@@ -5924,7 +5924,7 @@ knows. Both fail startup with `model.startup.declarationmissing` naming the key.
 
 *What the secrets manager supplies.* `ISecretSource.ReadSignOnSecretAsync`, passed to
 `AddJanus` beside the key-encryption key and the fingerprint key; absent, startup fails
-with `model.startup.keyunavailable`. Nothing of it is written anywhere. The proof key,
+with `model.startup.kekunavailable`. Nothing of it is written anywhere. The proof key,
 which is this server's own secret for the life of one flow, is held on the
 pre-authentication row wrapped under the key-encryption key.
 
@@ -11114,6 +11114,2916 @@ be delivered again. Under it:
 *Chapter text that should change.* 10 could list the three audit actions and the
 `outcome` vocabulary.
 
+---
+
+## 290. How a raised condition reaches the alert channels
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-ALERT-001, OPS-ALERT-002, CONV-DESIGN-002**
+
+*The question.* OPS-ALERT-001: "The following conditions SHALL raise alerts." Chapter 10
+section 5b gives `AlertRaised` one consumer, "Alert channels", and CONV-DESIGN-002
+orders every operation "**commit**, **publish** (after commit, the in-process events of
+LIB-API-001, raised from the committed outbox row)". The library published each
+condition to the host's `IEvents` and nothing else; only a change of the alert
+destinations was routed to a destination. No chapter says whether the channels send
+inside the operation that raised the condition or after it commits. It is Tier 3
+because it decides when a security alert, the break-glass use among them, leaves.
+
+*The readings.*
+
+1. Route the condition to the destinations inside the raising operation.
+2. Write the condition as a row in the raising transaction, and carry it to the
+   destinations by a pass of the alert channels after commit.
+
+*Chosen: 2.* CONV-DESIGN-002 puts what is raised after commit and reads it from the
+committed row; the first reading sends an alert for an operation that then rolls back,
+and builds the router, and with it the whole sending pipeline, inside every operation
+that can raise. Under it:
+
+- Every raise site calls the alert channels, which write the row (`raised_alerts`)
+  and publish `AlertRaised` to the host inside the raising transaction; a host that
+  refuses the event fails the raise and nothing commits, as entry 121 has every
+  publication.
+- A pass takes the oldest 100 rows and, one transaction each, routes the row through
+  the alert router (OPS-ALERT-002 deduplication, the owner's destinations) and removes
+  it. A row the router refuses stays, and the pass stops there so the order holds.
+- "Immediately" (OPS-BOOT-002 AC3) is the next pass of the alert job.
+- The row holds the structured details the alert carries, and nothing more, until it
+  is carried.
+- The pass assumes one worker; a second pass reaching the same row is caught by the
+  router's deduplication ledger, whose key refuses the second delivery.
+
+*Tests that pin it.*
+`AlertChannelsTests.OPS_ALERT_001_AC1_ARaisedConditionWaitsForTheChannelsAsync`,
+`AlertChannelsTests.CONV_DESIGN_005_AC1_AnEventTheHostRefusedFailsTheRaiseAsync`,
+`AlertDispatchTests.OPS_ALERT_001_AC1_ARaisedConditionIsCarriedOnceAsync`,
+`AlertDispatchTests.OPS_ALERT_001_AConditionTheRouterRefusedWaitsAsync`,
+`RaisedAlertsTests.OPS_ALERT_001_AC1_ARaisedConditionReadsBackAsItWasRaisedAsync`,
+`RaisedAlertsTests.OPS_ALERT_001_AC1_ACarriedConditionIsRemovedAsync`.
+
+*Chapter text that should change.* OPS-ALERT-001 could say that a condition is carried
+after the transaction that raised it commits, and chapter 10 section 5b that the alert
+channels read it from the committed row.
+
+---
+
+## 291. Generating the break-glass credential raises the break-glass alert
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-004 AC2, OPS-ALERT-001, OPS-ALERT-002**
+
+*The question.* OPS-BOOT-004 AC2: "Generation is audited and alerted, to the owner
+regardless of `alerting.owner.enabled` (OPS-BOOT-002)." OPS-ALERT-001 has a row for
+"Break-glass credential used" and none for generation, and chapter 10 section 5.23 has
+no identifier for it. OPS-ALERT-002 deduplicates on the identifier and what it fired
+about.
+
+*The readings.*
+
+1. Raise nothing on generation, since no row names it.
+2. Raise `breakglass-used` on generation as well as on use, told apart by the details.
+3. Raise a new condition for generation.
+
+*Chosen: 2.* AC2 requires the alert and the third reading adds an identifier chapter
+10 does not hold. `breakglass-used` is the one condition the router always sends to
+the owner (OPS-ALERT-004), which is what AC2 asks. Under it:
+
+- The details carry `event`: `generated` or `used`.
+- The deduplication scope is `generated:<issue>` or `used:<issue>`, so the use of an
+  issue is never folded into the alert its generation raised inside the window, and
+  each issue alerts once for each.
+
+*Tests that pin it.*
+`BreakGlassEndpointTests.OPS_BOOT_004_AC2_GenerationIsAuditedAndReachesTheOwnerAsync`,
+`BreakGlassEndpointTests.OPS_BOOT_002_AC3_UseReachesTheOwnerWithOwnerAlertsOffAsync`.
+
+*Chapter text that should change.* OPS-ALERT-001's break-glass row could read "used or
+generated", and chapter 10 section 5.23 could name the `event` detail.
+
+---
+
+## 292. Every attempt at the break-glass credential counts against the global limit
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-004 AC7, AUTH-ABUSE-001**
+
+*The question.* OPS-BOOT-004: attempts "SHALL be source-throttled per AUTH-ABUSE-001
+and, in addition, limited to at most 5 attempts per hour globally across all sources.
+With 128 bits behind it, the global limit exists to make the attack loud, not to make
+it infeasible." AC7: "A sixth attempt within one hour ... from any source, is refused".
+Nothing says whether a refused attempt counts, which of the two limits is applied
+first, or what time a refusal promises.
+
+*The readings.*
+
+1. Count only the attempts that reached the code (a sliding window of five).
+2. Count every arrival, the refused ones included, before anything else is looked at.
+
+*Chosen: 2*, the reading that refuses more. Under it:
+
+- The attempt is counted in a transaction of its own before the per-source delay, the
+  check symbols or any hash, so a refused attempt is counted as surely as one that
+  succeeds, and concurrent attempts are counted one at a time.
+- The sixth arrival within the hour, and every one after it, is answered 429
+  `auth.throttled` with `retryAt` an hour after the refused attempt. A sustained attack
+  therefore keeps the credential closed while it lasts; that is the loudness the item
+  asks for, and each refusal is an attempt the alerting sees.
+- The per-source delay of AUTH-ABUSE-001 then applies as for sign-in, keyed on the
+  source alone.
+- Attempts older than the window are forgotten by a sweep.
+
+*Tests that pin it.*
+`BreakGlassEndpointTests.OPS_BOOT_004_AC7_TheSixthAttemptInAnHourIsRefusedFromAnySourceAsync`,
+`BreakGlassStoreTests.OPS_BOOT_004_AC7_EveryAttemptIsCountedWithinTheWindowAsync`.
+
+*Chapter text that should change.* OPS-BOOT-004 could say that every attempt counts,
+refused ones included, and what `retryAt` a refusal carries.
+
+---
+
+## 293. What a refused break-glass code is answered
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-002 AC1, OPS-BOOT-004 AC3, AC6**
+
+*The question.* Chapter 09 answers `POST /auth/break-glass` with 422
+`auth.breakglass.invalid` and 409 `auth.breakglass.consumed`. OPS-BOOT-002
+AC1: "Use consumes it; a second attempt fails." OPS-BOOT-004 AC6: "a group with a
+wrong check character is refused before the hash is compared." Nothing says which
+codes are "consumed" rather than "invalid": a code already used, one replaced, or one
+that never existed.
+
+*The readings.*
+
+1. Answer `consumed` for any code that was ever issued and no longer stands.
+2. Answer `consumed` only for the issue most recently used, and `invalid` for
+   everything else.
+
+*Chosen: 2.* It tells the least: only the person who just used the envelope learns
+the code was good, and a replaced issue reveals nothing about itself. Under it:
+
+- A code that is not 36 symbols of the alphabet, hyphens and spaces aside, or whose
+  groups do not all hold their check symbol, is answered 422 `auth.breakglass.invalid`
+  before any issue is read.
+- A code that matches the standing issue opens the session and spends it; the record
+  of the use is written only while the issue still stands, so of two concurrent uses
+  one opens a session and the other is answered 409 `auth.breakglass.consumed`.
+- A code that matches the issue last used is answered 409 `auth.breakglass.consumed`.
+- Any other code, a replaced one included, is answered 422 `auth.breakglass.invalid`.
+- Every refusal counts against the source's delay (entry 292).
+
+*Tests that pin it.*
+`BreakGlassEndpointTests.OPS_BOOT_002_AC1_UseConsumesTheCredentialAsync`,
+`BreakGlassEndpointTests.OPS_BOOT_004_AC3_ASecondGenerationInvalidatesTheFirstAsync`,
+`BreakGlassEndpointTests.OPS_BOOT_004_AC6_AWrongCheckIsRefusedBeforeAnyHashIsComparedAsync`,
+`BreakGlassStoreTests.OPS_BOOT_002_AC1_AnIssueIsSpentOnceAsync`, `BreakGlassCodeTests`.
+
+*Chapter text that should change.* Chapter 09 could say that 409 answers the issue
+last used and 422 every other code, a replaced one included.
+
+---
+
+## 294. How the reserved `emergency` account is marked and found
+
+**Phase 9 · 2026-09-24 · Tier 2 · OPS-BOOT-001, OPS-BOOT-002, REG-ACCT-001**
+
+*The question.* OPS-BOOT-002: "**The session belongs to a reserved account,
+`emergency`**", created at bootstrap (OPS-BOOT-001), "with **no sign-in method of any
+kind**". An account holds no name the library could look it up by, and this one has no
+identifier to be found through. Nothing says how the library knows which account it
+is.
+
+*The readings.*
+
+1. Keep its subject in a configuration key written by bootstrap.
+2. Mark the account row itself, and let the database hold at most one marked row.
+
+*Chosen: 2.* A configuration key is a value an administrator can change, which would
+move the break-glass session onto another account; a mark on the row is written once,
+by bootstrap alone. Under it:
+
+- `accounts.emergency`, a boolean that is false on every account but the one, with a
+  unique partial index (`ux_accounts_emergency`) over the marked row.
+- `Account.CreateEmergency` is the only way to set it; it is carried through erasure
+  and read back unchanged.
+- The authentication and authorization areas read it through a port each, so neither
+  learns the other's types.
+
+*Tests that pin it.*
+`AccountStatesTests.OPS_BOOT_002_TheReservedAccountIsNeverTakenDownAsync`,
+`AccountTests.OPS_BOOT_002_TheEmergencyAccountIsNeverSuspendedOrDeleted`,
+`ModelTests.REG_ACCT_001_AC2_NoFieldExistsOutsideTheGroupsTheTableNames`.
+
+*Chapter text that should change.* OPS-BOOT-002 could name the mark and say the
+database holds at most one such account.
+
+---
+
+## 295. What the reserved account is refused, and with which code
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-002, AUTH-STEP-004**
+
+*The question.* OPS-BOOT-002: the `emergency` account has "**no sign-in method of any
+kind** ... no factor can be enrolled on it ... it appears in no device list, holds no
+mailbox, and cannot be granted anything further, suspended, or deleted." AUTH-STEP-004:
+"A **break-glass session SHALL satisfy the step-up requirement** for the duration of
+its lifetime." No chapter names the refusal, and the session that satisfies every gate
+is itself the only session the account has.
+
+*The readings.*
+
+1. Refuse only through the absence of any flow that reaches the account.
+2. Refuse each operation named, explicitly, wherever it could reach the account, and
+   refuse the gated actions of the session that would give it a way in or end it.
+
+*Chosen: 2*, which refuses in more places. Under it, each is answered 403
+`authz.denied`, the refusal the caller would see for an operation it may not perform:
+
+- suspension by an administrator, and a takedown;
+- a grant to the account, and its addition to a group, whose grants would be
+  something further granted;
+- from the break-glass session, the step-up actions `password:set`,
+  `identifier:add`, `username:change`, `factor:enrol`, `recoverycodes:generate`,
+  `mailcredential:create`, `account:deactivate` and `account:delete`, which it
+  passes no gate for although it passes every other.
+- The domain refuses the same transitions itself (`Account` throws on suspension,
+  deactivation, takedown and deletion of the reserved account), so a path this list
+  missed faults rather than succeeds.
+- The session never passes through device trust, so it appears in no device list.
+
+*Tests that pin it.*
+`AccountAdministrationTests.OPS_BOOT_002_TheEmergencyAccountIsNeverSuspendedAsync`,
+`AccountTests.OPS_BOOT_002_TheEmergencyAccountIsNeverSuspendedOrDeleted`,
+`AccountStatesTests.OPS_BOOT_002_TheReservedAccountIsNeverTakenDownAsync`,
+`GrantEndpointTests.OPS_BOOT_002_TheReservedAccountIsGrantedNothingAsync`,
+`GroupEndpointTests.OPS_BOOT_002_TheReservedAccountJoinsNoGroupAsync`,
+`BreakGlassEndpointTests.OPS_BOOT_002_NoSignInMethodIsGivenToTheReservedAccountAsync`.
+
+*Chapter text that should change.* OPS-BOOT-002 could name `authz.denied` as the
+refusal and list the gated actions the session does not pass.
+
+---
+
+## 296. How long the break-glass session lives
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-002 AC2, AUTH-STEP-004 AC3, AUTH-SESS-005b**
+
+*The question.* OPS-BOOT-002: "The session SHALL satisfy step-up for its lifetime
+(AUTH-STEP-004). Lifetime is configurable with an enforced ceiling (D-138)." Chapter 10
+section 4: `breakglass.session.lifetime`, "4 hours, ceiling 12". AC2: "The session
+expires automatically at a configured lifetime within the ceiling." Nothing says
+whether the session also ends when idle, and under which inactivity window.
+
+*The readings.*
+
+1. The lifetime is the only limit; an idle session lives to it.
+2. The lifetime is the absolute limit, and the account's policy's inactivity window
+   applies as well, never longer than the lifetime.
+
+*Chosen: 2*, which ends the session sooner. An unattended emergency session is the
+case the idle window exists for. Under it:
+
+- The absolute expiry is `breakglass.session.lifetime` from the moment of use,
+  whatever the policy's absolute lifetime says.
+- The inactivity window is the one the policy gives the session's assurance, cut to
+  the lifetime where it is longer.
+- The session satisfies every gate (entry 295 excepted) until it ends, and the
+  exception ends with it.
+
+*Tests that pin it.*
+`BreakGlassEndpointTests.OPS_BOOT_002_AC2_TheSessionExpiresAtTheConfiguredLifetimeAsync`,
+`StepUpTests.AUTH_STEP_004_AC3_TheExceptionDoesNotOutliveTheSession`.
+
+*Chapter text that should change.* OPS-BOOT-002 could say that the session's idle
+window is the policy's, bounded by the lifetime.
+
+---
+
+## 297. Break-glass has no service contract in `Janus.Core`
+
+**Phase 9 · 2026-09-24 · Tier 2 · LIB-API-001, LIB-API-005, CONV-DESIGN-002**
+
+*The question.* CONV-DESIGN-002: the unit of application logic is "a **service class
+per operation group**, implementing the corresponding contract from `Janus.Core`
+(LIB-API-005)". The two break-glass endpoints are the library's own and chapter 07
+names no contract a host calls for them.
+
+*The readings.*
+
+1. Publish an `IBreakGlass` contract in `Janus.Core` and implement it.
+2. Keep the service internal, reached only through the two endpoints.
+
+*Chosen: 2*, the smaller public surface. A host has no business presenting or
+generating the credential except through the frontend route and the management
+application, and a public contract would be a second way in that the endpoints'
+throttle and profile do not guard. The service is `internal sealed`, constructed by
+dependency injection and ordered as CONV-DESIGN-002 orders every operation; the only
+additions to the public surface are the two error codes and the two audit actions.
+
+*Tests that pin it.* The public-surface file (`PublicAPI.Unshipped.txt`) and its
+analyser; `BreakGlassEndpointTests`.
+
+*Chapter text that should change.* Chapter 07 could say that the break-glass
+operations are reached through the endpoints alone.
+
+---
+
+## 298. The address the generated page carries
+
+**Phase 9 · 2026-09-24 · Tier 2 · OPS-BOOT-004, FE-BG-001, LIB-HOST-001**
+
+*The question.* OPS-BOOT-004: the page shows "the `/break-glass` address". Chapter 09
+answers `POST /admin/break-glass/generate` with `{ "credential": "...", "address":
+"...", "issuedAt": "..." }`. FE-BG-001: "The authentication application SHALL provide
+a route `/break-glass`". Nothing says where the absolute address comes from.
+
+*The readings.*
+
+1. Answer the path alone and let the frontend make it absolute.
+2. Answer the absolute address: the authentication application's origin, which the
+   host already declares (`AuthenticationAddresses.Provider`), and `/break-glass`.
+
+*Chosen: 2.* The envelope is printed from this answer and read years later by someone
+who is not technical, so what it prints has to be complete; and the origin is a value
+the host has declared once already, not a new one. The address is composed in the
+service, from the declaration, and never from the request.
+
+*Tests that pin it.*
+`BreakGlassEndpointTests.OPS_BOOT_004_AC1_ABreakGlassSessionGeneratesAReplacementAsync`.
+
+*Chapter text that should change.* Chapter 09 could say `address` is absolute and
+built from the authentication application's declared origin.
+
+---
+
+## 299. One break-glass issue stands at a time
+
+**Phase 9 · 2026-09-24 · Tier 2 · OPS-BOOT-004 AC3, CONV-DESIGN-003**
+
+*The question.* OPS-BOOT-004 AC3: "a second request generates a new credential and
+invalidates the previous one." Two generations, or a generation and a use, can run at
+once, and nothing says what keeps two issues from standing together.
+
+*The readings.*
+
+1. Rely on the service reading what stands before it writes.
+2. Serialize every operation that reads what stands, and let the database refuse a
+   second standing issue as well.
+
+*Chosen: 2.* Under it:
+
+- Generation and use take a transaction-scoped advisory lock before they read what
+  stands, so a crashed operation releases it with its transaction.
+- A unique index over a constant (`ux_break_glass_credentials_standing`, on rows
+  neither used nor replaced) refuses a second standing issue whatever reaches the
+  table, and a check constraint refuses an issue both used and replaced.
+- The record of a use or a replacement is written only where the issue still stands,
+  and says whether it was.
+- An issue keeps `issued_by`, the account that generated it, and never its code.
+
+*Tests that pin it.*
+`BreakGlassStoreTests.OPS_BOOT_004_OneIssueStandsAtATimeAsync`,
+`BreakGlassStoreTests.OPS_BOOT_004_AnIssueEndsOnceAsync`,
+`BreakGlassStoreTests.OPS_BOOT_004_AC3_AReplacementStandsInThePreviousPlaceAsync`,
+`BreakGlassEndpointTests.OPS_BOOT_004_AC3_ASecondGenerationInvalidatesTheFirstAsync`.
+
+*Chapter text that should change.* None; this is how the requirement is held.
+
+---
+
+## 300. How the break-glass code is hashed
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-004 AC4, INT-PWD**
+
+*The question.* OPS-BOOT-004: "The system stores **only a hash**". AC4: "No plaintext
+break-glass credential exists in the database, the secrets manager, logs, mail, or any
+file." Nothing names the hash. The code carries 135 bits, so a fast hash would already
+resist guessing; a slow one costs time at every use.
+
+*The readings.*
+
+1. A keyed or plain fast hash, which 135 bits make safe against guessing.
+2. Argon2id with the password parameters of chapter 10 section 4.
+
+*Chosen: 2*, the one that keeps most in reserve. The code is used a handful of times
+in the life of a deployment, so the cost is paid rarely, and a slow hash protects the
+code if the entropy of the draw is ever less than the item promises. Under it:
+
+- The code is hashed in its canonical form (case folded, the check symbols kept,
+  hyphens and spaces dropped), under `password.argon2.memory`, `.iterations` and
+  `.parallelism`, and the hash carries its parameters, so a later change of them
+  still verifies an issue made before it.
+- The bytes of the code are cleared once hashed or compared, and the code is marked
+  never to be logged.
+
+*Tests that pin it.*
+`BreakGlassStoreTests.OPS_BOOT_004_AC4_OnlyAHashOfTheCodeIsHeldAsync`,
+`BreakGlassEndpointTests.OPS_BOOT_004_AC3_ASecondGenerationInvalidatesTheFirstAsync`,
+`NeverLoggedTests.CONV_LOG_003_AC1_EveryMemberCarryingAForbiddenValueIsMarked` (the
+authentication and hosting ones).
+
+*Chapter text that should change.* OPS-BOOT-004 could name the hash.
+
+---
+
+## 301. What "any cookie present is ignored" does at `/auth/break-glass`
+
+**Phase 9 · 2026-09-24 · Tier 3 · FE-BG-001 AC3, BFF-MACH-001, BFF-CSRF**
+
+*The question.* Chapter 09: `POST /auth/break-glass` is "**Mounted on the machine
+profile** (BFF-MACH-001): no session, outside the session-bound CSRF layer,
+source-throttled. **Any cookie present is ignored rather than refused**". The machine
+profile refuses a request that carries the session cookie. FE-BG-001 AC3: "The page
+works with a stale session cookie present for the domain."
+
+*The readings.*
+
+1. Exempt the route from the machine profile altogether.
+2. Keep the route on the machine profile, marked as machine-governed and held to the
+   malformed-request answer, but without the refusal of a cookie, and never resolve
+   the session the cookie names.
+
+*Chosen: 2*, the one that exempts the least. Under it:
+
+- The route is one of the machine routes, and the only one listed as ignoring the
+  cookie; everything else the profile does to it stays.
+- No session is read from the cookie, so nothing the stale session holds reaches the
+  operation.
+- Success writes the new session's cookie over the stale one and clears the
+  first-contact cookie, so nothing of the browser's earlier state survives.
+
+*Tests that pin it.*
+`BreakGlassEndpointTests.FE_BG_001_AC3_AStaleSessionCookieIsIgnoredAsync`.
+
+*Chapter text that should change.* BFF-MACH-001 could list `/auth/break-glass` as
+the machine route that ignores a cookie.
+
+---
+
+## 302. The owner's stated reason has nowhere to be stated
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-002, FE-BG-001, AUTHZ-IMP-001**
+
+*The question.* OPS-BOOT-002: "Every action in a break-glass session is audited with
+`emergency` as acting and effective identity (AUTHZ-IMP-001) and the owner's stated
+reason". Chapter 09 gives the request as `{ "credential": "..." }` and nothing else,
+and FE-BG-001: "one field for the sealed credential, one button, no other controls."
+The two chapters contradict each other: there is no place for the owner to state a
+reason once for the session.
+
+*The readings.*
+
+1. Add a `reason` member to `POST /auth/break-glass`, and a control to the page.
+2. Keep the shape chapter 09 gives, and record for each action in the session the
+   reason its own request carries.
+
+*Chosen: 2.* Chapters 09 and 10 are authoritative for shapes, and a second control on
+a page for someone who is not technical is what FE-BG-001 forbids. Under it:
+
+- Every action of the session is audited with `emergency` as acting and effective
+  identity, which no other session can be.
+- An action whose request carries a reason (a grant, a recovery approval, a
+  configuration change, a takedown) records it as it would for anyone; the use itself
+  records none.
+- The alert the use raises is the control that asks the owner why.
+
+*Tests that pin it.*
+`BreakGlassEndpointTests.AUTH_STEP_004_AC2_AnActionInTheSessionIsAuditedAsTheReservedAccountAsync`,
+`BreakGlassEndpointTests.OPS_BOOT_002_AC4_TheSessionGrantsSystemAdministrationAsync`.
+
+*Chapter text that should change.* Either OPS-BOOT-002 drops "and the owner's stated
+reason", or chapter 09 and FE-BG-001 gain the member and the control; the owner
+decides which.
+
+---
+
+## 303. How an action of background work is audited, and what refuses it to nobody
+
+**Phase 9 · 2026-09-24 · Tier 3 · IDN-PRIN-001 AC1, AC3, AC4, INF-BG-002, IDN-AUD-001**
+
+*The question.* IDN-PRIN-001 AC4: "Actions taken by either are audited with the
+reason." INF-BG-002 AC1: "A background job cannot query without a principal." AC2:
+"Its actions are audited with the stated reason." The audit record holds an acting and
+an effective subject and nothing else about the actor, and the passes that audit took
+no principal at all: an erasure the sweep executed was recorded with the empty subject
+as its actor and no reason.
+
+*The readings.*
+
+1. Write the principal's name and reason into the record's `details` document.
+2. Give the record columns of its own for the principal and its reason, with the
+   acting subject left empty, and let the database refuse any other combination.
+
+*Chosen: 2*, the one the database enforces rather than the code remembering. Under it:
+
+- `audit_records` gains `principal` and `principal_reason`, and
+  `ck_audit_records_principal` admits them only together and only beside the empty
+  acting subject; the effective subject is still the account the action was taken
+  on, where there is one.
+- `AuditRecord.Of` has a form that takes a `SystemPrincipal`, and the privacy and
+  credential audit ports a form each; nothing else writes a principal.
+- Every pass that records what it does (the account and organization erasure sweeps,
+  the privacy-request deadline sweep and the loss-report windows) takes the
+  `AccessContext` it runs under and throws unless it carries a principal that may run
+  `expiry-sweep`, so a person, or a principal named for other work, cannot run it.
+- The breach query's public `AuditEntry` is unchanged, so the public surface does not
+  grow; it shows the empty acting subject for such a record.
+
+*Tests that pin it.*
+`AuditStoreTests.IDN_PRIN_001_AC4_ABackgroundActionIsRecordedWithItsReasonAsync`,
+`AuditStoreTests.IDN_PRIN_001_AC4_APrincipalIsRecordedOnlyWithItsReasonAndNoActorAsync`,
+`DeletionSweepTests.IDN_AUD_001_ThePassRecordsWhatItDidAndToWhomAsync`,
+`LossReportsTests.IDN_PRIN_001_AC4_AnInvalidationIsRecordedUnderTheSweepAsync`,
+`DeletionSweepTests.INF_BG_002_AC1_TheSweepNeverRunsAsNobodyAsync`,
+`OrganizationErasureSweepTests.INF_BG_002_AC1_TheSweepNeverRunsAsNobodyAsync`,
+`DeadlineSweepTests.INF_BG_002_AC1_TheSweepNeverRunsAsNobodyAsync`,
+`LossReportsTests.INF_BG_002_AC1_TheAdvanceNeverRunsAsNobodyAsync`.
+
+*Chapter text that should change.* IDN-AUD-001 could name the two columns beside the
+acting and effective subjects.
+
+---
+
+## 304. Which pool-wide operations the scheduled jobs run as
+
+**Phase 9 · 2026-09-24 · Tier 3 · IDN-PRIN-001 AC3, INF-BG-001, INF-BG-002**
+
+*The question.* IDN-PRIN-001 lists the pool-wide work a deployment-scoped principal
+exists for, as reconciliation, retention purging, records-of-processing generation and
+expiry sweeps, and says it "is restricted to those named operations." INF-BG-001
+requires jobs that are none of the four: the transactional outbox publisher, the
+mailbox provisioning that follows it, the carrying of raised alerts, and the gateway
+balance poll. Each of them has to run as a principal naming some operation.
+
+*The readings.*
+
+1. Keep the four, and run each other job under the nearest of them (a publisher as
+   reconciliation, the balance poll as an expiry sweep).
+2. Add one operation per job.
+3. Add the fewest operations that cover the jobs outside the four: `delivery`, carrying
+   what has been committed to where it goes, and `monitoring`, reading the state of
+   something the deployment depends on and raising what the reading calls for.
+
+*Chosen: 3.* Reading 1 grants a job an operation it does not perform, so the outbox
+publisher's principal could run a reconciliation; reading 2 grows the public
+enumeration by a member for every job. Under 3:
+
+- `SystemOperation` gains `Delivery` (`delivery`) and `Monitoring` (`monitoring`).
+- Every job is its own deployment-scoped principal naming exactly one operation, and
+  states as its reason the item that requires it: the sweeps and grace windows run as
+  `expiry-sweep`, the mail reconciliation as `reconciliation`, the outbox, mailbox
+  provisioning and alert carrying as `delivery`, the balance poll as `monitoring`.
+- A pass that records what it does still refuses any principal that may not run
+  `expiry-sweep` (entry 303).
+
+*Tests that pin it.*
+`BackgroundWorkerTests.INF_BG_002_EveryScheduledJobIsANamedRestrictedPrincipal`,
+`BackgroundWorkerTests.INF_BG_002_AC1_AJobRunsAsItsPrincipalAsync`.
+
+*Chapter text that should change.* IDN-PRIN-001 could name delivery and monitoring
+beside the four operations it lists, or say which of the four each of the jobs of
+INF-BG-001 runs as.
+
+---
+
+## 305. How often the jobs run that no setting paces
+
+**Phase 9 · 2026-09-24 · Tier 2 · INF-BG-001, INT-MAIL-007, OPS-ALERT-001, INT-SMS-004**
+
+*The question.* INF-BG-001 AC2 judges a job by twice its interval, so every job needs
+one. `10` names the interval of most of them (`sweep.interval`, `outbox.poll.interval`,
+`abuse.sms.pollinterval`) but not of two: the carrying of raised alerts to their
+channels, and the mail reconciliation, which INT-MAIL-007 says "SHALL run daily". Nor
+does any chapter say what the balance poll does in a deployment that registered no SMS
+transport.
+
+*The readings.*
+
+1. Carry raised alerts every `sweep.interval`, as the other passes over a table are.
+2. Carry them every `outbox.poll.interval`, as the outbox publisher is.
+
+For the reconciliation, a new setting, or the day the chapter fixes. For the poll, a
+failure where no transport is registered, or a run with nothing to read.
+
+*Chosen: 2*, a day for the reconciliation, and nothing to read for the poll. A raised
+alert waits in `raised_alerts` exactly as an event waits in the outbox, and it is the
+record least able to wait five minutes. The reconciliation's day is the chapter's own
+and needs no key. A deployment with no transport has no balance, and a failure there
+would raise `background-job-failed` every hour for a gateway that does not exist.
+
+*Tests that pin it.* `BackgroundJobsTests.INF_BG_001_AC1_EveryJobRunsWithoutAPersonAsync`.
+
+*Chapter text that should change.* The `outbox.poll.interval` row of `10` could name
+OPS-ALERT-001 among the passes it paces.
+
+---
+
+## 306. How far back the token sweep reaches, and the one sweep not scheduled
+
+**Phase 9 · 2026-09-24 · Tier 3 · AUTH-KEY-003, AUTH-OIDC-003, OPS-OBS-003**
+
+*The question.* AUTH-KEY-003 requires consumed refresh tokens to be swept. AUTH-OIDC-003
+AC1 requires "A refresh token presented twice revokes all derived sessions", which the
+provider can only do while the redeemed row exists; the store's prune removes a
+redeemed row created before the instant it is given, whatever that row's own expiry.
+Separately, the store of staged identifier verifications has a sweep that takes an
+instant, and no chapter says how old a staged verification is when it is abandoned.
+
+*The readings.* For the tokens:
+
+1. Prune at the access token lifetime, or at some shorter span.
+2. Prune only what is older than the longest session the settings allow, the ceiling of
+   `session.default.absolute`, since no refresh token outlives its session.
+
+For the staged verifications:
+
+1. Sweep them at `code.verification.lifetime` after staging.
+2. Leave them unswept, ended only by `POST /account/identifiers/{id}/abandon` or by
+   completion.
+
+*Chosen: 2 and 2*, the readings that keep most. Pruning a redeemed refresh token that
+could still be presented turns a stolen token's reuse from a revocation of the family
+into a plain refusal, which AC1 forbids. A staged verification swept by age would
+strand the unverified identifier the account still holds: asking for the code again
+finds no pending verification and sends nothing.
+
+*Tests that pin it.* `BackgroundJobsTests.INF_BG_001_AC1_EveryJobRunsWithoutAPersonAsync`
+runs the sweep over the database; the reach itself is the constant `LongestSession` in
+`BackgroundJobs`.
+
+*Chapter text that should change.* AUTH-KEY-003 could say how long a consumed refresh
+token is kept, and chapter `20` how long a staged identifier verification stands.
+
+---
+
+## 307. How the command-line application reaches the deployment's keys
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-001, OPS-SEC-001, OPS-SEC-003, LIB-EXT-001, INF-HOST-003**
+
+*The question.* `janus bootstrap` creates an account whose identifiers are encrypted
+under a subject key wrapped by the key-encryption key and found by fingerprints
+computed under the fingerprint key, and `janus rotate-kek` needs the key versions and
+the maintenance credential. LIB-EXT-001 makes the secret source the host's to supply,
+"registered through configuration, not inheritance from a library type", and
+`ISecretSource` says each value is read "at startup or at the start of a command". The
+command-line application is an executable of the package: CONV-LAYOUT-002 allows it no
+public type a host could call with its own source, and CONV-CODE-004 allows no
+reflection to load one. INF-HOST-003 allows no secret in a file, an image or an
+environment variable.
+
+*The readings.*
+
+1. Give the command a public entry point, in `Janus.Core` or in the mounting types,
+   that a host calls from a program of its own with its `ISecretSource`.
+2. Load the host's `ISecretSource` from an assembly the command line names.
+3. Take the values as arguments, from a file, or from the environment.
+4. Read one document from standard input, which the operator pipes from the secrets
+   manager's own client, and refuse to run where standard input is a terminal.
+
+*Chosen: 4*, the one reading that crosses no rule: 1 grows the public surface against
+CONV-LAYOUT-002, 2 is reflection against CONV-CODE-004, 3 puts a secret where
+INF-HOST-003 forbids one or in the process list. Under 4:
+
+- The document is JSON with `connection` (the database connection the command runs
+  under), `keyEncryptionKeys` (`current` and `versions`, each version's key in
+  base64) and `fingerprintKey` in base64. The rotation commands read what they need
+  from the same document, and are recorded where they are built.
+- The command reads it once, at its start, and clears every key's bytes when it
+  ends; nothing of it is written anywhere. It is read by the command itself and not
+  through an `ISecretSource` of the library's own, which would be a default secret
+  source that LIB-EXT-001 leaves to the host.
+- A document that is not JSON, or larger than 64 KiB, is refused with
+  `api.request.malformed` naming `input`; a missing or unusable key with
+  `model.startup.kekunavailable` naming `keyEncryptionKeys` or `fingerprintKey`. A
+  refusal carries the member it concerns and nothing of the document.
+- A command whose standard input is not redirected is refused before it reads
+  anything, so no key is typed or pasted into a terminal.
+
+*Tests that pin it.* `BootstrapRefusalTests.OPS_SEC_001_TheCommandRefusesATerminalAsync`,
+`BootstrapRefusalTests.OPS_SEC_001_AC2_TheCommandRefusesADocumentWithoutTheKeysAsync`,
+`BootstrapRefusalTests.OPS_SEC_001_AC2_TheCommandRefusesAKeyThatCannotBeUsedAsync`,
+`BootstrapRefusalTests.OPS_SEC_001_ARefusalCarriesNoneOfTheDocumentAsync`.
+
+*Chapter text that should change.* OPS-BOOT-001 and OPS-SEC-003 could say how the
+command is handed the values of INF-HOST-003, and LIB-EXT-001 how the secret source is
+supplied to `Janus.Cli`.
+
+---
+
+## 308. What `janus bootstrap` takes on its command line, and how it refuses
+
+**Phase 9 · 2026-09-24 · Tier 2 · OPS-BOOT-001, LIB-HOST-001, OPS-CFG-004, CONV-NAME-001**
+
+*The question.* OPS-BOOT-001 gives the arguments as "the organization name, the
+administrator's email and phone, and every required deployment value by its key name",
+and the exit codes, and no more: not the spelling of an argument, whether a key that is
+not required may be named too, what completeness means, or where a refusal is written.
+
+*The readings.*
+
+1. Take any key of chapter 10 section 4, required or not, as `--<key> <value>`.
+2. Take the required keys only, and refuse every other.
+
+*Chosen: 2.* Every other key keeps its safe default until the application changes it
+through the audited configuration path, so a value bootstrap wrote could not bypass a
+direction rule or a protected key. Under 2:
+
+- The executable is the project's own, `Janus.Cli`, and `bootstrap` is its first
+  argument. Naming the executable `janus` would put the product name where
+  CONV-NAME-001 (D-163) allows it nowhere; a deployment may install it under any name.
+- Every argument is `--<name> <value>`: `--organization`, `--email`, `--phone`, and
+  each required key by its key name. A name given twice, without a value, or not
+  starting `--` is refused with `api.request.malformed` naming it.
+- A key that is not among the required ones is refused the same way, naming
+  `--<key>`. A required value its key does not admit is refused with the code the key
+  gives it, before the database is reached.
+- What is complete is decided by the same rule the host's start applies
+  (`model.startup.declarationmissing` naming the key,
+  `model.startup.governinglanguage` for `legal.governinglanguage`), so what bootstrap
+  accepts is a deployment that starts.
+- The schema is validated before anything is written, and the whole run is one
+  transaction.
+- Success prints the enrolment address alone on standard output and exits 0. A
+  refusal writes one JSON line `{"code": ..., "details": {...}}` to standard error,
+  prints nothing on standard output, and exits 1.
+
+*Tests that pin it.*
+`BootstrapRefusalTests.OPS_BOOT_001_AC4_BootstrapWithoutTheGoverningLanguageIsRefusedByNameAsync`,
+`BootstrapRefusalTests.OPS_BOOT_001_AValueTheDeploymentLeftUnnamedIsRefusedByItsKeyAsync`,
+`BootstrapRefusalTests.OPS_BOOT_001_AValueItsKeyDoesNotAdmitIsRefusedAsync`,
+`BootstrapRefusalTests.OPS_BOOT_001_AKeyThatDoesNotNameTheDeploymentIsRefusedAsync`,
+`BootstrapTests.OPS_BOOT_001_AFreshDeploymentIsStoodUpByTheCommandAsync`,
+`BootstrapTests.OPS_BOOT_001_TheNamedValuesAndTheAdministrativePolicyAreWrittenAsync`.
+
+*Chapter text that should change.* OPS-BOOT-001 could give the argument form, say
+that only the required keys are taken, say where a refusal is written, and name the
+command without the product name.
+
+---
+
+## 309. How bootstrap queues the first administrator's mailbox
+
+**Phase 9 · 2026-09-24 · Tier 2 · OPS-BOOT-001, INT-MAIL-006 AC1a, REG-MAIL-001**
+
+*The question.* INT-MAIL-006 AC1a requires that the bootstrap-created administrator's
+"provisioning request is queued and completes on the first successful push". The
+arguments OPS-BOOT-001 lists name the administrator's email and phone and no corporate
+address, and the command cannot tell whether the deployment integrates a mail server,
+since it needs only the database.
+
+*The readings.*
+
+1. Queue a mailbox at the administrator's email.
+2. Queue none.
+3. Take an optional `--mailbox <corporate address>` and queue a mailbox there where
+   one is named.
+
+*Chosen: 3.* Reading 1 makes the personal email the corporate one, which REG-MAIL-001
+forbids; reading 2 leaves AC1a unmet on a deployment that has a mail server. Under 3:
+
+- `--mailbox` is optional. Where it is named, the administrator takes the corporate
+  address as it would at an invitation's acknowledgement (primary, locked, verified),
+  and a mailbox is reserved at it and held by the administrator, which the delivery
+  job pushes once the mail server is reachable.
+- An address equal to the personal email is refused with
+  `identity.identifier.invalid` naming `mailbox`.
+- The `emergency` account gets no mailbox and no identifier (AC1b).
+
+*Tests that pin it.* `BootstrapTests.INT_MAIL_006_AC1a_TheAdministratorsMailboxIsQueuedAsync`,
+`BootstrapTests.OPS_BOOT_002_TheEmergencyAccountHoldsTheRoleAndNoWayInAsync`.
+
+*Chapter text that should change.* OPS-BOOT-001 could list the corporate address among
+the arguments, and say it is optional where no mail server is integrated.
+
+---
+
+## 310. The enrolment address bootstrap prints
+
+**Phase 9 · 2026-09-24 · Tier 2 · OPS-BOOT-001, INT-MAIL-006, API-LAND-001**
+
+*The question.* OPS-BOOT-001 prints the link "as the full `/enrol` address" and says
+"nothing is transmitted". INT-MAIL-006 says the administrator is reached at the
+personal address "where the enrolment link goes in any case". Neither names the origin
+the address is under or where the token travels in it.
+
+*The readings.*
+
+1. Print the address and also send it to the personal email.
+2. Print it only.
+
+*Chosen: 2.* The command needs only the database, and a message sent would be a
+transmission OPS-BOOT-001 rules out; the personal email is where the administrator is
+reached afterwards. Under 2:
+
+- The address is the first `webauthn.origins` entry's scheme and authority, then
+  `/enrol#token=<token>`. The token travels in the fragment, which no request carries,
+  so no server log or referrer holds it.
+- The token is an enrolment link held for the administrator, which lives
+  `recovery.link.lifetime`.
+- A first `webauthn.origins` entry that is not an absolute address is refused with
+  `api.request.malformed` naming the key.
+
+*Tests that pin it.* `BootstrapTests.OPS_BOOT_001_ThePrintedAddressEnrolsTheFirstAdministratorAsync`,
+`BootstrapTests.OPS_BOOT_001_AFreshDeploymentIsStoodUpByTheCommandAsync`.
+
+*Chapter text that should change.* OPS-BOOT-001 could name the origin and the
+fragment, and INT-MAIL-006 could say the link is printed, not sent.
+
+---
+
+## 311. What "a system administrator exists" means to bootstrap
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-001 AC1, OPS-CFG-007, D-028**
+
+*The question.* OPS-BOOT-001 AC1: "Running it twice while a system administrator
+exists is refused." A deployment can lose its administrator in several ways: the grant
+revoked, the grant expired, the account suspended or erased. Nothing says which of
+them re-opens bootstrap, which runs without any gate (D-028).
+
+*The readings.*
+
+1. Refuse only while some account holds a live, unexpired allow grant of a role
+   holding `system:administer`.
+2. Refuse where the administrative organization exists, or where any allow grant of
+   such a role was made and not revoked, expired or not.
+
+*Chosen: 2*, the strictest: it refuses most. Reading 1 would let whoever reaches the
+database mint a new administrator once every grant has lapsed, which is a way in with
+no gate at all. Under 2:
+
+- The check runs inside the transaction bootstrap writes in.
+- The refusal is `authz.denied`, with no details, and nothing is written.
+
+*Tests that pin it.*
+`BootstrapTests.OPS_BOOT_001_AC1_RunningItAgainWhileASystemAdministratorExistsIsRefusedAsync`.
+
+*Chapter text that should change.* OPS-BOOT-001 AC1 could say that a deployment once
+stood up is never stood up again, and name the refusal's code.
+
+---
+
+## 312. The canary subject and the reserved account bootstrap seeds
+
+**Phase 9 · 2026-09-24 · Tier 2 · OPS-BOOT-001, OPS-BOOT-002, DR-007, INT-MAIL-006 AC1b**
+
+*The question.* DR-007 says the canary holds "one encrypted field" and "a verified
+email" found by its fingerprint, and chapter 10 records it in
+`backup.restoretest.canary` as "the canary subject bootstrap seeds in the
+administrative organization". Neither names the field, the address, or whether the
+canary is an account.
+
+*The readings.*
+
+1. A subject key and rows with no account.
+2. An account, a member of the administrative organization holding no role.
+
+*Chosen: 2.* The identifier and profile rows are an account's, and a membership
+without a role grants nothing. Under 2:
+
+- The address is `canary@restore-test.invalid`, under the name RFC 2606 reserves for
+  what never resolves, so nothing addressed to it reaches anybody.
+- The encrypted field is the display name `Restore canary`.
+- The canary holds no credential, so it has no way in.
+- The `emergency` account is given a subject key like any other account, because a
+  break-glass session acts under it and what it does is recorded against it.
+
+*Tests that pin it.* `BootstrapTests.DR_007_TheCanarySubjectIsSeededAsync`,
+`BootstrapTests.OPS_BOOT_002_TheEmergencyAccountHoldsTheRoleAndNoWayInAsync`,
+`BootstrapTests.OPS_BOOT_001_AC2_NoAccountHoldsACredentialAsync`.
+
+*Chapter text that should change.* DR-007 or chapter 10's `backup.restoretest.canary`
+row could name the field, the address and the membership.
+
+---
+
+## 313. Who grants what bootstrap grants, and how its alert is raised
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-001 AC3, IDN-LIFE-009a AC1, AUTHZ-GRANT-004, OPS-ALERT-001, D-133**
+
+*The question.* IDN-LIFE-009a AC1: "Staff membership originates from an invitation,
+never from a bare grant", while OPS-BOOT-001 and INT-MAIL-006 AC1a have bootstrap make
+the first administrator's membership with no invitation. Every stored grant names who
+made it and why, and bootstrap makes the first grants, when nobody holds anything.
+OPS-BOOT-001 AC3 also has the "no emergency credential" alert raised on
+OPS-ALERT-001, which is carried by the alert channels the host registers, and the
+command runs with no host.
+
+*The readings.*
+
+1. For the membership: have bootstrap issue an invitation and acknowledge it itself,
+   or attach the membership directly as the one exception.
+2. For the granter: name none, or a subject no account holds, or each holder as its
+   own granter with the item as the reason.
+3. For the alert: send it from the command, or write it to the raised-alerts outbox
+   for the delivery job to carry.
+
+*Chosen: the direct attachment, the holder as granter, and the outbox.* An invitation
+bootstrap acknowledged itself would record a consent nobody gave. A grant with no
+granter is one no check can trace, and a granter no account holds reads as a system
+action where a person stood behind the command. Under this:
+
+- Bootstrap attaches its memberships through the same attachment the acknowledgement
+  uses, and is the one caller of it beside the acknowledgement; the structure test
+  that pins IDN-LIFE-009a AC1 names the two and no other.
+- The administrator's and the emergency account's `system-administrator` grants, and
+  the canary's membership, name the holder as granter and `OPS-BOOT-001` as the reason.
+- The alert is written to the raised-alerts outbox in the bootstrap transaction, and
+  carried by the delivery job like any raised alert, since the command sends nothing.
+
+*Tests that pin it.*
+`BootstrapTests.OPS_BOOT_001_AC3_NoEmergencyCredentialIsIssuedAndItsAbsenceIsRaisedAsync`,
+`BootstrapTests.OPS_BOOT_001_ThePrintedAddressEnrolsTheFirstAdministratorAsync`,
+`LibraryStructureTests.IDN_LIFE_009a_AC1_OnlyAnAcknowledgedInvitationMakesAMembership`.
+
+*Chapter text that should change.* IDN-LIFE-009a AC1 could except the bootstrap
+administrator, and OPS-BOOT-001 could name the granter of the first grants and say the
+alert is queued rather than sent.
+
+---
+
+## 314. What bootstrap records in the audit trail
+
+**Phase 9 · 2026-09-24 · Tier 3 · IDN-PRIN-001, IDN-AUD-001, AUTHZ-GRANT-004, OPS-BOOT-001**
+
+*The question.* Bootstrap creates the administrative organization and defines the three
+administrative roles. A person with server access runs it, but no one is signed in, and
+IDN-PRIN-001 requires that non-human work act as a named principal with a stated
+reason. Chapter 06 does not say whether bootstrap is audited, or as whom.
+
+*The readings.*
+
+1. Record nothing, since the rows themselves show what was made.
+2. Record under the administrator bootstrap creates.
+3. Record under a deployment-scoped system principal of its own.
+
+*Chosen: 3*, the strictest: it keeps most, and does not credit the administrator with
+what nobody signed in did. Under 3:
+
+- `SystemOperation` gains `Bootstrap` (`bootstrap`). The principal is named
+  `bootstrap`, states `OPS-BOOT-001` as its reason, and may run nothing else.
+- The organization is recorded as `identity.organization.created`, and each role
+  bootstrap defines as `authz.role.defined` with `before` empty and `reason`
+  `OPS-BOOT-001`, both under the principal and in the bootstrap transaction.
+- Every value bootstrap sets is recorded under the principal too, as entry 315 says.
+- `IOrganizationAudit`, `IRoleAudit` and `IConfigurationAudit` gain a form that takes
+  a system principal, as `ICredentialAudit` did in entry 303.
+
+*Tests that pin it.*
+`BootstrapTests.IDN_PRIN_001_AC4_WhatBootstrapDefinesAndSetsIsRecordedUnderItsPrincipalAsync`.
+
+*Chapter text that should change.* OPS-BOOT-001 could say bootstrap is audited under a
+principal of its own, and IDN-PRIN-001 could list `bootstrap` beside the operations
+entry 304 added.
+
+---
+
+## 315. How bootstrap writes the values it sets
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-BOOT-001, OPS-CFG-002, OPS-CFG-004, OPS-CFG-005, chapter 10 section 4.1a**
+
+*The question.* Bootstrap sets the values the deployment names, protected keys among
+them, the administrative organization's `policy.<organization>` ("set at bootstrap",
+chapter 10 section 4.1a) and `backup.restoretest.canary` ("set at bootstrap"). The
+library's one path for a runtime setting is the configuration administration, which
+refuses a system principal ("a system principal is nobody to answer", OPS-CFG-005) and
+never writes a protected key (OPS-CFG-004). OPS-CFG-005 AC1: "Every change produces an
+audit record with before and after values."
+
+*The readings.*
+
+1. Write through the configuration store as the administration does, leaving the
+   values unrecorded.
+2. Write the rows directly, unrecorded, as the initial state rather than a change.
+3. Write the rows directly and record each value as a configuration change under
+   bootstrap's principal.
+
+*Chosen: 3*, the strictest: it keeps most. Reading 1 puts a second caller on the
+store's write, which the structure test pinning OPS-CFG-002 refuses, and cannot write
+the protected keys; reading 2 leaves the security values the deployment starts from
+with no record. Under 3:
+
+- Every value bootstrap sets is written by its seed, in the transaction, and recorded
+  as `ops.configuration.changed` under the `bootstrap` principal with `key`, `before`
+  (null where no value stood), `after`, `loosening` false and `reason`
+  `OPS-BOOT-001`.
+- A value set where none stood is recorded as no loosening: OPS-CFG-002 prices a change
+  made through the application, and the value bootstrap sets is the one the
+  deployment starts from, named by whoever holds the server (D-028).
+- The settings table is written by the store and by bootstrap's seed alone; the
+  structure test pinning OPS-CFG-002 now names the two.
+
+*Tests that pin it.*
+`BootstrapTests.IDN_PRIN_001_AC4_WhatBootstrapDefinesAndSetsIsRecordedUnderItsPrincipalAsync`,
+`BootstrapTests.OPS_BOOT_001_TheNamedValuesAndTheAdministrativePolicyAreWrittenAsync`,
+`LibraryStructureTests.OPS_CFG_002_OnlyTheConfigurationAdministrationWritesARuntimeSetting`.
+
+*Chapter text that should change.* OPS-CFG-005 could say how the values set at
+bootstrap are recorded, and what `before` holds where no value stood.
+
+---
+
+## 316. What the key-encryption key's rotation re-wraps, and what the maintenance credential reaches for it
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-SEC-003 AC2, AC3, AC5, OPS-MIG-003a AC4, DR-009a AC5, INF-BG-001**
+
+*The question.* OPS-SEC-003 has the command re-wrap "every subject key" and retire the
+previous version once the job reports complete, "a value still wrapped under it (there
+is none by construction)". The library also holds six other values wrapped directly
+under the key-encryption key with their version beside them: an invitation's, a
+reserved mailbox's, a staged registration's and a queued message's own data key, the
+sign-on proof of a pre-authentication session, and the private half of each token
+signing key. A signing key stays current for `token.signing.rotation`. OPS-MIG-003a AC4
+holds the maintenance credential to "the subject-key table and the rotation progress
+table, and ... no other table", INF-BG-001 says the re-wrap "is not background work of
+the worker", and DR-009a AC5 says it is performed through OPS-SEC-003 "and by no other
+path". OPS-SEC-003 AC5 has each step audited, and the maintenance credential holds no
+right on the trail.
+
+*The readings.*
+
+1. Re-wrap the subject keys alone. Once the operator removes the previous version, the
+   signing key and any mailbox, invitation or registration still under it no longer
+   unwrap, and on a suspected exposure they stay readable to whoever holds the old
+   version until they age out.
+2. Have the worker re-wrap the six under the application's credential, which INF-BG-001
+   and DR-009a AC5 refuse.
+3. Have the command re-wrap all seven under the maintenance credential, granted the row
+   key, the version and the wrapped value of each of the six tables and no other column,
+   and the append to the trail.
+
+*Chosen: 3*, the strictest where granting least and keeping most pull apart: reading 1
+keeps least, since the previous version is retired while values stand under it, and
+reading 2 goes round the one path. Under 3:
+
+- The command re-wraps the subject keys in the ordered pass of OPS-SEC-003, then sweeps
+  subject keys written under a previous version behind the point the pass had reached,
+  then the six other columns, each in batches of 500 committed on their own. Each
+  value is written back only where it still stands as it was read, so an erasure or a
+  newer wrapping made meanwhile is never overwritten and no value is re-wrapped twice.
+  An erased subject key is under no version and is left alone.
+- The processed count, and the count audited, is the subject keys re-wrapped, as
+  OPS-SEC-003 AC5 names it.
+- The maintenance credential gains, by migration: read and write of `key_rotations`;
+  `INSERT` on `audit_records`, as the application holds it; and column rights, the row's
+  key, the version and the wrapped value to read and the last two to write, on
+  `invitations`, `mailboxes`, `registration_sessions`, `send_outbox`, `signing_keys` and
+  `preauthentication_sessions`. The serialized model lists every grant and the role
+  tests hold the list against what the database grants. The application's credential
+  reaches nothing of `key_rotations`.
+- The codes and refresh tokens the OIDC server encrypts under keys derived from each
+  held version (entry 159) are not re-encrypted: once the previous version is removed,
+  a refresh token issued before the rotation no longer reads and its holder signs in
+  again. A code lives sixty seconds.
+
+*Tests that pin it.*
+`KeyRotationTests.OPS_SEC_003_AC3_AfterRetirementNoValueIsWrappedUnderThePreviousVersionAsync`,
+`KeyRotationTests.OPS_SEC_003_AC2_AKilledRunResumesFromItsProgressAndReWrapsEachKeyOnceAsync`,
+`DatabaseRoleTests.OPS_MIG_003a_AC4_TheMaintenanceRoleReachesTheWrappedValuesAndNoOtherColumnAsync`,
+`DatabaseRoleTests.OPS_MIG_003a_AC4_TheListedGrantsAreTheOnesTheDatabaseHoldsAsync`,
+`SerializedModelTests.OPS_MIG_003a_AC4_TheMaintenanceGrantsAreListedInTheSerializedModel`.
+
+*Chapter text that should change.* OPS-SEC-003 could name every value wrapped under the
+key rather than the subject keys alone, and say what becomes of tokens protected under
+a derived key; OPS-MIG-003a AC4 could list the column rights on the six tables and the
+append to the trail beside the subject-key and progress tables.
+
+---
+
+## 317. How a key-encryption key rotation starts, is confirmed and retires
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-SEC-003 AC1, AC3, AC4, DR-009, DR-009a, IDN-PRIN-001**
+
+*The question.* OPS-SEC-003 has the command "introduce a new key version in the secrets
+manager and record it as current for wrapping", produce the escrow copy, not report the
+operation complete "until the operator confirms it is sealed", and retire the previous
+version once the job reports complete. The library holds no client of any secrets
+manager (LIB-EXT-001, CONV-DESIGN-008) and reads its keys only from the document of
+entry 307. Nothing says how the confirmation is given, what "retired" does, what the
+escrow copy looks like, which refusals the command gives, or who the actor of its audit
+records is.
+
+*The readings.*
+
+1. For the new version: the command draws it and prints it for the operator to store,
+   and re-wraps under it at once; or the operator adds it to the secrets manager as
+   current, keeping the previous one, and pipes the document to the command.
+2. For the confirmation: an interactive prompt, or a second run with an argument.
+3. For retirement: the library drops the version itself, or records the retirement and
+   leaves the removal from the secrets manager to the operator.
+
+*Chosen: the operator adds the version, a second run confirms, and retirement is
+recorded*, the strictest: a key the command drew and re-wrapped under before it was
+stored anywhere is lost with the process, a prompt reads standard input that carries
+the keys, and the library cannot remove a secret it never wrote. Under this:
+
+- `rotate-kek` runs under the maintenance credential: the connection's role holds the
+  maintenance role's rights and has no path to the application's. Anything else,
+  including a superuser, is refused with `authz.denied` and no details, before anything
+  is read.
+- The document's current version is the one rotated to. A rotation starts only to a
+  version later than any rotated to before, and only where every value stored is under
+  a version the document holds and none under one later than the current; otherwise
+  `model.startup.kekunavailable` naming `keyEncryptionKeys`. A rotation that stopped is
+  resumed by a run whose document names its version current, and no other starts
+  while it stands.
+- A run that completes the re-wrap prints the escrow copy, then the report
+  `{"version":N,"processed":M}`. The escrow copy is the document member the version
+  would be restored from, `{"keyEncryptionKeys":{"current":N,"versions":{"N":"<base64>"}}}`,
+  written from a buffer cleared afterwards and never held in a string. A later run
+  before the seal prints it again, since a process that died after recording completion
+  may never have printed it.
+- `rotate-kek --sealed` confirms the seal. It is refused with `api.request.malformed`
+  naming `sealed` where no rotation has completed or the latest has already retired.
+  It sweeps once more; where it finds a value wrapped under a previous version since
+  the rotation completed, which is an application not yet handed the new version, it
+  re-wraps it and refuses with the same code and `pending` giving the count, and the
+  previous version stays. Otherwise it records `retired_at` and reports
+  `{"version":N,"processed":M,"retired":[...]}`, the versions the operator then removes
+  from the secrets manager. A value found under a removed version fails with the named
+  error "The subject's key is wrapped under a retired version."
+- The steps are audited as `ops.keyrotation.started`, `resumed`, `completed` and
+  `retired`, security category, with `kind`, `version`, `processed` and, on retirement,
+  `retired`. The actor is the deployment-scoped principal `rotate-kek` with the reason
+  `OPS-SEC-003` and the new operation `key-rotation`, since the command cannot know
+  which person runs it.
+- The runbook order this assumes: add the version as current and keep the previous;
+  restart the application on the new document; run `rotate-kek`; seal the copy; run
+  `rotate-kek --sealed`; remove the retired versions.
+
+*Tests that pin it.*
+`KeyRotationTests.OPS_SEC_003_AC1_TheCommandIsRefusedWithoutTheMaintenanceCredentialAsync`,
+`KeyRotationTests.OPS_SEC_003_AC4_TheEscrowCopyIsPrintedAndTheRotationRetiresOnlyOnceItIsSealedAsync`,
+`KeyRotationTests.OPS_SEC_003_AC4_ASealBeforeTheRotationCompletesIsRefusedAsync`,
+`KeyRotationTests.OPS_SEC_003_AC3_RetirementWaitsWhileValuesAreStillWrappedUnderThePreviousVersionAsync`,
+`KeyRotationTests.OPS_SEC_003_ARotationNeedsANewVersionAndEveryVersionInUseAsync`,
+`KeyRotationTests.OPS_SEC_003_AC5_EachStepIsRecordedWithTheVersionTheCountAndThePrincipalAsync`,
+`PersonalFieldCipherTests.OPS_SEC_003_AC3_AKeyUnderARetiredVersionFailsWithANamedError`,
+`LibraryStructureTests.OPS_SEC_003_AC1_OnlyTheCommandLineRunsTheRotation`.
+
+*Chapter text that should change.* OPS-SEC-003 could say that the operator adds the
+version to the secrets manager, how the seal is confirmed, what the escrow copy holds
+and that retirement is the operator's removal once the command records it; chapter 10
+could list the four `ops.keyrotation` actions and the `key-rotation` operation; the
+runbook's section 9 could give the order above.
+
+---
+
+## 318. What the fingerprint key's rotation computes again, and what it keeps until the previous version retires
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-SEC-003 AC6, OPS-SEC-001, PRIV-RIGHT-005c, AUTH-KEY-002 AC2, AUTH-ABUSE-004 AC6, OPS-MIG-003a AC4**
+
+*The question.* OPS-SEC-003 has the fingerprint key's rotation use "the same shape (new
+version, resumable batch job, previous version usable until complete, escrow copy)"
+but re-compute "every stored fingerprint rather than re-wrapping a key", and AC6 asks
+for a test of it on a small fixture. OPS-SEC-001 and AUTH-KEY-002 speak of one
+fingerprint key; `ISecretSource`, `AddJanus` and the command-line key document carried
+one. A keyed fingerprint carries no version, so nothing said which key a stored one
+was computed under, and "previous version usable until complete" needs a lookup that
+matches under more than one. Four kinds of stored fingerprint have no value beside
+them to compute from: a username held after erasure, and the keys of the seven
+ledgers (throttle counters, send counters, send grants, sends, registration sources,
+non-existence notices, callbacks), which are hashes of addresses, numbers and sources
+the library never stores. A provider's link held the fingerprint of the provider's
+subject and not the subject. An address an erased subject gave up stays reserved
+until its undo lapses, and the subject's key that would decrypt it is destroyed.
+OPS-MIG-003a AC4 holds the maintenance credential to the subject-key and progress
+tables, entry 316 already widened it, and AUTH-ABUSE-004 AC6 has the send-counter
+row "a keyed hash and times and nothing else".
+
+*The readings.*
+
+1. Keep one key and have the command switch every fingerprint at once, the
+   application stopped. The previous version is not usable until complete, a stop
+   mid-run leaves lookups failing for whatever was not reached, and a rotation on
+   suspected exposure takes the service down for its length.
+2. Version the key as the key-encryption key is versioned, record the version beside
+   every stored fingerprint, look up under every version held, and have the command
+   compute each fingerprint again from the value beside it; what no value stands
+   behind is read under its version until it lapses or the retirement forgets it.
+3. As 2, but carry what no value stands behind across by copying it under the new
+   version at retirement. A keyed hash cannot be recomputed without its input, so this
+   is not open.
+
+*Chosen: 2*, the one reading that keeps the shape the chapter names; under it the
+previous version is retired only once nothing still read stands under it, which keeps
+most. Under 2:
+
+- `FingerprintKeys` (the current version and every version held) replaces the single
+  key in `ISecretSource.ReadFingerprintKeysAsync`, in `AddJanus` and in the key
+  document, whose member is now `fingerprintKeys` with `current` and `versions` as
+  `keyEncryptionKeys` has. Startup refuses a set whose current version is absent or
+  any of whose versions is shorter than 32 bytes, named as
+  `model.startup.kekunavailable` with `details.key` `fingerprintKeys`.
+- `fingerprint_version` is added beside the fingerprint on `identifiers`,
+  `identifier_removals`, `mailboxes`, `username_holds`, `authenticators` (nullable, set
+  with the provider subject) and the seven ledgers. Rows written before the migration
+  are version 1, which a deployment's first key document names; every write names its
+  version. A write is under the current version; a lookup matches under the current
+  version first and then each other version held, newest first.
+- A provider's link now also holds the provider's subject encrypted under the
+  subject's key (`enc_provider_subject`), so its fingerprint can be computed again.
+  Erasure neutralises the fingerprint as before and leaves the ciphertext under the
+  destroyed key.
+- `janus rotate-fingerprint-key` runs under the maintenance credential in the shape of
+  `rotate-kek` and shares its progress table: an ordered pass over the subjects in
+  batches of 500, each committing with the point it reached, computing again the
+  identifiers, the live reservations and the provider links of each live subject from
+  the value decrypted under the subject's key; then a sweep of what the pass could not
+  reach, the mailboxes' addresses included. Each fingerprint is written back only
+  where it and its version still stand as they were read. A stored fingerprint its own
+  value does not compute under its version stops the run as a defect.
+- The command refuses a current version no later than one rotated to before, and a
+  fingerprint still read under a version it was not handed, as `rotate-kek` does.
+- `--sealed` retires every version but the current once the run is complete and
+  nothing still read stands under a previous version: it is refused, with `pending`,
+  while a username is held under one or an erased subject's reservation has not
+  lapsed. On retirement, the ledger lines and the released holds under a previous
+  version are deleted. A throttle counter or a send count kept under the previous
+  version is lost with it, so a counter untouched since the switch starts again from
+  nothing; one touched since the switch was already counted under the new version.
+- The maintenance credential gains, by migration and in the serialized model: on
+  `identifiers` and `identifier_removals` the key, subject, fingerprint, version and
+  canonical ciphertext to read (and `expires_at` on the second), the fingerprint and
+  version to write; the same shape on `authenticators` (`provider_subject`,
+  `enc_provider_subject`) and on `mailboxes` (`holder`, `enc_canonical`); on
+  `username_holds` the version and release instant to read and `DELETE`; on each
+  ledger the version to read and `DELETE`, never the hash.
+- The send-counter row holds the version beside the hash, which AUTH-ABUSE-004 AC6's
+  "nothing else" does not list; it is not a value about anyone.
+
+*Tests that pin it.*
+`FingerprintRotationTests.OPS_SEC_003_AC6_ALookupMatchesUnderEveryVersionHeldAsync`,
+`FingerprintRotationTests.OPS_SEC_003_AC6_EveryFingerprintIsComputedAgainUnderTheNewVersionAsync`,
+`FingerprintRotationTests.OPS_SEC_003_AC6_AKilledRunResumesFromItsProgressAndComputesEachFingerprintOnceAsync`,
+`FingerprintRotationTests.OPS_SEC_003_AC6_RetirementWaitsForAHeldUsernameAndForgetsWhatTheVersionHashedAsync`,
+`FingerprintRotationTests.OPS_SEC_003_AC6_RetirementWaitsForTheReservationOfAnErasedSubjectAsync`,
+`FingerprintRotationTests.OPS_SEC_003_AC6_AFingerprintItsValueDoesNotComputeStopsTheRunAsync`,
+`FingerprintKeyRotationTests.OPS_SEC_003_AC6_TheCommandIsRefusedWithoutTheMaintenanceCredentialAsync`,
+`FingerprintKeyRotationTests.OPS_SEC_003_AC6_TheEscrowCopyIsPrintedAndTheRotationRetiresOnlyOnceItIsSealedAsync`,
+`FingerprintKeyRotationTests.OPS_SEC_003_AC6_ASealBeforeTheRotationCompletesIsRefusedAsync`,
+`FingerprintKeyRotationTests.OPS_SEC_003_AC6_EachStepIsRecordedWithTheVersionTheCountAndThePrincipalAsync`,
+`FingerprintKeyRotationTests.OPS_SEC_003_AC6_ARotationNeedsANewVersionAndEveryVersionInUseAsync`,
+`KeyMaterialTests.AUTH_KEY_002_AC2_StartupFailsNamedOnARetainedFingerprintKeyShorterThanTheHash`,
+`BootstrapRefusalTests.OPS_SEC_001_AC2_TheCommandRefusesAFingerprintKeyThatCannotBeUsedAsync`,
+`DatabaseRoleTests.OPS_MIG_003a_AC4_TheMaintenanceRoleReachesTheFingerprintsAndNoOtherColumnAsync`,
+`DatabaseRoleTests.OPS_MIG_003a_AC4_TheListedGrantsAreTheOnesTheDatabaseHoldsAsync`,
+`SendLedgerTests.AUTH_ABUSE_004_AC6_TheRecordHoldsAHashAndTimesAndNothingElseAsync`,
+`LibraryStructureTests.OPS_SEC_003_AC1_OnlyTheCommandLineRunsTheRotation`.
+
+*Chapter text that should change.* OPS-SEC-001, AUTH-KEY-002 and INF-HOST-003 could
+speak of the fingerprint key's versions as they speak of the key-encryption key's;
+PRIV-RIGHT-005c could say a fingerprint is stored with the version it was computed
+under; OPS-SEC-003 could say what a fingerprint with no value behind it becomes at
+retirement and that retirement waits for held usernames and unlapsed reservations;
+IDN-LIFE-012a could say the provider's subject is held encrypted beside its
+fingerprint; AUTH-ABUSE-004 AC6 could admit the version; OPS-MIG-003a AC4 could list
+the rights above; the runbook's "printed but not rotated" could point at the command.
+
+---
+
+## 319. How a protected key is changed from the server, and what the change records and raises
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-CFG-004 AC2, OPS-CFG-005, OPS-ALERT-001, D-071, chapter 10 section 4.8**
+
+*The question.* OPS-CFG-004 AC2: "Changing one requires access the application itself
+does not have; a command-line operation restricted to the server satisfies this as well
+as a redeployment." D-071: "Whatever mechanism is used must record the change and
+alert." Chapter 10 section 4.8 leaves the mechanism to the deployment ("an
+infrastructure choice"). Until now a protected key was written by bootstrap alone
+(entry 315), so after bootstrap no mechanism existed, and a key changed by hand in the
+database would be neither recorded nor raised. Nothing says which credential the
+change runs under, whether it carries a reason, whether it is priced by direction,
+what a member of `stepup.enforcement.<organization>` names, or what the governing
+language's "a restart to change" means for a command.
+
+*The readings.*
+
+1. Build no mechanism: a protected key changes by redeployment of a fresh database or
+   by hand, unrecorded.
+2. A command of `Janus.Cli` under the maintenance credential.
+3. A command of `Janus.Cli` under the connection the piped document names, as
+   bootstrap runs, taking protected keys only, each change recorded and raised.
+
+*Chosen: 3*, the strictest that builds what D-071 requires: reading 1 leaves every
+change unrecorded, and reading 2 gives the maintenance credential a third use that
+OPS-MIG-003a ("exactly two uses") forbids. Under 3:
+
+- The command is `configure`: `--<key> <value>` for each key and `--reason <text>`.
+  Only a key the catalogue marks protected is taken, or one organization's member of
+  the protected family, named `stepup.enforcement.<organization identifier>` with the
+  identifier as the key holds it. Any other key, including every key the application
+  may change, is refused with `api.request.malformed` naming `--<key>`, as bootstrap
+  refuses a key it does not take (entry 308). A value its key does not admit is
+  refused with the key's own code before the database is reached.
+- A reason is required whatever the direction, and a change without one, or with a
+  blank one, is refused with `auth.restriction.reasonrequired`, the code OPS-CFG-002
+  gives a loosening without a reason. No step-up is asked: the command has no session,
+  and whoever holds the server can already do worse (D-071).
+- The command runs under the connection the piped document names (entry 307), as
+  bootstrap does, so the protection is access to the server and to the document, not
+  a database right the application lacks. The application's own credential can still
+  write the settings table; the application's code cannot write a protected key
+  (`config.key.protected`), and no endpoint or job reaches the command's service.
+- Each value is written in one transaction with the rest, and recorded as
+  `ops.configuration.changed` under the deployment-scoped principal `configure` with
+  the reason `OPS-CFG-004` and the new operation `configuration`, carrying `key`,
+  `before` (null where no value stood), `after`, `loosening` and the operator's
+  `reason`. The direction is the key's own rule; a value set where none stood loosens
+  nothing, as bootstrap's values do not (entry 315), and one whose direction cannot be
+  read from what stands is a loosening (D-079b). Bootstrap now writes its values
+  through the same writer, and the settings table has two writers: the configuration
+  store and that writer.
+- Each key changed raises `protected-setting-changed` (High) with the key in its
+  details, deduplicated per key. The governing language also raises
+  `governing-language-changed` (Normal): the two rows of OPS-ALERT-001 are both about
+  this change, and raising both keeps most. Every named key is written, recorded and
+  raised, even where its value is the one in force.
+- A member of `stepup.enforcement.<organization>` for an organization the deployment
+  does not hold is refused with `config.value.notallowed` naming the key and the field
+  `organization`, so a mistyped identifier does not leave an operator believing a
+  switch was thrown.
+- The change is checked by the rule the host's start applies (LIB-HOST-001) over what
+  the settings table holds once it is written, so a change that would leave the
+  deployment unable to start (`hosting.location` outside Egypt with no
+  `hosting.crossborderbasis`) is refused with the code and key that start would give,
+  and nothing of it stays.
+- A change takes effect where the library next reads the key. The governing language
+  is read where a document version is published, so a change from the server takes
+  effect without a restart; OPS-CFG-004 AC2 admits a command as well as a
+  redeployment, and D-146's ground (not a runtime toggle of the application) holds.
+- `audit.enabled`, `exfiltration.export.auditing`, `token.signature.verification` and
+  `stepup.enforcement.<organization>` are read by nothing in the library: it audits,
+  audits exports, verifies signatures and enforces step-up whatever they hold. A change
+  to one from the server is recorded and raised and changes no behaviour. The chapters
+  say these may not be turned off through the application and nowhere what turning
+  one off does, and honouring an off-switch would grant more than ignoring it.
+- Success prints `{"changed":[...]}`, the keys in the order named and nothing of their
+  values; a refusal is the JSON line of entry 308 on standard error with exit code 1.
+
+*Tests that pin it.*
+`ConfigureTests.OPS_CFG_004_AC2_AProtectedKeyIsChangedFromTheServerWrittenDownAndRaisedAsync`,
+`ConfigureTests.OPS_CFG_004_TheGoverningLanguageIsRaisedUnderItsOwnConditionAsync`,
+`ConfigureTests.OPS_CFG_004_AnOrganizationsStepUpEnforcementIsSwitchedFromTheServerAsync`,
+`ConfigureTests.OPS_CFG_004_AKeyTheApplicationChangesIsRefusedAsync`,
+`ConfigureTests.OPS_CFG_004_AChangeWithoutAReasonIsRefusedAsync`,
+`ConfigureTests.OPS_CFG_004_AValueItsKeyDoesNotAdmitIsRefusedAsync`,
+`ConfigureTests.OPS_CFG_004_AChangeThatLeavesTheDeploymentUnableToStartIsRefusedAsync`,
+`LibraryStructureTests.OPS_CFG_004_AC2_OnlyTheCommandLineWritesAProtectedKey`,
+`LibraryStructureTests.OPS_CFG_002_OnlyTheConfigurationAdministrationWritesARuntimeSetting`.
+
+*Chapter text that should change.* OPS-CFG-004 could name the command, say that it
+takes a reason and no step-up, and say what turning off each switch does, if
+anything; chapter 10 section 4.8 could say the mechanism is the command rather than
+an infrastructure choice; OPS-CFG-005 could say how a change from the server is
+recorded; IDN-PRIN-001 could list `configure` among the system principals;
+OPS-ALERT-001 could say whether the governing language raises one alert or both;
+CONV-LAYOUT-001 could list `configure` among what `Janus.Cli` carries, beside bootstrap
+and key rotation.
+
+---
+
+## 320. The library carries its own events: a row on the transaction, and a publisher that offers it to the host's consumers
+
+**Phase 9 · 2026-09-24 · Tier 2 · LIB-API-001, LIB-HOST-001 AC1 and AC3, CONV-DESIGN-002, IDN-LIFE-003a, INF-BG-001, D-162 items 22 and 29, entry 121**
+
+*The question.* Entry 121 left the row a publication is recorded in, its marking and
+the degradation on exhaustion to "the publisher of phase 9", and noted that no
+implementation of `IEvents` was shipped. Every operation that emits an event publishes
+through `IEvents`, and the library registered nothing for it, so a host declaring only
+what LIB-HOST-001 lists could resolve none of those operations. CONV-DESIGN-002 has the
+events "raised from the committed outbox row"; D-162 item 29 has the row stay unmarked
+on failure, with the degradation raised, and marked on success; `IEventConsumer<TEvent>`
+in `Janus.Core` is "what a consumer registers" and nothing called it. No chapter names
+the table, says how a consumer is known, whether a consumer that took an event is
+offered it again when another refused it, what order the events keep, or what becomes
+of a marked row.
+
+*The readings.*
+
+1. `IEvents` is the host's to implement, as the test hosts treated it: the library
+   calls it inside the transaction and keeps no row.
+2. The library implements `IEvents` by writing a row onto the operation's transaction,
+   and a background publisher offers each committed row to the host's
+   `IEventConsumer<TEvent>` registrations, retries under `outbox.retry.*`, marks the row
+   once every consumer has taken it, and fails it and raises `degradation` once the
+   budget is spent.
+
+*Chosen: 2.* Reading 1 adds a declaration LIB-HOST-001 does not list (AC1, AC3), leaves
+`IEventConsumer<TEvent>` uncalled, and leaves "the committed outbox row" and "the row is
+marked" with no row. Under 2:
+
+- The row is `identity.events`: the event's name in chapter 10 section 5b as `kind`,
+  the event itself as generated JSON with every value of the vocabulary written by
+  name, the attempts, the next attempt, the consumers that have taken it, `published_at`
+  (the mark) and `failed_at`. The application's credential holds all four rights on it.
+- A publication succeeds once the row is on the transaction, and a rollback leaves no
+  row, so no consumer hears of a change that did not happen. A consumer's refusal never
+  fails the operation; a failure to write the row still does (entry 121, point 1).
+- The publisher is the job `events` (reason IDN-LIFE-003a, operation `delivery`, every
+  `outbox.poll.interval`) in `Janus.Hosting`, where D-162 item 22 puts the outbox
+  publisher. A consumer is an `IEventConsumer<TEvent>` registered for the event's kind,
+  known by the full name of its type. One that took an event is not offered it again;
+  one that refused it or threw is, after `outbox.retry.initial` multiplied by
+  `outbox.retry.factor` per attempt with full jitter. The row is marked once every
+  registered consumer has taken it, which is at once where none is registered.
+- After `outbox.retry.maxattempts` the row is failed and `degradation` (Normal) is
+  raised, scoped to the event's kind so that OPS-ALERT-002 keeps a consumer failing
+  every event of one kind to one alert inside `alerting.dedupe.window`, naming the row,
+  the attempts and the consumers still outstanding, in the transaction that records
+  the failure. A failed row is not offered
+  again. There is no manual completion path: IDN-LIFE-003a requires one for erasure,
+  restriction and takedown, which keep their own outbox.
+- Events are offered by the instant they were raised. Events of one millisecond carry
+  no order among themselves, and one a consumer refused waits out its delay while
+  later ones reach it: delivery promises each consumer the event, not its place.
+- Marked rows are kept, and nothing removes them. D-162 item 29 says the row is marked,
+  and no chapter names a retention for it.
+- The library's registration gives way to an `IEvents` a host registered before it, as
+  the replaceable defaults do; such a host bypasses the row and the publisher.
+
+*Tests that pin it.*
+`PendingEventsTests.LIB_API_001_EveryEmittedEventReadsBackAsItWasRaisedAsync`,
+`PendingEventsTests.CONV_DESIGN_002_AnEventWaitsOnlyOnceItsTransactionCommitsAsync`,
+`PendingEventsTests.IDN_LIFE_003a_AMarkedOrFailedEventIsNotReadAgainAsync`,
+`EventPublisherTests.CONV_DESIGN_002_AnEventReachesEveryConsumerOfItsKindAndIsMarkedAsync`,
+`EventPublisherTests.IDN_LIFE_003a_OnlyAConsumerThatRefusedIsOfferedTheEventAgainAsync`,
+`EventPublisherTests.IDN_LIFE_003a_AnEventWhoseBudgetIsSpentFailsAndRaisesDegradationAsync`,
+`EventPublisherTests.LIB_API_001_EveryEmittedEventHasItsConsumers`,
+`BackgroundJobsTests.INF_BG_001_AC1_EveryJobRunsWithoutAPersonAsync`.
+
+*Chapter text that should change.* LIB-API-001 or CONV-DESIGN-002 should say that the
+library carries its events through a row of its own and that a host consumes them by
+registering `IEventConsumer<TEvent>`; INF-BG-001 should name the event publisher beside
+the outbox publisher; chapter 10 should name a retention for a marked row, or say that
+a marked row is removed.
+
+---
+
+## 321. What a denial spike counts, and when it is raised
+
+**Phase 9 · 2026-09-24 · Tier 2 · AUTHZ-GATE-004, OPS-ALERT-001, OPS-ALERT-002, chapter 10 section 4.5 (`alerting.denials.threshold`)**
+
+*The question.* Chapter 10 gives `alerting.denials.threshold` as "50 per `PT10M`",
+"integer denials per actor in a fixed ten-minute window". Nothing says where a fixed
+window begins, who the actor is for a refusal that names no one (a request under no
+account, or a system principal), or whether the condition is raised at the number or
+above it. The gate had no alert port, so the condition was raised nowhere.
+
+*The readings.*
+
+1. Windows begin at the first refusal counted; refusals naming no actor are not
+   counted; the condition is raised at the number.
+2. Windows are fixed on the clock; refusals naming no actor are counted together; the
+   condition is raised above the number.
+
+*Chosen: 2.* The windows are ten minutes long and counted from the Unix epoch in UTC,
+so every instance of the library places a refusal in the same window, which "fixed"
+asks. The actor is the acting subject the refusal records; under impersonation that is
+the person acting, not the account whose authority is used. Every refusal that names no
+acting subject is counted together, raised with no scope, so a run of refusals to
+requests under no account is raised like anyone's; leaving them out would make the one
+run never raised the one a probe produces, and counting them raises more. The
+condition is raised once the window holds more refusals than the threshold, as the
+key's own description reads it, on each refusal past it, and OPS-ALERT-002 keeps that
+to one alert per actor inside `alerting.dedupe.window`; the details carry the count.
+The count is read from the audit trail the refusal has just been written to, so it
+needs no counter of its own. The gate reaches the alert router through a port of its
+own (`IAccessAlerts`), as the privacy area does, because an area project reaches no
+other area project (CONV-LAYOUT-001).
+
+A refusal recorded inside a transaction that then rolls back is neither kept nor
+counted nor raised; this is the lost-audit-row defect the phase 9 report names, not a
+choice made here.
+
+*Tests that pin it.*
+`GateBehaviourTests.OPS_ALERT_001_AC1_ADenialSpikeOfOneActorIsRaisedAsync`.
+
+*Chapter text that should change.* Chapter 10 section 4.5 should say where a fixed
+window begins, who the actor is for a refusal that names no one, and whether the
+condition is raised at the number or above it.
+
+---
+
+## 322. How a message no transport took is carried again
+
+**Phase 9 · 2026-09-24 · Tier 2 · D-022, INF-BG-001, AUTH-ABUSE-004, INT-SMS-004, IDN-ATTR-001, IDN-PRIN-003, D-162 item 23**
+
+*The question.* D-162 item 23 has every send written to the library's outbox and
+"delivered by the worker under `outbox.retry.*` with status recorded", and says that
+until the publisher exists the send path attempts once and leaves the row as recorded.
+It does not say whether the send path still makes the first attempt once the worker
+exists, what a retry counts against or whether the restrictions judge it again, which
+languages a retry carries where a transport took some of them, what becomes of the row
+when the budget is spent, or what the `degradation` alert is raised under.
+
+*The readings.*
+
+1. The send path only writes the row and answers at once; the worker makes every
+   attempt.
+2. The send path makes the first attempt once its row is written and answers with its
+   outcome; the worker makes the rest.
+
+*Chosen: 2.* Every caller acts on the answer: the alert router moves to the next
+destination when a transport refuses, the loss report records whether anyone was told,
+and a refusal by a restriction has to reach the person with its `retryAt`. Reading 1
+would answer success for a message no transport has taken. The row is written before
+the attempt with its next attempt set one `outbox.retry.initial` ahead, so the worker
+does not carry a message the send path is carrying; an attempt that leaves a language
+untaken is the first of `outbox.retry.maxattempts`, scheduled as the event outbox is
+(initial times factor per further attempt, full jitter).
+
+A retry is judged by the restrictions again, as they stand when it is made, and one
+they refuse waits as any refused attempt does. A refused delivery counts against no
+bucket (AUTH-ABUSE-004 AC2), so while a transport is down every send is admitted; not
+judging retries again would let a transport that comes back carry at once everything
+the restrictions would have held. What a carried retry counts against is read the same
+way. The gateway floor holds a retried text message as it holds any; an alert is
+exempt, as on the send path (OPS-ALERT-003).
+
+A retry carries only the languages no transport has taken; the row keeps them, outside
+the encrypted column, because a row holds more than one language only where the
+message goes out in every language the deployment declares, which says nothing of the
+recipient.
+
+When the budget is spent the row is removed and `degradation` is raised under the
+scope `send:<channel>`, so OPS-ALERT-002 keeps a failing transport to one alert per
+channel inside `alerting.dedupe.window`. The details name the message by its
+identifier, its message kind, its channel and the attempts, never its destination.
+Removing rather than marking the row keeps no record of where somebody was written to
+(IDN-PRIN-003): the alert, not the row, is the signal. The job is `sends`, run every
+`outbox.poll.interval`.
+
+Where a caller undertakes a send inside its own transaction, the row, and the first
+attempt with it, precede that transaction's commit; this is the observation the
+phase 9 report names, not a choice made here.
+
+*Tests that pin it.*
+`SendingServiceTests.D_022_ATransportRefusalLeavesTheMessageRecordedAsync`,
+`SendingServiceTests.D_022_ARefusedMessageIsCarriedOnceItsRetryIsDueAsync`,
+`SendingServiceTests.AUTH_ABUSE_004_AC2_ARetryIsJudgedByTheRestrictionsAgainAsync`,
+`SendingServiceTests.IDN_ATTR_001_ARetryCarriesOnlyTheLanguagesStillOwedAsync`,
+`SendingServiceTests.D_022_AMessageWhoseBudgetIsSpentIsRemovedAndRaisesDegradationAsync`,
+`SendingServiceTests.INT_SMS_004_AC2_ARetryIsHeldBelowTheFloorAsync`,
+`SendOutboxTests.D_022_AnAttemptReadsBackAsItWasRecordedAsync`,
+`SendOutboxTests.D_022_OnlyAMessageWhoseAttemptIsDueIsReadAsync`.
+
+*Chapter text that should change.* INF-BG-001 could say that the send path makes the
+first attempt and the worker the rest; AUTH-ABUSE-004 could say that a retry is judged
+again; chapter 10 section 4 could name send delivery beside IDN-LIFE-003a on the
+`outbox.*` rows and say that a spent send is removed and raises `degradation` per
+channel.
+
+---
+
+## 323. The licence and maintenance log endpoints, and who may use them
+
+**Phase 9 · 2026-09-24 · Tier 2 · OPS-MAINT-001, OPS-ALERT-001, OPS-ALERT-002, OPS-MIG-003, `09` section 8a**
+
+*The question.* OPS-MAINT-001 has the system store licence and permit expiry dates,
+warn `maintenance.expiry.warninglead` ahead, and keep a maintenance log "in the
+management application" whose entries "cannot be deleted through the application".
+Chapter 09 section 8a lists only `PUT /admin/compliance/licences` under
+`compliance:manage`. It does not say how the management application reads the
+licences back, how an entry reaches the log or is read, who may record one, where a
+licence's identifier comes from, whether a licence that has lapsed unrenewed is still
+warned of, or what runs the warning.
+
+*The readings.*
+
+1. Only the listed route exists; the log and the reads are left to a later chapter.
+2. The listed route, a read of the licences, and a read and an append of the log, all
+   under the permission the section names.
+
+*Chosen: 2.* AC1 has the dates "surfaced" and AC3 has the log "in the management
+application", and neither can be met without a way to read and to append. The routes
+are `GET` and `PUT /admin/compliance/licences` and `GET` and `POST
+/admin/compliance/maintenance`, each under `compliance:manage` and a session, the
+narrowest permission the section names; no route changes or removes an entry, and the
+application's database role holds `SELECT, INSERT` only on the log table, as on the
+audit records (OPS-MIG-003), so AC3's "cannot be deleted" holds below the endpoint as
+well.
+
+`PUT` replaces the whole list and is idempotent: the identifier is the caller's, and
+two licences under one identifier are refused as `api.request.malformed` at
+`licences` rather than one chosen. A log entry's actor is the signed-in subject, never
+a value the body names, and an entry dated after now has not been performed and is
+refused as malformed at `performedAt`. The views carry the D-153 value shapes and
+nothing more: an entry is read without its storage identifier.
+
+The warning is the job `licence-expiry`, run daily as a monitoring operation. Every
+licence whose expiry lies within the lead raises `expiry-approaching` under the scope
+`licence:<id>`, a lapsed one included, so the warning does not stop when the date
+passes unrenewed; OPS-ALERT-002 keeps each licence to one alert inside
+`alerting.dedupe.window`. The details carry the identifier, kind, name and expiry. The
+feature sits in `Janus.Authentication` beside the alerting it raises on.
+
+*Tests that pin it.*
+`MaintenanceRecordsTests.OPS_MAINT_001_EveryOperationAnswersToComplianceManageAsync`,
+`MaintenanceRecordsTests.OPS_MAINT_001_AC1_TheExpiryDatesAreStoredAndReadBackAsync`,
+`MaintenanceRecordsTests.OPS_MAINT_001_TwoLicencesUnderOneIdentifierAreRefusedAsync`,
+`MaintenanceRecordsTests.OPS_MAINT_001_AC3_AnEntryIsDatedAndCarriesThePersonAskingAsync`,
+`MaintenanceRecordsTests.OPS_MAINT_001_AC3_ATaskDatedAfterNowIsRefusedAsync`,
+`LicenceExpiryTests.OPS_MAINT_001_AC2_ALicenceInsideTheLeadRaisesExpiryApproachingAsync`,
+`LicenceExpiryTests.OPS_MAINT_001_AC2_ALicenceThatLapsedUnrenewedIsStillRaisedAsync`,
+`LicenceExpiryTests.OPS_MAINT_001_AC2_TheLeadIsTheConfiguredOneAsync`,
+`MaintenanceEndpointTests.OPS_MAINT_001_AC1_TheExpiryDatesAreStoredAndReadBackAsync`,
+`MaintenanceEndpointTests.OPS_MAINT_001_AC3_ARecordedTaskIsDatedAndCarriesThePersonAskingAsync`,
+`MaintenanceEndpointTests.OPS_MAINT_001_ABodyThatCannotBeReadIsMalformedAsync`,
+`MaintenanceEndpointTests.OPS_MAINT_001_AnAccountWithoutComplianceManageIsRefusedAsync`,
+`MaintenanceStoreTests.OPS_MAINT_001_AC1_TheExpiryDatesReadBackAsTheyWereReplacedAsync`,
+`MaintenanceStoreTests.OPS_MAINT_001_AC3_AnEntryReadsBackDatedAndWithItsActorAsync`,
+`DatabaseRoleTests.OPS_MAINT_001_AC3_TheApplicationCannotChangeOrRemoveALogEntryAsync`.
+
+*Chapter text that should change.* Chapter 09 section 8a could list `GET
+/admin/compliance/licences` and `GET` and `POST /admin/compliance/maintenance` beside
+the `PUT`; OPS-MAINT-001 could say that the log is append-only at the database role and
+that a lapsed licence stays warned of.
+
+---
+
+## 324. When the holiday list has run out, and what looks
+
+**Phase 9 · 2026-09-24 · Tier 2 · PRIV-RIGHT-002, D-142, OPS-ALERT-001, `10` row `privacy.holidays`**
+
+*The question.* D-142 item 4 and the `10` row for `privacy.holidays` raise a Normal
+alert "when no listed date lies beyond `maintenance.expiry.warninglead`", and
+PRIV-RIGHT-002 calls it "a list running out". Neither says whether an empty list,
+which is the default, has run out, in which zone "beyond" is judged, or what looks.
+
+*The readings.*
+
+1. Only a list that holds dates can run out; an empty list raises nothing.
+2. The words as written: an empty list lists no date beyond the lead and is raised.
+
+*Chosen: 2.* It is what the sentence says, and it is the reading that warns: a
+deployment that never lists a holiday counts every one as a working day, which is
+compliant but is what the alert exists to bring to a person's attention. OPS-ALERT-002
+keeps it to one alert inside `alerting.dedupe.window`, so it recurs at that pace until
+a date is listed.
+
+A date lies beyond the lead when it falls after the calendar day that now plus the
+lead falls on in `privacy.calendar.timezone`, the zone every holiday is determined in
+(D-153); a date on that day itself is not beyond it. The condition names no one and
+carries the horizon instant. The look is the job `holiday-list`, run daily as a
+monitoring operation beside `licence-expiry`, since the lead it measures is counted in
+days.
+
+*Tests that pin it.*
+`HolidayListWatchTests.OPS_ALERT_001_AC1_AHolidayListRunningOutIsRaisedAsync`,
+`HolidayListWatchTests.PRIV_RIGHT_002_AnEmptyHolidayListIsRaisedAsync`,
+`HolidayListWatchTests.PRIV_RIGHT_002_AListReachingPastTheLeadRaisesNothingAsync`,
+`HolidayListWatchTests.PRIV_RIGHT_002_TheLeadIsTheConfiguredOneAsync`.
+
+*Chapter text that should change.* The `10` row for `privacy.holidays` could say that
+an empty list is raised and that "beyond" is judged by calendar day in
+`privacy.calendar.timezone`; INF-BG-001 could name the holiday-list look among the
+jobs.
+
+---
+
+## 325. Where the IP-to-city file comes from, what it looks like, and how a process holds it
+
+**Phase 9 · 2026-09-24 · Tier 2 · INT-GEN-006, AUTH-SESS-013, LIB-EXT-001, INF-BG-001, D-162 section B (entry 117)**
+
+*The question.* INT-GEN-006 resolves the city on a session from "a local IP-to-city
+database: a file bundled with the library or supplied by the host, read in process,
+never a call to a third party", refreshed every `location.database.refresh` by a
+background job, stale beyond `location.database.maxage`. No chapter names the file's
+format, how a host supplies it, where a refresh reads it from, or how a process that
+has just started resolves an address before the job next runs. CONV-DESIGN-008 names
+no package that reads any published database format.
+
+*The readings.*
+
+1. The library bundles a database and a reader for a published format.
+2. The host supplies the file through a public port, in a format the library defines;
+   the library reads it whole into memory and resolves against the copy.
+3. The host supplies a path through a new setting.
+
+*Chosen: 2.* Reading 1 needs a data licence and a package neither the chapters nor
+CONV-DESIGN-008 give; reading 3 adds a key to `10`. Reading 2 is the shape the library
+already gives the deployment's DNS (`IDnsResolver`): one public interface,
+`ILocationSource`, with one method that opens the file as it now stands and answers a
+`Result<Stream>`. It is optional; with none registered no session carries a location
+and `degradation` is raised, as before. Opening it reads a file the deployment holds
+and reaches no network; keeping that file current is the deployment's.
+
+The format is documented on the interface: UTF-8 text, a line `# YYYY-MM-DD` giving
+the date the data was produced, and one tab-separated range per line (first address,
+last address, country as ISO 3166-1 alpha-2 or nothing, city or nothing, latitude and
+longitude of the city present exactly where the city is). A file is taken whole or not
+at all: no date, a line that cannot be read, ranges of mixed family or reversed, or two
+ranges that overlap refuse it, because a file read in part would resolve some
+addresses and silently not others. Its age is judged from its own date, not from when
+it was read.
+
+A process holds one parsed copy for every scope. It reads the file the first time it
+resolves an address, so a restart does not wait for the next refresh, and after that
+only the job `location-database` (INF-BG-001, every `location.database.refresh`, a
+monitoring operation) reads it again and replaces the copy whole. A refresh that could
+not open or read the file raises `degradation` under `location.database.refresh` and
+keeps the copy it had, until that copy is stale; a stale copy answers no location and
+raises under `location.database.stale`; no copy at all raises under
+`location.database.absent`. A failed refresh is surfaced by that alert and the run
+counts as run, so `background-job-failed` stays the signal of a job that could not run.
+The copy is per process; a deployment runs the worker in the process that serves
+requests.
+
+The internal resolver port of entry 117 now answers the city and country and, beside
+them, where the city lies, which OPS-ALERT-007 measures by; the location a session
+shows is still `{ city, country }` and no public signature carries a place.
+
+*Tests that pin it.*
+`LocationDatabaseTests.INT_GEN_006_AC1_TheResolverHoldsNothingItCouldCallOutWith`,
+`LocationDatabaseTests.INT_GEN_006_AC1_EveryAddressIsResolvedAgainstTheCopyHeldAsync`,
+`LocationDatabaseTests.INT_GEN_006_AC3_TheCityIsWhatTheFileSaysOfTheAddressAsync`,
+`LocationDatabaseTests.INT_GEN_006_AC3_WithNoFileAvailableNoLocationIsAnsweredAsync`,
+`LocationDatabaseTests.INT_GEN_006_AC2_TheMissingFileSurfacesAsADegradationAsync`,
+`LocationDatabaseTests.INT_GEN_006_AC2_AFailedRefreshSurfacesAsADegradationAsync`,
+`LocationDatabaseTests.INT_GEN_006_AC2_ARefreshReplacesTheCopyHeldAsync`,
+`LocationDatabaseTests.INT_GEN_006_AFileThatCannotBeReadWholeIsRefusedAsync` (seven cases),
+`LocationDatabaseTests.INT_GEN_006_AFileWithNoDateIsRefusedAsync`,
+`LocationDatabaseTests.INT_GEN_006_AStaleFileAnswersNoLocationAndIsRaisedAsync`,
+`BackgroundJobsTests.INF_BG_001_AC1_EveryJobRunsWithoutAPersonAsync`.
+
+*Chapter text that should change.* INT-GEN-006 could name `ILocationSource` and the
+file's format, and say that a refused file is refused whole; LIB-HOST-001 could list
+the location file among the optional host declarations; `10` section 4 could say that
+the file's age is judged from its own date.
+
+---
+
+## 326. When two sessions are looked at together, and what is kept to measure them
+
+**Phase 9 · 2026-09-24 · Tier 2 · OPS-ALERT-007, AUTH-SESS-013, OPS-ALERT-002, CONV-DESIGN-005**
+
+*The question.* OPS-ALERT-007 raises `concurrent-sessions-implausible` when two sessions
+of one account are both used inside `alerting.sessions.window` and their resolved
+cities lie further apart than `alerting.sessions.distance` or in different countries;
+the same city, or an unresolved location on either side, never alerts. It does not say
+at which use the two are compared, how the distance between two cities is measured,
+what a session keeps to measure it by, whether sessions standing on one record count
+as two, what the alert names, or what becomes of the use when the alert cannot be
+raised.
+
+*The readings.*
+
+1. Compare at every use of every session against every other.
+2. Compare only when a use begins a stretch: a session begun or derived, a use from a
+   city other than the one it was last used from, or a use after a pause longer than
+   the window.
+
+*Chosen: 2.* Every pair that reading 1 would raise is raised by reading 2 at the later
+of the two stretches, since the earlier session was then used inside the window, and
+reading 2 reads the account's sessions once a stretch rather than once a request. A
+city is resolved when the database named it; a place with a country and no city is
+unresolved and never raises. Two places are the same city when country and city match
+without regard to case. The distance is the great-circle distance between the two
+cities' coordinates on a sphere of the Earth's mean radius; it is compared only where
+the countries do not already differ. Sessions standing on one record are one session
+held more than one way and are never compared with each other.
+
+To measure a distance a session keeps, beside the city and country it shows, where
+that city lies: the coordinates of the city from the location file (entry 325), stored
+in the place under the person's key and gone with it (AUTH-SESS-013 AC4). They are no
+finer than the city, never shown and never exported. A place written before they were
+kept reads back without them and is unresolved for this purpose.
+
+The alert is scoped to the account, so OPS-ALERT-002 keeps one account to one alert
+inside `alerting.dedupe.window`, and its details name the account and the two sessions
+and neither place, which stays the person's. The look runs in the transaction that
+records the use; an alert that cannot be raised fails the use, as a degradation the
+resolver cannot raise does (CONV-DESIGN-005 AC1).
+
+*Tests that pin it.*
+`SessionServiceTests.OPS_ALERT_007_AC1_SimultaneousSessionsFromImplausibleOriginsAlertAsync`,
+`SessionServiceTests.OPS_ALERT_007_AC1_CitiesFurtherApartThanTheDistanceAlertAsync`,
+`SessionServiceTests.OPS_ALERT_007_AC2_OrdinaryMultiDeviceUseDoesNotAsync`,
+`SessionServiceTests.OPS_ALERT_007_ASessionTakenUpAgainFarAwayAlertsAsync`,
+`SessionServiceTests.OPS_ALERT_007_TheDistanceIsTheConfiguredOneAsync`,
+`SessionStoreTests.OPS_ALERT_007_WhereACityLiesReadsBackAsWrittenAsync`.
+
+*Chapter text that should change.* OPS-ALERT-007 could say when two sessions are
+compared, that distance is great-circle between the cities, that sessions on one
+record are one session, and that the alert names the sessions and not the places;
+AUTH-SESS-013 could say that the place kept under the person's key includes where the
+city lies.
+
+---
+
+## 327. Where read volume is counted from, and how a person's normal is kept
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-ALERT-005, AUTHZ-GATE-002, LIB-API-004, PRIV-RIGHT-005c**
+
+*The question.* OPS-ALERT-005 (D-153) counts "one record returned to the actor by a
+gate-filtered query or an export" per calendar day in `privacy.calendar.timezone`, and
+raises `read-volume-anomaly` when today's count exceeds `exfiltration.readvolume.factor`
+times the actor's mean daily count over `exfiltration.readvolume.baselinewindow` and
+exceeds `exfiltration.readvolume.minimum`. The gate returns a predicate the host runs
+against its own tables (AUTHZ-GATE-002), so the library never sees how many rows came
+back. The chapters do not say how the count reaches the library, who an actor is when
+one person acts for another or when a system principal runs, how the mean treats a day
+with no reads or a person with no history, when the mean is computed, or what is kept
+and for how long.
+
+*The readings.*
+
+1. The library counts nothing it cannot see; the condition is left to the host.
+2. The library exposes a port the host reports each filtered query's and each export's
+   row count to, and counts and judges them itself.
+3. As 2, and the library also counts the records its own staff routes return.
+
+*Chosen: 2, strictest where the readings differ on what is watched.* Reading 1 leaves a
+security condition of the table without a raise site, which OPS-ALERT-001 AC1 does not
+allow. A public `IReadVolume` (`Janus.Core`) takes the access context and the number of
+records one gate-filtered query or one export returned; a negative number is
+`api.request.malformed` naming `records`. Reading 3 is not taken: no library route runs
+a gate-filtered query (the library's own reads check a permission on one record or
+list the library's own administrative tables), and `/privacy/export` returns only the
+actor's own records and is outside the staff export controls (`10`,
+`exfiltration.export.stepuprequired`).
+
+The actor is the acting person (`AccessContext.Acting`): a staff member acting for a
+customer is counted, the customer is not. Work a system principal does is nobody's
+reading and is not counted. The day is the calendar day of the instant in
+`privacy.calendar.timezone`, the day the privacy clock counts. The mean is the sum of
+the actor's counts on the days of the window before today divided by the window's
+length in days, so a day without reads counts as nothing read and today never raises
+its own baseline; a person with no count in the window has a mean of nothing, so only
+the minimum stands between their first busy day and the alert, as D-153 intends. Both
+comparisons are strict.
+
+The means are recomputed once a day by the `read-volume-baseline` job (Monitoring,
+daily, in one transaction), which also forgets every count older than the window, so a
+count is kept no longer than the window it serves. A count and a mean hold the actor's
+identifier and a number and nothing of what was read; PRIV-RIGHT-005c's erasure leaves
+them as it leaves every row holding the identifier alone, and they lapse with the window.
+With `exfiltration.readvolume.alerting` off, counts are still kept so the mean is whole
+when it is turned back on; nothing is raised. An unreadable factor, minimum or flag
+falls back to its default rather than silencing the condition. The alert is scoped to
+the actor and its details are `{actor, records, dailyMean}`.
+
+*Tests that pin it.*
+`ReadVolumeTests.OPS_ALERT_005_AC1_AnActorReadingFarBeyondTheirOwnPatternRaisesAsync`,
+`ReadVolumeTests.OPS_ALERT_005_AC2_AnActorWhoseNormalIsHighDoesNotAlertAsync`,
+`ReadVolumeTests.OPS_ALERT_005_TheMinimumKeepsAFirstBusyDaySilentAsync`,
+`ReadVolumeTests.OPS_ALERT_005_TheFactorAndMinimumAreTheConfiguredOnesAsync`,
+`ReadVolumeTests.OPS_ALERT_005_AlertingOffCountsAndRaisesNothingAsync`,
+`ReadVolumeTests.OPS_ALERT_005_TheActorIsCountedNotThePersonActedForAsync`,
+`ReadVolumeTests.OPS_ALERT_005_ASystemPrincipalIsNotCountedAsync`,
+`ReadVolumeTests.OPS_ALERT_005_ANegativeCountIsMalformedAsync`,
+`ReadVolumeTests.OPS_ALERT_005_ADayIsTheCalendarDayInTheZoneAsync`,
+`ReadVolumeTests.OPS_ALERT_005_TheMeanIsTakenOverTheWindowBeforeTodayAsync`,
+`ReadVolumeTests.OPS_ALERT_005_TheWindowIsTheConfiguredOneAsync`,
+`ReadVolumeStoreTests.OPS_ALERT_005_ReportsOnOneDayAddToOneCountAsync`,
+`ReadVolumeStoreTests.OPS_ALERT_005_TheMeanIsRecomputedOverTheWindowBeforeTodayAsync`,
+`ReadVolumeStoreTests.OPS_ALERT_005_ARecountReplacesEveryMeanAsync`.
+
+*Chapter text that should change.* OPS-ALERT-005 could say that the host reports each
+filtered query's and export's row count through `IReadVolume` (and `07` list it among
+the ports a host calls), that the actor is the acting person and a system principal is
+not counted, that the mean is over every day of the window before today with a day
+without reads counted as nothing, and that counts are kept for the window only.
+
+---
+
+## 328. How a host's action bound to a step-up gate is met
+
+**Phase 9 · 2026-09-24 · Tier 3 · AUTH-STEP-001, AUTH-STEP-002, AUTH-STEP-003, AUTHZ-GATE-005, LIB-HOST-004**
+
+*The question.* A host binds its own action to a step-up gate through the model builder
+(`StepUpGate`, D-160), naming a gate of `10` section 5a or one of its own. Every such
+action was refused with `auth.stepup.required` on every call: the gate never read a
+session, since phase 2 left the session to phase 3 and phase 3 built the session's
+judgement for the library's own actions only. AUTH-STEP-002 AC3 ("a subject whose
+session meets the gate within the maximum age is not challenged") and D-160's
+`requires` ("an action whose bound gate the session does not currently satisfy") never
+held for a host's action, and the list filter admitted rows under a bound action the
+check refused. The chapters do not say which session judges a host's gate, what a gate
+the host names costs when no policy states values for it, or what the assurance
+provider's level is compared with.
+
+*The readings.*
+
+1. Keep refusing every bound action of a host.
+2. Judge the gate against the library's session that carries the request, where it is
+   the acting person's own; a gate named in section 5a costs that action's values, and
+   a gate the host names costs (a) the system default gate, (b) the dearest gate of the
+   person's policy, or (c) nothing it can be met by.
+
+*Chosen: 2(b).* Reading 1 fails AUTH-STEP-002 AC3 for every host. Of the three costs,
+(a) can be cheaper than what the person's own organization asks at its gates, and (c)
+is reading 1 again; (b) never asks less than a named gate of the same policy would. The
+session judged is the one the request resolved to, and only where its account is the
+context's acting person: a context acting for someone else is judged by the actor's
+session, and a system principal, a call carrying no session of the library (a token, a
+background job) or a context the session does not belong to is not judged by it. That
+unjudged case is as before: `auth.stepup.unavailable` with no assurance provider, and
+`auth.stepup.required` with one. The provider's level is still not compared with any
+gate, because it reports a level alone and a gate is three values (AUTH-STEP-002); no
+level can show a phishing-resistance requirement or a maximum age met.
+
+The refusal carries what a gate on the library's own surface carries (`action`,
+`level`, `phishingResistant`, `outcome`, `combinations`), so the frontend prompts the
+same way and steps up at `POST /auth/step-up`. A gate is judged once a request and once
+a capability page, never once a row (AUTHZ-GATE-005 AC1). The list filter and the SQL
+fragment ask the bound gate as the check does, so the two renderings of one rule agree
+(AUTHZ-GATE-001); a restricted account's list still matches nothing before any gate is
+asked.
+
+*Tests that pin it.*
+`StepUpGatesTests.AUTH_STEP_002_AC3_ASessionThatMeetsAHostsGateIsNotChallengedAsync`,
+`StepUpGatesTests.AUTH_STEP_002_AnotherPersonsSessionMeetsNoGateAsync`,
+`StepUpGatesTests.AUTH_STEP_003_AC2_TheDenialIsDistinguishableFromAnOrdinaryOneAsync`,
+`StepUpGuardTests.AUTH_STEP_002_AGateNamedInTheCatalogueCostsItsOwnValuesAsync`,
+`StepUpGuardTests.AUTHZ_GATE_005_AGateTheHostNamesCostsTheDearestGateOfThePolicyAsync`,
+`StepUpGuardTests.AUTH_STEP_002_AnotherPersonsSessionIsRefusedAsync`,
+`GateBehaviourTests.AUTH_STEP_002_AC3_ASessionThatMeetsAHostsGateIsNotChallengedAsync`,
+`GateBehaviourTests.AUTH_STEP_001_AListUnderABoundActionAsksForStepUpAsync`,
+`GateBehaviourTests.LIB_HOST_004_AC2_ABoundActionIsDeniedWithNoAssuranceProviderAsync`.
+
+*Chapter text that should change.* AUTH-STEP-002 or AUTHZ-GATE-005 could say that a
+host's gate is judged against the acting person's own session, what a gate the host
+names costs (or let section 4.1a's `gates` carry host-named keys), and that a list
+filter asks the bound gate; LIB-HOST-004 could say what the provider's level is
+compared with, or return the three values a gate needs.
+
+---
+
+## 329. What an export operation is, and what it asks
+
+**Phase 9 · 2026-09-24 · Tier 3 · OPS-ALERT-006, D-045, OPS-CFG-004**
+
+*The question.* OPS-ALERT-006 says export operations "SHALL be defined, gated by
+step-up, individually audited, and rate-limited", and its AC1 that "export" is an
+enumerated set of operations. `10` gives `exfiltration.export.stepuprequired` (staff
+bulk export only, D-148), `exfiltration.export.ratelimit` (5 per hour) and
+`exfiltration.export.auditing` (protected). No chapter says who enumerates the set,
+where an export passes through the library, what counts as one export, whom the limit
+counts, what the audit row carries, or what a system principal meets at the step-up
+gate. Entry 319 recorded that the three keys were read by nothing.
+
+*The readings.*
+
+1. The set is the library's own: nothing of the library's own surface is a staff bulk
+   export, so the set is empty and the keys stay unread.
+2. The set is the host's: every permission the host declares whose action is `export`
+   (the action AUTHZ-GATE-006 already names as reading) is an export operation, and the
+   gate, through which every exercise of a host's permission passes (AUTHZ-SEAM-001),
+   applies step-up, the limit and the audit row. What counts as one export is
+   (a) each admitted check, list filter or SQL fragment exercising the permission, or
+   (b) each record the host reports it returned.
+3. As 2, with a separate host-facing call the host makes when it exports, outside the
+   gate.
+
+*Chosen: 2(a).* Reading 1 leaves every key of D-045 dead and the item unbuilt.
+Reading 3 is a second path around the gate for the one kind of action the item exists
+to control, and a host that forgets the call exports ungated. Reading 2 puts the
+enumeration where AC1 puts it, in declared names, and never in a judgement of volume.
+Of the two counts, (b) needs the host's report, which `IReadVolume` (entry 327) already
+carries for volume and which the host could omit; (a) is counted where the gate admits
+the operation, so an export the host runs is counted whatever it then returns.
+
+What is built:
+
+- An export is a host-declared permission whose action is `export`.
+  `AuthorizationModel.Exports` holds the set; the library declares none, and a
+  person's copy of their own records (`/privacy/export`) is no permission and is
+  gated as before (D-141, D-148).
+- Step-up: while `exfiltration.export.stepuprequired` is on (default, and assumed on
+  where unreadable), an export the host bound to no gate asks for a gate named by the
+  export itself, which costs the dearest gate of the person's policy (entry 328). A gate
+  the host bound it to is asked instead. A system principal has no session and meets no
+  gate, so it cannot export while the flag is on (strictest reading); a deployment whose
+  background work exports turns the flag off, which is recorded and alerted as any
+  runtime change is.
+- Order: restriction, then grants, then the gate, then consent, then the limit, then
+  the audit row. A refused export is neither counted nor recorded as an export (a
+  refusal by the grants is recorded as `authz.access.denied`, as before).
+- One export is each admitted `RequireAsync` (all three overloads), `FilterAsync` and
+  `FragmentAsync` call exercising an export permission. A capability page is not one:
+  it answers what could be done and exercises nothing. A restricted account's list
+  filter matches nothing before any of this is asked; an export is a reading action
+  and is not restricted.
+- The limit is each actor's own over a rolling hour: a person by subject, a system
+  principal by its name. Past it the call is refused with `auth.throttled` and
+  `retryAt`, the instant the oldest of the hour's exports leaves the window. A limit of
+  zero or less admits nothing and answers one hour from now. The table `bulk_exports`
+  keeps the instants and forgets an actor's older than the hour when the actor's next
+  export is recorded. Two concurrent exports of one actor can both be admitted at the
+  limit, as with a subject's own exports (D-086); the limit is a brake, not a count of
+  record.
+- Every admitted export is recorded in the trail as `authz.access.exported`, category
+  security, with the acting and effective person (or the principal's name and reason,
+  with the nil subject), the organization where the call named one, and details
+  `permission`, `resourceType` and, for a check, `resource`. What the export returned is
+  never recorded. D-045's "why" is not carried: the gate takes no reason, and no
+  chapter gives an export one.
+- `exfiltration.export.auditing` is honoured: off only where the deployment turned it off
+  through the command line (OPS-CFG-004), and the export is still counted when it is.
+  Entry 319's observation no longer holds for this key.
+
+*Tests that pin it.*
+`AuthorizationModelTests.OPS_ALERT_006_AC1_ExportIsAnEnumeratedSetOfOperations`,
+`ExportOperationsTests.OPS_ALERT_006_AC1_OnlyADeclaredExportIsGatedLimitedAndRecordedAsync`,
+`ExportOperationsTests.OPS_ALERT_006_AnExportAsksForStepUpWhileTheDeploymentRequiresItAsync`,
+`ExportOperationsTests.OPS_ALERT_006_AnExportPastTheHourlyLimitIsThrottledUntilAPlaceFreesAsync`,
+`ExportOperationsTests.OPS_ALERT_006_TheLimitIsEachActorsOwnAsync`,
+`ExportOperationsTests.OPS_ALERT_006_ALimitOfNothingAdmitsNoExportAsync`,
+`ExportOperationsTests.OPS_ALERT_006_EachAdmittedExportIsIndividuallyAuditedAsync`,
+`ExportOperationsTests.OPS_ALERT_006_AC2_OnlyTheDeploymentTurnsTheAuditOffAsync`,
+`ConfigurationEndpointTests.OPS_ALERT_006_AC2_ExportAuditingCannotBeDisabledThroughTheApplicationAsync`,
+`ExportStoreTests.OPS_ALERT_006_EachActorsHourHoldsItsOwnExportsAsync`,
+`ExportStoreTests.OPS_ALERT_006_AnAdmittedExportIsRecordedOnItsOwnAsync`,
+`GateBehaviourTests.OPS_ALERT_006_AnExportIsGatedRecordedAndLimitedAtTheGateAsync`.
+
+*Chapter text that should change.* OPS-ALERT-006 could say that the set is the host's
+permissions whose action is `export`, that the gate applies all three requirements, what
+one export is, that the limit is per actor over a rolling hour and answered with
+`auth.throttled` and `retryAt`, what a system principal meets at the gate, and whether
+an export carries a reason (and so whether the gate should take one).
+
+---
+
+## 330. How the library learns of clock drift and a failed certificate renewal
+
+**Phase 9 · 2026-09-24 · Tier 2 · INF-HOST-001, INF-TLS-003, OPS-ALERT-001, LIB-EXT-001**
+
+*The question.* OPS-ALERT-001 lists `certificate-renewal-failed` (High, INF-TLS-003)
+and `clock-drift` (Normal, INF-HOST-001), and the phase 9 gate asks that every
+condition fire from a test. The clock and the certificates are the environment's: the
+plan says Milestone 1 touches no certificate and no host machine, and places TLS and
+clock synchronisation in Milestone 2 steps 3 and 4. No chapter says how the library
+learns that either has failed, and neither condition had a raise site.
+
+*The readings.*
+
+1. Leave both to the environment's own monitoring, outside the library's alerting;
+   neither condition is ever raised by the library.
+2. The library measures both itself: queries a time server and connects to the served
+   origins to read their certificates. This needs a time server address no `10` key
+   names, and makes the library the one component watching both.
+3. The deployment registers what the environment knows, through two optional seams in
+   the manner of `ILocationSource` (entry 325), and the library reads them on a
+   schedule and raises through its own channels.
+
+*Chosen: 3.* Reading 1 leaves two rows of the table with no way to reach the D-048
+channels, which INF-TLS-003 names. Reading 2 adds a key and a network dependency, and
+reads the certificate expiry through the same component that would report renewal,
+which INF-TLS-003 AC3 forbids. Reading 3 adds two public interfaces and no key.
+
+What is built:
+
+- `IClockReference.OffsetAsync`: the offset of this host's clock from the reference, as
+  the environment last measured it, positive where the host is ahead. The hourly
+  `clock-drift` job raises `clock-drift` where the offset's magnitude exceeds
+  `factor.totp.drift` steps of 30 seconds (INF-HOST-001 AC1 names the TOTP drift
+  tolerance), with details `offsetSeconds` and `toleranceSeconds`. The edge is within.
+- `ICertificateRenewal.LastFailureAsync`: when the most recent renewal failed, or
+  nothing where it succeeded. The hourly `certificate-renewal` job raises
+  `certificate-renewal-failed` with `failedAt` at every pass until a renewal succeeds;
+  OPS-ALERT-002 keeps it to one alert a window.
+- Fail closed: a deployment that registers neither, or whose seam answers a failure, is
+  raised as `degradation` with the scope `clock.reference.absent`,
+  `clock.reference.unread`, `certificate.renewal.absent` or
+  `certificate.renewal.unread`, as an absent location source is (entry 325). An
+  unwatched clock or renewer is not known to be sound.
+- The expiry of the served certificate (INF-TLS-003 AC1) and the separation of the two
+  checks (AC3) are the environment's: the expiry is read off-host from what is served,
+  by nothing that renews, which is the INF-OBS-003 reachability check's place. Keeping
+  the clock within the tolerance (INF-HOST-001 AC1) is the environment's clock
+  synchronisation. These are verified in Milestone 2 steps 3 and 4, not by a test here.
+
+*Tests that pin it.*
+`EnvironmentWatchTests.INF_HOST_001_AC2_DriftBeyondToleranceRaisesAnAlertAsync`,
+`EnvironmentWatchTests.INF_HOST_001_DriftWithinToleranceRaisesNothingAsync`,
+`EnvironmentWatchTests.INF_HOST_001_TheToleranceFollowsTheCodeDriftAsync`,
+`EnvironmentWatchTests.INF_HOST_001_AC2_AnUnmeasuredClockIsRaisedAsADegradationAsync`,
+`EnvironmentWatchTests.INF_TLS_003_AC2_ARenewalFailureRaisesAnAlertWithoutAnyoneCheckingAsync`,
+`EnvironmentWatchTests.INF_TLS_003_AC2_AnUnwatchedRenewalIsRaisedAsADegradationAsync`,
+`BackgroundJobsTests.INF_BG_001_AC1_EveryJobRunsWithoutAPersonAsync`.
+
+*Chapter text that should change.* INF-HOST-001 and INF-TLS-003 could say that the
+environment reports the measured offset and the renewal outcome to the library through
+the two seams, and LIB-EXT-001's table could list them with "None: the deployment
+supplies them; an absent one is raised as a degradation". OPS-OBS-002's list of
+degradations could name the four scopes.
+
+---
+
+## 331. How the missing emergency credential stays raised, and where it is shown
+
+**Phase 9 · 2026-09-24 · Tier 2 · OPS-BOOT-001 AC3, OPS-ALERT-001, OPS-ALERT-002, 09**
+
+*The question.* OPS-BOOT-001 AC3: until a break-glass credential is generated, "a
+non-dismissable High alert ... is shown to every system administrator and raised on
+OPS-ALERT-001". Bootstrap raised `no-emergency-credential` once (entry 313), so the
+alert went out in one window and never again, and nothing raised it after a credential
+was spent. `09` names no route a management application could read the credential's
+state from, so nothing could show it to an administrator.
+
+*The readings.*
+
+1. Raise it once at bootstrap, as before.
+2. Raise it at every pass of a job while no issue stands (none generated, or the last
+   spent), so OPS-ALERT-002 carries it once a window until one is generated; and for
+   the showing, (a) add a route such as `GET /admin/break-glass` answering whether an
+   issue stands, or (b) add no route.
+
+*Chosen: 2(b).* Reading 1 is dismissed by the first window's end, which "non-dismissable"
+forbids. The hourly `emergency-credential` job raises it while `StandingAsync` finds no
+issue, which covers a spent credential too: after an emergency no credential exists.
+For the showing, `09` is authoritative for routes and names none, and a new route
+widens the public surface, so none is added; the alert reaches the alert destinations,
+which the operator holds. What a management application shows every system
+administrator needs a route `09` does not yet have.
+
+*Tests that pin it.*
+`EmergencyCredentialWatchTests.OPS_BOOT_001_AC3_TheAbsenceIsRaisedUntilACredentialIsGeneratedAsync`,
+`EmergencyCredentialWatchTests.OPS_BOOT_001_AC3_ASpentCredentialLeavesTheAbsenceRaisedAsync`,
+`BootstrapTests.OPS_BOOT_001_AC3_NoEmergencyCredentialIsIssuedAndItsAbsenceIsRaisedAsync`,
+`BackgroundJobsTests.INF_BG_001_AC1_EveryJobRunsWithoutAPersonAsync`.
+
+*Chapter text that should change.* `09` could add a route answering whether a
+break-glass credential stands (for example `GET /admin/break-glass`, system
+administrators only, `{ "standing": true|false, "issuedAt": ... }`), so the management
+application can show the alert of OPS-BOOT-001 AC3; OPS-BOOT-001 AC3 could say the
+alert is raised again every window until one is generated, a spent one included.
+
+---
+
+## 332. How the off-host erasure ledger is written, and what an erasure waits for
+
+**Phase 9 · 2026-09-24 · Tier 3 · DR-016, DR-006a, IDN-LIFE-003a, IDN-LIFE-003b, LIB-EXT-001**
+
+*The question.* DR-016 asks that completed erasures be appended to an off-host ledger
+and that no erasure be reported complete until its line is durable (AC2); the plan puts
+the ledger writer in phase 9. No chapter says how the library reaches storage off the
+host, at which point of an erasure the line is written, or what happens while the
+ledger cannot take it, and LIB-EXT-001's table has no row for it. It touches erasure, so
+the strictest reading is taken.
+
+*The readings.*
+
+1. Append the line inside the erasure's own transaction, before it commits. The ledger
+   is not the database, so the two cannot commit together: a transaction that fails
+   after the append leaves a line for an erasure that did not happen.
+2. Append once the erasure's transaction commits, tracked by a new column on the
+   erasures table and a retry pass of its own. IDN-LIFE-003b lists that table's
+   columns, and the pass would repeat the outbox's retry, budget and alert.
+3. Make the line one more required confirmation on the erasure's outbox record, which
+   IDN-LIFE-003a already describes ("the outbox record carries each required
+   subscriber's confirmation"; "complete only when every required subscriber has
+   confirmed"), so the record and the erasures row that follows it complete only once
+   the line is durable.
+
+*Chosen: 3.* Reading 1 writes lines for erasures that may not exist, which a replay
+would then carry out. Reading 2 adds a column IDN-LIFE-003b does not list and a second
+retry mechanism. Reading 3 holds the erasure open, retries it and raises it by the
+mechanism the chapter already gives the host-side work.
+
+What is built:
+
+- `IErasureLedger.AppendAsync(line)`, answering success only once the line is durable.
+  The deployment registers it over storage that does not share fate with the database
+  host; that storage is the environment's (DR-016 AC1, verified in Milestone 2).
+- The line is the erasure's instant in RFC 3339 UTC to the second (the instant its
+  transaction committed, truncated), one space, the subject identifier in its
+  lower-case form, one space, the reason in the spelling of `10` section 5.12a, and
+  nothing else (AC4). DR-016's illustration shows the minute and two spaces; its
+  Values paragraph (D-153) says the second and one space, and is followed. A line is
+  read back only in the exact form it is written in.
+- The confirmation is named `erasure-ledger`, is required, is offered before the host's
+  subscribers, and only on `ErasureRequested` records. While the ledger refuses the
+  line, the record and the erasures row stay `awaiting-subscribers` on the outbox
+  schedule; a spent budget fails both and raises `erasure-delivery-exhausted` with
+  `erasure-ledger` among the outstanding. `GET /admin/erasures/{id}` lists it first.
+- The manual completion path vouches for the host's subscribers and never for the
+  line: where the attempts never made it durable, the path appends it first, and while
+  the ledger refuses it the path answers `system.fault` (500) and closes nothing. The
+  audit's `outstanding` names the host's subscribers only.
+- A confirmation is recorded under the subscriber's name, so a host subscriber named
+  `erasure-ledger`, or two host subscribers under one name, would read another's
+  confirmation as their own and close an erasure with its work undone. Startup refuses
+  either with the new code `model.startup.subscribername`, `details.handler` naming the
+  name. Two host subscribers sharing a name had that effect before this entry too.
+- A line may be appended twice (a pass whose record does not commit after the append,
+  or a replay's redelivery); a replay reads a repeat as the one erasure.
+- A deployment that registers no ledger completes its erasures without a line and
+  raises nothing: DR-016 is deferred until the tier upgrade and R-A13 accepts the
+  exposure until then, so an hourly alert would raise an accepted risk as a failure.
+
+*Tests that pin it.*
+`OutboxPublisherTests.DR_016_AC2_AnErasureIsNotCompleteUntilItsLineIsDurableAsync`,
+`OutboxPublisherTests.DR_016_AC4_TheLineHoldsTheInstantTheSubjectAndTheReasonAndNothingElseAsync`,
+`OutboxPublisherTests.DR_016_AC2_ALedgerThatNeverTakesTheLineIsRaisedWhenTheBudgetIsSpentAsync`,
+`OutboxPublisherTests.DR_016_OnlyAnErasureWaitsForTheLedgerAsync`,
+`ErasureServiceTests.DR_016_AC2_AnErasureIsReadWithItsLedgerLineAsync`,
+`ErasureServiceTests.DR_016_AC2_AManualCompletionWritesTheLineBeforeItClosesTheErasureAsync`,
+`ErasureServiceTests.DR_016_AC2_ALineAlreadyWrittenIsNotWrittenAgainAsync`,
+`ErasureServiceTests.DR_016_AC2_AManualCompletionClosesNothingWhileTheLineCannotBeWrittenAsync`,
+`ErasureLedgerLineTests.DR_016_ALineIsReadAsTheErasureItWasWrittenFor`,
+`ErasureLedgerLineTests.DR_016_ALineInAnyOtherFormIsNotRead`,
+`HandlerCoverageTests.DR_016_AC2_ASubscriberUnderTheLedgersNameFailsStartup`,
+`HandlerCoverageTests.IDN_LIFE_003a_TwoSubscribersUnderOneNameFailStartup`,
+`StartupValidationTests.DR_016_AC2_ASubscriberUnderTheLedgersNameIsRefusedAsync`,
+`ErasureEndpointTests.DR_016_AC2_AManualCompletionIsAFaultWhileTheLedgerCannotTakeTheLineAsync`.
+
+*Chapter text that should change.* LIB-EXT-001's table could add "Off-host erasure
+ledger (DR-016) | None: the deployment supplies it at the tier upgrade; until then
+erasures complete without it (R-A13)". DR-016 could say the line is a required
+confirmation on the erasure's outbox record, that the manual completion appends it and
+never vouches for it, and could show its illustration to the second with one space.
+IDN-LIFE-003a could say that subscriber names are distinct and that `erasure-ledger` is
+the library's. `10` section 1.5 could add `model.startup.subscribername`.
+
+---
+
+## 333. What the replay of the erasure ledger does to a restored database
+
+**Phase 9 · 2026-09-24 · Tier 3 · DR-016 AC3, DR-006a AC1, IDN-PRIN-001, INF-BG-002, IDN-LIFE-003**
+
+*The question.* DR-016 names the replay (`janus replay-erasures <ledger path>`,
+idempotent over every line) and says only "for every identifier in the ledger, confirm
+the key is destroyed and the erasure recorded; complete anything the restore forgot".
+No chapter says what a line whose account the restore brought back live becomes, since
+the only transition into `deleted` is from `deleting`; whether the host is told again;
+under which principal the replay acts; or what becomes of a ledger that cannot be read
+whole. It touches erasure, so the strictest reading is taken.
+
+*The readings.*
+
+1. For each line: where the erasures row stands, nothing (the row commits with the
+   key's destruction, IDN-LIFE-003b AC4); otherwise carry the erasure out again, from
+   whatever state the restore left the account in, and tell the host again.
+2. As 1, but carry out only an account the restore left `deleting`, and report the rest
+   for the operator to put into deletion by hand.
+3. As 1, but leave the host's own tables to the operator.
+
+*Chosen: 1.* The erasure was carried out and reported complete before the restore, so
+no state the restore brought back is one the account may stay in; reading 2 leaves a
+person's data readable until someone acts. The restore brought the host's rows back as
+well, so reading 3 leaves the host's half undone.
+
+What is built:
+
+- `janus replay-erasures <path>` reads the whole ledger before anything else: UTF-8
+  with no byte order mark read as another encoding, each line in the one form entry 332
+  writes. A file that cannot be opened or decoded, or no path, is refused as
+  `api.request.malformed` with `details.member` `ledger`; a line in any other form
+  refuses the whole ledger with `details.line` its number, and nothing is written. The
+  key document is piped as for every command; the connection is the application's own
+  credential, which holds every right the erasure writes with.
+- A line whose erasures row stands, a repeated line included, is left as it is. A line
+  naming an account the restored database does not hold is counted and left. Every
+  other line is carried out again in one transaction: the account enters the deletion
+  the line records where it was not already deleting (`takedown` for `minor-takedown`,
+  `oob-request` for the other two reasons, since the ledger and not the person asks
+  now), at the line's instant, from `active`, `restricted` or `suspended`, and is
+  erased by the same writes as the sweep's; the `ErasureRequested` record goes on the
+  outbox again at the line's instant and reason, so the host redoes its half and the
+  line is appended again unchanged; and the erasure is audited as
+  `privacy.erasure.executed` under the deployment-scoped principal `replay-erasures`,
+  reason `DR-016`, with details `reason` and `erasedAt`.
+- `SystemOperation` gains `ErasureReplay` (`erasure-replay`), the one operation that
+  principal may run, as bootstrap (entry 314) and key rotation have theirs.
+- The command prints `{"reapplied": n, "standing": n, "absent": n}` and nothing of a
+  subject. A second run over the same ledger carries out nothing more.
+- DR-006a AC1 speaks of erasures "recorded in the erasures table ... where that table
+  survives the restore"; a restore of the one database restores that table with it, so
+  the replay reads the ledger, which DR-006a names as what re-applies them.
+
+*Tests that pin it.*
+`ErasureReplayTests.DR_016_AC3_TheWholeLedgerIsReplayedAndASecondReplayChangesNothingAsync`,
+`ErasureReplayTests.DR_016_AC3_ALedgerWithALineInAnotherFormIsRefusedWholeAsync`,
+`ErasureReplayTests.DR_016_AC3_AnUnreadableLedgerIsRefusedAsync`,
+`AccountTests.DR_016_AC3_AnErasureIsReappliedFromTheStateARestoreLeft`,
+`AccountTests.DR_016_AC3_AnAccountLeftDeletingKeepsItsDeletion`,
+`AccountTests.DR_016_AC3_AnErasedOrEmergencyAccountIsNotReapplied`.
+
+*Chapter text that should change.* DR-016 could say what a replayed line becomes (the
+deletion origin recorded, the host told again, the audit and its principal) and what
+the command prints and refuses. IDN-PRIN-001 could list `erasure-replay` among the
+operations. The restore procedure (`12` section 4) could say the ledger is copied from
+its storage and replayed under the application's credential before cutting over, and
+DR-006a AC1 could name the ledger in place of the erasures table.
+
+---
+
+## 334. How the restore test is run, proved, timed and recorded
+
+**Phase 9 · 2026-09-25 · Tier 3 · DR-007, DR-008, DR-010 AC2, DR-017 AC2, OPS-ALERT-001, INF-BG-001, LIB-EXT-001**
+
+*The question.* DR-007 names the job's steps: restore the latest base backup and logs
+into a throwaway instance, decrypt the canary's field with the live key-encryption key,
+verify a fingerprint resolves, record the elapsed time against the objective, tear the
+instance down, and alert on failure or overrun. A library cannot restore a backup:
+where the backups are, how they are opened and what the instance is built on are the
+environment's (DR-010, DR-017). No chapter says how the library is handed the instance,
+where the measured time is recorded, what a deployment that cannot restore at all
+becomes, whether a restore running past the objective is waited for, or what proves "a
+known account can sign in" for a canary that holds no credential (entry 312). It
+touches the keys, so the strictest reading is taken.
+
+*The readings.*
+
+1. A host seam the library asks to restore into a throwaway instance and to tear it
+   down; the library opens the restored database with the keys it runs on and proves
+   the canary itself; a deployment that registers no seam fails every run.
+2. As 1, but a deployment with no seam skips the test and raises a degradation.
+3. The host runs the whole test and reports its outcome and time; the library records
+   and raises.
+
+For the record: an audit row per run, the maintenance log, or a table of its own. For a
+restore still running at the objective: wait for it, or abandon it.
+
+*Chosen: 1, an audit row, and abandoning at the objective.* Reading 3 leaves the
+decryption under the live key, the half DR-007 exists to prove, to code the library
+never sees. Reading 2 lets a deployment that never tested a backup pass quietly, where
+DR-007 calls an untested backup a hypothesis. The maintenance log is for the human
+tasks and DR-007 says this job is not one; an audit row needs no new table and is kept
+for the security period. A restore that hangs would otherwise never be raised, and the
+test has failed by then in any case.
+
+What is built:
+
+- Public `IRestoreTestInstance`. `RestoreAsync` builds an instance from the committed
+  infrastructure definition, never over the running database, restores the latest
+  base backup and the logs after it, and returns how to reach the restored database.
+  `TearDownAsync` tears down whatever the last restore built, however far it got. The
+  backup's private key is the implementation's to fetch when it restores and to hold
+  in memory only (DR-010 AC2).
+- The job `restore-test`, reason `DR-007`, operation `monitoring`, every
+  `backup.restoretest.interval`. It reads `backup.restoretest.objective` (the default,
+  which is its ceiling, where unreadable) and `backup.restoretest.canary`, and asks for
+  a restore under a cancellation that fires at the objective. It opens the restored
+  database as a storage area of its own under the keys the process holds, with pooled
+  connections off, so no connection to the instance is left open when the teardown is
+  asked. Then:
+  - it decrypts the canary's display name (entry 312); none there, a canary setting
+    naming no subject, or a fault is `undecrypted`;
+  - it reads the canary's verified email and finds its account by it as sign-in does,
+    the canonical form looked up by its fingerprint; not found, found as another
+    account, or a fault is `unresolved`. This is what AC4's "a known account can sign
+    in" is proved by: sign-in's resolution of an identifier to its account, since the
+    canary holds no credential;
+  - nothing registered, a restore that failed, or one that threw is `unrestored`; a run
+    that took longer than the objective, whatever step it reached, is `overrun`; any
+    other run is `passed`.
+- A step that throws is read as the failure of that step and logged by the type of what
+  was thrown only (hosting background event 3, a warning).
+- The teardown is asked after every restore attempted, with no cancellation, so the
+  worker stopping does not leave the instance standing. One that fails or throws is
+  recorded as `outlived`.
+- Every run is recorded as `ops.restoretest.completed`, security category, under the
+  job's principal, with details `outcome`, `elapsedSeconds`, `objectiveSeconds` and
+  `outlived`, and nothing of the canary. A run short of a pass, or whose instance may
+  have outlived it, raises `restore-test-failed` with the same details in the same
+  transaction.
+- A run holds its own process's worker for as long as it takes. The deployment's other
+  process keeps taking the other jobs' runs, since the database decides which process
+  takes each run, and the objective bounds how long any run holds one.
+- `backup.restoretest.interval` is `P3M`, which the chapter 10 holding rule reads as 93
+  days (D-152), so a calendar quarter of 90 days can pass without a run.
+
+*Tests that pin it.*
+`RestoreTestTests.DR_007_AC1_TheTestRunsAtItsIntervalWithoutAPersonAsync`,
+`RestoreTestTests.DR_007_AC4_TheRestoredCanaryDecryptsAndItsAccountIsFoundAsync`,
+`RestoreTestTests.DR_007_AC2_TheMeasuredTimeIsRecordedAgainstTheObjectiveAsync`,
+`RestoreTestTests.DR_007_AC3_ABackupTheLiveKeyCannotOpenIsRaisedAsync`,
+`RestoreTestTests.DR_007_AC3_ABackupWhoseAccountsTheLiveFingerprintKeyCannotFindIsRaisedAsync`,
+`RestoreTestTests.DR_007_AC3_ARunThatRestoresNothingIsRaisedAsync`,
+`RestoreTestTests.DR_008_AC1_TheTestReadsTheRestoredInstanceAndLeavesTheRunningOneAsync`,
+`RestoreTestTests.DR_008_AC2_TheInstanceDoesNotOutliveTheTestAsync`,
+`BackgroundJobsTests.INF_BG_001_AC1_EveryJobRunsWithoutAPersonAsync`.
+
+*Chapter text that should change.* DR-007 could name the host seam and what it returns,
+the outcomes, the record and its details, that the test is abandoned at the objective,
+and that "a known account can sign in" is proved by resolving the canary's verified
+email to its account. DR-008 could say the teardown is asked whatever became of the
+test and that a failed one raises. Chapter 10 could list `ops.restoretest.completed`.
+If "at least quarterly" means once in every calendar quarter, the
+`backup.restoretest.interval` row could be written as `P90D`.
+
+---
+
+## 335. How the recovery-code reminder is sent
+
+**Phase 9 · 2026-09-25 · Tier 2 · AUTH-FACT-008 AC5, INF-BG-001, REG-ACCT-001, PRIV-RIGHT-003, D-022**
+
+*The question.* AUTH-FACT-008 AC5 asks that a set older than `recovery.codes.reminder`
+produce one reminder and no further reminder until the set is regenerated. Phase 3
+built the set's `RemindedAt` and a service method that marked a set reminded, but no
+job called it and nothing was sent, so the criterion held in a unit test and never in
+a deployment. No chapter names the message, who it reaches, which accounts it skips,
+when the pass runs, or where the person sees that it fired.
+
+*The readings.*
+
+1. A message kind of its own, sent to the security-notice set; the set is marked in the
+   transaction that writes the notices; accounts that are not active are skipped; the
+   instant is shown on the account and carried in the export.
+2. As 1, but the reminder rides `security-notice`, which already reaches the same set.
+3. As 1, but every account with a set is reminded, whatever its state.
+
+*Chosen: 1.* A catalogue that words `security-notice` for "something happened to the
+account" would tell a person their account was touched when nothing was; CONV-CONTENT-001
+leaves the words to the deployment, which needs a key to word this one by. A suspended,
+restricted or deleting account cannot act on the reminder, and a deleting one is owed
+no mail beyond its deletion notice; its set stays owed the reminder, so it is sent if
+the account comes back. D-022 writes a message in the transaction that made it
+necessary, which is what makes "one reminder" hold across a failed pass.
+
+What is built:
+
+- `MessageKind.RecoveryCodesReminder`, key `recovery-codes-reminder`, on both channels,
+  with default words in both shipped languages. It carries no link and no value.
+- `IRecoveryCodeStore.DueReminderAsync`: the sets generated at or before an instant,
+  never reminded, held by an active account, oldest first, a page at a time.
+- `RecoveryCodeReminders.RemindAsync` reads the age (an unreadable one fails the pass
+  and sends nothing), and for each set due marks it reminded, records it, and asks for
+  the reminder on every channel of the security-notice set, in one transaction. A
+  channel that refuses the reminder does not keep the set owed it: the one reminder
+  was produced. The pass takes every page until none is left.
+- The job `recovery-code-reminder`, reason `AUTH-FACT-008`, operation `expiry-sweep`,
+  daily, since the age is counted in months.
+- `RecoveryCodeStatus.RemindedAt` (public), shown as `recoveryCodes.remindedAt` on the
+  account read, and `remindedAt` in the export's `recovery-codes` record beside the
+  other instants the set carries.
+- The unused `RecoveryCodeService.RemindAsync` is removed.
+
+*Tests that pin it.*
+`RecoveryCodeRemindersTests.AUTH_FACT_008_AC5_AnOldSetRemindsItsOwnerOnceAsync`,
+`RecoveryCodeRemindersTests.AUTH_FACT_008_AC5_TheAgeIsWhatTheDeploymentConfiguresAsync`,
+`RecoveryCodeRemindersTests.AUTH_FACT_008_AC5_AnAccountThatIsNotActiveIsNotRemindedAsync`,
+`RecoveryCodeRemindersTests.AUTH_FACT_008_AC5_EverySetDueIsRemindedOnceInOnePassAsync`,
+`RecoveryCodeStoreTests.AUTH_FACT_008_AC5_TheSetsOwedTheirReminderAreReadOldestFirstAsync`,
+`AccountServiceTests.AUTH_FACT_008_AC5_TheReadCarriesWhenTheSetWasRemindedOfAsync`,
+`ExportSourceTests.REG_ACCT_001_AC1_TheExportCarriesTheCredentialsTheAccountShowsAsync`,
+`VocabularyContractTests.WireNames_TheKeysTheCatalogueIsAskedBy_AreWritten`,
+`BackgroundJobsTests.INF_BG_001_AC1_EveryJobRunsWithoutAPersonAsync`.
+
+*Chapter text that should change.* AUTH-FACT-008 could name the message, its recipients
+(the security-notice set), that only an active account is reminded, and the daily pass.
+Chapter 09 could list `remindedAt` in the account's `recoveryCodes` object. Chapter 10
+could carry `recovery-codes-reminder` if it lists message kinds.
+
+---
+
+## 336. How the audit partitions are kept, and how the maintenance credential reaches the worker
+
+**Phase 9 · 2026-09-25 · Tier 3 · PRIV-RET-002, OPS-MIG-003a, INF-HOST-003, INF-BG-001, INF-BG-002, OPS-DATA-002, LIB-EXT-001**
+
+*The question.* Phase 1 created `audit_ensure_partitions()` and
+`audit_drop_expired_partitions(interval, interval)`, executable by the maintenance role
+only, and ran the first once at migration. Nothing called either afterwards: no month
+past the two the migration created was ever made, so a deployment not migrated again
+within about two months would refuse every audited operation for want of a partition,
+and no expired partition was ever dropped. PRIV-RET-002 has a scheduled job call the
+drop with the maintenance credential "the worker fetches from the secrets manager", and
+the months "created ahead by the sweep". `ISecretSource.ReadMaintenanceCredentialAsync`
+exists but nothing reads it, and `AddJanus`, which takes every other value the secrets
+manager supplies, does not take this one. No chapter says what form the credential has,
+how the worker is handed it, what a deployment without it becomes, what the job does
+under a credential that is not the maintenance one, or what the record of a run holds. It
+touches credentials and retention, so the strictest reading is taken.
+
+*The readings.*
+
+For the credential's path: (1) a further `AddJanus` argument, as the key-encryption key,
+the fingerprint key and the sign-on secret are passed; (2) the job resolves the host's
+`ISecretSource` from the container at each run. For its form: (a) a whole database
+connection for the maintenance login; (b) a password joined to the application's own
+connection under a user name the library would have to assume. For its absence: refuse
+to start, or start and fail every run. For the months ahead: this job, or the expiry
+sweep, which runs under the application's credential and cannot execute the function.
+
+*Chosen: 1, a, refuse to start, and this job.* Every other secret reaches the library as
+an `AddJanus` argument read once at startup (chapter 08's "fetched once, at startup"),
+and no `ISecretSource` is registered in a container anywhere, so 2 would be a second way
+of doing the same thing. The role is `NOLOGIN` and the deployment attaches the login
+(OPS-MIG-003), so the library cannot know the user name (b) would need, and the command
+line's key document already carries the maintenance connection whole. A deployment that
+starts without the credential would lose its audit trail within two months, so it does
+not start. The sweep cannot reach the function, so the months ahead are this job's.
+
+What is built:
+
+- `AddJanus` takes `maintenanceCredential` after `signOnSecret`: the database connection
+  of a login that holds the maintenance role's rights, as its UTF-8 bytes. Empty, startup
+  fails with `model.startup.kekunavailable`, `details.key` `maintenanceCredential`.
+- Internal `IAuditPartitions` (Identity, audit) with `AuditPartitions` (Storage): whether
+  the connection is the maintenance credential (the role's rights and no path to the
+  application's, the test the key-rotation commands apply, entry 316), the ensure
+  function and the drop function, each through the connection accessor of its own area.
+- The job `audit-partitions`, reason `PRIV-RET-002`, operation `retention-purge`, daily.
+  It opens a storage area of its own over the maintenance credential, unpooled, so no
+  connection stays open under it after the run, and shares none with the running one
+  (OPS-DATA-002 holds within each area: nothing of the job's is in the application's
+  transaction). It refuses a connection that is not the maintenance credential with
+  `authz.denied` before either function is asked; then creates the months ahead; then
+  reads `retention.audit.security` and `retention.audit.routine` and, where either is
+  unreadable, fails the run having dropped nothing; then drops.
+- Each completed run is recorded as `ops.auditpartitions.maintained`, security category,
+  under the job's principal, over the application's own credential (the maintenance role
+  writes no row), with details `created`, `dropped`, `securityRetentionDays` and
+  `routineRetentionDays`, and no subject.
+- A drop is not undone by a record that then fails to be written; the run fails and the
+  worker's lapse alert applies (INF-BG-001).
+- A refused or failed run is a failed run, which the worker raises as
+  `background-job-failed` once the job has lapsed (PRIV-RET-002 AC3).
+
+*Tests that pin it.*
+`AuditRetentionTests.PRIV_RET_002_AC3_ExpiredPartitionsAreDroppedOnScheduleWithoutAPersonAsync`,
+`AuditRetentionTests.PRIV_RET_002_AC5_ARunUnderAnotherCredentialDropsNothingAsync`,
+`AuditPartitionsTests.OPS_MIG_003a_OnlyTheMaintenanceCredentialIsTakenForItAsync` (3 cases),
+`AuditPartitionsTests.PRIV_RET_002_AC3_TheMonthsAheadAreCreatedAndTheExpiredDroppedAsync`,
+`KeyMaterialTests.OPS_MIG_003a_StartupFailsNamedWithoutTheMaintenanceCredential`,
+`BackgroundJobsTests.INF_BG_001_AC1_EveryJobRunsWithoutAPersonAsync`,
+`AuditActionsTests` (the list).
+
+*Chapter text that should change.* PRIV-RET-002 could say that the job creates the months
+ahead as well as dropping, since the sweep it names cannot execute the function, and
+what its record holds. INF-HOST-003 and chapter 07 could say the maintenance credential is
+a whole database connection handed to `AddJanus` at startup, and that a deployment
+without it does not start. Chapter 10 could list `ops.auditpartitions.maintained`.
+
+---
+
+## 337. How a blocklist fallback is raised
+
+**Phase 9 · 2026-09-25 · Tier 2 · OPS-OBS-002, OPS-ALERT-001, OPS-ALERT-002, INT-PWD-002, AUTH-PASS-004**
+
+*The question.* OPS-ALERT-001's table lists "blocklist fallback" under `degradation`,
+and OPS-OBS-002 AC1 has each listed degradation produce a monitored signal. Phase 2 had
+screening write the fall back to the host's log only (`IScreeningLog.Degraded`), so a
+deployment whose range service had been unreachable for months would have screened
+against the offline corpus without anyone being told. The other three degradations
+the item lists raise the alert already (entries on `mailbox.push:<mailbox id>`,
+`mailbox.reconciliation` and `send:<channel>`). No chapter names the scope of this one,
+its details, or what screening does when the alert cannot be raised.
+
+*The readings.* For the scope: (1) one scope for every fall back; (2) a scope per
+configured corpus. For an alert that cannot be raised: (a) screen on against the
+offline corpus and leave the log as the only trace; (b) refuse the operation with what
+refused the alert.
+
+*Chosen: 1 and b.* The condition is the deployment's, not a person's, so one scope
+keeps a sustained outage to one alert a window under OPS-ALERT-002 whichever corpus is
+configured; the details say which. A fall back the owner cannot be told of is the
+silent degradation OPS-OBS-002 forbids, so the operation is refused, as an absent
+location source is (entry 325).
+
+What is built:
+
+- `PasswordScreening` takes the alert channels and the clock. When the configured corpus
+  cannot answer and it is not the offline one, the fall back is logged as before, then
+  raised as `degradation` with the scope `password.blocklist.fallback` and details
+  `configured` (the written name of the configured corpus) and `used` (`offline`),
+  before the offline corpus is asked.
+- A raise that fails refuses the screening with the error that refused it; nothing is
+  screened past unseen.
+- Screening runs outside any open transaction on every path that reaches it (set,
+  change, recovery, registration), so the alert commits with its own unit of work and a
+  refusal of the password that follows does not roll it back.
+
+*Tests that pin it.*
+`PasswordScreeningTests.OPS_OBS_002_AC1_ABlocklistFallbackRaisesADegradationAsync`,
+`PasswordScreeningTests.OPS_OBS_002_AC2_AFallbackThatCannotBeRaisedRefusesTheOperationAsync`,
+`PasswordScreeningTests.ScreenAsync_TheConfiguredCorpusAnswering_RaisesNothingAsync`,
+`ScreeningTests.INT_PWD_002_AC1_WithTheServiceUnreachableTheOfflineListAnswersAsync`
+(extended).
+
+*Chapter text that should change.* OPS-OBS-002 could name the scope
+`password.blocklist.fallback` beside the other degradations' scopes, and say that a
+fall back that cannot be raised refuses the operation. INT-PWD-002 AC1 could say the
+fall back is raised, not only recorded.
+
+---
+
+## 338. A development database is made ready the way a production one is
+
+**Phase 9 · 2026-09-25 · Tier 2 · OPS-ENV-001, OPS-BOOT-001**
+
+*The question.* OPS-ENV-001 has development databases "seeded with realistic principals
+and grants", AC1 "A fresh development database yields a usable, permission-realistic
+dataset", AC2 "No bypass flag exists in any environment". No chapter says what seeds a
+development database, what it holds, or how the absence of a bypass flag is shown.
+
+*The readings.*
+
+1. A development seed of the library's own: a command or a start-up step that writes
+   sample organizations, accounts and grants into a database it is told is for
+   development.
+2. The path a production database takes, and nothing beside it: the migrations, then
+   `janus bootstrap`, which writes the administrative organization, the three
+   administrative roles with their permissions, the first administrator and
+   `emergency`; everything after that is made through the library's own operations, as
+   in production.
+
+*Chosen: 2.* A seed of its own is a second way of making principals and grants that
+production never runs, and a path that exists only where a database is told it is for
+development is itself the kind of switch AC2 forbids. Under 2 what a developer sees is
+exactly what an operator sees on the first day: real roles, real grants, a real
+administrator whose link enrols, and nothing granted outside a role.
+
+What is built: nothing new in the library. AC1 is pinned on a fresh database after
+bootstrap: every live grant belongs to a member of the administrative organization and
+names the seeded system administrator's role, there are exactly two such principals (the
+administrator and `emergency`), and no grant names a role that confers nothing. AC2 is
+pinned by a scan of the shipped code: nothing asks which environment it runs in
+(`IsDevelopment`, `EnvironmentName`, `GetEnvironmentVariable`), and no key of the
+settings catalogue is named for bypassing, skipping or disabling a check.
+
+*Tests that pin it.*
+`BootstrapTests.OPS_ENV_001_AC1_AFreshDatabaseYieldsAUsablePermissionRealisticDatasetAsync`,
+`FailClosedTests.OPS_ENV_001_AC2_NoBypassFlagExistsInAnyEnvironment`.
+
+*Chapter text that should change.* OPS-ENV-001 could say that a development database is
+made ready by the migrations and `janus bootstrap`, as a production one is, and that the
+library ships no seed of its own.
+
+---
+
+## 339. A concealed refusal is answered by the browser profile
+
+**Phase 9 · 2026-09-25 · Tier 3 · BFF-ERR-003, BFF-ORDER-001, OPS-ENV-002, AUTHZ-CONCEAL-001, AUTHZ-CONCEAL-002, AUTHZ-CONCEAL-004, API-CONV-003**
+
+*The question.* BFF-ORDER-001 stage 11 is "Error translation and concealment",
+BFF-ERR-003 AC3 has uniformity "enforced by the pipeline, not by endpoint discipline",
+and OPS-ENV-002 AC1 has denied-access semantics enforced in shared infrastructure.
+Entry 126 built stage 11's error translation and left its concealment unbuilt. The gate
+refused every record-level check with `authz.denied`, which the status table maps to
+403, and left the host's endpoint to answer it as an absence; the library's writer is
+internal, so each host endpoint answered a concealing type however it chose, and one
+that answered 403 said the record was there. Chapter 10 section 1.3 has `authz.denied`
+"used where existence is not concealed" and names no code for a concealed denial. No
+chapter says what the concealed answer's code and body are, how the pipeline learns
+that a refusal was concealed, or what becomes of what the endpoint wrote.
+
+*The readings.* For the code: (1) the gate returns a not-found code on a concealing type
+in place of `authz.denied`; (2) the gate keeps `authz.denied` and the pipeline answers a
+not-found code. For what the pipeline replaces: (a) a 403 or 404 the endpoint answered;
+(b) every answer of a request in which a refusal was concealed. For what the answer
+carries: (i) the code alone; (ii) the audit identifier of the refusal, as `authz.denied`
+carries it.
+
+*Chosen: 2, b and ii (Tier 3, the strictest reading).* BFF-ERR-003 puts concealment in
+the pipeline, and a code from the gate would still leave the answer to each endpoint;
+the result a host holds is unchanged and what crosses the boundary is not. An endpoint
+that goes on past a concealed refusal and answers anything else has answered from a
+record the caller may not see; under (a) a success, a 409 or a 422 would still say the
+record is there. AUTHZ-CONCEAL-004 has the response carry an identifier that appears in
+the audit trail, and the gate records a refusal for a record the library holds no row
+for exactly as one for a record the caller may not see, so the genuine absence carries
+one too and the two stay the same shape.
+
+What is built:
+
+- The code `authz.resource.notfound`, answered 404 (`ErrorCodes.ResourceNotFound`). No
+  operation returns it; stage 11 answers it.
+- The gate hands every refusal on a type that does not disclose to a holder of the
+  request, under the identifier it recorded. A refusal on a disclosing type, and one
+  tied to no record (AUTHZ-CONCEAL-005), hand nothing.
+- Stage 11 of the browser profile, mounted outermost, stands in for the response body:
+  what the endpoint writes goes through until a refusal is concealed and nothing goes
+  through after. When the request comes back with a refusal concealed, the response is
+  cleared to what it carried when the request reached the endpoints (the stages' own
+  cookies stay, anything the endpoint added goes), and the one refusal writer answers
+  404 `authz.resource.notfound` with `details.correlation` the audit identifier of the
+  first refusal concealed. A log line ties the request's trace identifier to it.
+- An answer the endpoint had begun before the refusal cannot be taken back: the
+  connection is closed rather than finished, and the operator is told at error level.
+- The machine profile does not carry the stage. Its routes are the library's own, none
+  of which checks a record, and a provider's callback has no caller to conceal from.
+
+*Residue.* Timing (BFF-ERR-003 AC2, AUTHZ-CONCEAL-002 AC2, API-CONV-003 AC1) is one
+refusal path and one writer, with the byte identity asserted, and is named in the report
+as verified by construction as the criteria say. The gate reads the candidate grants of
+a record it holds a row for and not of one it holds none for, so the two refusals
+differ by that query; the owner may want the read made for both. A host that answers
+its own 404 without asking the gate is outside the pipeline: the remarks of
+`UseBrowserProfile` and `IAccessGate.RequireAsync` say the gate is asked and the
+profile answers.
+
+*Rows for chapter 10.* Section 1.3: `authz.resource.notfound` | No such record, or a
+record of a concealing type the caller may not see; one answer for both, 404, carrying
+the audit identifier of the refusal | AUTHZ-CONCEAL-001, BFF-ERR-003.
+
+*Tests that pin it.*
+`ConcealmentTests.BFF_ERR_003_AC1_AConcealedRefusalIsTheSameBytesWhateverTheEndpointWroteAsync`,
+`ConcealmentTests.AUTHZ_CONCEAL_004_AC1_TheAnswerCarriesTheIdentifierTheRefusalWasRecordedUnderAsync`,
+`ConcealmentTests.InvokeAsync_TwoRefusalsConcealed_AnswersTheFirstAsync`,
+`ConcealmentTests.InvokeAsync_ARefusalConcealed_KeepsWhatTheStagesWroteAsync`,
+`ConcealmentTests.InvokeAsync_NothingConcealed_LeavesTheAnswerAsTheEndpointWroteItAsync`,
+`ConcealmentTests.InvokeAsync_AnAnswerBegunBeforeTheRefusal_IsBrokenOffAsync`,
+`BrowserProfileTests.OPS_ENV_002_AC1_TheProfileAnswersAConcealedRefusalAndKeepsWhatItsStagesWroteAsync`,
+`BrowserProfileTests.BFF_ERR_003_AC3_AnEndpointAnsweringPastAConcealedRefusalIsAnsweredAsAbsenceAsync`,
+`ExplanationTests.AUTHZ_CONCEAL_001_AC1_ARefusalOnATypeDeclaringNothingIsConcealedAsync`,
+`ExplanationTests.AUTHZ_CONCEAL_001_AC2_ARefusalOnADisclosingTypeIsNotConcealedAsync`,
+`ApiStatusTests.API_CONV_003_AC2_OnlyAFailureNamingNoRecordAnswersForbidden` (extended),
+`ErrorCodesTests.CONV_NAME_003_AC2_ChangingACodeFailsTheContractTest` (extended).
+
+*Chapter text that should change.* Chapter 10 section 1.3 needs the row above.
+BFF-ERR-003 could name the code and say the answer carries the refusal's audit
+identifier and nothing the endpoint wrote. AUTHZ-CONCEAL-001 could say that a host asks
+the gate before it looks the record up, since a record the library holds no row for is
+the genuine absence a concealed refusal is identical to.
+
+---
+
+## 340. How a client enters the registry, and how its secret is rotated
+
+**Phase 9 · 2026-09-25 · Tier 3 · AUTH-OIDC-001, OPS-SEC-001, OPS-SEC-002, API-REDIR-001**
+
+*The question.* AUTH-OIDC-001 has "a manually managed client registry" and AC4 has the
+mail-server client "registered at bootstrap where the mail integration is enabled".
+OPS-SEC-002 has client secrets share one lifecycle with the signing keys, with automated
+rotation and overlap windows; AC1 has rotation complete without restart or manual
+action, AC2 has what was issued under the previous key stay valid through the overlap.
+Phase 5 built the registry's reader and a writer only the tests called. Nothing in the
+library or the command-line application wrote a client, and entry 262's "bootstrap
+registers it" was never built, so a deployment could register the mail server or its
+own browser applications only by writing the table by hand. Nothing kept a replaced
+secret. No chapter says how a client is registered, where its secret comes from, what a
+registration writes down, or how long a replaced secret is taken.
+
+*The readings.* For the route: (1) bootstrap takes the mail-server client's values and
+secret; (2) a command of its own, run as the deployment is stood up and again whenever a
+client changes; (3) an endpoint of the management application. For the secret: (a) an
+argument; (b) a member of the key document piped from the secrets manager. For the
+overlap: (i) none, the new secret replaces the old at once; (ii) the replaced secret is
+taken for the signing keys' overlap, the access-token lifetime and five minutes; (iii) a
+key of its own.
+
+*Chosen: 2, b and ii (Tier 3, the strictest reading).* Bootstrap runs once and refuses a
+second run, so under (1) a secret could never be rotated and a browser application added
+later could never be registered. An endpoint (3) is the dynamic registration
+AUTH-OIDC-001 puts out of scope, reached with a session rather than with the server. An
+argument shows in the process list, so the secret travels as the keys do (entry 307). A
+key of its own (iii) is a default no chapter names; the signing keys' overlap is the one
+OPS-SEC-002's "one lifecycle" already prices.
+
+What is built:
+
+- `janus register-client --client <id> --name <name> --kind protocol|browser-application
+  --redirect <address> --scopes "<scope> ..."`, the secret in the key document's
+  optional member `clientSecret` as its UTF-8 bytes in base64, held and cleared with the
+  keys. The command checks the schema as the others do and prints
+  `{"registered":"<id>"}`.
+- `ClientRegistry` refuses with `api.request.malformed` naming the member: an identifier
+  or a scope that is empty or carries white space, a blank name, a destination without
+  an origin (the rule API-REDIR-001 AC3 applies at startup), and a secret shorter than
+  32 bytes, not UTF-8, or nothing but white space. The command refuses an absent or
+  undecodable `clientSecret` the same way.
+- The registry holds the SHA-256 of the secret, as before. Registering a client again
+  with a different secret moves the fingerprint held to `previous_secret`, with
+  `previous_secret_until` now plus `oidc.accesstoken.lifetime` plus five minutes
+  (migration `AddClientSecretOverlap`; a check keeps the two columns null together). A
+  registration that keeps the secret leaves both alone.
+- The token and pushed-authorization endpoints take either fingerprint, each compared in
+  constant time, the replaced one only before `previous_secret_until`.
+- Each registration is written down in the security partition as
+  `auth.oidc.clientregistered` under the principal `register-client`, reason
+  `AUTH-OIDC-001`, operation `configuration`, with `details.client`, `details.kind` and
+  `details.changed` (whether the registry held the client before), and nothing of the
+  secret.
+
+*Contradiction (Tier 3).* OPS-SEC-002 AC1 has rotation complete without restart or
+manual action, and D-026.3 has client secrets at rest under the key-encryption key with
+automated rotation. D-162 item 66 and `ISecretSource` (each value read once, at startup)
+have an application's sign-on secret come from the secrets manager, and the mail
+server's secret sits in the mail server's own configuration, which the library does not
+reach. Under this build a client secret is rotated in three human steps: a new secret in
+the secrets manager, `janus register-client` run with it, and the application restarted
+or the mail server reconfigured within the overlap. AC2 holds for client secrets and AC1
+holds for the signing keys; AC1 for client secrets is read under D-162 item 66 as the
+overlap that lets those steps be taken without an outage. The owner decides which
+governs: a library that generates and hands out client secrets itself, or a lifecycle
+outside the library with the overlap as its contract.
+
+*Residue.* API-REDIR-001 AC3 reads the registry's origins at startup, so a registration
+that changes a destination is taken by a running host at its next start. Until a
+registration exists, a declared mail client the registry does not hold as a `protocol`
+client faults as entry 262 has it, which is what tells an operator who skipped the
+command.
+
+*Rows for chapter 10.* Audit actions: `auth.oidc.clientregistered` | security |
+`AuditActions.ClientRegistered` | A client was registered in the provider's registry, or
+a registered one changed, from the server.
+
+*Tests that pin it.*
+`ClientRegistryTests.AUTH_OIDC_001_AC4_TheMailServerClientIsRegisteredFromTheServerAsync`,
+`ClientRegistryTests.OPS_SEC_002_AC2_AReplacedSecretIsKeptThroughTheOverlapAsync`,
+`ClientRegistryTests.OPS_SEC_002_AC2_TheOverlapFollowsTheAccessTokenLifetimeAsync`,
+`ClientRegistryTests.OPS_SEC_002_AChangeThatKeepsTheSecretReplacesNothingAsync`,
+`ClientRegistryTests.AUTH_OIDC_001_AClientTheRegistryCannotServeIsRefusedAsync`,
+`ClientRegistryTests.OPS_SEC_001_ASecretTheServerWouldNotTakeIsRefusedAsync`,
+`OidcStoreTests.OPS_SEC_002_AC2_AReplacedSecretIsKeptUntilTheOverlapEndsAsync`,
+`OidcFlowTests.OPS_SEC_002_AC2_AReplacedSecretAuthenticatesTheClientThroughTheOverlapAsync`,
+`RegisterClientTests.AUTH_OIDC_001_AC4_TheMailServerClientIsRegisteredAsTheDeploymentIsStoodUpAsync`,
+`RegisterClientTests.OPS_SEC_002_AC2_RegisteringANewSecretKeepsTheReplacedOneThroughTheOverlapAsync`,
+`RegisterClientTests.AUTH_OIDC_001_ARegistrationWithoutAUsableSecretIsRefusedAsync`,
+`RegisterClientTests.AUTH_OIDC_001_AnArgumentTheCommandCannotTakeIsRefusedAsync`,
+`AuditActionsTests.CONV_NAME_003_AC2_ChangingAnActionFailsTheContractTest` (extended).
+
+*Chapter text that should change.* AUTH-OIDC-001 AC4 could read "registered with
+`janus register-client` as the deployment is stood up" in place of "at bootstrap", and
+OPS-SEC-003's values could name the command beside `rotate-kek`. OPS-SEC-002 needs the
+owner's answer on AC1 for client secrets. Chapter 10 needs the audit-action row, and
+section 4.9 could say that a replaced client secret keeps the signing keys' overlap.
+
+---
+
+## 341. How the key-encryption key's cryptoperiod is kept
+
+**Phase 9 · 2026-09-25 · Tier 3 · DR-009a AC1, OPS-MAINT-001, OPS-ALERT-001, OPS-ALERT-002**
+
+*The question.* DR-009a AC1 has the cryptoperiod defined and rotation occur at its
+expiry. Chapter 06 section 9 puts the rotation inside the annual operation ("Annual, one
+operation") and names it a maintenance exception, a human step, and OPS-MAINT-001 logs
+it as the task `envelope-rotation`. OPS-MAINT-001 warns ahead of a licence's expiry, but
+nothing warned ahead of the operation, and no chapter says what tells the owner that the
+key's period is ending.
+
+*The readings.* (1) The cryptoperiod is kept by the runbook's calendar (chapter 11's
+schedule) and the library does nothing; AC1 is named as verified by inspection. (2) The
+library warns ahead of the anniversary of the latest operation the maintenance log
+records, as it warns of a licence. (3) The library warns ahead of the anniversary of the
+latest rotation the audit trail records.
+
+*Chosen: 2 (Tier 3, the strictest reading).* Under (1) the key outlives its period
+whenever the owner forgets, which OPS-MAINT-001 AC2 rules out for a licence ("Warning
+does not depend on anyone remembering"). Under (3) the area reads the trail through a
+port it does not hold, and the other four parts of the operation go unwatched; the log
+already records the operation as one task, dated and with its actor.
+
+What is built:
+
+- `EnvelopeRotationWatch`, run daily as the job `envelope-rotation` (reason `DR-009a`,
+  operation `monitoring`). The cryptoperiod is one year from the latest
+  `envelope-rotation` entry of the maintenance log. From `maintenance.expiry.warninglead`
+  before its end, and for as long as no later entry is recorded, each look raises
+  `expiry-approaching` under the scope `envelope-rotation` with `details.task`,
+  `details.performedAt` and `details.dueAt`. A log that records no operation has it due
+  now, both instants null. OPS-ALERT-002 keeps it to one alert a window.
+
+*Residue.* The watch reads the log, not the key: an operation recorded without the
+rotation silences it, and a rotation left unrecorded keeps it raised. The rotation
+stays the human step of chapter 06 section 9, so AC1's "rotation occurs at its expiry"
+is met by the warning and the command together, and is named so in the report. A fresh
+deployment is raised until the first sealing of the envelope is recorded, as it is for a
+missing break-glass credential (entry 331).
+
+*Tests that pin it.*
+`EnvelopeRotationWatchTests.DR_009a_AC1_TheOperationInsideTheLeadIsRaisedAsDueAsync`,
+`EnvelopeRotationWatchTests.DR_009a_AC1_AnOperationWithinItsCryptoperiodRaisesNothingAsync`,
+`EnvelopeRotationWatchTests.DR_009a_AC1_AnOperationUndoneOrNeverRecordedIsRaisedAsync`,
+`EnvelopeRotationWatchTests.DR_009a_AC1_TheLeadIsTheConfiguredOneAsync`.
+
+*Chapter text that should change.* DR-009a could state the cryptoperiod as one year from
+the last annual operation and say it is warned of from the maintenance log.
+OPS-MAINT-001 could list the annual operation beside the licences and permits it warns
+of, under `expiry-approaching` with the scope `envelope-rotation`.
+
+---
+
+## 342. A restriction names no channel
+
+**Phase 9 · 2026-09-25 · Tier 3 · AUTH-ABUSE-004, D-146, `10` section 4.5 `restrictions`**
+
+*The question.* AUTH-ABUSE-004 gives a restriction a key, an optional purpose filter and
+its buckets, and says every send evaluates every applicable restriction. The model has
+no channel. The shipped names say one: `sms.destination`, `sms.source`,
+`email.destination`. Read as the model states, a mail to an address answers to
+`sms.destination` (3 a day) as well as `email.destination` (5 an hour), so the hourly
+bucket is never the one that refuses, and a text message answers to the one a minute of
+`email.destination`. The sending phase built the model as stated and no entry recorded
+the question; it was found again in this phase.
+
+*The readings.* (1) A restriction governs every send its key and purpose match, whatever
+the channel; the names are names. (2) The prefix of a shipped name is a channel filter:
+`sms.*` governs text messages and `email.*` mail. (3) A channel field is added to the
+restriction beside the purpose.
+
+*Chosen: 1 (Tier 3, the strictest reading).* It grants least: every send answers to
+every restriction the model makes applicable, and no send escapes one because of how a
+host named it. Reading (2) gives a name a meaning the chapter does not, and a host's
+restriction named `sms.anything` would silently stop governing mail. Reading (3) adds a
+field to the public restriction shape and to `10` section 4.5, which is the owner's.
+
+*Residue.* A deployment that offers both channels to one person meets the tighter of the
+two sets on each: three mails a day to one address, and one text message a minute to one
+number. A host that wants channel limits apart edits the shipped restrictions; it cannot
+yet say "this one is for mail".
+
+*Tests that pin it.*
+`SendingServiceTests.AUTH_ABUSE_004_ARestrictionGovernsEverySendWhateverItsNameAsync`,
+`SendingServiceTests.AUTH_ABUSE_004_AC1_AFourthTextMessageInsideADayIsRefusedWithTheLiftAsync`,
+`SendingServiceTests.AUTH_ABUSE_004_AC1_ASecondMailInsideAMinuteIsRefusedWithTheLiftAsync`.
+
+*Chapter text that should change.* AUTH-ABUSE-004 could either give the restriction a
+channel filter (`sms` · `email` · `any`) beside the purpose, with the shipped defaults
+filtered by the channel their names give, or say that a restriction applies across
+channels and that the shipped names are names only.
+
 
 # Rows for chapter 10
 
@@ -11152,6 +14062,8 @@ The subsection each row belongs in is named with it.
 | `authz.group.inuse` | 1.3 | 409 | The group holds a member, belongs to a group, or was given a grant, so it cannot be removed. (AUTHZ-GROUP-001, AUTHZ-GRANT-003 AC3, entry 192) |
 | `identity.domain.unverified` | 1.1 | 422 | A listed domain is verified and no TXT value at `_identity-verify.<domain>` is `identity-domain-verification=<token>`, or the lookup could not be made; nothing is written. (REG-DOM-001, entry 209) |
 | `identity.invitation.notfound` | 1.1 | 404 | `GET /account/invitation` or the acknowledgement is asked of an account no standing invitation is attached to: none of its links was opened by it, or each it opened was acknowledged or revoked. (REG-INV-002, entry 242) |
+| `model.startup.subscribername` | 1.5 | 500 | Startup: two subject-event subscribers are registered under one name, or one under `erasure-ledger`, the name the erasure ledger's confirmation is recorded under. `details.handler` names it; nothing starts (IDN-LIFE-003a, DR-016, entry 332). |
+| `authz.resource.notfound` | 1.3 | 404 | The browser profile answers a request in which the gate refused a record of a type that conceals its records, whether or not the record exists, and whatever the endpoint wrote after the refusal. `details.correlation` is the audit record of the refusal; nothing else is carried (AUTHZ-CONCEAL-001, BFF-ERR-003, entry 339). |
 
 ## LIB-HOST-001, host declarations
 
@@ -11159,7 +14071,7 @@ The subsection each row belongs in is named with it.
 | --- | --- | --- |
 | `PasskeyAddresses` (`changePassword`, `enrol`, `manage`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `passkeyAddresses` or the field of it that is empty. The addresses are the frontend pages `/.well-known/change-password` and `/.well-known/passkey-endpoints` point at (REG-PM-001). |
 | `AuthenticationAddresses` (`signIn`, `provider`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `authenticationAddresses.signIn` or `authenticationAddresses.provider`. The first is where an authorization request that is not silent and holds no session is forwarded (AUTH-SESS-012 AC3). The second is the address the library is mounted at on the authentication application, which is where another application finds `/oidc/authorize` and `/oidc/token` (BFF-SESS-006). |
-| `SignOnClient` (`clientId`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `signOnClient.clientId`. The identifier is what this application calls itself at the provider when it establishes its own session, and the registry holds the one destination a code returns to under it. The secret it presents is not a declaration: it comes from the secrets manager through `ISecretSource.ReadSignOnSecretAsync` and is passed to `AddJanus`, which refuses to start without it with `model.startup.keyunavailable` and `details.key` naming `signOnSecret` (BFF-SESS-006, OPS-SEC-001). |
+| `SignOnClient` (`clientId`) | yes, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `signOnClient.clientId`. The identifier is what this application calls itself at the provider when it establishes its own session, and the registry holds the one destination a code returns to under it. The secret it presents is not a declaration: it comes from the secrets manager through `ISecretSource.ReadSignOnSecretAsync` and is passed to `AddJanus`, which refuses to start without it with `model.startup.kekunavailable` and `details.key` naming `signOnSecret` (BFF-SESS-006, OPS-SEC-001). |
 | `IDnsResolver` (`TextRecordsAsync`) | optional | No startup refusal. Every verification of a locked domain answers `identity.domain.unverified` and every scheduled check fails and raises `domain-reverification-failed`, so no domain is ever proved. A deployment that locks no domain needs none (REG-DOM-001, entry 212). |
 | `IMailServer` (`ProvisionAsync`, `MailboxesAsync`, `AppPasswordsAsync`, `CreateAppPasswordAsync`, `RevokeAppPasswordAsync`) | optional | No startup refusal. No mailbox is pushed and none is compared; the rows are still written, and the first pass after a registration pushes every state owed. A push carries a key that stays the same until the server confirms it, the address in its canonical form and the state `disabled`, `enabled` or `removed`; the server applies a key once. The listing answers every mailbox the server hosts with whether it is enabled. The three app-password calls carry the person's token and act on the account the server finds in it; the creation answers the server's new secret and its identifier, and a revocation of an identifier the server does not hold for that person answers `auth.credential.notfound`. Without a registration every app-password operation answers `authz.denied`. A deployment whose staff mail is hosted elsewhere needs none (INT-MAIL-006, INT-MAIL-008, INT-MAIL-009, INT-MAIL-010, entries 215, 262 and 263). |
 | `MailServerClient` (`clientId`) | where `IMailServer` is registered, no default | Startup fails with `model.startup.declarationmissing`; `details.key` names `mailServerClient.clientId`. The identifier is the registry's `protocol` client the mail server trusts, which the library issues the person's token to for the app-password calls; it presents no secret, since the library issues the token itself (INT-MAIL-010, AUTH-OIDC-001 AC4, entry 262). |
@@ -11254,6 +14166,8 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | Action | Category | Catalogue member | Written when |
 | --- | --- | --- | --- |
 | `auth.botdefence.signalled` | security | `AuditActions.BotDefenceSignalled` | The bot defence answered a send with a signal, which is recorded without the signal's own detail. (AUTH-ABUSE-009) |
+| `auth.breakglass.generated` | security | `AuditActions.BreakGlassGenerated` | The break-glass credential was generated, a first issue or a replacement. The acting and effective subject is who generated it: a system administrator, or the reserved account from a break-glass session; `details.credential` names the issue and `details.replaced` the one it replaced, where there was one. The row names no organization. (OPS-BOOT-004, entry 291) |
+| `auth.breakglass.used` | security | `AuditActions.BreakGlassUsed` | The break-glass credential was used and opened the emergency session. The acting and effective subject is the reserved account; `details.credential` names the issue and `details.session` the session it opened. The row names no organization. (OPS-BOOT-002) |
 | `auth.credential.countermismatch` | security | `AuditActions.CredentialCounterMismatch` | An authenticator presented a signature counter that did not advance, which is what a cloned credential looks like. (AUTH-FACT-002) |
 | `auth.credential.enrolled` | security | `AuditActions.CredentialEnrolled` | A credential was enrolled on an account. (AUTH-FACT-001) |
 | `auth.credential.invalidated` | security | `AuditActions.CredentialInvalidated` | A credential was invalidated by a loss report that took effect. (AUTH-REC-004) |
@@ -11266,6 +14180,7 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `auth.mailcredential.revoked` | security | `AuditActions.MailCredentialRevoked` | The mail server revoked an app password at its holder's request. Details carry `credential`, the server's identifier. The account is both subjects; the row names no organization. (REG-MAIL-002, INT-MAIL-010, entry 263) |
 | `auth.providerevent.rejected` | security | `AuditActions.ProviderEventRejected` | A social provider's security event about a linked identity was refused: its provider's keys do not verify it, or it had been carried before. Details carry `credential`, `event` (the type as the provider spells it) and `outcome` (`unsigned` or `replayed`); the account is both subjects. (IDN-LIFE-012a AC1, entry 289) |
 | `auth.providerevent.taken` | security | `AuditActions.ProviderEventTaken` | A social provider's security event about a linked identity was carried. Details carry `credential`, `event` and `outcome` (`sessionsEnded`, `credentialUnlinked`, `accountSuspended`, `addressUnverified` or `recorded`); the account is both subjects. (IDN-LIFE-012a, entries 285 to 289) |
+| `auth.oidc.clientregistered` | security | `AuditActions.ClientRegistered` | A client was registered in the provider's registry, or a registered one changed, from the server. The principal is the `register-client` command with the reason `AUTH-OIDC-001`; `details.client`, `details.kind` and `details.changed` (whether the registry held it before). No subject; the row names no organization. (AUTH-OIDC-001, OPS-SEC-002, entry 340) |
 | `auth.oidc.refreshreused` | security | `AuditActions.RefreshTokenReused` | A refresh token was presented a second time, which revokes the family it belongs to. (AUTH-TOK-004) |
 | `auth.phonesignal.considered` | security | `AuditActions.PhoneSignalConsidered` | A phone signal was consulted before a send, recorded without the number it was consulted for. (AUTH-ABUSE-006) |
 | `auth.recovery.approved` | security | `AuditActions.RecoveryApproved` | An assisted recovery was approved, naming the approver and the reason given. (AUTH-REC-006) |
@@ -11273,6 +14188,7 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `auth.restriction.granted` | security | `AuditActions.RestrictionGranted` | A sending restriction was granted against an address or a number. (AUTH-ABUSE-005) |
 | `auth.session.presented` | security | `AuditActions.SessionPresented` | A session was presented, which is what a sign-in history is read from. (AUTH-SESS-010) |
 | `authz.access.denied` | security | `AuditActions.AccessDenied` | A permission was refused, which is the row the refusal's correlation identifier resolves to. (AUTHZ-CONCEAL-004) |
+| `authz.access.exported` | security | `AuditActions.AccessExported` | An export operation was admitted at the gate. The acting and effective subject is who exported, or the nil subject with the system principal's name and reason; details carry `permission`, `resourceType` and, where a check named one record, `resource`. Not written while `exfiltration.export.auditing` is off. (OPS-ALERT-006, entry 329) |
 | `authz.group.created` | security | `AuditActions.GroupCreated` | A group was created in an organization. Details carry `group`, `name` and `reason`; the row is filed under the group's organization. (AUTHZ-GROUP-001, entry 191) |
 | `authz.group.memberadded` | security | `AuditActions.GroupMemberAdded` | An account or a group was added to a group. Details carry `group`, `name`, `memberType`, `memberId` and `reason`. (AUTHZ-GROUP-001, OPS-CFG-007, entry 191) |
 | `authz.group.memberremoved` | security | `AuditActions.GroupMemberRemoved` | An account or a group was taken out of a group. Details carry `group`, `name`, `memberType`, `memberId` and `reason`. (AUTHZ-GROUP-001, OPS-CFG-007, entry 191) |
@@ -11302,13 +14218,19 @@ row is routed to, which is what its retention follows (PRIV-RET-002).
 | `identity.takedown.executed` | security | `AuditActions.TakedownExecuted` | Phase one of a takedown committed: the account entered its window, its sessions ended and the hosts' delivery was written. Details carry `takedown`, `trigger` (spelled as `10` section 5.12d), `reason` and `erasureDue`. (IDN-LIFE-003) |
 | `identity.takedown.reversed` | security | `AuditActions.TakedownReversed` | A takedown was reversed inside its window and the account restored to active. Details carry `reason`. (IDN-LIFE-003) |
 | `identity.username.changed` | routine | `AuditActions.UsernameChanged` | The account's username was changed, which holds the old one for as long as the retention says. (REG-IDENT-009) |
-| `ops.configuration.changed` | security | `AuditActions.ConfigurationChanged` | A runtime setting is put in force through the one configuration operation. Details carry `key`, `before`, `after`, `loosening` and, where the change is a loosening, `reason`. (OPS-CFG-002, OPS-CFG-005) |
+| `ops.auditpartitions.maintained` | security | `AuditActions.AuditPartitionsMaintained` | A run of the audit retention job completed under the maintenance credential. Details carry `created` (months made ahead), `dropped` (partitions past retention), `securityRetentionDays` and `routineRetentionDays`; the principal is the job's, `audit-partitions`, reason `PRIV-RET-002`; the row names no subject and no organization. (PRIV-RET-002, INF-BG-002, entry 336) |
+| `ops.configuration.changed` | security | `AuditActions.ConfigurationChanged` | A runtime setting is put in force through the one configuration operation, or a value is set by bootstrap or by `configure` from the server under that command's principal. Details carry `key`, `before`, `after`, `loosening` and, where the change is a loosening or is made from the server, `reason`. (OPS-CFG-002, OPS-CFG-004, OPS-CFG-005, entries 315 and 319) |
+| `ops.keyrotation.completed` | security | `AuditActions.KeyRotationCompleted` | A rotation of the key-encryption key or the fingerprint key reached every value under its version. Details carry `kind`, `version` and `processed`; the principal is the command's, `rotate-kek` or `rotate-fingerprint-key`, reason `OPS-SEC-003`; the row names no subject and no organization. (OPS-SEC-003 AC5, entries 316 and 318) |
+| `ops.keyrotation.resumed` | security | `AuditActions.KeyRotationResumed` | A rotation that had stopped was taken up again from its recorded progress. Details carry `kind`, `version` and `processed`, under the command's principal. (OPS-SEC-003 AC2, AC5, entries 316 and 318) |
+| `ops.keyrotation.retired` | security | `AuditActions.KeyRotationRetired` | The versions before a completed rotation's were retired once its escrow copy was confirmed sealed. Details carry `kind`, `version`, `processed` and `retired`, the versions retired, under the command's principal. (OPS-SEC-003 AC3, AC4, AC5, entries 316 and 318) |
+| `ops.keyrotation.started` | security | `AuditActions.KeyRotationStarted` | A rotation of the key-encryption key or the fingerprint key started. Details carry `kind`, `version` and `processed`, under the command's principal. (OPS-SEC-003 AC5, entries 316 and 318) |
+| `ops.restoretest.completed` | security | `AuditActions.RestoreTestCompleted` | A run of the automated restore test ended, passed or not. Details carry `outcome` (`passed`, `unrestored`, `undecrypted`, `unresolved` or `overrun`), `elapsedSeconds`, `objectiveSeconds` and `outlived`; the principal is the job's, `restore-test`, reason `DR-007`; the row names no subject and no organization. (DR-007 AC2, DR-008 AC2, entry 334) |
 | `privacy.consent.granted` | security | `AuditActions.ConsentGranted` | A consent was granted for a purpose, naming the document version it was given against. (PRIV-CONS-004) |
 | `privacy.consent.withdrawn` | security | `AuditActions.ConsentWithdrawn` | A consent was withdrawn for a purpose. (PRIV-CONS-008) |
 | `privacy.document.published` | security | `AuditActions.DocumentPublished` | A version of a legal document was published in the governing language. (PRIV-CONS-005) |
 | `privacy.document.translated` | security | `AuditActions.DocumentTranslated` | A translation was filed against a published version of a legal document. (PRIV-CONS-005) |
 | `privacy.erasure.completed` | security | `AuditActions.ErasureCompleted` | An erasure whose retries were spent was completed by hand, with its erasures row. Details carry `erasure` and `outstanding`, the required subscribers that had not confirmed, by name; the acting subject is the operator, the effective subject the erased one. (IDN-LIFE-003a, entry 264) |
-| `privacy.erasure.executed` | security | `AuditActions.ErasureExecuted` | An erasure was carried out, which destroys the subject key and leaves the trail resolving. (PRIV-RIGHT-005) |
+| `privacy.erasure.executed` | security | `AuditActions.ErasureExecuted` | An erasure was carried out, which destroys the subject key and leaves the trail resolving. A replay of the off-host ledger records each erasure it carries out again under the principal `replay-erasures`, reason `DR-016`, with details `reason` and `erasedAt`. (PRIV-RIGHT-005, DR-016, entry 333) |
 | `privacy.export.assembled` | security | `AuditActions.ExportAssembled` | A subject export was assembled and made available to the subject. (PRIV-RIGHT-003) |
 | `privacy.objection.recorded` | security | `AuditActions.ObjectionRecorded` | An objection to a purpose was recorded. (PRIV-BASIS-003) |
 | `privacy.objection.withdrawn` | security | `AuditActions.ObjectionWithdrawn` | An objection to a purpose was withdrawn and the purpose resumed. (PRIV-BASIS-003) |
@@ -11342,6 +14264,7 @@ asks for it. The library never holds the words (CONV-CONTENT-001).
 | `no-account` | `MessageKind.NoAccount` | The answer to a request made for an address no account holds. |
 | `privacy-request-lapsed` | `MessageKind.PrivacyRequestLapsed` | The honest word to a subject whose out-of-band erasure request reached its deadline undecided (PRIV-RIGHT-002). |
 | `privacy-request-received` | `MessageKind.PrivacyRequestReceived` | The automatic receipt a data subject request gets the moment it enters the queue, which is not a decision and starts nothing (PRIV-RIGHT-002). |
+| `recovery-codes-reminder` | `MessageKind.RecoveryCodesReminder` | The one reminder a set of recovery codes gets once it is older than `recovery.codes.reminder`, sent to the security-notice set of an active account and carrying no link (AUTH-FACT-008 AC5, entry 335). |
 | `recovery-link` | `MessageKind.RecoveryLink` | The link a person asked for to set a new password, which restores nothing else and removes no factor. |
 | `secondstep-code` | `MessageKind.SecondStepCode` | A code presented as a second step. |
 | `security-notice` | `MessageKind.SecurityNotice` | A notice that something happened to the account. |

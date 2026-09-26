@@ -67,6 +67,14 @@ public static class ErrorCodes
     public static ErrorCode StartupDeclarationMissing { get; } = ErrorCode.Parse("model.startup.declarationmissing");
 
     /// <summary>
+    /// Startup: two subject-event subscribers are registered under one name, or one is
+    /// registered under the name the erasure ledger's confirmation is recorded under.
+    /// The details name it under <c>handler</c>; give each subscriber a name of its own.
+    /// </summary>
+    /// <remarks>Implements IDN-LIFE-003a and DR-016.</remarks>
+    public static ErrorCode StartupSubscriberName { get; } = ErrorCode.Parse("model.startup.subscribername");
+
+    /// <summary>
     /// Startup: a host preference declaration is malformed. The details name the key
     /// under <c>preference</c>; correct the declaration.
     /// </summary>
@@ -599,6 +607,21 @@ public static class ErrorCodes
         ErrorCode.Parse("auth.enrolment.tokeninvalid");
 
     /// <summary>
+    /// The emergency credential was rejected: it is not the one that stands, or a group
+    /// of it does not hold its check symbol. Type it again exactly as the sealed page
+    /// prints it; a replaced credential opens nothing.
+    /// </summary>
+    /// <remarks>Implements OPS-BOOT-002, OPS-BOOT-004, chapter 10 section 1.2.</remarks>
+    public static ErrorCode BreakGlassInvalid { get; } = ErrorCode.Parse("auth.breakglass.invalid");
+
+    /// <summary>
+    /// The emergency credential was already used, and it opens one session and no
+    /// second. Generate a new one from the management application.
+    /// </summary>
+    /// <remarks>Implements OPS-BOOT-002, chapter 10 section 1.2.</remarks>
+    public static ErrorCode BreakGlassConsumed { get; } = ErrorCode.Parse("auth.breakglass.consumed");
+
+    /// <summary>
     /// The password matched one of the sources the deployment rejects on. Choose
     /// another; length does not excuse a match.
     /// </summary>
@@ -775,6 +798,17 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements AUTHZ-GATE-001, chapter 10 section 1.3.</remarks>
     public static ErrorCode PolicyUnregistered { get; } = ErrorCode.Parse("authz.policy.unregistered");
+
+    /// <summary>
+    /// No such record, or one the caller may not see on a type that conceals its
+    /// records; the answer is the same for both. Name a record that exists and that
+    /// the caller holds a permission on.
+    /// </summary>
+    /// <remarks>
+    /// Implements AUTHZ-CONCEAL-001, AUTHZ-CONCEAL-002, API-CONV-003 and BFF-ERR-003. The
+    /// browser profile answers it; nothing in the library returns it from an operation.
+    /// </remarks>
+    public static ErrorCode ResourceNotFound { get; } = ErrorCode.Parse("authz.resource.notfound");
 
     /// <summary>
     /// The subject's processing is restricted, so the record is readable and not

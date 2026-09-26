@@ -350,6 +350,28 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// OPS-BOOT-002: the reserved account the break-glass session belongs to cannot be
+    /// granted anything further, by whoever asks.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_TheReservedAccountIsGrantedNothingAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(
+            Administration,
+            Permissions.GrantManage,
+            Permissions.SystemAdminister);
+
+        _deployment.Reserves(new SubjectId(Holder));
+
+        Answer refused = await GrantedAsync(administrator, "organization", Administration.ToString());
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
+        Assert.Empty(await HeldAsync(Administration));
+    }
+
+    /// <summary>
     /// AUTH-STEP-001 and chapter 10 section 5a: granting and revoking are the
     /// <c>grant:manage</c> step-up action, so a session whose proof is no longer recent
     /// changes nothing.

@@ -2,13 +2,18 @@ using System;
 using System.Security.Cryptography;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.Background;
+using Janus.Authentication.Bootstrap;
+using Janus.Authentication.BreakGlass;
 using Janus.Authentication.Callbacks;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Credentials;
+using Janus.Authentication.Events;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
+using Janus.Authentication.Maintenance;
 using Janus.Authentication.Oidc;
 using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
@@ -42,13 +47,18 @@ using Janus.Privacy.Requests;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Accounts;
 using Janus.Storage.Authentication.Alerting;
+using Janus.Storage.Authentication.Background;
+using Janus.Storage.Authentication.Bootstrap;
+using Janus.Storage.Authentication.BreakGlass;
 using Janus.Storage.Authentication.Callbacks;
 using Janus.Storage.Authentication.Configuration;
 using Janus.Storage.Authentication.Credentials;
+using Janus.Storage.Authentication.Events;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authentication.Mailboxes;
+using Janus.Storage.Authentication.Maintenance;
 using Janus.Storage.Authentication.Oidc;
 using Janus.Storage.Authentication.Organizations;
 using Janus.Storage.Authentication.Passwords;
@@ -107,8 +117,8 @@ internal static class StorageRegistration
     /// The versions a subject key may be wrapped under, read from the secrets manager
     /// at startup and never from the database (OPS-SEC-001).
     /// </param>
-    /// <param name="fingerprintKey">
-    /// The key the searchable fingerprints are computed under, read from the same
+    /// <param name="fingerprintKeys">
+    /// The versions the searchable fingerprints are computed under, read from the same
     /// place and held outside the database (PRIV-RIGHT-005c).
     /// </param>
     /// <returns>The collection, for chaining.</returns>
@@ -116,7 +126,7 @@ internal static class StorageRegistration
         this IServiceCollection services,
         string connectionString,
         KeyEncryptionKeys keyEncryptionKeys,
-        ReadOnlyMemory<byte> fingerprintKey)
+        FingerprintKeys fingerprintKeys)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -134,6 +144,7 @@ internal static class StorageRegistration
         services.AddSingleton<RandomNumberGenerator>(_ => RandomNumberGenerator.Create());
 
         services.AddScoped<IConfigurationStore, ConfigurationStore>();
+        services.AddScoped<IProtectedSettings, ProtectedSettings>();
 
         services.AddScoped<IAccountStore, AccountStore>();
         services.AddScoped<ISubjectKeyStore>(provider => new SubjectKeyStore(
@@ -155,7 +166,7 @@ internal static class StorageRegistration
         services.AddScoped<IIdentifierStore>(provider => new IdentifierStore(
             provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
-            fingerprintKey,
+            fingerprintKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IProfileStore>(provider => new ProfileStore(
             provider.GetRequiredService<StoreContext>(),
@@ -171,8 +182,10 @@ internal static class StorageRegistration
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IAuditStore>(provider => new AuditStore(
             provider.GetRequiredService<StoreContext>(),
+            provider.GetRequiredService<DataConnections>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IAuditPartitions, AuditPartitions>();
 
         services.AddScoped<ISessionStore>(provider => new SessionStore(
             provider.GetRequiredService<StoreContext>(),
@@ -182,7 +195,7 @@ internal static class StorageRegistration
             provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>(),
-            fingerprintKey));
+            fingerprintKeys));
         services.AddScoped<IRegistrationSessionStore>(provider => new RegistrationSessionStore(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<DataConnections>(),
@@ -208,7 +221,12 @@ internal static class StorageRegistration
         services.AddScoped<IDeviceStore, DeviceStore>();
         services.AddScoped<IMembershipLookup, MembershipLookup>();
         services.AddScoped<Janus.Authentication.Policies.IAdministrativeOrganization, AdministrativeOrganization>();
-        services.AddScoped<IPreAuthenticationStore, PreAuthenticationStore>();
+        services.AddScoped<Janus.Authentication.BreakGlass.IEmergencyAccount, EmergencyAccount>();
+        services.AddScoped<IBreakGlassStore, BreakGlassStore>();
+        services.AddScoped<IBreakGlassAudit, BreakGlassAudit>();
+        services.AddScoped<IPreAuthenticationStore>(provider => new PreAuthenticationStore(
+            provider.GetRequiredService<StoreContext>(),
+            keyEncryptionKeys));
         services.AddScoped<IChallengeStore, ChallengeStore>();
         services.AddScoped<IVerificationCodeStore, VerificationCodeStore>();
         services.AddScoped<IKeyCeremonyStore, KeyCeremonyStore>();
@@ -255,7 +273,7 @@ internal static class StorageRegistration
         services.AddScoped<IMailboxStore>(provider => new MailboxStore(
             provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
-            fingerprintKey,
+            fingerprintKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IInvitationStore>(provider => new InvitationStore(
             provider.GetRequiredService<StoreContext>(),
@@ -272,7 +290,10 @@ internal static class StorageRegistration
         services.AddScoped<IOrganizationSuspensions, OrganizationSuspensions>();
         services.AddScoped<IRecordedConsents, RecordedConsents>();
         services.AddScoped<IAccessAudit, AccessAudit>();
+        services.AddScoped<IReadVolumeStore, ReadVolumeStore>();
+        services.AddScoped<IBulkExportLedger, BulkExportLedger>();
         services.AddScoped<Janus.Authorization.Gate.IAdministrativeOrganization, GateAdministrativeOrganization>();
+        services.AddScoped<Janus.Authorization.Grants.IEmergencyAccount, GrantEmergencyAccount>();
 
         services.AddScoped<ISendOutbox>(provider => new SendDeliveryStore(
             provider.GetRequiredService<StoreContext>(),
@@ -280,23 +301,28 @@ internal static class StorageRegistration
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<ISendLedger>(provider => new SendLedger(
             provider.GetRequiredService<StoreContext>(),
-            fingerprintKey));
+            fingerprintKeys));
         services.AddScoped<IThrottleLedger>(provider => new ThrottleLedger(
             provider.GetRequiredService<StoreContext>(),
-            fingerprintKey));
+            fingerprintKeys));
         services.AddScoped<INoticeLedger>(provider => new NoticeLedger(
             provider.GetRequiredService<StoreContext>(),
-            fingerprintKey));
+            fingerprintKeys));
         services.AddScoped<ICallbackLedger>(provider => new CallbackLedger(
             provider.GetRequiredService<StoreContext>(),
-            fingerprintKey));
+            fingerprintKeys));
         services.AddScoped<ICallbackEvents, CallbackEventStore>();
         services.AddScoped<ICallbackReferenceStore, CallbackReferenceStore>();
         services.AddScoped<IRegistrationSources>(provider => new RegistrationSourceLedger(
             provider.GetRequiredService<StoreContext>(),
-            fingerprintKey));
+            fingerprintKeys));
         services.AddScoped<ISmsBalanceLedger, SmsBalanceLedger>();
         services.AddScoped<IAlertLedger, AlertLedger>();
+        services.AddScoped<IRaisedAlerts, RaisedAlerts>();
+        services.AddScoped<IPendingEvents, PendingEvents>();
+        services.AddScoped<IMaintenanceStore, MaintenanceStore>();
+        services.AddScoped<IJobRuns, JobRunStore>();
+        services.AddScoped<IDeploymentSeed, DeploymentSeed>();
         services.AddScoped<IConfigurationAudit, ConfigurationAudit>();
         services.AddScoped<ISendAudit, SendAudit>();
         services.AddScoped<IBotDefenceAudit, BotDefenceAudit>();

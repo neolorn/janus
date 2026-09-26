@@ -10,6 +10,12 @@ internal sealed class SendGrantRecord
     /// <summary>The <c>key</c> column, which is this table key.</summary>
     public byte[] Key { get; set; } = [];
 
+    /// <summary>
+    /// The <c>fingerprint_version</c> column: the version of the fingerprint key the
+    /// key is hashed under.
+    /// </summary>
+    public int FingerprintVersion { get; set; }
+
     /// <summary>The <c>credit</c> column.</summary>
     public int Credit { get; set; }
 }

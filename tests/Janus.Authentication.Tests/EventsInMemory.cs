@@ -2,15 +2,17 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Alerting;
 using Janus.Core;
 
 namespace Janus.Authentication.Tests;
 
 /// <summary>
 /// Where the emitted events go, holding them in order so a test can read what an
-/// operation announced and what it did not.
+/// operation announced and what it did not. A raised condition is held as the
+/// <see cref="AlertRaised"/> event the alert channels announce it by.
 /// </summary>
-internal sealed class EventsInMemory : IEvents
+internal sealed class EventsInMemory : IEvents, IAlertChannels
 {
     /// <summary>
     /// Every event published, in order.
@@ -45,4 +47,8 @@ internal sealed class EventsInMemory : IEvents
 
         return ValueTask.FromResult(Result.Success());
     }
+
+    /// <inheritdoc/>
+    public ValueTask<Result> RaiseAsync(AlertRaised raised, CancellationToken cancellationToken) =>
+        PublishAsync(raised, cancellationToken);
 }

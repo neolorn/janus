@@ -1,18 +1,22 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.BreakGlass;
 using Janus.Authentication.Callbacks;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Credentials;
+using Janus.Authentication.Events;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
+using Janus.Authentication.Maintenance;
 using Janus.Authentication.Oidc;
 using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
@@ -33,9 +37,13 @@ using Janus.Hosting.Accounts;
 using Janus.Hosting.Alerting;
 using Janus.Hosting.Authentication;
 using Janus.Hosting.Authorization;
+using Janus.Hosting.Background;
 using Janus.Hosting.Bff;
+using Janus.Hosting.BreakGlass;
 using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
+using Janus.Hosting.Events;
+using Janus.Hosting.Maintenance;
 using Janus.Hosting.Oidc;
 using Janus.Hosting.Organizations;
 using Janus.Hosting.Passwords;
@@ -62,6 +70,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace Janus.Hosting;
 
@@ -88,14 +97,19 @@ public static class HostingRegistration
     /// The versions a subject key may be wrapped under, read from the secrets manager
     /// at startup and never from the database (OPS-SEC-001).
     /// </param>
-    /// <param name="fingerprintKey">
-    /// The key the searchable fingerprints are computed under, read from the same place
-    /// and held outside the database (PRIV-RIGHT-005c).
+    /// <param name="fingerprintKeys">
+    /// The versions the searchable fingerprints are computed under, read from the same
+    /// place and held outside the database (PRIV-RIGHT-005c).
     /// </param>
     /// <param name="signOnSecret">
     /// What this application presents at the provider's token endpoint when it
     /// establishes its own session, read from the same place and never from
     /// configuration (BFF-SESS-006, OPS-SEC-001).
+    /// </param>
+    /// <param name="maintenanceCredential">
+    /// The database connection the scheduled maintenance runs under, which holds the
+    /// maintenance role's rights and nothing else, read from the same place and never
+    /// from configuration (OPS-MIG-003a, INF-HOST-003).
     /// </param>
     /// <param name="declaration">What the host declared about its own domain.</param>
     /// <param name="application">
@@ -112,8 +126,9 @@ public static class HostingRegistration
         this IServiceCollection services,
         string connectionString,
         KeyEncryptionKeys keyEncryptionKeys,
-        ReadOnlyMemory<byte> fingerprintKey,
+        FingerprintKeys fingerprintKeys,
         ReadOnlyMemory<byte> signOnSecret,
+        ReadOnlyMemory<byte> maintenanceCredential,
         AuthorizationDeclaration declaration,
         ApplicationKind application)
     {
@@ -123,12 +138,12 @@ public static class HostingRegistration
         // the library holds no fallback for either, so a deployment that reached
         // neither stops here with the code that names why, not at the first request
         // that would have read a person's field.
-        Present(keyEncryptionKeys, fingerprintKey, signOnSecret);
+        Present(keyEncryptionKeys, fingerprintKeys, signOnSecret, maintenanceCredential);
 
         // CONV-DESIGN-007: time is injected, and a host that has its own clock keeps it.
         services.TryAddSingleton(TimeProvider.System);
 
-        services.AddStorageArea(connectionString, keyEncryptionKeys, fingerprintKey);
+        services.AddStorageArea(connectionString, keyEncryptionKeys, fingerprintKeys);
         services.AddSingleton(AuthorizationModel.Of(declaration));
 
         // AUTHZ-GROUP-002: one set per operation, which is what makes ten checks in one
@@ -136,10 +151,17 @@ public static class HostingRegistration
         services.AddScoped<SubjectSets>();
 
         // LIB-HOST-004: the assurance provider is the host's to supply, and a host
-        // that supplies none is one where nothing reports what a session has proved.
+        // that supplies none is one where nothing reports what a session has proved
+        // other than the library's own session, which is judged where it carries the
+        // request (AUTH-STEP-002).
+        services.AddScoped<ISessionGates, RequestGates>();
         services.AddScoped(services => new StepUpGates(
-            services.GetRequiredService<AuthorizationModel>(),
+            services.GetRequiredService<ISessionGates>(),
             services.GetService<IAssuranceProvider>()));
+
+        // OPS-ALERT-006: an export is gated, limited and recorded inside the gate, so no
+        // host path exercises one around it.
+        services.AddScoped<ExportOperations>();
 
         // API-CONV-002: a body the reader could not parse is answered by the library
         // with a code and a correlation identifier, so the reader raises the failure
@@ -150,6 +172,7 @@ public static class HostingRegistration
         // and what validates a token are registered here and not left to the host.
         services.AddSingleton(new BrowserSessionCookies(application));
         services.AddScoped<SynchronizerTokens>();
+        services.AddScoped<Concealment>();
         services.AddScoped<MalformedRequest>();
         services.AddScoped<ResourceIsolation>();
         services.AddScoped<CustomRequestHeader>();
@@ -228,6 +251,66 @@ public static class HostingRegistration
             services.GetService<ChallengeVerifier>(),
             services.GetRequiredService<TimeProvider>()));
         services.AddScoped<AlertRouter>();
+        services.AddScoped<IAlertChannels, AlertChannels>();
+        services.AddScoped<AlertDispatch>();
+
+        // LIB-API-001, CONV-DESIGN-002: an emitted event is a row on the transaction
+        // that made it true, offered to the host's consumers once that has committed.
+        services.TryAddScoped<IEvents, EventOutbox>();
+        services.AddScoped<EventConsumers>();
+        services.AddScoped<EventPublisher>();
+
+        // OPS-BOOT-002, OPS-BOOT-004: the sealed emergency credential, and OPS-BOOT-001
+        // AC3: its absence raised until one is generated.
+        services.AddScoped<BreakGlassService>();
+        services.AddScoped<EmergencyCredentialWatch>();
+
+        // OPS-MAINT-001: the licences and permits warned of, and the maintenance log.
+        // DR-009a: the annual operation the key-encryption key is rotated in, warned of
+        // from the log.
+        services.AddScoped<MaintenanceRecords>();
+        services.AddScoped<LicenceExpiry>();
+        services.AddScoped<EnvelopeRotationWatch>();
+
+        // INF-HOST-001, INF-TLS-003: the clock and the renewer are the environment's, so
+        // what measures them is the deployment's to register, and one it does not
+        // register is raised as unwatched.
+        services.AddScoped(provider => new ClockDriftWatch(
+            provider.GetService<IClockReference>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<TimeProvider>()));
+        services.AddScoped(provider => new CertificateRenewalWatch(
+            provider.GetService<ICertificateRenewal>(),
+            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<TimeProvider>()));
+
+        // DR-007, DR-008: the backups and the throwaway instance are the environment's,
+        // so what restores into one is the deployment's to register, and one it does not
+        // register fails every test; what is restored is opened with the keys this
+        // process holds, which is what the test proves the backup readable with.
+        services.AddScoped(provider => new RestoreTest(
+            provider.GetService<IRestoreTestInstance>(),
+            keyEncryptionKeys,
+            fingerprintKeys,
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IPrivacyAudit>(),
+            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<ILogger<RestoreTest>>()));
+
+        // PRIV-RET-002, OPS-MIG-003a: the partitions are reached over the maintenance
+        // credential only, in an area of their own built with the keys this process holds.
+        services.AddSingleton(new MaintenanceCredential(maintenanceCredential));
+        services.AddScoped(provider => new AuditRetention(
+            provider.GetRequiredService<MaintenanceCredential>(),
+            keyEncryptionKeys,
+            fingerprintKeys,
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IPrivacyAudit>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<AlertDestinationChange>();
         services.AddScoped<IAlertLog, AlertLog>();
         services.AddScoped<IConfigurationAdministration, ConfigurationService>();
@@ -257,12 +340,24 @@ public static class HostingRegistration
         services.AddScoped<PasswordScreening>();
         services.AddScoped<PasswordService>();
         services.AddScoped<PreAuthenticationService>();
-        services.AddScoped<ILocationResolver, LocationDatabase>();
+
+        // INT-GEN-006: one copy of the location file for the process, read from the
+        // file the deployment supplies, where it supplies one.
+        services.AddSingleton<LocationCopy>();
+        services.AddScoped(provider => new LocationDatabase(
+            provider.GetRequiredService<LocationCopy>(),
+            provider.GetService<ILocationSource>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<TimeProvider>()));
+        services.AddScoped<ILocationResolver>(provider => provider.GetRequiredService<LocationDatabase>());
+        services.AddScoped<ConcurrentSessions>();
         services.AddScoped<SessionService>();
         services.AddScoped<ISessions>(provider => provider.GetRequiredService<SessionService>());
         services.AddScoped<TotpService>();
         services.AddScoped<WebAuthnService>();
         services.AddScoped<RecoveryCodeService>();
+        services.AddScoped<RecoveryCodeReminders>();
         services.AddScoped<DeviceService>();
         services.AddScoped<StepUpGuard>();
         services.AddScoped<IStepUpGate, StepUpGate>();
@@ -334,15 +429,39 @@ public static class HostingRegistration
         services.AddScoped<WorkingCalendar>();
         services.AddScoped<RestrictionGrant>();
         services.AddScoped<DeadlineSweep>();
+        services.AddScoped<HolidayListWatch>();
         services.AddScoped<IPrivacyRequests, PrivacyRequestService>();
         services.AddScoped<ITakedowns, TakedownService>();
-        services.AddScoped<IErasures, ErasureService>();
+
+        // DR-016: the off-host ledger is the deployment's to register; one it does not
+        // register leaves its erasures completing without a line, the residual R-A13
+        // accepts until the tier upgrade.
+        services.AddScoped<IErasures>(provider => new ErasureService(
+            provider.GetRequiredService<Janus.Privacy.Policies.AdministrativeScope>(),
+            provider.GetRequiredService<IStepUpGate>(),
+            provider.GetRequiredService<IOutboxStore>(),
+            provider.GetRequiredService<IErasureStore>(),
+            provider.GetServices<ISubjectEventSubscriber>(),
+            provider.GetService<IErasureLedger>(),
+            provider.GetRequiredService<IPrivacyAudit>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>()));
+
         services.AddScoped<DeletionSweep>();
         services.AddScoped<OrganizationErasureSweep>();
         services.AddScoped<IExports, ExportService>();
         services.AddScoped<IProcessingRecords, ProcessingRecordsService>();
         services.AddScoped<IAuditTrail, AuditTrailService>();
-        services.AddScoped<OutboxPublisher>();
+        services.AddScoped(provider => new OutboxPublisher(
+            provider.GetRequiredService<IOutboxStore>(),
+            provider.GetRequiredService<IErasureStore>(),
+            provider.GetServices<ISubjectEventSubscriber>(),
+            provider.GetService<IErasureLedger>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IPrivacyAlerts>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<RandomNumberGenerator>()));
 
         // AUTHZ-MODEL-001: what may be processed for what is part of the one
         // declaration the host makes, so the privacy side reads it from there rather
@@ -352,7 +471,19 @@ public static class HostingRegistration
 
         services.AddScoped<Derivations>();
         services.AddScoped<ReverseLookup>();
+        services.AddScoped<IAccessAlerts, AccessAlerts>();
+        services.AddScoped<DenialSpikes>();
+
+        // BFF-ERR-003: what the gate concealed is answered by stage 11 of the same
+        // request, so the two share one holder.
+        services.AddScoped<ConcealedRefusals>();
+        services.AddScoped<IConcealedRefusals>(provider => provider.GetRequiredService<ConcealedRefusals>());
         services.AddScoped<IAccessGate, AccessGate>();
+
+        // OPS-ALERT-005: the host says how many records a filtered query of its own
+        // returned, and the library counts them against the person given them.
+        services.AddScoped<ReadVolume>();
+        services.AddScoped<IReadVolume>(provider => provider.GetRequiredService<ReadVolume>());
         services.AddScoped<Janus.Authorization.Gate.AdministrativeScope>();
         services.AddScoped<IGrants, GrantService>();
         services.AddScoped<IRoles, RoleService>();
@@ -371,7 +502,7 @@ public static class HostingRegistration
             provider.GetRequiredService<ConfigurationAdministration>(),
             provider.GetService<IDnsResolver>(),
             provider.GetRequiredService<IOrganizationAudit>(),
-            provider.GetRequiredService<IEvents>(),
+            provider.GetRequiredService<IAlertChannels>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<RandomNumberGenerator>()));
@@ -379,7 +510,7 @@ public static class HostingRegistration
             provider.GetRequiredService<IDomainStore>(),
             provider.GetService<IDnsResolver>(),
             provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IEvents>(),
+            provider.GetRequiredService<IAlertChannels>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>()));
 
@@ -389,14 +520,14 @@ public static class HostingRegistration
             provider.GetRequiredService<IMailboxStore>(),
             provider.GetService<IMailServer>(),
             provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IEvents>(),
+            provider.GetRequiredService<IAlertChannels>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped(provider => new MailboxReconciliation(
             provider.GetRequiredService<IMailboxStore>(),
             provider.GetService<IMailServer>(),
-            provider.GetRequiredService<IEvents>(),
+            provider.GetRequiredService<IAlertChannels>(),
             provider.GetRequiredService<TimeProvider>()));
 
         // INT-MAIL-010: the app passwords are the mail server's, reached with a token
@@ -427,7 +558,7 @@ public static class HostingRegistration
 
         // REG-MAIL-001: an invitation reserves a mailbox only where there is a mail
         // server to create it on.
-        services.AddScoped<IInvitations>(provider => new InvitationService(
+        services.AddScoped(provider => new InvitationService(
             provider.GetRequiredService<IAccessGate>(),
             provider.GetRequiredService<Janus.Authentication.Policies.AdministrativeScope>(),
             provider.GetRequiredService<StepUpGuard>(),
@@ -447,6 +578,7 @@ public static class HostingRegistration
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<RandomNumberGenerator>()));
+        services.AddScoped<IInvitations>(provider => provider.GetRequiredService<InvitationService>());
         services.AddScoped<IGroups, GroupService>();
         services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();
         services.AddScoped<ModelValidation>();
@@ -468,6 +600,13 @@ public static class HostingRegistration
         services.Insert(7, ServiceDescriptor.Singleton<IHostedService, RedirectValidationService>());
         services.Insert(8, ServiceDescriptor.Singleton<IHostedService, SigningKeyValidationService>());
         services.Insert(9, ServiceDescriptor.Singleton<IHostedService, RelayValidationService>());
+
+        // INF-BG-001: the scheduled work starts once the checks above have passed.
+        services.AddHostedService(provider => new BackgroundWorker(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            BackgroundJobs.All,
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<ILogger<BackgroundWorker>>()));
 
         return services;
     }
@@ -498,6 +637,8 @@ public static class HostingRegistration
         options.SerializerOptions.TypeInfoResolverChain.Clear();
         options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(BreakGlassJson.Default);
+        options.SerializerOptions.TypeInfoResolverChain.Add(MaintenanceJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(AccountJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(RecoveryJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(CredentialsJson.Default);
@@ -514,12 +655,13 @@ public static class HostingRegistration
     private static string Corpus =>
         Path.Combine(AppContext.BaseDirectory, WordList.Directory);
 
-    // The fingerprint key computes an HMAC-SHA256, so anything shorter than that hash
+    // The fingerprint key computes an HMAC-SHA256, so a version shorter than that hash
     // is a key that weakens the code it is used by and is not a key the library runs on.
     private static void Present(
         KeyEncryptionKeys keyEncryptionKeys,
-        ReadOnlyMemory<byte> fingerprintKey,
-        ReadOnlyMemory<byte> signOnSecret)
+        FingerprintKeys fingerprintKeys,
+        ReadOnlyMemory<byte> signOnSecret,
+        ReadOnlyMemory<byte> maintenanceCredential)
     {
         if (keyEncryptionKeys is null)
         {
@@ -528,11 +670,12 @@ public static class HostingRegistration
                 Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("keyEncryptionKeys")));
         }
 
-        if (fingerprintKey.Length < 32)
+        if (fingerprintKeys is null
+            || fingerprintKeys.Versions.Values.Any(version => version.Length < FingerprintKeys.MinimumLength))
         {
             throw new StartupException(
-                "The fingerprint key was not supplied, or is shorter than the hash it computes.",
-                Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("fingerprintKey")));
+                "The fingerprint key was not supplied, or a version of it is shorter than the hash it computes.",
+                Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("fingerprintKeys")));
         }
 
         // BFF-SESS-006: an application that cannot authenticate itself at the token
@@ -543,6 +686,16 @@ public static class HostingRegistration
             throw new StartupException(
                 "The sign-on client secret was not supplied; the library reads it from the secrets manager and holds no fallback.",
                 Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("signOnSecret")));
+        }
+
+        // PRIV-RET-002: without the maintenance credential no month is created ahead and
+        // no expired one is dropped, so the trail stops taking rows once the months the
+        // migration created have passed; the deployment stops here instead.
+        if (maintenanceCredential.Length is 0)
+        {
+            throw new StartupException(
+                "The maintenance credential was not supplied; the library reads it from the secrets manager and holds no fallback.",
+                Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("maintenanceCredential")));
         }
     }
 

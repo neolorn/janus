@@ -21,7 +21,7 @@ namespace Janus.Authentication.Mailboxes;
 /// </remarks>
 internal sealed class Mailbox
 {
-    private Mailbox(MailboxId id, string address, DateTimeOffset reservedAt)
+    private Mailbox(MailboxId id, EmailAddress address, DateTimeOffset reservedAt)
     {
         Id = id;
         Address = address;
@@ -34,9 +34,9 @@ internal sealed class Mailbox
     public MailboxId Id { get; }
 
     /// <summary>
-    /// Its address, in its canonical form.
+    /// Its address.
     /// </summary>
-    public string Address { get; }
+    public EmailAddress Address { get; }
 
     /// <summary>
     /// When it was reserved.
@@ -99,16 +99,11 @@ internal sealed class Mailbox
     /// <summary>
     /// A mailbox reserved for an address, disabled until a membership attaches.
     /// </summary>
-    /// <param name="address">The address, in its canonical form.</param>
+    /// <param name="address">The address.</param>
     /// <param name="at">When it is reserved.</param>
     /// <returns>The mailbox, owed a push that creates it disabled.</returns>
-    /// <exception cref="ArgumentException">The address is empty.</exception>
-    public static Mailbox Reserved(string address, DateTimeOffset at)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(address);
-
-        return new Mailbox(MailboxId.Of(at), address, at);
-    }
+    public static Mailbox Reserved(EmailAddress address, DateTimeOffset at) =>
+        new(MailboxId.Of(at), address, at);
 
     /// <summary>
     /// The mailbox as it already stands. This is the store's translation of a stored
@@ -129,7 +124,7 @@ internal sealed class Mailbox
     /// <returns>The mailbox.</returns>
     public static Mailbox Existing(
         MailboxId id,
-        string address,
+        EmailAddress address,
         DateTimeOffset reservedAt,
         SubjectId? holder,
         DateTimeOffset? retiredAt,
@@ -277,7 +272,7 @@ internal sealed class Mailbox
         }
 
         return FailedAt is null && (NextAttemptAt is null || NextAttemptAt <= now)
-            ? new MailboxPush(PendingKey.Value, Address, owed)
+            ? new MailboxPush(PendingKey.Value, Address.Value, owed)
             : null;
     }
 

@@ -25,13 +25,18 @@ internal sealed class AuthorizationModel
     private const BindingFlags Carried =
         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
 
+    // OPS-ALERT-006 AC1: an export is an action by that name, never a judgement of how
+    // much an action returns.
+    private const string Export = "export";
+
     // The three actions that read by their name alone; every other action modifies
     // unless the host declared it reading (AUTHZ-GATE-006, D-160).
-    private static readonly string[] Reading = ["read", "list", "export"];
+    private static readonly string[] Reading = ["read", "list", Export];
 
     private readonly Dictionary<string, LawfulBasisDeclaration> _bases;
     private readonly Dictionary<Type, ResourceTypeDeclaration> _entities;
     private readonly HashSet<Permission> _permissions;
+    private readonly HashSet<Permission> _exports;
     private readonly HashSet<string> _readingActions;
     private readonly Dictionary<string, RelationshipDeclaration> _relationships;
     private readonly DeclaredProcessing _processing;
@@ -56,6 +61,12 @@ internal sealed class AuthorizationModel
         _entities = entities;
         _relationships = relationships;
         _permissions = permissions;
+
+        _exports =
+        [
+            .. permissions.Where(permission =>
+                string.Equals(permission.Action, Export, StringComparison.Ordinal)),
+        ];
         _readingActions = readingActions;
         _stepUpGates = stepUpGates;
         _actionPurposes = actionPurposes;
@@ -145,6 +156,24 @@ internal sealed class AuthorizationModel
     /// <param name="permission">The permission a role would grant.</param>
     /// <returns>Whether it is declared.</returns>
     public bool Declares(Permission permission) => _permissions.Contains(permission);
+
+    /// <summary>
+    /// The export operations: every permission the host declares whose action is
+    /// <c>export</c>.
+    /// </summary>
+    /// <remarks>
+    /// Implements OPS-ALERT-006 AC1. A person's copy of their own records is no
+    /// permission and so never one of these: it is gated at the account's reachable
+    /// assurance instead (D-141, D-148).
+    /// </remarks>
+    public IReadOnlySet<Permission> Exports => _exports;
+
+    /// <summary>
+    /// Whether the permission is an export operation.
+    /// </summary>
+    /// <param name="permission">The permission being asked for.</param>
+    /// <returns>Whether it is one of <see cref="Exports"/>.</returns>
+    public bool IsExport(Permission permission) => _exports.Contains(permission);
 
     /// <summary>
     /// Whether the permission's action reads rather than modifies, which is what a
@@ -302,17 +331,98 @@ internal sealed class AuthorizationModel
 
     // OPS-MIG-003a AC2, AC4: what the maintenance credential may reach, written out
     // here so it is read in the serialized model and not only in the migration that
-    // grants it. DatabaseRoleTests holds the two against each other.
+    // grants it. DatabaseRoleTests holds the two against each other. The columns and
+    // the audit append are the key rotations' (entries 316 and 318 of the decisions
+    // pending review).
     private static readonly SerializedModel.MaintenanceGrant[] MaintenanceGrants =
     [
+        new("COLUMN identity.authenticators.enc_provider_subject", "SELECT"),
+        new("COLUMN identity.authenticators.fingerprint_version", "SELECT"),
+        new("COLUMN identity.authenticators.fingerprint_version", "UPDATE"),
+        new("COLUMN identity.authenticators.id", "SELECT"),
+        new("COLUMN identity.authenticators.provider_subject", "SELECT"),
+        new("COLUMN identity.authenticators.provider_subject", "UPDATE"),
+        new("COLUMN identity.authenticators.subject", "SELECT"),
+        new("COLUMN identity.callbacks.fingerprint_version", "SELECT"),
+        new("COLUMN identity.identifier_removals.enc_canonical", "SELECT"),
+        new("COLUMN identity.identifier_removals.expires_at", "SELECT"),
+        new("COLUMN identity.identifier_removals.fingerprint", "SELECT"),
+        new("COLUMN identity.identifier_removals.fingerprint", "UPDATE"),
+        new("COLUMN identity.identifier_removals.fingerprint_version", "SELECT"),
+        new("COLUMN identity.identifier_removals.fingerprint_version", "UPDATE"),
+        new("COLUMN identity.identifier_removals.identifier_id", "SELECT"),
+        new("COLUMN identity.identifier_removals.subject", "SELECT"),
+        new("COLUMN identity.identifiers.enc_canonical", "SELECT"),
+        new("COLUMN identity.identifiers.fingerprint", "SELECT"),
+        new("COLUMN identity.identifiers.fingerprint", "UPDATE"),
+        new("COLUMN identity.identifiers.fingerprint_version", "SELECT"),
+        new("COLUMN identity.identifiers.fingerprint_version", "UPDATE"),
+        new("COLUMN identity.identifiers.identifier_id", "SELECT"),
+        new("COLUMN identity.identifiers.subject", "SELECT"),
+        new("COLUMN identity.invitations.id", "SELECT"),
+        new("COLUMN identity.invitations.key_version", "SELECT"),
+        new("COLUMN identity.invitations.key_version", "UPDATE"),
+        new("COLUMN identity.invitations.wrapped_key", "SELECT"),
+        new("COLUMN identity.invitations.wrapped_key", "UPDATE"),
+        new("COLUMN identity.mailboxes.enc_canonical", "SELECT"),
+        new("COLUMN identity.mailboxes.fingerprint", "SELECT"),
+        new("COLUMN identity.mailboxes.fingerprint", "UPDATE"),
+        new("COLUMN identity.mailboxes.fingerprint_version", "SELECT"),
+        new("COLUMN identity.mailboxes.fingerprint_version", "UPDATE"),
+        new("COLUMN identity.mailboxes.holder", "SELECT"),
+        new("COLUMN identity.mailboxes.id", "SELECT"),
+        new("COLUMN identity.mailboxes.key_version", "SELECT"),
+        new("COLUMN identity.mailboxes.key_version", "UPDATE"),
+        new("COLUMN identity.mailboxes.wrapped_key", "SELECT"),
+        new("COLUMN identity.mailboxes.wrapped_key", "UPDATE"),
+        new("COLUMN identity.nonexistence_notices.fingerprint_version", "SELECT"),
+        new("COLUMN identity.preauthentication_sessions.fingerprint", "SELECT"),
+        new("COLUMN identity.preauthentication_sessions.signon_key_version", "SELECT"),
+        new("COLUMN identity.preauthentication_sessions.signon_key_version", "UPDATE"),
+        new("COLUMN identity.preauthentication_sessions.signon_verifier", "SELECT"),
+        new("COLUMN identity.preauthentication_sessions.signon_verifier", "UPDATE"),
+        new("COLUMN identity.registration_sessions.id", "SELECT"),
+        new("COLUMN identity.registration_sessions.key_version", "SELECT"),
+        new("COLUMN identity.registration_sessions.key_version", "UPDATE"),
+        new("COLUMN identity.registration_sessions.wrapped_key", "SELECT"),
+        new("COLUMN identity.registration_sessions.wrapped_key", "UPDATE"),
+        new("COLUMN identity.registration_sources.fingerprint_version", "SELECT"),
+        new("COLUMN identity.send_counters.fingerprint_version", "SELECT"),
+        new("COLUMN identity.send_grants.fingerprint_version", "SELECT"),
+        new("COLUMN identity.send_outbox.id", "SELECT"),
+        new("COLUMN identity.send_outbox.key_version", "SELECT"),
+        new("COLUMN identity.send_outbox.key_version", "UPDATE"),
+        new("COLUMN identity.send_outbox.wrapped_key", "SELECT"),
+        new("COLUMN identity.send_outbox.wrapped_key", "UPDATE"),
+        new("COLUMN identity.sends.fingerprint_version", "SELECT"),
+        new("COLUMN identity.signing_keys.key_id", "SELECT"),
+        new("COLUMN identity.signing_keys.key_version", "SELECT"),
+        new("COLUMN identity.signing_keys.key_version", "UPDATE"),
+        new("COLUMN identity.signing_keys.private_key", "SELECT"),
+        new("COLUMN identity.signing_keys.private_key", "UPDATE"),
+        new("COLUMN identity.throttle_counters.fingerprint_version", "SELECT"),
+        new("COLUMN identity.username_holds.fingerprint_version", "SELECT"),
+        new("COLUMN identity.username_holds.releases_at", "SELECT"),
         new(
             "FUNCTION identity.audit_drop_expired_partitions("
             + "security_retention interval, routine_retention interval)",
             "EXECUTE"),
         new("FUNCTION identity.audit_ensure_partitions()", "EXECUTE"),
         new("SCHEMA identity", "USAGE"),
+        new("TABLE identity.audit_records", "INSERT"),
+        new("TABLE identity.callbacks", "DELETE"),
+        new("TABLE identity.key_rotations", "INSERT"),
+        new("TABLE identity.key_rotations", "SELECT"),
+        new("TABLE identity.key_rotations", "UPDATE"),
+        new("TABLE identity.nonexistence_notices", "DELETE"),
+        new("TABLE identity.registration_sources", "DELETE"),
+        new("TABLE identity.send_counters", "DELETE"),
+        new("TABLE identity.send_grants", "DELETE"),
+        new("TABLE identity.sends", "DELETE"),
         new("TABLE identity.subject_keys", "SELECT"),
         new("TABLE identity.subject_keys", "UPDATE"),
+        new("TABLE identity.throttle_counters", "DELETE"),
+        new("TABLE identity.username_holds", "DELETE"),
     ];
 
     private static SerializedModel.Type Serialized(ResourceTypeDeclaration type) =>

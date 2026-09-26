@@ -530,8 +530,16 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             "SELECT identity.audit_ensure_partitions()");
 
         int months = await connection.ExecuteScalarAsync<int>(
-            "SELECT count(*) FROM pg_class "
-                + "WHERE relkind = 'r' AND relname LIKE 'audit_records_%_20%'");
+            """
+            SELECT count(*)
+            FROM pg_class,
+                unnest(ARRAY['audit_records_security_', 'audit_records_routine_']) AS parent,
+                generate_series(0, 2) AS ahead
+            WHERE relkind = 'r'
+                AND relname = parent || to_char(
+                    date_trunc('month', now() AT TIME ZONE 'UTC') + ahead * interval '1 month',
+                    'YYYY_MM')
+            """);
 
         Assert.Equal(0, created);
         Assert.Equal(6, months);
@@ -580,6 +588,106 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
         Assert.Equal(before, await CountedAsync(connection, subjects));
     }
 
+    /// <summary>
+    /// IDN-AUD-001 AC1: an event recorded on a path that opened no transaction, or after
+    /// the one it opened has committed, is kept: nothing waits for a later save that
+    /// never comes.
+    /// </summary>
+    [Fact]
+    public async Task IDN_AUD_001_AC1_AnEventOutsideATransactionIsKeptAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Now());
+
+        await using (StoreContext writing = database.Context())
+        {
+            await using var work = new UnitOfWork(writing);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+
+            await Store(writing).AppendAsync(
+                AuditRecord.Of(NewId(), AuditCategory.Security, Suspended, Now(), subject, subject, organization: null),
+                TestContext.Current.CancellationToken);
+        }
+
+        AuditRecord read = await OneAsync(subject);
+
+        Assert.Equal(Suspended, read.Action);
+    }
+
+    /// <summary>
+    /// IDN-AUD-001 AC1: an event recorded inside a transaction is part of it, so an
+    /// operation that fails part way through leaves no record of what it never did.
+    /// </summary>
+    [Fact]
+    public async Task IDN_AUD_001_AC1_AnEventInsideATransactionFallsWithItAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Now());
+
+        await using (StoreContext writing = database.Context())
+        {
+            await using var work = new UnitOfWork(writing);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+
+            await Store(writing).AppendAsync(
+                AuditRecord.Of(NewId(), AuditCategory.Security, Suspended, Now(), subject, subject, organization: null),
+                TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Empty(await Store(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// IDN-PRIN-001 AC4, INF-BG-002 AC2: an action background work took is recorded
+    /// under the name of the principal it ran as and the reason it stated, with no
+    /// acting identity it does not have.
+    /// </summary>
+    [Fact]
+    public async Task IDN_PRIN_001_AC4_ABackgroundActionIsRecordedWithItsReasonAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Now());
+        var principal = SystemPrincipal.ForDeployment("expiry-sweep", "OPS-OBS-003", SystemOperation.ExpirySweep);
+
+        await AppendAsync(AuditRecord.Of(
+            NewId(),
+            AuditCategory.Security,
+            AuditAction.Parse("privacy.erasure.executed"),
+            Now(),
+            principal,
+            subject,
+            organization: null));
+
+        AuditRecord read = await OneAsync(subject);
+
+        Assert.Equal("expiry-sweep", read.Principal);
+        Assert.Equal("OPS-OBS-003", read.Reason);
+        Assert.Equal(default, read.ActingSubject);
+        Assert.Equal(subject, read.EffectiveSubject);
+    }
+
+    /// <summary>
+    /// IDN-PRIN-001 AC4: a principal is never recorded without its reason, and never
+    /// beside an acting identity, which the database refuses rather than the code
+    /// remembering.
+    /// </summary>
+    [Fact]
+    public async Task IDN_PRIN_001_AC4_APrincipalIsRecordedOnlyWithItsReasonAndNoActorAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Now());
+
+        PostgresException unreasoned = await Assert.ThrowsAsync<PostgresException>(
+            async () => await WritePrincipalAsync(Guid.Empty, subject.Value, "expiry-sweep", reason: null));
+        PostgresException acted = await Assert.ThrowsAsync<PostgresException>(
+            async () => await WritePrincipalAsync(subject.Value, subject.Value, "expiry-sweep", "OPS-OBS-003"));
+
+        Assert.Equal("ck_audit_records_principal", unreasoned.ConstraintName);
+        Assert.Equal("ck_audit_records_principal", acted.ConstraintName);
+        Assert.Equal(1, await WritePrincipalAsync(Guid.Empty, subject.Value, "expiry-sweep", "OPS-OBS-003"));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
@@ -606,6 +714,23 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             new { id = Guid.CreateVersion7(), at = Now(), action });
     }
 
+    // One row written straight to the table under a principal: what the constraint
+    // admits is read from the database and not from the store.
+    private async Task<int> WritePrincipalAsync(Guid acting, Guid effective, string principal, string? reason)
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        return await connection.ExecuteAsync(
+            """
+            INSERT INTO identity.audit_records
+                (id, category, occurred_at, action, acting_subject, effective_subject,
+                 details, principal, principal_reason)
+            VALUES (@id, 'security', @at, 'privacy.erasure.executed', @acting, @effective,
+                    '{}'::jsonb, @principal, @reason);
+            """,
+            new { id = Guid.CreateVersion7(), at = Now(), acting, effective, principal, reason });
+    }
+
     private static AuditRecordId NewId() => new(Guid.CreateVersion7());
 
     private static DateTimeOffset Now() => DateTimeOffset.UtcNow;
@@ -623,7 +748,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
     }
 
     private AuditStore Store(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness);
+        new(context, new DataConnections(context), _deployment.Keys, _deployment.Randomness);
 
     private async ValueTask<IReadOnlyList<AuditEntry>> TrailAsync(SubjectId subject)
     {
@@ -638,7 +763,6 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
     {
         await using StoreContext writing = database.Context();
         await Store(writing).AppendAsync(record, TestContext.Current.CancellationToken);
-        await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
     private async ValueTask<AuditRecord> OneAsync(SubjectId subject)

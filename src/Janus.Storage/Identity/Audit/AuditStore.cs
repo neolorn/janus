@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Core;
 using Janus.Identity.Audit;
 using Janus.Privacy.SubjectKeys;
@@ -17,40 +18,62 @@ namespace Janus.Storage.Identity.Audit;
 /// <summary>
 /// The audit trail, over the <c>audit_records</c> table.
 /// </summary>
-/// <param name="context">The context the operation's writes are tracked on.</param>
+/// <param name="context">The context the subject keys are read through.</param>
+/// <param name="connections">Where the append takes its connection from.</param>
 /// <param name="keyEncryptionKeys">The versions a subject key may be wrapped under.</param>
 /// <param name="randomness">The randomness the initialisation vector is drawn from.</param>
 /// <remarks>
-/// Implements IDN-AUD-001, PRIV-RET-002, PRIV-RET-003 and CONV-DESIGN-003. Nothing here
-/// changes or removes a row: the only write is an append.
+/// Implements IDN-AUD-001, IDN-PRIN-001, PRIV-RET-002, PRIV-RET-003 and CONV-DESIGN-003.
+/// Nothing here changes or removes a row: the only write is an append. The record is
+/// written through the operation's own connection, so an event on a path that opened no
+/// transaction stands on its own and one inside a transaction is part of it; a record
+/// held for a later save would be lost by an operation that has already committed.
 /// </remarks>
 internal sealed class AuditStore(
     StoreContext context,
+    DataConnections connections,
     KeyEncryptionKeys keyEncryptionKeys,
     RandomNumberGenerator randomness) : IAuditStore
 {
+    private const string Append =
+        """
+        INSERT INTO identity.audit_records
+            (id, category, occurred_at, action, acting_subject, effective_subject,
+             organization, details, enc_details, principal, principal_reason)
+        VALUES (@id, @category, @at, @action, @acting, @effective, @organization,
+                CAST(@details AS jsonb), @personal, @principal, @reason);
+        """;
+
     /// <inheritdoc/>
     public async ValueTask AppendAsync(AuditRecord record, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(record);
 
-        await context.AuditRecords
-            .AddAsync(
-                new AuditRowRecord
+        byte[]? personal = record.PersonalDetails.Count == 0
+            ? null
+            : await SealedAsync(record, cancellationToken).ConfigureAwait(false);
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                Append,
+                new
                 {
-                    Id = record.Id,
-                    Category = record.Category,
-                    OccurredAt = record.OccurredAt.ToUniversalTime(),
-                    Action = record.Action,
-                    ActingSubject = record.ActingSubject,
-                    EffectiveSubject = record.EffectiveSubject,
-                    Organization = record.Organization,
-                    Details = Written(record.Details),
-                    PersonalDetails = record.PersonalDetails.Count == 0
-                        ? null
-                        : await SealedAsync(record, cancellationToken).ConfigureAwait(false),
+                    id = record.Id.Value,
+                    category = VocabularyConverter<AuditCategory>.Write(record.Category),
+                    at = record.OccurredAt.ToUniversalTime(),
+                    action = record.Action.ToString(),
+                    acting = record.ActingSubject.Value,
+                    effective = record.EffectiveSubject.Value,
+                    organization = record.Organization?.Value,
+                    details = Written(record.Details),
+                    personal,
+                    principal = record.Principal,
+                    reason = record.Reason,
                 },
-                cancellationToken)
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
             .ConfigureAwait(false);
     }
 
@@ -136,7 +159,9 @@ internal sealed class AuditStore(
                 : Fields(PersonalFieldCipher.Decrypt(
                     dataKey,
                     Located(row.EffectiveSubject),
-                    row.PersonalDetails)));
+                    row.PersonalDetails)),
+            row.Principal,
+            row.PrincipalReason);
 
     private async ValueTask<byte[]> SealedAsync(
         AuditRecord record,

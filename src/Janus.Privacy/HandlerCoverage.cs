@@ -3,19 +3,20 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using Janus.Core;
+using Janus.Privacy.Erasures;
 
 namespace Janus.Privacy;
 
 /// <summary>
-/// What the deployment declared read against what it registered: every sensitive
-/// resource type has a subject-event subscriber that covers it, and every objectable
-/// purpose has a handler that names it.
+/// What the deployment declared read against what it registered: every subject-event
+/// subscriber answers to a name of its own, every sensitive resource type has one that
+/// covers it, and every objectable purpose has a handler that names it.
 /// </summary>
 /// <param name="declaration">What the host declared about its own domain.</param>
 /// <param name="subscribers">The subject-event subscribers the host registered.</param>
 /// <param name="handlers">The purpose handlers the host registered.</param>
 /// <remarks>
-/// Implements PRIV-RIGHT-005b, PRIV-RIGHT-001a, IDN-LIFE-003a and LIB-HOST-001.
+/// Implements PRIV-RIGHT-005b, PRIV-RIGHT-001a, IDN-LIFE-003a, DR-016 and LIB-HOST-001.
 /// Adding a subscriber requires no library change; leaving one out stops the
 /// deployment rather than the erasure that would half happen.
 /// </remarks>
@@ -30,6 +31,22 @@ internal sealed class HandlerCoverage(
     /// <returns>Nothing, or the first omission, named.</returns>
     public Result Validate()
     {
+        // A confirmation is recorded under the subscriber's name, so two subscribers
+        // under one name, or one under the erasure ledger's, would each read the
+        // other's confirmation as its own and an erasure would close half done.
+        var names = new HashSet<string>([ErasureLedgerSubscriber.Called], StringComparer.Ordinal);
+
+        foreach (ISubjectEventSubscriber subscriber in subscribers)
+        {
+            if (!names.Add(subscriber.Name))
+            {
+                return Result.Failure(Error.From(
+                    ErrorCodes.StartupSubscriberName,
+                    "handler",
+                    JsonSerializer.SerializeToElement(subscriber.Name)));
+            }
+        }
+
         var covered = new HashSet<ResourceType>(
             subscribers.SelectMany(subscriber => subscriber.Covers));
 

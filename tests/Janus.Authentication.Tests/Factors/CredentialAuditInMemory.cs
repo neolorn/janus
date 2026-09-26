@@ -19,6 +19,12 @@ internal sealed class CredentialAuditInMemory : ICredentialAudit
     public List<(AuditAction Action, SubjectId Subject, AuthenticatorId Credential)> Records { get; } = [];
 
     /// <summary>
+    /// The system principal each record was made under, in the order it was recorded;
+    /// nothing where a person acted.
+    /// </summary>
+    public List<SystemPrincipal?> Principals { get; } = [];
+
+    /// <summary>
     /// What was recorded of mail app passwords, in the order it was recorded.
     /// </summary>
     public List<(AuditAction Action, SubjectId Subject, string Credential)> MailCredentials { get; } = [];
@@ -38,6 +44,22 @@ internal sealed class CredentialAuditInMemory : ICredentialAudit
         CancellationToken cancellationToken)
     {
         Records.Add((action, subject, credential));
+        Principals.Add(null);
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask RecordedAsync(
+        AuditAction action,
+        SystemPrincipal principal,
+        SubjectId subject,
+        AuthenticatorId credential,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        Records.Add((action, subject, credential));
+        Principals.Add(principal);
 
         return ValueTask.CompletedTask;
     }

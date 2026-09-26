@@ -26,7 +26,19 @@ internal sealed class SubjectEraserInMemory : ISubjectEraser
         SubjectId subject,
         ErasureReason reason,
         DateTimeOffset at,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        ErasedAsync(subject, reason, at);
+
+    /// <inheritdoc/>
+    public ValueTask<Erasure> ReapplyAsync(
+        SubjectId subject,
+        ErasureReason reason,
+        DeletionOrigin by,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        ErasedAsync(subject, reason, at);
+
+    private ValueTask<Erasure> ErasedAsync(SubjectId subject, ErasureReason reason, DateTimeOffset at)
     {
         if (_erased.Exists(erasure => erasure.Subject == subject))
         {

@@ -22,11 +22,11 @@ namespace Janus.Privacy.Erasures;
 /// <param name="work">The one transaction each account is carried in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements IDN-LIFE-014, IDN-LIFE-003, IDN-ACCT-007 and PRIV-RIGHT-005. Nothing
-/// here waits on a human: the window is the whole of the decision, and an account that
-/// reaches its end without a cancellation or a reversal is erased. One account per
-/// transaction, so a deployment that falls over mid-pass has erased whole accounts and
-/// begun none.
+/// Implements IDN-LIFE-014, IDN-LIFE-003, IDN-ACCT-007, PRIV-RIGHT-005 and INF-BG-002.
+/// Nothing here waits on a human: the window is the whole of the decision, and an
+/// account that reaches its end without a cancellation or a reversal is erased. One
+/// account per transaction, so a deployment that falls over mid-pass has erased whole
+/// accounts and begun none.
 /// </remarks>
 internal sealed class DeletionSweep(
     IAccountStates accounts,
@@ -42,10 +42,15 @@ internal sealed class DeletionSweep(
     /// <summary>
     /// Runs one pass.
     /// </summary>
+    /// <param name="context">The system principal the pass runs as.</param>
     /// <param name="cancellationToken">Abandons the pass.</param>
     /// <returns>How many accounts the pass erased.</returns>
-    public async ValueTask<int> SweepAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">
+    /// A person is asking, or the principal may not sweep what has expired.
+    /// </exception>
+    public async ValueTask<int> SweepAsync(AccessContext context, CancellationToken cancellationToken)
     {
+        SystemPrincipal principal = Sweeping(context);
         DateTimeOffset now = time.GetUtcNow();
 
         TimeSpan grace = await ReadAsync(Settings.AccountDeletionGrace, cancellationToken)
@@ -68,13 +73,22 @@ internal sealed class DeletionSweep(
                 continue;
             }
 
-            await ErasedAsync(deletion, now, cancellationToken).ConfigureAwait(false);
+            await ErasedAsync(principal, deletion, now, cancellationToken).ConfigureAwait(false);
 
             erased++;
         }
 
         return erased;
     }
+
+    // INF-BG-002 AC1: the pass runs as a named principal that may sweep what has
+    // expired, and never as nobody.
+    private static SystemPrincipal Sweeping(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.ExpirySweep)
+            ? principal
+            : throw new ArgumentException(
+                "The pass runs as a system principal that may sweep what has expired.",
+                nameof(context));
 
     private async ValueTask<TimeSpan> ReadAsync(
         DurationSetting setting,
@@ -91,6 +105,7 @@ internal sealed class DeletionSweep(
     };
 
     private async ValueTask ErasedAsync(
+        SystemPrincipal principal,
         PendingDeletion deletion,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -110,17 +125,16 @@ internal sealed class DeletionSweep(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
         await audit
             .RecordedAsync(
                 Erased,
-                acting: null,
+                principal,
                 deletion.Subject,
                 now,
                 Named(deletion, reason),
                 cancellationToken)
             .ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static Dictionary<string, JsonElement> Named(

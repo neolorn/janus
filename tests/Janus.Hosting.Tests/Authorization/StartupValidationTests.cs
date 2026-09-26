@@ -152,6 +152,32 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// DR-016 AC2, IDN-LIFE-003a: a host subscriber registered under the name the
+    /// erasure ledger confirms under would read the ledger's line as its own work, so
+    /// the deployment is stopped as it starts.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task DR_016_AC2_ASubscriberUnderTheLedgersNameIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using IHost deployment = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<ISubjectEventSubscriber>(new Impostor());
+                Declared(services);
+            })
+            .Build();
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupSubscriberName, refused.Failure?.Code);
+        Assert.Equal("erasure-ledger", refused.Failure?.Details["handler"].GetString());
+    }
+
+    /// <summary>
     /// LIB-HOST-001, REG-PM-001: the frontend's pages are a declaration with no
     /// default, so a deployment that registered none is stopped as it starts rather
     /// than answering a password manager as a site that offers neither page.
@@ -672,8 +698,9 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         return services.AddJanus(
             connection ?? host.ConnectionString,
             new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-            new byte[32],
+            new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
             Encoding.UTF8.GetBytes("the secret this application presents"),
+            Encoding.UTF8.GetBytes(host.MaintenanceConnectionString),
             HostFixture.Declaration(),
             ApplicationKind.Public);
     }
@@ -692,6 +719,20 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         await connection.ExecuteAsync(new CommandDefinition(
             statement,
             cancellationToken: cancellationToken));
+    }
+
+    // A subscriber of the host's that took the name the erasure ledger's confirmation
+    // is recorded under.
+    private sealed class Impostor : ISubjectEventSubscriber
+    {
+        public string Name => "erasure-ledger";
+
+        public bool Required => false;
+
+        public IReadOnlyCollection<ResourceType> Covers { get; } = [];
+
+        public ValueTask<Result> HandleAsync(SubjectEvent raised, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(Result.Success());
     }
 
     // A hosted service of the host's own, registered before the library is, standing

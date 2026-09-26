@@ -320,6 +320,30 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-ALERT-006 AC2: the export audit is a protected key, so no call through the
+    /// application turns it off, the administrator's own included.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_006_AC2_ExportAuditingCannotBeDisabledThroughTheApplicationAsync()
+    {
+        Browser administrator = await AuthorisedAsync(
+            Permissions.ConfigurationManage,
+            Permissions.SystemAdminister);
+
+        Answer changed = await administrator.SendAsync(
+            "PUT",
+            "/admin/config/exfiltration.export.auditing",
+            ("value", false),
+            ("reason", "a quarterly export"));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, changed.Status);
+        Assert.Equal(ErrorCodes.ConfigurationKeyProtected.ToString(), changed.Text("code"));
+        Assert.True(await InForceAsync(Settings.ExfiltrationExportAuditing));
+        Assert.Empty(_deployment.Changes.Written);
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-004 and chapter 10 section 2.1: the named restriction set has its
     /// own operations and its own permission, so it is no key of this route.
     /// </summary>

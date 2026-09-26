@@ -2,11 +2,20 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
+using Janus.Authentication.Alerting;
+using Janus.Authentication.Factors;
+using Janus.Authentication.Sessions;
 using Janus.Core;
+using Janus.Core.Configuration;
+using Janus.Hosting.Bff;
+using Janus.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Authorization;
@@ -379,6 +388,61 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
+    /// AUTHZ-GATE-004, OPS-ALERT-001 AC1: the refusals of one actor inside one fixed
+    /// ten-minute window raise <c>denial-spike</c> for that actor once there are more of
+    /// them than <c>alerting.denials.threshold</c>, and not before.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_ALERT_001_AC1_ADenialSpikeOfOneActorIsRaisedAsync()
+    {
+        Nested nested = await NestAsync();
+
+        for (int each = 0; each < Settings.AlertingDenialsThreshold.Default; each++)
+        {
+            Assert.False(await ChecksAsync(nested.Account, nested.Record));
+        }
+
+        Assert.Equal(0, await SpikesAsync(nested.Account));
+
+        Assert.False(await ChecksAsync(nested.Account, nested.Record));
+
+        Assert.Equal(1, await SpikesAsync(nested.Account));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-004, OPS-ALERT-001 AC1: the refusals that name no acting subject are
+    /// counted together, so a run of them raises <c>denial-spike</c> with no scope.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_ALERT_001_AC1_ARunOfRefusalsNamingNoOneIsRaisedAsync()
+    {
+        Nested nested = await NestAsync();
+
+        for (int each = 0; each <= Settings.AlertingDenialsThreshold.Default; each++)
+        {
+            await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+            await using HostContext reading = host.Context();
+
+            Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .RequireAsync(
+                    AccessContext.Of(SystemPrincipal.ForOrganization(
+                        "import",
+                        "the nightly import",
+                        nested.Deployment.Organization)),
+                    HostPermissions.Read,
+                    nested.Record,
+                    Sources(reading),
+                    TestContext.Current.CancellationToken);
+
+            Assert.Equal(ErrorCodes.Denied, outcome.Match(() => ErrorCodes.SystemFault, error => error.Code));
+        }
+
+        Assert.NotEqual(0, await SpikesAsync(null));
+    }
+
+    /// <summary>
     /// AUTHZ-PRIN-003 AC2: background work asking as a named principal holds no account
     /// and therefore holds no grant, so the gate refuses rather than assuming.
     /// </summary>
@@ -678,6 +742,130 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
                 await nested.Deployment.AccountAsync(cancellationToken),
                 nested.Record,
                 HostPermissions.Publish));
+    }
+
+    /// <summary>
+    /// AUTH-STEP-002 AC3, AUTHZ-GATE-005 (D-160): a host's action bound to a gate is
+    /// judged against the acting person's own session, so a session that proved enough
+    /// within the gate's age is admitted without a challenge, and one whose proof has
+    /// aged is refused with what the gate costs.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_STEP_002_AC3_ASessionThatMeetsAHostsGateIsNotChallengedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Publish]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        Assert.Null(await SteppedUpRefusalAsync(nested, TimeSpan.Zero));
+
+        Error aged = Assert.IsType<Error>(await SteppedUpRefusalAsync(nested, TimeSpan.FromDays(1)));
+
+        Assert.Equal(ErrorCodes.StepUpRequired, aged.Code);
+        Assert.Equal(HostPermissions.Publish.ToString(), aged.Details["action"].GetString());
+    }
+
+    /// <summary>
+    /// AUTH-STEP-001, AUTHZ-GATE-001: a list exercises the permission as a check does,
+    /// so the filter for an action bound to a gate is refused as the check is, and the
+    /// two renderings of one rule never disagree about it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_STEP_001_AListUnderABoundActionAsksForStepUpAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Publish]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        IAccessGate gate = scope.ServiceProvider.GetRequiredService<IAccessGate>();
+
+        Result<SqlFilter> fragment = await gate.FragmentAsync(
+            AccessContext.Of(nested.Account),
+            HostPermissions.Publish,
+            Document,
+            nested.Deployment.Organization,
+            "d",
+            "id",
+            cancellationToken);
+
+        Result<Expression<Func<HostDocument, bool>>> filter = await gate.FilterAsync(
+            AccessContext.Of(nested.Account),
+            HostPermissions.Publish,
+            Document,
+            nested.Deployment.Organization,
+            Sources(reading),
+            cancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.StepUpUnavailable,
+            fragment.Match(_ => (ErrorCode?)null, error => error.Code));
+        Assert.Equal(
+            ErrorCodes.StepUpUnavailable,
+            filter.Match(_ => (ErrorCode?)null, error => error.Code));
+        Assert.Equal(
+            ErrorCodes.StepUpUnavailable,
+            await RefusalAsync(nested.Account, nested.Record, HostPermissions.Publish));
+    }
+
+    /// <summary>
+    /// OPS-ALERT-006 (D-045): an export the grants allow asks for step-up although the
+    /// host bound it to no gate; once the session meets it, each export is recorded on
+    /// its own, and past the hour's limit the next is refused and recorded as nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_ALERT_006_AnExportIsGatedRecordedAndLimitedAtTheGateAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Export]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.StepUpUnavailable,
+            await RefusalAsync(nested.Account, nested.Record, HostPermissions.Export));
+        Assert.Equal(0, await ExportsRecordedAsync(nested.Account));
+
+        for (int export = 0; export < Settings.ExfiltrationExportRateLimit.Default; export++)
+        {
+            Assert.Null(await SteppedUpRefusalAsync(nested, TimeSpan.Zero, HostPermissions.Export));
+        }
+
+        Error throttled = Assert.IsType<Error>(
+            await SteppedUpRefusalAsync(nested, TimeSpan.Zero, HostPermissions.Export));
+
+        Assert.Equal(ErrorCodes.Throttled, throttled.Code);
+        Assert.True(throttled.Details.ContainsKey("retryAt"));
+        Assert.Equal(Settings.ExfiltrationExportRateLimit.Default, await ExportsRecordedAsync(nested.Account));
+        Assert.True(await ChecksAsync(nested.Account, nested.Record));
     }
 
     /// <summary>
@@ -1165,6 +1353,64 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
                     TestContext.Current.CancellationToken)));
     }
 
+    // The request arrives on a session of the account's own, which proved a
+    // phishing-resistant second factor the stated time ago.
+    private async Task<Error?> SteppedUpRefusalAsync(
+        Nested nested,
+        TimeSpan ago,
+        Permission? permission = null)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        IServiceProvider services = scope.ServiceProvider;
+        DateTimeOffset proved = services.GetRequiredService<TimeProvider>().GetUtcNow() - ago;
+
+        var session = Session.Begin(
+            SessionId.New(TimeProvider.System),
+            nested.Account,
+            new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),
+            new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")),
+            proved,
+            TimeSpan.FromDays(7),
+            TimeSpan.FromDays(30),
+            satisfiesEveryGate: false);
+
+        IUnitOfWork work = services.GetRequiredService<IUnitOfWork>();
+
+        await work.BeginAsync(cancellationToken);
+
+        // A session is kept under its person's key, which an account written directly
+        // does not have until its first session asks for it.
+        ISubjectKeyStore keys = services.GetRequiredService<ISubjectKeyStore>();
+
+        if (await keys.FindBySubjectAsync(nested.Account, cancellationToken) is null)
+        {
+            await keys.CreateAsync(nested.Account, cancellationToken);
+        }
+
+        await services.GetRequiredService<ISessionStore>().AddAsync(
+            session,
+            RandomNumberGenerator.GetBytes(32),
+            RandomNumberGenerator.GetBytes(32),
+            cancellationToken);
+        await work.CommitAsync(cancellationToken);
+
+        services.GetRequiredService<RequestSession>().Resolved(session);
+
+        Result outcome = await services.GetRequiredService<IAccessGate>()
+            .RequireAsync(
+                AccessContext.Of(nested.Account),
+                permission ?? HostPermissions.Publish,
+                nested.Record,
+                Sources(reading),
+                cancellationToken);
+
+        return outcome.Match(() => (Error?)null, error => error);
+    }
+
     private async Task<ErrorCode?> RefusalAsync(
         SubjectId account,
         ResourceReference resource,
@@ -1182,6 +1428,30 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
                 TestContext.Current.CancellationToken);
 
         return outcome.Match(() => (ErrorCode?)null, error => error.Code);
+    }
+
+    private async Task<int> ExportsRecordedAsync(SubjectId account)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(
+            """
+            SELECT count(*)::int FROM identity.audit_records
+            WHERE action = 'authz.access.exported' AND acting_subject = @account
+            """,
+            new { account = account.Value });
+    }
+
+    private async Task<int> SpikesAsync(SubjectId? account)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(
+            """
+            SELECT count(*)::int FROM identity.raised_alerts
+            WHERE condition = 'denial-spike' AND idempotency_key LIKE @key
+            """,
+            new { key = Alerts.Key(AlertCondition.DenialSpike, account?.ToString()) + "@%" });
     }
 
     private async Task<bool> ChecksAsync(

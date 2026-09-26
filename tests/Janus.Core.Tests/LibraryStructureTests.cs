@@ -86,7 +86,15 @@ public sealed class LibraryStructureTests
     // CONV-DESIGN-004 AC2: a parameter of the underlying type where the library has a
     // type of its own for the thing.
     private static readonly Regex Untyped = new(
-        @"[(,]\s*(Guid\s+[a-z]|string\s+(subject|organization|email|phone|username|address))",
+        @"[(,]\s*(Guid\s+[a-z]|string\s+(subject|organization|email|phone|username|address)\b)",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
+
+    // CONV-DESIGN-004 AC2: a member that implements another package's interface takes
+    // what that interface declares, which no type of the library's can change.
+    // OpenIddict's stores name the OIDC subject as text.
+    private static readonly Regex Foreign = new(
+        @":\s*IOpenIddict\w+Store<",
         RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(5));
 
@@ -274,7 +282,10 @@ public sealed class LibraryStructureTests
     /// <summary>
     /// OPS-CFG-002, OPS-CFG-005: one operation writes a runtime setting, so a change
     /// that went round it would be a change nobody was told of and nobody had to answer
-    /// for. Nothing else in the library calls the store's write.
+    /// for. Nothing else in the library calls the store's write, and the settings table
+    /// is written by the store and by the writer of protected keys alone, which bootstrap
+    /// and the change from the server reach, each recording what it sets (OPS-BOOT-001,
+    /// OPS-CFG-004, entries 315 and 319).
     /// </summary>
     [Fact]
     public void OPS_CFG_002_OnlyTheConfigurationAdministrationWritesARuntimeSetting()
@@ -288,12 +299,113 @@ public sealed class LibraryStructureTests
             .Select(one => one.File);
 
         Assert.Empty(writing);
+        Assert.Equal(
+            ["ConfigurationStore.cs", "ProtectedSettings.cs"],
+            Named(text => Regex.IsMatch(text, @"\bSettings\s*\.\s*Add\(", RegexOptions.None, TimeSpan.FromSeconds(5))));
+    }
+
+    /// <summary>
+    /// OPS-CFG-004 AC1 and AC2, D-071: a protected key is written by bootstrap and by the
+    /// change from the server alone, and the change from the server is run by the command
+    /// line alone, so no endpoint of the management application and no job of the worker
+    /// reaches either.
+    /// </summary>
+    [Fact]
+    public void OPS_CFG_004_AC2_OnlyTheCommandLineWritesAProtectedKey()
+    {
+        Assert.Equal(
+            ["DeploymentSeed.cs", "IProtectedSettings.cs", "ProtectedConfiguration.cs", "ProtectedSettings.cs", "StorageRegistration.cs"],
+            Named(text => Regex.IsMatch(text, @"\bIProtectedSettings\b", RegexOptions.None, TimeSpan.FromSeconds(5))));
+        Assert.Equal(
+            ["ConfigureCommand.cs", "ProtectedConfiguration.cs"],
+            Named(text => Regex.IsMatch(text, @"\bProtectedConfiguration\b", RegexOptions.None, TimeSpan.FromSeconds(5))));
+    }
+
+    /// <summary>
+    /// DR-009a AC5: the key-encryption key is rotated through OPS-SEC-003 and by no other
+    /// path. The principal a rotation runs under is made by the rotations alone, and
+    /// nothing the host mounts, the worker runs or the conformance suite drives names a
+    /// rotation at all.
+    /// </summary>
+    [Fact]
+    public void DR_009a_AC5_NoPathButTheCommandRotatesTheKey()
+    {
+        Assert.Equal(
+            ["FingerprintKeyRotation.cs", "KeyRotation.cs"],
+            Named(text => Regex.IsMatch(text, @"\bSystemOperation\.KeyRotation\b", RegexOptions.None, TimeSpan.FromSeconds(5))));
+        Assert.DoesNotContain(
+            Sources(),
+            file => ((string[])["Janus.Hosting", "Janus.Conformance"]).Any(project => file.StartsWith(
+                    Path.Combine(Repository.Root, "src", project) + Path.DirectorySeparatorChar,
+                    StringComparison.Ordinal))
+                && Regex.IsMatch(
+                    File.ReadAllText(file),
+                    @"\b(KeyRotation|FingerprintKeyRotation|IKeyRotationStore|RotateKeyEncryptionKeyCommand)\b",
+                    RegexOptions.None,
+                    TimeSpan.FromSeconds(5)));
+    }
+
+    /// <summary>
+    /// DR-006a AC2: no erasure procedure attempts to modify a backup. The library takes
+    /// and writes no backup, and the one port through which it reaches one is the restore
+    /// test's, which restores a copy into a throwaway instance; nothing that erases names
+    /// it.
+    /// </summary>
+    [Fact]
+    public void DR_006a_AC2_NoErasureProcedureReachesABackup()
+    {
+        Assert.Equal(
+            ["HostingRegistration.cs", "IRestoreTestInstance.cs", "RestoreTest.cs"],
+            Named(text => Regex.IsMatch(text, @"\bIRestoreTestInstance\b", RegexOptions.None, TimeSpan.FromSeconds(5))));
+        Assert.Empty(Named(text => Regex.IsMatch(
+            text,
+            @"\bpg_(dump|dumpall|restore|basebackup)\b",
+            RegexOptions.None,
+            TimeSpan.FromSeconds(5))));
+    }
+
+    /// <summary>
+    /// OPS-SEC-003 AC1 and AC6, DR-009a AC5: the rotations of the key-encryption key and
+    /// of the fingerprint key are run by the command line and by nothing else, so no
+    /// endpoint of the management application, no job of the worker and no host reaches
+    /// either. The fingerprint rotation reads the batch size of the other and keeps its
+    /// progress in the same table.
+    /// </summary>
+    [Fact]
+    public void OPS_SEC_003_AC1_OnlyTheCommandLineRunsTheRotation()
+    {
+        Assert.Equal(
+            ["FingerprintKeyRotation.cs", "KeyRotation.cs", "RotateKeyEncryptionKeyCommand.cs"],
+            Named(text => Regex.IsMatch(text, @"(?<!SystemOperation\.)\bKeyRotation\b(?!\s*=\s*\d)", RegexOptions.None, TimeSpan.FromSeconds(5))));
+        Assert.Equal(
+            [
+                "FingerprintKeyRotation.cs",
+                "IKeyRotationStore.cs",
+                "KeyRotation.cs",
+                "KeyRotationStore.cs",
+                "RotateFingerprintKeyCommand.cs",
+                "RotateKeyEncryptionKeyCommand.cs",
+            ],
+            Named(text => Regex.IsMatch(text, @"\bIKeyRotationStore\b", RegexOptions.None, TimeSpan.FromSeconds(5))));
+        Assert.Equal(
+            [
+                "FingerprintKeyRotation.cs",
+                "FingerprintRotationStore.cs",
+                "IFingerprintRotationStore.cs",
+                "RotateFingerprintKeyCommand.cs",
+            ],
+            Named(text => Regex.IsMatch(
+                text,
+                @"\b(FingerprintKeyRotation|IFingerprintRotationStore)\b",
+                RegexOptions.None,
+                TimeSpan.FromSeconds(5))));
     }
 
     /// <summary>
     /// IDN-LIFE-009a AC1: a membership is made in one place, the attachment of an
-    /// acknowledged invitation, and the acknowledgement is the one thing that runs it;
-    /// a grant, or any other path, makes none.
+    /// acknowledged invitation, and the acknowledgement is the one thing that runs it,
+    /// beside bootstrap, which makes the first administrator's (OPS-BOOT-001,
+    /// INT-MAIL-006 AC1a, entry 313); a grant, or any other path, makes none.
     /// </summary>
     [Fact]
     public void IDN_LIFE_009a_AC1_OnlyAnAcknowledgedInvitationMakesAMembership()
@@ -307,7 +419,13 @@ public sealed class LibraryStructureTests
 
         Assert.Equal(["MembershipAttachment.cs"], making);
         Assert.Equal(
-            ["IMembershipAttachment.cs", "InvitationAcknowledgement.cs", "MembershipAttachment.cs", "StorageRegistration.cs"],
+            [
+                "DeploymentBootstrap.cs",
+                "IMembershipAttachment.cs",
+                "InvitationAcknowledgement.cs",
+                "MembershipAttachment.cs",
+                "StorageRegistration.cs",
+            ],
             Named(text => text.Contains("MembershipAttachment", StringComparison.Ordinal)));
     }
 
@@ -351,7 +469,9 @@ public sealed class LibraryStructureTests
     public void CONV_DESIGN_004_AC2_NoMethodTakesAValueAsItsUnderlyingType()
     {
         IEnumerable<string> taking = SourcesOf([.. Areas, "Janus.Storage"])
-            .Where(file => Untyped.IsMatch(File.ReadAllText(file)));
+            .Select(file => (File: file, Text: File.ReadAllText(file)))
+            .Where(one => Untyped.IsMatch(one.Text) && !Foreign.IsMatch(one.Text))
+            .Select(one => one.File);
 
         Assert.Empty(taking);
     }

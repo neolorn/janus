@@ -20,10 +20,10 @@ namespace Janus.Privacy.Requests;
 /// <param name="work">The one transaction each request is carried in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements PRIV-RIGHT-002 and PRIV-RIGHT-004. Nothing here waits on a human: with
-/// one operator, a deadline that depends on a click is a deadline missed by an
-/// absence. A request decided before its deadline is not reached by this pass at all,
-/// which is what cancels both alerts.
+/// Implements PRIV-RIGHT-002, PRIV-RIGHT-004 and INF-BG-002. Nothing here waits on a
+/// human: with one operator, a deadline that depends on a click is a deadline missed by
+/// an absence. A request decided before its deadline is not reached by this pass at
+/// all, which is what cancels both alerts.
 /// </remarks>
 internal sealed class DeadlineSweep(
     IPrivacyRequestStore requests,
@@ -44,17 +44,22 @@ internal sealed class DeadlineSweep(
     /// <summary>
     /// Runs one pass.
     /// </summary>
+    /// <param name="context">The system principal the pass runs as.</param>
     /// <param name="cancellationToken">Abandons the pass.</param>
     /// <returns>How many requests the pass changed.</returns>
-    public async ValueTask<int> SweepAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">
+    /// A person is asking, or the principal may not sweep what has expired.
+    /// </exception>
+    public async ValueTask<int> SweepAsync(AccessContext context, CancellationToken cancellationToken)
     {
+        SystemPrincipal principal = Sweeping(context);
         DateTimeOffset now = time.GetUtcNow();
         int carried = 0;
 
         foreach (QueuedRequest request in
             await requests.ReachedAsync(now, cancellationToken).ConfigureAwait(false))
         {
-            if (await ReachedAsync(request, now, cancellationToken).ConfigureAwait(false))
+            if (await ReachedAsync(principal, request, now, cancellationToken).ConfigureAwait(false))
             {
                 carried++;
             }
@@ -62,6 +67,15 @@ internal sealed class DeadlineSweep(
 
         return carried;
     }
+
+    // INF-BG-002 AC1: the pass runs as a named principal that may sweep what has
+    // expired, and never as nobody.
+    private static SystemPrincipal Sweeping(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.ExpirySweep)
+            ? principal
+            : throw new ArgumentException(
+                "The pass runs as a system principal that may sweep what has expired.",
+                nameof(context));
 
     private static Dictionary<string, JsonElement> Named(QueuedRequest request) =>
         new(capacity: 4, StringComparer.Ordinal)
@@ -73,6 +87,7 @@ internal sealed class DeadlineSweep(
         };
 
     private async ValueTask<bool> ReachedAsync(
+        SystemPrincipal principal,
         QueuedRequest request,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -101,7 +116,7 @@ internal sealed class DeadlineSweep(
 
         if (now > request.DecisionDue)
         {
-            await LapsedAsync(request, now, cancellationToken).ConfigureAwait(false);
+            await LapsedAsync(principal, request, now, cancellationToken).ConfigureAwait(false);
 
             carried = true;
         }
@@ -117,6 +132,7 @@ internal sealed class DeadlineSweep(
     }
 
     private async ValueTask LapsedAsync(
+        SystemPrincipal principal,
         QueuedRequest request,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -145,7 +161,7 @@ internal sealed class DeadlineSweep(
         await audit
             .RecordedAsync(
                 Lapsed,
-                acting: null,
+                principal,
                 request.Subject,
                 now,
                 Named(request),

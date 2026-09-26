@@ -15,6 +15,13 @@ public static class AuditActions
     public static AuditAction AccessDenied { get; } = AuditAction.Parse("authz.access.denied");
 
     /// <summary>
+    /// An export operation was admitted: who exported, which operation, over which kind
+    /// of record and within which organization, and when.
+    /// </summary>
+    /// <remarks>Implements OPS-ALERT-006, D-045, chapter 10 section 5.</remarks>
+    public static AuditAction AccessExported { get; } = AuditAction.Parse("authz.access.exported");
+
+    /// <summary>
     /// An account was deactivated by its own owner.
     /// </summary>
     /// <remarks>Implements IDN-LIFE-013, chapter 10 section 5.</remarks>
@@ -40,10 +47,64 @@ public static class AuditActions
     public static AuditAction BotDefenceSignalled { get; } = AuditAction.Parse("auth.botdefence.signalled");
 
     /// <summary>
+    /// The break-glass credential was generated, a first issue or a replacement that
+    /// invalidated the one before it.
+    /// </summary>
+    /// <remarks>Implements OPS-BOOT-004, chapter 10 section 5.</remarks>
+    public static AuditAction BreakGlassGenerated { get; } = AuditAction.Parse("auth.breakglass.generated");
+
+    /// <summary>
+    /// The break-glass credential was used and opened the emergency session.
+    /// </summary>
+    /// <remarks>Implements OPS-BOOT-002, chapter 10 section 5.</remarks>
+    public static AuditAction BreakGlassUsed { get; } = AuditAction.Parse("auth.breakglass.used");
+
+    /// <summary>
     /// A configuration key was changed, with the key, the old value and the new one.
     /// </summary>
     /// <remarks>Implements OPS-CFG-005, chapter 10 section 5.</remarks>
     public static AuditAction ConfigurationChanged { get; } = AuditAction.Parse("ops.configuration.changed");
+
+    /// <summary>
+    /// A rotation of the key-encryption key or the fingerprint key started, with the key,
+    /// the version it rotates to and the count processed.
+    /// </summary>
+    /// <remarks>Implements OPS-SEC-003 AC5.</remarks>
+    public static AuditAction KeyRotationStarted { get; } = AuditAction.Parse("ops.keyrotation.started");
+
+    /// <summary>
+    /// A rotation that had stopped was taken up again from its recorded progress, with
+    /// the count it had processed.
+    /// </summary>
+    /// <remarks>Implements OPS-SEC-003 AC2, AC5.</remarks>
+    public static AuditAction KeyRotationResumed { get; } = AuditAction.Parse("ops.keyrotation.resumed");
+
+    /// <summary>
+    /// A rotation reported every value under its version, with the count it processed.
+    /// </summary>
+    /// <remarks>Implements OPS-SEC-003 AC5.</remarks>
+    public static AuditAction KeyRotationCompleted { get; } = AuditAction.Parse("ops.keyrotation.completed");
+
+    /// <summary>
+    /// The versions before a completed rotation's were retired once its escrow copy was
+    /// confirmed sealed, with the versions retired.
+    /// </summary>
+    /// <remarks>Implements OPS-SEC-003 AC3, AC4, AC5.</remarks>
+    public static AuditAction KeyRotationRetired { get; } = AuditAction.Parse("ops.keyrotation.retired");
+
+    /// <summary>
+    /// A run of the automated restore test ended, with what it found, the time it took,
+    /// the objective it was judged against and whether its instance outlived it.
+    /// </summary>
+    /// <remarks>Implements DR-007 AC2, DR-008 AC2.</remarks>
+    public static AuditAction RestoreTestCompleted { get; } = AuditAction.Parse("ops.restoretest.completed");
+
+    /// <summary>
+    /// A run of the audit retention job ended, with how many monthly partitions it
+    /// created ahead, how many expired ones it dropped, and the retentions it held them to.
+    /// </summary>
+    /// <remarks>Implements PRIV-RET-002, INF-BG-002.</remarks>
+    public static AuditAction AuditPartitionsMaintained { get; } = AuditAction.Parse("ops.auditpartitions.maintained");
 
     /// <summary>
     /// A consent was granted for a purpose, naming the document version it was given against.
@@ -332,6 +393,13 @@ public static class AuditActions
     /// </summary>
     /// <remarks>Implements AUTH-REC-006, chapter 10 section 5.</remarks>
     public static AuditAction RecoveryApproved { get; } = AuditAction.Parse("auth.recovery.approved");
+
+    /// <summary>
+    /// A client was registered in the provider's registry, or a registered one changed,
+    /// from the server.
+    /// </summary>
+    /// <remarks>Implements AUTH-OIDC-001 and OPS-SEC-002.</remarks>
+    public static AuditAction ClientRegistered { get; } = AuditAction.Parse("auth.oidc.clientregistered");
 
     /// <summary>
     /// A refresh token was presented a second time, which revokes the family it belongs to.

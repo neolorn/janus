@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Sending;
+using Janus.Core;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Sending;
@@ -15,12 +16,14 @@ namespace Janus.Storage.Authentication.Sending;
 /// can still take back.
 /// </summary>
 /// <param name="context">The context the operation runs on.</param>
-/// <param name="fingerprintKey">What the restriction keys are hashed under.</param>
+/// <param name="fingerprintKeys">The versions the restriction keys are hashed under.</param>
 /// <remarks>
-/// Implements AUTH-ABUSE-004, INT-SMS-005 and CONV-DESIGN-003. The plain key value
-/// crosses into this class and no further.
+/// Implements AUTH-ABUSE-004, INT-SMS-005, OPS-SEC-003 and CONV-DESIGN-003. The plain key
+/// value crosses into this class and no further. What was counted or granted under a
+/// previous version of the fingerprint key still stands until the rotation retires the
+/// version; what is counted or granted now is under the current one.
 /// </remarks>
-internal sealed class SendLedger(StoreContext context, ReadOnlyMemory<byte> fingerprintKey)
+internal sealed class SendLedger(StoreContext context, FingerprintKeys fingerprintKeys)
     : ISendLedger
 {
     private const string Separator = "\u0000";
@@ -46,22 +49,32 @@ internal sealed class SendLedger(StoreContext context, ReadOnlyMemory<byte> fing
 
         foreach (RestrictionKey key in keys)
         {
-            byte[] hashed = Hashed(key);
+            var sent = new List<DateTimeOffset>();
+            int credit = 0;
+            bool found = false;
 
-            SendCounterRecord? counter = await context.SendCounters
-                .FindAsync([hashed], cancellationToken)
-                .ConfigureAwait(false);
+            foreach (byte[] hashed in Candidates(key))
+            {
+                SendCounterRecord? counter = await context.SendCounters
+                    .FindAsync([hashed], cancellationToken)
+                    .ConfigureAwait(false);
 
-            SendGrantRecord? grant = await context.SendGrants
-                .FindAsync([hashed], cancellationToken)
-                .ConfigureAwait(false);
+                SendGrantRecord? grant = await context.SendGrants
+                    .FindAsync([hashed], cancellationToken)
+                    .ConfigureAwait(false);
 
-            if (counter is null && grant is null)
+                found |= counter is not null || grant is not null;
+                sent.AddRange(counter?.SentAt ?? []);
+                credit += grant?.Credit ?? 0;
+            }
+
+            if (!found)
             {
                 continue;
             }
 
-            standing[key] = new SendCounter(counter?.SentAt ?? [], grant?.Credit ?? 0);
+            // The times are read oldest first, whichever version counted them.
+            standing[key] = new SendCounter([.. sent.Order()], credit);
         }
 
         return standing;
@@ -97,7 +110,12 @@ internal sealed class SendLedger(StoreContext context, ReadOnlyMemory<byte> fing
 
             if (counter is null)
             {
-                context.SendCounters.Add(new SendCounterRecord { Key = hashed, SentAt = kept });
+                context.SendCounters.Add(new SendCounterRecord
+                {
+                    Key = hashed,
+                    FingerprintVersion = fingerprintKeys.CurrentVersion,
+                    SentAt = kept,
+                });
             }
             else
             {
@@ -112,20 +130,25 @@ internal sealed class SendLedger(StoreContext context, ReadOnlyMemory<byte> fing
 
         foreach (RestrictionKey key in spent)
         {
-            SendGrantRecord? grant = await context.SendGrants
-                .FindAsync([Hashed(key)], cancellationToken)
-                .ConfigureAwait(false);
-
-            if (grant is null)
+            foreach (byte[] hashed in Candidates(key))
             {
-                continue;
-            }
+                SendGrantRecord? grant = await context.SendGrants
+                    .FindAsync([hashed], cancellationToken)
+                    .ConfigureAwait(false);
 
-            grant.Credit--;
+                if (grant is null)
+                {
+                    continue;
+                }
 
-            if (grant.Credit <= 0)
-            {
-                context.SendGrants.Remove(grant);
+                grant.Credit--;
+
+                if (grant.Credit <= 0)
+                {
+                    context.SendGrants.Remove(grant);
+                }
+
+                break;
             }
         }
 
@@ -138,6 +161,7 @@ internal sealed class SendLedger(StoreContext context, ReadOnlyMemory<byte> fing
         {
             Reference = reference,
             Counted = [.. counted.Select(count => Hashed(count.Key))],
+            FingerprintVersion = fingerprintKeys.CurrentVersion,
             SentAt = at,
             SettlesAt = at + settles,
         });
@@ -211,7 +235,12 @@ internal sealed class SendLedger(StoreContext context, ReadOnlyMemory<byte> fing
 
         if (grant is null)
         {
-            context.SendGrants.Add(new SendGrantRecord { Key = hashed, Credit = credit });
+            context.SendGrants.Add(new SendGrantRecord
+            {
+                Key = hashed,
+                FingerprintVersion = fingerprintKeys.CurrentVersion,
+                Credit = credit,
+            });
 
             return;
         }
@@ -239,8 +268,11 @@ internal sealed class SendLedger(StoreContext context, ReadOnlyMemory<byte> fing
         return [.. kept];
     }
 
-    private byte[] Hashed(RestrictionKey key) =>
-        Fingerprint.Compute(
-            Encoding.UTF8.GetBytes(key.Restriction + Separator + key.Value),
-            fingerprintKey.Span);
+    private static byte[] Named(RestrictionKey key) =>
+        Encoding.UTF8.GetBytes(key.Restriction + Separator + key.Value);
+
+    private byte[] Hashed(RestrictionKey key) => Fingerprint.Compute(Named(key), fingerprintKeys);
+
+    private IReadOnlyList<byte[]> Candidates(RestrictionKey key) =>
+        Fingerprint.Candidates(Named(key), fingerprintKeys);
 }

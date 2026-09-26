@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sessions;
@@ -39,6 +40,9 @@ public sealed class BrowserProfileTests : IDisposable
 
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 
+    // The audit record a concealed refusal was written as.
+    private static readonly AuditRecordId Concealed = new(Guid.Parse("01990a1c-7c00-7000-8000-00000000c0de"));
+
     private readonly FixedClock _clock = new(Noon);
 
     private readonly SessionStoreInMemory _sessions = new();
@@ -54,6 +58,8 @@ public sealed class BrowserProfileTests : IDisposable
     private readonly PreAuthenticationStoreInMemory _contacts = new();
 
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
+
+    private Func<HttpContext, Task>? _answering;
 
     private bool _reached;
 
@@ -770,6 +776,69 @@ public sealed class BrowserProfileTests : IDisposable
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// OPS-ENV-002 AC1: a refusal the gate concealed is answered by the profile every
+    /// endpoint is mounted behind, as the absence of the record; what the stages wrote
+    /// stays, and the refusal the endpoint wrote does not.
+    /// </summary>
+    [Fact]
+    public async Task OPS_ENV_002_AC1_TheProfileAnswersAConcealedRefusalAndKeepsWhatItsStagesWroteAsync()
+    {
+        (OpaqueToken secret, OpaqueToken _) = await LiveAsync();
+
+        _clock.Advance(TimeSpan.FromDays(2));
+        _answering = async context =>
+        {
+            context.RequestServices.GetRequiredService<ConcealedRefusals>().Concealed(Concealed);
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            context.Response.Headers["X-Record-Owner"] = "someone";
+            await context.Response.WriteAsJsonAsync(
+                new { code = "authz.denied" },
+                TestContext.Current.CancellationToken);
+        };
+
+        HttpContext context = Arriving("GET", ("Sec-Fetch-Site", "same-origin"));
+
+        Carrying(context, secret);
+
+        await Mounted()(context);
+
+        Assert.Equal(StatusCodes.Status404NotFound, context.Response.StatusCode);
+        Assert.Contains("\"code\":\"authz.resource.notfound\"", await AnsweredAsync(context), StringComparison.Ordinal);
+        Assert.Contains(
+            BrowserCookies.Session + "=;",
+            context.Response.Headers.SetCookie.ToString(),
+            StringComparison.Ordinal);
+        Assert.False(context.Response.Headers.ContainsKey("X-Record-Owner"));
+    }
+
+    /// <summary>
+    /// BFF-ERR-003 AC3: an endpoint that goes on past a concealed refusal and answers
+    /// success is still answered as the absence of the record, so uniformity does not
+    /// rest on what each endpoint remembers to do.
+    /// </summary>
+    [Fact]
+    public async Task BFF_ERR_003_AC3_AnEndpointAnsweringPastAConcealedRefusalIsAnsweredAsAbsenceAsync()
+    {
+        _answering = async context =>
+        {
+            context.RequestServices.GetRequiredService<ConcealedRefusals>().Concealed(Concealed);
+            await context.Response.WriteAsJsonAsync(
+                new { title = "Quarterly" },
+                TestContext.Current.CancellationToken);
+        };
+
+        HttpContext context = Arriving("GET", ("Sec-Fetch-Site", "same-origin"));
+
+        await Mounted()(context);
+
+        string answered = await AnsweredAsync(context);
+
+        Assert.Equal(StatusCodes.Status404NotFound, context.Response.StatusCode);
+        Assert.Contains("\"code\":\"authz.resource.notfound\"", answered, StringComparison.Ordinal);
+        Assert.DoesNotContain("Quarterly", answered, StringComparison.Ordinal);
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _randomness.Dispose();
 
@@ -822,7 +891,7 @@ public sealed class BrowserProfileTests : IDisposable
         _reached = true;
         _resolved = context.RequestServices?.GetService<RequestSession>();
 
-        return Task.CompletedTask;
+        return _answering?.Invoke(context) ?? Task.CompletedTask;
     }
 
     private static IReadOnlyList<string> Reading(params string[] what) =>
@@ -869,6 +938,7 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddSingleton(token);
         services.AddSingleton<ILogger<FirstContact>>(new LogInMemory<FirstContact>());
         services.AddSingleton<ILogger<MalformedRequest>>(new LogInMemory<MalformedRequest>());
+        services.AddSingleton<ILogger<Concealment>>(new LogInMemory<Concealment>());
         services.AddSingleton<ISessionStore>(_sessions);
         services.AddSingleton<ISessionAudit>(_audit);
         services.AddSingleton<IAuthenticatorStore, AuthenticatorStoreInMemory>();
@@ -886,9 +956,13 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddScoped<PolicyResolution>();
         services.AddSingleton<IAdministrativeOrganization>(new AdministrativeOrganizationInMemory());
         services.AddScoped<AdministrativeScope>();
+        services.AddSingleton<IAlertChannels, EventsInMemory>();
+        services.AddScoped<ConcurrentSessions>();
         services.AddScoped<SessionService>();
         services.AddScoped<PreAuthenticationService>();
         services.AddScoped<SynchronizerTokens>();
+        services.AddScoped<ConcealedRefusals>();
+        services.AddScoped<Concealment>();
         services.AddScoped<MalformedRequest>();
         services.AddScoped<ResourceIsolation>();
         services.AddScoped<CustomRequestHeader>();

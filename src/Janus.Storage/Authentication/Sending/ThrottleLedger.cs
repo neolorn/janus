@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Sending;
+using Janus.Core;
 
 namespace Janus.Storage.Authentication.Sending;
 
@@ -10,9 +12,13 @@ namespace Janus.Storage.Authentication.Sending;
 /// Where failed attempts are counted, under the hash of what they were made against.
 /// </summary>
 /// <param name="context">The context the operation runs on.</param>
-/// <param name="fingerprintKey">What the scope keys are hashed under.</param>
-/// <remarks>Implements AUTH-ABUSE-001 and CONV-DESIGN-003.</remarks>
-internal sealed class ThrottleLedger(StoreContext context, ReadOnlyMemory<byte> fingerprintKey)
+/// <param name="fingerprintKeys">The versions the scope keys are hashed under.</param>
+/// <remarks>
+/// Implements AUTH-ABUSE-001, OPS-SEC-003 and CONV-DESIGN-003. A counter kept under a
+/// previous version of the fingerprint key is read until the rotation retires the
+/// version, and the next failure is counted under the current one from where it stood.
+/// </remarks>
+internal sealed class ThrottleLedger(StoreContext context, FingerprintKeys fingerprintKeys)
     : IThrottleLedger
 {
     /// <inheritdoc/>
@@ -21,11 +27,19 @@ internal sealed class ThrottleLedger(StoreContext context, ReadOnlyMemory<byte> 
         string key,
         CancellationToken cancellationToken)
     {
-        ThrottleRecord? counter = await context.ThrottleCounters
-            .FindAsync([scope, Hashed(key)], cancellationToken)
-            .ConfigureAwait(false);
+        foreach (byte[] hashed in Candidates(key))
+        {
+            ThrottleRecord? counter = await context.ThrottleCounters
+                .FindAsync([scope, hashed], cancellationToken)
+                .ConfigureAwait(false);
 
-        return counter is null ? null : new ThrottleCounter(counter.Failures, counter.At);
+            if (counter is not null)
+            {
+                return new ThrottleCounter(counter.Failures, counter.At);
+            }
+        }
+
+        return null;
     }
 
     /// <inheritdoc/>
@@ -48,6 +62,7 @@ internal sealed class ThrottleLedger(StoreContext context, ReadOnlyMemory<byte> 
             {
                 Scope = scope,
                 Key = hashed,
+                FingerprintVersion = fingerprintKeys.CurrentVersion,
                 Failures = standing + 1,
                 At = at,
             });
@@ -65,16 +80,22 @@ internal sealed class ThrottleLedger(StoreContext context, ReadOnlyMemory<byte> 
         string key,
         CancellationToken cancellationToken)
     {
-        ThrottleRecord? counter = await context.ThrottleCounters
-            .FindAsync([scope, Hashed(key)], cancellationToken)
-            .ConfigureAwait(false);
-
-        if (counter is not null)
+        foreach (byte[] hashed in Candidates(key))
         {
-            context.ThrottleCounters.Remove(counter);
+            ThrottleRecord? counter = await context.ThrottleCounters
+                .FindAsync([scope, hashed], cancellationToken)
+                .ConfigureAwait(false);
+
+            if (counter is not null)
+            {
+                context.ThrottleCounters.Remove(counter);
+            }
         }
     }
 
     private byte[] Hashed(string key) =>
-        Fingerprint.Compute(Encoding.UTF8.GetBytes(key), fingerprintKey.Span);
+        Fingerprint.Compute(Encoding.UTF8.GetBytes(key), fingerprintKeys);
+
+    private IReadOnlyList<byte[]> Candidates(string key) =>
+        Fingerprint.Candidates(Encoding.UTF8.GetBytes(key), fingerprintKeys);
 }

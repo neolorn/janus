@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -19,10 +20,31 @@ internal sealed class ConfigurationAuditInMemory : IConfigurationAudit
     /// </summary>
     public List<ConfigurationChange> Written { get; } = [];
 
+    /// <summary>
+    /// Every value a system principal set, in the order it was set.
+    /// </summary>
+    public List<(ConfigurationKey Key, string? Before, string After, SystemPrincipal Principal)> Principals { get; } = [];
+
     /// <inheritdoc/>
     public ValueTask ChangedAsync(ConfigurationChange change, CancellationToken cancellationToken)
     {
         Written.Add(change);
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask ChangedAsync(
+        ConfigurationKey key,
+        string? before,
+        string after,
+        bool loosening,
+        string reason,
+        SystemPrincipal principal,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        Principals.Add((key, before, after, principal));
 
         return ValueTask.CompletedTask;
     }

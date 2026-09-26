@@ -265,7 +265,7 @@ internal sealed class ExportSource(
             return [];
         }
 
-        Dictionary<string, string> values = Values(capacity: 4);
+        Dictionary<string, string> values = Values(capacity: 5);
 
         values["remaining"] = codes.Remaining.ToString(CultureInfo.InvariantCulture);
         values["generatedAt"] = Moment(codes.GeneratedAt);
@@ -278,6 +278,11 @@ internal sealed class ExportSource(
         if (codes.ExportedAt is DateTimeOffset exported)
         {
             values["exportedAt"] = Moment(exported);
+        }
+
+        if (codes.RemindedAt is DateTimeOffset reminded)
+        {
+            values["remindedAt"] = Moment(reminded);
         }
 
         return [values];

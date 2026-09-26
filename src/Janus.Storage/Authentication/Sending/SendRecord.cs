@@ -18,6 +18,12 @@ internal sealed class SendRecord
     /// <summary>The <c>counted</c> column.</summary>
     public byte[][] Counted { get; set; } = [];
 
+    /// <summary>
+    /// The <c>fingerprint_version</c> column: the version of the fingerprint key the
+    /// keys counted are hashed under.
+    /// </summary>
+    public int FingerprintVersion { get; set; }
+
     /// <summary>The <c>sent_at</c> column.</summary>
     public DateTimeOffset SentAt { get; set; }
 

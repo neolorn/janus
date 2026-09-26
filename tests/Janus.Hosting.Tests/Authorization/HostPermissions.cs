@@ -30,6 +30,12 @@ internal static class HostPermissions
     public static Permission Recommend { get; } = Permission.Parse("document:recommend");
 
     /// <summary>
+    /// Exporting the host's records, which the host declares as an export operation
+    /// (OPS-ALERT-006).
+    /// </summary>
+    public static Permission Export { get; } = Permission.Parse("document:export");
+
+    /// <summary>
     /// Reading one of the host's records of the type that discloses.
     /// </summary>
     public static Permission ReadNote { get; } = Permission.Parse("note:read");

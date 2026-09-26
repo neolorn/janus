@@ -35,4 +35,25 @@ internal interface ISubjectEraser
         ErasureReason reason,
         DateTimeOffset at,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Erases a subject again after a restore to a point before its erasure: the same
+    /// writes as <see cref="EraseAsync"/>, from whatever state the restore left the
+    /// account in (DR-016).
+    /// </summary>
+    /// <param name="subject">Whose fields to erase.</param>
+    /// <param name="reason">Why the erasure happened, as the ledger records it.</param>
+    /// <param name="by">The origin the deletion is recorded under where the account was not deleting.</param>
+    /// <param name="at">The instant of the erasure, as the ledger records it.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The erasure, with the host-side work outstanding.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The subject has no account, has no key, or has already been erased.
+    /// </exception>
+    ValueTask<Erasure> ReapplyAsync(
+        SubjectId subject,
+        ErasureReason reason,
+        DeletionOrigin by,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
 }

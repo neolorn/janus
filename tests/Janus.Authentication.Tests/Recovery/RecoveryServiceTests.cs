@@ -4,6 +4,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
@@ -381,6 +382,39 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-ALERT-001 and AUTH-RECOV-002: recovery approvals clustering on one account
+    /// raise the alert under that account once they reach the threshold, and not before.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_001_RecoveryClusteringOnOneAccountIsRaisedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId first, SessionId opened) = await ApproverAsync();
+        (SubjectId second, SessionId another) = await ApproverAsync();
+
+        _configuration.Set(Settings.RecoveryApproversRequired, 2);
+        _configuration.Set(Settings.AlertingRecoveryAccountThreshold, 2);
+
+        _ = await Approving(first, opened, subject, Reason);
+
+        Assert.DoesNotContain(
+            _events.Published.OfType<AlertRaised>(),
+            raised => raised.Condition is AlertCondition.RecoveryClustering);
+
+        _ = await Approving(second, another, subject, Reason);
+
+        AlertRaised clustering = Assert.Single(
+            _events.Published.OfType<AlertRaised>(),
+            raised => raised.Condition is AlertCondition.RecoveryClustering);
+
+        Assert.Equal(AlertSeverity.High, clustering.Severity);
+        Assert.Equal(
+            Alerts.Key(AlertCondition.RecoveryClustering, subject.ToString()),
+            Alerts.Deduplication(clustering.IdempotencyKey));
+    }
+
+    /// <summary>
     /// AUTH-RECOV-002 AC6 and AUTH-RECOV-003 AC1: a channel the requester supplies is
     /// refused, and only one the account already holds is accepted.
     /// </summary>
@@ -656,6 +690,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             _configuration,
             new AdministrativeScope(_gate, _administrative),
             _locations,
+            new ConcurrentSessions(_live, _configuration, _events),
             _work,
             _clock,
             _randomness);
@@ -666,7 +701,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     private PasswordService Passwords =>
         new(
             _passwords,
-            new PasswordScreening(_corpus, _words, _configuration, _screening),
+            new PasswordScreening(_corpus, _words, _configuration, _screening, _events, _clock),
             new Argon2idHasher(_randomness),
             _configuration,
             _work,

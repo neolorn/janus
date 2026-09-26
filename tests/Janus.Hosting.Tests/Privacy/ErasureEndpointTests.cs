@@ -62,7 +62,8 @@ public sealed class ErasureEndpointTests : IAsyncDisposable
         Assert.Equal(Ahmed.Value, one.GetProperty("subject").GetGuid());
         Assert.Equal("minor-takedown", one.GetProperty("reason").GetString());
         Assert.Equal("failed", one.GetProperty("status").GetString());
-        Assert.Equal(JsonValueKind.Array, one.GetProperty("subscribers").ValueKind);
+        Assert.Equal("erasure-ledger", one.GetProperty("subscribers")[0].GetProperty("name").GetString());
+        Assert.True(one.GetProperty("subscribers")[0].GetProperty("required").GetBoolean());
         Assert.Equal(StatusCodes.Status404NotFound, unknown.Status);
         Assert.Equal(ErrorCodes.ErasureNotFound.ToString(), unknown.Text("code"));
     }
@@ -83,10 +84,40 @@ public sealed class ErasureEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, completed.Status);
         Assert.Equal(ErasureStatus.Complete, delivery.Status);
+        Assert.Single(_deployment.Ledger.Lines);
         Assert.Equal(ErasureStatus.Complete, Assert.Single(_deployment.Erasures.Erasures).Status);
         Assert.Equal(StatusCodes.Status409Conflict, again.Status);
         Assert.Equal(ErrorCodes.ErasureNotFailed.ToString(), again.Text("code"));
         Assert.Equal(0, (await browser.SendAsync("GET", Path)).Json().GetArrayLength());
+    }
+
+    /// <summary>
+    /// DR-016 AC2: while the ledger cannot take the line the manual completion is a
+    /// fault, answered 500 <c>system.fault</c> with nothing else, and the erasure stays
+    /// failed until a completion finds the line durable.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task DR_016_AC2_AManualCompletionIsAFaultWhileTheLedgerCannotTakeTheLineAsync()
+    {
+        Delivery delivery = await FailedAsync();
+        Browser browser = await AuthorisedAsync();
+
+        _deployment.Ledger.Durable = false;
+
+        Answer refused = await browser.SendAsync("POST", $"{Path}/{delivery.Id.Value}/complete");
+
+        Assert.Equal(StatusCodes.Status500InternalServerError, refused.Status);
+        Assert.Equal(ErrorCodes.SystemFault.ToString(), refused.Text("code"));
+        Assert.Empty(refused.Json().GetProperty("details").EnumerateObject());
+        Assert.Equal(ErasureStatus.Failed, delivery.Status);
+
+        _deployment.Ledger.Durable = true;
+
+        Answer completed = await browser.SendAsync("POST", $"{Path}/{delivery.Id.Value}/complete");
+
+        Assert.Equal(StatusCodes.Status204NoContent, completed.Status);
+        Assert.Equal(ErasureStatus.Complete, delivery.Status);
     }
 
     /// <summary>

@@ -30,6 +30,24 @@ public sealed class AccountTests
     }
 
     /// <summary>
+    /// OPS-BOOT-002: the reserved emergency account is created active and is never
+    /// suspended, deactivated, taken down or put into a deletion window.
+    /// </summary>
+    [Fact]
+    public void OPS_BOOT_002_TheEmergencyAccountIsNeverSuspendedOrDeleted()
+    {
+        var account = Account.CreateEmergency(Ahmed, Noon);
+
+        Assert.True(account.IsEmergency);
+        Assert.False(Account.Create(Ahmed, Noon).IsEmergency);
+        Assert.Throws<InvalidOperationException>(account.Suspend);
+        Assert.Throws<InvalidOperationException>(account.Deactivate);
+        Assert.Throws<InvalidOperationException>(() => account.Takedown(Noon));
+        Assert.Throws<InvalidOperationException>(() => account.RequestDeletion(DeletionOrigin.Self, Noon));
+        Assert.Equal(AccountState.Active, account.State);
+    }
+
+    /// <summary>
     /// IDN-ACCT-007 AC4: the grace window is cancellable throughout, and cancelling
     /// restores the account to active.
     /// </summary>
@@ -315,6 +333,71 @@ public sealed class AccountTests
         Assert.Throws<InvalidOperationException>(account.Deactivate);
         Assert.Throws<InvalidOperationException>(account.Restrict);
         Assert.Throws<InvalidOperationException>(account.Reactivate);
+    }
+
+    /// <summary>
+    /// DR-016 AC3, DR-006a AC1: an erasure the ledger records is carried out again from
+    /// whatever state a restore left the account in; one that was not deleting enters
+    /// the deletion the ledger records, and none holds a restriction once erased.
+    /// </summary>
+    /// <param name="state">The state the restore left the account in.</param>
+    [Theory]
+    [InlineData(AccountState.Active)]
+    [InlineData(AccountState.Restricted)]
+    [InlineData(AccountState.Suspended)]
+    public void DR_016_AC3_AnErasureIsReappliedFromTheStateARestoreLeft(AccountState state)
+    {
+        var account = Account.Create(Ahmed, Noon.AddDays(-30));
+
+        if (state is AccountState.Restricted)
+        {
+            account.Restrict();
+        }
+        else if (state is AccountState.Suspended)
+        {
+            account.Suspend();
+        }
+
+        account.ReapplyErasure(DeletionOrigin.OutOfBandRequest, Noon);
+
+        Assert.Equal(AccountState.Deleted, account.State);
+        Assert.Equal(DeletionOrigin.OutOfBandRequest, account.DeletingBy);
+        Assert.Equal(Noon, account.DeletingSince);
+        Assert.False(account.RestrictionHeld);
+    }
+
+    /// <summary>
+    /// DR-016 AC3: an account the restore left inside its deletion window keeps the
+    /// deletion it was in and is erased.
+    /// </summary>
+    [Fact]
+    public void DR_016_AC3_AnAccountLeftDeletingKeepsItsDeletion()
+    {
+        var account = Account.Create(Ahmed, Noon.AddDays(-30));
+        account.RequestDeletion(DeletionOrigin.Self, Noon.AddDays(-1));
+
+        account.ReapplyErasure(DeletionOrigin.OutOfBandRequest, Noon);
+
+        Assert.Equal(AccountState.Deleted, account.State);
+        Assert.Equal(DeletionOrigin.Self, account.DeletingBy);
+        Assert.Equal(Noon.AddDays(-1), account.DeletingSince);
+    }
+
+    /// <summary>
+    /// DR-016 AC3, OPS-BOOT-002: an account already erased is not erased again, and the
+    /// emergency account is never erased.
+    /// </summary>
+    [Fact]
+    public void DR_016_AC3_AnErasedOrEmergencyAccountIsNotReapplied()
+    {
+        var erased = Account.Create(Ahmed, Noon);
+        erased.RequestDeletion(DeletionOrigin.Self, Noon);
+        erased.MarkErased();
+
+        var emergency = Account.CreateEmergency(Ahmed, Noon);
+
+        Assert.Throws<InvalidOperationException>(() => erased.ReapplyErasure(DeletionOrigin.OutOfBandRequest, Noon));
+        Assert.Throws<InvalidOperationException>(() => emergency.ReapplyErasure(DeletionOrigin.OutOfBandRequest, Noon));
     }
 
     /// <summary>

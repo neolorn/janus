@@ -31,6 +31,7 @@ internal sealed class ThrottleConfiguration : IEntityTypeConfiguration<ThrottleR
             .HasColumnName("key")
             .HasMaxLength(Fingerprint.Length);
 
+        builder.Property(counter => counter.FingerprintVersion).HasColumnName("fingerprint_version");
         builder.Property(counter => counter.Failures).HasColumnName("failures");
         builder.Property(counter => counter.At).HasColumnName("at");
     }

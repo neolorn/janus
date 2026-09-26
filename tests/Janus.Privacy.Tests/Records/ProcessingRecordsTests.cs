@@ -16,7 +16,7 @@ namespace Janus.Privacy.Tests.Records;
 /// (PRIV-PRIN-002, PRIV-ROPA-001, PRIV-ROPA-002, PRIV-ROPA-003).
 /// </summary>
 [Trait("kind", "unit")]
-public sealed class ProcessingRecordsTests
+public sealed class ProcessingRecordsTests : IAsyncDisposable
 {
     private static readonly DateTimeOffset Noon = new(2026, 9, 22, 12, 0, 0, TimeSpan.Zero);
 
@@ -31,6 +31,7 @@ public sealed class ProcessingRecordsTests
     private readonly ComplianceStoreInMemory _compliance = new();
     private readonly RegisterRolesInMemory _roles = new();
     private readonly ConfigurationInMemory _configuration = new();
+    private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
 
     /// <summary>
@@ -46,6 +47,9 @@ public sealed class ProcessingRecordsTests
         _configuration.Set(Settings.HostingEnvironment, "a rented virtual machine");
         _configuration.Set(Settings.HostingLocation, HostingLocation.Inside);
     }
+
+    /// <inheritdoc/>
+    public async ValueTask DisposeAsync() => await _work.DisposeAsync();
 
     /// <summary>
     /// PRIV-PRIN-002 AC1, PRIV-ROPA-001: a purpose added to the declaration is in the
@@ -607,6 +611,26 @@ public sealed class ProcessingRecordsTests
     }
 
     /// <summary>
+    /// PRIV-ROPA-001: what a person supplies is written in a transaction of its own and
+    /// committed, so the next register reads it from the store rather than from the
+    /// request that supplied it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_ROPA_001_WhatAPersonSuppliesIsCommittedAsync()
+    {
+        Assert.True((await Records(Declaration.Declared().Build())
+            .DeclareAsync(
+                AccessContext.Of(Mona),
+                new ComplianceRecord("the data protection officer", "annual training", []),
+                TestContext.Current.CancellationToken))
+            .Match(() => true, _ => false));
+
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(1, _work.Committed);
+    }
+
+    /// <summary>
     /// PRIV-BASIS-001 AC2: the lawful basis column is the label the deployment
     /// declared, so a deployment whose list reads differently emits its own words and
     /// the library contributes none.
@@ -726,5 +750,6 @@ public sealed class ProcessingRecordsTests
             _compliance,
             _roles,
             _configuration,
+            _work,
             _clock);
 }

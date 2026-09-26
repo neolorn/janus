@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -44,6 +45,25 @@ internal sealed class SendOutboxInMemory : ISendOutbox
     public ValueTask RemoveAsync(SendDeliveryId delivery, CancellationToken cancellationToken)
     {
         _ = _held.Remove(delivery);
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<SendDelivery>> DueAsync(
+        DateTimeOffset now,
+        int count,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<SendDelivery>>(
+            [.. Waiting.Where(delivery => delivery.NextAttemptAt <= now).Take(count)]);
+
+    /// <inheritdoc/>
+    public ValueTask RecordAsync(SendDelivery delivery, CancellationToken cancellationToken)
+    {
+        if (_held.ContainsKey(delivery!.Id))
+        {
+            _held[delivery.Id] = delivery;
+        }
 
         return ValueTask.CompletedTask;
     }

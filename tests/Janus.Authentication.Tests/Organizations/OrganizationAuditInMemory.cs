@@ -24,6 +24,11 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
     /// </summary>
     public IReadOnlyList<OrganizationChange> Changes => _changes;
 
+    /// <summary>
+    /// Every change a system principal recorded, oldest first.
+    /// </summary>
+    public List<(AuditAction Action, OrganizationId Organization, SystemPrincipal Principal)> Principals { get; } = [];
+
     /// <inheritdoc/>
     public ValueTask RecordedAsync(
         AuditAction action,
@@ -34,6 +39,19 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
         CancellationToken cancellationToken)
     {
         _changes.Add(new OrganizationChange(action, organization, reason, actor, at));
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask RecordedAsync(
+        AuditAction action,
+        OrganizationId organization,
+        SystemPrincipal principal,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        Principals.Add((action, organization, principal));
 
         return ValueTask.CompletedTask;
     }

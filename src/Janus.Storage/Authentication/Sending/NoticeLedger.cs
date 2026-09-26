@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Sending;
+using Janus.Core;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Sending;
@@ -12,9 +14,12 @@ namespace Janus.Storage.Authentication.Sending;
 /// Where the addresses already told there is no account are remembered.
 /// </summary>
 /// <param name="context">The context the operation runs on.</param>
-/// <param name="fingerprintKey">What the addresses are hashed under.</param>
-/// <remarks>Implements AUTH-ABUSE-003 and CONV-DESIGN-003.</remarks>
-internal sealed class NoticeLedger(StoreContext context, ReadOnlyMemory<byte> fingerprintKey)
+/// <param name="fingerprintKeys">The versions the addresses are hashed under.</param>
+/// <remarks>
+/// Implements AUTH-ABUSE-003, OPS-SEC-003 and CONV-DESIGN-003. A notice recorded under
+/// a previous version of the fingerprint key still counts until the rotation retires it.
+/// </remarks>
+internal sealed class NoticeLedger(StoreContext context, FingerprintKeys fingerprintKeys)
     : INoticeLedger
 {
     private static readonly TimeSpan Hour = TimeSpan.FromHours(1);
@@ -28,18 +33,18 @@ internal sealed class NoticeLedger(StoreContext context, ReadOnlyMemory<byte> fi
     {
         ArgumentNullException.ThrowIfNull(destination);
 
-        byte[] hashed = Hashed(destination);
         DateTimeOffset opened = at - window;
 
-        bool told = await context.NonexistenceNotices
-            .AnyAsync(
-                notice => notice.Destination == hashed && notice.At > opened,
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        if (told)
+        foreach (byte[] hashed in Candidates(destination))
         {
-            return false;
+            if (await context.NonexistenceNotices
+                    .AnyAsync(
+                        notice => notice.Destination == hashed && notice.At > opened,
+                        cancellationToken)
+                    .ConfigureAwait(false))
+            {
+                return false;
+            }
         }
 
         DateTimeOffset oldest = at - (window > Hour ? window : Hour);
@@ -52,7 +57,8 @@ internal sealed class NoticeLedger(StoreContext context, ReadOnlyMemory<byte> fi
         context.NonexistenceNotices.Add(new NoticeRecord
         {
             Id = Guid.CreateVersion7(at),
-            Destination = hashed,
+            Destination = Fingerprint.Compute(Encoding.UTF8.GetBytes(destination), fingerprintKeys),
+            FingerprintVersion = fingerprintKeys.CurrentVersion,
             At = at,
         });
 
@@ -65,6 +71,6 @@ internal sealed class NoticeLedger(StoreContext context, ReadOnlyMemory<byte> fi
             .CountAsync(notice => notice.At >= from, cancellationToken)
             .ConfigureAwait(false);
 
-    private byte[] Hashed(string destination) =>
-        Fingerprint.Compute(Encoding.UTF8.GetBytes(destination), fingerprintKey.Span);
+    private IReadOnlyList<byte[]> Candidates(string destination) =>
+        Fingerprint.Candidates(Encoding.UTF8.GetBytes(destination), fingerprintKeys);
 }

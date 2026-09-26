@@ -39,6 +39,12 @@ internal sealed class AccountRecord
     public bool RestrictionHeld { get; set; }
 
     /// <summary>
+    /// The <c>emergency</c> column, set on the one account the break-glass session
+    /// belongs to.
+    /// </summary>
+    public bool IsEmergency { get; set; }
+
+    /// <summary>
     /// The <c>deleting_by</c> column.
     /// </summary>
     public DeletionOrigin? DeletingBy { get; set; }

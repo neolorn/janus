@@ -35,4 +35,23 @@ internal interface IPrivacyAudit
         DateTimeOffset at,
         IReadOnlyDictionary<string, JsonElement> details,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records one action background work took, under the system principal it ran as
+    /// (IDN-PRIN-001, INF-BG-002).
+    /// </summary>
+    /// <param name="action">What happened.</param>
+    /// <param name="principal">The principal that took it, with its stated reason.</param>
+    /// <param name="subject">Whose account it was done on, where it was done on one.</param>
+    /// <param name="at">When.</param>
+    /// <param name="details">The structured context of the entry.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask RecordedAsync(
+        AuditAction action,
+        SystemPrincipal principal,
+        SubjectId? subject,
+        DateTimeOffset at,
+        IReadOnlyDictionary<string, JsonElement> details,
+        CancellationToken cancellationToken);
 }

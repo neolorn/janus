@@ -19,6 +19,9 @@ namespace Janus.Privacy.Tests.Requests;
 [Trait("kind", "unit")]
 public sealed class DeadlineSweepTests : IAsyncDisposable
 {
+    private static readonly AccessContext Sweeper = AccessContext.Of(
+        SystemPrincipal.ForDeployment("expiry-sweep", "OPS-OBS-003", SystemOperation.ExpirySweep));
+
     private static readonly DateTimeOffset Noon = new(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly SubjectId Ahmed =
@@ -80,6 +83,26 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
     public async ValueTask DisposeAsync() => await _work.DisposeAsync();
 
     /// <summary>
+    /// INF-BG-002 AC1, IDN-PRIN-001 AC3: the pass runs as a named principal that may
+    /// sweep what has expired, and is refused to a person and to a principal named for
+    /// other work.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INF_BG_002_AC1_TheSweepNeverRunsAsNobodyAsync()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(async () => await Sweep.SweepAsync(
+            AccessContext.Of(new SubjectId(Guid.CreateVersion7())),
+            TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<ArgumentException>(async () => await Sweep.SweepAsync(
+            AccessContext.Of(SystemPrincipal.ForDeployment(
+                "mail-reconciliation",
+                "INT-MAIL-007",
+                SystemOperation.Reconciliation)),
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-002 AC2: the Normal alert fires the warning lead before the
     /// deadline, and nothing is asked of a human for it to happen.
     /// </summary>
@@ -91,7 +114,7 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
 
         _clock.Advance(new DateTimeOffset(2026, 9, 23, 22, 0, 0, TimeSpan.Zero) - Noon);
 
-        Assert.Equal(1, await Sweep.SweepAsync(CancellationToken.None));
+        Assert.Equal(1, await Sweep.SweepAsync(Sweeper, CancellationToken.None));
 
         PrivacyAlertRaised raised = Assert.Single(_alerts.Raised);
 
@@ -111,8 +134,8 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
 
         _clock.Advance(new DateTimeOffset(2026, 9, 23, 22, 0, 0, TimeSpan.Zero) - Noon);
 
-        _ = await Sweep.SweepAsync(CancellationToken.None);
-        _ = await Sweep.SweepAsync(CancellationToken.None);
+        _ = await Sweep.SweepAsync(Sweeper, CancellationToken.None);
+        _ = await Sweep.SweepAsync(Sweeper, CancellationToken.None);
 
         Assert.Single(_alerts.Raised);
     }
@@ -129,7 +152,7 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
 
         _clock.Advance(new DateTimeOffset(2026, 9, 28, 1, 0, 0, TimeSpan.FromHours(3)) - Noon);
 
-        _ = await Sweep.SweepAsync(CancellationToken.None);
+        _ = await Sweep.SweepAsync(Sweeper, CancellationToken.None);
 
         Assert.Equal(
             [AlertCondition.PrivacyDeadlineApproaching, AlertCondition.PrivacyDeadlineReached],
@@ -149,7 +172,7 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
 
         _clock.Advance(new DateTimeOffset(2026, 9, 29, 1, 0, 0, TimeSpan.FromHours(3)) - Noon);
 
-        _ = await Sweep.SweepAsync(CancellationToken.None);
+        _ = await Sweep.SweepAsync(Sweeper, CancellationToken.None);
 
         Assert.Equal(
             PrivacyRequestStatus.GrantedByLapse,
@@ -172,7 +195,7 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
 
         _clock.Advance(new DateTimeOffset(2026, 9, 29, 1, 0, 0, TimeSpan.FromHours(3)) - Noon);
 
-        _ = await Sweep.SweepAsync(CancellationToken.None);
+        _ = await Sweep.SweepAsync(Sweeper, CancellationToken.None);
 
         QueuedRequest held = Assert.Single(_requests.Queue);
 
@@ -195,7 +218,7 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
 
         _clock.Advance(new DateTimeOffset(2026, 9, 29, 1, 0, 0, TimeSpan.FromHours(3)) - Noon);
 
-        _ = await Sweep.SweepAsync(CancellationToken.None);
+        _ = await Sweep.SweepAsync(Sweeper, CancellationToken.None);
 
         Assert.Null(_accounts.Deleting);
         Assert.Empty(_outbox.Deliveries);
@@ -219,7 +242,7 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
 
         _clock.Advance(new DateTimeOffset(2026, 9, 29, 1, 0, 0, TimeSpan.FromHours(3)) - Noon);
 
-        Assert.Equal(0, await Sweep.SweepAsync(CancellationToken.None));
+        Assert.Equal(0, await Sweep.SweepAsync(Sweeper, CancellationToken.None));
         Assert.Empty(_alerts.Raised);
         Assert.Equal(PrivacyRequestStatus.Refused, Assert.Single(_requests.Queue).Status);
     }
@@ -235,7 +258,7 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
 
         _clock.Advance(new DateTimeOffset(2026, 9, 29, 1, 0, 0, TimeSpan.FromHours(3)) - Noon);
 
-        _ = await Sweep.SweepAsync(CancellationToken.None);
+        _ = await Sweep.SweepAsync(Sweeper, CancellationToken.None);
 
         Assert.Contains(
             _audit.Entries,

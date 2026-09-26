@@ -17,7 +17,7 @@ namespace Janus.Authentication.Sending;
 /// registered with the relay.
 /// </summary>
 /// <param name="configuration">Where the policy, the sending domain and the declaration are read.</param>
-/// <param name="events">Where the warning goes.</param>
+/// <param name="alerts">Where the warning goes.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements INT-MAIL-011 and entry 269. A relay address counts as verified by the
@@ -27,7 +27,7 @@ namespace Janus.Authentication.Sending;
 /// </remarks>
 internal sealed class RelayRegistration(
     IConfigurationStore configuration,
-    IEvents events,
+    IAlertChannels alerts,
     TimeProvider time)
 {
     /// <summary>
@@ -73,8 +73,8 @@ internal sealed class RelayRegistration(
             return Result.Success();
         }
 
-        return await events
-            .PublishAsync(
+        return await alerts
+            .RaiseAsync(
                 Alerts.Of(AlertCondition.RelayDomainUnregistered, domain, time.GetUtcNow(), Details(domain)),
                 cancellationToken)
             .ConfigureAwait(false);

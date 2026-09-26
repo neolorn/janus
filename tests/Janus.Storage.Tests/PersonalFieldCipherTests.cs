@@ -229,7 +229,7 @@ public sealed class PersonalFieldCipherTests
     /// refused with a named error rather than read under another version.
     /// </summary>
     [Fact]
-    public void Unwrap_AVersionNoLongerHeld_Throws()
+    public void OPS_SEC_003_AC3_AKeyUnderARetiredVersionFailsWithANamedError()
     {
         using var randomness = RandomNumberGenerator.Create();
         byte[] dataKey = PersonalFieldCipher.NewDataKey(randomness);
@@ -237,7 +237,10 @@ public sealed class PersonalFieldCipherTests
 
         byte[] wrapped = PersonalFieldCipher.Wrap(dataKey, keys.Current.Span);
 
-        Assert.ThrowsAny<CryptographicException>(() => PersonalFieldCipher.Unwrap(Scheme, 1, wrapped, keys));
+        CryptographicException refused = Assert.ThrowsAny<CryptographicException>(
+            () => PersonalFieldCipher.Unwrap(Scheme, 1, wrapped, keys));
+
+        Assert.Equal("The subject's key is wrapped under a retired version.", refused.Message);
     }
 
     /// <summary>

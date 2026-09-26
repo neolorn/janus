@@ -18,6 +18,12 @@ internal sealed class NoticeRecord
     /// <summary>The <c>destination</c> column.</summary>
     public byte[] Destination { get; set; } = [];
 
+    /// <summary>
+    /// The <c>fingerprint_version</c> column: the version of the fingerprint key the
+    /// destination is hashed under.
+    /// </summary>
+    public int FingerprintVersion { get; set; }
+
     /// <summary>The <c>at</c> column.</summary>
     public DateTimeOffset At { get; set; }
 }

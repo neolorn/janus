@@ -87,6 +87,13 @@ internal sealed class Account
     public AccountRegistration? Registration { get; private init; }
 
     /// <summary>
+    /// Whether it is the reserved <c>emergency</c> account the break-glass session
+    /// belongs to, which bootstrap creates and nothing else does. It holds no sign-in
+    /// method and is never suspended or deleted (OPS-BOOT-002).
+    /// </summary>
+    public bool IsEmergency { get; private init; }
+
+    /// <summary>
     /// Creates an account. It is created active, in one transaction, at the end of the
     /// registration session; there is no pending state.
     /// </summary>
@@ -103,6 +110,15 @@ internal sealed class Account
         new(subject, createdAt) { Registration = registration };
 
     /// <summary>
+    /// Creates the reserved <c>emergency</c> account, which bootstrap does once.
+    /// </summary>
+    /// <param name="subject">The identifier issued for it.</param>
+    /// <param name="createdAt">The instant it was created.</param>
+    /// <returns>The account.</returns>
+    public static Account CreateEmergency(SubjectId subject, DateTimeOffset createdAt) =>
+        new(subject, createdAt) { IsEmergency = true };
+
+    /// <summary>
     /// The account as it already stands. This is the store's translation of a stored
     /// row and no transition, so it takes the state it is given without asking how the
     /// account reached it.
@@ -117,6 +133,7 @@ internal sealed class Account
     /// <param name="deletingBy">Why its grace window began, where one is running.</param>
     /// <param name="deletingSince">When that window began.</param>
     /// <param name="registration">What the registration recorded.</param>
+    /// <param name="isEmergency">Whether it is the reserved emergency account.</param>
     /// <returns>The account.</returns>
     public static Account Existing(
         SubjectId subject,
@@ -126,10 +143,12 @@ internal sealed class Account
         bool restrictionHeld,
         DeletionOrigin? deletingBy,
         DateTimeOffset? deletingSince,
-        AccountRegistration? registration) =>
+        AccountRegistration? registration,
+        bool isEmergency) =>
         new(subject, createdAt, state, suspendedBy, restrictionHeld, deletingBy, deletingSince)
         {
             Registration = registration,
+            IsEmergency = isEmergency,
         };
 
     /// <summary>
@@ -253,6 +272,7 @@ internal sealed class Account
     /// </exception>
     public void Takedown(DateTimeOffset at)
     {
+        Unreserved();
         Require(AccountState.Active, AccountState.Restricted, AccountState.Suspended);
 
         RestrictionHeld = RestrictionHeld || State is AccountState.Restricted;
@@ -313,8 +333,34 @@ internal sealed class Account
         RestrictionHeld = false;
     }
 
+    /// <summary>
+    /// Records an erasure again after a restore to a point before it took the erasure
+    /// away. The account enters the deletion the ledger records from whatever state the
+    /// restore left it in, keeping the deletion it was already in, and is erased.
+    /// </summary>
+    /// <param name="by">The origin the deletion is recorded under where it was not already deleting.</param>
+    /// <param name="at">The instant of the erasure, as the ledger records it.</param>
+    /// <exception cref="InvalidOperationException">
+    /// The account is already deleted, or is the reserved emergency account.
+    /// </exception>
+    /// <remarks>
+    /// Implements DR-016 and DR-006a. The erasure was carried out and reported complete
+    /// before the restore, so no state the restore brought back is one it may stay in.
+    /// </remarks>
+    public void ReapplyErasure(DeletionOrigin by, DateTimeOffset at)
+    {
+        if (State is not AccountState.Deleting)
+        {
+            Require(AccountState.Active, AccountState.Restricted, AccountState.Suspended);
+            EnterDeletion(by, at);
+        }
+
+        MarkErased();
+    }
+
     private void EnterSuspension(SuspensionOrigin by, params AccountState[] from)
     {
+        Unreserved();
         Require(from);
 
         State = AccountState.Suspended;
@@ -323,6 +369,8 @@ internal sealed class Account
 
     private void EnterDeletion(DeletionOrigin by, DateTimeOffset at)
     {
+        Unreserved();
+
         State = AccountState.Deleting;
         DeletingBy = by;
         DeletingSince = at;
@@ -335,6 +383,16 @@ internal sealed class Account
         DeletingBy = null;
         DeletingSince = null;
         SuspendedBy = null;
+    }
+
+    // OPS-BOOT-002: the break-glass session's account is the one way in the emergency
+    // leaves, so nothing suspends it or starts its deletion.
+    private void Unreserved()
+    {
+        if (IsEmergency)
+        {
+            throw new InvalidOperationException("The emergency account is never suspended or deleted.");
+        }
     }
 
     private void Require(params AccountState[] states)

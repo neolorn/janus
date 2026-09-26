@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Dapper;
@@ -24,7 +25,9 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
 {
     // The shipped defaults of retention.audit.security and retention.audit.routine,
     // which the worker reads from the catalogue and passes in.
-    private const string Retentions = "interval '7 years', interval '90 days'";
+    // Longer than any month the fixture holds has been past, so the one partition a case
+    // makes expired is the only one the drop finds, whatever day the suite runs on.
+    private const string Retentions = "interval '7 years', interval '30 years'";
 
     private const string InsufficientPrivilege = "42501";
 
@@ -49,6 +52,27 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     }
 
     /// <summary>
+    /// OPS-MAINT-001 AC3: an entry of the maintenance log cannot be changed or removed
+    /// through the application, whose credential appends and reads and does no more.
+    /// </summary>
+    [Fact]
+    public async Task OPS_MAINT_001_AC3_TheApplicationCannotChangeOrRemoveALogEntryAsync()
+    {
+        await using NpgsqlConnection connection = await AsAsync("identity_app");
+
+        PostgresException changed = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await connection.ExecuteAsync("UPDATE identity.maintenance_log SET note = 'altered'"));
+
+        PostgresException removed = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await connection.ExecuteAsync("DELETE FROM identity.maintenance_log"));
+
+        Assert.Equal(InsufficientPrivilege, changed.SqlState);
+        Assert.Equal(InsufficientPrivilege, removed.SqlState);
+        Assert.Equal(0, await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*)::int FROM identity.maintenance_log"));
+    }
+
+    /// <summary>
     /// PRIV-RET-002 AC3: a partition whose end has passed its category's retention is
     /// dropped without the application taking any part, and the months in retention are
     /// left where they are.
@@ -60,9 +84,9 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
 
         await connection.ExecuteAsync(
             """
-            CREATE TABLE identity.audit_records_routine_2020_01
+            CREATE TABLE identity.audit_records_routine_1990_01
                 PARTITION OF identity.audit_records_routine
-                FOR VALUES FROM ('2020-01-01 00:00:00+00') TO ('2020-02-01 00:00:00+00');
+                FOR VALUES FROM ('1990-01-01 00:00:00+00') TO ('1990-02-01 00:00:00+00');
             """);
 
         int standing = await PartitionsAsync(connection);
@@ -72,7 +96,7 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
         Assert.Equal(1, dropped);
         Assert.Equal(standing - 1, await PartitionsAsync(connection));
         Assert.Null(await connection.ExecuteScalarAsync<string>(
-            "SELECT to_regclass('identity.audit_records_routine_2020_01')::text"));
+            "SELECT to_regclass('identity.audit_records_routine_1990_01')::text"));
     }
 
     /// <summary>
@@ -185,6 +209,68 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     }
 
     /// <summary>
+    /// OPS-MIG-003a AC4: the maintenance role reads and writes the rotation's progress,
+    /// and of a table holding a value wrapped beside the subject keys it reaches the
+    /// row's key, the version and the wrapped value and no other column (entry 316 of
+    /// the decisions pending review).
+    /// </summary>
+    [Fact]
+    public async Task OPS_MIG_003a_AC4_TheMaintenanceRoleReachesTheWrappedValuesAndNoOtherColumnAsync()
+    {
+        await using NpgsqlConnection connection = await AsAsync("identity_maintenance");
+
+        Assert.Equal(0, await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*)::int FROM identity.key_rotations"));
+        Assert.Equal(0, await connection.ExecuteAsync(
+            "UPDATE identity.key_rotations SET processed = processed"));
+        Assert.Equal(0, await connection.ExecuteScalarAsync<int>(
+            "SELECT count(key_version)::int FROM identity.invitations"));
+        Assert.Equal(0, await connection.ExecuteAsync(
+            "UPDATE identity.signing_keys SET key_version = key_version WHERE key_id = key_id"));
+
+        PostgresException refused = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await connection.ExecuteScalarAsync<int>(
+                "SELECT count(enc_identifiers)::int FROM identity.invitations"));
+
+        Assert.Equal(InsufficientPrivilege, refused.SqlState);
+
+        await using NpgsqlConnection application = await AsAsync("identity_app");
+
+        PostgresException withheld = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await application.ExecuteScalarAsync<int>("SELECT count(*)::int FROM identity.key_rotations"));
+
+        Assert.Equal(InsufficientPrivilege, withheld.SqlState);
+    }
+
+    /// <summary>
+    /// OPS-MIG-003a AC4, OPS-SEC-003 AC6: of a table holding a keyed fingerprint the
+    /// maintenance role reaches what computing it again needs and no other column, and
+    /// of a ledger the version a line is hashed under and the line to forget, never the
+    /// hash (entry 318 of the decisions pending review).
+    /// </summary>
+    [Fact]
+    public async Task OPS_MIG_003a_AC4_TheMaintenanceRoleReachesTheFingerprintsAndNoOtherColumnAsync()
+    {
+        await using NpgsqlConnection connection = await AsAsync("identity_maintenance");
+
+        Assert.Equal(0, await connection.ExecuteAsync(
+            """
+            UPDATE identity.identifiers SET fingerprint = fingerprint, fingerprint_version = fingerprint_version
+            WHERE identifier_id = identifier_id AND subject = subject AND enc_canonical = enc_canonical
+            """));
+        Assert.Equal(0, await connection.ExecuteAsync(
+            "DELETE FROM identity.throttle_counters WHERE fingerprint_version <> 1"));
+
+        PostgresException withheld = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await connection.ExecuteScalarAsync<int>("SELECT count(enc_entered)::int FROM identity.identifiers"));
+        PostgresException hashed = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await connection.ExecuteScalarAsync<int>("SELECT count(key)::int FROM identity.throttle_counters"));
+
+        Assert.Equal(InsufficientPrivilege, withheld.SqlState);
+        Assert.Equal(InsufficientPrivilege, hashed.SqlState);
+    }
+
+    /// <summary>
     /// OPS-MIG-003a AC2, AC4: what the serialized model lists for the maintenance
     /// credential is what the database grants it, so the listing a reviewer reads
     /// cannot drift from the migration that writes the grants.
@@ -210,16 +296,63 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
               AND relkind IN ('r', 'p')
               AND has_table_privilege('identity_maintenance', pg_class.oid, right_held)
             UNION ALL
+            SELECT 'COLUMN identity.' || relname || '.' || attname || ' ' || right_held
+            FROM pg_attribute
+            JOIN pg_class ON pg_class.oid = pg_attribute.attrelid
+            JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace,
+                 unnest(ARRAY['SELECT', 'INSERT', 'UPDATE']) AS right_held
+            WHERE nspname = 'identity'
+              AND relkind IN ('r', 'p')
+              AND attnum > 0
+              AND NOT attisdropped
+              AND has_column_privilege('identity_maintenance', pg_class.oid, attnum, right_held)
+              AND NOT has_table_privilege('identity_maintenance', pg_class.oid, right_held)
+            UNION ALL
             SELECT 'FUNCTION identity.' || proname || '('
                    || pg_get_function_identity_arguments(pg_proc.oid) || ') EXECUTE'
             FROM pg_proc
             JOIN pg_namespace ON pg_namespace.oid = pg_proc.pronamespace
             WHERE nspname = 'identity'
               AND has_function_privilege('identity_maintenance', pg_proc.oid, 'EXECUTE')
+            """);
+
+        Assert.Equal(Listed().Order(StringComparer.Ordinal), held.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// OPS-MIG-003: the application reaches the rows of every table the library holds,
+    /// the audit trail (PRIV-RET-002) and the maintenance log (OPS-MAINT-001) only to
+    /// read and append, the migration history and the views only to read, and every
+    /// sequence it draws from. A table a migration adds without granting it fails here
+    /// rather than under the application's own credential. The key rotation's progress is the maintenance credential's alone
+    /// (OPS-MIG-003a AC4).
+    /// </summary>
+    [Fact]
+    public async Task OPS_MIG_003_TheApplicationReachesTheRowsOfEveryTableAsync()
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        IEnumerable<string> withheld = await connection.QueryAsync<string>(
+            """
+            SELECT relname || ' ' || right_held
+            FROM pg_class
+            JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace,
+                 unnest(CASE
+                     WHEN relkind = 'v' OR relname = '__migrations_history' THEN ARRAY['SELECT']
+                     WHEN relname IN ('audit_records', 'maintenance_log') THEN ARRAY['SELECT', 'INSERT']
+                     WHEN relkind = 'S' THEN ARRAY['USAGE']
+                     ELSE ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE'] END) AS right_held
+            WHERE nspname = 'identity'
+              AND relkind IN ('r', 'p', 'v', 'S')
+              AND NOT relispartition
+              AND relname <> 'key_rotations'
+              AND NOT CASE relkind
+                  WHEN 'S' THEN has_sequence_privilege('identity_app', pg_class.oid, right_held)
+                  ELSE has_table_privilege('identity_app', pg_class.oid, right_held) END
             ORDER BY 1
             """);
 
-        Assert.Equal(Listed(), held);
+        Assert.Empty(withheld);
     }
 
     /// <summary>

@@ -158,6 +158,34 @@ public sealed class AccountServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-008 AC4, AC5: the read carries how the set of recovery codes stands,
+    /// including when it was shown, exported and reminded of.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_008_AC5_TheReadCarriesWhenTheSetWasRemindedOfAsync()
+    {
+        var set = RecoveryCodeSet.Of(_person, [], Noon);
+        set.Viewed(Noon + TimeSpan.FromMinutes(1));
+        set.Exported(Noon + TimeSpan.FromMinutes(2));
+        set.Reminded(Noon + TimeSpan.FromDays(365));
+        await _recoveryCodes.ReplaceAsync(set, TestContext.Current.CancellationToken);
+
+        RecoveryCodeStatus shown = Read(await Service.ReadAsync(
+                Acting,
+                TestContext.Current.CancellationToken))
+            .RecoveryCodes!;
+
+        Assert.Equal(
+            new RecoveryCodeStatus(
+                0,
+                Noon,
+                Noon + TimeSpan.FromMinutes(1),
+                Noon + TimeSpan.FromMinutes(2),
+                Noon + TimeSpan.FromDays(365)),
+            shown);
+    }
+
+    /// <summary>
     /// REG-PROF-001 AC2: with both keys off the edit refuses the field and the read
     /// carries neither, whatever the account already holds.
     /// </summary>

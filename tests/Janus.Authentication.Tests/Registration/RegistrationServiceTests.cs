@@ -108,7 +108,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
             _notices,
             new PasswordService(
                 _passwords,
-                new PasswordScreening(_corpus, _words, _configuration, _screening),
+                new PasswordScreening(_corpus, _words, _configuration, _screening, _events, _clock),
                 new Argon2idHasher(_randomness),
                 _configuration,
                 _work,
@@ -136,6 +136,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
                 _configuration,
                 new AdministrativeScope(_gate, _administrative),
                 _locations,
+                new ConcurrentSessions(_live, _configuration, _events),
                 _work,
                 _clock,
                 _randomness),
@@ -1016,6 +1017,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
                 "https://fallback.example.test/welcome",
                 ["openid"]),
             [7, 8, 9],
+            DateTimeOffset.MinValue,
             TestContext.Current.CancellationToken);
 
         _configuration.Set(Settings.RedirectDefaultClient, "fallback");
@@ -1043,6 +1045,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
                 "https://elsewhere.example.test/welcome",
                 ["openid"]),
             [4, 5, 6],
+            DateTimeOffset.MinValue,
             TestContext.Current.CancellationToken);
 
         Assert.Equal(Registered, Ok(await AcceptedAsync(await SecuredAsync())).Landing);
@@ -1630,6 +1633,7 @@ public sealed class RegistrationServiceTests : IAsyncDisposable
         .RecordAsync(
             new OidcClient(Client, Client, OidcClientKind.BrowserApplication, Registered, ["openid"]),
             [1, 2, 3],
+            DateTimeOffset.MinValue,
             TestContext.Current.CancellationToken)
         .AsTask();
 

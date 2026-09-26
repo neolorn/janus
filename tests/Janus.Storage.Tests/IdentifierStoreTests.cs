@@ -32,8 +32,8 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
 {
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly byte[] Elsewhere =
-        Encoding.UTF8.GetBytes("the fingerprint key of another deployment");
+    private static readonly FingerprintKeys Elsewhere =
+        new(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = Encoding.UTF8.GetBytes("the fingerprint key of another deployment") });
 
     private readonly Deployment _deployment = new(database);
 
@@ -237,7 +237,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
         var store = new IdentifierStore(
             reading,
             new KeyEncryptionKeys(1, counting),
-            Deployment.FingerprintKey,
+            Deployment.FingerprintKeys,
             _deployment.Randomness);
 
         IdentifierSet set = await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
@@ -676,7 +676,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     public void Dispose() => _deployment.Dispose();
 
     private IdentifierStore Store(StoreContext context) =>
-        new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
+        new(context, _deployment.Keys, Deployment.FingerprintKeys, _deployment.Randomness);
 
     // A verified primary personal email displaced by a corporate address, as an
     // acknowledgement into an organization whose mail is integrated leaves it.

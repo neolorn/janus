@@ -37,7 +37,7 @@ namespace Janus.Authentication.Recovery;
 /// <param name="sending">Where a message goes out.</param>
 /// <param name="nonExistence">What answers an address no account holds.</param>
 /// <param name="throttle">The progressive delay.</param>
-/// <param name="events">Where the anomaly alerts go.</param>
+/// <param name="alerts">Where the anomaly alerts go.</param>
 /// <param name="configuration">Where the lifetimes and the limits come from.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
@@ -65,7 +65,7 @@ internal sealed class RecoveryService(
     INotificationHandler sending,
     NonExistenceNotice nonExistence,
     ThrottleService throttle,
-    IEvents events,
+    IAlertChannels alerts,
     IConfigurationStore configuration,
     IUnitOfWork work,
     TimeProvider time,
@@ -687,11 +687,10 @@ internal sealed class RecoveryService(
         await approvals
             .AddAsync(new RecoveryApproval(subject, approver, channel.Canonical, now), cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
         await audit
             .ApprovedAsync(approver, subject, reason, channel.Kind, now, cancellationToken)
             .ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         Result raised = await RaiseAsync(
                 subject,
@@ -847,8 +846,8 @@ internal sealed class RecoveryService(
 
         if (forAccount >= account)
         {
-            Result published = await events
-                .PublishAsync(
+            Result published = await alerts
+                .RaiseAsync(
                     Alerts.Of(AlertCondition.RecoveryClustering, subject.ToString(), now),
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -861,8 +860,8 @@ internal sealed class RecoveryService(
 
         if (byApprover >= raised)
         {
-            Result published = await events
-                .PublishAsync(
+            Result published = await alerts
+                .RaiseAsync(
                     Alerts.Of(AlertCondition.ApproverVolume, approver.ToString(), now),
                     cancellationToken)
                 .ConfigureAwait(false);

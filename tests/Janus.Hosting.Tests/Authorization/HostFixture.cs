@@ -35,6 +35,14 @@ public sealed class HostFixture : IAsyncLifetime
     public string ConnectionString => _database.ConnectionString;
 
     /// <summary>
+    /// The connection the scheduled maintenance runs under: the fixture's own, holding
+    /// the maintenance role's rights and no path to the application's (OPS-MIG-003a).
+    /// </summary>
+    public string MaintenanceConnectionString =>
+        new NpgsqlConnectionStringBuilder(ConnectionString) { Options = "-c role=identity_maintenance" }
+            .ConnectionString;
+
+    /// <summary>
     /// The container the library's services are resolved from.
     /// </summary>
     public IServiceProvider Services => _services
@@ -45,6 +53,13 @@ public sealed class HostFixture : IAsyncLifetime
     /// </summary>
     /// <returns>The open connection.</returns>
     public async ValueTask<NpgsqlConnection> OpenAsync() => await _database.OpenAsync();
+
+    /// <summary>
+    /// Takes a backup of the whole instance the database lives in, as the script that
+    /// replays it into a new instance.
+    /// </summary>
+    /// <returns>The script.</returns>
+    public async ValueTask<byte[]> BackupAsync() => await _database.BackupAsync();
 
     /// <summary>
     /// Opens a context over the host's own tables, with the library's two contract
@@ -135,8 +150,11 @@ public sealed class HostFixture : IAsyncLifetime
         services.AddJanus(
             ConnectionString,
             new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = material }),
-            Encoding.UTF8.GetBytes("the fingerprint key of this deployment"),
+            new FingerprintKeys(
+                1,
+                new Dictionary<int, ReadOnlyMemory<byte>> { [1] = Encoding.UTF8.GetBytes("the fingerprint key of this deployment") }),
             Encoding.UTF8.GetBytes("the secret this application presents"),
+            Encoding.UTF8.GetBytes(MaintenanceConnectionString),
             Declaration(),
             ApplicationKind.Public);
 
@@ -189,6 +207,7 @@ public sealed class HostFixture : IAsyncLifetime
             .Permission(HostPermissions.Publish.ToString())
             .Permission(HostPermissions.ReadNote.ToString())
             .Permission(HostPermissions.Recommend.ToString())
+            .Permission(HostPermissions.Export.ToString())
             .StepUpGate(HostPermissions.Publish.ToString(), "document:publish")
             .ServesPurpose(HostPermissions.Recommend.ToString(), "recommendations")
             .Relationship<HostReviewer>(

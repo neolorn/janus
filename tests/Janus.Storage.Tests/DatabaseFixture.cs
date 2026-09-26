@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using DotNet.Testcontainers.Containers;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Testcontainers.PostgreSql;
@@ -20,6 +21,37 @@ namespace Janus.Storage.Tests;
 public sealed class DatabaseFixture : IAsyncLifetime
 {
     private const string Database = "identity";
+
+    private const string BackupScript = "/tmp/backup.sql";
+
+    // The cases stamp their records in September 2026 and the weeks after it, the months
+    // a migration run then created. The migration creates the months of the day it runs,
+    // so a later run is given these as that one created them, under the names the
+    // migration's function gives them.
+    private const string FixedMonths =
+        """
+        DO $months$
+        DECLARE
+            parent text;
+            starts timestamp with time zone;
+        BEGIN
+            FOREACH parent IN ARRAY ARRAY['audit_records_security', 'audit_records_routine'] LOOP
+                FOREACH starts IN ARRAY ARRAY[
+                    timestamptz '2026-09-01 00:00:00+00',
+                    timestamptz '2026-10-01 00:00:00+00',
+                    timestamptz '2026-11-01 00:00:00+00'] LOOP
+                    EXECUTE format(
+                        'CREATE TABLE IF NOT EXISTS identity.%I PARTITION OF identity.%I '
+                            || 'FOR VALUES FROM (%L) TO (%L)',
+                        parent || '_' || to_char(starts AT TIME ZONE 'UTC', 'YYYY_MM'),
+                        parent,
+                        starts,
+                        starts + interval '1 month');
+                END LOOP;
+            END LOOP;
+        END
+        $months$;
+        """;
 
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine").Build();
 
@@ -61,6 +93,26 @@ public sealed class DatabaseFixture : IAsyncLifetime
         return connection;
     }
 
+    /// <summary>
+    /// Takes a backup of the whole instance, its roles and every database, as the script
+    /// that replays it into a new instance.
+    /// </summary>
+    /// <returns>The script.</returns>
+    /// <exception cref="InvalidOperationException">The backup could not be taken.</exception>
+    public async ValueTask<byte[]> BackupAsync()
+    {
+        string superuser = new NpgsqlConnectionStringBuilder(_container.GetConnectionString()).Username
+            ?? throw new InvalidOperationException("The instance names no superuser.");
+
+        ExecResult taken = await _container.ExecAsync(
+            ["pg_dumpall", "--username", superuser, "--file", BackupScript],
+            TestContext.Current.CancellationToken);
+
+        return taken.ExitCode == 0
+            ? await _container.ReadFileAsync(BackupScript, TestContext.Current.CancellationToken)
+            : throw new InvalidOperationException("The backup could not be taken.");
+    }
+
     /// <inheritdoc/>
     public async ValueTask InitializeAsync()
     {
@@ -82,6 +134,9 @@ public sealed class DatabaseFixture : IAsyncLifetime
         }.ConnectionString;
 
         await MigrateAsync();
+
+        await using NpgsqlConnection connection = await OpenAsync();
+        await connection.ExecuteAsync(FixedMonths);
     }
 
     /// <inheritdoc/>

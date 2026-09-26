@@ -136,10 +136,9 @@ internal sealed class AccountLifecycle(
             return Result.Failure(unpublished);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
         await audit.RecordedAsync(Deactivated, subject, subject, now, cancellationToken)
             .ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success();
     }
@@ -197,10 +196,9 @@ internal sealed class AccountLifecycle(
             return Result.Failure(unpublished);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
         await audit.RecordedAsync(Reactivated, link.Subject, link.Subject, now, cancellationToken)
             .ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success();
     }
@@ -288,10 +286,9 @@ internal sealed class AccountLifecycle(
             return Result.Failure<DateTimeOffset>(unpublished);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
         await audit.RecordedAsync(DeletionRequested, subject, subject, now, cancellationToken)
             .ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success(erasesAt);
     }
@@ -356,11 +353,10 @@ internal sealed class AccountLifecycle(
             return Result.Failure(unpublished);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
         await audit
             .RecordedAsync(DeletionCancelled, link.Subject, link.Subject, now, cancellationToken)
             .ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success();
     }

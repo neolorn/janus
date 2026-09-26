@@ -34,4 +34,45 @@ public enum SystemOperation
     /// </summary>
     [JsonStringEnumMemberName("expiry-sweep")]
     ExpirySweep = 3,
+
+    /// <summary>
+    /// Carrying what has been committed to where it goes: the outbox, the mailboxes
+    /// owed to the mail server and the raised alerts.
+    /// </summary>
+    [JsonStringEnumMemberName("delivery")]
+    Delivery = 4,
+
+    /// <summary>
+    /// Reading the state of something the deployment depends on and raising the alert
+    /// its reading calls for.
+    /// </summary>
+    [JsonStringEnumMemberName("monitoring")]
+    Monitoring = 5,
+
+    /// <summary>
+    /// Standing a fresh deployment up: its named values, its administrative roles and
+    /// organization, and the accounts it starts with.
+    /// </summary>
+    [JsonStringEnumMemberName("bootstrap")]
+    Bootstrap = 6,
+
+    /// <summary>
+    /// Rotating the key-encryption key or the fingerprint key: re-wrapping or
+    /// re-computing what the previous version produced, and retiring it.
+    /// </summary>
+    [JsonStringEnumMemberName("key-rotation")]
+    KeyRotation = 7,
+
+    /// <summary>
+    /// Changing a protected key from the server, which the application cannot do.
+    /// </summary>
+    [JsonStringEnumMemberName("configuration")]
+    Configuration = 8,
+
+    /// <summary>
+    /// Carrying out again, after a restore, the erasures the off-host ledger records and
+    /// the restored database does not.
+    /// </summary>
+    [JsonStringEnumMemberName("erasure-replay")]
+    ErasureReplay = 9,
 }

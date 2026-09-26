@@ -11,8 +11,8 @@ namespace Janus.Authorization.Roles;
 /// and why.
 /// </summary>
 /// <remarks>
-/// Implements AUTHZ-GRANT-004, OPS-CFG-007 and IDN-AUD-001. A role changes what every
-/// holder of it may do at once, so the change is recorded as a grant is.
+/// Implements AUTHZ-GRANT-004, OPS-CFG-007, IDN-AUD-001 and IDN-PRIN-001. A role changes
+/// what every holder of it may do at once, so the change is recorded as a grant is.
 /// </remarks>
 internal interface IRoleAudit
 {
@@ -33,6 +33,23 @@ internal interface IRoleAudit
         IReadOnlyList<Permission> after,
         string reason,
         SubjectId actor,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records a role a system principal created, as bootstrap seeds the administrative
+    /// ones (IDN-PRIN-001).
+    /// </summary>
+    /// <param name="role">Which role.</param>
+    /// <param name="after">What it permits.</param>
+    /// <param name="principal">The principal that created it, with its stated reason.</param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask DefinedAsync(
+        RoleName role,
+        IReadOnlyList<Permission> after,
+        SystemPrincipal principal,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 

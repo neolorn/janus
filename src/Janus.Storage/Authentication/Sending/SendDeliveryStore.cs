@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
@@ -7,18 +8,19 @@ using System.Threading.Tasks;
 using Janus.Authentication.Sending;
 using Janus.Core;
 using Janus.Privacy.SubjectKeys;
+using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Sending;
 
 /// <summary>
-/// The messages undertaken but not yet carried, over the <c>send_outbox</c> table.
+/// The messages undertaken but not yet carried in full, over the <c>send_outbox</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <param name="keyEncryptionKeys">The versions a data key may be wrapped under.</param>
 /// <param name="randomness">The randomness the key and the vectors are drawn from.</param>
 /// <remarks>
-/// Implements D-022, IDN-PRIN-003 and PRIV-RIGHT-005a. The whole message is one
-/// encrypted document under a key the row carries, so removing the row removes both
+/// Implements D-022, INF-BG-001, IDN-PRIN-003 and PRIV-RIGHT-005a. The whole message is
+/// one encrypted document under a key the row carries, so removing the row removes both
 /// the message and the only key that reads it.
 /// </remarks>
 internal sealed class SendDeliveryStore(
@@ -46,6 +48,8 @@ internal sealed class SendDeliveryStore(
                 Message = Written(dataKey, delivery.Requested),
             };
 
+            Attempted(record, delivery);
+
             await context.SendOutbox.AddAsync(record, cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -67,6 +71,43 @@ internal sealed class SendDeliveryStore(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<SendDelivery>> DueAsync(
+        DateTimeOffset now,
+        int count,
+        CancellationToken cancellationToken)
+    {
+        List<SendDeliveryRecord> rows = await context.SendOutbox
+            .AsNoTracking()
+            .Where(delivery => delivery.NextAttemptAt <= now)
+            .OrderBy(delivery => delivery.Id)
+            .Take(count)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. rows.Select(Read)];
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// A row already removed was settled by another attempt, and is left as that
+    /// attempt left it.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">The delivery is absent.</exception>
+    public async ValueTask RecordAsync(SendDelivery delivery, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(delivery);
+
+        SendDeliveryRecord? record = await context.SendOutbox
+            .FindAsync([delivery.Id], cancellationToken)
+            .ConfigureAwait(false);
+
+        if (record is not null)
+        {
+            Attempted(record, delivery);
+        }
+    }
+
+    /// <inheritdoc/>
     public async ValueTask RemoveAsync(SendDeliveryId delivery, CancellationToken cancellationToken)
     {
         SendDeliveryRecord? record = await context.SendOutbox
@@ -77,6 +118,15 @@ internal sealed class SendDeliveryStore(
         {
             context.SendOutbox.Remove(record);
         }
+    }
+
+    private static void Attempted(SendDeliveryRecord record, SendDelivery delivery)
+    {
+        record.Attempts = delivery.Attempts;
+        record.NextAttemptAt = delivery.NextAttemptAt;
+        record.TakenLanguages = JsonSerializer.Serialize(
+            delivery.Taken.Order(StringComparer.Ordinal).ToList(),
+            SendDeliveryJson.Default.ListString);
     }
 
     // A message concerning no account is bound to no subject; the data key is the
@@ -158,6 +208,11 @@ internal sealed class SendDeliveryStore(
             Values = new Dictionary<string, string>(document.Values, StringComparer.Ordinal),
         };
 
-        return new SendDelivery(record.Id, record.RecordedAt, request);
+        return new SendDelivery(record.Id, record.RecordedAt, request)
+        {
+            Attempts = record.Attempts,
+            NextAttemptAt = record.NextAttemptAt,
+            Taken = JsonSerializer.Deserialize(record.TakenLanguages, SendDeliveryJson.Default.ListString) ?? [],
+        };
     }
 }

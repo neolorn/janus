@@ -176,6 +176,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
 
         Assert.Equal("2", codes["remaining"]);
         Assert.Equal(Noon, DateTimeOffset.Parse(codes["generatedAt"], null));
+        Assert.Equal(Noon + TimeSpan.FromDays(365), DateTimeOffset.Parse(codes["remindedAt"], null));
 
         IReadOnlyDictionary<string, string> browser =
             Assert.Single(named["devices"].Records).Values;
@@ -448,7 +449,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
                 Declared,
                 new OutboxStore(reading, new FixedTime(Noon))),
             new IdentifierDirectory(Identifiers(reading), Preferences(reading)),
-            new AuthenticatorStore(reading, _deployment.Keys, _deployment.Randomness, Deployment.FingerprintKey),
+            new AuthenticatorStore(reading, _deployment.Keys, _deployment.Randomness, Deployment.FingerprintKeys),
             new PasswordStore(reading),
             new RecoveryCodeStore(reading),
             new DeviceStore(reading),
@@ -562,7 +563,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
 
         await using StoreContext writing = database.Context();
 
-        await new AuthenticatorStore(writing, _deployment.Keys, _deployment.Randomness, Deployment.FingerprintKey)
+        await new AuthenticatorStore(writing, _deployment.Keys, _deployment.Randomness, Deployment.FingerprintKeys)
             .AddAsync(credential, TestContext.Current.CancellationToken);
 
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -581,11 +582,12 @@ public sealed class ExportSourceTests(DatabaseFixture database)
                 parallelism: 1)),
         ];
 
+        var set = RecoveryCodeSet.Of(subject, hashes, Noon);
+        set.Reminded(Noon + TimeSpan.FromDays(365));
+
         await using StoreContext writing = database.Context();
 
-        await new RecoveryCodeStore(writing).ReplaceAsync(
-            RecoveryCodeSet.Of(subject, hashes, Noon),
-            TestContext.Current.CancellationToken);
+        await new RecoveryCodeStore(writing).ReplaceAsync(set, TestContext.Current.CancellationToken);
 
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
@@ -709,7 +711,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
     }
 
     private IdentifierStore Identifiers(StoreContext context) =>
-        new(context, _deployment.Keys, Deployment.FingerprintKey, _deployment.Randomness);
+        new(context, _deployment.Keys, Deployment.FingerprintKeys, _deployment.Randomness);
 
     private PreferenceStore Preferences(StoreContext context) =>
         new(context, _deployment.Keys, _deployment.Randomness);

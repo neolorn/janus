@@ -18,6 +18,8 @@ public sealed class ErrorCodesTests
     private static readonly string[] Catalogue =
     [
         "api.request.malformed",
+        "auth.breakglass.consumed",
+        "auth.breakglass.invalid",
         "auth.challenge.required",
         "auth.code.expired",
         "auth.code.invalid",
@@ -64,6 +66,7 @@ public sealed class ErrorCodesTests
         "authz.group.cycle",
         "authz.group.inuse",
         "authz.policy.unregistered",
+        "authz.resource.notfound",
         "authz.restricted",
         "authz.role.inuse",
         "config.change.stepuprequired",
@@ -127,6 +130,7 @@ public sealed class ErrorCodesTests
         "model.startup.redirectclient",
         "model.startup.rpid",
         "model.startup.schemamismatch",
+        "model.startup.subscribername",
         "model.type.noorganizationpath",
         "model.type.undeclaredreference",
         "privacy.consent.required",

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Passwords;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -11,20 +12,26 @@ using Xunit;
 namespace Janus.Authentication.Tests.Passwords;
 
 /// <summary>
-/// Screening at set and at change (AUTH-PASS-004, INT-PWD-001 to 003).
+/// Screening at set and at change (AUTH-PASS-004, INT-PWD-001 to 003), and the
+/// fall back raised (OPS-OBS-002).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class PasswordScreeningTests
 {
     private const string Breached = "correct horse battery staple";
 
+    private static readonly DateTimeOffset Noon =
+        new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
+
     private readonly LeakedPasswordCorpusInMemory _corpus = new();
     private readonly WordListInMemory _words = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly ScreeningLogInMemory _log = new();
+    private readonly EventsInMemory _events = new();
+    private readonly FixedClock _clock = new(Noon);
 
     private PasswordScreening Screening =>
-        new(_corpus, _words, _configuration, _log);
+        new(_corpus, _words, _configuration, _log, _events, _clock);
 
     /// <summary>
     /// AUTH-PASS-004 AC1: a password in the corpus is refused however long it is.
@@ -98,6 +105,68 @@ public sealed class PasswordScreeningTests
             TestContext.Current.CancellationToken);
 
         Assert.Equal(ErrorCodes.ScreeningUnavailable, Refusal(screened));
+    }
+
+    /// <summary>
+    /// OPS-OBS-002 AC1: a fall back to the offline corpus raises <c>degradation</c>
+    /// under its own scope, naming the corpus that did not answer and the one that did.
+    /// </summary>
+    [Fact]
+    public async Task OPS_OBS_002_AC1_ABlocklistFallbackRaisesADegradationAsync()
+    {
+        _corpus.Unreachable.Add(BlocklistSource.RangeApi);
+
+        Result screened = await Screening.ScreenAsync(
+            Encoding.UTF8.GetBytes("a password nothing holds"),
+            [],
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(Refusal(screened));
+
+        AlertRaised raised = Assert.Single(_events.Of<AlertRaised>());
+
+        Assert.Equal(AlertCondition.Degradation, raised.Condition);
+        Assert.Equal(
+            Alerts.Key(AlertCondition.Degradation, "password.blocklist.fallback"),
+            Alerts.Deduplication(raised.IdempotencyKey));
+        Assert.Equal(Noon, raised.RaisedAt);
+        Assert.Equal("rangeApi", raised.Details["configured"].GetString());
+        Assert.Equal("offline", raised.Details["used"].GetString());
+    }
+
+    /// <summary>
+    /// OPS-OBS-002 AC2: a fall back that cannot be raised is not screened past
+    /// unseen; the operation is refused with what refused the alert.
+    /// </summary>
+    [Fact]
+    public async Task OPS_OBS_002_AC2_AFallbackThatCannotBeRaisedRefusesTheOperationAsync()
+    {
+        _corpus.Unreachable.Add(BlocklistSource.RangeApi);
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Result screened = await Screening.ScreenAsync(
+            Encoding.UTF8.GetBytes("a password nothing holds"),
+            [],
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, Refusal(screened));
+        Assert.Empty(_events.Of<AlertRaised>());
+    }
+
+    /// <summary>
+    /// OPS-OBS-002: the configured corpus answering is no degradation, and nothing is
+    /// raised.
+    /// </summary>
+    [Fact]
+    public async Task ScreenAsync_TheConfiguredCorpusAnswering_RaisesNothingAsync()
+    {
+        Result screened = await Screening.ScreenAsync(
+            Encoding.UTF8.GetBytes("a password nothing holds"),
+            [],
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(Refusal(screened));
+        Assert.Empty(_events.Of<AlertRaised>());
     }
 
     /// <summary>

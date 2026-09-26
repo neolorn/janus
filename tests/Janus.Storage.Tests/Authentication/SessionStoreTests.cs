@@ -341,6 +341,37 @@ public sealed class SessionStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// OPS-ALERT-007: where a session's city lies is kept with the place under the
+    /// person's key and reads back as written, and a place written without it reads
+    /// back without it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_007_WhereACityLiesReadsBackAsWrittenAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        Session record = Record(subject);
+
+        record.Touch(
+            new SessionOrigin("203.0.113.9", new DeviceDescription("Safari", "iOS"))
+            {
+                Location = new SessionLocation("Alexandria", "EG"),
+                Coordinates = new Coordinates(31.2001, 29.9187),
+            },
+            Noon,
+            TimeSpan.FromDays(1));
+
+        await WrittenAsync(record);
+
+        await using StoreContext reading = database.Context();
+        Session read = Assert.IsType<Session>(
+            await Store(reading).FindAsync(record.Id, TestContext.Current.CancellationToken));
+
+        Assert.Equal(new Coordinates(31.2001, 29.9187), read.LastSeen.Coordinates);
+        Assert.Null(read.Origin.Coordinates);
+    }
+
+    /// <summary>
     /// What the session did is carried onto its row: where it was last used, what it
     /// has since reached, and the idle clock the use refreshed.
     /// </summary>

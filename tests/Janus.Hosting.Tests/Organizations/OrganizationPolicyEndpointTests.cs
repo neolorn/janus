@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Policies;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -204,6 +205,41 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status204NoContent, loosened.Status);
         Assert.Null((await OverrideAsync(Branch)).RequiredAssurance);
         Assert.True(Assert.Single(_deployment.Changes.Written).Loosening);
+    }
+
+    /// <summary>
+    /// OPS-ALERT-001 AC1, D-083: giving up a gate the organization asked more of raises
+    /// the High alert under the organization, naming its policy key and the gate.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_001_AC1_AnOrganizationPolicyAskingLessAtAGateRaisesTheAlertAsync()
+    {
+        (Browser administrator, SubjectId subject) = await SignedInAsync();
+
+        _deployment.Gate.Grant(subject, Administration, Permissions.OrganizationManage);
+        _deployment.Gate.Grant(subject, Administration, Permissions.SystemAdminister);
+        _deployment.Configuration.Set(
+            Settings.OrganizationPolicy,
+            Branch.ToString(),
+            PolicyOverride.None with
+            {
+                Gates = new Dictionary<StepUpAction, Gate>
+                {
+                    [StepUpAction.PolicyChange] = new(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5)),
+                },
+            });
+
+        Answer loosened = await administrator.SendAsync("PUT", PathOf(Branch), """{"reason":"Back to the default."}""");
+        AlertRaised raised = Assert.Single(
+            _deployment.Events.Of<AlertRaised>(),
+            alert => alert.Condition is AlertCondition.StepUpPolicyWeakened);
+
+        Assert.Equal(StatusCodes.Status204NoContent, loosened.Status);
+        Assert.Equal(AlertSeverity.High, raised.Severity);
+        Assert.Equal(Alerts.Key(AlertCondition.StepUpPolicyWeakened, Branch.ToString()), Alerts.Deduplication(raised.IdempotencyKey));
+        Assert.Equal("policy." + Branch, raised.Details["key"].GetString());
+        Assert.Equal(["policy:change"], raised.Details["gates"].EnumerateArray().Select(gate => gate.GetString()));
     }
 
     /// <summary>

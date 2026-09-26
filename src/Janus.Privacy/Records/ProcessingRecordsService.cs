@@ -22,6 +22,7 @@ namespace Janus.Privacy.Records;
 /// <param name="compliance">Where the three supplied fields are.</param>
 /// <param name="roles">Where the roles holding a permission are read.</param>
 /// <param name="configuration">Where the hosting and retention keys are read.</param>
+/// <param name="work">The one transaction what a person supplies is written in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements PRIV-PRIN-002, PRIV-ROPA-001, PRIV-ROPA-002, PRIV-ROPA-003 and
@@ -35,6 +36,7 @@ internal sealed class ProcessingRecordsService(
     IComplianceStore compliance,
     IRegisterRoles roles,
     IConfigurationStore configuration,
+    IUnitOfWork work,
     TimeProvider time) : IProcessingRecords
 {
     // The four rows of the shipped register, named as ProviderRegister ships them
@@ -175,7 +177,9 @@ internal sealed class ProcessingRecordsService(
             return Result.Failure(denied);
         }
 
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await compliance.RecordAsync(record, cancellationToken).ConfigureAwait(false);
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success();
     }

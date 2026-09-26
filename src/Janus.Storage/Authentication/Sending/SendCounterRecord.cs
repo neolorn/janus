@@ -19,6 +19,12 @@ internal sealed class SendCounterRecord
     public byte[] Key { get; set; } = [];
 
     /// <summary>
+    /// The <c>fingerprint_version</c> column: the version of the fingerprint key the
+    /// key is hashed under.
+    /// </summary>
+    public int FingerprintVersion { get; set; }
+
+    /// <summary>
     /// The <c>sent_at</c> column, oldest first, so the last of them is when the key
     /// was last sent to and what the sweep reads.
     /// </summary>

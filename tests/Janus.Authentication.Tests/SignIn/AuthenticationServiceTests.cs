@@ -166,6 +166,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             _configuration,
             new AdministrativeScope(_gate, _administrative),
             _locations,
+            new ConcurrentSessions(_live, _configuration, _events),
             _work,
             _clock,
             _randomness);
@@ -176,7 +177,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     private PasswordService Passwords =>
         new(
             _passwords,
-            new PasswordScreening(_corpus, _words, _configuration, _screening),
+            new PasswordScreening(_corpus, _words, _configuration, _screening, _events, _clock),
             new Argon2idHasher(_randomness),
             _configuration,
             _work,

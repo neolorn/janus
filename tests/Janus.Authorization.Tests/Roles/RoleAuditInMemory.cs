@@ -24,6 +24,11 @@ internal sealed class RoleAuditInMemory : IRoleAudit
     /// </summary>
     public IReadOnlyList<RoleChange> Changes => _changes;
 
+    /// <summary>
+    /// Every role a system principal created, oldest first.
+    /// </summary>
+    public List<(RoleName Role, IReadOnlyList<Permission> After, SystemPrincipal Principal)> Principals { get; } = [];
+
     /// <inheritdoc/>
     public ValueTask DefinedAsync(
         RoleName role,
@@ -35,6 +40,19 @@ internal sealed class RoleAuditInMemory : IRoleAudit
         CancellationToken cancellationToken)
     {
         _changes.Add(new RoleChange(AuditActions.RoleDefined, role, before, after, reason, actor, at));
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask DefinedAsync(
+        RoleName role,
+        IReadOnlyList<Permission> after,
+        SystemPrincipal principal,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        Principals.Add((role, after, principal));
 
         return ValueTask.CompletedTask;
     }

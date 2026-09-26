@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.BreakGlass;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sessions;
@@ -19,6 +20,7 @@ namespace Janus.Authentication.Accounts;
 /// <param name="scope">Whether the caller administers accounts in the deployment.</param>
 /// <param name="stepUp">What the gated operations ask of the administrator's session.</param>
 /// <param name="directory">Where the standing is read and the transition carried.</param>
+/// <param name="emergency">Which account no administrator suspends.</param>
 /// <param name="sessions">What a suspension ends.</param>
 /// <param name="links">Where the link a deletion notice carried is held.</param>
 /// <param name="configuration">Where the grace window is read.</param>
@@ -37,6 +39,7 @@ internal sealed class AccountAdministration(
     AdministrativeScope scope,
     StepUpGuard stepUp,
     IAccountDirectory directory,
+    IEmergencyAccount emergency,
     ISessionStore sessions,
     ILifecycleLinkStore links,
     IConfigurationStore configuration,
@@ -67,6 +70,14 @@ internal sealed class AccountAdministration(
         }
 
         AccountState? state = await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        // OPS-BOOT-002: the break-glass session's account is never suspended, since it is
+        // the way in an emergency leaves.
+        if (state is not null
+            && await emergency.FindAsync(cancellationToken).ConfigureAwait(false) == subject)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
 
         switch (state)
         {

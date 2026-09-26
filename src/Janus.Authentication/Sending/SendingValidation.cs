@@ -89,11 +89,11 @@ internal sealed class SendingValidation(
         foreach (TextSetting key in
             new[] { Settings.IntegrationMailEndpoint, Settings.IntegrationSmsEndpoint })
         {
-            string address = (await configuration.ReadAsync(key, cancellationToken)
+            string endpoint = (await configuration.ReadAsync(key, cancellationToken)
                 .ConfigureAwait(false))
                 .Match(value => value, _ => string.Empty);
 
-            if (address.Length is not 0 && !Secure(address))
+            if (endpoint.Length is not 0 && !Secure(endpoint))
             {
                 return Error.From(
                     ErrorCodes.EndpointInsecure,
@@ -107,8 +107,8 @@ internal sealed class SendingValidation(
 
     // An address that is not an absolute https address is not one the library calls,
     // whether it names another scheme or is not an address at all.
-    private static bool Secure(string address) =>
-        Uri.TryCreate(address, UriKind.Absolute, out Uri? parsed)
+    private static bool Secure(string endpoint) =>
+        Uri.TryCreate(endpoint, UriKind.Absolute, out Uri? parsed)
         && string.Equals(parsed.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal);
 
     private Error? Unsupplied(IReadOnlyList<Restriction> declared)

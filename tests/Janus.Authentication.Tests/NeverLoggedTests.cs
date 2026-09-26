@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Janus.Authentication.Accounts;
+using Janus.Authentication.BreakGlass;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Invitations;
@@ -67,6 +68,7 @@ public sealed class NeverLoggedTests
             Member<PendingSignIn>(nameof(PendingSignIn.Code)),
             Member<PendingSignIn>(nameof(PendingSignIn.Browser)),
             Member<LandedSignIn>(nameof(LandedSignIn.Code)),
+            Member<GeneratedBreakGlass>(nameof(GeneratedBreakGlass.Credential)),
         ]));
 
     private static PropertyInfo Member<T>(string name) =>

@@ -76,6 +76,125 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.ToTable("alerts", "identity");
             });
 
+        modelBuilder.Entity("Janus.Storage.Authentication.Alerting.RaisedAlertRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<string>("Condition")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("condition");
+
+                b.Property<string>("Details")
+                    .IsRequired()
+                    .HasColumnType("jsonb")
+                    .HasColumnName("details");
+
+                b.Property<string>("IdempotencyKey")
+                    .IsRequired()
+                    .HasMaxLength(320)
+                    .HasColumnType("character varying(320)")
+                    .HasColumnName("idempotency_key");
+
+                b.Property<DateTimeOffset>("RaisedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("raised_at");
+
+                b.HasKey("Id")
+                    .HasName("pk_raised_alerts");
+
+                b.ToTable("raised_alerts", "identity");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Background.BackgroundJobRecord", b =>
+            {
+                b.Property<string>("Name")
+                    .HasColumnType("text")
+                    .HasColumnName("name");
+
+                b.Property<DateTimeOffset>("AttemptedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("attempted_at");
+
+                b.Property<DateTimeOffset?>("LapseRaisedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("lapse_raised_at");
+
+                b.Property<DateTimeOffset>("RecordedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("recorded_at");
+
+                b.Property<DateTimeOffset?>("SucceededAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("succeeded_at");
+
+                b.HasKey("Name")
+                    .HasName("pk_background_jobs");
+
+                b.ToTable("background_jobs", "identity");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.BreakGlass.BreakGlassAttemptRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset>("AttemptedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("attempted_at");
+
+                b.HasKey("Id")
+                    .HasName("pk_break_glass_attempts");
+
+                b.HasIndex("AttemptedAt")
+                    .HasDatabaseName("ix_break_glass_attempts_attempted_at");
+
+                b.ToTable("break_glass_attempts", "identity");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.BreakGlass.BreakGlassCredentialRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset?>("ConsumedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("consumed_at");
+
+                b.Property<string>("Hash")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("hash");
+
+                b.Property<DateTimeOffset>("IssuedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("issued_at");
+
+                b.Property<Guid>("IssuedBy")
+                    .HasColumnType("uuid")
+                    .HasColumnName("issued_by");
+
+                b.Property<DateTimeOffset?>("ReplacedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("replaced_at");
+
+                b.HasKey("Id")
+                    .HasName("pk_break_glass_credentials");
+
+                b.HasIndex("IssuedBy")
+                    .HasDatabaseName("ix_break_glass_credentials_issued_by");
+
+                b.ToTable("break_glass_credentials", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_break_glass_credentials_ended", "consumed_at IS NULL OR replaced_at IS NULL");
+                    });
+            });
+
         modelBuilder.Entity("Janus.Storage.Authentication.Callbacks.CallbackEventRecord", b =>
             {
                 b.Property<string>("Callback")
@@ -107,6 +226,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<DateTimeOffset>("At")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("at");
+
+                b.Property<int>("FingerprintVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("fingerprint_version");
 
                 b.Property<bool>("Rejected")
                     .HasColumnType("boolean")
@@ -194,6 +317,58 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
+        modelBuilder.Entity("Janus.Storage.Authentication.Events.PendingEventRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<int>("Attempts")
+                    .HasColumnType("integer")
+                    .HasColumnName("attempts");
+
+                b.Property<DateTimeOffset?>("FailedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("failed_at");
+
+                b.Property<string>("Kind")
+                    .IsRequired()
+                    .HasMaxLength(64)
+                    .HasColumnType("character varying(64)")
+                    .HasColumnName("kind");
+
+                b.Property<DateTimeOffset>("NextAttemptAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("next_attempt_at");
+
+                b.Property<string>("Payload")
+                    .IsRequired()
+                    .HasColumnType("jsonb")
+                    .HasColumnName("payload");
+
+                b.Property<DateTimeOffset?>("PublishedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("published_at");
+
+                b.Property<DateTimeOffset>("RaisedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("raised_at");
+
+                b.Property<string>("TakenBy")
+                    .IsRequired()
+                    .HasColumnType("jsonb")
+                    .HasColumnName("taken_by");
+
+                b.HasKey("Id")
+                    .HasName("pk_events");
+
+                b.HasIndex("NextAttemptAt")
+                    .HasDatabaseName("ix_events_due")
+                    .HasFilter("published_at IS NULL AND failed_at IS NULL");
+
+                b.ToTable("events", "identity");
+            });
+
         modelBuilder.Entity("Janus.Storage.Authentication.Factors.AuthenticatorRecord", b =>
             {
                 b.Property<Guid>("Id")
@@ -228,10 +403,18 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("credential_id");
 
+                b.Property<byte[]>("EncryptedProviderSubject")
+                    .HasColumnType("bytea")
+                    .HasColumnName("enc_provider_subject");
+
                 b.Property<string>("Factor")
                     .IsRequired()
                     .HasColumnType("text")
                     .HasColumnName("factor");
+
+                b.Property<int?>("FingerprintVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("fingerprint_version");
 
                 b.Property<DateTimeOffset?>("InvalidatesAt")
                     .HasColumnType("timestamp with time zone")
@@ -308,7 +491,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                         t.HasCheckConstraint("ck_authenticators_invalidates_at", "invalidates_at IS NULL OR state IN ('suspended')");
 
-                        t.HasCheckConstraint("ck_authenticators_provider_subject", "(provider_subject IS NULL) <> (factor IN ('apple', 'google')) AND (provider_subject IS NULL OR octet_length(provider_subject) = 32)");
+                        t.HasCheckConstraint("ck_authenticators_provider_subject", "(provider_subject IS NULL) <> (factor IN ('apple', 'google')) AND (provider_subject IS NULL OR octet_length(provider_subject) = 32) AND (provider_subject IS NULL) = (fingerprint_version IS NULL) AND (provider_subject IS NULL) = (enc_provider_subject IS NULL)");
 
                         t.HasCheckConstraint("ck_authenticators_state", "state IN ('active', 'invalidated', 'suspended')");
 
@@ -679,6 +862,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("fingerprint");
 
+                b.Property<int>("FingerprintVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("fingerprint_version");
+
                 b.Property<Guid?>("Holder")
                     .HasColumnType("uuid")
                     .HasColumnName("holder");
@@ -742,6 +929,65 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                         t.HasCheckConstraint("ck_mailboxes_released", "released_at IS NULL OR (holder IS NULL AND retired_at IS NULL)");
                     });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Maintenance.LicenceRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<DateTimeOffset>("ExpiresAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("expires_at");
+
+                b.Property<string>("Kind")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("kind");
+
+                b.Property<string>("Name")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("name");
+
+                b.Property<DateTimeOffset?>("RenewedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("renewed_at");
+
+                b.HasKey("Id")
+                    .HasName("pk_licences");
+
+                b.ToTable("licences", "identity");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.Maintenance.MaintenanceEntryRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<Guid>("Actor")
+                    .HasColumnType("uuid")
+                    .HasColumnName("actor");
+
+                b.Property<string>("Note")
+                    .HasColumnType("text")
+                    .HasColumnName("note");
+
+                b.Property<DateTimeOffset>("PerformedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("performed_at");
+
+                b.Property<string>("Task")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("task");
+
+                b.HasKey("Id")
+                    .HasName("pk_maintenance_log");
+
+                b.ToTable("maintenance_log", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Oidc.OidcAuthorizationRecord", b =>
@@ -820,6 +1066,14 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("text")
                     .HasColumnName("name");
 
+                b.Property<byte[]>("PreviousSecret")
+                    .HasColumnType("bytea")
+                    .HasColumnName("previous_secret");
+
+                b.Property<DateTimeOffset?>("PreviousSecretUntil")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("previous_secret_until");
+
                 b.Property<string>("Redirect")
                     .IsRequired()
                     .HasColumnType("text")
@@ -841,6 +1095,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.ToTable("oidc_clients", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_oidc_clients_kind", "kind IN ('browser-application', 'protocol')");
+
+                        t.HasCheckConstraint("ck_oidc_clients_previous", "(previous_secret IS NULL) = (previous_secret_until IS NULL)");
                     });
             });
 
@@ -1399,6 +1655,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("destination");
 
+                b.Property<int>("FingerprintVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("fingerprint_version");
+
                 b.HasKey("Id")
                     .HasName("pk_nonexistence_notices");
 
@@ -1418,6 +1678,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<DateTimeOffset>("At")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("at");
+
+                b.Property<int>("FingerprintVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("fingerprint_version");
 
                 b.Property<byte[]>("Source")
                     .IsRequired()
@@ -1441,6 +1705,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("key");
 
+                b.Property<int>("FingerprintVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("fingerprint_version");
+
                 b.PrimitiveCollection<DateTimeOffset[]>("SentAt")
                     .IsRequired()
                     .HasColumnType("timestamp with time zone[]")
@@ -1458,6 +1726,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("uuid")
                     .HasColumnName("id");
 
+                b.Property<int>("Attempts")
+                    .HasColumnType("integer")
+                    .HasColumnName("attempts");
+
                 b.Property<int>("KeyVersion")
                     .HasColumnType("integer")
                     .HasColumnName("key_version");
@@ -1467,6 +1739,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("enc_message");
 
+                b.Property<DateTimeOffset>("NextAttemptAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("next_attempt_at");
+
                 b.Property<DateTimeOffset>("RecordedAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("recorded_at");
@@ -1474,6 +1750,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<Guid?>("Subject")
                     .HasColumnType("uuid")
                     .HasColumnName("subject");
+
+                b.Property<string>("TakenLanguages")
+                    .IsRequired()
+                    .HasColumnType("jsonb")
+                    .HasColumnName("taken_languages");
 
                 b.Property<byte[]>("WrappedKey")
                     .IsRequired()
@@ -1483,8 +1764,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasKey("Id")
                     .HasName("pk_send_outbox");
 
-                b.HasIndex("RecordedAt")
-                    .HasDatabaseName("ix_send_outbox_recorded_at");
+                b.HasIndex("NextAttemptAt")
+                    .HasDatabaseName("ix_send_outbox_due");
 
                 b.ToTable("send_outbox", "identity");
             });
@@ -1499,6 +1780,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<int>("Credit")
                     .HasColumnType("integer")
                     .HasColumnName("credit");
+
+                b.Property<int>("FingerprintVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("fingerprint_version");
 
                 b.HasKey("Key")
                     .HasName("pk_send_grants");
@@ -1520,6 +1805,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .IsRequired()
                     .HasColumnType("bytea[]")
                     .HasColumnName("counted");
+
+                b.Property<int>("FingerprintVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("fingerprint_version");
 
                 b.Property<DateTimeOffset>("SentAt")
                     .HasColumnType("timestamp with time zone")
@@ -1556,6 +1845,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<int>("Failures")
                     .HasColumnType("integer")
                     .HasColumnName("failures");
+
+                b.Property<int>("FingerprintVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("fingerprint_version");
 
                 b.HasKey("Scope", "Key")
                     .HasName("pk_throttle_counters");
@@ -1877,6 +2170,76 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                         t.HasCheckConstraint("ck_signin_links_wrong_attempts", "wrong_attempts >= 0");
                     });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Gate.BulkExportRecord", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid")
+                    .HasColumnName("id");
+
+                b.Property<Guid?>("Actor")
+                    .HasColumnType("uuid")
+                    .HasColumnName("actor");
+
+                b.Property<DateTimeOffset>("AdmittedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("admitted_at");
+
+                b.Property<string>("Principal")
+                    .HasColumnType("text")
+                    .HasColumnName("principal");
+
+                b.HasKey("Id")
+                    .HasName("pk_bulk_exports");
+
+                b.HasIndex("Actor", "Principal", "AdmittedAt")
+                    .HasDatabaseName("ix_bulk_exports_actor");
+
+                b.ToTable("bulk_exports", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_bulk_exports_actor", "(actor IS NULL) <> (principal IS NULL)");
+                    });
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Gate.ReadBaselineRecord", b =>
+            {
+                b.Property<Guid>("Actor")
+                    .HasColumnType("uuid")
+                    .HasColumnName("actor");
+
+                b.Property<decimal>("DailyMean")
+                    .HasColumnType("numeric")
+                    .HasColumnName("daily_mean");
+
+                b.HasKey("Actor")
+                    .HasName("pk_read_baselines");
+
+                b.ToTable("read_baselines", "identity");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authorization.Gate.ReadVolumeRecord", b =>
+            {
+                b.Property<Guid>("Actor")
+                    .HasColumnType("uuid")
+                    .HasColumnName("actor");
+
+                b.Property<DateOnly>("Day")
+                    .HasColumnType("date")
+                    .HasColumnName("day");
+
+                b.Property<long>("Records")
+                    .HasColumnType("bigint")
+                    .HasColumnName("records");
+
+                b.HasKey("Actor", "Day")
+                    .HasName("pk_read_volume");
+
+                b.HasIndex("Day")
+                    .HasDatabaseName("ix_read_volume_day");
+
+                b.ToTable("read_volume", "identity");
             });
 
         modelBuilder.Entity("Janus.Storage.Authorization.Grants.GrantRecord", b =>
@@ -2215,6 +2578,12 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("deleting_since");
 
+                b.Property<bool>("IsEmergency")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(false)
+                    .HasColumnName("emergency");
+
                 b.Property<string>("NoticeVersion")
                     .HasMaxLength(64)
                     .HasColumnType("character varying(64)")
@@ -2244,6 +2613,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasIndex("DeletingSince")
                     .HasDatabaseName("ix_accounts_deleting_since")
                     .HasFilter("deleting_since IS NOT NULL");
+
+                b.HasIndex("IsEmergency")
+                    .IsUnique()
+                    .HasDatabaseName("ux_accounts_emergency")
+                    .HasFilter("emergency");
 
                 b.ToTable("accounts", "identity", t =>
                     {
@@ -2306,6 +2680,14 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<byte[]>("PersonalDetails")
                     .HasColumnType("bytea")
                     .HasColumnName("enc_details");
+
+                b.Property<string>("Principal")
+                    .HasColumnType("text")
+                    .HasColumnName("principal");
+
+                b.Property<string>("PrincipalReason")
+                    .HasColumnType("text")
+                    .HasColumnName("principal_reason");
 
                 b.HasKey("Category", "OccurredAt", "Id")
                     .HasName("pk_audit_records");
@@ -2386,6 +2768,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("fingerprint");
 
+                b.Property<int>("FingerprintVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("fingerprint_version");
+
                 b.Property<bool>("IsLocked")
                     .HasColumnType("boolean")
                     .HasColumnName("is_locked");
@@ -2463,6 +2849,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("bytea")
                     .HasColumnName("fingerprint");
 
+                b.Property<int>("FingerprintVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("fingerprint_version");
+
                 b.Property<bool>("IsLocked")
                     .HasColumnType("boolean")
                     .HasColumnName("is_locked");
@@ -2521,6 +2911,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<byte[]>("Fingerprint")
                     .HasColumnType("bytea")
                     .HasColumnName("fingerprint");
+
+                b.Property<int>("FingerprintVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("fingerprint_version");
 
                 b.Property<DateTimeOffset>("HeldFrom")
                     .HasColumnType("timestamp with time zone")
@@ -3135,6 +3529,51 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
+        modelBuilder.Entity("Janus.Storage.Privacy.SubjectKeys.KeyRotationRecord", b =>
+            {
+                b.Property<string>("Kind")
+                    .HasColumnType("text")
+                    .HasColumnName("kind");
+
+                b.Property<int>("Version")
+                    .HasColumnType("integer")
+                    .HasColumnName("version");
+
+                b.Property<DateTimeOffset?>("CompletedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("completed_at");
+
+                b.Property<Guid?>("LastSubject")
+                    .HasColumnType("uuid")
+                    .HasColumnName("last_subject");
+
+                b.Property<int>("Processed")
+                    .HasColumnType("integer")
+                    .HasColumnName("processed");
+
+                b.Property<DateTimeOffset?>("RetiredAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("retired_at");
+
+                b.Property<DateTimeOffset>("StartedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("started_at");
+
+                b.HasKey("Kind", "Version")
+                    .HasName("pk_key_rotations");
+
+                b.ToTable("key_rotations", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_key_rotations_kind", "kind IN ('fingerprint-key', 'key-encryption-key')");
+
+                        t.HasCheckConstraint("ck_key_rotations_processed", "processed >= 0");
+
+                        t.HasCheckConstraint("ck_key_rotations_retired", "retired_at IS NULL OR completed_at IS NOT NULL");
+
+                        t.HasCheckConstraint("ck_key_rotations_version", "version >= 1");
+                    });
+            });
+
         modelBuilder.Entity("Janus.Storage.Privacy.SubjectKeys.SubjectKeyRecord", b =>
             {
                 b.Property<Guid>("Subject")
@@ -3193,6 +3632,16 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .OnDelete(DeleteBehavior.Restrict)
                     .IsRequired()
                     .HasConstraintName("fk_lifecycle_links_subject");
+            });
+
+        modelBuilder.Entity("Janus.Storage.Authentication.BreakGlass.BreakGlassCredentialRecord", b =>
+            {
+                b.HasOne("Janus.Storage.Identity.Accounts.AccountRecord", null)
+                    .WithMany()
+                    .HasForeignKey("IssuedBy")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired()
+                    .HasConstraintName("fk_break_glass_credentials_issued_by");
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Credentials.KeyCeremonyRecord", b =>

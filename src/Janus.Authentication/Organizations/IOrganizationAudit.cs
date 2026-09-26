@@ -11,7 +11,8 @@ namespace Janus.Authentication.Organizations;
 /// what, when and why.
 /// </summary>
 /// <remarks>
-/// Implements IDN-ORG-003, REG-DOM-001, IDN-LIFE-009a, IDN-MEM-001 and IDN-AUD-001.
+/// Implements IDN-ORG-003, REG-DOM-001, IDN-LIFE-009a, IDN-MEM-001, IDN-AUD-001 and
+/// IDN-PRIN-001.
 /// </remarks>
 internal interface IOrganizationAudit
 {
@@ -30,6 +31,23 @@ internal interface IOrganizationAudit
         OrganizationId organization,
         string reason,
         SubjectId actor,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records that a system principal did something to an organization, as bootstrap
+    /// creates the administrative one (IDN-PRIN-001).
+    /// </summary>
+    /// <param name="action">What happened.</param>
+    /// <param name="organization">Which organization.</param>
+    /// <param name="principal">The principal that did it, with its stated reason.</param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask RecordedAsync(
+        AuditAction action,
+        OrganizationId organization,
+        SystemPrincipal principal,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 

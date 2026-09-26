@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -246,8 +247,9 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
         services.AddJanus(
             host.ConnectionString,
             new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-            new byte[32],
+            new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
             new byte[16],
+            Encoding.UTF8.GetBytes(host.MaintenanceConnectionString),
             HostFixture.Declaration(materialised: true),
             ApplicationKind.Public);
 

@@ -69,7 +69,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
         _passwords.Hold(_person, Noon);
         _ = _identifiers.Verified(_person, IdentifierKind.Email, Mail);
 
-        var mailbox = Mailbox.Reserved(Mail, Noon.AddDays(-1));
+        var mailbox = Mailbox.Reserved(Parsed(Mail), Noon.AddDays(-1));
 
         mailbox.Hold(_person);
         _mailboxes.Held.Add(mailbox);
@@ -311,5 +311,12 @@ public sealed class AppPasswordsTests : IAsyncDisposable
             .GetResult();
 
         return session.Id;
+    }
+
+    private static EmailAddress Parsed(string value)
+    {
+        Assert.True(EmailAddress.TryParse(value, out EmailAddress address));
+
+        return address;
     }
 }

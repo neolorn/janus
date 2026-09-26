@@ -50,10 +50,10 @@ internal sealed class AuthenticatorStoreInMemory : IAuthenticatorStore
     /// <inheritdoc/>
     public ValueTask<Authenticator?> ByProviderAsync(
         Factor provider,
-        string subject,
+        string providerSubject,
         CancellationToken cancellationToken) =>
         ValueTask.FromResult(
-            _linked.TryGetValue((provider, subject), out AuthenticatorId id) ? _held.GetValueOrDefault(id) : null);
+            _linked.TryGetValue((provider, providerSubject), out AuthenticatorId id) ? _held.GetValueOrDefault(id) : null);
 
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<Authenticator>> OfAsync(
@@ -71,12 +71,12 @@ internal sealed class AuthenticatorStoreInMemory : IAuthenticatorStore
     }
 
     /// <inheritdoc/>
-    public ValueTask LinkAsync(Authenticator authenticator, string subject, CancellationToken cancellationToken)
+    public ValueTask LinkAsync(Authenticator authenticator, string providerSubject, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(authenticator);
 
         Hold(authenticator);
-        _linked[(authenticator.Factor, subject)] = authenticator.Id;
+        _linked[(authenticator.Factor, providerSubject)] = authenticator.Id;
 
         return ValueTask.CompletedTask;
     }

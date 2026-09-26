@@ -113,7 +113,8 @@ internal sealed class AccountService(
                     codes.Remaining,
                     codes.GeneratedAt,
                     codes.ViewedAt,
-                    codes.ExportedAt),
+                    codes.ExportedAt,
+                    codes.RemindedAt),
             Shown(profile, fields),
             Shown(preferences)));
     }

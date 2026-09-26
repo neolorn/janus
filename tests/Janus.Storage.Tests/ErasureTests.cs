@@ -244,6 +244,7 @@ public sealed class ErasureTests(DatabaseFixture database) : IClassFixture<Datab
             Subject = subject,
             Kind = kind,
             Fingerprint = Fingerprint.Compute(plaintext, FingerprintKey),
+            FingerprintVersion = 1,
             CanonicalisationVersion = CanonicalForm.UnicodeVersion,
             Entered = PersonalFieldCipher.Encrypt(
                 dataKey,

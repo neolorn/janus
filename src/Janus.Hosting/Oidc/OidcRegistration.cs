@@ -77,7 +77,8 @@ internal static class OidcRegistration
                 _ = options.SetDefaultTokenEntity<OidcTokenRecord>();
 
                 // AUTH-OIDC-001 AC2, CONV-SEC-002: the secret is judged against the
-                // fingerprint the registry holds, in constant time.
+                // fingerprint the registry holds, in constant time, and against the one
+                // it replaced until the overlap ends (OPS-SEC-002).
                 _ = options.ReplaceApplicationManager<OidcClientRecord, ClientSecrets>();
 
                 // CONV-DESIGN-003: an entity read here is tracked by the request's own

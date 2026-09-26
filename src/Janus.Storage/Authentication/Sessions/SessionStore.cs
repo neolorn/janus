@@ -256,7 +256,12 @@ internal sealed class SessionStore(
             dataKey,
             new PersonalFieldLocation(subject, SessionConfiguration.Table, column),
             Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
-                new SessionPlace(origin.Address, origin.Location?.City, origin.Location?.Country),
+                new SessionPlace(
+                    origin.Address,
+                    origin.Location?.City,
+                    origin.Location?.Country,
+                    origin.Coordinates?.Latitude,
+                    origin.Coordinates?.Longitude),
                 SessionPlaceJson.Default.SessionPlace)),
             randomness);
 
@@ -311,6 +316,9 @@ internal sealed class SessionStore(
             Location = place.City is null && place.Country is null
                 ? null
                 : new SessionLocation(place.City, place.Country),
+            Coordinates = place is { Latitude: double latitude, Longitude: double longitude }
+                ? new Coordinates(latitude, longitude)
+                : null,
         };
     }
 

@@ -13,9 +13,14 @@ namespace Janus.Core;
 /// </summary>
 /// <remarks>
 /// Implements AUTHZ-SEAM-001, AUTHZ-PRIN-001, AUTHZ-PRIN-002, AUTHZ-GATE-001,
-/// AUTHZ-GATE-002, AUTHZ-GATE-004, AUTHZ-GATE-005 and LIB-SEAM-001. Every evaluation
-/// is scoped to the organization owning the record, resolved from the record and never
-/// from a session (AUTHZ-SCOPE-001), and every path fails closed (AUTHZ-PRIN-003).
+/// AUTHZ-GATE-002, AUTHZ-GATE-004, AUTHZ-GATE-005, OPS-ALERT-006 and LIB-SEAM-001.
+/// Every evaluation is scoped to the organization owning the record, resolved from the
+/// record and never from a session (AUTHZ-SCOPE-001), and every path fails closed
+/// (AUTHZ-PRIN-003). A permission the host declares with the action <c>export</c> is an
+/// export operation: while <c>exfiltration.export.stepuprequired</c> is on it asks for
+/// step-up whether or not the host bound it to a gate, and each check, filter or
+/// fragment that admits it counts against the actor's
+/// <c>exfiltration.export.ratelimit</c> for the hour and is recorded on its own.
 /// </remarks>
 public interface IAccessGate
 {
@@ -28,9 +33,11 @@ public interface IAccessGate
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Nothing, or <c>authz.denied</c> carrying the correlation identifier the audit
-    /// trail records it under. What the caller answers with is the type's declared
-    /// concealment behaviour: a concealing type answers as a record that does not
-    /// exist, a disclosing one says the record exists and is forbidden.
+    /// trail records it under. What the caller is answered is the type's declared
+    /// concealment behaviour: on a disclosing type the refusal says the record exists
+    /// and is forbidden; on a concealing one the browser profile answers the request as
+    /// a record that does not exist, <c>authz.resource.notfound</c> under the same
+    /// identifier, whatever the endpoint goes on to write.
     /// </returns>
     ValueTask<Result> RequireAsync(
         AccessContext context,
@@ -99,7 +106,12 @@ public interface IAccessGate
     /// <param name="organization">The organization the listing is within.</param>
     /// <param name="sources">The contract tables and the identifier selector.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The predicate, which enumerates nothing and returns no record.</returns>
+    /// <returns>
+    /// The predicate, which enumerates nothing and returns no record;
+    /// <c>auth.stepup.required</c> where the action is bound to a step-up gate the
+    /// session has not met; or <c>auth.throttled</c> carrying <c>retryAt</c> where the
+    /// action is an export the actor has no place left for this hour.
+    /// </returns>
     ValueTask<Result<Expression<Func<TResource, bool>>>> FilterAsync<TResource>(
         AccessContext context,
         Permission permission,
@@ -119,7 +131,12 @@ public interface IAccessGate
     /// <param name="rowAlias">The alias the query gives the row.</param>
     /// <param name="column">The column of that row holding the record's identifier.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The fragment and its parameters.</returns>
+    /// <returns>
+    /// The fragment and its parameters; <c>auth.stepup.required</c> where the action is
+    /// bound to a step-up gate the session has not met; or <c>auth.throttled</c>
+    /// carrying <c>retryAt</c> where the action is an export the actor has no place left
+    /// for this hour.
+    /// </returns>
     /// <exception cref="ArgumentException">
     /// The row alias or the column is not an identifier, which is what would let a value
     /// into the fragment's text.

@@ -25,6 +25,7 @@ internal static class ApiStatus
         // rather than a denial.
         [ErrorCodes.StartupGoverningLanguage] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupDeclarationMissing] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupSubscriberName] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupPreferenceDeclaration] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupContainmentCycle] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupUnindexedDerivation] = StatusCodes.Status500InternalServerError,
@@ -64,6 +65,7 @@ internal static class ApiStatus
         // Not found, and the concealed denial that answers the same way.
         [ErrorCodes.CredentialNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.GrantNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.ResourceNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.DocumentNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.RequestNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.TakedownNotFound] = StatusCodes.Status404NotFound,
@@ -126,6 +128,8 @@ internal static class ApiStatus
         [ErrorCodes.FactorRequired] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.CredentialSuspended] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.EnrolmentTokenInvalid] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.BreakGlassInvalid] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.BreakGlassConsumed] = StatusCodes.Status409Conflict,
         [ErrorCodes.RecoveryTokenInvalid] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.RecoveryTokenExpired] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.RecoveryReasonRequired] = StatusCodes.Status422UnprocessableEntity,

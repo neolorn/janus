@@ -291,6 +291,7 @@ public sealed class VocabularyContractTests
                 "no-account",
                 "privacy-request-lapsed",
                 "privacy-request-received",
+                "recovery-codes-reminder",
                 "recovery-link",
                 "secondstep-code",
                 "security-notice",

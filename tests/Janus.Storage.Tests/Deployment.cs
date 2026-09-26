@@ -31,6 +31,12 @@ internal sealed class Deployment(DatabaseFixture database) : IDisposable
     public static readonly byte[] FingerprintKey =
         Encoding.UTF8.GetBytes("the fingerprint key of this deployment");
 
+    /// <summary>
+    /// The versions of the fingerprint key, the one above current and alone.
+    /// </summary>
+    public static readonly FingerprintKeys FingerprintKeys =
+        new(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = FingerprintKey });
+
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly Dictionary<int, ReadOnlyMemory<byte>> _versions = [];
 

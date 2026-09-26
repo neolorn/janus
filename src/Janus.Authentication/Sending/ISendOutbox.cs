@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -40,4 +42,25 @@ internal interface ISendOutbox
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of removing it.</returns>
     ValueTask RemoveAsync(SendDeliveryId delivery, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The messages whose next attempt is due, oldest first.
+    /// </summary>
+    /// <param name="now">The instant the pass runs at.</param>
+    /// <param name="count">How many at most.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>The messages.</returns>
+    ValueTask<IReadOnlyList<SendDelivery>> DueAsync(
+        DateTimeOffset now,
+        int count,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Writes what an attempt made of one message onto the transaction in progress:
+    /// the attempts, the next one, and the languages taken.
+    /// </summary>
+    /// <param name="delivery">The message, as the attempt left it.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of writing it.</returns>
+    ValueTask RecordAsync(SendDelivery delivery, CancellationToken cancellationToken);
 }

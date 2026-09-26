@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sessions;
@@ -22,6 +23,12 @@ namespace Janus.Authentication.Tests.Sessions;
 [Trait("kind", "unit")]
 public sealed class SessionServiceTests : IAsyncDisposable
 {
+    private const string CairoAddress = "198.51.100.7";
+    private const string GizaAddress = "198.51.100.80";
+    private const string AlexandriaAddress = "203.0.113.20";
+    private const string AswanAddress = "203.0.113.60";
+    private const string LondonAddress = "2001:db8::7";
+
     private static readonly DateTimeOffset Noon =
         new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
@@ -38,6 +45,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
     private readonly AccessGateInMemory _gate = new();
     private readonly AdministrativeOrganizationInMemory _administrative = new();
     private readonly LocationResolverInMemory _locations = new();
+    private readonly EventsInMemory _alerts = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
@@ -52,6 +60,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
             _configuration,
             new AdministrativeScope(_gate, _administrative),
             _locations,
+            new ConcurrentSessions(_sessions, _configuration, _alerts),
             _work,
             _clock,
             _randomness);
@@ -611,6 +620,128 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-ALERT-007 AC1: two sessions of one account both used inside
+    /// <c>alerting.sessions.window</c> from cities in different countries raise
+    /// <c>concurrent-sessions-implausible</c> for the account, naming the two sessions
+    /// and neither place.
+    /// </summary>
+    [Fact]
+    public async Task OPS_ALERT_007_AC1_SimultaneousSessionsFromImplausibleOriginsAlertAsync()
+    {
+        SubjectId subject = Subject();
+        Placed();
+
+        IssuedSession cairo = await BegunFromAsync(subject, CairoAddress);
+
+        _clock.Advance(TimeSpan.FromMinutes(10));
+
+        IssuedSession london = await BegunFromAsync(subject, LondonAddress);
+
+        AlertRaised raised = Assert.Single(_alerts.Of<AlertRaised>());
+
+        Assert.Equal(AlertCondition.ConcurrentSessionsImplausible, raised.Condition);
+        Assert.Equal(
+            Alerts.Key(AlertCondition.ConcurrentSessionsImplausible, subject.ToString()),
+            Alerts.Deduplication(raised.IdempotencyKey));
+        Assert.Equal(
+            ["other", "session", "subject"],
+            raised.Details.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(london.Id.ToString(), raised.Details["session"].GetString());
+        Assert.Equal(cairo.Id.ToString(), raised.Details["other"].GetString());
+    }
+
+    /// <summary>
+    /// OPS-ALERT-007 AC1: two cities of one country further apart than
+    /// <c>alerting.sessions.distance</c> are implausible too.
+    /// </summary>
+    [Fact]
+    public async Task OPS_ALERT_007_AC1_CitiesFurtherApartThanTheDistanceAlertAsync()
+    {
+        SubjectId subject = Subject();
+        Placed();
+
+        _ = await BegunFromAsync(subject, CairoAddress);
+        _ = await BegunFromAsync(subject, AswanAddress);
+
+        Assert.Equal(
+            AlertCondition.ConcurrentSessionsImplausible,
+            Assert.Single(_alerts.Of<AlertRaised>()).Condition);
+    }
+
+    /// <summary>
+    /// OPS-ALERT-007 AC2: ordinary use on more than one device, in one city or in two
+    /// nearby, raises nothing, and neither does a place the database could not resolve.
+    /// </summary>
+    [Fact]
+    public async Task OPS_ALERT_007_AC2_OrdinaryMultiDeviceUseDoesNotAsync()
+    {
+        SubjectId subject = Subject();
+        Placed();
+
+        IssuedSession laptop = await BegunFromAsync(subject, CairoAddress);
+        IssuedSession phone = await BegunFromAsync(subject, "198.51.100.40");
+
+        _ = await BegunFromAsync(subject, GizaAddress);
+        _ = await BegunFromAsync(subject, "192.0.2.99");
+
+        _clock.Advance(TimeSpan.FromMinutes(5));
+        _ = Value(await Service.ResolveAsync(laptop.Secret, From(GizaAddress), TestContext.Current.CancellationToken));
+        _ = Value(await Service.ResolveAsync(phone.Secret, From(CairoAddress), TestContext.Current.CancellationToken));
+
+        Assert.Empty(_alerts.Of<AlertRaised>());
+    }
+
+    /// <summary>
+    /// OPS-ALERT-007: a session last used before the window is not in use, and one
+    /// taken up again far away while another is in use is raised when it is.
+    /// </summary>
+    [Fact]
+    public async Task OPS_ALERT_007_ASessionTakenUpAgainFarAwayAlertsAsync()
+    {
+        SubjectId subject = Subject();
+        Placed();
+
+        IssuedSession london = await BegunFromAsync(subject, LondonAddress);
+
+        _clock.Advance(TimeSpan.FromHours(2));
+
+        _ = await BegunFromAsync(subject, CairoAddress);
+
+        Assert.Empty(_alerts.Of<AlertRaised>());
+
+        _clock.Advance(TimeSpan.FromMinutes(10));
+        _ = Value(await Service.ResolveAsync(london.Secret, From(LondonAddress), TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            AlertCondition.ConcurrentSessionsImplausible,
+            Assert.Single(_alerts.Of<AlertRaised>()).Condition);
+    }
+
+    /// <summary>
+    /// OPS-ALERT-007: the distance is <c>alerting.sessions.distance</c>, so a
+    /// deployment that sets it lower hears of cities nearer together.
+    /// </summary>
+    [Fact]
+    public async Task OPS_ALERT_007_TheDistanceIsTheConfiguredOneAsync()
+    {
+        SubjectId subject = Subject();
+        Placed();
+
+        _ = await BegunFromAsync(subject, CairoAddress);
+        _ = await BegunFromAsync(subject, AlexandriaAddress);
+
+        Assert.Empty(_alerts.Of<AlertRaised>());
+
+        _configuration.Set(Settings.AlertingSessionsDistance, 100);
+
+        _ = await BegunFromAsync(subject, AlexandriaAddress);
+
+        Assert.Equal(
+            AlertCondition.ConcurrentSessionsImplausible,
+            Assert.Single(_alerts.Of<AlertRaised>()).Condition);
+    }
+
+    /// <summary>
     /// INT-GEN-006 and CONV-DESIGN-005 AC1: a resolver that could not report what it
     /// had to report fails the sign-in, because the degradation it exists to raise is
     /// the deployment's only sight of an absent database.
@@ -1107,6 +1238,32 @@ public sealed class SessionServiceTests : IAsyncDisposable
                 null));
 
         return subject;
+    }
+
+    private static SessionOrigin From(string address) =>
+        new(address, new DeviceDescription("Safari", "iOS"));
+
+    // Cairo, Giza a few kilometres away, Alexandria under 200 and Aswan over 600 away,
+    // and London in another country. 192.0.2.99 resolves to nothing.
+    private void Placed()
+    {
+        _locations.Holds(CairoAddress, new SessionLocation("Cairo", "EG"), new Coordinates(30.0444, 31.2357));
+        _locations.Holds("198.51.100.40", new SessionLocation("Cairo", "EG"), new Coordinates(30.0444, 31.2357));
+        _locations.Holds(GizaAddress, new SessionLocation("Giza", "EG"), new Coordinates(30.0131, 31.2089));
+        _locations.Holds(AlexandriaAddress, new SessionLocation("Alexandria", "EG"), new Coordinates(31.2001, 29.9187));
+        _locations.Holds(AswanAddress, new SessionLocation("Aswan", "EG"), new Coordinates(24.0889, 32.8998));
+        _locations.Holds(LondonAddress, new SessionLocation("London", "GB"), new Coordinates(51.5072, -0.1276));
+    }
+
+    private async ValueTask<IssuedSession> BegunFromAsync(SubjectId subject, string address)
+    {
+        _work.Reset();
+
+        return Value(await Service.BeginAsync(
+            subject,
+            [Factor.Password],
+            From(address),
+            TestContext.Current.CancellationToken));
     }
 
     private async ValueTask<IssuedSession> BegunAsync(SubjectId subject, Factor[] presented)

@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -43,4 +45,17 @@ internal interface IRecoveryCodeStore
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of removing it.</returns>
     ValueTask RemoveAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The accounts whose set is owed its one reminder: generated at or before an
+    /// instant, never reminded, and held by an account that is active. Oldest set first.
+    /// </summary>
+    /// <param name="generatedBy">The latest generation old enough to be reminded of.</param>
+    /// <param name="count">How many at most.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>The accounts.</returns>
+    ValueTask<IReadOnlyList<SubjectId>> DueReminderAsync(
+        DateTimeOffset generatedBy,
+        int count,
+        CancellationToken cancellationToken);
 }

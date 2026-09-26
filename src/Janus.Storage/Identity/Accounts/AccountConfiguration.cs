@@ -88,6 +88,10 @@ internal sealed class AccountConfiguration : IEntityTypeConfiguration<AccountRec
         builder.Property(account => account.RestrictionHeld)
             .HasColumnName("restriction_held");
 
+        builder.Property(account => account.IsEmergency)
+            .HasColumnName("emergency")
+            .HasDefaultValue(false);
+
         builder.Property(account => account.DeletingBy)
             .HasColumnName("deleting_by")
             .HasConversion(new VocabularyConverter<DeletionOrigin>());
@@ -109,6 +113,13 @@ internal sealed class AccountConfiguration : IEntityTypeConfiguration<AccountRec
         builder.Property(account => account.NoticeVersion)
             .HasColumnName("notice_version")
             .HasMaxLength(DocumentVersionLength);
+
+        // OPS-BOOT-002: one account is the break-glass session's, and the index admits
+        // no second.
+        builder.HasIndex(account => account.IsEmergency)
+            .HasDatabaseName("ux_accounts_emergency")
+            .HasFilter("emergency")
+            .IsUnique();
 
         // The sweep of OPS-OBS-003 reads the windows that have elapsed and nothing else.
         builder.HasIndex(account => account.DeletingSince)

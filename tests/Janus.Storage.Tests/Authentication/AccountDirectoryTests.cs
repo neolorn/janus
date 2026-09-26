@@ -141,7 +141,7 @@ public sealed class AccountDirectoryTests(DatabaseFixture database)
 
         await using (StoreContext writing = database.Context())
         {
-            await new AccountAudit(new AuditStore(writing, _deployment.Keys, _deployment.Randomness), TimeProvider.System)
+            await new AccountAudit(new AuditStore(writing, new DataConnections(writing), _deployment.Keys, _deployment.Randomness), TimeProvider.System)
                 .CancelledOnBehalfAsync(administrator, subject, request, Noon, TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
@@ -149,7 +149,7 @@ public sealed class AccountDirectoryTests(DatabaseFixture database)
         await using StoreContext reading = database.Context();
 
         AuditRecord read = Assert.Single(
-            await new AuditStore(reading, _deployment.Keys, _deployment.Randomness)
+            await new AuditStore(reading, new DataConnections(reading), _deployment.Keys, _deployment.Randomness)
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
 
         Assert.Equal(

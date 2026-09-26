@@ -20,8 +20,11 @@ namespace Janus.Authorization.Gate;
 /// <param name="records">Where a record's organization is read from.</param>
 /// <param name="evaluator">Where a rendered rule is run.</param>
 /// <param name="audit">Where a refusal is recorded and read back.</param>
+/// <param name="concealed">Where a refusal on a type that conceals is handed to the boundary.</param>
+/// <param name="spikes">Where each recorded refusal is counted against its actor.</param>
 /// <param name="subjects">Who the principal is, resolved once per operation.</param>
 /// <param name="gates">What an action's step-up gate still asks of the session.</param>
+/// <param name="exports">What an export operation asks beyond what the grants allow.</param>
 /// <param name="derived">Which of the host's relationships confer what is being asked.</param>
 /// <param name="lookup">Who can access a record, for the view that asks.</param>
 /// <param name="consents">What the caller has consented to, for the purpose the action serves.</param>
@@ -29,8 +32,8 @@ namespace Janus.Authorization.Gate;
 /// <param name="time">The clock liveness is read against.</param>
 /// <remarks>
 /// Implements AUTHZ-SEAM-001, AUTHZ-PRIN-001, AUTHZ-PRIN-003, AUTHZ-GATE-002,
-/// AUTHZ-GATE-004, AUTHZ-GATE-005, AUTHZ-SCOPE-001, AUTHZ-CONCEAL-004, AUTHZ-DERIVE-007,
-/// PRIV-SENS-002, PRIV-SENS-002a and LIB-SEAM-001.
+/// AUTHZ-GATE-004, AUTHZ-GATE-005, AUTHZ-SCOPE-001, AUTHZ-CONCEAL-001, AUTHZ-CONCEAL-004,
+/// AUTHZ-DERIVE-007, PRIV-SENS-002, PRIV-SENS-002a, OPS-ALERT-006 and LIB-SEAM-001.
 /// A check and a filter are the one rule rendered two ways, so neither can come to
 /// answer what the other would refuse. Every path that cannot resolve what it needs
 /// denies.
@@ -40,8 +43,11 @@ internal sealed class AccessGate(
     IResourceStore records,
     IAccessEvaluator evaluator,
     IAccessAudit audit,
+    IConcealedRefusals concealed,
+    DenialSpikes spikes,
     SubjectSets subjects,
     StepUpGates gates,
+    ExportOperations exports,
     Derivations derived,
     ReverseLookup lookup,
     IRecordedConsents consents,
@@ -90,7 +96,7 @@ internal sealed class AccessGate(
                 cancellationToken).ConfigureAwait(false);
         }
 
-        return await OutstandingAsync(decided.Subject, permission, cancellationToken)
+        return await AllowedAsync(context, permission, resource, decided, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -114,7 +120,7 @@ internal sealed class AccessGate(
 
         if (decided.Grant is { Deny: false })
         {
-            return await OutstandingAsync(decided.Subject, permission, cancellationToken)
+            return await AllowedAsync(context, permission, resource, decided, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -131,7 +137,7 @@ internal sealed class AccessGate(
                 [resource.Id],
                 cancellationToken).ConfigureAwait(false)).Contains(resource.Id.ToString()))
         {
-            return await OutstandingAsync(decided.Subject, permission, cancellationToken)
+            return await AllowedAsync(context, permission, resource, decided, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -172,8 +178,14 @@ internal sealed class AccessGate(
 
         // An organization-wide check names no record, so it has no data subject; a
         // consent-based purpose is refused rather than admitted on nobody's consent.
-        return await OutstandingAsync(dataSubject: null, permission, cancellationToken)
+        Result outstanding = await OutstandingAsync(context, dataSubject: null, permission, cancellationToken)
             .ConfigureAwait(false);
+
+        return outstanding.Match(() => (Error?)null, error => error) is Error unmet
+            ? Result.Failure(unmet)
+            : await exports
+                .AdmitAsync(context, permission, OrganizationWide, organization, record: null, cancellationToken)
+                .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -342,6 +354,15 @@ internal sealed class AccessGate(
             return Result.Success<Expression<Func<TResource, bool>>>(_ => false);
         }
 
+        // AUTH-STEP-001: a list exercises the permission as a check does, so the gate
+        // bound to it is asked of the session before any row is admitted, and an export
+        // is admitted under its limit before the rule is handed out (OPS-ALERT-006).
+        if (await ExercisedAsync(context, permission, type, organization, cancellationToken).ConfigureAwait(false)
+            is Error unmet)
+        {
+            return Result.Failure<Expression<Func<TResource, bool>>>(unmet);
+        }
+
         PermissionRule rule = await RuleAsync(
             context,
             [permission],
@@ -365,6 +386,12 @@ internal sealed class AccessGate(
         if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
         {
             return Result.Success(MatchesNothing);
+        }
+
+        if (await ExercisedAsync(context, permission, type, organization, cancellationToken).ConfigureAwait(false)
+            is Error unmet)
+        {
+            return Result.Failure<SqlFilter>(unmet);
         }
 
         PermissionRule rule = await RuleAsync(
@@ -477,6 +504,19 @@ internal sealed class AccessGate(
         IReadOnlySet<Permission> nobody = await UnconsentedAsync(
             dataSubject: null, permissions, cancellationToken).ConfigureAwait(false);
 
+        // AUTHZ-GATE-005 (D-160): a gate is the session's to meet whatever the record,
+        // so it is judged once for the page rather than once per row.
+        var unstepped = new HashSet<Permission>();
+
+        foreach (Permission permission in permissions)
+        {
+            if (await UnsteppedAsync(context, permission, cancellationToken).ConfigureAwait(false)
+                is not null)
+            {
+                unstepped.Add(permission);
+            }
+        }
+
         var unconsented = new Dictionary<SubjectId, IReadOnlySet<Permission>>();
 
         foreach (ResourceId resource in resources)
@@ -495,6 +535,7 @@ internal sealed class AccessGate(
                 conferred,
                 derivedRows,
                 set.Restricted,
+                unstepped,
                 Whose(whose, resource) is SubjectId owner ? unconsented[owner] : nobody)),
         ]);
     }
@@ -676,6 +717,7 @@ internal sealed class AccessGate(
         IReadOnlyList<PageCapability> conferred,
         IReadOnlyDictionary<Permission, IReadOnlySet<string>> derivedRows,
         bool restricted,
+        HashSet<Permission> unstepped,
         IReadOnlySet<Permission> unconsented)
     {
         string named = resource.ToString();
@@ -714,7 +756,7 @@ internal sealed class AccessGate(
                 outstanding.Add(CapabilityResidual.Restricted);
             }
 
-            if (gates.OutstandingOn(permission) is not null)
+            if (unstepped.Contains(permission))
             {
                 outstanding.Add(CapabilityResidual.StepUp);
             }
@@ -738,13 +780,15 @@ internal sealed class AccessGate(
     // those does not is refused with what it is waiting for rather than with a denial
     // (AUTH-STEP-001, PRIV-SENS-002).
     private async ValueTask<Result> OutstandingAsync(
+        AccessContext context,
         SubjectId? dataSubject,
         Permission permission,
         CancellationToken cancellationToken)
     {
-        if (gates.OutstandingOn(permission) is ErrorCode code)
+        if (await UnsteppedAsync(context, permission, cancellationToken).ConfigureAwait(false)
+            is Error unmet)
         {
-            return Result.Failure(Error.From(code));
+            return Result.Failure(unmet);
         }
 
         return await UnconsentedAsync(dataSubject, permission, cancellationToken)
@@ -752,6 +796,60 @@ internal sealed class AccessGate(
             ? Result.Failure(Error.From(missing))
             : Result.Success();
     }
+
+    // OPS-ALERT-006: an export the grants, its gate and its consent allow is admitted
+    // under the hourly limit and recorded last, so that nothing refused is counted.
+    private async ValueTask<Result> AllowedAsync(
+        AccessContext context,
+        Permission permission,
+        ResourceReference resource,
+        Decision decided,
+        CancellationToken cancellationToken)
+    {
+        Result outstanding = await OutstandingAsync(context, decided.Subject, permission, cancellationToken)
+            .ConfigureAwait(false);
+
+        return outstanding.Match(() => (Error?)null, error => error) is Error unmet
+            ? Result.Failure(unmet)
+            : await exports
+                .AdmitAsync(context, permission, resource.Type, decided.Organization, resource.Id, cancellationToken)
+                .ConfigureAwait(false);
+    }
+
+    // AUTH-STEP-001, OPS-ALERT-006: what a list or a fragment asks before the rule is
+    // handed out, which is the gate the action is bound to and, for an export, a place
+    // under the limit. The host reads the rows the rule admits, so the export is
+    // counted when the rule is handed out, whatever the query then returns.
+    private async ValueTask<Error?> ExercisedAsync(
+        AccessContext context,
+        Permission permission,
+        ResourceType type,
+        OrganizationId organization,
+        CancellationToken cancellationToken)
+    {
+        if (await UnsteppedAsync(context, permission, cancellationToken).ConfigureAwait(false)
+            is Error unmet)
+        {
+            return unmet;
+        }
+
+        Result admitted = await exports
+            .AdmitAsync(context, permission, type, organization, record: null, cancellationToken)
+            .ConfigureAwait(false);
+
+        return admitted.Match(() => (Error?)null, error => error);
+    }
+
+    // AUTH-STEP-001, OPS-ALERT-006: the gate an action asks for is the one the host bound
+    // it to, or, where it bound none, the one an export asks for of its own.
+    private async ValueTask<Error?> UnsteppedAsync(
+        AccessContext context,
+        Permission permission,
+        CancellationToken cancellationToken) =>
+        await gates.OutstandingAsync(
+            context,
+            model.GateOf(permission) ?? await exports.GateOfAsync(permission, cancellationToken).ConfigureAwait(false),
+            cancellationToken).ConfigureAwait(false);
 
     // PRIV-SENS-002 AC1, PRIV-SENS-002a: the consent read is the record's data
     // subject's, whoever the caller is, so staff and background work are gated exactly
@@ -960,7 +1058,8 @@ internal sealed class AccessGate(
             $"The resource type '{type}' is not declared, so no policy governs it."));
 
     // AUTHZ-CONCEAL-004, CONV-LOG-005: one path answers every refusal, and the
-    // identifier it hands back is the row the refusal was recorded as. A request made
+    // identifier it hands back is the row the refusal was recorded as. The same path
+    // counts it towards its actor's denial spike (AUTHZ-GATE-004, OPS-ALERT-001). A request made
     // under no account is refused with an identifier like any other; the row names
     // nobody, and that absence is the recorded fact.
     private async ValueTask<Result> RefusedAsync(
@@ -974,18 +1073,25 @@ internal sealed class AccessGate(
 
         var correlation = AuditRecordId.New(time);
 
-        await audit
-            .RecordAsync(
-                new DeniedAccess(
-                    correlation,
-                    context.Acting,
-                    context.Effective,
-                    organization,
-                    permission,
-                    type,
-                    time.GetUtcNow()),
-                cancellationToken)
-            .ConfigureAwait(false);
+        var denial = new DeniedAccess(
+            correlation,
+            context.Acting,
+            context.Effective,
+            organization,
+            permission,
+            type,
+            time.GetUtcNow());
+
+        await audit.RecordAsync(denial, cancellationToken).ConfigureAwait(false);
+        await spikes.WatchAsync(denial, cancellationToken).ConfigureAwait(false);
+
+        // AUTHZ-CONCEAL-001, BFF-ERR-003: on a type that conceals, what the caller is
+        // answered is the boundary's, under this identifier, so it is the same answer
+        // whether the record is there and whatever the endpoint writes after this.
+        if (!Discloses(type))
+        {
+            concealed.Concealed(correlation);
+        }
 
         return Result.Failure(Error.From(
             ErrorCodes.Denied,

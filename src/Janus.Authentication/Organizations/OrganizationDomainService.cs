@@ -28,7 +28,7 @@ namespace Janus.Authentication.Organizations;
 /// Where a domain's TXT record is read, absent where the deployment registered none.
 /// </param>
 /// <param name="audit">Where every change is written down.</param>
-/// <param name="events">Where a removal's alert goes.</param>
+/// <param name="alerts">Where a removal's alert goes.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where a token is drawn from.</param>
@@ -48,7 +48,7 @@ internal sealed class OrganizationDomainService(
     ConfigurationAdministration administration,
     IDnsResolver? dns,
     IOrganizationAudit audit,
-    IEvents events,
+    IAlertChannels alerts,
     IUnitOfWork work,
     TimeProvider time,
     RandomNumberGenerator randomness) : IOrganizationDomains
@@ -285,8 +285,8 @@ internal sealed class OrganizationDomainService(
 
         // OPS-ALERT-001: a removal stops new sign-ins with addresses in the domain, which
         // the people behind them will notice before anyone reads the audit trail.
-        if ((await events
-                .PublishAsync(
+        if ((await alerts
+                .RaiseAsync(
                     Alerts.Of(
                         AlertCondition.DomainRemoved,
                         organization + ":" + read.Domain,

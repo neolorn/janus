@@ -9,9 +9,14 @@ namespace Janus.Core;
 /// <param name="GeneratedAt">When the set was drawn.</param>
 /// <param name="ViewedAt">When the person last looked at them.</param>
 /// <param name="ExportedAt">When the person last took a copy away.</param>
-/// <remarks>Implements REG-ACCT-001 and AUTH-RECOV-006.</remarks>
+/// <param name="RemindedAt">
+/// When the set's one reminder fired, which the account shows until the set is
+/// regenerated; nothing before then.
+/// </param>
+/// <remarks>Implements REG-ACCT-001, AUTH-RECOV-006 and AUTH-FACT-008.</remarks>
 public sealed record RecoveryCodeStatus(
     int Remaining,
     DateTimeOffset GeneratedAt,
     DateTimeOffset? ViewedAt,
-    DateTimeOffset? ExportedAt);
+    DateTimeOffset? ExportedAt,
+    DateTimeOffset? RemindedAt);

@@ -1,12 +1,16 @@
 using System;
 using Janus.Storage.Authentication.Accounts;
 using Janus.Storage.Authentication.Alerting;
+using Janus.Storage.Authentication.Background;
+using Janus.Storage.Authentication.BreakGlass;
 using Janus.Storage.Authentication.Callbacks;
 using Janus.Storage.Authentication.Credentials;
+using Janus.Storage.Authentication.Events;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authentication.Mailboxes;
+using Janus.Storage.Authentication.Maintenance;
 using Janus.Storage.Authentication.Oidc;
 using Janus.Storage.Authentication.Organizations;
 using Janus.Storage.Authentication.Passwords;
@@ -16,6 +20,7 @@ using Janus.Storage.Authentication.Registration;
 using Janus.Storage.Authentication.Sending;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Authentication.SignIn;
+using Janus.Storage.Authorization.Gate;
 using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Authorization.Groups;
 using Janus.Storage.Authorization.Resources;
@@ -302,6 +307,16 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     public DbSet<CallbackEventRecord> CallbackEvents => Set<CallbackEventRecord>();
 
     /// <summary>
+    /// The issues of the break-glass credential, of which at most one stands.
+    /// </summary>
+    public DbSet<BreakGlassCredentialRecord> BreakGlassCredentials => Set<BreakGlassCredentialRecord>();
+
+    /// <summary>
+    /// The attempts at the break-glass credential, from any source.
+    /// </summary>
+    public DbSet<BreakGlassAttemptRecord> BreakGlassAttempts => Set<BreakGlassAttemptRecord>();
+
+    /// <summary>
     /// The correlation references issued for a host's unsigned callbacks.
     /// </summary>
     public DbSet<CallbackReferenceRecord> CallbackReferences => Set<CallbackReferenceRecord>();
@@ -316,6 +331,17 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     /// The conditions already raised, within their deduplication window.
     /// </summary>
     public DbSet<AlertRecord> Alerts => Set<AlertRecord>();
+
+    /// <summary>
+    /// The conditions raised and not yet carried by the alert channels.
+    /// </summary>
+    public DbSet<RaisedAlertRecord> RaisedAlerts => Set<RaisedAlertRecord>();
+
+    /// <summary>
+    /// The emitted events, each until every consumer registered for its kind has
+    /// taken it, and marked after.
+    /// </summary>
+    public DbSet<PendingEventRecord> Events => Set<PendingEventRecord>();
 
     /// <summary>
     /// The registrations in progress, each staging what its steps collected.
@@ -432,6 +458,42 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     /// </summary>
     public DbSet<SigningKeyRecord> SigningKeys => Set<SigningKeyRecord>();
 
+    /// <summary>
+    /// The background jobs, with when each was last attempted and last succeeded.
+    /// </summary>
+    public DbSet<BackgroundJobRecord> BackgroundJobs => Set<BackgroundJobRecord>();
+
+    /// <summary>
+    /// The rotations of the key-encryption key and the fingerprint key, with how far
+    /// each has gone.
+    /// </summary>
+    public DbSet<KeyRotationRecord> KeyRotations => Set<KeyRotationRecord>();
+
+    /// <summary>
+    /// The licences and permits whose expiry the system warns of.
+    /// </summary>
+    public DbSet<LicenceRecord> Licences => Set<LicenceRecord>();
+
+    /// <summary>
+    /// The maintenance log: each recurring task performed and each review made.
+    /// </summary>
+    public DbSet<MaintenanceEntryRecord> MaintenanceLog => Set<MaintenanceEntryRecord>();
+
+    /// <summary>
+    /// The records each person was given, counted by day.
+    /// </summary>
+    public DbSet<ReadVolumeRecord> ReadVolume => Set<ReadVolumeRecord>();
+
+    /// <summary>
+    /// Each person's daily mean over the baseline window.
+    /// </summary>
+    public DbSet<ReadBaselineRecord> ReadBaselines => Set<ReadBaselineRecord>();
+
+    /// <summary>
+    /// When each actor's recent export operations were admitted.
+    /// </summary>
+    public DbSet<BulkExportRecord> BulkExports => Set<BulkExportRecord>();
+
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -486,9 +548,13 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new NoticeConfiguration());
         modelBuilder.ApplyConfiguration(new CallbackConfiguration());
         modelBuilder.ApplyConfiguration(new CallbackEventConfiguration());
+        modelBuilder.ApplyConfiguration<BreakGlassCredentialRecord>(new BreakGlassConfiguration());
+        modelBuilder.ApplyConfiguration<BreakGlassAttemptRecord>(new BreakGlassConfiguration());
         modelBuilder.ApplyConfiguration(new CallbackReferenceConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationSourceConfiguration());
         modelBuilder.ApplyConfiguration(new AlertConfiguration());
+        modelBuilder.ApplyConfiguration(new RaisedAlertConfiguration());
+        modelBuilder.ApplyConfiguration(new PendingEventConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationSessionConfiguration());
         modelBuilder.ApplyConfiguration(new RegistrationLinkConfiguration());
         modelBuilder.ApplyConfiguration(new PreAuthenticationConfiguration());
@@ -520,5 +586,12 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration(new PrivacyRequestConfiguration());
         modelBuilder.ApplyConfiguration(new ExportConfiguration());
         modelBuilder.ApplyConfiguration(new ComplianceConfiguration());
+        modelBuilder.ApplyConfiguration(new BackgroundJobConfiguration());
+        modelBuilder.ApplyConfiguration(new KeyRotationConfiguration());
+        modelBuilder.ApplyConfiguration(new LicenceConfiguration());
+        modelBuilder.ApplyConfiguration(new MaintenanceEntryConfiguration());
+        modelBuilder.ApplyConfiguration(new ReadVolumeConfiguration());
+        modelBuilder.ApplyConfiguration(new ReadBaselineConfiguration());
+        modelBuilder.ApplyConfiguration(new BulkExportConfiguration());
     }
 }

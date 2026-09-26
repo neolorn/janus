@@ -380,6 +380,12 @@ internal sealed class Deployment : IAsyncDisposable
     public Janus.Privacy.Tests.Erasures.ErasureStoreInMemory Erasures { get; } = new();
 
     /// <summary>
+    /// The off-host erasure ledger, so a test can read the lines written and make the
+    /// storage unreachable.
+    /// </summary>
+    public Janus.Privacy.Tests.Erasures.ErasureLedgerInMemory Ledger { get; } = new();
+
+    /// <summary>
     /// What the other areas hold of an export, so a test can arrange it.
     /// </summary>
     public ExportSourceInMemory ExportSource { get; } = new();
@@ -476,6 +482,17 @@ internal sealed class Deployment : IAsyncDisposable
     public AlertLedgerInMemory Alerts { get; } = new();
 
     /// <summary>
+    /// The raised conditions the alert channels have not yet carried.
+    /// </summary>
+    public RaisedAlertsInMemory Raised { get; } = new();
+
+    /// <summary>
+    /// The compromised-password corpora screening asks, which a test can make
+    /// unreachable.
+    /// </summary>
+    public LeakedPasswordCorpusInMemory Corpus { get; } = new();
+
+    /// <summary>
     /// The sends counted against the restrictions, which a delivery report can release.
     /// </summary>
     public SendLedgerInMemory SendLedger { get; } = new();
@@ -547,6 +564,11 @@ internal sealed class Deployment : IAsyncDisposable
     public Janus.Authentication.Tests.Mailboxes.MailServerInMemory MailServer { get; } = new();
 
     /// <summary>
+    /// The licences and permits warned of and the maintenance log.
+    /// </summary>
+    public Janus.Authentication.Tests.Maintenance.MaintenanceStoreInMemory Maintenance { get; } = new();
+
+    /// <summary>
     /// The domains organizations lock their members to.
     /// </summary>
     public Janus.Authentication.Tests.Organizations.DomainStoreInMemory Domains { get; } = new();
@@ -567,6 +589,36 @@ internal sealed class Deployment : IAsyncDisposable
     private Janus.Authorization.Tests.Gate.AdministrativeOrganizationInMemory GateAdministrative { get; } = new();
 
     /// <summary>
+    /// The issues of the break-glass credential and the attempts at it.
+    /// </summary>
+    public Janus.Authentication.Tests.BreakGlass.BreakGlassStoreInMemory BreakGlass { get; } = new();
+
+    /// <summary>
+    /// What was written down about the break-glass credential.
+    /// </summary>
+    public Janus.Authentication.Tests.BreakGlass.BreakGlassAuditInMemory BreakGlassAudit { get; } = new();
+
+    /// <summary>
+    /// The reserved emergency account as the authentication area reads it.
+    /// </summary>
+    private Janus.Authentication.Tests.BreakGlass.EmergencyAccountInMemory Emergency { get; } = new();
+
+    /// <summary>
+    /// The reserved emergency account as the authorization area reads it.
+    /// </summary>
+    private Janus.Authorization.Tests.Grants.EmergencyAccountInMemory GrantEmergency { get; } = new();
+
+    /// <summary>
+    /// Names the account the break-glass session belongs to, as bootstrap does.
+    /// </summary>
+    /// <param name="account">The reserved emergency account.</param>
+    public void Reserves(SubjectId account)
+    {
+        Emergency.Account = account;
+        GrantEmergency.Account = account;
+    }
+
+    /// <summary>
     /// Names the organization that administers the deployment, as bootstrap does, so a
     /// permission granted there is one an administrative operation honours.
     /// </summary>
@@ -578,6 +630,22 @@ internal sealed class Deployment : IAsyncDisposable
         GateAdministrative.Organization = organization;
         Gate.Administrative = organization;
         Organizations.Seed(organization, administrative: true);
+    }
+
+    /// <summary>
+    /// Runs one pass of the alert channels, in a scope of its own as the worker would.
+    /// </summary>
+    /// <returns>How many raised conditions were carried.</returns>
+    public async Task<int> CarryAlertsAsync()
+    {
+        await using AsyncServiceScope scope = _application.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider
+                .GetRequiredService<AlertDispatch>()
+                .CarryAsync(CancellationToken.None))
+            .Match(
+                carried => carried,
+                error => throw new InvalidOperationException("The alert channels refused: " + error.Code + "."));
     }
 
     /// <summary>
@@ -642,7 +710,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<ISendOutbox, SendOutboxInMemory>();
         _ = services.AddSingleton<INoticeLedger, NoticeLedgerInMemory>();
         _ = services.AddSingleton<ISmsBalanceLedger, SmsBalanceLedgerInMemory>();
-        _ = services.AddSingleton<ILeakedPasswordCorpus, LeakedPasswordCorpusInMemory>();
+        _ = services.AddSingleton<ILeakedPasswordCorpus>(Corpus);
         _ = services.AddSingleton<IWordList, WordListInMemory>();
         _ = services.AddSingleton<IScreeningLog, ScreeningLogInMemory>();
         _ = services.AddSingleton<IRecoveryCodeStore, RecoveryCodeStoreInMemory>();
@@ -737,6 +805,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<StepUpGuard>();
         _ = services.AddScoped<IStepUpGate, StepUpGate>();
         _ = services.AddScoped<ILocationResolver, LocationResolverInMemory>();
+        _ = services.AddScoped<ConcurrentSessions>();
         _ = services.AddScoped<SessionService>();
         _ = services.AddScoped<ISessions>(provider => provider.GetRequiredService<SessionService>());
         _ = services.AddScoped<PreAuthenticationService>();
@@ -787,12 +856,14 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<WorkingCalendar>();
         _ = services.AddScoped<RestrictionGrant>();
         _ = services.AddScoped<DeadlineSweep>();
+        _ = services.AddScoped<HolidayListWatch>();
         _ = services.AddScoped<IPrivacyRequests, PrivacyRequestService>();
         _ = services.AddSingleton<IExportSource>(ExportSource);
         _ = services.AddSingleton<IExportLedger>(ExportLedger);
         _ = services.AddScoped<IExports, ExportService>();
         _ = services.AddScoped<ITakedowns, Janus.Privacy.Takedowns.TakedownService>();
         _ = services.AddSingleton<Janus.Privacy.Erasures.IErasureStore>(Erasures);
+        _ = services.AddSingleton<IErasureLedger>(Ledger);
         _ = services.AddScoped<IErasures, Janus.Privacy.Erasures.ErasureService>();
         _ = services.AddSingleton(Janus.Privacy.Tests.Declaration.Reaching);
         _ = services.AddSingleton<Janus.Privacy.Records.IComplianceStore>(Compliance);
@@ -805,12 +876,20 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IAlertLedger>(Alerts);
         _ = services.AddSingleton<IAlertLog, AlertLogInMemory>();
         _ = services.AddScoped<AlertRouter>();
+        _ = services.AddScoped<IAlertChannels, AlertChannels>();
+        _ = services.AddSingleton<IRaisedAlerts>(Raised);
+        _ = services.AddScoped<AlertDispatch>();
+        _ = services.AddSingleton<Janus.Authentication.BreakGlass.IEmergencyAccount>(Emergency);
+        _ = services.AddSingleton<Janus.Authentication.BreakGlass.IBreakGlassStore>(BreakGlass);
+        _ = services.AddSingleton<Janus.Authentication.BreakGlass.IBreakGlassAudit>(BreakGlassAudit);
+        _ = services.AddScoped<Janus.Authentication.BreakGlass.BreakGlassService>();
         _ = services.AddScoped<AlertDestinationChange>();
         _ = services.AddScoped<IConfigurationAdministration, ConfigurationService>();
         _ = services.AddSingleton<ISendAudit, SendAuditInMemory>();
         _ = services.AddScoped<RestrictionAdministration>();
         _ = services.AddScoped<IRestrictionSet, RestrictionSetService>();
         _ = services.AddSingleton<Janus.Authorization.Gate.IAdministrativeOrganization>(GateAdministrative);
+        _ = services.AddSingleton<Janus.Authorization.Grants.IEmergencyAccount>(GrantEmergency);
         _ = services.AddSingleton<Janus.Authorization.Grants.IGrantStore>(AccessGrants);
         _ = services.AddSingleton<Janus.Authorization.Roles.IRoleStore>(Roles);
         _ = services.AddSingleton<Janus.Authorization.Groups.IGroupStore>(Groups);
@@ -835,6 +914,9 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Authentication.Invitations.IRoleCatalogue>(RoleCatalogue);
         _ = services.AddSingleton<Janus.Authentication.Mailboxes.IMailboxStore>(Mailboxes);
         _ = services.AddSingleton<IMailServer>(MailServer);
+        _ = services.AddSingleton<Janus.Authentication.Maintenance.IMaintenanceStore>(Maintenance);
+        _ = services.AddScoped<Janus.Authentication.Maintenance.MaintenanceRecords>();
+        _ = services.AddScoped<Janus.Authentication.Maintenance.LicenceExpiry>();
         _ = services.AddSingleton<Janus.Authentication.Invitations.IMembershipAttachment>(Attachments);
         _ = services.AddScoped<Janus.Authentication.Invitations.InvitationAcknowledgement>();
         _ = services.AddSingleton<Janus.Authentication.Invitations.IMembershipEnding>(Endings);
@@ -849,6 +931,8 @@ internal sealed class Deployment : IAsyncDisposable
 
         _ = services.AddSingleton(new BrowserSessionCookies(application));
         _ = services.AddScoped<SynchronizerTokens>();
+        _ = services.AddScoped<ConcealedRefusals>();
+        _ = services.AddScoped<Concealment>();
         _ = services.AddScoped<MalformedRequest>();
         _ = services.AddScoped<ResourceIsolation>();
         _ = services.AddScoped<CustomRequestHeader>();

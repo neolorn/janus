@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Janus.Core;
+using Janus.Privacy.Tests.Outbox;
 using Xunit;
 
 namespace Janus.Privacy.Tests;
@@ -104,6 +105,50 @@ public sealed class HandlerCoverageTests
     }
 
     /// <summary>
+    /// DR-016 AC2, IDN-LIFE-003a: a subscriber registered under the name the erasure
+    /// ledger's confirmation is recorded under would take the ledger's line for its own
+    /// work, so the deployment does not start, and the failure names it.
+    /// </summary>
+    [Fact]
+    public void DR_016_AC2_ASubscriberUnderTheLedgersNameFailsStartup()
+    {
+        Result outcome = Coverage(
+            [Covering(Statement), new SubscriberInMemory("erasure-ledger", required: true)],
+            [new PurposeHandlerInMemory("security")]).Validate();
+
+        Assert.Equal(
+            ErrorCodes.StartupSubscriberName,
+            outcome.Match(() => (ErrorCode?)null, failure => failure.Code));
+        Assert.Equal(
+            "erasure-ledger",
+            outcome.Match(
+                () => null,
+                failure => failure.Details["handler"].GetString()));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003a AC3: two subscribers under one name would share one confirmation,
+    /// so the second would never be offered an event the first had confirmed; the
+    /// deployment does not start.
+    /// </summary>
+    [Fact]
+    public void IDN_LIFE_003a_TwoSubscribersUnderOneNameFailStartup()
+    {
+        Result outcome = Coverage(
+            [Covering(Statement), new SubscriberInMemory("host", required: false)],
+            [new PurposeHandlerInMemory("security")]).Validate();
+
+        Assert.Equal(
+            ErrorCodes.StartupSubscriberName,
+            outcome.Match(() => (ErrorCode?)null, failure => failure.Code));
+        Assert.Equal(
+            "host",
+            outcome.Match(
+                () => null,
+                failure => failure.Details["handler"].GetString()));
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-001a AC3: a purpose on a basis that is not objectable is asked no
     /// handler of, so registering the objectable one is enough.
     /// </summary>
@@ -117,7 +162,7 @@ public sealed class HandlerCoverageTests
         Assert.True(outcome.Match(() => true, _ => false));
     }
 
-    private static Outbox.SubscriberInMemory Covering(ResourceType type) =>
+    private static SubscriberInMemory Covering(ResourceType type) =>
         new("host", required: true) { Covers = [type] };
 
     private static HandlerCoverage Coverage(

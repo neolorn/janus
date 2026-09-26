@@ -9,19 +9,21 @@ namespace Janus.Hosting;
 
 /// <summary>
 /// Reads the declared sensitive types and objectable purposes against the handlers
-/// the host registered, before the web server starts.
+/// the host registered, and the subscribers' names against each other, before the web
+/// server starts.
 /// </summary>
 /// <param name="scopes">Where the scope the check reads in comes from.</param>
 /// <remarks>
-/// Implements PRIV-RIGHT-005b, PRIV-RIGHT-001a, IDN-LIFE-003a and D-160. A handler
-/// that is not there is found now rather than at the erasure that would have reached
-/// no one.
+/// Implements PRIV-RIGHT-005b, PRIV-RIGHT-001a, IDN-LIFE-003a, DR-016 and D-160. A
+/// handler that is not there, or answers to another's name, is found now rather than at
+/// the erasure that would have reached no one.
 /// </remarks>
 internal sealed class HandlerValidationService(IServiceScopeFactory scopes) : IHostedService
 {
     /// <inheritdoc/>
     /// <exception cref="StartupException">
-    /// A sensitive resource type or an objectable purpose has no registered handler.
+    /// A sensitive resource type or an objectable purpose has no registered handler, or
+    /// a subscriber's name is taken.
     /// </exception>
     public Task StartAsync(CancellationToken cancellationToken)
     {
@@ -33,7 +35,7 @@ internal sealed class HandlerValidationService(IServiceScopeFactory scopes) : IH
             .Switch(
                 () => { },
                 failure => throw new StartupException(
-                    "A sensitive resource type or an objectable purpose the deployment declares has no registered handler.",
+                    "A subject-event subscriber's name is taken, or a sensitive resource type or an objectable purpose the deployment declares has no registered handler.",
                     failure));
 
         return Task.CompletedTask;

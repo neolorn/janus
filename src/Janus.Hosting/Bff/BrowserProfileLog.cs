@@ -1,3 +1,4 @@
+using System;
 using Microsoft.Extensions.Logging;
 
 namespace Janus.Hosting.Bff;
@@ -183,4 +184,30 @@ internal static partial class BrowserProfileLog
         Level = LogLevel.Information,
         Message = "A cross-site POST navigation without a session was sent on as a GET ({CorrelationId}).")]
     public static partial void CrossSiteReturn(ILogger log, string correlationId);
+
+    /// <summary>
+    /// A refusal on a type that conceals, answered as the absence of the record
+    /// (AUTHZ-CONCEAL-004).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    /// <param name="correlation">The audit record the refusal was written as.</param>
+    [LoggerMessage(
+        EventId = 15,
+        Level = LogLevel.Information,
+        Message = "The refusal recorded as {Correlation} was answered as an absent record ({CorrelationId}).")]
+    public static partial void Concealed(ILogger log, string correlationId, Guid correlation);
+
+    /// <summary>
+    /// A refusal on a type that conceals, made after the endpoint had begun its answer,
+    /// which could then only be broken off (BFF-ERR-003).
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    /// <param name="correlation">The audit record the refusal was written as.</param>
+    [LoggerMessage(
+        EventId = 16,
+        Level = LogLevel.Error,
+        Message = "The refusal recorded as {Correlation} came after the answer had begun, so the connection was closed ({CorrelationId}).")]
+    public static partial void ConcealedTooLate(ILogger log, string correlationId, Guid correlation);
 }

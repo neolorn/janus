@@ -21,4 +21,10 @@ internal sealed record SessionOrigin(string Address, DeviceDescription Device)
     /// say.
     /// </summary>
     public SessionLocation? Location { get; init; }
+
+    /// <summary>
+    /// Where the city lies, absent where no city was resolved. It is never shown; it is
+    /// what two sessions' cities are measured apart by (OPS-ALERT-007).
+    /// </summary>
+    public Coordinates? Coordinates { get; init; }
 }

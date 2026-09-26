@@ -74,6 +74,10 @@ internal sealed class AuditConfiguration : IEntityTypeConfiguration<AuditRowReco
 
         builder.Property(record => record.PersonalDetails).HasColumnName(PersonalDetailsColumn);
 
+        builder.Property(record => record.Principal).HasColumnName("principal");
+
+        builder.Property(record => record.PrincipalReason).HasColumnName("principal_reason");
+
         // PRIV-BREACH-002: every record of one subject, without a full scan.
         builder.HasIndex(record => new { record.EffectiveSubject, record.OccurredAt })
             .HasDatabaseName("ix_audit_records_effective_subject");

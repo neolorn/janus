@@ -25,13 +25,15 @@ namespace Janus.Authentication.Sessions;
 /// <param name="configuration">Where the lifetimes are read from.</param>
 /// <param name="scope">Whether the caller may end sessions that are not their own.</param>
 /// <param name="locations">What the address a session was used from resolves to.</param>
+/// <param name="concurrent">The watch over sessions used implausibly far apart at once.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where a session secret is drawn from.</param>
 /// <remarks>
-/// Implements AUTH-SESS-001 to AUTH-SESS-013 and IDN-LIFE-012a. Lifetimes are read
-/// from the assurance the principal's policy requires and from nothing else, so the
-/// session a passkey opened lives exactly as long as the one a password opened.
+/// Implements AUTH-SESS-001 to AUTH-SESS-013, IDN-LIFE-012a and OPS-ALERT-007.
+/// Lifetimes are read from the assurance the principal's policy requires and from
+/// nothing else, so the session a passkey opened lives exactly as long as the one a
+/// password opened.
 /// </remarks>
 internal sealed class SessionService(
     ISessionStore sessions,
@@ -42,6 +44,7 @@ internal sealed class SessionService(
     IConfigurationStore configuration,
     AdministrativeScope scope,
     ILocationResolver locations,
+    ConcurrentSessions concurrent,
     IUnitOfWork work,
     TimeProvider time,
     RandomNumberGenerator randomness) : ISessions
@@ -71,7 +74,8 @@ internal sealed class SessionService(
     /// which the emergency path uses and nothing else does. The floor does not hold
     /// it, because the credential behind it is one printed secret and enforcing the
     /// floor would refuse the session the emergency exists for; the compensating
-    /// control is the alerting.
+    /// control is the alerting. It lives for <c>breakglass.session.lifetime</c>, not
+    /// for the policy's lifetimes.
     /// </summary>
     /// <param name="subject">Who signed in.</param>
     /// <param name="presented">What they presented.</param>
@@ -177,6 +181,8 @@ internal sealed class SessionService(
         }
 
         SessionOrigin used = located.Match(one => one, _ => origin);
+        SessionOrigin before = session.LastSeen;
+        DateTimeOffset usedBefore = session.LastSeenAt;
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
@@ -190,6 +196,12 @@ internal sealed class SessionService(
         {
             spine.Touch(used, now, inactivity);
             await sessions.RecordAsync(spine, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (await UnwatchedAsync(session, before, usedBefore, now, cancellationToken)
+                .ConfigureAwait(false) is Error unraised)
+        {
+            return Result.Failure<Session>(unraised);
         }
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -318,6 +330,9 @@ internal sealed class SessionService(
             return Result.Failure<IssuedSession>(unlocated);
         }
 
+        SessionOrigin before = session.LastSeen;
+        DateTimeOffset usedBefore = session.LastSeenAt;
+
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
         session.Present(proved, now);
@@ -332,6 +347,13 @@ internal sealed class SessionService(
             .ConfigureAwait(false);
         await audit.PresentedAsync(session.Id, session.Subject, presented, now, cancellationToken)
             .ConfigureAwait(false);
+
+        if (await UnwatchedAsync(session, before, usedBefore, now, cancellationToken)
+                .ConfigureAwait(false) is Error unraised)
+        {
+            return Result.Failure<IssuedSession>(unraised);
+        }
+
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success(new IssuedSession(session.Id, restored, restoredToken));
@@ -432,6 +454,13 @@ internal sealed class SessionService(
         await sessions
             .AddAsync(derived, secret.Fingerprint(), token.Fingerprint(), cancellationToken)
             .ConfigureAwait(false);
+
+        if (await UnwatchedAsync(derived, before: null, usedBefore: null, now, cancellationToken)
+                .ConfigureAwait(false) is Error unraised)
+        {
+            return Result.Failure<IssuedSession>(unraised);
+        }
+
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success(new IssuedSession(derived.Id, secret, token));
@@ -648,6 +677,19 @@ internal sealed class SessionService(
             await ReadAsync(absolute, cancellationToken).ConfigureAwait(false));
     }
 
+    // OPS-BOOT-002 AC2: the emergency session ends at a lifetime of its own, within the
+    // ceiling the setting enforces, and is never idle for longer than it lives.
+    private async ValueTask<(TimeSpan Inactivity, TimeSpan Absolute)> EmergencyLifetimesAsync(
+        Policy policy,
+        CancellationToken cancellationToken)
+    {
+        (TimeSpan inactivity, TimeSpan _) = await LifetimesAsync(policy, cancellationToken).ConfigureAwait(false);
+        TimeSpan lifetime = await ReadAsync(Settings.BreakGlassSessionLifetime, cancellationToken)
+            .ConfigureAwait(false);
+
+        return (inactivity < lifetime ? inactivity : lifetime, lifetime);
+    }
+
     private async ValueTask<TimeSpan> ReadAsync(
         DurationSetting setting,
         CancellationToken cancellationToken) =>
@@ -661,8 +703,25 @@ internal sealed class SessionService(
         CancellationToken cancellationToken) =>
         (await locations.ResolveAsync(origin.Address, cancellationToken).ConfigureAwait(false))
             .Match(
-                place => Result.Success(origin with { Location = place }),
+                place => Result.Success(origin with
+                {
+                    Location = place?.Location,
+                    Coordinates = place?.Coordinates,
+                }),
                 Result.Failure<SessionOrigin>);
+
+    // OPS-ALERT-007: a use is looked at in the transaction that records it, so a
+    // condition that cannot be raised leaves the use unrecorded (CONV-DESIGN-005).
+    private async ValueTask<Error?> UnwatchedAsync(
+        Session session,
+        SessionOrigin? before,
+        DateTimeOffset? usedBefore,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) =>
+        (await concurrent
+            .WatchAsync(session, before, usedBefore, now, cancellationToken)
+            .ConfigureAwait(false))
+        .Match(() => (Error?)null, error => error);
 
     private async ValueTask<Result<IssuedSession>> BeginAsync(
         SubjectId subject,
@@ -702,8 +761,9 @@ internal sealed class SessionService(
             return Result.Failure<IssuedSession>(Error.From(ErrorCodes.FactorRequired));
         }
 
-        (TimeSpan inactivity, TimeSpan absolute) =
-            await LifetimesAsync(policy, cancellationToken).ConfigureAwait(false);
+        (TimeSpan inactivity, TimeSpan absolute) = satisfiesEveryGate
+            ? await EmergencyLifetimesAsync(policy, cancellationToken).ConfigureAwait(false)
+            : await LifetimesAsync(policy, cancellationToken).ConfigureAwait(false);
 
         DateTimeOffset now = time.GetUtcNow();
 
@@ -734,6 +794,13 @@ internal sealed class SessionService(
         await audit.PresentedAsync(session.Id, subject, presented, now, cancellationToken)
             .ConfigureAwait(false);
         await RestoreAsync(subject, presented, now, cancellationToken).ConfigureAwait(false);
+
+        if (await UnwatchedAsync(session, before: null, usedBefore: null, now, cancellationToken)
+                .ConfigureAwait(false) is Error unraised)
+        {
+            return Result.Failure<IssuedSession>(unraised);
+        }
+
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success(new IssuedSession(session.Id, secret, token));

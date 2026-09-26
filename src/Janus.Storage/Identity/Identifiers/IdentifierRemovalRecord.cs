@@ -35,6 +35,12 @@ internal sealed class IdentifierRemovalRecord
     public byte[] Fingerprint { get; set; } = [];
 
     /// <summary>
+    /// The <c>fingerprint_version</c> column: the version of the fingerprint key the
+    /// fingerprint was computed under.
+    /// </summary>
+    public int FingerprintVersion { get; set; }
+
+    /// <summary>
     /// The <c>enc_entered</c> column: the form the person entered.
     /// </summary>
     public byte[] Entered { get; set; } = [];

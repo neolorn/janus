@@ -18,7 +18,7 @@ namespace Janus.Authentication.Sending;
 /// <param name="configuration">Where the threshold, the delays and the caps come from.</param>
 /// <param name="ledger">Where failures are counted.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
-/// <param name="events">Where the sustained-failure alert goes.</param>
+/// <param name="alerts">Where the sustained-failure alert goes.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements AUTH-ABUSE-001, AUTH-ABUSE-002 and OPS-ALERT-001. A source arriving
@@ -29,7 +29,7 @@ internal sealed class ThrottleService(
     IConfigurationStore configuration,
     IThrottleLedger ledger,
     IUnitOfWork work,
-    IEvents events,
+    IAlertChannels alerts,
     TimeProvider time)
 {
     /// <summary>
@@ -137,8 +137,8 @@ internal sealed class ThrottleService(
 
             if (scope is ThrottleScope.Account && standing + 1 >= threshold)
             {
-                Result published = await events
-                    .PublishAsync(
+                Result published = await alerts
+                    .RaiseAsync(
                         Alerts.Of(AlertCondition.AuthFailuresSustained, key, now),
                         cancellationToken)
                     .ConfigureAwait(false);

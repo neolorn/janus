@@ -191,38 +191,6 @@ internal sealed class RecoveryCodeService(
         Result.Success(
             (await sets.FindAsync(subject, cancellationToken).ConfigureAwait(false))?.Remaining ?? 0);
 
-    /// <summary>
-    /// Whether the account's set is old enough for the one reminder it gets, and
-    /// records that the reminder was sent where it is.
-    /// </summary>
-    /// <param name="subject">Whose set.</param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Whether a reminder is due now.</returns>
-    public async ValueTask<Result<bool>> RemindAsync(
-        SubjectId subject,
-        CancellationToken cancellationToken)
-    {
-        RecoveryCodeSet? held = await sets.FindAsync(subject, cancellationToken).ConfigureAwait(false);
-        DateTimeOffset now = time.GetUtcNow();
-
-        TimeSpan after = (await configuration.ReadAsync(Settings.RecoveryCodesReminder, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.RecoveryCodesReminder.Default);
-
-        if (held is null || !held.RemindsAt(now, after))
-        {
-            return Result.Success(false);
-        }
-
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-
-        held.Reminded(now);
-        await sets.RecordAsync(held, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-        return Result.Success(true);
-    }
-
     private static TValue Held<TValue>(Error error, ref Error? failure)
     {
         failure = error;

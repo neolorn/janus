@@ -5,12 +5,14 @@ using Janus.Authentication;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sessions;
 using Janus.Core;
+using Janus.Identity.Accounts;
 using Janus.Privacy.Requests;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Privacy.Requests;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Storage.Tests.Privacy;
@@ -195,6 +197,54 @@ public sealed class AccountStatesTests(DatabaseFixture database)
         }
 
         Assert.Equal(DeletionOrigin.Self, (await StandingAsync(subject)).DeletingBy);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002: the reserved account reads back as the reserved account, a
+    /// takedown leaves it standing, and the database holds no second one.
+    /// </summary>
+    [Fact]
+    public async Task OPS_BOOT_002_TheReservedAccountIsNeverTakenDownAsync()
+    {
+        SubjectId reserved = Subjects.New();
+
+        await using (StoreContext writing = database.Context())
+        {
+            await new AccountStore(writing).AddAsync(
+                Account.CreateEmergency(reserved, Noon),
+                TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (StoreContext taking = database.Context())
+        {
+            Assert.False(await States(taking).TakeDownAsync(
+                reserved,
+                Noon,
+                TestContext.Current.CancellationToken));
+        }
+
+        await using StoreContext reading = database.Context();
+
+        Account read = Assert.IsType<Account>(
+            await new AccountStore(reading).FindBySubjectAsync(reserved, TestContext.Current.CancellationToken));
+
+        Assert.True(read.IsEmergency);
+        Assert.Equal(AccountState.Active, read.State);
+
+        await using StoreContext again = database.Context();
+
+        DbUpdateException refusal = await Assert.ThrowsAsync<DbUpdateException>(async () =>
+        {
+            await new AccountStore(again).AddAsync(
+                Account.CreateEmergency(Subjects.New(), Noon),
+                TestContext.Current.CancellationToken);
+            await again.SaveChangesAsync(TestContext.Current.CancellationToken);
+        });
+
+        Assert.Equal(
+            "ux_accounts_emergency",
+            Assert.IsType<PostgresException>(refusal.InnerException).ConstraintName);
     }
 
     private AccountStates States(StoreContext context) =>

@@ -93,6 +93,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
                 new AdministrativeScope(_gate, _administrative),
                 new PolicyResolution(new MembershipLookupInMemory(), _configuration, new PolicyRaiseStoreInMemory()),
                 new RelayRegistration(_configuration, _events, _clock),
+                _events,
                 _work,
                 _clock),
             new AlertRouter(
@@ -108,6 +109,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
                     Considered.Nothing(_work, _clock),
                     new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
                     _work,
+                    _events,
                     _events,
                     _clock,
                     _randomness),

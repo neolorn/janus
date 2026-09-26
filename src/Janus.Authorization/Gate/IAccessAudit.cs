@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -23,6 +24,14 @@ internal interface IAccessAudit
     ValueTask RecordAsync(DeniedAccess denial, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Records one admitted export.
+    /// </summary>
+    /// <param name="export">What was exported, by whom and when.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask RecordAsync(ExportedAccess export, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reads back the refusal a correlation identifier stands for.
     /// </summary>
     /// <param name="correlation">The identifier the refusal was answered with.</param>
@@ -30,5 +39,19 @@ internal interface IAccessAudit
     /// <returns>The refusal, or nothing where the identifier stands for none.</returns>
     ValueTask<DeniedAccess?> FindAsync(
         AuditRecordId correlation,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Counts the refusals recorded against one actor inside a window.
+    /// </summary>
+    /// <param name="acting">The actor, or nothing for the refusals that name no one.</param>
+    /// <param name="from">Where the window opens.</param>
+    /// <param name="until">Where the window closes, itself outside it.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>How many refusals the window holds.</returns>
+    ValueTask<int> CountAsync(
+        SubjectId? acting,
+        DateTimeOffset from,
+        DateTimeOffset until,
         CancellationToken cancellationToken);
 }

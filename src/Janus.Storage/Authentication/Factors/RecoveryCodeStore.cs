@@ -124,6 +124,23 @@ internal sealed class RecoveryCodeStore(StoreContext context) : IRecoveryCodeSto
         }
     }
 
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<SubjectId>> DueReminderAsync(
+        DateTimeOffset generatedBy,
+        int count,
+        CancellationToken cancellationToken) =>
+        await context.RecoveryCodeSets
+            .Where(set => set.RemindedAt == null
+                && set.GeneratedAt <= generatedBy
+                && context.Accounts.Any(account =>
+                    account.Subject == set.Subject && account.State == AccountState.Active))
+            .OrderBy(set => set.GeneratedAt)
+            .ThenBy(set => set.Subject)
+            .Take(count)
+            .Select(set => set.Subject)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
     private async Task<List<RecoveryCodeRecord>> CodesAsync(
         SubjectId subject,
         CancellationToken cancellationToken) =>

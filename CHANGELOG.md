@@ -10,6 +10,27 @@ against the public contract of LIB-API-001.
 
 ### Changed
 
+- A fall back from the configured compromised-password corpus to the offline one is
+  raised as `degradation` under the scope `password.blocklist.fallback`, naming both
+  corpora, and no longer only logged. Where the alert cannot be raised the password is
+  refused.
+- `AddJanus` takes the maintenance credential after the sign-on secret: the database
+  connection of a login holding the maintenance role's rights, read from the secrets
+  manager. A deployment that supplies none does not start, with
+  `model.startup.kekunavailable` naming `maintenanceCredential`.
+- Startup refuses two subject-event subscribers registered under one name, and any
+  subscriber named `erasure-ledger`, with `model.startup.subscribername` naming it,
+  since a confirmation is recorded under the name and a shared one would let an
+  erasure close with a subscriber's work undone.
+- The fingerprint key now has versions, as the key-encryption key has.
+  `ISecretSource.ReadFingerprintKeysAsync` and `AddJanus` take a `FingerprintKeys`,
+  the current version and every version still held, and the key document piped to the
+  command line names `fingerprintKeys` with `current` and `versions`. Startup refuses a
+  set without its current version, or with any version shorter than 32 bytes. Every
+  fingerprint is written under the current version and found under any version held.
+  A deployment's existing fingerprints are version 1, so its first document names its
+  one key as version 1.
+
 - Every access token now names the client it was issued to in `aud`, beside
   `client_id`, as RFC 9068 has it; the token the library hands the mail server for app
   passwords names the mail server's client. A party verifying a token offline can now
@@ -359,6 +380,188 @@ against the public contract of LIB-API-001.
   `model.startup.declarationmissing` naming the key.
 
 ### Added
+
+- The annual operation on the envelope, in which the key-encryption key is rotated, is
+  warned of: a daily job, `envelope-rotation`, raises `expiry-approaching` from
+  `maintenance.expiry.warninglead` before a year has passed since the last
+  `envelope-rotation` entry of the maintenance log, and goes on raising it until the
+  next one is recorded. A log that records none has the operation due now.
+- `janus register-client` registers a client in the provider's registry, or changes a
+  registered one, from the server: `--client`, `--name`, `--kind`, `--redirect` and
+  `--scopes`, with the secret piped in the key document as `clientSecret`. The registry
+  keeps what the secret hashes to. Registering a client again with a new secret keeps
+  the one it replaced accepted for the access-token lifetime and five minutes, which is
+  how a client secret is rotated. Each registration is recorded as
+  `auth.oidc.clientregistered`.
+- The audit trail's monthly partitions are kept by a daily job, `audit-partitions`,
+  under the maintenance credential: the current month and the two after it are created
+  where missing, and partitions past `retention.audit.security` or
+  `retention.audit.routine` are dropped. The job refuses any other credential, and each
+  run is recorded as `ops.auditpartitions.maintained`.
+- A set of recovery codes older than `recovery.codes.reminder` now reminds its owner,
+  once, on every channel of the security-notice set, under the new message kind
+  `recovery-codes-reminder`; a daily job sends it to active accounts only. The account
+  read shows `recoveryCodes.remindedAt`, and the export carries it.
+- The restore test runs by itself every `backup.restoretest.interval`. A deployment
+  registers `IRestoreTestInstance`, which restores its latest backup into a throwaway
+  instance and tears it down again; the library opens the restored database with the
+  keys it runs on, decrypts the canary's field, finds the canary's account by its
+  verified email, and times the whole against `backup.restoretest.objective`. Every
+  run is recorded as `ops.restoretest.completed` with its outcome, the seconds it took
+  and the objective. A run that restores nothing, cannot decrypt, cannot find the
+  account, runs past the objective (it is abandoned there) or whose instance may still
+  stand raises `restore-test-failed`. Without an `IRestoreTestInstance`, every run
+  raises it.
+- `replay-erasures <ledger path>` carries out again, after a restore, every erasure
+  the off-host ledger records and the restored database does not: from whatever state
+  the restore left the account in, with the host told again, audited under the
+  principal `replay-erasures`. The whole ledger is read first and a line in any other
+  form refuses it whole; a second run changes nothing more. It prints how many lines
+  were carried out again, stood already, or named no account.
+- A deployment can register `IErasureLedger` over storage that does not share fate
+  with the database host. Every erasure's line (its instant to the second, the subject
+  identifier and the reason) is appended to it before the erasure completes: the line
+  is a required confirmation named `erasure-ledger`, retried and raised as any
+  required subscriber is and listed first at `GET /admin/erasures/{id}`, and the manual
+  completion appends it itself and answers `system.fault` while the ledger refuses it.
+  Without a ledger, erasures complete as before.
+- `no-emergency-credential` is raised by the hourly `emergency-credential` job for as
+  long as no break-glass credential stands, including after one is spent, and stops
+  only when one is generated.
+- A deployment can register `IClockReference`, which reports how far the host's clock
+  stands from the time the environment keeps it to, and `ICertificateRenewal`, which
+  reports when the last certificate renewal failed. The hourly `clock-drift` job raises
+  `clock-drift` when the offset exceeds `factor.totp.drift` steps of 30 seconds, and the
+  hourly `certificate-renewal` job raises `certificate-renewal-failed` until a renewal
+  succeeds. Either one missing, or unable to answer, is raised as `degradation`.
+- A permission a host declares with the action `export` is an export operation. While
+  `exfiltration.export.stepuprequired` is on, exercising one asks the session for
+  step-up even where the host bound it to no gate, so a system principal cannot export
+  until the deployment turns the flag off. Each person or principal is admitted
+  `exfiltration.export.ratelimit` exports in any rolling hour, and the next is refused
+  with `auth.throttled` and `retryAt`. Every admitted export is recorded as
+  `authz.access.exported`, naming who exported, the operation, the kind of record and
+  the one record a check named. A check, a list filter and an SQL fragment exercising
+  the permission each count as one export; a capability page does not.
+- A host reports through `IReadVolume` how many records each gate-filtered query or
+  export returned to a person. Each person's count for the day in
+  `privacy.calendar.timezone` is compared with their own daily mean over
+  `exfiltration.readvolume.baselinewindow`, recomputed by the daily
+  `read-volume-baseline` job, and `read-volume-anomaly` is raised when it exceeds both
+  `exfiltration.readvolume.factor` times that mean and `exfiltration.readvolume.minimum`.
+  Work done by a system principal is not counted.
+- Two sessions of one account used inside `alerting.sessions.window` from cities
+  further apart than `alerting.sessions.distance`, or in different countries, raise
+  `concurrent-sessions-implausible` for the account, naming the two sessions and
+  neither place. Ordinary use on several devices in one city or nearby raises nothing.
+- A deployment can supply its IP-to-city file through `ILocationSource`, in the format
+  the interface documents. Sessions then show the city and country each was used from,
+  resolved in process against a copy read on first use and refreshed by the
+  `location-database` job every `location.database.refresh`. A file that cannot be read
+  whole is refused and the copy held before it kept; a missing, refused or stale file
+  raises `degradation` and the session is shown without a location.
+- The daily `holiday-list` job raises `holiday-list-exhausted` when no date in
+  `privacy.holidays` falls beyond `maintenance.expiry.warninglead`, an empty list
+  included. Deadlines are counted as before; the alert only asks for the next dates.
+- Licence and permit expiry dates are kept and read at `/admin/compliance/licences`,
+  and the daily `licence-expiry` job raises `expiry-approaching` for each one within
+  `maintenance.expiry.warninglead`, a lapsed one included. The maintenance log is read
+  and appended at `/admin/compliance/maintenance`, each entry carrying the person who
+  recorded it; no route changes or removes an entry and the database role cannot. Both
+  answer to `compliance:manage`.
+- A message no transport took is now carried again. The `sends` job retries it under
+  `outbox.retry.*` in the languages still owed, judged by the restrictions and held by
+  the gateway floor as any send is, and counts it only once a transport takes it. Once
+  the budget is spent the message is removed and `degradation` is raised for its
+  channel, naming the message and never where it was going.
+- More permission refusals than `alerting.denials.threshold` against one actor inside
+  one fixed ten-minute window raise `denial-spike` for that actor. The refusals of
+  requests that name no acting subject are counted together and raised with no scope.
+- The library now carries the events it emits. An operation writes each event onto its
+  own transaction, and the `events` job offers it, once that transaction has committed,
+  to every `IEventConsumer<TEvent>` the host registered for its kind. A consumer that
+  refuses or throws is offered the event again under `outbox.retry.*`, the others are
+  not, and once the budget is spent the event is failed and `degradation` is raised. A
+  host no longer registers an `IEvents` of its own; one that does keeps it, and the
+  library's delivery is bypassed.
+- `configure` changes protected keys from the server, the one way to change a key the
+  management application refuses: pipe the key document to it as to `bootstrap` and
+  name each key as `--<key> <value>`, with `--reason`. It takes the keys chapter 10
+  section 4.8 protects and `stepup.enforcement.<organization>` for an organization the
+  deployment holds, and refuses every other key. Each change is recorded under the
+  `configure` principal with its reason and raises `protected-setting-changed`; the
+  governing language also raises `governing-language-changed`. A change that would
+  leave the deployment unable to start is refused and nothing of it is written.
+- A change to the system policy or to an organization's policy that leaves any step-up
+  gate asking less (a lower level, phishing resistance no longer asked, or a longer
+  maximum age) raises the High `stepup-policy-weakened` alert as it is made, naming the
+  policy key and the gates. An organization's alert is raised under that organization.
+- `rotate-fingerprint-key` rotates the fingerprint key from the command line under the
+  maintenance credential, as `rotate-kek` rotates the other: add the new version as
+  current, keep the previous one, restart the application on it, and pipe the document
+  to the command. It computes every stored fingerprint again from the value beside it,
+  resumes where it stopped, and prints the new version's escrow copy. Once the copy is
+  sealed, `rotate-fingerprint-key --sealed` retires the previous versions; it refuses
+  while a username held after an erasure, or an address an erased account gave up, is
+  still reserved under one of them. Retirement forgets the throttle and sending counts
+  kept under a previous version, so any of those not touched since the new version
+  became current start again from nothing. A social sign-in link now also holds the
+  provider's subject encrypted under the account's key.
+- `rotate-kek` rotates the key-encryption key from the command line under the
+  maintenance credential. Add the new version to the secrets manager as current, keep
+  the previous one, restart the application on it, and pipe the document to the
+  command: it re-wraps every value held under the key in batches of 500, resumes where
+  it stopped when run again, and prints the new version's escrow copy. Once the copy is
+  sealed, `rotate-kek --sealed` retires the previous versions and names them for
+  removal from the secrets manager; it refuses while anything is still wrapped under
+  them. Each step is audited under the `rotate-kek` principal. Refresh tokens issued
+  before the rotation stop reading once the previous version is removed.
+- A command-line application stands a fresh deployment up with `bootstrap`. It takes
+  the organization's name, the first administrator's email and phone, optionally the
+  corporate address whose mailbox is queued for them, and each required deployment
+  value as `--<key> <value>`; any other key is refused. The database connection, the
+  key-encryption keys and the fingerprint keys are read once from a JSON document piped
+  to standard input, never from a terminal, an argument or the environment. It writes
+  the named values, the three administrative roles, the administrative organization
+  and its policy, the administrator, the reserved `emergency` account holding the
+  role and no way in, and the restore test's canary, raises the alert that no
+  emergency credential exists, and prints the administrator's `/enrol` address. It
+  refuses to run where a system administrator exists or ever existed. A refusal is one
+  JSON line on standard error, with exit code 1. What it defines and sets is audited
+  under its own principal, for which `SystemOperation` gains `Bootstrap`.
+- The library runs its own scheduled work. A worker `AddJanus` registers sweeps
+  expired sessions, codes, links and tokens, ends the windows of account deletion,
+  organization erasure, loss reports and privacy-request deadlines, re-verifies locked
+  domains, publishes the outbox, provisions mailboxes, carries raised alerts,
+  reconciles the mail server daily and reads the gateway balance. Each job runs as a
+  named principal of its own, once across the processes of a deployment, and a job
+  whose last success is older than twice its interval raises `background-job-failed`.
+  `SystemOperation` gains `Delivery` and `Monitoring`. A deployment applies one
+  further migration, which adds the table the runs are kept in.
+- Background work acts as a named system principal that states its reason, and is
+  audited as one. The passes that record what they do (the account and organization
+  erasure sweeps, the privacy-request deadline sweep and the loss-report windows) run
+  only as a principal that may sweep what has expired, and are refused to a person or
+  to a principal named for other work. What they record carries the principal's name
+  and reason where a person's action carries the acting account. A deployment applies
+  one further migration, which adds the two columns to the audit trail.
+- The sealed break-glass credential. `POST /admin/break-glass/generate` generates it,
+  for a stepped-up system administrator or from a break-glass session, and answers the
+  code once, in nine check-charactered groups of four, with the absolute
+  `/break-glass` address the envelope prints; a new code invalidates the one before
+  it, and only an Argon2id hash of it is kept. `POST /auth/break-glass` takes the code
+  on the machine profile, ignoring any cookie the browser holds, and opens an auth
+  session for the reserved `emergency` account that passes every step-up gate for
+  `breakglass.session.lifetime`. A code opens one session; a group whose check
+  character is wrong is refused before any hash is compared; at most five attempts
+  an hour are taken from all sources together, besides the per-source delay.
+  Generation and use are audited under `auth.breakglass.generated` and
+  `auth.breakglass.used`, and raise `breakglass-used` to the operator and to the
+  owner whatever `alerting.owner.enabled` says. The reserved account is never
+  suspended, taken down, deleted, granted anything or added to a group, and is given
+  no password, identifier, factor, recovery codes or mail credential; each is refused
+  with `authz.denied`. One migration adds the mark of the reserved account and the
+  two tables the credential and its attempts are kept in.
 
 - `POST /callbacks/providers/google` and `POST /callbacks/providers/apple` take the
   security events Google (Cross-Account Protection) and Sign in with Apple send about
@@ -1582,6 +1785,52 @@ against the public contract of LIB-API-001.
 
 ### Fixed
 
+- A refusal on a resource type that conceals its records is answered by the browser
+  profile as `404 authz.resource.notfound`, carrying the identifier the refusal was
+  recorded under, whatever the endpoint wrote after it, and the answer is the same
+  whether or not the record exists. Each host endpoint had been left to answer the
+  gate's `authz.denied` itself, and one that answered 403 said the record was there.
+- An account that was restricted when its deletion was requested is erased when its
+  grace window ends. The erasure had been refused by the database at every attempt,
+  because the restriction held through the window was never released with it.
+- A host's action bound to a step-up gate can be performed once the person has stepped
+  up. The gate is judged against the acting person's own session, a gate named in the
+  step-up catalogue costs what the person's policy states for it, and a gate the host
+  names costs what the dearest gate of that policy costs. Every such action used to be
+  refused whatever the session had proved. The list filter and the SQL fragment now ask
+  the bound gate as the single check does, and a refusal carries what the gate costs
+  and what the person can present.
+- The fields of the records of processing a person supplies through
+  `PUT /admin/compliance/assessments` are committed. They were handed to the store and
+  never saved, so a deployment's register reported them missing whatever was supplied.
+- A change to the system policy is judged field by field, as an organization's policy
+  is: a change that only asks more is a tightening and is made without step-up or a
+  reason. Any change to the system policy used to be treated as a loosening.
+- A deployment resolves the store a browser's first contact is bound through, which
+  every sign-in reaches. The store was never handed the key-encryption keys the host
+  passes in, so resolving it failed and no browser could begin a sign-in.
+- The application's own database role, `identity_app`, reaches the rows of every table
+  the library uses and reads the migration history its startup check compares. Only
+  the tables of the first two migrations had been granted to it, so a deployment
+  running under that role, as the separation of credentials requires, could neither
+  start nor serve. A deployment applies one further migration, which grants the rest.
+- Every audit record is kept. A record written where the operation had opened no
+  transaction, or after its transaction had committed, waited for a save that never
+  came and was lost; among them were the deactivation, reactivation and deletion of an
+  account, the invalidation of a lost credential, the erasures the sweep executes, and
+  an assembled export. A record is now written through the operation's own
+  connection: inside a transaction it is part of it, and outside one it stands alone.
+- An action and its audit record commit together: the deactivation, reactivation and
+  deletion of an account and the cancellation of a deletion, the removal of a
+  credential, each step of a loss report, a recovery approval, an export and the
+  erasures the sweeps execute. Each record was written after its transaction had
+  committed, so a failure between the two left the action unrecorded.
+- Every alert condition the library raises reaches the alert destinations. It is
+  written in the transaction that raised it and carried by the alert channels after
+  that transaction commits, oldest first and once, so a condition raised by an
+  operation that then fails is never sent. Before, only a change of the alert
+  destinations reached anybody; every other condition reached the host's events
+  alone. One migration adds the table the raised conditions wait in.
 - An organization's policy that overrides the gates of some step-up actions resolves,
   every other action keeping the system's gate. Such a policy failed to resolve for
   every member of the organization.

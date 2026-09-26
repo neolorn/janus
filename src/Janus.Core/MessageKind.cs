@@ -139,4 +139,11 @@ public enum MessageKind
     /// </summary>
     [JsonStringEnumMemberName("invitation-link")]
     InvitationLink = 19,
+
+    /// <summary>
+    /// The one reminder a recovery-code set gets once it is older than
+    /// <c>recovery.codes.reminder</c>, sent to the security-notice set (AUTH-FACT-008).
+    /// </summary>
+    [JsonStringEnumMemberName("recovery-codes-reminder")]
+    RecoveryCodesReminder = 20,
 }

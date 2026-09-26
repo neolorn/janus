@@ -1,6 +1,8 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Janus.Authentication;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Recovery;
@@ -55,6 +57,36 @@ public sealed class CredentialFlowTests : IAsyncDisposable
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync() => await _deployment.DisposeAsync();
+
+    /// <summary>
+    /// OPS-OBS-002 AC2: a blocklist fall back met while a password is changed is still
+    /// waiting for the alert channels once the corpus answers again, and is carried
+    /// once rather than forgotten with the outage.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_OBS_002_AC2_AFallbackOutlivesTheOutageUntilItIsCarriedAsync()
+    {
+        _deployment.Configuration.Set(Settings.AlertingEmailDestinations, ["ops@example.test"]);
+        _deployment.Configuration.Set(Settings.AlertingSmsDestinations, ["+441632960098"]);
+        _deployment.Configuration.Set(Settings.AlertingOwnerEmail, "owner@example.test");
+        _deployment.Configuration.Set(Settings.AlertingOwnerSms, "+441632960099");
+
+        Browser browser = await SignedInAsync();
+
+        _deployment.Corpus.Unreachable.Add(BlocklistSource.RangeApi);
+
+        Answer changed = await browser.SendAsync("POST", "/account/password", ("password", Replacement));
+
+        _deployment.Corpus.Unreachable.Clear();
+
+        Assert.Equal(StatusCodes.Status204NoContent, changed.Status);
+        Assert.Equal(
+            [Alerts.Key(AlertCondition.Degradation, "password.blocklist.fallback")],
+            _deployment.Raised.Waiting.Select(alert => Alerts.Deduplication(alert.Raised.IdempotencyKey)));
+        Assert.Equal(1, await _deployment.CarryAlertsAsync());
+        Assert.Empty(_deployment.Raised.Waiting);
+    }
 
     /// <summary>
     /// LIB-API-005 and AUTH-PASS-004: the password is changed over the endpoint, and

@@ -111,7 +111,11 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
         CancellationToken cancellationToken)
     {
         if (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
-            is not { State: AccountState.Active or AccountState.Restricted or AccountState.Suspended } account)
+            is not
+            {
+                State: AccountState.Active or AccountState.Restricted or AccountState.Suspended,
+                IsEmergency: false,
+            } account)
         {
             return false;
         }
