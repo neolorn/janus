@@ -42,6 +42,8 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
     [Fact]
     public async Task INF_BG_001_AC1_EveryJobRunsWithoutAPersonAsync()
     {
+        await ForgetEarlierRunsAsync();
+
         await using ServiceProvider services = Deployed(Authorization.Deployment.Noon);
 
         BackgroundWorker worker = services.GetServices<IHostedService>().OfType<BackgroundWorker>().Single();
@@ -68,6 +70,9 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
     public async Task OPS_OBS_003_AC1_WhatHasLapsedIsClearedWithNobodyAskingAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await ForgetEarlierRunsAsync();
+
         SubjectId subject = await new Authorization.Deployment(host).AccountAsync(cancellationToken);
         byte[] holder = RandomNumberGenerator.GetBytes(32);
 
@@ -109,6 +114,9 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
     public async Task IDN_PRIN_003_AC4_AnEventEveryConsumerTookIsClearedWithNobodyAskingAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await ForgetEarlierRunsAsync();
+
         DateTimeOffset noon = Authorization.Deployment.Noon;
         PendingEvent published = Raised(noon, publishedAt: noon, failedAt: null);
         PendingEvent waiting = Raised(noon, publishedAt: null, failedAt: null);
@@ -143,6 +151,16 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
                 "SELECT id FROM identity.events WHERE id = ANY(@ids)",
                 new { ids = new[] { published.Id.Value, waiting.Id.Value, failed.Id.Value } }))
                 .Order());
+    }
+
+    // Each case owns its job state: the runs another case recorded, at its own clock, are
+    // removed first, so every job is due at this case's clock and no case reads another's
+    // run, whatever order the class runs in.
+    private async Task ForgetEarlierRunsAsync()
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        await connection.ExecuteAsync("DELETE FROM identity.background_jobs;");
     }
 
     // An event as a pass left it, its next pass a year away so no pass in the test
