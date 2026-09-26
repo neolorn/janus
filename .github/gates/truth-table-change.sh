@@ -39,7 +39,12 @@ fi
 
 changed=$(git diff --name-only "$base" "$head" -- "${logic[@]}")
 
-if git diff "$base" "$head" -- 'src/Janus.Storage/Migrations/*.cs' | grep -E '^[-+][^-+]' | grep -qw effective_grants; then
+# Each output is read whole before it is searched: a search that stops at its first
+# match would close the pipe on git and fail the pipeline under pipefail.
+migrations=$(git diff "$base" "$head" -- 'src/Janus.Storage/Migrations/*.cs')
+rewritten=$(grep -E '^[-+][^-+]' <<<"$migrations" || true)
+
+if grep -qw effective_grants <<<"$rewritten"; then
   changed=$(printf '%s\n%s' "$changed" "a migration changing the view effective_grants" | sed '/^$/d')
 fi
 

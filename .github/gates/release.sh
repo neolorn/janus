@@ -55,11 +55,12 @@ versions() {
     | sed -nE 's/^## \[([0-9]+\.[0-9]+\.[0-9]+)\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$/\1/p' || true
 }
 
-# The lines a section holds, from its heading to the next heading of its level.
+# The lines a section holds, from its heading to the next heading of its level. The
+# changelog is read to its end: stopping early would close the pipe on git.
 section() {
   git show "$1:CHANGELOG.md" | awk -v heading="## [$2]" '
-    index($0, heading) == 1 { inside = 1; next }
-    inside && /^## / { exit }
+    !done && index($0, heading) == 1 { inside = 1; next }
+    inside && /^## / { inside = 0; done = 1 }
     inside { print }'
 }
 
@@ -226,13 +227,17 @@ for commit in $commits; do
     status=1
   fi
 
-  if section "$commit" "Unreleased" | grep -q '^- '; then
+  unreleased=$(section "$commit" "Unreleased")
+
+  if grep -q '^- ' <<<"$unreleased"; then
     echo "${commit}: the release leaves lines under Unreleased."
     status=1
   fi
 
   for file in $(git ls-tree -r --name-only "$commit" | grep -E '(^|/)PublicAPI\.Unshipped\.txt$'); do
-    if git show "${commit}:${file}" | grep -vE '^(#nullable enable)?[[:space:]]*$' | grep -q .; then
+    shipped=$(git show "${commit}:${file}")
+
+    if [ -n "$(grep -vE '^(#nullable enable)?[[:space:]]*$' <<<"$shipped" || true)" ]; then
       echo "${commit}: the release leaves lines in ${file}."
       status=1
     fi
