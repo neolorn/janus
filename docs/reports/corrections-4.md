@@ -1,10 +1,10 @@
 # Corrections 4: D-166 and D-167
 
-Status: stopped at open question 11 (Tier 3). D-168 settled questions 1 and 2 of the first
+Status: stopped at open question 12 (Tier 2). D-168 settled questions 1 and 2 of the first
 stop, D-169 question 3, D-170 questions 4 to 6, D-171 question 7, D-172 questions 8 and 9,
-and D-173 question 10. Of the rest of D-166, section D.8 is applied up to its paragraph
-340; D-172 item 2, which comes before it, is applied but for its check constraint, where
-question 11 stops the run (section 2).
+D-173 question 10 and D-174 question 11; all are applied. Of the rest of D-166, section
+D.8 is applied up to 340, with D-171 item 3; D-166 343, which D-171 item 2 puts next,
+stops the run at question 12 (section 2).
 
 ## 1. Items implemented
 
@@ -118,6 +118,10 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 | The documentation of D-172 | `1653155` | none | none |
 | The documentation of D-173 | `5e6faec` | none | none |
 | D-172 item 2 as D-173 corrects it, but for the check constraint: the deployment key under the max UUID of RFC 9562, erasure's refusal of it, the field cipher's values for rows of no subject bound to their own row (D-166 234 for invitations), and the migration that moves the key and refuses where a value bound the old way stands | `c656253` | PRIV-RIGHT-005a AC18 | `DeploymentDataKeyTests.PRIV_RIGHT_005a_AC18_TheDeploymentKeyIsHeldUnderTheMaxUuidAsync`, `DeploymentDataKeyTests.PRIV_RIGHT_005a_AC18_TheMigrationMovesTheKeyToTheMaxUuidAsync`, `DeploymentDataKeyTests.PRIV_RIGHT_005a_AC18_TheMigrationRefusesNamingTheTableWhereAValueBoundTheOldWayStandsAsync` (four cases), `SubjectEraserTests.PRIV_RIGHT_005a_AC18_AnErasureNamingTheMaxUuidIsRefusedAndLeavesTheRowAsync`, `InvitationStoreTests.PRIV_RIGHT_005a_AC18_AnInvitationsValueDoesNotOpenOnAnotherRowAsync`, `MailboxStoreTests.PRIV_RIGHT_005a_AC18_AnUnheldAddressDoesNotOpenOnAnotherRowAsync`, `SendOutboxTests.PRIV_RIGHT_005a_AC18_AMessageNamingNoSubjectDoesNotOpenOnAnotherRowAsync`, `RegistrationSessionStoreTests.PRIV_RIGHT_005a_AC18_StagedValuesDoNotOpenOnAnotherRowAsync` |
+| The documentation of D-174 | `04841cb` | none | none |
+| D-174: `SubjectId` refuses the max UUID; every column of a library-owned table that can hold a subject identifier refuses it by a check constraint (49 columns in the model and the audit record's two identities); the subject-key table's key and the rotation's cursor typed as a row of that table (`SubjectKeyId`) | `ae04c76` | PRIV-RIGHT-005a AC18, OPS-SEC-003, CONV-DESIGN-004 | `SubjectIdTests.PRIV_RIGHT_005a_AC18_NoSubjectIsMadeFromTheMaxUuid`, `SubjectIdTests.PRIV_RIGHT_005a_AC18_TheNilSubjectIsStillMade`, `SubjectIdTests.PRIV_RIGHT_005a_AC18_AWrittenSubjectReadsBackThroughTheRefusal`, `SchemaContractTests.PRIV_RIGHT_005a_AC18_EveryColumnThatCanHoldASubjectRefusesTheMaxUuidAsync`, `SchemaContractTests.PRIV_RIGHT_005a_AC18_TheSubjectKeyTableAndTheRotationCursorNameARowAsync`, `KeyRotationTests.PRIV_RIGHT_005a_AC18_TheRotationsPointReachesTheDeploymentKeysRowAsync`, `SubjectEraserTests.PRIV_RIGHT_005a_AC18_AnErasureNamingTheMaxUuidIsRefusedAndLeavesTheRowAsync`, `WebAuthnServiceTests.PRIV_RIGHT_005a_AC18_AnAssertionWhoseHandleIsTheMaxUuidIsRefusedAsync` |
+| D-166 D.8, 340 with D-172 item 1: the library draws, holds wrapped and rotates every client secret; the client half reads it per request; the conformance suite's provider probes made by the sign-on's client half through `IProviderProbes` in `Janus.Core`; `ConformanceClient` removed; ledger line 340 | `1deb8bc` | OPS-SEC-001, OPS-SEC-002, AUTH-OIDC-001, BFF-SESS-006, LIB-TEST-001 AC4, AC5 | `SuiteSurfaceTests.LIB_TEST_001_AC5_NeitherTheSuiteNorTheProbeContractCarriesASecret`, `SuiteSurfaceTests.LIB_TEST_001_AC5_ASurfaceCarryingASecretIsFound`, `ProviderProbesTests.LIB_TEST_001_AC4_TheProbesAskAsTheSignOnClientWithTheRegistrysSecretAsync`, `ProviderProbesTests.LIB_TEST_001_AC4_ASecretReplacedSinceTheLastRunIsTheOnePresentedAsync`, `ProviderProbesTests.LIB_TEST_001_AC4_AnUnregisteredSignOnClientAsksNothingAsync`, `ConformanceSuiteTests.AUTH_OIDC_006_AC1_TheSampleHostsProviderRefusesEveryRetiredFormAsync`, `ConformanceSuiteTests.AUTH_OIDC_006_AC1_AProviderAdmittingWhatItShouldRefuseIsReportedAsync`, `ClientSecretLifecycleTests.OPS_SEC_002_AC1_AClientSecretRotatesAtTheCadenceWithoutRestartAsync`, `ClientSecretLifecycleTests.OPS_SEC_002_AC2_TheReplacedSecretAuthenticatesThroughTheOverlapAndNotAfterAsync`, `ClientSecretLifecycleTests.OPS_SEC_002_TwoProcessesRotatingTogetherLeaveOneSecretAsync`, `OidcStoreTests.OPS_SEC_001_NoClientSecretIsHeldInTheClearAsync`, `KeyRotationTests.OPS_SEC_003_AC1_AKeyRotationReWrapsTheClientSecretsAsync`, `RegisterClientTests.AUTH_OIDC_001_AC4_TheMailServerClientIsRegisteredWithNoSecretSuppliedAsync`, `RegisterClientTests.OPS_SEC_002_ARegistrationThatChangesAClientKeepsItsSecretAsync` |
+| D-171 item 3: `IUnitOfWork.BeginAsync` and `CommitAsync` return a result; 436 callers pass the failure up or throw it as a fault naming its code | `f923b8a` | CONV-DESIGN-003 AC7, CONV-DESIGN-005 | `AuthenticationServiceTests.CONV_DESIGN_003_AC7_AServiceReturnsTheFailureItsTransactionAnswersAsync`, `DeletionSweepTests.CONV_DESIGN_003_AC7_ABackgroundPassThrowsTheFailureItsTransactionAnswersAsync` |
 | D-171 item 4: a session opened from the break-glass session carries its reason; one opened by an ordinary sign-in carries none (no code change) | `5ebabcd` | OPS-BOOT-002 AC10 | `BreakGlassEndpointTests.OPS_BOOT_002_AC10_ASessionOpenedFromTheBreakGlassSessionCarriesTheReasonAsync` |
 | D-166 D.8, 316: one data key of the deployment, a row of `subject_keys`, under which every value of no subject is held; the rotation re-wraps subject-key rows only, writing back only where the value read still stands; ledger line 316 | `ced2208` | OPS-SEC-003, OPS-MIG-003a AC4, AUTH-KEY-002, PRIV-RIGHT-005a | `KeyRotationTests.OPS_SEC_003_AC3_AfterRetirementEveryValueOfNoSubjectStillReadsAsync`, `KeyRotationTests.OPS_SEC_003_AC3_AProofKeyInFlightStillReadsAfterRetirementAsync`, `KeyRotationTests.OPS_SEC_003_ARotationTouchesNoTableButTheSubjectKeysAndItsProgressAsync`, `KeyRotationTests.OPS_SEC_003_ARotationDoesNotOverwriteAKeyRewrittenAtTheSameVersionAsync`, `DatabaseRoleTests.OPS_MIG_003a_AC4_TheMaintenanceRoleReachesNoValueBesideTheSubjectKeysAsync`, `OidcStoreTests.AUTH_KEY_002_ThePrivateHalfIsWrappedUnderTheDeploymentDataKeyAsync`, `SubjectEraserTests.PRIV_RIGHT_005a_ErasureNeverTouchesTheDeploymentDataKeyAsync`, `SerializedModelTests` (the maintenance grants) |
 
@@ -213,6 +217,23 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 - Each row-binding test moves a value together with its wrapped key to another row, which opened under the shared binding and no longer does.
 - The run was interrupted by a crash of the machine after this work was written and before it was committed. Every changed file was re-read and checked whole before the commit. The 340 work had been set aside in `tmp/c4/held/340-now/` so that the commit and its checks were its own, and was put back after it, identical to what was saved.
 
+**D-174 (`ae04c76`).**
+- The checks are named `ck_<table>_<column>_not_max_uuid` in 44 configurations, and the audit table's two identities, which stand outside the model, take theirs in the migration's SQL; its partitions inherit them. The schema test finds each column from the model: every property typed `SubjectId`, and the identifier beside each subject-type discriminator.
+- A stored `SubjectId` reads back through its constructor, so a written subject is held to the refusal as it is read; the stored shape is unchanged.
+- `WebAuthnService` compared a user handle the client supplies by making a `SubjectId` of it. It now compares the handle's value with the held subject's, so an all-ones handle is refused as any stranger's is, with `auth.factor.rejected`.
+- A consequence left to D.11: a Hosting handler that makes a `SubjectId` from a route or body value now faults on the max UUID, where it answered as for an unknown subject. D-166's correction to CONV-DESIGN-004 AC2, binding each identifier at the edge, answers it with `api.request.malformed`; it is not yet applied.
+
+**340 with D-172 item 1 (`1deb8bc`).**
+- `IProviderProbes.RunAsync` takes an access context, as LIB-API-005 has every operation take one, and meets no gate (CONV-DESIGN-002 AC3). The probes ask what the old probe asked, as the declared `SignOnClient`, through the `identity-signon` client; each request that presents the secret reads it from the registry, and the bytes are cleared after use. No finding can carry the secret.
+- The sample host registers only its own application. The migration `HoldClientSecretsWrapped` refuses where a client row stands, since a hash cannot become a secret.
+- `SignOnTests.AUTH_OIDC_006_AC2_ARequestThePushRefusesIsNotForwardedAsync` provokes the push refusal with a registered destination carrying a fragment, since the application now always presents the registry's own secret.
+- The probe of LIB-TEST-001 AC4 for a pushed request naming another destination belongs to D-166 145 and 279 (D.9), not yet applied.
+- Its commit message carries two `Implements:` lines where the convention writes one. The history is not rewritten.
+
+**D-171 item 3 (`f923b8a`).**
+- Three private helpers answer `Error?` (`AuthenticationService.CountedAsync` and `StepUpRefusedAsync`, `OrganizationErasureSweep.ErasedAsync`). Their answer already is the failure their callers, which return results, pass up, so they hand back the transaction's failure rather than throw it. No signature changed.
+- `ResultContractTests.NotOperationContracts` lists only `ISecretSource`, until 336 removes it.
+
 **Criteria no test decides.**
 - D-166 319 (1), the signing algorithm: `token.signing.algorithm` admits only `ES256` at its reading, so `configure` refuses any other value before the check of `SigningKeys` is reached. The check stands in `CompleteAsync`; no value reaches its refusal. Verified by review.
 - D-170 item 1, the writers that take no reason (`CredentialAudit`, `OidcAudit.ReusedAsync`, `BotDefenceAudit`, `PhoneSignalAudit`, `SessionAudit.FailedAsync`): none writes a record a break-glass session can cause, since every credential action is refused in the session (OPS-BOOT-002 AC9) and the others are written where no session acts. Verified by review.
@@ -225,18 +246,17 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 
 | Item | Reason | Waits on |
 |---|---|---|
-| D-172 item 2, its check constraint keeping the max UUID out of every table of subjects other than the subject-key table, and the criterion 18 test that the database refuses it there | Open question 11 | Question 11 |
-| D-166 D.8, 340, with D-172 item 1 | Follows D-172 item 2 in the owner's order. The work stands uncommitted in the working tree and is kept in `tmp/c4/held/`: the registry drawing and holding each secret wrapped with its rotation, the client half reading it per exchange, the sign-on secret and its source member removed, and the migration `HoldClientSecretsWrapped`, now timed after `c656253`'s migration. It builds; its tests are not all written or run | Question 11 |
-| D-166 D.9 343 and 349, D.6 215, then D.8 121 and 336 (the key ring of D-171) | Not reached: D-171 item 2 puts them after 340 | Question 11 |
-| D-166 D.8, the paragraphs after 121 and 336: 317, 318, 341, 303 (and the audit's subject), 304 and 334 parts (1) and (2), 323, the audit action rows | Not reached: they follow 121 and 336 in the log's order | Question 11 |
-| D-166 section D.2, the entries after 114 (115, 129, 146, 152, 208, 328, 401, 402 and 422, 417, 419, 421, 326, and the preferred second step) | Not reached | Question 11 |
-| D-166 section C, rules X1 and X3 to X9 as sweeps (X2 is applied, under 116; X3 on the configuration routes, under 178) | Not reached | Question 11 |
-| D-166 sections D.1 to D.7 and D.9 to D.11 | Not reached | Question 11 |
-| D-166 section E, every item other than E.6 | Not reached | Question 11 |
-| D-166 section F, the rows of chapter 10 other than those applied under D.8 (the retired step-up and device verification codes, `model.startup.secretunavailable`, `config.change.reasonrequired`, the retired switches, `integration.mailserver.endpoint`, `breakglass-generated`) | Not reached. The three contract tests that failed at `aa7c5e9` now pass at `0dc0ae0` | Question 11 |
-| D-166 section G, the ledger lines of the entries not yet applied | Each goes in the commit that applies its entry | Question 11 |
-| Truth-table rows for D-166 entries 396 and 265 | They state the D-166 outcomes, so they belong with those fixes | Question 11 |
-| The full gate, the pull request for `corrections-4` | The run stopped before step 4 of the work order (section 5) | Question 11 |
+| D-166 D.9 343 and 349 | Open question 12 | Question 12 |
+| D-166 D.6 215, then D.8 121 and 336 (the key ring of D-171) | Not reached: D-171 item 2 puts them after 343 | Question 12 |
+| D-166 D.8, the paragraphs after 121 and 336: 317, 318, 341, 303 (and the audit's subject), 304 and 334 parts (1) and (2), 323, the audit action rows | Not reached: they follow 121 and 336 in the log's order | Question 12 |
+| D-166 section D.2, the entries after 114 (115, 129, 146, 152, 208, 328, 401, 402 and 422, 417, 419, 421, 326, and the preferred second step) | Not reached | Question 12 |
+| D-166 section C, rules X1 and X3 to X9 as sweeps (X2 is applied, under 116; X3 on the configuration routes, under 178) | Not reached | Question 12 |
+| D-166 sections D.1 to D.7 and D.9 to D.11 | Not reached | Question 12 |
+| D-166 section E, every item other than E.6 | Not reached | Question 12 |
+| D-166 section F, the rows of chapter 10 other than those applied under D.8 (the retired step-up and device verification codes, `model.startup.secretunavailable`, `config.change.reasonrequired`, the retired switches, `integration.mailserver.endpoint`, `breakglass-generated`) | Not reached. The three contract tests that failed at `aa7c5e9` now pass at `0dc0ae0` | Question 12 |
+| D-166 section G, the ledger lines of the entries not yet applied | Each goes in the commit that applies its entry | Question 12 |
+| Truth-table rows for D-166 entries 396 and 265 | They state the D-166 outcomes, so they belong with those fixes | Question 12 |
+| The full gate, the pull request for `corrections-4` | The run stopped before step 4 of the work order (section 5) | Question 12 |
 
 ## 3. Resolved by rule
 
@@ -437,7 +457,7 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
   identity of every system principal's work (IDN-AUD-001). `SubjectEraser` refuses it.
 - Which identifier holds the key, and whether the nil subject may, concerns keys and
   erasure. No proposal is made; the committed choice stands until the owner decides.
-- **Settled by D-172** (the max UUID of RFC 9562), applied in `c656253` but for question 11.
+- **Settled by D-172** (the max UUID of RFC 9562), applied in `c656253` and `ae04c76`.
 
 **10. Tier 3. D-172 item 2: re-binding the values under the deployment key.**
 
@@ -490,19 +510,50 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 - The scope decides where the database refuses the deployment key's identifier. No
   proposal is made. The constraint and its test wait for the answer; the rest of the item
   is in `c656253`.
+- **Settled by D-174** (every column that can hold a subject identifier), applied in `ae04c76`.
+
+**12. Tier 2. D-166 343 against LIB-HOST-001 AC2 and `10`: how a malformed social provider declaration is named.**
+
+- **What the code needs.** The details of the startup refusal for a social provider
+  declared twice, naming a factor that is not a social provider, with an address that is
+  not absolute `https`, a `return` whose path does not end as it must, or no client or an
+  empty one. Today these are refused with `model.startup.declarationmissing`, and
+  `ErrorCodes` has no member for `model.startup.declarationinvalid` yet.
+- **What the specification says.** D-166 343: `model.startup.declarationinvalid`,
+  `details.key` naming the member. `07` LIB-HOST-001 AC2 and the `10` row: a malformed
+  declaration is named by `details.declaration` and `details.field`, and the row lists
+  "a social provider declared twice or with a member outside its rule" among them
+  (`details.key` is kept for the landing origins alone). `10` gives the value of
+  `details.declaration` for a template (the message kind) and an encrypted field (the
+  type), not for a social provider, nor what `details.field` names for one declared twice.
+- **Readings.**
+  1. `details.key` `socialProvider.<member>`, as the log has it. Smallest fix: `10` and
+     AC2 name `details.key` for social providers, as AC6 does for the landing origins.
+  2. `details.declaration` `socialProvider`, `details.field` the member (`provider`,
+     `metadata`, `configuration`, `return`, `clientIds`). Smallest fix: the `10` row
+     states that value.
+  3. `details.declaration` the provider's name as its route names it (`apple`),
+     `details.field` the member, as the template and the encrypted field are named.
+     Smallest fix: as 2.
+- The rest of 343 reads as settled; nothing of it is committed.
 
 ## 5. Gate result
 
-**`corrections-4`.** Not run. The run stopped at question 11, before step 6 of the work
+**`corrections-4`.** Not run. The run stopped at question 12, before step 6 of the work
 order, so the full gate was not run and no pull request was opened. The branch is pushed so
-its commits can be read; the 340 work in the working tree is not.
-- `c656253`, checked in a scratch checkout of that commit so the 340 work took no part:
-  build with warnings as errors, format, and the unit and contract tests, Analyzers 20,
-  Authentication 813, Authorization 126, Cli 19, Core 468, Hosting 723, Identity 89,
-  Privacy 222, Storage 33, with the one failure of the scratch checkout noted below; the
-  integration suites of `Janus.Storage.Tests` (417) and `Janus.Cli.Tests` (65), no failure.
+its commits can be read.
+- At `f923b8a`, the head of the code, in the repository's own checkout: build with
+  warnings as errors, format, and the unit and contract tests, Analyzers 20,
+  Authentication 811, Authorization 126, Cli 19, Conformance 2, Core 471, Hosting 728,
+  Identity 89, Privacy 223, Storage 33, no failure; and the integration suites,
+  `Janus.Storage.Tests` 419, `Janus.Cli.Tests` 66, `Janus.Conformance.Tests` 10,
+  `Janus.Hosting.Tests` 217, no failure. The migration applied twice and the pipeline's
+  own jobs were not run.
+- Secret scanning: the pinned scanner, run locally as the pipeline runs it, over the 845
+  commits of the history at `f923b8a` before the push: no finding.
 - Push runs on the reports of the earlier stops: 36558943751 on `40bd871`, 36566244433 on
-  `927de12`, 36588064683 on `3e6b810` and 36597616186 on `f24e546`, all green.
+  `927de12`, 36588064683 on `3e6b810`, 36597616186 on `f24e546` and 36610818396 on
+  `870b325`, all green.
 - Fast checks at `ced2208` (build with warnings as errors, format, the unit and contract
   tests), in a scratch checkout of that commit so the uncommitted 340 work took no part:
   Analyzers 20, Authentication 813, Authorization 126, Cli 19, Core 468, Hosting 723,
