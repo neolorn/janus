@@ -47,6 +47,8 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
     private const string Reason = "The operator cannot be reached.";
 
+    private const string Page = "/account/profile";
+
     private static readonly OrganizationId Administration =
         new(Guid.Parse("33333333-3333-4333-8333-333333333333"));
 
@@ -396,6 +398,47 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-BOOT-002 AC10 (D-171): a session another application opens from the
+    /// break-glass session is the same emergency, so a record written in it reads back
+    /// with the reason; one written in a session opened from an ordinary sign-in reads
+    /// back with none.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AC10_ASessionOpenedFromTheBreakGlassSessionCarriesTheReasonAsync()
+    {
+        await ApplicationRegisteredAsync();
+
+        (Browser administrator, string credential) = await AdministratorAsync();
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Administration, Permissions.RoleManage);
+        var owner = new Browser(_deployment);
+
+        Assert.Equal(StatusCodes.Status200OK, (await PresentedAsync(owner, credential)).Status);
+
+        Browser ordinary = await SignedOnAsync(administrator);
+        Browser emergency = await SignedOnAsync(owner);
+
+        foreach ((Browser browser, string name) in ((Browser, string)[])[(ordinary, "reviewers"), (emergency, "approvers")])
+        {
+            Answer defined = await browser.SendAsync(
+                "POST",
+                "/admin/roles",
+                ("name", name),
+                ("permissions", new[] { Permissions.RecoveryApprove.ToString() }),
+                ("reason", "Approvals while the operator is away."));
+
+            Assert.True(defined.Status is StatusCodes.Status200OK or StatusCodes.Status201Created, defined.Body);
+        }
+
+        Janus.Authorization.Tests.Roles.RoleAuditInMemory.RoleChange[] changes = [.. _deployment.RoleChanges.Changes];
+
+        Assert.Equal(2, changes.Length);
+        Assert.Null(changes[0].BreakGlassReason);
+        Assert.Equal(_emergency, changes[1].Actor);
+        Assert.Equal(Reason, changes[1].BreakGlassReason);
+    }
+
+    /// <summary>
     /// OPS-BOOT-002 AC10: a recovery approved in the session is written down with the
     /// reason given at its use.
     /// </summary>
@@ -500,31 +543,15 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     [Fact]
     public async Task OPS_BOOT_002_AC6_AnApplicationOpensFromTheSessionAsync()
     {
-        const string page = "/account/profile";
-
-        await _deployment.Clients.RecordAsync(
-            new OidcClient(
-                "this-application",
-                "this-application",
-                OidcClientKind.BrowserApplication,
-                "https://identity.example.test/auth/signon/return",
-                ["openid"]),
-            OpaqueToken.Of("a-secret-the-deployment-set").Fingerprint(),
-            DateTimeOffset.MinValue,
-            TestContext.Current.CancellationToken);
+        await ApplicationRegisteredAsync();
 
         string credential = await GeneratedAsync();
         var owner = new Browser(_deployment);
-        var application = new Browser(_deployment);
 
         _ = await PresentedAsync(owner, credential);
 
-        Answer forwarded = await application.SendAsync("GET", "/auth/signon?returnTo=" + Uri.EscapeDataString(page));
-        Answer issued = await owner.SendAsync("GET", Local(forwarded.Location));
-        Answer established = await application.SendAsync("GET", Local(issued.Location));
+        Browser application = await SignedOnAsync(owner);
 
-        Assert.Equal(StatusCodes.Status302Found, established.Status);
-        Assert.Equal(page, established.Location);
         Assert.Equal(StatusCodes.Status200OK, (await application.SendAsync("GET", "/auth/session")).Status);
     }
 
@@ -994,6 +1021,37 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
             source: source);
 
     private string Drawn() => BreakGlassCode.Draw(_randomness);
+
+    // The three legs of BFF-SESS-006: this application forwards a browser that holds
+    // nothing here, the authentication application issues a code against the record the
+    // holder's browser carries, and this application trades it on its own connection.
+    // The deployment is one origin, so the legs are followed as its own paths.
+    private async Task<Browser> SignedOnAsync(Browser holder)
+    {
+        var arriving = new Browser(_deployment);
+
+        Answer forwarded = await arriving.SendAsync("GET", "/auth/signon?returnTo=" + Uri.EscapeDataString(Page));
+        Answer issued = await holder.SendAsync("GET", Local(forwarded.Location));
+        Answer established = await arriving.SendAsync("GET", Local(issued.Location));
+
+        Assert.Equal(StatusCodes.Status302Found, established.Status);
+        Assert.Equal(Page, established.Location);
+
+        return arriving;
+    }
+
+    // The application another session is opened in, registered with the provider.
+    private Task ApplicationRegisteredAsync() =>
+        _deployment.Clients.RecordAsync(
+            new OidcClient(
+                "this-application",
+                "this-application",
+                OidcClientKind.BrowserApplication,
+                "https://identity.example.test/auth/signon/return",
+                ["openid"]),
+            OpaqueToken.Of("a-secret-the-deployment-set").Fingerprint(),
+            DateTimeOffset.MinValue,
+            TestContext.Current.CancellationToken).AsTask();
 
     private AlertRaised Raised(AlertCondition condition) =>
         _deployment.Events.Of<AlertRaised>().Last(raised => raised.Condition == condition);

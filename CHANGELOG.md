@@ -282,7 +282,8 @@ against the public contract of LIB-API-001.
   and `auth.breakglass.used`, and raise `breakglass-generated`
   (`AlertCondition.BreakGlassGenerated`) and `breakglass-used`, each High and scoped to
   the issue, to the operator and to the owner whatever `alerting.owner.enabled` says.
-  The session keeps the reason, and every audit record it writes carries it in a column
+  The session keeps the reason, as does a session another application opens from it,
+  and every audit record either writes carries it in a column
   of its own, `auth.breakglass.used` included; the trail read returns it as
   `breakGlassReason` (`AuditEntry.BreakGlassReason`), and a record of background work
   never carries one.
