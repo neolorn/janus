@@ -1318,11 +1318,12 @@ the record concerns, where it concerns one. The acting and effective identities 
 acted and are the same on every record (AUTHZ-IMP-001); they do not name whom the action
 concerns. The query by data subject reads, through an index, the records naming the
 person as `subject` or as acting identity (`GET /admin/audit?subject=`, `09` section
-8a). It returns each record's codes, instants, identifiers and plain details, and never a
-value held under a subject's key (PRIV-RET-002), so it reads the same before and after
-an erasure.
+8a). It returns each record's codes, instants, identifiers and plain details, and the
+reason given at the use of a break-glass session where the record was written in one
+(`breakGlassReason`, OPS-BOOT-002), and never a value held under a subject's key
+(PRIV-RET-002), so it reads the same before and after an erasure.
 
-*Source: D-025, D-166*
+*Source: D-025, D-166, D-170*
 
 Answering "who was affected" fast is what makes the 72-hour clock achievable. An
 indexing decision made now or a painful one made during an incident.
@@ -1334,8 +1335,9 @@ indexing decision made now or a painful one made during an incident.
    with its codes, instants and identifiers, as before the erasure.
 3. The query returns no value a record holds under a subject's key.
 4. An action taken on another person's account, from a break-glass session included, is
-   returned by the query for that person through `subject`, and names the actor as both
-   acting and effective identity.
+   returned by the query for that person through `subject`, names the actor as both
+   acting and effective identity, and, from a break-glass session, carries the reason
+   given at its use as `breakGlassReason`.
 
 ---
 

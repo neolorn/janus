@@ -945,7 +945,10 @@ Every record carries an acting identity and an effective identity equal to it
 (AUTHZ-IMP-001); work of a system principal carries the nil subject in both, with the
 principal's name (section 5.29) and its stated reason. A record that concerns an account
 names it as `subject`, whoever acted (IDN-AUD-001, PRIV-BREACH-002). Every record a
-break-glass session writes carries the reason given at its use (OPS-BOOT-002).
+break-glass session writes carries the reason given at its use, `auth.breakglass.used`
+included, in a field of the record's own beside its identities, never in `details`,
+whose `reason` is the action's own; it is plain, as every stated reason is (OPS-BOOT-002,
+D-170).
 
 | Action | Category | Written when | Source |
 |---|---|---|---|
@@ -1027,7 +1030,7 @@ break-glass session writes carries the reason given at its use (OPS-BOOT-002).
 | `privacy.request.submitted` | security | The subject submitted a data subject request | PRIV-RIGHT-001, PRIV-RIGHT-002 |
 | `privacy.restriction.lifted` | security | An administrator lifted a restriction of processing and the subscribers were told; the administrator acting, the account the `subject`; no organization | PRIV-RIGHT-004 |
 
-*Source: IDN-AUD-001, PRIV-RET-001, PRIV-RET-002, CONV-NAME-003, D-162, D-166*
+*Source: IDN-AUD-001, PRIV-RET-001, PRIV-RET-002, CONV-NAME-003, D-162, D-166, D-170*
 
 ### 5.25 Message kinds
 

@@ -1045,8 +1045,11 @@ account, taking it down or adding it to a group, SHALL be refused with 403
 `recoverycodes:generate`, `mailcredential:create`, `account:deactivate` and
 `account:delete`, whatever the reserved account's policy lists. It holds a subject key
 like any account, so what a break-glass session records under it is sealed as any
-account's is. It may approve any recovery, including the sole administrator's
-(AUTH-RECOV-002a). The session SHALL
+account's is. The reason given at use is not such a value: it is the owner's statement
+of why the emergency session exists, kept with the session and written in plain text on
+every audit record the session writes, in a field of the record's own; it is plain, as
+every stated reason is, so the trail reads it back (D-170). The session may approve any
+recovery, including the sole administrator's (AUTH-RECOV-002a). The session SHALL
 satisfy step-up for its lifetime (AUTH-STEP-004). Lifetime is configurable with an
 enforced ceiling (D-138): the session ends `breakglass.session.lifetime` after the use
 that opened it, whatever the policy's absolute lifetime, and its inactivity window is
@@ -1074,7 +1077,7 @@ credential, one field for the reason, one button. The endpoint
 free-text member under API-CONV-002, and kept with the session. The owner is not technical
 (`12` §1); an API endpoint is not a procedure they can follow.
 
-*Source: D-065, D-129, D-166*
+*Source: D-065, D-129, D-166, D-170*
 
 **Acceptance criteria**
 1. Use consumes it; a second attempt fails.
@@ -1095,7 +1098,9 @@ free-text member under API-CONV-002, and kept with the session. The owner is not
    `authz.denied`; an administrator's suspension, takedown, grant or group addition
    naming the reserved account is refused the same way.
 10. Every audit record written in a break-glass session carries the reason given at
-    its use.
+    its use, `auth.breakglass.used` included, and the trail read returns it as
+    `breakGlassReason`; a record written by background work the session caused
+    carries none.
 
 ---
 
@@ -1110,7 +1115,7 @@ removed) under the `password.argon2.*` parameters in force at generation, which 
 carries; the code is held **on paper only**, never in the secrets manager, never
 emailed, never written to a file.
 
-*Source: D-148; D-065, D-133, D-147, D-166*
+*Source: D-148; D-065, D-133, D-147, D-166, D-170*
 
 **Strength and throttle (D-147, D-153).** The credential SHALL carry at least 128 bits of
 entropy, drawn from a typeable alphabet (no characters that are confused in print or
@@ -1127,8 +1132,9 @@ global limit when it arrives, before the per-source delay, the check symbols or 
 hash is looked at, an attempt the limit refuses included; a refusal by the limit is 429
 `auth.throttled` with `details.retryAt` one hour after the refused attempt. The first
 attempt the limit refuses SHALL raise `auth-failures-sustained` for the reserved
-account. With 128 bits behind it, the global limit exists to make the attack loud, not
-to make it infeasible.
+account, and with no scope where no reserved account exists yet, so an attack on a
+deployment not yet bootstrapped is loud too (D-170). With 128 bits behind it, the
+global limit exists to make the attack loud, not to make it infeasible.
 
 The four other envelope items (DR-009) live in both the envelope and the secrets
 manager because the system needs them daily. The break-glass code is needed by
@@ -1156,7 +1162,8 @@ new. Alerting and audit are the controls.
    a group with a wrong check character is refused before the hash is compared.
 7. A sixth attempt within one hour at `/auth/break-glass`, from any source, is
    refused and counted, and the per-source throttle of AUTH-ABUSE-001 applies as well;
-   the first such refusal raises `auth-failures-sustained` for the reserved account.
+   the first such refusal raises `auth-failures-sustained` for the reserved account,
+   and with no scope on a deployment where no reserved account exists yet.
 
 ---
 

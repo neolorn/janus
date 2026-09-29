@@ -8952,6 +8952,8 @@ section 7 · `19` · `20` · `docs/guide/janus-explained.md`,
 
 > **Amended.** R3's Public Suffix List is drawn when a release is prepared and committed with its date, not downloaded by each build (D-169).
 
+> **Amended.** D.8 break-glass part (7): the reason is kept in a field of the session and of each audit record, plain, carried with the acting identity; part (2): the limit alert is raised with no scope where no reserved account exists (D-170).
+
 **Date:** 2026-09-25 · **Status:** accepted · **Amends:** D-161 (item 4, the working mode; item 2, where the drift check's rows come from), D-162 (item 22, where the governed send path lives; item 23, when the first attempt is made; item 26, the budget of a text message carrying a link; item 31, where destination records are kept and when they are swept; item 66, where a client secret comes from; C.55, where photo availability is held and what bootstrap writes; C.68 at `POST /auth/link`; C.103, the condition of the mail server row; E, the status of `identity.identifier.invalid`), D-153 (owner decision 2, the source a flood limit counts; owner decision 7, the word lists; the `backup.restoretest.interval` default; the address the bootstrap command prints), D-147 (the retirement of a key-encryption-key version; the name of the startup code for an unavailable secret), D-146 (item 17: a restriction's channel, the notices to a holder, a reason on every edit), D-143 (the policy object gains `photos`), D-129 (the break-glass page takes a reason), D-127 (a takedown reversal restores the state the takedown found), D-079a (a recognised device is exempt from the hold, not from the count), D-071 (three protected switches retired), D-060 (photos are off for the administrative organization until a codec is declared), D-057 (an authorization request's `redirect_uri` is refused at the push, not replaced), D-164 (item 3: the mail server verifies `aud` itself), D-165 (the developer recipient row is a declared example; the provider callback row and INT-GEN-003's sentence restored) · **Extends:** D-162, D-164, D-165
 
 **TL;DR.** The ledger entries 110 to 423 were audited entry by entry against the
@@ -11685,6 +11687,67 @@ own trace check skips those data files and nothing else.
 
 ---
 
+## D-170 — Corrections-4 questions: the break-glass reason on the trail, bootstrap's `before`, the limit alert before bootstrap
+
+**Date:** 2026-09-29 · **Status:** accepted · **Amends:** D-166 (D.8, break-glass parts (2) and (7)) · **Extends:** D-166 (319 fix (2) and section G)
+
+**TL;DR.** The corrections-4 run stopped on three questions. The reason the owner gives
+with the break-glass credential is kept by the session and written, in plain text, in a
+field of its own on every audit record the session writes; it reaches the record with the
+acting identity, never through ambient state. D-166 319 fix (2) already governs
+bootstrap's first configuration records, since section G revises entry 315 by 319. The
+limit alert on the break-glass endpoint is raised with no scope where no reserved
+account exists yet.
+
+**1. The reason given at use (the run's question 4).** D-166 settled 302 with option 1 and
+OPS-BOOT-002 criterion 10 requires the reason on every record; no chapter said where it
+is kept, where the record carries it, or how the record gets it.
+
+- **The session** keeps it in a field of its own, set when the credential opens the
+  session and never changed; no other session has one.
+- **The record** carries it in a field of its own beside its identities, empty on every
+  record not written in a break-glass session; the trail read returns it as
+  `breakGlassReason`. `auth.breakglass.used` carries it too. *Rejected:* a key in
+  `details` (a record the session writes often carries its own `details.reason`, as a
+  role defined in the emergency does, and a key every action's details must admit belongs
+  to no action's shape); the principal's reason (that field states why a system
+  principal acted, with the nil subject as actor, and one field meaning two things is how
+  a trail is misread).
+- **How it reaches the record:** explicitly, with the acting identity, from the session
+  through the values the services already hand the audit writers. No ambient,
+  request-scoped or static holder: work a system principal does later because of the
+  session writes its own records and must not inherit the reason, and a holder the store
+  reads cannot tell the two apart. No public type gains a way for a host to set the
+  reason.
+- **Plain, not sealed.** The reason is the owner's statement of why the emergency session
+  exists, the same kind of value as every administrative reason the trail already holds
+  in plain text. The reserved account is never erased, so sealing under its key would
+  protect nothing, and the trail read returns no value held under a subject's key, so a
+  sealed reason would be unreadable exactly where it is needed. OPS-BOOT-002's sentence
+  on sealing covers what is held under the reserved account's key, not this.
+- The free-text rule X4 applies. Tests carrying OPS-BOOT-002 criterion 10 prove that a
+  role definition, a recovery approval and a configuration change made in the session read back
+  with the reason, that `auth.breakglass.used` carries it, and that a record written by
+  background work the session caused does not.
+
+**2. Bootstrap's `before` (the run's question 5).** D-166 already answers it. Section G
+records entry 315 as revised by 319, and 315 was bootstrap's seed recording `before` as the
+row's text. Fix (2) of 319 therefore governs every configuration record, the seed
+included: `before` is the written form of the key's default where no row stood, and null
+only for a required key. A test carrying OPS-CFG-005 proves the seed's records.
+
+**3. The limit alert before bootstrap (the run's question 6).** OPS-BOOT-004 states the
+global limit's purpose: to make the attack loud. Where no reserved account exists, the
+first refusal of the limit still raises `auth-failures-sustained`, with no scope, as the
+implementer built it. A test carrying OPS-BOOT-004 criterion 7 proves the alert is raised
+on a deployment with no reserved account.
+
+**Propagated to:** `01` IDN-AUD-001 · `04` PRIV-BREACH-002 · `06` OPS-BOOT-002 (text and
+criterion 10), OPS-BOOT-004 (text and criterion 7) · `09` `GET /admin/audit` · `10`
+section 5.24.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -11864,6 +11927,7 @@ own trace check skips those data files and nothing else.
 | Secret scanning over the full history: the scanner's own release, checksum-pinned; an allow-list entry names the file and the value | D-167 |
 | Corrections-4 questions: the library's version without reflection; what the host does on erasure | D-168 |
 | Third-party data the package or the repository carries is kept as published; a name inside it is not a trace | D-169 |
+| Corrections-4 questions: the break-glass reason on the trail, bootstrap's `before`, the limit alert before bootstrap | D-170 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
