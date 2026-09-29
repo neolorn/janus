@@ -715,6 +715,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<TimeProvider>(Clock);
         _ = services.AddSingleton(_randomness);
         _ = services.AddSingleton<IConfigurationStore>(Configuration);
+        _ = services.AddSingleton<IConfigurationWrites>(Configuration);
         _ = services.AddSingleton<IUnitOfWork>(Work);
         _ = services.AddSingleton<IEvents>(Events);
 

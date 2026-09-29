@@ -62,6 +62,7 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
     private ConfigurationAdministration Administration =>
         new(
             _configuration,
+            _configuration,
             _changes,
             new AdministrativeScope(_gate, _administrative),
             new PolicyResolution(new MembershipLookupInMemory(), _configuration, _raises),

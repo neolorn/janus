@@ -982,10 +982,9 @@ against the public contract of LIB-API-001.
   longer admits included) is a fault: the read throws `InvalidOperationException`
   naming the key and never the stored text, and nothing in the library puts a default
   or any other value in its place, so a request fails as `system.fault` and a job fails
-  its run. A key the application may not change is refused whatever the caller asks. `WriteAsync` for one member of a key that exists once per
-  organization or once per declared category puts the value in force for the next read,
-  answers what was in force before, and refuses a protected family or a value the family
-  does not admit.
+  its run. The store only reads: it has no write, and a runtime value is put in force
+  through the management application's one writer alone, with its step-up, its reason
+  and its record.
 - The browser-facing pipeline is mounted with one call, `UseBrowserProfile`, and
   protects whatever the host mounts after it: a cross-site state change, a state change
   without the `X-Identity-Request` header, one claiming another origin, and one whose

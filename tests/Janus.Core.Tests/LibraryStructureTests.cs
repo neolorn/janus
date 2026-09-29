@@ -1186,7 +1186,7 @@ public sealed class LibraryStructureTests
             .SelectMany(folder => Sources().Where(file =>
                 file.StartsWith(folder, StringComparison.Ordinal)));
 
-    private static bool Written(string text) => Called(text, "IConfigurationStore", "WriteAsync");
+    private static bool Written(string text) => Called(text, "IConfigurationWrites", "WriteAsync");
 
     // Whichever name a class gives the port it holds, a call through it is that name
     // followed by the port's method.

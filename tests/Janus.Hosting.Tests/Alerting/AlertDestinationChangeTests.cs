@@ -91,6 +91,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
             _configuration,
             new ConfigurationAdministration(
                 _configuration,
+                _configuration,
                 _changes,
                 new AdministrativeScope(_gate, _administrative),
                 new PolicyResolution(new MembershipLookupInMemory(), _configuration, new PolicyRaiseStoreInMemory()),

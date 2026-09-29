@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Configuration;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -13,7 +14,7 @@ namespace Janus.Authentication.Tests;
 /// The configuration store, holding what a test wrote and answering everything else
 /// with the key's default.
 /// </summary>
-internal sealed class ConfigurationInMemory : IConfigurationStore
+internal sealed class ConfigurationInMemory : IConfigurationStore, IConfigurationWrites
 {
     private static readonly Dictionary<string, JsonElement> Nothing = [];
 

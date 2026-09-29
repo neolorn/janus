@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Configuration;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.EntityFrameworkCore;
@@ -21,7 +22,7 @@ namespace Janus.Storage.Settings;
 /// default the catalogue gives it. A row that does not read under its key is a fault
 /// (CONV-ERR-001): the read throws, and nothing stands in for the value.
 /// </remarks>
-internal sealed class ConfigurationStore(StoreContext context) : IConfigurationStore
+internal sealed class ConfigurationStore(StoreContext context) : IConfigurationStore, IConfigurationWrites
 {
     /// <inheritdoc/>
     public async ValueTask<Result<TValue>> ReadAsync<TValue>(

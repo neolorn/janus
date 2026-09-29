@@ -7187,6 +7187,8 @@ organization is". The configuration store had no write for one member of such a 
 routes, the 201 and 204 answers, the 400s and the answer to a repeat, and say the policy
 row is `{}` and recorded as a configuration change.
 
+**Superseded by D-166.**
+
 ---
 
 ## 194. `organization:manage` is asked in the administrative organization

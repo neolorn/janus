@@ -15,7 +15,8 @@ namespace Janus.Authentication.Configuration;
 /// The one way a runtime setting changes: classified for direction, gated where it
 /// loosens, given a written reason, and written down.
 /// </summary>
-/// <param name="configuration">Where the settings are read and written.</param>
+/// <param name="configuration">Where the settings are read.</param>
+/// <param name="writes">Where the value in force is written, which nothing else reaches.</param>
 /// <param name="audit">Where the change is written down.</param>
 /// <param name="scope">Whether the caller may loosen the deployment.</param>
 /// <param name="policies">Where what a change to the system policy raised is recorded.</param>
@@ -25,13 +26,13 @@ namespace Janus.Authentication.Configuration;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements OPS-CFG-002, OPS-CFG-005, OPS-CFG-008, INT-MAIL-011 AC2, OPS-ALERT-001 and the
-/// <c>system:administer</c> row of chapter 10 section 2.1. Nothing else calls
-/// <see cref="IConfigurationStore.WriteAsync{TValue}(Setting{TValue}, TValue, CancellationToken)"/>:
-/// a change that went round this would be a change nobody was told of and nobody had
-/// to answer for.
+/// <c>system:administer</c> row of chapter 10 section 2.1. Nothing else holds
+/// <see cref="IConfigurationWrites"/>: a change that went round this would be a change
+/// nobody was told of and nobody had to answer for.
 /// </remarks>
 internal sealed class ConfigurationAdministration(
     IConfigurationStore configuration,
+    IConfigurationWrites writes,
     IConfigurationAudit audit,
     AdministrativeScope scope,
     PolicyResolution policies,
@@ -96,7 +97,7 @@ internal sealed class ConfigurationAdministration(
             return Result.Failure(refused);
         }
 
-        _ = (await configuration
+        _ = (await writes
                 .WriteAsync(setting, value, cancellationToken)
                 .ConfigureAwait(false))
             .Match(one => one, error => Held<TValue>(error, ref failure));
@@ -188,7 +189,7 @@ internal sealed class ConfigurationAdministration(
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
-        TValue before = (await configuration
+        TValue before = (await writes
                 .WriteAsync(family, parameter, value, cancellationToken)
                 .ConfigureAwait(false))
             .Match(one => one, error => Held<TValue>(error, ref failure));

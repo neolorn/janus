@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using Janus.Core.Configuration;
 using Xunit;
 
 namespace Janus.Core.Tests;
@@ -40,6 +41,26 @@ public sealed class PublicSurfaceTests
         @"typeof\((?<type>\w+)\)\.Assembly\.GetManifestResourceStream\(",
         RegexOptions.None,
         TimeSpan.FromSeconds(5));
+
+    /// <summary>
+    /// OPS-CFG-005 and OPS-CFG-008: the store a host holds only reads, so no host can put
+    /// a runtime value in force with no step-up, no reason and no record; the one writer
+    /// writes through a port of its own assembly.
+    /// </summary>
+    [Fact]
+    public void OPS_CFG_005_TheConfigurationStoreOnlyReads()
+    {
+        string[] members =
+        [
+            .. typeof(IConfigurationStore)
+                .GetMethods(Declared)
+                .Select(method => method.Name)
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal),
+        ];
+
+        Assert.Equal(["ReadAsync", "ReadWrittenAsync"], members);
+    }
 
     /// <summary>
     /// CONV-CODE-003 AC1: a contract member hands out a read-only view, never a
