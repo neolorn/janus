@@ -12136,6 +12136,8 @@ with no record. Under 3:
 *Chapter text that should change.* OPS-CFG-005 could say how the values set at
 bootstrap are recorded, and what `before` holds where no value stood.
 
+**Revised by entry 319.**
+
 ---
 
 ## 316. What the key-encryption key's rotation re-wraps, and what the maintenance credential reaches for it
@@ -12495,6 +12497,8 @@ recorded; IDN-PRIN-001 could list `configure` among the system principals;
 OPS-ALERT-001 could say whether the governing language raises one alert or both;
 CONV-LAYOUT-001 could list `configure` among what `Janus.Cli` carries, beside bootstrap
 and key rotation.
+
+**Superseded by D-166.**
 
 ---
 

@@ -150,7 +150,8 @@ internal sealed class ConfigurationAdministration(
                     loosening,
                     reason?.Trim(),
                     actor,
-                    time.GetUtcNow()),
+                    time.GetUtcNow(),
+                    Principal: null),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -219,7 +220,8 @@ internal sealed class ConfigurationAdministration(
                     loosening,
                     reason,
                     actor,
-                    time.GetUtcNow()),
+                    time.GetUtcNow(),
+                    Principal: null),
                 cancellationToken)
             .ConfigureAwait(false);
 

@@ -100,6 +100,13 @@ internal sealed class ConfigurationAudit(
         await ReadAsync(Changes().Where(row => row.ActingSubject == actor), cancellationToken)
             .ConfigureAwait(false);
 
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<ConfigurationChange>> OfPrincipalAsync(
+        string principal,
+        CancellationToken cancellationToken) =>
+        await ReadAsync(Changes().Where(row => row.Principal == principal), cancellationToken)
+            .ConfigureAwait(false);
+
     private static Dictionary<string, JsonElement> Details(
         ConfigurationKey key,
         string? before,
@@ -143,7 +150,8 @@ internal sealed class ConfigurationAudit(
             fields.GetProperty("loosening").GetBoolean(),
             fields.TryGetProperty("reason", out JsonElement reason) ? reason.GetString() : null,
             row.ActingSubject,
-            row.OccurredAt);
+            row.OccurredAt,
+            row.Principal);
     }
 
     private static async ValueTask<IReadOnlyList<ConfigurationChange>> ReadAsync(

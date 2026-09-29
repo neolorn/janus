@@ -640,7 +640,8 @@ against the public contract of LIB-API-001.
   the alert destinations included, is refused unless the caller also holds
   `system:administer` in the administrative organization; a tightening asks nothing
   more. Both are recorded with who made it, the key, the value before and after, the
-  direction, the reason and the time, and the record reads back by setting and by actor.
+  direction, the reason and the time, and the record reads back by setting, by actor
+  and by the system principal that made it, whose name a change it made carries.
   Changing the alert destinations goes through the same operation, and a change with no
   reason is refused before the destinations being replaced are told.
 - The library ships the words of every message it sends, in English and in Arabic. A
