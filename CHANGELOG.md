@@ -248,7 +248,8 @@ against the public contract of LIB-API-001.
   sessions, codes, links and tokens, ends the windows of account deletion, organization
   erasure, loss reports and privacy-request deadlines, re-verifies locked domains,
   publishes the outbox, provisions mailboxes, carries raised alerts, reconciles the mail
-  server daily and reads the gateway balance. Each job runs as a named principal of its
+  server daily and reads the gateway balance. Two passes that carry the same condition
+  at once deliver it once. Each job runs as a named principal of its
   own, once across the processes of a deployment, and a job whose last success is older
   than twice its interval raises `background-job-failed`. `SystemOperation` carries
   `Delivery` and `Monitoring` for this work, and the runs are kept in a table of their
