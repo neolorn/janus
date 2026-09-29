@@ -354,7 +354,7 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
 
         Assert.Equal(1, missing.ExitCode);
         Assert.Equal(
-            """{"code":"model.startup.kekunavailable","details":{"member":"keyEncryptionKeys"}}""",
+            """{"code":"model.startup.secretunavailable","details":{"key":"keyEncryptionKeys"}}""",
             missing.Error.Trim());
         Assert.Equal(0, await connection.ExecuteScalarAsync<int>("SELECT count(*)::int FROM identity.key_rotations"));
 

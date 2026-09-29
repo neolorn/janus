@@ -200,7 +200,9 @@ against the public contract of LIB-API-001.
   corporate address whose mailbox is queued for them, and each required deployment value
   as `--<key> <value>`; any other key is refused. The database connection, the
   key-encryption keys and the fingerprint keys are read once from a JSON document piped
-  to standard input, never from a terminal, an argument or the environment. It writes
+  to standard input, never from a terminal, an argument or the environment; a terminal,
+  a document that does not read, or one without a usable key is refused with
+  `model.startup.secretunavailable`, `details.key` naming `input` or the key. It writes
   the named values, the three administrative roles, the administrative organization and
   its policy, the administrator, the reserved `emergency` account holding the role and
   no way in, and the restore test's canary, raises the alert that no emergency
@@ -1228,7 +1230,7 @@ against the public contract of LIB-API-001.
   declaration and the `ApplicationKind` the pipeline is mounted in. The maintenance
   credential is the database connection of a login holding the maintenance role's
   rights, read from the secrets manager; a deployment that supplies none does not start,
-  with `model.startup.kekunavailable` naming `maintenanceCredential`. What the host
+  with `model.startup.secretunavailable` naming `maintenanceCredential`. What the host
   declares about its own domain is built and checked here, at startup. The endpoints
   mount with `MapIdentityEndpoints` and `MapIdentityWellKnown` on `IdentityEndpoints`,
   and the two profiles with `UseBrowserProfile` and `UseMachineProfile` on

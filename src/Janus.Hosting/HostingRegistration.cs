@@ -693,7 +693,7 @@ public static class HostingRegistration
         {
             throw new StartupException(
                 "The key-encryption key was not supplied; the library reads it from the secrets manager and holds no fallback.",
-                Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("keyEncryptionKeys")));
+                Error.From(ErrorCodes.StartupSecretUnavailable, "key", JsonSerializer.SerializeToElement("keyEncryptionKeys")));
         }
 
         if (fingerprintKeys is null
@@ -701,7 +701,7 @@ public static class HostingRegistration
         {
             throw new StartupException(
                 "The fingerprint key was not supplied, or a version of it is shorter than the hash it computes.",
-                Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("fingerprintKeys")));
+                Error.From(ErrorCodes.StartupSecretUnavailable, "key", JsonSerializer.SerializeToElement("fingerprintKeys")));
         }
 
         // BFF-SESS-006: an application that cannot authenticate itself at the token
@@ -711,7 +711,7 @@ public static class HostingRegistration
         {
             throw new StartupException(
                 "The sign-on client secret was not supplied; the library reads it from the secrets manager and holds no fallback.",
-                Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("signOnSecret")));
+                Error.From(ErrorCodes.StartupSecretUnavailable, "key", JsonSerializer.SerializeToElement("signOnSecret")));
         }
 
         // PRIV-RET-002: without the maintenance credential no month is created ahead and
@@ -721,7 +721,7 @@ public static class HostingRegistration
         {
             throw new StartupException(
                 "The maintenance credential was not supplied; the library reads it from the secrets manager and holds no fallback.",
-                Error.From(ErrorCodes.StartupKeyUnavailable, "key", JsonSerializer.SerializeToElement("maintenanceCredential")));
+                Error.From(ErrorCodes.StartupSecretUnavailable, "key", JsonSerializer.SerializeToElement("maintenanceCredential")));
         }
     }
 

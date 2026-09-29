@@ -159,8 +159,24 @@ public sealed class BootstrapRefusalTests
 
         Assert.Equal(1, run.ExitCode);
         Assert.Empty(run.Output);
-        Assert.Equal(ErrorCodes.StartupKeyUnavailable.ToString(), Code(run));
-        Assert.Equal("input", Detail(run, "member"));
+        Assert.Equal(ErrorCodes.StartupSecretUnavailable.ToString(), Code(run));
+        Assert.Equal("input", Detail(run, "key"));
+    }
+
+    /// <summary>
+    /// OPS-SEC-001: a document that does not read as one is refused as a terminal is,
+    /// naming the input rather than a key, before anything is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_001_TheCommandRefusesADocumentThatDoesNotReadAsync()
+    {
+        Invocation run = await Invocation.PipedAsync(Invocation.Bootstrap(), JsonValue.Create("keys"));
+
+        Assert.Equal(1, run.ExitCode);
+        Assert.Empty(run.Output);
+        Assert.Equal(ErrorCodes.StartupSecretUnavailable.ToString(), Code(run));
+        Assert.Equal("input", Detail(run, "key"));
     }
 
     /// <summary>
@@ -180,8 +196,8 @@ public sealed class BootstrapRefusalTests
         Invocation run = await Invocation.PipedAsync(Invocation.Bootstrap(), document);
 
         Assert.Equal(1, run.ExitCode);
-        Assert.Equal(ErrorCodes.StartupKeyUnavailable.ToString(), Code(run));
-        Assert.Equal(member, Detail(run, "member"));
+        Assert.Equal(ErrorCodes.StartupSecretUnavailable.ToString(), Code(run));
+        Assert.Equal(member, Detail(run, "key"));
     }
 
     /// <summary>
@@ -206,7 +222,7 @@ public sealed class BootstrapRefusalTests
         Invocation run = await Invocation.PipedAsync(Invocation.Bootstrap(), document);
 
         Assert.Equal(1, run.ExitCode);
-        Assert.Equal(ErrorCodes.StartupKeyUnavailable.ToString(), Code(run));
+        Assert.Equal(ErrorCodes.StartupSecretUnavailable.ToString(), Code(run));
     }
 
     /// <summary>
@@ -231,8 +247,8 @@ public sealed class BootstrapRefusalTests
         Invocation run = await Invocation.PipedAsync(Invocation.Bootstrap(), document);
 
         Assert.Equal(1, run.ExitCode);
-        Assert.Equal(ErrorCodes.StartupKeyUnavailable.ToString(), Code(run));
-        Assert.Equal("fingerprintKeys", Detail(run, "member"));
+        Assert.Equal(ErrorCodes.StartupSecretUnavailable.ToString(), Code(run));
+        Assert.Equal("fingerprintKeys", Detail(run, "key"));
     }
 
     /// <summary>

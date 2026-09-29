@@ -137,12 +137,16 @@ public static class ErrorCodes
     public static ErrorCode StartupUndeclaredDerivationReference { get; } = ErrorCode.Parse("model.derivation.undeclaredreference");
 
     /// <summary>
-    /// Startup: the key-encryption key or the fingerprint key could not be obtained
-    /// from the secrets manager. Make the secrets manager reachable and the values
-    /// readable; the library holds no fallback and starts without neither.
+    /// Startup: a secret the library reads through the host's secret source was not
+    /// supplied, or was supplied empty or unusable; the details name it under
+    /// <c>key</c>. Also a value wrapped under a key version no longer held. Make the
+    /// secret readable; the library holds no fallback and does not start without it.
     /// </summary>
-    /// <remarks>Implements AUTH-KEY-002, OPS-SEC-001, chapter 10 section 1.5.</remarks>
-    public static ErrorCode StartupKeyUnavailable { get; } = ErrorCode.Parse("model.startup.kekunavailable");
+    /// <remarks>
+    /// Implements AUTH-KEY-002, OPS-SEC-001, OPS-MIG-003a, OPS-SEC-003, LIB-EXT-001,
+    /// chapter 10 section 1.5.
+    /// </remarks>
+    public static ErrorCode StartupSecretUnavailable { get; } = ErrorCode.Parse("model.startup.secretunavailable");
 
     /// <summary>
     /// Startup: the relying party identifier is not a registrable suffix of a

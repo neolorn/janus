@@ -194,7 +194,7 @@ internal sealed class KeyRotation(
     }
 
     private static Error KeysUnavailable() =>
-        Error.From(ErrorCodes.StartupKeyUnavailable, "member", JsonSerializer.SerializeToElement("keyEncryptionKeys"));
+        Error.From(ErrorCodes.StartupSecretUnavailable, "key", JsonSerializer.SerializeToElement("keyEncryptionKeys"));
 
     // The seal named where the rotation cannot take it, with the count of values found
     // under a previous version where that is why.

@@ -171,7 +171,7 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
 
         Assert.Equal(1, missing.ExitCode);
         Assert.Equal(
-            """{"code":"model.startup.kekunavailable","details":{"member":"fingerprintKeys"}}""",
+            """{"code":"model.startup.secretunavailable","details":{"key":"fingerprintKeys"}}""",
             missing.Error.Trim());
         Assert.Equal(0, await connection.ExecuteScalarAsync<int>("SELECT count(*)::int FROM identity.key_rotations"));
 

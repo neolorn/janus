@@ -76,9 +76,9 @@ internal sealed class KeyDocument
     /// <param name="held">What clears every key read when the command ends.</param>
     /// <param name="cancellationToken">Abandons the read.</param>
     /// <returns>
-    /// The document, or the failure naming what was missing: the keys where standard
-    /// input is a terminal or holds none that can be used, the member where the
-    /// document is not one.
+    /// The document, or the failure naming what was missing: <c>input</c> where standard
+    /// input is a terminal or the document itself does not read, the key where it holds
+    /// none that can be used, the member where one it carries is not of its form.
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public static async ValueTask<Result<KeyDocument>> ReadAsync(
@@ -105,7 +105,7 @@ internal sealed class KeyDocument
                 {
                     if (read.Length >= Longest)
                     {
-                        return Result.Failure<KeyDocument>(Malformed("input"));
+                        return Result.Failure<KeyDocument>(Unavailable("input"));
                     }
 
                     byte[] grown = new byte[read.Length * 2];
@@ -144,7 +144,7 @@ internal sealed class KeyDocument
         }
         catch (JsonException)
         {
-            return Result.Failure<KeyDocument>(Malformed("input"));
+            return Result.Failure<KeyDocument>(Unavailable("input"));
         }
 
         using (document)
@@ -153,7 +153,7 @@ internal sealed class KeyDocument
 
             if (root.ValueKind is not JsonValueKind.Object)
             {
-                return Result.Failure<KeyDocument>(Malformed("input"));
+                return Result.Failure<KeyDocument>(Unavailable("input"));
             }
 
             if (!root.TryGetProperty("connection", out JsonElement connection)
@@ -234,8 +234,8 @@ internal sealed class KeyDocument
         return material.ContainsKey(currentVersion) ? (currentVersion, material) : null;
     }
 
-    private static Error Unavailable(string member) =>
-        Error.From(ErrorCodes.StartupKeyUnavailable, "member", JsonSerializer.SerializeToElement(member));
+    private static Error Unavailable(string key) =>
+        Error.From(ErrorCodes.StartupSecretUnavailable, "key", JsonSerializer.SerializeToElement(key));
 
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));

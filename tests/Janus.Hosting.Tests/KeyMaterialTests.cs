@@ -27,7 +27,7 @@ public sealed class KeyMaterialTests
     [Fact]
     public void AUTH_KEY_002_AC2_StartupFailsNamedWithoutTheKeyEncryptionKey() =>
         Assert.Equal(
-            ErrorCodes.StartupKeyUnavailable,
+            ErrorCodes.StartupSecretUnavailable,
             Refused(keys: null, Fingerprints(new byte[32])));
 
     /// <summary>
@@ -37,7 +37,7 @@ public sealed class KeyMaterialTests
     [Fact]
     public void AUTH_KEY_002_AC2_StartupFailsNamedWithoutTheFingerprintKey() =>
         Assert.Equal(
-            ErrorCodes.StartupKeyUnavailable,
+            ErrorCodes.StartupSecretUnavailable,
             Refused(Usable, fingerprintKeys: null));
 
     /// <summary>
@@ -47,7 +47,7 @@ public sealed class KeyMaterialTests
     [Fact]
     public void AUTH_KEY_002_AC2_StartupFailsNamedOnAFingerprintKeyShorterThanTheHash() =>
         Assert.Equal(
-            ErrorCodes.StartupKeyUnavailable,
+            ErrorCodes.StartupSecretUnavailable,
             Refused(Usable, Fingerprints(new byte[16])));
 
     /// <summary>
@@ -57,7 +57,7 @@ public sealed class KeyMaterialTests
     [Fact]
     public void AUTH_KEY_002_AC2_StartupFailsNamedOnARetainedFingerprintKeyShorterThanTheHash() =>
         Assert.Equal(
-            ErrorCodes.StartupKeyUnavailable,
+            ErrorCodes.StartupSecretUnavailable,
             Refused(
                 Usable,
                 new FingerprintKeys(2, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[16], [2] = new byte[32] })));
@@ -80,7 +80,7 @@ public sealed class KeyMaterialTests
                 ApplicationKind.Public))
             .Failure;
 
-        Assert.Equal(ErrorCodes.StartupKeyUnavailable, refused?.Code);
+        Assert.Equal(ErrorCodes.StartupSecretUnavailable, refused?.Code);
         Assert.Equal("maintenanceCredential", refused?.Details["key"].GetString());
     }
 

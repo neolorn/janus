@@ -200,7 +200,7 @@ internal sealed class FingerprintKeyRotation(
     }
 
     private static Error KeysUnavailable() =>
-        Error.From(ErrorCodes.StartupKeyUnavailable, "member", JsonSerializer.SerializeToElement("fingerprintKeys"));
+        Error.From(ErrorCodes.StartupSecretUnavailable, "key", JsonSerializer.SerializeToElement("fingerprintKeys"));
 
     // The seal named where the rotation cannot take it, with the count of fingerprints
     // found under a previous version where that is why.
