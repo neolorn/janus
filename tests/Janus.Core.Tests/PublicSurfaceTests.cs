@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using Xunit;
 
 namespace Janus.Core.Tests;
@@ -29,6 +30,16 @@ public sealed class PublicSurfaceTests
     // encrypted field names as its subject (PRIV-RIGHT-005a).
     private static readonly string[] ModelBuilder =
         ["AuthorizationModel.cs", "DeclaredMember.cs", "VocabularyConverter.cs"];
+
+    // An assembly is reached, without naming the namespace, through a type's Assembly.
+    private static readonly Regex AssemblyReached = new(@"\.Assembly\b", RegexOptions.None, TimeSpan.FromSeconds(5));
+
+    // The one use CONV-CODE-004 AC2 admits beside the model builder: the package's own
+    // embedded resources, read from the assembly of a type the reading project declares.
+    private static readonly Regex OwnResources = new(
+        @"typeof\((?<type>\w+)\)\.Assembly\.GetManifestResourceStream\(",
+        RegexOptions.None,
+        TimeSpan.FromSeconds(5));
 
     /// <summary>
     /// CONV-CODE-003 AC1: a contract member hands out a read-only view, never a
@@ -67,12 +78,22 @@ public sealed class PublicSurfaceTests
     [Fact]
     public void CONV_CODE_004_AC2_NoShippedFileUsesReflection()
     {
-        IEnumerable<string> reaching = Directory
-            .EnumerateFiles(Path.Combine(Repository.Root, "src"), "*.cs", SearchOption.AllDirectories)
-            .Where(file => !file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar, StringComparison.Ordinal)
-                && !file.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-            .Where(file => !ModelBuilder.Contains(Path.GetFileName(file), StringComparer.Ordinal))
+        IEnumerable<string> reaching = Shipped()
             .Where(file => File.ReadAllText(file).Contains("System.Reflection", StringComparison.Ordinal));
+
+        Assert.Empty(reaching);
+    }
+
+    /// <summary>
+    /// CONV-CODE-004 AC2 (D-168): the one assembly the shipped code reaches outside the
+    /// model builder is its own, and only to read the resources embedded in the package.
+    /// </summary>
+    [Fact]
+    public void CONV_CODE_004_AC2_AnAssemblyIsReachedOnlyForItsOwnResources()
+    {
+        IEnumerable<string> reaching = Shipped()
+            .Where(file => !ReadsOnlyItsOwnResources(file))
+            .Select(file => Path.GetRelativePath(Repository.Root, file));
 
         Assert.Empty(reaching);
     }
@@ -120,5 +141,42 @@ public sealed class PublicSurfaceTests
         Type definition = type.GetGenericTypeDefinition();
 
         return definition == typeof(List<>) || definition == typeof(Dictionary<,>);
+    }
+
+    // Every source file of a shipped project but the model builder's.
+    private static IEnumerable<string> Shipped() =>
+        Directory
+            .EnumerateFiles(Path.Combine(Repository.Root, "src"), "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                && !file.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            .Where(file => !ModelBuilder.Contains(Path.GetFileName(file), StringComparer.Ordinal));
+
+    // Each assembly the file reaches is one it reads its own resources from, through a
+    // type its own project declares.
+    private static bool ReadsOnlyItsOwnResources(string file)
+    {
+        string text = File.ReadAllText(file);
+        MatchCollection reading = OwnResources.Matches(text);
+        string project = Directory.GetParent(file)!.FullName;
+
+        while (!Directory.EnumerateFiles(project, "*.csproj").Any())
+        {
+            project = Directory.GetParent(project)!.FullName;
+        }
+
+        return AssemblyReached.Count(text) == reading.Count
+            && reading.All(read => Declares(project, read.Groups["type"].Value));
+    }
+
+    private static bool Declares(string project, string type)
+    {
+        var declaration = new Regex(
+            $@"\b(?:class|record|struct|interface|enum)\s+{Regex.Escape(type)}\b",
+            RegexOptions.None,
+            TimeSpan.FromSeconds(5));
+
+        return Directory
+            .EnumerateFiles(project, "*.cs", SearchOption.AllDirectories)
+            .Any(file => declaration.IsMatch(File.ReadAllText(file)));
     }
 }

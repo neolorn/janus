@@ -36,6 +36,12 @@
     <EmbeddedResource Include="Passwords\leaked-passwords.txt" />
   </ItemGroup>
 
+  <!-- INT-PWD-001, CONV-CODE-004: the range requests name the library's package, whose
+       identifier and version the build writes as constants (D-168). -->
+  <PropertyGroup>
+    <LibraryPackageConstants>true</LibraryPackageConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Janus.Hosting.Tests" />
   </ItemGroup>
