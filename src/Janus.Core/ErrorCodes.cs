@@ -50,13 +50,6 @@ public static class ErrorCodes
     public static ErrorCode ConfigurationChangeReasonRequired { get; } = ErrorCode.Parse("config.change.reasonrequired");
 
     /// <summary>
-    /// Loosening a control requires step-up authentication and a written reason.
-    /// Present both and repeat the change.
-    /// </summary>
-    /// <remarks>Implements OPS-CFG-002, chapter 10 section 1.5.</remarks>
-    public static ErrorCode ConfigurationChangeStepUpRequired { get; } = ErrorCode.Parse("config.change.stepuprequired");
-
-    /// <summary>
     /// An organization policy field is looser than the system default. Tighten the
     /// field, or raise the system default first.
     /// </summary>
@@ -683,13 +676,6 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements AUTH-SESS-007, chapter 10 section 1.2.</remarks>
     public static ErrorCode SessionCsrfInvalid { get; } = ErrorCode.Parse("auth.session.csrfinvalid");
-
-    /// <summary>
-    /// The sign-in is held until the code sent to the account's primary email is
-    /// entered. A status, not a refusal.
-    /// </summary>
-    /// <remarks>Implements AUTH-FACT-016, chapter 10 section 1.2.</remarks>
-    public static ErrorCode DeviceVerificationRequired { get; } = ErrorCode.Parse("auth.device.verificationrequired");
 
     /// <summary>
     /// The account does not meet a raised requirement and the run-up has elapsed. The

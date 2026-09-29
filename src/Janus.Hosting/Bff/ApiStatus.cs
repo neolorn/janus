@@ -60,7 +60,6 @@ internal static class ApiStatus
         [ErrorCodes.ChallengeRequired] = StatusCodes.Status403Forbidden,
         [ErrorCodes.Denied] = StatusCodes.Status403Forbidden,
         [ErrorCodes.Restricted] = StatusCodes.Status403Forbidden,
-        [ErrorCodes.ConfigurationChangeStepUpRequired] = StatusCodes.Status403Forbidden,
         [ErrorCodes.PolicyGraceExpired] = StatusCodes.Status403Forbidden,
         [ErrorCodes.ConsentRequired] = StatusCodes.Status403Forbidden,
         [ErrorCodes.PhotoNotEnabled] = StatusCodes.Status403Forbidden,
@@ -169,10 +168,8 @@ internal static class ApiStatus
         [ErrorCodes.ReactivationTokenInvalid] = StatusCodes.Status422UnprocessableEntity,
 
         // What 10 section 1.2 calls a status and not a refusal: the removal is
-        // accepted and the window it takes is what the answer carries, and the
-        // held sign-in is answered with what it still needs.
+        // accepted and the window it takes is what the answer carries.
         [ErrorCodes.CredentialLastSecondFactor] = StatusCodes.Status202Accepted,
-        [ErrorCodes.DeviceVerificationRequired] = StatusCodes.Status200OK,
 
         // Throttled, which carries the interval and not the reason. A send a
         // restriction refused is the same answer: 09 gives it 429 wherever it names

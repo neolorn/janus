@@ -3755,7 +3755,6 @@ static Janus.Core.ErrorCodes.CodeExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.CodeInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.CodeReplayed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationChangeReasonRequired.get -> Janus.Core.ErrorCode
-static Janus.Core.ErrorCodes.ConfigurationChangeStepUpRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationKeyProtected.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationLastDestination.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationPolicyBelowSystem.get -> Janus.Core.ErrorCode
@@ -3773,7 +3772,6 @@ static Janus.Core.ErrorCodes.CredentialSuspended.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.DeletionWindowElapsed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.Denied.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.DerivationSourcesMissing.get -> Janus.Core.ErrorCode
-static Janus.Core.ErrorCodes.DeviceVerificationRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.DocumentNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.DomainUnverified.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.EndpointInsecure.get -> Janus.Core.ErrorCode
