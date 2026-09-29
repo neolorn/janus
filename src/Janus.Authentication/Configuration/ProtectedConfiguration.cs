@@ -76,7 +76,9 @@ internal sealed class ProtectedConfiguration(
         foreach (ProtectedValue value in values)
         {
             bool loosening = await value.LoosensAsync(configuration, cancellationToken).ConfigureAwait(false);
-            string? before = await settings.WriteAsync(value.Key, value.Written, cancellationToken).ConfigureAwait(false);
+            string? before = await value.BeforeAsync(configuration, cancellationToken).ConfigureAwait(false);
+
+            _ = await settings.WriteAsync(value.Key, value.Written, cancellationToken).ConfigureAwait(false);
 
             await audit
                 .ChangedAsync(value.Key, before, value.Written, loosening, reason, Principal, now, cancellationToken)

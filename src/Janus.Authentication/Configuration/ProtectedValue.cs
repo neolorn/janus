@@ -30,4 +30,14 @@ internal abstract class ProtectedValue
     /// <param name="cancellationToken">Abandons the read.</param>
     /// <returns>Whether the change loosens.</returns>
     public abstract ValueTask<bool> LoosensAsync(IConfigurationStore configuration, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// What the key was before the change, as the record carries it: the written form
+    /// of the value in force, which is the default where no row stood, and nothing only
+    /// for a key the deployment names that has no row (OPS-CFG-005, D-166).
+    /// </summary>
+    /// <param name="configuration">Where the value in force is read.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>The written value in force, or nothing.</returns>
+    public abstract ValueTask<string?> BeforeAsync(IConfigurationStore configuration, CancellationToken cancellationToken);
 }

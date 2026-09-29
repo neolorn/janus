@@ -22,9 +22,10 @@ public sealed class ConfigureTests(BootstrappedDeployment deployment) : IClassFi
     private const string Reason = "The provider's own limits now apply.";
 
     /// <summary>
-    /// OPS-CFG-004 AC2 and OPS-ALERT-001: a protected key the application refuses is
-    /// changed from the server, written down under the command's principal with the
-    /// values, the direction and the reason, and raised as a High condition.
+    /// OPS-CFG-004 AC2, OPS-CFG-005 and OPS-ALERT-001: a protected key the application
+    /// refuses is changed from the server, written down under the command's principal
+    /// with the values, the direction and the reason, and raised as a High condition.
+    /// No row stood for the key, so what it was is its default, the value in force.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -50,7 +51,9 @@ public sealed class ConfigureTests(BootstrappedDeployment deployment) : IClassFi
         Assert.Equal(0, run.ExitCode);
         Assert.Equal("""{"changed":["abuse.throttle.enabled"]}""", run.Output.Trim());
         Assert.Equal(Settings.AbuseThrottleEnabled.Write(false), await ValueAsync(connection, key));
-        Assert.Equal((null, Settings.AbuseThrottleEnabled.Write(false), true, Reason, "OPS-CFG-004"), recorded);
+        Assert.Equal(
+            (Settings.AbuseThrottleEnabled.Write(true), Settings.AbuseThrottleEnabled.Write(false), true, Reason, "OPS-CFG-004"),
+            recorded);
         Assert.Equal(["protected-setting-changed"], await RaisedAsync(connection, key));
     }
 
@@ -208,6 +211,50 @@ public sealed class ConfigureTests(BootstrappedDeployment deployment) : IClassFi
         Assert.Equal("model.startup.rpid", Refusal(run));
         Assert.Null(await ValueAsync(connection, key));
         Assert.Empty(await RaisedAsync(connection, key));
+    }
+
+    /// <summary>
+    /// OPS-CFG-005 (D-166, 319): what a key was is the written form of the value in
+    /// force, and nothing only for a key the deployment names that has no row: the
+    /// first change of the cross-border basis records nothing before it, and the next
+    /// records the value the first put in force.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_005_AChangeRecordsTheValueInForceAsWhatItWasAsync()
+    {
+        string key = Settings.HostingCrossBorderBasis.Key.ToString();
+
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        try
+        {
+            Invocation first = await ConfiguredAsync("--" + key, "standard contractual clauses", "--reason", Reason);
+            Invocation second = await ConfiguredAsync("--" + key, "an adequacy decision", "--reason", Reason);
+
+            IReadOnlyList<(string? Before, string After)> recorded = [.. await connection
+                .QueryAsync<(string?, string)>(
+                    """
+                    SELECT details->>'before', details->>'after'
+                    FROM identity.audit_records
+                    WHERE action = 'ops.configuration.changed' AND principal = 'configure'
+                      AND details->>'key' = @Key
+                    ORDER BY occurred_at, id
+                    """,
+                    new { Key = key })];
+
+            Assert.Equal(0, first.ExitCode);
+            Assert.Equal(0, second.ExitCode);
+            Assert.Equal(
+                [(null, "standard contractual clauses"), ("standard contractual clauses", "an adequacy decision")],
+                recorded);
+        }
+        finally
+        {
+            // The key is required once the location is outside Egypt, which another case
+            // of the class relies on finding unnamed.
+            await connection.ExecuteAsync("DELETE FROM identity.settings WHERE key = @Key", new { Key = key });
+        }
     }
 
     private static async Task<string?> ValueAsync(NpgsqlConnection connection, string key) =>

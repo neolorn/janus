@@ -174,7 +174,9 @@ against the public contract of LIB-API-001.
   `integration.mailserver.endpoint` and the default client) are on that one list; a
   mail server endpoint that is not an absolute `https` address stops startup with
   `integration.endpoint.insecure` naming the key. Each change is recorded under the
-  `configure` principal with its reason and raises `protected-setting-changed`; the
+  `configure` principal with its reason and what the key was (its default where no
+  value was written, nothing only for a key the deployment names and never named) and
+  raises `protected-setting-changed`; the
   governing language also raises `governing-language-changed`. A change that would leave
   the deployment unable to start is refused and nothing of it is written: the command
   runs the start's checks over the written values (the keys to name, the relying party,

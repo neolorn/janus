@@ -33,4 +33,17 @@ internal sealed class ProtectedSettingValue<TValue>(Setting<TValue> setting, TVa
             before => setting.Loosens(before, value),
             _ => false);
     }
+
+    /// <inheritdoc/>
+    /// <exception cref="ArgumentNullException">The configuration is absent.</exception>
+    public override async ValueTask<string?> BeforeAsync(IConfigurationStore configuration, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        // A read answers only a key the deployment names that has no row; a stored
+        // value that does not read is the store's fault, thrown there.
+        return (await configuration.ReadAsync(setting, cancellationToken).ConfigureAwait(false)).Match(
+            before => setting.Write(before),
+            _ => (string?)null);
+    }
 }
