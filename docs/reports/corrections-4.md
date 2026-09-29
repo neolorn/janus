@@ -1,9 +1,10 @@
 # Corrections 4: D-166 and D-167
 
-Status: stopped at open question 10 (Tier 3). D-168 settled questions 1 and 2 of the first
-stop, D-169 question 3, D-170 questions 4 to 6, D-171 question 7, and D-172 questions 8
-and 9. Of the rest of D-166, section D.8 is applied up to its paragraph 340; D-172 item 2,
-which comes before it, stops the run at question 10 (section 2).
+Status: stopped at open question 11 (Tier 3). D-168 settled questions 1 and 2 of the first
+stop, D-169 question 3, D-170 questions 4 to 6, D-171 question 7, D-172 questions 8 and 9,
+and D-173 question 10. Of the rest of D-166, section D.8 is applied up to its paragraph
+340; D-172 item 2, which comes before it, is applied but for its check constraint, where
+question 11 stops the run (section 2).
 
 ## 1. Items implemented
 
@@ -115,6 +116,8 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 | D-166 D.8, break-glass part (8): `GET /admin/break-glass`; the ledger lines of 291, 295, 297, 302 and 331 | `221654d` | OPS-BOOT-001 AC3 | `BreakGlassEndpointTests.OPS_BOOT_001_AC3_TheAbsenceIsReadByEverySystemAdministratorAsync`, `BreakGlassEndpointTests.OPS_BOOT_001_AC3_OnlyASystemAdministratorReadsTheStandingAsync` |
 | The documentation of D-171 | `24bccd9` | none | none |
 | The documentation of D-172 | `1653155` | none | none |
+| The documentation of D-173 | `5e6faec` | none | none |
+| D-172 item 2 as D-173 corrects it, but for the check constraint: the deployment key under the max UUID of RFC 9562, erasure's refusal of it, the field cipher's values for rows of no subject bound to their own row (D-166 234 for invitations), and the migration that moves the key and refuses where a value bound the old way stands | `c656253` | PRIV-RIGHT-005a AC18 | `DeploymentDataKeyTests.PRIV_RIGHT_005a_AC18_TheDeploymentKeyIsHeldUnderTheMaxUuidAsync`, `DeploymentDataKeyTests.PRIV_RIGHT_005a_AC18_TheMigrationMovesTheKeyToTheMaxUuidAsync`, `DeploymentDataKeyTests.PRIV_RIGHT_005a_AC18_TheMigrationRefusesNamingTheTableWhereAValueBoundTheOldWayStandsAsync` (four cases), `SubjectEraserTests.PRIV_RIGHT_005a_AC18_AnErasureNamingTheMaxUuidIsRefusedAndLeavesTheRowAsync`, `InvitationStoreTests.PRIV_RIGHT_005a_AC18_AnInvitationsValueDoesNotOpenOnAnotherRowAsync`, `MailboxStoreTests.PRIV_RIGHT_005a_AC18_AnUnheldAddressDoesNotOpenOnAnotherRowAsync`, `SendOutboxTests.PRIV_RIGHT_005a_AC18_AMessageNamingNoSubjectDoesNotOpenOnAnotherRowAsync`, `RegistrationSessionStoreTests.PRIV_RIGHT_005a_AC18_StagedValuesDoNotOpenOnAnotherRowAsync` |
 | D-171 item 4: a session opened from the break-glass session carries its reason; one opened by an ordinary sign-in carries none (no code change) | `5ebabcd` | OPS-BOOT-002 AC10 | `BreakGlassEndpointTests.OPS_BOOT_002_AC10_ASessionOpenedFromTheBreakGlassSessionCarriesTheReasonAsync` |
 | D-166 D.8, 316: one data key of the deployment, a row of `subject_keys`, under which every value of no subject is held; the rotation re-wraps subject-key rows only, writing back only where the value read still stands; ledger line 316 | `ced2208` | OPS-SEC-003, OPS-MIG-003a AC4, AUTH-KEY-002, PRIV-RIGHT-005a | `KeyRotationTests.OPS_SEC_003_AC3_AfterRetirementEveryValueOfNoSubjectStillReadsAsync`, `KeyRotationTests.OPS_SEC_003_AC3_AProofKeyInFlightStillReadsAfterRetirementAsync`, `KeyRotationTests.OPS_SEC_003_ARotationTouchesNoTableButTheSubjectKeysAndItsProgressAsync`, `KeyRotationTests.OPS_SEC_003_ARotationDoesNotOverwriteAKeyRewrittenAtTheSameVersionAsync`, `DatabaseRoleTests.OPS_MIG_003a_AC4_TheMaintenanceRoleReachesNoValueBesideTheSubjectKeysAsync`, `OidcStoreTests.AUTH_KEY_002_ThePrivateHalfIsWrappedUnderTheDeploymentDataKeyAsync`, `SubjectEraserTests.PRIV_RIGHT_005a_ErasureNeverTouchesTheDeploymentDataKeyAsync`, `SerializedModelTests` (the maintenance grants) |
 
@@ -198,11 +201,17 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 
 **D-166 D.8, 316.**
 - The order: 340 wraps client secrets under 316's deployment key, so 316 is applied first (D-166 section B, D-171 item 2).
-- The deployment key is the `subject_keys` row under the nil subject (question 9, which D-172 item 2 settles for the max UUID; not yet applied, question 10), written on first need by an insert that does nothing on conflict, then read back. `SubjectEraser` refuses the nil subject before anything.
+- The deployment key is the `subject_keys` row under the nil subject (question 9; moved to the max UUID by D-172 and D-173 in `c656253`), written on first need by an insert that does nothing on conflict, then read back. `SubjectEraser` refuses the nil subject before anything.
 - Invitations, reserved mailboxes, registration sessions, the send outbox, the sign-on proof, signing keys and provider attempts moved under it; their `key_version` columns and the checks on them are dropped. A list read unwraps the deployment key once for the batch (D-171).
 - Migration `MoveValuesUnderTheDeploymentKey` refuses where any value is still wrapped under the key-encryption key outside `subject_keys`, since the database cannot re-wrap it, and revokes the maintenance role's grants on those tables except the mailbox reads the fingerprint rotation needs. Its `Down` refuses where values under the deployment key stand.
 - A mutation check: with the `wrapped_key = @read` condition removed, `OPS_SEC_003_ARotationDoesNotOverwriteAKeyRewrittenAtTheSameVersionAsync` fails.
 - Not done here, as other sections' items: 234 (the invitation's identifier in its additional data, D.6) and the outbox's erasure marker (PRIV-RIGHT-005a).
+
+**D-172 item 2 as D-173 corrects it (`c656253`).**
+- Each store builds the subject position of the additional data from its row's own identifier: the invitation's, the unheld mailbox's (the holder's while one holds it), the queued message's where it names no subject (the subject's where it names one), and the registration session's, which was bound to the provisional subject, not its row. RFC 5649 wraps are unchanged.
+- The migration `HoldTheDeploymentKeyUnderTheMaxUuid` changes no model. It refuses with an exception naming the table where an invitation with identifiers, an unheld mailbox, a queued message naming no subject, or any registration session stands, then moves the key's row as it is. Its `Down` mirrors it. Nothing is re-encrypted.
+- Each row-binding test moves a value together with its wrapped key to another row, which opened under the shared binding and no longer does.
+- The run was interrupted by a crash of the machine after this work was written and before it was committed. Every changed file was re-read and checked whole before the commit. The 340 work had been set aside in `tmp/c4/held/340-now/` so that the commit and its checks were its own, and was put back after it, identical to what was saved.
 
 **Criteria no test decides.**
 - D-166 319 (1), the signing algorithm: `token.signing.algorithm` admits only `ES256` at its reading, so `configure` refuses any other value before the check of `SigningKeys` is reached. The check stands in `CompleteAsync`; no value reaches its refusal. Verified by review.
@@ -216,18 +225,18 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 
 | Item | Reason | Waits on |
 |---|---|---|
-| D-172 item 2: the deployment key under the max UUID, each value bound to its own row, the refusal, the check constraint, the test carrying PRIV-RIGHT-005a criterion 18 | Open question 10 | Question 10 |
-| D-166 D.8, 340, with D-172 item 1 | Follows D-172 item 2 in the owner's order. The work stands uncommitted in the working tree and is kept in `tmp/c4/held/`: the registry drawing and holding each secret wrapped with its rotation, the client half reading it per exchange, the sign-on secret and its source member removed, and the migration `HoldClientSecretsWrapped`. It builds; its tests are not all written or run | Question 10 |
-| D-166 D.9 343 and 349, D.6 215, then D.8 121 and 336 (the key ring of D-171) | Not reached: D-171 item 2 puts them after 340 | Question 10 |
-| D-166 D.8, the paragraphs after 121 and 336: 317, 318, 341, 303 (and the audit's subject), 304 and 334 parts (1) and (2), 323, the audit action rows | Not reached: they follow 121 and 336 in the log's order | Question 10 |
-| D-166 section D.2, the entries after 114 (115, 129, 146, 152, 208, 328, 401, 402 and 422, 417, 419, 421, 326, and the preferred second step) | Not reached | Question 10 |
-| D-166 section C, rules X1 and X3 to X9 as sweeps (X2 is applied, under 116; X3 on the configuration routes, under 178) | Not reached | Question 10 |
-| D-166 sections D.1 to D.7 and D.9 to D.11 | Not reached | Question 10 |
-| D-166 section E, every item other than E.6 | Not reached | Question 10 |
-| D-166 section F, the rows of chapter 10 other than those applied under D.8 (the retired step-up and device verification codes, `model.startup.secretunavailable`, `config.change.reasonrequired`, the retired switches, `integration.mailserver.endpoint`, `breakglass-generated`) | Not reached. The three contract tests that failed at `aa7c5e9` now pass at `0dc0ae0` | Question 10 |
-| D-166 section G, the ledger lines of the entries not yet applied | Each goes in the commit that applies its entry | Question 10 |
-| Truth-table rows for D-166 entries 396 and 265 | They state the D-166 outcomes, so they belong with those fixes | Question 10 |
-| The full gate, the pull request for `corrections-4` | The run stopped before step 4 of the work order (section 5) | Question 10 |
+| D-172 item 2, its check constraint keeping the max UUID out of every table of subjects other than the subject-key table, and the criterion 18 test that the database refuses it there | Open question 11 | Question 11 |
+| D-166 D.8, 340, with D-172 item 1 | Follows D-172 item 2 in the owner's order. The work stands uncommitted in the working tree and is kept in `tmp/c4/held/`: the registry drawing and holding each secret wrapped with its rotation, the client half reading it per exchange, the sign-on secret and its source member removed, and the migration `HoldClientSecretsWrapped`, now timed after `c656253`'s migration. It builds; its tests are not all written or run | Question 11 |
+| D-166 D.9 343 and 349, D.6 215, then D.8 121 and 336 (the key ring of D-171) | Not reached: D-171 item 2 puts them after 340 | Question 11 |
+| D-166 D.8, the paragraphs after 121 and 336: 317, 318, 341, 303 (and the audit's subject), 304 and 334 parts (1) and (2), 323, the audit action rows | Not reached: they follow 121 and 336 in the log's order | Question 11 |
+| D-166 section D.2, the entries after 114 (115, 129, 146, 152, 208, 328, 401, 402 and 422, 417, 419, 421, 326, and the preferred second step) | Not reached | Question 11 |
+| D-166 section C, rules X1 and X3 to X9 as sweeps (X2 is applied, under 116; X3 on the configuration routes, under 178) | Not reached | Question 11 |
+| D-166 sections D.1 to D.7 and D.9 to D.11 | Not reached | Question 11 |
+| D-166 section E, every item other than E.6 | Not reached | Question 11 |
+| D-166 section F, the rows of chapter 10 other than those applied under D.8 (the retired step-up and device verification codes, `model.startup.secretunavailable`, `config.change.reasonrequired`, the retired switches, `integration.mailserver.endpoint`, `breakglass-generated`) | Not reached. The three contract tests that failed at `aa7c5e9` now pass at `0dc0ae0` | Question 11 |
+| D-166 section G, the ledger lines of the entries not yet applied | Each goes in the commit that applies its entry | Question 11 |
+| Truth-table rows for D-166 entries 396 and 265 | They state the D-166 outcomes, so they belong with those fixes | Question 11 |
+| The full gate, the pull request for `corrections-4` | The run stopped before step 4 of the work order (section 5) | Question 11 |
 
 ## 3. Resolved by rule
 
@@ -243,6 +252,8 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 | `Program.RunAsync` (`82fa429`) | D-166 308 (4) names the command in the refusal; an invocation with no argument names none | `10` section 1, `api.request.malformed` | A request refused before any member is read carries the code alone |
 | `ConformanceSuite.ProviderAsync` and `ConformanceSuite.Validated` (`0dc0ae0`) | Neither is given a container, and each drew from the static `RandomNumberGenerator` | CONV-DESIGN-007 AC2 | Randomness comes from a generator instance made where the work is composed and handed to what draws, as the command compositions and `StorageRegistration` make theirs |
 | `tests/Janus.Storage.Tests` `Deployment` and `DatabaseFixture` (`ced2208`) | Each test drew its own key-encryption key while the class shares one database, and the deployment key of 316 is one row of that database, so a second test could not unwrap it | OPS-SEC-003; the working guide's section 3, test infrastructure | The key-encryption key is the fixture's, one per database, and the tests build the deployment key's store from it; no runtime code changed |
+| `tests/Janus.Storage.Tests` `DatabaseFixture` (`c656253`) | A migration test needs a database of its own, migrated to a named migration, beside the class's shared one | PRIV-RIGHT-005a AC18; the working guide's section 3, test infrastructure | `DatabaseFixture` gains the creation of a named database and a context over a connection string; no runtime code changed |
+| `docs/reports/decisions-pending-review.md`, entry 234 (`c656253`) | The work order asked for 234's ledger line with its commit; section G lists 234 neither as superseded nor as revised, D-166 keeps it "with a fix", and the ledger takes only the lines section G gives | The working guide's section 3 (the closed ledger); D-166 section G | No line is written for a kept entry that section G does not list |
 | `AlertsTests` (`72f0e85`) | `breakglass-generated` takes the next free value, 31, but is declared after `breakglass-used` in the table's order, so the test that read the order from the values failed | OPS-ALERT-001; the working guide's section 3, test infrastructure | The test reads the declaration order from the enumeration's fields |
 
 ## 4. Open questions
@@ -426,7 +437,7 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
   identity of every system principal's work (IDN-AUD-001). `SubjectEraser` refuses it.
 - Which identifier holds the key, and whether the nil subject may, concerns keys and
   erasure. No proposal is made; the committed choice stands until the owner decides.
-- **Settled by D-172** (the max UUID of RFC 9562). Not yet applied (question 10).
+- **Settled by D-172** (the max UUID of RFC 9562), applied in `c656253` but for question 11.
 
 **10. Tier 3. D-172 item 2: re-binding the values under the deployment key.**
 
@@ -457,15 +468,41 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
   value is still wrapped under the key-encryption key), is a decision on keys. No proposal
   is made. Nothing of item 2 is committed; the 340 work stays uncommitted in the working
   tree, as before.
+- **Settled by D-173**: the field cipher's values bound to their row, RFC 5649 wraps unbound, the migration refusing instead of re-encrypting. Applied in `c656253`.
+
+**11. Tier 3. PRIV-RIGHT-005a and D-172 item 2: which tables are "tables of subjects".**
+
+- PRIV-RIGHT-005a and D-172 item 2: "a check constraint keeps it out of every table of
+  subjects other than the subject-key table"; criterion 18: "a row of any other table of
+  subjects carrying the max UUID is refused by the database". No chapter, `10` row or
+  log entry defines "table of subjects", and the phrase appears nowhere else.
+- The schema as it stands:
+  - tables whose primary key is the subject: `accounts`, `account_preferences`,
+    `erasures`, `grant_versions`, `key_ceremonies`, `passwords`, `profile_photos`,
+    `profiles`, `recovery_code_sets`;
+  - tables whose primary key begins with the subject: `consents`, `objections`,
+    `identifier_backup_settings`, `recovery_codes`, `recovery_approvals`;
+  - columns naming a subject in other tables, most under a foreign key to
+    `accounts(subject)`, and some under none: the audit records' acting and effective
+    identities, `grants.subject_id` and `granted_by`, `devices.subject_id`,
+    `registration_sessions.provisional_subject`, `resources.subject`,
+    `send_outbox.subject`, `verification_codes.holder`.
+- The scope decides where the database refuses the deployment key's identifier. No
+  proposal is made. The constraint and its test wait for the answer; the rest of the item
+  is in `c656253`.
 
 ## 5. Gate result
 
-**`corrections-4`.** Not run. The run stopped at question 10, before step 6 of the work
+**`corrections-4`.** Not run. The run stopped at question 11, before step 6 of the work
 order, so the full gate was not run and no pull request was opened. The branch is pushed so
-its commits can be read; the 340 work in the working tree is not. No code commit was made
-after `ced2208`, so the checks below stand for the code at the head.
+its commits can be read; the 340 work in the working tree is not.
+- `c656253`, checked in a scratch checkout of that commit so the 340 work took no part:
+  build with warnings as errors, format, and the unit and contract tests, Analyzers 20,
+  Authentication 813, Authorization 126, Cli 19, Core 468, Hosting 723, Identity 89,
+  Privacy 222, Storage 33, with the one failure of the scratch checkout noted below; the
+  integration suites of `Janus.Storage.Tests` (417) and `Janus.Cli.Tests` (65), no failure.
 - Push runs on the reports of the earlier stops: 36558943751 on `40bd871`, 36566244433 on
-  `927de12` and 36588064683 on `3e6b810`, all green.
+  `927de12`, 36588064683 on `3e6b810` and 36597616186 on `f24e546`, all green.
 - Fast checks at `ced2208` (build with warnings as errors, format, the unit and contract
   tests), in a scratch checkout of that commit so the uncommitted 340 work took no part:
   Analyzers 20, Authentication 813, Authorization 126, Cli 19, Core 468, Hosting 723,
@@ -474,8 +511,8 @@ after `ced2208`, so the checks below stand for the code at the head.
   `gitdir` path names the product; in the repository `.git` is a directory.
 - The integration suite of `Janus.Storage.Tests` at `ced2208`: 407, no failure. The other
   suites of the full gate were not run.
-- Secret scanning: the pinned scanner, run locally as the pipeline runs it, over the 837
-  commits of the history at `1653155` before the push: no finding.
+- Secret scanning: the pinned scanner, run locally as the pipeline runs it, over the 840
+  commits of the history at `c656253` before the push: no finding.
 
 **Pull request #6 (`phase-10-release`), merged as `b6d14fe`.**
 - Pull request run 36217259244 on `cdc185a`: every required check green. `Secret scanning` runs on push only, and push run 36217256269 was green, with job 108335588796.
