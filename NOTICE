@@ -17,3 +17,8 @@ the 12dicts lists to the public domain and asks that their use be acknowledged
 (http://wordlist.aspell.net/12dicts/). The list is in
 src/Janus.Hosting/Passwords/3esl.txt, and the build keeps its single lower-case words
 of four letters or more.
+
+This package contains the Public Suffix List, version 2026-09-24_13-26-36_UTC, from
+https://publicsuffix.org/list/public_suffix_list.dat, downloaded on 2026-09-29. It is
+subject to the Mozilla Public License 2.0 (https://mozilla.org/MPL/2.0/) and is carried
+unmodified, with its header, in src/Janus.Authentication/Factors/public_suffix_list.dat.

@@ -1120,7 +1120,9 @@ against the public contract of LIB-API-001.
   stops the deployment, and one left unset is derived as the parent domain the origins
   share rather than taken from the first of them. The related-origins document lists
   exactly the additional origins configured, and a set of them wider than a browser
-  reads stops the deployment too.
+  reads stops the deployment too. Both are judged against the Public Suffix List the
+  package carries, its ICANN and private sections alike: an identifier that is a public
+  suffix is refused, and `shop.com` and `shop.co.uk` count as one name.
 - A browser can be trusted after a two-factor sign-in, which spares it the second factor
   and nothing else: the session that follows records only the password, the offer is
   absent where the policy requires two factors or the password is too short to stand

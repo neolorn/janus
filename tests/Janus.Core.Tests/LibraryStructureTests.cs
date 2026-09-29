@@ -482,6 +482,27 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
+    /// AUTH-FACT-010: the notice names the Public Suffix List, its licence and its source
+    /// address, and the version the carried list states in its header.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_010_TheNoticeNamesThePublicSuffixList()
+    {
+        string notice = string.Join(
+            ' ',
+            File.ReadAllText(Path.Combine(Repository.Root, "NOTICE"))
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        string version = File
+            .ReadLines(Path.Combine(Repository.Root, "src", "Janus.Authentication", "Factors", "public_suffix_list.dat"))
+            .First(line => line.StartsWith("// VERSION: ", StringComparison.Ordinal))[12..];
+
+        Assert.Contains("Public Suffix List", notice, StringComparison.Ordinal);
+        Assert.Contains("Mozilla Public License 2.0", notice, StringComparison.Ordinal);
+        Assert.Contains("https://publicsuffix.org/list/public_suffix_list.dat", notice, StringComparison.Ordinal);
+        Assert.Contains("version " + version, notice, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// CONV-LAYOUT-001 AC3: every project's library dependencies are exactly the ones
     /// the table gives, so a dependency pointing outward does not build.
     /// </summary>

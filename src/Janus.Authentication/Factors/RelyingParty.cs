@@ -96,13 +96,13 @@ internal sealed class RelyingParty
         string[] hosts = [.. origins.Select(Host)];
         string resolved = identifier.Length == 0 ? Common(hosts) : identifier;
 
-        if (Labels(resolved).Length < 2)
+        if (PublicSuffixList.Shipped.IsSuffix(resolved))
         {
             throw Refused(
                 ErrorCodes.StartupRelyingPartyId,
                 "rpid",
                 resolved,
-                "it carries no registrable parent domain");
+                "it is a public suffix and carries no registrable domain");
         }
 
         foreach (string host in hosts)
@@ -118,7 +118,9 @@ internal sealed class RelyingParty
         }
 
         string[] related = [.. relatedOrigins.Select(Host)];
-        HashSet<string> labels = [.. related.Append(resolved).Select(Registrable)];
+        HashSet<string> labels = new(
+            related.Append(resolved).Select(PublicSuffixList.Shipped.Label),
+            StringComparer.OrdinalIgnoreCase);
 
         return labels.Count > LabelLimit
             ? throw Refused(
@@ -209,14 +211,6 @@ internal sealed class RelyingParty
     private static bool Over(string identifier, string host) =>
         string.Equals(host, identifier, StringComparison.OrdinalIgnoreCase)
         || host.EndsWith("." + identifier, StringComparison.OrdinalIgnoreCase);
-
-    // The name a browser counts an allowlist by: the label before the public suffix.
-    private static string Registrable(string host)
-    {
-        string[] labels = Labels(host);
-
-        return labels.Length < 2 ? labels[0] : labels[^2];
-    }
 
     private static async ValueTask<TValue> ValueAsync<TValue>(
         IConfigurationStore configuration,

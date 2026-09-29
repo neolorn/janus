@@ -16,6 +16,12 @@
                       ReferenceOutputAssembly="false" />
   </ItemGroup>
 
+  <!-- AUTH-FACT-010, AUTH-FACT-012, D-166: the Public Suffix List travels unmodified,
+       with its header and date, and judges only the deployment's own origins. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Factors\public_suffix_list.dat" />
+  </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Janus.Authentication.Tests" />
     <InternalsVisibleTo Include="Janus.Storage" />

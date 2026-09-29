@@ -183,6 +183,92 @@ public sealed class RelyingPartyTests
                 .Id);
 
     /// <summary>
+    /// AUTH-FACT-012 AC2: <c>shop.com</c> and <c>shop.co.uk</c> carry one label between
+    /// them, the name before each public suffix, so five labels stand with both.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_012_AC2_ShopComAndShopCoUkCountAsOneLabel() =>
+        Assert.Equal(
+            "shop.com",
+            RelyingParty.Of(
+                    "shop.com",
+                    ["https://www.shop.com"],
+                    [
+                        "https://shop.co.uk",
+                        "https://second.net",
+                        "https://third.org",
+                        "https://fourth.io",
+                    ],
+                    Algorithms)
+                .Id);
+
+    /// <summary>
+    /// AUTH-FACT-012 AC2: <c>a.co.uk</c> and <c>b.co.uk</c> carry two labels, so beside
+    /// four others they exceed what a browser reads.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_012_AC2_ACoUkAndBCoUkCountAsTwoLabels() =>
+        Assert.Equal(
+            ErrorCodes.StartupLabelLimit,
+            Refused(() => RelyingParty.Of(
+                "example.com",
+                ["https://app.example.com"],
+                [
+                    "https://a.co.uk",
+                    "https://b.co.uk",
+                    "https://third.org",
+                    "https://fourth.io",
+                    "https://fifth.dev",
+                ],
+                Algorithms)));
+
+    /// <summary>
+    /// AUTH-FACT-012 AC2: the list's private section applies as its ICANN section does,
+    /// so two names under one hosting suffix carry two labels.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_012_AC2_ThePrivateSectionCountsAsTheIcannSectionDoes() =>
+        Assert.Equal(
+            ErrorCodes.StartupLabelLimit,
+            Refused(() => RelyingParty.Of(
+                "example.com",
+                ["https://app.example.com"],
+                [
+                    "https://first.github.io",
+                    "https://second.github.io",
+                    "https://third.org",
+                    "https://fourth.io",
+                    "https://fifth.dev",
+                ],
+                Algorithms)));
+
+    /// <summary>
+    /// AUTH-FACT-010 AC1: an identifier that is a public suffix of more than one label,
+    /// under which anyone may register, is no registrable suffix and is refused.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_010_AC1_AnIdentifierThatIsAPublicSuffixIsRefused()
+    {
+        Assert.Equal(ErrorCodes.StartupRelyingPartyId, Refusal("co.uk", ["https://shop.co.uk"]));
+        Assert.Equal(ErrorCodes.StartupRelyingPartyId, Refusal("github.io", ["https://someone.github.io"]));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-010 AC2: the common parent derived is a registrable domain, and origins
+    /// that share only a public suffix share nothing a passkey could be bound to.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_010_AC2_TheDerivedParentIsARegistrableDomain()
+    {
+        Assert.Equal(
+            "shop.co.uk",
+            Settled(string.Empty, ["https://app.shop.co.uk", "https://id.shop.co.uk"]).Id);
+        Assert.Equal(
+            ErrorCodes.StartupRelyingPartyId,
+            Refusal(string.Empty, ["https://a.co.uk", "https://b.co.uk"]));
+    }
+
+    /// <summary>
     /// AUTH-FACT-010: the four keys the deployment names are where the relying party
     /// comes from.
     /// </summary>
