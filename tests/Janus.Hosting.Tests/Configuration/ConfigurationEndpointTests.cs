@@ -60,7 +60,7 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
         Assert.True(read.Json().GetProperty("value").GetBoolean());
         Assert.True(read.Json().GetProperty("default").GetBoolean());
         Assert.True(read.Json().GetProperty("protected").GetBoolean());
-        Assert.Equal(nameof(SettingDirection.Decrease), read.Text("direction"));
+        Assert.Equal("decrease", read.Text("direction"));
     }
 
     /// <summary>
@@ -83,7 +83,7 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
         Assert.Equal("PT30M", read.Text("value"));
         Assert.Equal("PT1H", read.Text("default"));
         Assert.False(read.Json().GetProperty("protected").GetBoolean());
-        Assert.Equal(nameof(SettingDirection.Increase), read.Text("direction"));
+        Assert.Equal("increase", read.Text("direction"));
     }
 
     /// <summary>
@@ -498,6 +498,112 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
         Assert.Equal(Settings.SessionAal2Inactivity.Default, await InForceAsync(Settings.SessionAal2Inactivity));
         Assert.Empty(_deployment.Changes.Written);
     }
+
+    /// <summary>
+    /// PRIV-RET-001 and chapter 09 section 8: the retention of a category the host
+    /// declared reads with its floor as the default where no period is written, and
+    /// changes through the route under its row's lock: a lengthening is a tightening, a
+    /// shortening is a loosening that asks the permission to loosen, a period below the
+    /// floor is refused, and each change is written down.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RET_001_ACategorysRetentionIsChangedThroughTheRouteAsync()
+    {
+        ConfigurationKey key = Settings.HostCategoryRetention.For("statement");
+        string floor = Settings.HostCategoryRetention.Write(TimeSpan.FromDays(1826));
+
+        Browser manager = await AuthorisedAsync(
+            Permissions.ConfigurationRead,
+            Permissions.ConfigurationManage);
+
+        Answer read = await manager.SendAsync("GET", "/admin/config/retention.statement");
+
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+        Assert.Equal("retention.statement", read.Text("key"));
+        Assert.Equal(floor, read.Text("value"));
+        Assert.Equal(floor, read.Text("default"));
+        Assert.False(read.Json().GetProperty("protected").GetBoolean());
+        Assert.Equal("decrease", read.Text("direction"));
+
+        _deployment.Configuration.Held.Clear();
+        _deployment.Work.Reset();
+
+        Answer lengthened = await RetainedAsync(manager, "P2000D");
+
+        Assert.Equal(StatusCodes.Status204NoContent, lengthened.Status);
+        Assert.Equal([key, key], _deployment.Configuration.Held);
+        Assert.Equal(_deployment.Work.Opened, _deployment.Work.Committed);
+
+        Answer shortened = await RetainedAsync(manager, "P1900D");
+
+        Assert.Equal(StatusCodes.Status403Forbidden, shortened.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), shortened.Text("code"));
+        Assert.Equal(_deployment.Work.Opened, _deployment.Work.Committed);
+
+        Answer below = await RetainedAsync(manager, "P1000D");
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, below.Status);
+        Assert.Equal(ErrorCodes.ConfigurationValueBelowFloor.ToString(), below.Text("code"));
+        Assert.Equal(key.ToString(), below.Json().GetProperty("details").GetProperty("key").GetString());
+        Assert.Equal(TimeSpan.FromDays(2000), await RetainedForAsync("statement"));
+
+        ConfigurationChange tightening = Assert.Single(_deployment.Changes.Written);
+
+        Assert.Equal(key, tightening.Key);
+        Assert.Equal(floor, tightening.Before);
+        Assert.Equal("P2000D", tightening.After);
+        Assert.False(tightening.Loosening);
+
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Administration, Permissions.SystemAdminister);
+
+        Answer loosened = await RetainedAsync(manager, "P1900D");
+
+        Assert.Equal(StatusCodes.Status204NoContent, loosened.Status);
+        Assert.Equal(TimeSpan.FromDays(1900), await RetainedForAsync("statement"));
+        Assert.True(_deployment.Changes.Written[^1].Loosening);
+    }
+
+    /// <summary>
+    /// PRIV-RET-001 and chapter 09 section 8: a retention key of a category the host
+    /// did not declare is none of the keys the route serves, read or changed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RET_001_AnUndeclaredCategoryIsNoKeyAsync()
+    {
+        Browser administrator = await AuthorisedAsync(
+            Permissions.ConfigurationRead,
+            Permissions.ConfigurationManage,
+            Permissions.SystemAdminister);
+
+        Answer read = await administrator.SendAsync("GET", "/admin/config/retention.undeclared");
+        Answer changed = await RetainedAsync(administrator, "P2000D", "undeclared");
+
+        foreach (Answer answer in new[] { read, changed })
+        {
+            Assert.Equal(StatusCodes.Status400BadRequest, answer.Status);
+            Assert.Equal(ErrorCodes.RequestMalformed.ToString(), answer.Text("code"));
+            Assert.Equal("key", answer.Json().GetProperty("details").GetProperty("member").GetString());
+        }
+
+        Assert.Empty(_deployment.Changes.Written);
+    }
+
+    private static Task<Answer> RetainedAsync(Browser browser, string period, string category = "statement") =>
+        browser.SendAsync(
+            "PUT",
+            "/admin/config/retention." + category,
+            ("value", period),
+            ("reason", "the statements' audit horizon"));
+
+    private async Task<TimeSpan> RetainedForAsync(string category) =>
+        (await _deployment.Configuration.ReadAsync(
+            Settings.HostCategoryRetention,
+            category,
+            TestContext.Current.CancellationToken)).Match(
+            value => value,
+            error => throw new Xunit.Sdk.XunitException($"The member was refused: {error.Code}."));
 
     private static Task<Answer> TightenedAsync(Browser browser) =>
         browser.SendAsync(

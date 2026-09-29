@@ -95,7 +95,7 @@ internal sealed class ConfigurationAdministration(
 
         bool loosening = Loosens(setting, before, value);
 
-        if (await RefusalAsync(setting, loosening, reason, challenge, context, cancellationToken)
+        if (await RefusalAsync(setting.Key, loosening, reason, challenge, context, cancellationToken)
                 .ConfigureAwait(false) is Error refused)
         {
             return await EndedAsync(refused, cancellationToken).ConfigureAwait(false);
@@ -315,10 +315,48 @@ internal sealed class ConfigurationAdministration(
             return Result.Failure(failure);
         }
 
-        return await RefusalAsync(setting, Loosens(setting, before, value), reason, challenge, context, cancellationToken)
+        return await RefusalAsync(setting.Key, Loosens(setting, before, value), reason, challenge, context, cancellationToken)
                 .ConfigureAwait(false) is Error refused
             ? Result.Failure(refused)
             : Result.Success();
+    }
+
+    /// <summary>
+    /// What a change to one member costs where the family's own direction decides it,
+    /// by the rule a key that exists once is judged by: a reason for every change, and
+    /// the permission to loosen and the <c>config:loosen</c> gate for a loosening.
+    /// </summary>
+    /// <typeparam name="TValue">The type of the member's value.</typeparam>
+    /// <param name="family">The family, from <see cref="Settings"/>.</param>
+    /// <param name="parameter">The declared category.</param>
+    /// <param name="loosening">
+    /// Whether the change loosens, judged on the value in force read under
+    /// <see cref="HoldAsync{TValue}(SettingFamily{TValue}, string, CancellationToken)"/>.
+    /// </param>
+    /// <param name="reason">Why, which every change carries.</param>
+    /// <param name="challenge">What the <c>config:loosen</c> gate answered.</param>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="cancellationToken">Abandons the check.</param>
+    /// <returns>Nothing where the change is allowed, or why it is refused.</returns>
+    /// <remarks>
+    /// Implements OPS-CFG-002, OPS-CFG-008 AC2 and PRIV-RET-001 for
+    /// <c>retention.&lt;category&gt;</c> (D-166, 180).
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">The family, the challenge or the context is absent.</exception>
+    public ValueTask<Error?> RefusalAsync<TValue>(
+        SettingFamily<TValue> family,
+        string parameter,
+        bool loosening,
+        string? reason,
+        StepUpChallenge challenge,
+        AccessContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(family);
+        ArgumentNullException.ThrowIfNull(challenge);
+        ArgumentNullException.ThrowIfNull(context);
+
+        return RefusalAsync(family.For(parameter), loosening, reason, challenge, context, cancellationToken);
     }
 
     // Chapter 10 section 4.1a classifies each field of the system policy on its own, as
@@ -333,8 +371,8 @@ internal sealed class ConfigurationAdministration(
     // reason (OPS-CFG-002 AC1 to AC3, chapter 10 section 2.1). The reason is asked of
     // every change to a runtime setting, a tightening of the named restriction set
     // included (OPS-CFG-008 AC2).
-    private async ValueTask<Error?> RefusalAsync<TValue>(
-        Setting<TValue> setting,
+    private async ValueTask<Error?> RefusalAsync(
+        ConfigurationKey key,
         bool loosening,
         string? reason,
         StepUpChallenge challenge,
@@ -343,7 +381,7 @@ internal sealed class ConfigurationAdministration(
     {
         if (!loosening)
         {
-            return Unexplained(setting, reason);
+            return Unexplained(key, reason);
         }
 
         if (await scope.RefusedAsync(context, Permissions.SystemAdminister, cancellationToken)
@@ -357,16 +395,19 @@ internal sealed class ConfigurationAdministration(
             return StepUpRefusal.Of(challenge);
         }
 
-        return Unexplained(setting, reason);
+        return Unexplained(key, reason);
     }
 
     // API-CONV-002: a free-text field is 1 to 1024 characters after trimming. A blank
     // reason is the refusal 10 names for a change; one past the limit is a request the
     // boundary does not read.
-    private static Error? Unexplained<TValue>(Setting<TValue> setting, string? reason) =>
+    private static Error? Unexplained(ConfigurationKey key, string? reason) =>
         (reason?.Trim().Length ?? 0) switch
         {
-            0 => Named(ErrorCodes.ConfigurationChangeReasonRequired, setting),
+            0 => Error.From(
+                ErrorCodes.ConfigurationChangeReasonRequired,
+                "key",
+                JsonSerializer.SerializeToElement(key.ToString())),
             > 1024 => Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement("reason")),
             _ => null,
         };
@@ -392,7 +433,4 @@ internal sealed class ConfigurationAdministration(
 
         return default!;
     }
-
-    private static Error Named<TValue>(ErrorCode code, Setting<TValue> setting) =>
-        Error.From(code, "key", JsonSerializer.SerializeToElement(setting.Key.ToString()));
 }

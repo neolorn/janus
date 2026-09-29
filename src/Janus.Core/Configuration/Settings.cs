@@ -885,10 +885,10 @@ public static class Settings
     /// <summary>
     /// How long a host-declared category of data is kept: one key per declared
     /// category, whose floor the host declares. Startup fails for a declared category
-    /// without one.
+    /// without one. Shortening loosens.
     /// </summary>
     public static SettingFamily<TimeSpan> HostCategoryRetention { get; } =
-        new("retention", SettingScope.Runtime, SettingForms.Duration);
+        new("retention", SettingScope.Runtime, SettingForms.Duration, SettingDirection.Decrease);
 
     /// <summary>
     /// The (memory, iterations) pairs the Argon2id floor admits. A deployment is at or

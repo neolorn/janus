@@ -537,11 +537,15 @@ against the public contract of LIB-API-001.
   set of operations in process.
 - `GET /admin/config/{key}` reads one runtime key under `config:read`: its value in
   force and its default in the key's own JSON type, whether it is protected, and which
-  way it loosens. `PUT /admin/config/{key}` changes it under `config:manage`; a
-  loosening also needs `system:administer` in the administrative organization, step-up
-  and a reason, a tightening asks nothing more, a protected key is refused with 422
-  `config.key.protected`, and the alert destination keys tell the destinations they
-  replace. `IConfigurationAdministration` is the same operation in process.
+  way it loosens (`increase`, `decrease` or `any-change`). `PUT /admin/config/{key}`
+  changes it under `config:manage`; a loosening also needs `system:administer` in the
+  administrative organization, step-up and a reason, a tightening asks nothing more, a
+  protected key is refused with 422 `config.key.protected`, and the alert destination
+  keys tell the destinations they replace. The route also serves
+  `retention.<category>` for each category the host declared, read with its floor as
+  the default and changed above that floor, shortening being the loosening; any other
+  name is refused with 400 naming `key`. `IConfigurationAdministration` is the same
+  operation in process.
 - `GET /admin/audit?subject=...` and `IAuditTrail` read every audit record naming one
   subject, what it did to others as well as what was done to it, most recent first,
   under `audit:read`: each entry carries its codes, identities, organization and plain

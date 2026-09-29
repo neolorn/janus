@@ -6653,6 +6653,8 @@ route lists no 404, and the name is part of the request.
 *Chapter text that should change.* 09 section 8 could say which keys the route serves
 and add the 400 for a name that is not one of them.
 
+**Superseded by D-166.**
+
 ---
 
 ## 181. A configuration value crosses the interface in its own JSON type
@@ -6685,6 +6687,8 @@ every other view writes an enum.
 
 *Chapter text that should change.* 09 section 8 could show one `GET` answer and name
 the spelling of `direction`.
+
+**Superseded by D-166.**
 
 ---
 

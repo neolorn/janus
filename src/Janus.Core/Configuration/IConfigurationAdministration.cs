@@ -9,8 +9,11 @@ namespace Janus.Core.Configuration;
 /// </summary>
 /// <remarks>
 /// Implements LIB-API-005, OPS-CFG-002, OPS-CFG-003, OPS-CFG-004, OPS-CFG-005,
-/// OPS-CFG-008 and chapter 09 section 8. The named restriction set is not one of the
-/// keys served here: it has its own operations and its own permission.
+/// OPS-CFG-008, PRIV-RET-001 and chapter 09 section 8. The keys served are the ones
+/// that exist once for the deployment and <c>retention.&lt;category&gt;</c> for each
+/// category the host declared, read with its floor as the default. The named
+/// restriction set is not one of them: it has its own operations and its own
+/// permission.
 /// </remarks>
 public interface IConfigurationAdministration
 {
