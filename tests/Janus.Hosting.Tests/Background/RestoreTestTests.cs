@@ -64,7 +64,26 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
             TestContext.Current.CancellationToken);
 
         Assert.Equal(("DR-007", true), (job.Principal.Reason, job.Principal.MayRun(SystemOperation.Monitoring)));
-        Assert.Equal(TimeSpan.FromDays(93), interval.Match(value => value, _ => TimeSpan.Zero));
+        Assert.Equal(TimeSpan.FromDays(90), interval.Match(value => value, _ => TimeSpan.Zero));
+    }
+
+    /// <summary>
+    /// DR-007 AC1: the test runs at least once a quarter, so its interval is a count of
+    /// days no longer than the shortest calendar quarter: the default and the ceiling
+    /// are 90 days, and a day more is refused as above the ceiling.
+    /// </summary>
+    [Fact]
+    public void DR_007_AC1_NoIntervalExceedsTheShortestQuarter()
+    {
+        Error refusal = Settings.BackupRestoreTestInterval.Accept(TimeSpan.FromDays(91)).Match(
+            _ => throw new Xunit.Sdk.XunitException("A day past the quarter was accepted."),
+            error => error);
+
+        Assert.Equal(
+            (TimeSpan.FromDays(90), TimeSpan.FromDays(90)),
+            (Settings.BackupRestoreTestInterval.Default, Settings.BackupRestoreTestInterval.Ceiling));
+        Assert.Equal(ErrorCodes.ConfigurationValueAboveCeiling, refusal.Code);
+        Assert.Equal("P90D", refusal.Details["ceiling"].GetString());
     }
 
     /// <summary>

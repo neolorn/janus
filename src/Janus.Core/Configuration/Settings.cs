@@ -785,9 +785,12 @@ public static class Settings
     public static DurationSetting BackupRestoreTestObjective { get; } =
         new("backup.restoretest.objective", SettingScope.Runtime, "PT8H", ceiling: "PT8H");
 
-    /// <summary>How often the restore test runs.</summary>
+    /// <summary>
+    /// How often the restore test runs: a count of days, so the interval never exceeds
+    /// the shortest calendar quarter, where months would be held at 31 days each.
+    /// </summary>
     public static DurationSetting BackupRestoreTestInterval { get; } =
-        new("backup.restoretest.interval", SettingScope.Runtime, "P3M", ceiling: "P3M");
+        new("backup.restoretest.interval", SettingScope.Runtime, "P90D", ceiling: "P90D");
 
     /// <summary>
     /// The canary subject the restore test decrypts a field of and resolves the

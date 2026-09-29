@@ -192,7 +192,9 @@ public sealed class SettingsCatalogueTests
         Assert.Equal(TimeSpan.FromDays(5 * 366), Settings.RetentionAuditSecurity.Floor);
         Assert.Equal(TimeSpan.FromDays(3 * 366), Settings.RetentionConsent.Default);
         Assert.Equal(TimeSpan.FromDays(366), Settings.RetentionConsent.Floor);
-        Assert.Equal(TimeSpan.FromDays(3 * 31), Settings.BackupRestoreTestInterval.Default);
+        Assert.Equal(
+            TimeSpan.FromDays(2 * 31),
+            Settings.BackupRestoreTestInterval.Read("P2M").Match(value => value, _ => TimeSpan.Zero));
     }
 
     /// <summary>

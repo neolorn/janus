@@ -78,7 +78,8 @@ against the public contract of LIB-API-001.
   where missing, and partitions past `retention.audit.security` or
   `retention.audit.routine` are dropped. The job refuses any other credential, and each
   run is recorded as `ops.auditpartitions.maintained`.
-- The restore test runs by itself every `backup.restoretest.interval`. A deployment
+- The restore test runs by itself every `backup.restoretest.interval`, 90 days by
+  default and at most. A deployment
   registers `IRestoreTestInstance`, which restores its latest backup into a throwaway
   instance and tears it down again; the library opens the restored database with the
   keys it runs on, decrypts the canary's field, finds the canary's account by its
