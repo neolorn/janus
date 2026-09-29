@@ -42,6 +42,9 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
 
     private static readonly FingerprintKeys Fingerprinted = FingerprintKeysOf(0x02);
 
+    // How long a case waits on the run it started before it fails rather than hangs.
+    private static readonly TimeSpan Bound = TimeSpan.FromMinutes(1);
+
     /// <summary>
     /// DR-007 AC1: the test is one of the worker's jobs, run as a principal that may
     /// monitor with DR-007 as its reason, at <c>backup.restoretest.interval</c>, so no
@@ -96,13 +99,17 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
     /// <summary>
     /// DR-007 AC2, AC3: the time a run takes is recorded against the objective, and a
     /// restore still running when the objective passes is abandoned, recorded as an
-    /// overrun with the time it had taken, and raised with the same.
+    /// overrun with the time it had taken, and raised with the same. The clock is moved
+    /// by the test to the objective and no further, so the run is abandoned at the very
+    /// instant the objective passes, whatever the machine's own timing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task DR_007_AC2_TheMeasuredTimeIsRecordedAgainstTheObjectiveAsync()
     {
         DateTimeOffset at = Noon.AddDays(2);
+        var objective = TimeSpan.FromSeconds(1);
+        var time = new ManualTime(at);
         var stalled = new StalledRestore();
 
         _ = await CanaryAsync(at);
@@ -114,7 +121,12 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
 
         try
         {
-            Assert.Equal(Result.Success(), await RunAsync(at, stalled, Live, Fingerprinted));
+            Task<Result> run = RunAsync(at, stalled, Live, Fingerprinted, time);
+
+            await stalled.Started.WaitAsync(Bound, TestContext.Current.CancellationToken);
+            time.Advance(objective);
+
+            Assert.Equal(Result.Success(), await run.WaitAsync(Bound, TestContext.Current.CancellationToken));
         }
         finally
         {
@@ -125,16 +137,16 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
                 new { Key = Settings.BackupRestoreTestObjective.Key.ToString() });
         }
 
-        JsonElement recorded = await RecordedAsync(at);
+        JsonElement recorded = await RecordedAsync(at + objective);
 
         Assert.Equal(
-            ("overrun", 1d, false, 1),
+            ("overrun", 1d, 1d, false, 1),
             (recorded.GetProperty("outcome").GetString(),
+                recorded.GetProperty("elapsedSeconds").GetDouble(),
                 recorded.GetProperty("objectiveSeconds").GetDouble(),
                 recorded.GetProperty("outlived").GetBoolean(),
                 stalled.TornDown));
-        Assert.True(recorded.GetProperty("elapsedSeconds").GetDouble() >= 1d);
-        Assert.Equal([recorded.GetRawText()], (await RaisedAsync(at)).Select(raised => raised.GetRawText()));
+        Assert.Equal([recorded.GetRawText()], (await RaisedAsync(at + objective)).Select(raised => raised.GetRawText()));
     }
 
     /// <summary>
@@ -341,16 +353,18 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
     private string Database() => new NpgsqlConnectionStringBuilder(host.ConnectionString).Database
         ?? throw new InvalidOperationException("The fixture names no database.");
 
-    // A deployment over the fixture's database at the case's own instant, with what a
-    // host declares for itself and, where the case has one, what restores its backups.
+    // A deployment over the fixture's database at the case's own instant, or on the clock
+    // the case moves, with what a host declares for itself and, where the case has one,
+    // what restores its backups.
     private ServiceProvider Deployed(
         DateTimeOffset at,
         IRestoreTestInstance? instance,
         KeyEncryptionKeys keys,
-        FingerprintKeys fingerprints)
+        FingerprintKeys fingerprints,
+        TimeProvider? time = null)
     {
         IServiceCollection services = new ServiceCollection()
-            .AddSingleton<TimeProvider>(new FixedTime(at))
+            .AddSingleton(time ?? new FixedTime(at))
             .AddSingleton<IEvents>(new EventsInMemory())
             .AddSingleton<IMailTransport>(new MailTransportInMemory())
             .AddSingleton<ISmsTransport>(new SmsTransportInMemory())
@@ -410,9 +424,10 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
         DateTimeOffset at,
         IRestoreTestInstance? instance,
         KeyEncryptionKeys keys,
-        FingerprintKeys fingerprints)
+        FingerprintKeys fingerprints,
+        TimeProvider? time = null)
     {
-        await using ServiceProvider services = Deployed(at, instance, keys, fingerprints);
+        await using ServiceProvider services = Deployed(at, instance, keys, fingerprints, time);
         await using AsyncServiceScope scope = services.CreateAsyncScope();
 
         return await BackgroundJobs.All

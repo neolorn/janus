@@ -106,8 +106,9 @@ internal sealed class RestoreTest(
             }
 
             // DR-007: whatever step the objective cut short, the test failed by running
-            // out of time.
-            if (elapsed > objective)
+            // out of time. The deadline having fired decides it, since the stopwatch can
+            // read short of the objective at the instant the deadline's timer fires.
+            if (deadline.IsCancellationRequested || elapsed > objective)
             {
                 outcome = RestoreTestOutcome.Overrun;
             }

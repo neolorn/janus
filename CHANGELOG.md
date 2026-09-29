@@ -85,8 +85,8 @@ against the public contract of LIB-API-001.
   verified email, and times the whole against `backup.restoretest.objective`. Every run
   is recorded as `ops.restoretest.completed` with its outcome, the seconds it took and
   the objective. A run that restores nothing, cannot decrypt, cannot find the account,
-  runs past the objective (it is abandoned there) or whose instance may still stand
-  raises `restore-test-failed`. Without an `IRestoreTestInstance`, every run raises it.
+  runs past the objective (it is abandoned there, and recorded as an overrun whichever
+  step it was on) or whose instance may still stand raises `restore-test-failed`. Without an `IRestoreTestInstance`, every run raises it.
 - `replay-erasures <ledger path>` carries out again, after a restore, every erasure the
   off-host ledger records and the restored database does not: from whatever state the
   restore left the account in, with the host told again, audited under the principal
