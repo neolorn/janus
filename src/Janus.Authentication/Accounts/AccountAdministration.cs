@@ -131,7 +131,7 @@ internal sealed class AccountAdministration(
         }
 
         await audit
-            .AdministeredAsync(AuditActions.AccountSuspended, acting, subject, now, cancellationToken)
+            .AdministeredAsync(AuditActions.AccountSuspended, acting, context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -201,7 +201,7 @@ internal sealed class AccountAdministration(
         }
 
         await audit
-            .AdministeredAsync(AuditActions.AccountReactivated, acting, subject, now, cancellationToken)
+            .AdministeredAsync(AuditActions.AccountReactivated, acting, context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -246,7 +246,7 @@ internal sealed class AccountAdministration(
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await directory.LiftRestrictionAsync(subject, now, cancellationToken).ConfigureAwait(false);
         await audit
-            .AdministeredAsync(AuditActions.RestrictionLifted, acting, subject, now, cancellationToken)
+            .AdministeredAsync(AuditActions.RestrictionLifted, acting, context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
@@ -325,7 +325,7 @@ internal sealed class AccountAdministration(
         }
 
         await audit
-            .CancelledOnBehalfAsync(acting, subject, request, now, cancellationToken)
+            .CancelledOnBehalfAsync(acting, context.BreakGlassReason, subject, request, now, cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 

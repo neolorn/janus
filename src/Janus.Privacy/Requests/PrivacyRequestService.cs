@@ -96,7 +96,7 @@ internal sealed class PrivacyRequestService(
             : await QueuedAsync(
                     QueuedRequest.Submitted(subject, type, detail ?? string.Empty, today, now, deadline),
                     Submitted,
-                    context.Acting,
+                    context,
                     now,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -154,7 +154,7 @@ internal sealed class PrivacyRequestService(
             : await QueuedAsync(
                     QueuedRequest.Entered(entry, now, deadline),
                     Entered,
-                    context.Acting,
+                    context,
                     now,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -208,6 +208,7 @@ internal sealed class PrivacyRequestService(
             .RecordedAsync(
                 Fulfilled,
                 context.Acting,
+                context.BreakGlassReason,
                 held.Subject,
                 now,
                 Named(held),
@@ -246,7 +247,14 @@ internal sealed class PrivacyRequestService(
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await requests.RecordAsync(held, cancellationToken).ConfigureAwait(false);
         await audit
-            .RecordedAsync(Refused, context.Acting, held.Subject, now, Named(held), cancellationToken)
+            .RecordedAsync(
+                Refused,
+                context.Acting,
+                context.BreakGlassReason,
+                held.Subject,
+                now,
+                Named(held),
+                cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
@@ -341,14 +349,21 @@ internal sealed class PrivacyRequestService(
     private async ValueTask<Result<PrivacyRequestReceipt>> QueuedAsync(
         QueuedRequest request,
         AuditAction action,
-        SubjectId? acting,
+        AccessContext context,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await requests.AddAsync(request, cancellationToken).ConfigureAwait(false);
         await audit
-            .RecordedAsync(action, acting, request.Subject, now, Named(request), cancellationToken)
+            .RecordedAsync(
+                action,
+                context.Acting,
+                context.BreakGlassReason,
+                request.Subject,
+                now,
+                Named(request),
+                cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 

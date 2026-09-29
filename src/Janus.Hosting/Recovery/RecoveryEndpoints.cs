@@ -274,7 +274,7 @@ internal static class RecoveryEndpoints
     {
         ArgumentNullException.ThrowIfNull(browser);
 
-        return AccessContext.Of(browser.Required.Subject);
+        return browser.Asking;
     }
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)

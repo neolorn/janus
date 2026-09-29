@@ -52,7 +52,7 @@ internal static class ErasureEndpoints
 
         return Answers.Of(
             await erasures
-                .ListAsync(AccessContext.Of(browser.Required.Subject), cancellationToken)
+                .ListAsync(browser.Asking, cancellationToken)
                 .ConfigureAwait(false),
             outstanding => TypedResults.Json<IReadOnlyList<ErasureProgressView>>(
                 [.. outstanding.Select(ErasureProgressView.Of)],
@@ -73,7 +73,7 @@ internal static class ErasureEndpoints
         return Answers.Of(
             await erasures
                 .ReadAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     new ErasureId(id),
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -96,7 +96,7 @@ internal static class ErasureEndpoints
         return Answers.Of(
             await erasures
                 .CompleteAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     new ErasureId(id),
                     cancellationToken)

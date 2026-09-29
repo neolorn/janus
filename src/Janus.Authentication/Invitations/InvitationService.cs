@@ -179,7 +179,7 @@ internal sealed class InvitationService(
 
         if (reservation is not null)
         {
-            await ReserveAsync(reservation, acting, now, cancellationToken).ConfigureAwait(false);
+            await ReserveAsync(reservation, acting, context.BreakGlassReason, now, cancellationToken).ConfigureAwait(false);
         }
 
         await invitations.AddAsync(invitation, cancellationToken).ConfigureAwait(false);
@@ -189,6 +189,7 @@ internal sealed class InvitationService(
                 organization,
                 invitation.Id,
                 acting,
+                context.BreakGlassReason,
                 now,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -243,7 +244,7 @@ internal sealed class InvitationService(
         DateTimeOffset now = time.GetUtcNow();
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-        await WithdrawnAsync(held, acting, now, cancellationToken).ConfigureAwait(false);
+        await WithdrawnAsync(held, acting, context.BreakGlassReason, now, cancellationToken).ConfigureAwait(false);
 
         // REG-MAIL-001: a reservation nobody ever took is given up with the invitation
         // that made it; a mailbox someone has held stays, disabled.
@@ -506,12 +507,13 @@ internal sealed class InvitationService(
     private async ValueTask ReserveAsync(
         Reservation reservation,
         SubjectId acting,
+        string? breakGlassReason,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         foreach (Invitation replaced in reservation.Replaced)
         {
-            await WithdrawnAsync(replaced, acting, now, cancellationToken).ConfigureAwait(false);
+            await WithdrawnAsync(replaced, acting, breakGlassReason, now, cancellationToken).ConfigureAwait(false);
         }
 
         if (reservation.IsNew)
@@ -604,6 +606,7 @@ internal sealed class InvitationService(
     private async ValueTask WithdrawnAsync(
         Invitation invitation,
         SubjectId acting,
+        string? breakGlassReason,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -616,6 +619,7 @@ internal sealed class InvitationService(
                 invitation.Organization,
                 invitation.Id,
                 acting,
+                breakGlassReason,
                 now,
                 cancellationToken)
             .ConfigureAwait(false);

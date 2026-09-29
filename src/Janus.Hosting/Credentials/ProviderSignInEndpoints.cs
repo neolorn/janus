@@ -170,5 +170,5 @@ internal static class ProviderSignInEndpoints
     // BFF-STEP-001: both are mounted as endpoints that need a session, so the stage
     // that requires one has already answered a request that arrived without it.
     private static CredentialAuthority Acting(RequestSession browser) =>
-        CredentialAuthority.Of(AccessContext.Of(browser.Required.Subject), browser.Required.Id);
+        CredentialAuthority.Of(browser.Asking, browser.Required.Id);
 }

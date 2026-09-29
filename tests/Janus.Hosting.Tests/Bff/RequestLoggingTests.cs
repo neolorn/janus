@@ -221,7 +221,7 @@ public sealed class RequestLoggingTests : IAsyncDisposable
             ("factor", "password"),
             ("value", Flow.Password));
 
-        (SessionId Session, SubjectId Subject, IReadOnlyCollection<Factor> Presented) raised =
+        (SessionId Session, SubjectId Subject, IReadOnlyCollection<Factor> Presented, string? _) raised =
             quiet.SessionAudit.Records[presented];
 
         Answer denied = await administrator.SendAsync("GET", Erasures);
@@ -242,7 +242,7 @@ public sealed class RequestLoggingTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status200OK, used.Status);
         Assert.Equal(StatusCodes.Status204NoContent, changed.Status);
 
-        (SessionId Session, SubjectId Subject, Factor Presented) unraised =
+        (SessionId Session, SubjectId Subject, Factor Presented, string? _) unraised =
             Assert.Single(quiet.SessionAudit.StepUpsFailed);
 
         Assert.Equal<(SubjectId?, Factor)>(
@@ -523,7 +523,10 @@ public sealed class RequestLoggingTests : IAsyncDisposable
 
     // The break-glass credential presented as it was typed.
     private static Task<Answer> BrokenAsync(Browser browser, string credential) =>
-        browser.SendAsync("POST", "/auth/break-glass", JsonSerializer.Serialize(new { credential }));
+        browser.SendAsync(
+            "POST",
+            "/auth/break-glass",
+            JsonSerializer.Serialize(new { credential, reason = "The operator cannot be reached." }));
 
     private static async Task<string> BegunAsync(Browser browser, string identifier)
     {

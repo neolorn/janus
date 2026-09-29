@@ -138,6 +138,7 @@ internal sealed class LegalDocumentService(
             .RecordedAsync(
                 Translated,
                 context.Acting,
+                context.BreakGlassReason,
                 subject: null,
                 time.GetUtcNow(),
                 Named(document, version, translation.Language),
@@ -225,6 +226,7 @@ internal sealed class LegalDocumentService(
             .RecordedAsync(
                 Published,
                 context.Acting,
+                context.BreakGlassReason,
                 subject: null,
                 version.PublishedAt,
                 Named(version, publication.Material, superseded),

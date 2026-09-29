@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.BreakGlass;
+using Janus.Authentication.Configuration;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Roles;
@@ -16,6 +17,7 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Janus.Hosting.Tests.BreakGlass;
@@ -40,6 +42,8 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     private const string Present = "/auth/break-glass";
 
     private const string Generate = "/admin/break-glass/generate";
+
+    private const string Reason = "The operator cannot be reached.";
 
     private static readonly OrganizationId Administration =
         new(Guid.Parse("33333333-3333-4333-8333-333333333333"));
@@ -306,6 +310,187 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-BOOT-002 AC10 and X4: the reason is required with the credential, as free text
+    /// of at most 1024 characters, and an absent, blank or longer one is refused naming
+    /// it before the credential is looked at, so nothing is spent or counted.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AC10_TheReasonIsRequiredWithTheCredentialAsync()
+    {
+        string credential = await GeneratedAsync();
+        var owner = new Browser(_deployment);
+
+        Answer absent = await owner.SendAsync("POST", Present, JsonSerializer.Serialize(new { credential }));
+        Answer blank = await owner.SendAsync(
+            "POST",
+            Present,
+            JsonSerializer.Serialize(new { credential, reason = "   " }));
+        Answer longer = await owner.SendAsync(
+            "POST",
+            Present,
+            JsonSerializer.Serialize(new { credential, reason = new string('r', 1025) }));
+
+        foreach (Answer refused in new[] { absent, blank, longer })
+        {
+            Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+            Assert.Equal(ErrorCodes.RequestMalformed.ToString(), refused.Text("code"));
+            Assert.Equal(
+                "reason",
+                refused.Json().GetProperty("details").GetProperty("member").GetString());
+        }
+
+        Assert.Null(Assert.Single(_deployment.BreakGlass.Issues).ConsumedAt);
+        Assert.Empty(_deployment.BreakGlassAudit.Used);
+        Assert.Equal(StatusCodes.Status200OK, (await PresentedAsync(owner, credential)).Status);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC10: the use is written down with the reason given with it, and so
+    /// is the session it opened.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AC10_TheUseCarriesTheReasonAsync()
+    {
+        string credential = await GeneratedAsync();
+
+        _ = await PresentedAsync(new Browser(_deployment), credential);
+
+        Assert.Equal(Reason, Assert.Single(_deployment.BreakGlassAudit.Used).BreakGlassReason);
+        Assert.Equal(
+            Reason,
+            Assert.Single(_deployment.SessionAudit.Records, record => record.Subject == _emergency).BreakGlassReason);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC10: a role defined in the session is written down with the reason
+    /// given at its use, beside the reason the definition states.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AC10_ARoleDefinedInTheSessionCarriesTheReasonAsync()
+    {
+        string credential = await GeneratedAsync();
+        var owner = new Browser(_deployment);
+
+        _ = await PresentedAsync(owner, credential);
+
+        Answer defined = await owner.SendAsync(
+            "POST",
+            "/admin/roles",
+            ("name", "approvers"),
+            ("permissions", new[] { Permissions.RecoveryApprove.ToString() }),
+            ("reason", "Approvals while the operator is away."));
+
+        Assert.True(defined.Status is StatusCodes.Status200OK or StatusCodes.Status201Created, defined.Body);
+
+        Janus.Authorization.Tests.Roles.RoleAuditInMemory.RoleChange change =
+            Assert.Single(_deployment.RoleChanges.Changes);
+
+        Assert.Equal(_emergency, change.Actor);
+        Assert.Equal("Approvals while the operator is away.", change.Reason);
+        Assert.Equal(Reason, change.BreakGlassReason);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC10: a recovery approved in the session is written down with the
+    /// reason given at its use.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AC10_ARecoveryApprovedInTheSessionCarriesTheReasonAsync()
+    {
+        string credential = await GeneratedAsync();
+        SubjectId administrator = _deployment.Directory.Created[^1].Subject;
+        var owner = new Browser(_deployment);
+
+        _ = await PresentedAsync(owner, credential);
+
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(59));
+
+        Assert.Equal(StatusCodes.Status200OK, (await ApprovedAsync(owner, administrator)).Status);
+
+        Janus.Authentication.Tests.Recovery.RecoveryAuditInMemory.Entry approval = Assert.Single(_deployment.RecoveryAudit.Written);
+
+        Assert.Equal(_emergency, approval.Approver);
+        Assert.Equal(Reason, approval.BreakGlassReason);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC10: a configuration change made in the session is written down
+    /// with the reason given at its use, beside the reason the change states.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AC10_AConfigurationChangeInTheSessionCarriesTheReasonAsync()
+    {
+        string credential = await GeneratedAsync();
+        var owner = new Browser(_deployment);
+
+        _ = await PresentedAsync(owner, credential);
+
+        Answer changed = await owner.SendAsync(
+            "PUT",
+            "/admin/config/alerting.email.destinations",
+            ("value", Rota),
+            ("reason", "The operator is unreachable."));
+
+        Assert.Equal(StatusCodes.Status204NoContent, changed.Status);
+
+        ConfigurationChange change = Assert.Single(_deployment.Changes.Written);
+
+        Assert.Equal("The operator is unreachable.", change.Reason);
+        Assert.Equal(Reason, change.BreakGlassReason);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC10: work a system principal does later because of the session
+    /// writes its own record, which carries no reason: a request entered in the session
+    /// carries it, and its lapse, which the deadline sweep records, does not.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AC10_BackgroundWorkTheSessionCausedCarriesNoneAsync()
+    {
+        _deployment.Configuration.Set(Settings.PrivacyCalendarTimeZone, "Africa/Cairo");
+
+        string credential = await GeneratedAsync();
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        var owner = new Browser(_deployment);
+
+        _ = await PresentedAsync(owner, credential);
+
+        Answer entered = await owner.SendAsync(
+            "POST",
+            "/admin/privacy/requests/",
+            ("subject", subject.Value.ToString()),
+            ("type", "restriction"),
+            ("detail", "a letter asking for a restriction"),
+            ("receivedAt", DateOnly.FromDateTime(_deployment.Clock.GetUtcNow().UtcDateTime).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)),
+            ("channel", "letter"),
+            ("identityConfirmation", "national identity card seen"));
+
+        Assert.Equal(StatusCodes.Status202Accepted, entered.Status);
+
+        _deployment.Clock.Advance(TimeSpan.FromDays(120));
+
+        await using AsyncServiceScope scope = _deployment.Scope();
+
+        Result swept = await Janus.Hosting.Background.BackgroundJobs.All
+            .Single(job => job.Name == "privacy-deadlines")
+            .RunAsync(scope.ServiceProvider, TestContext.Current.CancellationToken);
+
+        var trail = (Janus.Privacy.Tests.PrivacyAuditInMemory)scope.ServiceProvider
+            .GetRequiredService<Janus.Privacy.IPrivacyAudit>();
+
+        Assert.True(swept.Match(() => true, _ => false));
+        Assert.Equal(
+            [(AuditActions.RequestEntered, Reason, false), (AuditActions.RequestLapsed, null, true)],
+            trail.Entries.Select(entry => (entry.Action, entry.BreakGlassReason, entry.Principal is not null)));
+    }
+
+    /// <summary>
     /// OPS-BOOT-002 AC6 and FE-BG-001 AC1: the session is an auth session, so another
     /// application opens from it with no further credential.
     /// </summary>
@@ -380,12 +565,13 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
         _ = await _deployment.CarryAlertsAsync();
 
         SubjectId administrator = _deployment.Directory.Created[^1].Subject;
-        (SubjectId acting, BreakGlassCredentialId issue, BreakGlassCredentialId? replaced, _) =
+        (SubjectId acting, BreakGlassCredentialId issue, BreakGlassCredentialId? replaced, _, string? inSession) =
             Assert.Single(_deployment.BreakGlassAudit.Generated);
         AlertRaised generated = Raised(AlertCondition.BreakGlassGenerated);
 
         Assert.Equal(administrator, acting);
         Assert.Null(replaced);
+        Assert.Null(inSession);
         Assert.Contains(_deployment.Mail.Taken, mail => string.Equals(mail.Destination.Value, Owner, StringComparison.Ordinal));
         Assert.Contains(_deployment.Sms.Taken, message => string.Equals(message.Destination.Value, OwnerNumber, StringComparison.Ordinal));
         Assert.Equal(AlertSeverity.High, generated.Severity);
@@ -695,7 +881,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
         browser.SendAsync(
             "POST",
             Present,
-            JsonSerializer.Serialize(new { credential }),
+            JsonSerializer.Serialize(new { credential, reason = Reason }),
             source: source);
 
     private string Drawn() => BreakGlassCode.Draw(_randomness);

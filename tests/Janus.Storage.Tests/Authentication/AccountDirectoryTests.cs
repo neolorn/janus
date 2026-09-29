@@ -142,7 +142,13 @@ public sealed class AccountDirectoryTests(DatabaseFixture database)
         await using (StoreContext writing = database.Context())
         {
             await new AccountAudit(new AuditStore(writing, new DataConnections(writing), _deployment.Keys, _deployment.Randomness), TimeProvider.System)
-                .CancelledOnBehalfAsync(administrator, subject, request, Noon, TestContext.Current.CancellationToken);
+                .CancelledOnBehalfAsync(
+                    administrator,
+                    breakGlassReason: null,
+                    subject,
+                    request,
+                    Noon,
+                    TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 

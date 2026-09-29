@@ -492,6 +492,7 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
             loosening: false,
             "no recovery by mail",
             actor,
+            breakGlassReason: null,
             TestContext.Current.CancellationToken);
 
         ConfigurationChange written = Assert.Single(_changes.Written);

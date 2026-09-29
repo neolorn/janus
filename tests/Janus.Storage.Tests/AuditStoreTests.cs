@@ -50,6 +50,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             Now(),
             administrator,
             subject,
+            breakGlassReason: null,
             organization));
 
         AuditRecord read = await OneAsync(subject);
@@ -90,6 +91,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             Now(),
             subject,
             subject,
+            breakGlassReason: null,
             organization: null));
 
         Assert.Null((await OneAsync(subject)).Organization);
@@ -112,6 +114,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             occurred,
             subject,
             subject,
+            breakGlassReason: null,
             organization: null));
 
         AuditRecord read = await OneAsync(subject);
@@ -140,6 +143,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             Now(),
             subject,
             subject,
+            breakGlassReason: null,
             organization: null,
             details: Fields(("origin", "self"))));
 
@@ -166,6 +170,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             Now().AddHours(-2),
             subject,
             subject,
+            breakGlassReason: null,
             organization: null));
 
         await AppendAsync(AuditRecord.Of(
@@ -175,6 +180,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             Now().AddHours(-1),
             subject,
             subject,
+            breakGlassReason: null,
             organization: null));
 
         await using StoreContext reading = database.Context();
@@ -203,6 +209,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             Now(),
             subject,
             subject,
+            breakGlassReason: null,
             organization: null,
             personalDetails: Fields(("added", "ahmed@example.com"))));
 
@@ -234,6 +241,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             occurred,
             subject,
             subject,
+            breakGlassReason: null,
             organization: null,
             personalDetails: Fields(("added", "ahmed@example.com"))));
 
@@ -274,6 +282,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             Now(),
             subject,
             subject,
+            breakGlassReason: null,
             organization: null));
 
         await using NpgsqlConnection connection = await database.OpenAsync();
@@ -329,6 +338,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             occurred,
             subject,
             subject,
+            breakGlassReason: null,
             organization: null,
             personalDetails: Fields(("reason", "ahmed@example.com"))));
 
@@ -339,6 +349,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             occurred - TimeSpan.FromMinutes(5),
             subject,
             subject,
+            breakGlassReason: null,
             organization: null));
 
         await _deployment.EraseAsync(subject);
@@ -374,6 +385,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             Now(),
             subject,
             subject,
+            breakGlassReason: null,
             organization: null,
             details: Fields(("trigger", "staff-report")),
             personalDetails: Fields(("reason", "ahmed@example.com"))));
@@ -414,6 +426,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             occurred - TimeSpan.FromMinutes(5),
             approver,
             approver,
+            breakGlassReason: null,
             organization: null));
 
         await AppendAsync(AuditRecord.Of(
@@ -423,6 +436,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             occurred,
             approver,
             recovered,
+            breakGlassReason: null,
             organization: null,
             details: Fields(("channel", "in-person")),
             personalDetails: Fields(("reason", "ahmed@example.com"))));
@@ -454,6 +468,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             Now(),
             subject,
             other,
+            breakGlassReason: null,
             organization: null));
 
         await using NpgsqlConnection connection = await database.OpenAsync();
@@ -505,6 +520,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             Now(),
             subject,
             subject,
+            breakGlassReason: null,
             organization: null));
 
         await using NpgsqlConnection connection = await database.OpenAsync();
@@ -566,6 +582,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
                 Now(),
                 subject,
                 subject,
+                breakGlassReason: null,
                 organization: null,
                 personalDetails: Fields(("reason", "ahmed@example.com"))));
 
@@ -576,6 +593,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
                 Now(),
                 subject,
                 subject,
+                breakGlassReason: null,
                 organization: null));
         }
 
@@ -606,7 +624,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             await work.CommitAsync(TestContext.Current.CancellationToken);
 
             await Store(writing).AppendAsync(
-                AuditRecord.Of(NewId(), AuditCategory.Security, Suspended, Now(), subject, subject, organization: null),
+                AuditRecord.Of(NewId(), AuditCategory.Security, Suspended, Now(), subject, subject, breakGlassReason: null, organization: null),
                 TestContext.Current.CancellationToken);
         }
 
@@ -631,7 +649,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             await work.BeginAsync(TestContext.Current.CancellationToken);
 
             await Store(writing).AppendAsync(
-                AuditRecord.Of(NewId(), AuditCategory.Security, Suspended, Now(), subject, subject, organization: null),
+                AuditRecord.Of(NewId(), AuditCategory.Security, Suspended, Now(), subject, subject, breakGlassReason: null, organization: null),
                 TestContext.Current.CancellationToken);
         }
 
@@ -688,6 +706,72 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
         Assert.Equal(1, await WritePrincipalAsync(Guid.Empty, subject.Value, "expiry-sweep", "OPS-OBS-003"));
     }
 
+    /// <summary>
+    /// OPS-BOOT-002 AC10, PRIV-BREACH-002 AC4: a record written in a break-glass session
+    /// carries the reason given at its use in a field of its own, neither in its details
+    /// nor as a principal's reason, and the trail read returns it; a record written
+    /// anywhere else carries none.
+    /// </summary>
+    [Fact]
+    public async Task OPS_BOOT_002_AC10_TheTrailReadsTheBreakGlassReasonBackAsync()
+    {
+        SubjectId emergency = await _deployment.AccountAsync(Now());
+        SubjectId other = await _deployment.AccountAsync(Now());
+        var approved = AuditAction.Parse("auth.recovery.approved");
+        DateTimeOffset occurred = Now();
+
+        await AppendAsync(AuditRecord.Of(
+            NewId(),
+            AuditCategory.Security,
+            approved,
+            occurred,
+            emergency,
+            other,
+            "The operator cannot be reached.",
+            organization: null,
+            details: Fields(("reason", "Lost every factor."))));
+
+        await AppendAsync(AuditRecord.Of(
+            NewId(),
+            AuditCategory.Security,
+            Suspended,
+            occurred - TimeSpan.FromMinutes(5),
+            emergency,
+            emergency,
+            breakGlassReason: null,
+            organization: null));
+
+        IReadOnlyList<AuditEntry> trail = await TrailAsync(emergency);
+        AuditRecord written = await OneAsync(other);
+
+        Assert.Equal(["The operator cannot be reached.", null], trail.Select(entry => entry.BreakGlassReason));
+        Assert.Equal("Lost every factor.", trail[0].Details["reason"].GetString());
+        Assert.Equal("The operator cannot be reached.", written.BreakGlassReason);
+        Assert.Null(written.Reason);
+        Assert.Null(written.Principal);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC10: background work is never a break-glass session, so the
+    /// database refuses a principal's record carrying the reason, and a blank one.
+    /// </summary>
+    [Fact]
+    public async Task OPS_BOOT_002_AC10_NoBackgroundRecordCarriesTheReasonAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Now());
+
+        PostgresException principal = await Assert.ThrowsAsync<PostgresException>(
+            async () => await WriteBreakGlassAsync(Guid.Empty, "expiry-sweep", "OPS-OBS-003", "The operator cannot be reached."));
+        PostgresException blank = await Assert.ThrowsAsync<PostgresException>(
+            async () => await WriteBreakGlassAsync(subject.Value, principal: null, reason: null, "  "));
+
+        Assert.Equal("ck_audit_records_breakglass_reason", principal.ConstraintName);
+        Assert.Equal("ck_audit_records_breakglass_reason", blank.ConstraintName);
+        Assert.Equal(
+            1,
+            await WriteBreakGlassAsync(subject.Value, principal: null, reason: null, "The operator cannot be reached."));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
@@ -729,6 +813,23 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
                     '{}'::jsonb, @principal, @reason);
             """,
             new { id = Guid.CreateVersion7(), at = Now(), acting, effective, principal, reason });
+    }
+
+    // One row written straight to the table with a break-glass reason: what the
+    // constraint admits is read from the database and not from the store.
+    private async Task<int> WriteBreakGlassAsync(Guid acting, string? principal, string? reason, string breakGlassReason)
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        return await connection.ExecuteAsync(
+            """
+            INSERT INTO identity.audit_records
+                (id, category, occurred_at, action, acting_subject, effective_subject,
+                 details, principal, principal_reason, breakglass_reason)
+            VALUES (@id, 'security', @at, 'identity.account.suspended', @acting, @acting,
+                    '{}'::jsonb, @principal, @reason, @breakGlassReason);
+            """,
+            new { id = Guid.CreateVersion7(), at = Now(), acting, principal, reason, breakGlassReason });
     }
 
     private static AuditRecordId NewId() => new(Guid.CreateVersion7());

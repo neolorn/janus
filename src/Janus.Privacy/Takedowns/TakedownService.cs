@@ -117,6 +117,7 @@ internal sealed class TakedownService(
             .RecordedAsync(
                 Executed,
                 context.Acting,
+                context.BreakGlassReason,
                 subject,
                 now,
                 Named(takedown, trigger, written),
@@ -237,7 +238,14 @@ internal sealed class TakedownService(
         }
 
         await audit
-            .RecordedAsync(Reversed, context.Acting, subject, now, Named(written), cancellationToken)
+            .RecordedAsync(
+                Reversed,
+                context.Acting,
+                context.BreakGlassReason,
+                subject,
+                now,
+                Named(written),
+                cancellationToken)
             .ConfigureAwait(false);
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);

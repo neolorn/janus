@@ -111,6 +111,7 @@ internal sealed class OrganizationService(
                     loosening: false,
                     stated,
                     acting,
+                    context.BreakGlassReason,
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error unwritten)
@@ -119,7 +120,7 @@ internal sealed class OrganizationService(
         }
 
         await audit
-            .RecordedAsync(AuditActions.OrganizationCreated, organization, stated, acting, now, cancellationToken)
+            .RecordedAsync(AuditActions.OrganizationCreated, organization, stated, acting, context.BreakGlassReason, now, cancellationToken)
             .ConfigureAwait(false);
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -197,7 +198,7 @@ internal sealed class OrganizationService(
         }
 
         await audit
-            .RecordedAsync(AuditActions.OrganizationDeletionRequested, organization, stated, acting, now, cancellationToken)
+            .RecordedAsync(AuditActions.OrganizationDeletionRequested, organization, stated, acting, context.BreakGlassReason, now, cancellationToken)
             .ConfigureAwait(false);
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -268,7 +269,7 @@ internal sealed class OrganizationService(
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await directory.CancelDeletionAsync(organization, cancellationToken).ConfigureAwait(false);
         await audit
-            .RecordedAsync(AuditActions.OrganizationDeletionCancelled, organization, stated, acting, now, cancellationToken)
+            .RecordedAsync(AuditActions.OrganizationDeletionCancelled, organization, stated, acting, context.BreakGlassReason, now, cancellationToken)
             .ConfigureAwait(false);
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -439,6 +440,7 @@ internal sealed class OrganizationService(
                     loosening,
                     stated,
                     acting,
+                    context.BreakGlassReason,
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error unwritten)

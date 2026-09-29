@@ -57,7 +57,7 @@ internal static class RestrictionEndpoints
 
         return Answers.Of(
             await restrictions
-                .AllAsync(AccessContext.Of(browser.Required.Subject), cancellationToken)
+                .AllAsync(browser.Asking, cancellationToken)
                 .ConfigureAwait(false),
             all => TypedResults.Json<IReadOnlyList<RestrictionView>>(
                 [.. all.Select(RestrictionView.Of)],
@@ -77,7 +77,7 @@ internal static class RestrictionEndpoints
 
         return Answers.Of(
             await restrictions
-                .ReadAsync(AccessContext.Of(browser.Required.Subject), name, cancellationToken)
+                .ReadAsync(browser.Asking, name, cancellationToken)
                 .ConfigureAwait(false),
             restriction => TypedResults.Json(
                 RestrictionView.Of(restriction),
@@ -107,7 +107,7 @@ internal static class RestrictionEndpoints
         return Answers.Of(
             await restrictions
                 .EditAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     replacement,
                     body.Reason,
@@ -132,7 +132,7 @@ internal static class RestrictionEndpoints
         return Answers.Of(
             await restrictions
                 .DeleteAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     name,
                     body.Reason,
@@ -172,7 +172,7 @@ internal static class RestrictionEndpoints
         return Answers.Of(
             await restrictions
                 .GrantAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     name,
                     body.KeyValue,

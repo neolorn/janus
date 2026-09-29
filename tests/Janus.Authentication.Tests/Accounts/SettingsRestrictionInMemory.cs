@@ -21,6 +21,9 @@ internal sealed class SettingsRestrictionInMemory : ISettingsRestriction
     public void Restrict(SubjectId subject) => _restricted.Add(subject);
 
     /// <inheritdoc/>
-    public ValueTask<Error?> RefusedAsync(SubjectId subject, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_restricted.Contains(subject) ? Error.From(ErrorCodes.Restricted) : null);
+    public ValueTask<Error?> RefusedAsync(AccessContext context, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(
+            context?.Effective is SubjectId subject && _restricted.Contains(subject)
+                ? Error.From(ErrorCodes.Restricted)
+                : null);
 }

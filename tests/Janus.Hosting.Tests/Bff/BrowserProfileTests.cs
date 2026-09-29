@@ -1217,7 +1217,7 @@ public sealed class BrowserProfileTests : IDisposable
                 Noon,
                 TimeSpan.FromDays(1),
                 TimeSpan.FromDays(30),
-                satisfiesEveryGate: false),
+                breakGlassReason: null),
             secret.Fingerprint(),
             token.Fingerprint(),
             TestContext.Current.CancellationToken);

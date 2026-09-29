@@ -44,6 +44,7 @@ public sealed class ConfigurationAuditTests(DatabaseFixture database)
             Loosening: true,
             "a support window",
             actor,
+            BreakGlassReason: null,
             DateTimeOffset.UtcNow,
             Principal: null);
 
@@ -139,7 +140,16 @@ public sealed class ConfigurationAuditTests(DatabaseFixture database)
         string before,
         string after,
         SubjectId actor) =>
-        new(key, before, after, Loosening: true, "a support window", actor, DateTimeOffset.UtcNow, Principal: null);
+        new(
+            key,
+            before,
+            after,
+            Loosening: true,
+            "a support window",
+            actor,
+            BreakGlassReason: null,
+            DateTimeOffset.UtcNow,
+            Principal: null);
 
     private ConfigurationAudit Audit(StoreContext context) =>
         new(context, new AuditStore(context, new DataConnections(context), _deployment.Keys, _deployment.Randomness), TimeProvider.System);

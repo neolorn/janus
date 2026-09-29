@@ -50,7 +50,7 @@ internal static class SessionRevocationEndpoints
         return Answers.Of(
             await sessions
                 .RevokeAccountAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     new SubjectId(subject),
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -67,7 +67,7 @@ internal static class SessionRevocationEndpoints
 
         return Answers.Of(
             await sessions
-                .RevokeEveryAsync(AccessContext.Of(browser.Required.Subject), cancellationToken)
+                .RevokeEveryAsync(browser.Asking, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }

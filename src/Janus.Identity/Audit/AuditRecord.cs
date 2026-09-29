@@ -14,7 +14,9 @@ namespace Janus.Identity.Audit;
 /// IDN-PRIN-003 and INF-BG-002. The acting and effective identities are two fields where
 /// one would do, so that "who did this" is never inferred. An action of background work
 /// names the system principal that took it and the reason it stated, in place of an
-/// acting identity it does not have. The record holds identifiers and codes; an
+/// acting identity it does not have. An action a person took in a break-glass session
+/// carries the reason given at the credential's use, in a field of its own, handed in
+/// with the acting identity (OPS-BOOT-002, D-170). The record holds identifiers and codes; an
 /// attribute an event has to carry is held under the subject's own key, so that erasure
 /// reaches it without any row being touched.
 /// </remarks>
@@ -34,7 +36,8 @@ internal sealed class AuditRecord
         IReadOnlyDictionary<string, JsonElement> details,
         IReadOnlyDictionary<string, JsonElement> personalDetails,
         string? principal,
-        string? reason)
+        string? reason,
+        string? breakGlassReason)
     {
         Id = id;
         Category = category;
@@ -47,6 +50,7 @@ internal sealed class AuditRecord
         PersonalDetails = personalDetails;
         Principal = principal;
         Reason = reason;
+        BreakGlassReason = breakGlassReason;
     }
 
     /// <summary>
@@ -112,6 +116,12 @@ internal sealed class AuditRecord
     public string? Reason { get; }
 
     /// <summary>
+    /// The reason given at the use of the break-glass credential, where a person took
+    /// the action in the session it opened, or nothing.
+    /// </summary>
+    public string? BreakGlassReason { get; }
+
+    /// <summary>
     /// Records an event.
     /// </summary>
     /// <param name="id">The identifier issued for the record.</param>
@@ -120,6 +130,10 @@ internal sealed class AuditRecord
     /// <param name="occurredAt">The instant it occurred.</param>
     /// <param name="actingSubject">Who took the action.</param>
     /// <param name="effectiveSubject">Whose identity it was taken under.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="organization">The organization, where one applies.</param>
     /// <param name="details">The structured fields, or nothing.</param>
     /// <param name="personalDetails">The attributes to hold under the key, or nothing.</param>
@@ -131,6 +145,7 @@ internal sealed class AuditRecord
         DateTimeOffset occurredAt,
         SubjectId actingSubject,
         SubjectId effectiveSubject,
+        string? breakGlassReason,
         OrganizationId? organization,
         IReadOnlyDictionary<string, JsonElement>? details = null,
         IReadOnlyDictionary<string, JsonElement>? personalDetails = null) =>
@@ -145,7 +160,8 @@ internal sealed class AuditRecord
             details ?? Nothing,
             personalDetails ?? Nothing,
             principal: null,
-            reason: null);
+            reason: null,
+            breakGlassReason);
 
     /// <summary>
     /// Records an action background work took, under the name and the reason of the
@@ -184,7 +200,8 @@ internal sealed class AuditRecord
             details ?? Nothing,
             Nothing,
             principal.Name,
-            principal.Reason);
+            principal.Reason,
+            breakGlassReason: null);
     }
 
     /// <summary>
@@ -202,6 +219,10 @@ internal sealed class AuditRecord
     /// <param name="personalDetails">The attributes that were held under the key.</param>
     /// <param name="principal">The system principal that took it, where one did.</param>
     /// <param name="reason">The reason that principal stated, where one did.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened.
+    /// </param>
     /// <returns>The record.</returns>
     /// <exception cref="ArgumentNullException">Either set of fields is absent.</exception>
     public static AuditRecord Existing(
@@ -215,7 +236,8 @@ internal sealed class AuditRecord
         IReadOnlyDictionary<string, JsonElement> details,
         IReadOnlyDictionary<string, JsonElement> personalDetails,
         string? principal,
-        string? reason)
+        string? reason,
+        string? breakGlassReason)
     {
         ArgumentNullException.ThrowIfNull(details);
         ArgumentNullException.ThrowIfNull(personalDetails);
@@ -231,6 +253,7 @@ internal sealed class AuditRecord
             details,
             personalDetails,
             principal,
-            reason);
+            reason,
+            breakGlassReason);
     }
 }

@@ -62,7 +62,7 @@ internal static class AccountAdministrationEndpoints
         return Answers.Of(
             await accounts
                 .SuspendAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     new SubjectId(subject),
                     cancellationToken)
@@ -82,7 +82,7 @@ internal static class AccountAdministrationEndpoints
         return Answers.Of(
             await accounts
                 .ReactivateAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     new SubjectId(subject),
                     cancellationToken)
@@ -102,7 +102,7 @@ internal static class AccountAdministrationEndpoints
         return Answers.Of(
             await accounts
                 .LiftRestrictionAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     new SubjectId(subject),
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -121,7 +121,7 @@ internal static class AccountAdministrationEndpoints
         return Answers.Of(
             await accounts
                 .CancelDeletionAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     new SubjectId(subject),
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -146,7 +146,7 @@ internal static class AccountAdministrationEndpoints
         return Answers.Of(
             await accounts
                 .ReadPhotoAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     new SubjectId(subject),
                     cancellationToken)
                 .ConfigureAwait(false),

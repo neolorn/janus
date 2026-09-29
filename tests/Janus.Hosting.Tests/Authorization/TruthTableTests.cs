@@ -598,7 +598,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "a change to the account's own settings":
             case "a change to the account's own settings, by a restricted caller":
                 return await scope.ServiceProvider.GetRequiredService<ISettingsRestriction>()
-                    .RefusedAsync(caller, cancellationToken) is Error refused
+                    .RefusedAsync(AccessContext.Of(caller), cancellationToken) is Error refused
                     ? Refused(refused)
                     : Decided.Allowed;
 

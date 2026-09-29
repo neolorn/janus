@@ -310,7 +310,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
             replacement,
             "an incident",
             Satisfied,
-            SubjectId.New(_randomness),
+            AccessContext.Of(SubjectId.New(_randomness)),
             TestContext.Current.CancellationToken)).Switch(
             () => { },
             error => throw new Xunit.Sdk.XunitException($"The change was refused: {error.Code}."));
@@ -325,7 +325,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
             replacement,
             reason,
             challenge ?? Satisfied,
-            SubjectId.New(_randomness),
+            AccessContext.Of(SubjectId.New(_randomness)),
             TestContext.Current.CancellationToken)).Match(
             () => throw new Xunit.Sdk.XunitException("The change was not refused."),
             error => error);

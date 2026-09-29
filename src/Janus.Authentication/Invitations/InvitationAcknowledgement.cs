@@ -207,6 +207,7 @@ internal sealed class InvitationAcknowledgement(
                 invitation.Organization,
                 invitation.Id,
                 invitee,
+                context.BreakGlassReason,
                 now,
                 cancellationToken)
             .ConfigureAwait(false);

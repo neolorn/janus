@@ -1159,6 +1159,7 @@ internal sealed class AccessGate(
             correlation,
             context.Acting,
             context.Effective,
+            context.BreakGlassReason,
             organization,
             permission,
             type,

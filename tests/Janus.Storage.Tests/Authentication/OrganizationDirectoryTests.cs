@@ -135,6 +135,7 @@ public sealed class OrganizationDirectoryTests(DatabaseFixture database)
                 organization,
                 "Closing the branch.",
                 actor,
+                breakGlassReason: null,
                 Noon,
                 TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);

@@ -55,7 +55,7 @@ internal static class RoleEndpoints
 
         return Answers.Of(
             await roles
-                .AllAsync(AccessContext.Of(browser.Required.Subject), cancellationToken)
+                .AllAsync(browser.Asking, cancellationToken)
                 .ConfigureAwait(false),
             all => TypedResults.Json<IReadOnlyList<RoleView>>(
                 [.. all.Select(RoleView.Of)],
@@ -91,7 +91,7 @@ internal static class RoleEndpoints
         return Answers.Of(
             await roles
                 .DefineAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     role,
                     reason,
@@ -126,7 +126,7 @@ internal static class RoleEndpoints
         return Answers.Of(
             await roles
                 .RemoveAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     role,
                     reason,

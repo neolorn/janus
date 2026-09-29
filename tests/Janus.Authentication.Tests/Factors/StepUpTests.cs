@@ -286,7 +286,7 @@ public sealed class StepUpTests : IDisposable
             Noon,
             TimeSpan.FromMinutes(30),
             TimeSpan.FromHours(1),
-            satisfiesEveryGate: true);
+            breakGlassReason: "The operator cannot be reached.");
 
         Assert.Equal(
             StepUpOutcome.Satisfied,
@@ -734,7 +734,7 @@ public sealed class StepUpTests : IDisposable
             Noon,
             TimeSpan.FromMinutes(30),
             TimeSpan.FromHours(1),
-            satisfiesEveryGate);
+            satisfiesEveryGate ? "The operator cannot be reached." : null);
 
     private StepUpChallenge Challenge(Gate gate, HeldFactors held) =>
         StepUp.On(Signed(null), gate, held, Noon);
@@ -748,7 +748,7 @@ public sealed class StepUpTests : IDisposable
             Noon,
             TimeSpan.FromDays(1),
             TimeSpan.FromDays(30),
-            satisfiesEveryGate: false);
+            breakGlassReason: null);
 
     private Authenticator Suspended(Factor factor, DateTimeOffset? completes = null)
     {

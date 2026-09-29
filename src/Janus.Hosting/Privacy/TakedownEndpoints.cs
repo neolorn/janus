@@ -64,7 +64,7 @@ internal static class TakedownEndpoints
         return Answers.Of(
             await takedowns
                 .ExecuteAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     new SubjectId(subject),
                     trigger,
@@ -90,7 +90,7 @@ internal static class TakedownEndpoints
         return Answers.Of(
             await takedowns
                 .ReadAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     new SubjectId(subject),
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -120,7 +120,7 @@ internal static class TakedownEndpoints
         return Answers.Of(
             await takedowns
                 .ReverseAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     new SubjectId(subject),
                     reason,

@@ -101,6 +101,7 @@ public sealed class SessionAuditTests(DatabaseFixture database)
             await Audit(writing).StepUpFailedAsync(
                 session,
                 account,
+                breakGlassReason: null,
                 Factor.Totp,
                 DateTimeOffset.UtcNow,
                 TestContext.Current.CancellationToken);

@@ -78,6 +78,10 @@ internal sealed class AuditConfiguration : IEntityTypeConfiguration<AuditRowReco
 
         builder.Property(record => record.PrincipalReason).HasColumnName("principal_reason");
 
+        // OPS-BOOT-002, D-170: the reason a break-glass session keeps, beside the
+        // identities of a person's action; background work carries none.
+        builder.Property(record => record.BreakGlassReason).HasColumnName("breakglass_reason");
+
         // PRIV-BREACH-002: every record of one subject, without a full scan.
         builder.HasIndex(record => new { record.EffectiveSubject, record.OccurredAt })
             .HasDatabaseName("ix_audit_records_effective_subject");

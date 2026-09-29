@@ -23,6 +23,10 @@ internal interface IPrivacyAudit
     /// </summary>
     /// <param name="action">What happened.</param>
     /// <param name="acting">Who did it, where a person did.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="subject">Whose account it was done on, where it was done on one.</param>
     /// <param name="at">When.</param>
     /// <param name="details">The structured context of the entry.</param>
@@ -31,6 +35,7 @@ internal interface IPrivacyAudit
     ValueTask RecordedAsync(
         AuditAction action,
         SubjectId? acting,
+        string? breakGlassReason,
         SubjectId? subject,
         DateTimeOffset at,
         IReadOnlyDictionary<string, JsonElement> details,

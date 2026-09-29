@@ -111,6 +111,7 @@ internal sealed class ConsentService(
             .RecordedAsync(
                 Granted,
                 context.Acting,
+                context.BreakGlassReason,
                 subject,
                 now,
                 Named(purpose, version, mechanism, kind),
@@ -168,6 +169,7 @@ internal sealed class ConsentService(
             .RecordedAsync(
                 Withdrawn,
                 context.Acting,
+                context.BreakGlassReason,
                 subject,
                 now,
                 Named(purpose, consent.NoticeVersion, consent.Mechanism, consent.Kind),
@@ -229,7 +231,14 @@ internal sealed class ConsentService(
         await ObjectedAsync(subject, purpose, objecting: true, now, cancellationToken)
             .ConfigureAwait(false);
         await audit
-            .RecordedAsync(Objected, context.Acting, subject, now, Named(purpose, version, mechanism), cancellationToken)
+            .RecordedAsync(
+                Objected,
+                context.Acting,
+                context.BreakGlassReason,
+                subject,
+                now,
+                Named(purpose, version, mechanism),
+                cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
@@ -276,6 +285,7 @@ internal sealed class ConsentService(
             .RecordedAsync(
                 Resumed,
                 context.Acting,
+                context.BreakGlassReason,
                 subject,
                 now,
                 Named(purpose, objection.NoticeVersion, objection.Mechanism),

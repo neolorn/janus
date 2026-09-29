@@ -17,6 +17,10 @@ namespace Janus.Authorization.Gate;
 /// Whose identity the request was made under, or nothing where it was made under
 /// none.
 /// </param>
+/// <param name="BreakGlassReason">
+/// The reason given at the use of the break-glass credential, where the request was
+/// made in the session it opened, or nothing.
+/// </param>
 /// <param name="Organization">
 /// The organization the evaluation was scoped to, or nothing where the library holds
 /// no record of the thing that was asked about.
@@ -39,6 +43,7 @@ internal sealed record DeniedAccess(
     AuditRecordId Correlation,
     SubjectId? Acting,
     SubjectId? Effective,
+    string? BreakGlassReason,
     OrganizationId? Organization,
     Permission Permission,
     ResourceType Type,

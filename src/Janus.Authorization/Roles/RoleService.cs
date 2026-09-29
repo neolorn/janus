@@ -126,6 +126,7 @@ internal sealed class RoleService(
                 Defined(defined).Permissions,
                 stated,
                 acting,
+                context.BreakGlassReason,
                 time.GetUtcNow(),
                 cancellationToken)
             .ConfigureAwait(false);
@@ -193,6 +194,7 @@ internal sealed class RoleService(
                 Defined(held).Permissions,
                 stated,
                 acting,
+                context.BreakGlassReason,
                 time.GetUtcNow(),
                 cancellationToken)
             .ConfigureAwait(false);

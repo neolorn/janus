@@ -76,7 +76,7 @@ internal sealed class IdentifierService(
         }
 
         // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
-        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
             is Error restricted)
         {
             return Result.Failure(restricted);
@@ -160,7 +160,7 @@ internal sealed class IdentifierService(
         }
 
         // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
-        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
             is Error restricted)
         {
             return Result.Failure(restricted);
@@ -389,7 +389,7 @@ internal sealed class IdentifierService(
         }
 
         // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
-        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
             is Error restricted)
         {
             return Result.Failure(restricted);
@@ -463,7 +463,7 @@ internal sealed class IdentifierService(
         }
 
         // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
-        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
             is Error restricted)
         {
             return Result.Failure(restricted);
@@ -514,7 +514,7 @@ internal sealed class IdentifierService(
         }
 
         // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
-        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
             is Error restricted)
         {
             return Result.Failure(restricted);
@@ -691,7 +691,7 @@ internal sealed class IdentifierService(
         }
 
         // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
-        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
             is Error restricted)
         {
             return Result.Failure(restricted);

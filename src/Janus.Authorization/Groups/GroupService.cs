@@ -108,7 +108,9 @@ internal sealed class GroupService(
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await groups.CreateAsync(group, cancellationToken).ConfigureAwait(false);
-        await audit.CreatedAsync(group, stated, acting, time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        await audit
+            .CreatedAsync(group, stated, acting, context.BreakGlassReason, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success(group.Id);
@@ -154,7 +156,9 @@ internal sealed class GroupService(
         }
 
         await groups.RemoveAsync(group, cancellationToken).ConfigureAwait(false);
-        await audit.RemovedAsync(held, stated, acting, time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        await audit
+            .RemovedAsync(held, stated, acting, context.BreakGlassReason, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success();
@@ -229,7 +233,7 @@ internal sealed class GroupService(
 
         await groups.AddMemberAsync(group, member, cancellationToken).ConfigureAwait(false);
         await audit
-            .MemberAddedAsync(held, member, stated, acting, time.GetUtcNow(), cancellationToken)
+            .MemberAddedAsync(held, member, stated, acting, context.BreakGlassReason, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -283,7 +287,7 @@ internal sealed class GroupService(
 
         await groups.RemoveMemberAsync(group, member, cancellationToken).ConfigureAwait(false);
         await audit
-            .MemberRemovedAsync(held, member, stated, acting, time.GetUtcNow(), cancellationToken)
+            .MemberRemovedAsync(held, member, stated, acting, context.BreakGlassReason, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);

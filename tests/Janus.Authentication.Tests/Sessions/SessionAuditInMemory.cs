@@ -16,7 +16,7 @@ internal sealed class SessionAuditInMemory : ISessionAudit
     /// <summary>
     /// What each authentication presented, in the order it was recorded.
     /// </summary>
-    public List<(SessionId Session, SubjectId Subject, IReadOnlyCollection<Factor> Presented)> Records { get; } = [];
+    public List<(SessionId Session, SubjectId Subject, IReadOnlyCollection<Factor> Presented, string? BreakGlassReason)> Records { get; } = [];
 
     /// <summary>
     /// Each factor refused at authentication, with the account it was presented
@@ -27,17 +27,18 @@ internal sealed class SessionAuditInMemory : ISessionAudit
     /// <summary>
     /// Each factor refused at a step-up, in the order it was recorded.
     /// </summary>
-    public List<(SessionId Session, SubjectId Subject, Factor Presented)> StepUpsFailed { get; } = [];
+    public List<(SessionId Session, SubjectId Subject, Factor Presented, string? BreakGlassReason)> StepUpsFailed { get; } = [];
 
     /// <inheritdoc/>
     public ValueTask PresentedAsync(
         SessionId session,
         SubjectId subject,
+        string? breakGlassReason,
         IReadOnlyCollection<Factor> presented,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        Records.Add((session, subject, presented));
+        Records.Add((session, subject, presented, breakGlassReason));
 
         return ValueTask.CompletedTask;
     }
@@ -58,11 +59,12 @@ internal sealed class SessionAuditInMemory : ISessionAudit
     public ValueTask StepUpFailedAsync(
         SessionId session,
         SubjectId subject,
+        string? breakGlassReason,
         Factor presented,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        StepUpsFailed.Add((session, subject, presented));
+        StepUpsFailed.Add((session, subject, presented, breakGlassReason));
 
         return ValueTask.CompletedTask;
     }

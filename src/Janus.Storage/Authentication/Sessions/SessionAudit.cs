@@ -37,6 +37,7 @@ internal sealed class SessionAudit(IAuditStore records, TimeProvider time) : ISe
     public async ValueTask PresentedAsync(
         SessionId session,
         SubjectId subject,
+        string? breakGlassReason,
         IReadOnlyCollection<Factor> presented,
         DateTimeOffset at,
         CancellationToken cancellationToken)
@@ -51,6 +52,7 @@ internal sealed class SessionAudit(IAuditStore records, TimeProvider time) : ISe
                     at,
                     subject,
                     subject,
+                    breakGlassReason,
                     organization: null,
                     new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
                     {
@@ -81,6 +83,7 @@ internal sealed class SessionAudit(IAuditStore records, TimeProvider time) : ISe
                 at,
                 actingSubject: default,
                 subject ?? default,
+                breakGlassReason: null,
                 organization: null,
                 new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
                 {
@@ -92,6 +95,7 @@ internal sealed class SessionAudit(IAuditStore records, TimeProvider time) : ISe
     public ValueTask StepUpFailedAsync(
         SessionId session,
         SubjectId subject,
+        string? breakGlassReason,
         Factor presented,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
@@ -103,6 +107,7 @@ internal sealed class SessionAudit(IAuditStore records, TimeProvider time) : ISe
                 at,
                 subject,
                 subject,
+                breakGlassReason,
                 organization: null,
                 new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
                 {

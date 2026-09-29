@@ -65,20 +65,26 @@ internal sealed class RestrictionAdministration(
     /// </param>
     /// <param name="reason">The written reason, which every edit requires.</param>
     /// <param name="challenge">What the <c>restriction:edit</c> gate answered.</param>
-    /// <param name="actor">Who is making the change.</param>
+    /// <param name="context">Who is making the change.</param>
     /// <param name="cancellationToken">Abandons the change.</param>
     /// <returns>Whether the change was made, or why it was refused.</returns>
-    /// <exception cref="ArgumentNullException">The name or the challenge is absent.</exception>
+    /// <exception cref="ArgumentNullException">The name, the challenge or the context is absent.</exception>
     public async ValueTask<Result> EditAsync(
         string name,
         Restriction? replacement,
         string? reason,
         StepUpChallenge challenge,
-        SubjectId actor,
+        AccessContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(challenge);
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Acting is not SubjectId actor)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
 
         if (!StepUpRefusal.Met(challenge))
         {
@@ -137,7 +143,7 @@ internal sealed class RestrictionAdministration(
                 written,
                 reason,
                 challenge,
-                AccessContext.Of(actor),
+                context,
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -149,7 +155,16 @@ internal sealed class RestrictionAdministration(
         DateTimeOffset now = time.GetUtcNow();
 
         await audit
-            .EditedAsync(name, before, replacement, loosening, reason, actor, now, cancellationToken)
+            .EditedAsync(
+                name,
+                before,
+                replacement,
+                loosening,
+                reason,
+                actor,
+                context.BreakGlassReason,
+                now,
+                cancellationToken)
             .ConfigureAwait(false);
 
         Result published = await events
@@ -194,22 +209,28 @@ internal sealed class RestrictionAdministration(
     /// <param name="credit">How many sends the credit is worth.</param>
     /// <param name="reason">The written reason, which a grant requires.</param>
     /// <param name="challenge">What the <c>restriction:grant</c> gate answered.</param>
-    /// <param name="actor">Who is granting it.</param>
+    /// <param name="context">Who is granting it.</param>
     /// <param name="cancellationToken">Abandons the grant.</param>
     /// <returns>Whether the credit was added, or why it was refused.</returns>
-    /// <exception cref="ArgumentNullException">A value or the challenge is absent.</exception>
+    /// <exception cref="ArgumentNullException">A value, the challenge or the context is absent.</exception>
     public async ValueTask<Result> GrantAsync(
         string name,
         string keyValue,
         int credit,
         string? reason,
         StepUpChallenge challenge,
-        SubjectId actor,
+        AccessContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(keyValue);
         ArgumentNullException.ThrowIfNull(challenge);
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Acting is not SubjectId actor)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
 
         if (!StepUpRefusal.Met(challenge))
         {
@@ -256,7 +277,7 @@ internal sealed class RestrictionAdministration(
         DateTimeOffset now = time.GetUtcNow();
 
         await audit
-            .GrantedAsync(name, credit, reason, actor, now, cancellationToken)
+            .GrantedAsync(name, credit, reason, actor, context.BreakGlassReason, now, cancellationToken)
             .ConfigureAwait(false);
 
         // The plain key value never leaves this method: the event carries the

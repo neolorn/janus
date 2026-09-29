@@ -16,7 +16,11 @@ namespace Janus.Hosting.Privacy;
 /// <param name="Effective">Whose identity the action was taken under.</param>
 /// <param name="Organization">The organization it belongs to, where one applies.</param>
 /// <param name="Details">The codes and references it carries.</param>
-/// <remarks>Implements PRIV-BREACH-002 and chapter 09 section 8a.</remarks>
+/// <param name="BreakGlassReason">
+/// The reason given at the use of the break-glass credential, where the record was
+/// written in the session it opened.
+/// </param>
+/// <remarks>Implements PRIV-BREACH-002, OPS-BOOT-002 and chapter 09 section 8a.</remarks>
 internal sealed record AuditEntryView(
     Guid Id,
     AuditCategory Category,
@@ -25,7 +29,8 @@ internal sealed record AuditEntryView(
     Guid Acting,
     Guid Effective,
     Guid? Organization,
-    IReadOnlyDictionary<string, JsonElement> Details)
+    IReadOnlyDictionary<string, JsonElement> Details,
+    string? BreakGlassReason)
 {
     /// <summary>
     /// The view of an audit record.
@@ -45,6 +50,7 @@ internal sealed record AuditEntryView(
             entry.Acting.Value,
             entry.Effective.Value,
             entry.Organization?.Value,
-            entry.Details);
+            entry.Details,
+            entry.BreakGlassReason);
     }
 }

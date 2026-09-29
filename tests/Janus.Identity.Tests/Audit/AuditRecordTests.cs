@@ -43,6 +43,7 @@ public sealed class AuditRecordTests
             Noon,
             Mona,
             Ahmed,
+            breakGlassReason: null,
             organization: null);
 
         Assert.Equal(Mona, record.ActingSubject);
@@ -64,6 +65,7 @@ public sealed class AuditRecordTests
             Noon,
             Ahmed,
             Ahmed,
+            breakGlassReason: null,
             organization: null);
 
         Assert.Equal(Noon, record.OccurredAt);
@@ -114,6 +116,7 @@ public sealed class AuditRecordTests
             Noon,
             Ahmed,
             Ahmed,
+            breakGlassReason: null,
             organization: null,
             details: Fields(("kind", "email")),
             personalDetails: Fields(("added", "ahmed@example.com")));
@@ -183,5 +186,6 @@ public sealed class AuditRecordTests
             Noon,
             Ahmed,
             Ahmed,
+            breakGlassReason: null,
             organization);
 }

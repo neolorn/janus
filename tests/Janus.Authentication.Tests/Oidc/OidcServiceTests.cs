@@ -264,7 +264,7 @@ public sealed class OidcServiceTests : IAsyncDisposable
                 _clock.GetUtcNow(),
                 inactivity,
                 absolute,
-                satisfiesEveryGate: true),
+                breakGlassReason: "The operator cannot be reached."),
             [1],
             [2],
             Cancellation);

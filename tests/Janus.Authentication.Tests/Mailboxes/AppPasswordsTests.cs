@@ -300,7 +300,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
             at,
             TimeSpan.FromDays(1),
             TimeSpan.FromDays(30),
-            satisfiesEveryGate: false);
+            breakGlassReason: null);
         byte[] fingerprint = new byte[32];
         byte[] synchronizer = new byte[32];
 

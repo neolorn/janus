@@ -23,12 +23,13 @@ internal sealed class PrivacyAuditInMemory : IPrivacyAudit
     public ValueTask RecordedAsync(
         AuditAction action,
         SubjectId? acting,
+        string? breakGlassReason,
         SubjectId? subject,
         DateTimeOffset at,
         IReadOnlyDictionary<string, JsonElement> details,
         CancellationToken cancellationToken)
     {
-        _entries.Add(new PrivacyAuditEntry(action, acting, subject, at, details));
+        _entries.Add(new PrivacyAuditEntry(action, acting, subject, at, details) { BreakGlassReason = breakGlassReason });
 
         return ValueTask.CompletedTask;
     }

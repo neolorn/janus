@@ -43,6 +43,7 @@ internal sealed class CredentialAudit(IAuditStore records, TimeProvider time) : 
                     at,
                     subject,
                     subject,
+                    breakGlassReason: null,
                     organization: null,
                     new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
                     {
@@ -90,6 +91,7 @@ internal sealed class CredentialAudit(IAuditStore records, TimeProvider time) : 
                     at,
                     subject,
                     subject,
+                    breakGlassReason: null,
                     organization: null,
                     new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
                     {
@@ -115,6 +117,7 @@ internal sealed class CredentialAudit(IAuditStore records, TimeProvider time) : 
                     at,
                     subject,
                     subject,
+                    breakGlassReason: null,
                     organization: null,
                     new Dictionary<string, JsonElement>(capacity: 3, StringComparer.Ordinal)
                     {

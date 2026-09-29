@@ -46,6 +46,12 @@ internal sealed class SessionConfiguration : IEntityTypeConfiguration<SessionRec
             table.HasCheckConstraint(
                 "ck_sessions_phishing_resistant",
                 "phishing_resistant = (phishing_resistant_at IS NOT NULL)");
+
+            // OPS-BOOT-002, D-170: only the session the break-glass credential opens,
+            // and one derived from it, keeps the reason given at its use.
+            table.HasCheckConstraint(
+                "ck_sessions_breakglass_reason",
+                "breakglass_reason IS NULL OR (satisfies_every_gate AND length(btrim(breakglass_reason)) BETWEEN 1 AND 1024)");
         });
 
         builder.HasKey(session => session.Id).HasName("pk_sessions");
@@ -109,6 +115,7 @@ internal sealed class SessionConfiguration : IEntityTypeConfiguration<SessionRec
         builder.Property(session => session.AbsoluteExpiry).HasColumnName("absolute_expiry");
         builder.Property(session => session.EndedAt).HasColumnName("ended_at");
         builder.Property(session => session.SatisfiesEveryGate).HasColumnName("satisfies_every_gate");
+        builder.Property(session => session.BreakGlassReason).HasColumnName("breakglass_reason");
 
         // AUTH-SESS-003: the cookie is looked up by what it fingerprints to, and two
         // sessions never share one.

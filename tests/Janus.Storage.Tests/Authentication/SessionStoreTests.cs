@@ -95,6 +95,40 @@ public sealed class SessionStoreTests(DatabaseFixture database)
         Assert.Equal(new SessionLocation("Cairo", "EG"), read.Origin.Location);
         Assert.Null(read.EndedAt);
         Assert.False(read.SatisfiesEveryGate);
+        Assert.Null(read.BreakGlassReason);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC10: the session the break-glass credential opens keeps the reason
+    /// given at its use, and what derives from it keeps the same, read back from the
+    /// durable store.
+    /// </summary>
+    [Fact]
+    public async Task OPS_BOOT_002_AC10_TheSessionKeepsTheReasonGivenAtItsUseAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        var record = Session.Begin(
+            SessionId.New(TimeProvider.System),
+            subject,
+            new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
+            new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")),
+            Noon,
+            TimeSpan.FromMinutes(30),
+            TimeSpan.FromHours(1),
+            breakGlassReason: "The operator cannot be reached.");
+        Session derived = Derived(record, SessionType.PerApp);
+
+        await WrittenAsync(record, derived);
+
+        await using StoreContext reading = database.Context();
+        Session read = Assert.IsType<Session>(
+            await Store(reading).FindAsync(record.Id, TestContext.Current.CancellationToken));
+        Session readDerived = Assert.IsType<Session>(
+            await Store(reading).FindAsync(derived.Id, TestContext.Current.CancellationToken));
+
+        Assert.True(read.SatisfiesEveryGate);
+        Assert.Equal("The operator cannot be reached.", read.BreakGlassReason);
+        Assert.Equal("The operator cannot be reached.", readDerived.BreakGlassReason);
     }
 
     /// <summary>
@@ -507,7 +541,7 @@ public sealed class SessionStoreTests(DatabaseFixture database)
             Noon,
             inactivity ?? TimeSpan.FromDays(1),
             absolute ?? TimeSpan.FromDays(30),
-            satisfiesEveryGate: false);
+            breakGlassReason: null);
 
     private static Session Derived(Session record, SessionType type) => record.Derive(
         SessionId.New(TimeProvider.System),

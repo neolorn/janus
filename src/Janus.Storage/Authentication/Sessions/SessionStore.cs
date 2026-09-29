@@ -101,6 +101,7 @@ internal sealed class SessionStore(
                 AbsoluteExpiry = session.AbsoluteExpiry,
                 EndedAt = session.EndedAt,
                 SatisfiesEveryGate = session.SatisfiesEveryGate,
+                BreakGlassReason = session.BreakGlassReason,
             });
         }
         finally
@@ -293,7 +294,8 @@ internal sealed class SessionStore(
         record.IdleExpiry,
         record.AbsoluteExpiry,
         record.EndedAt,
-        record.SatisfiesEveryGate);
+        record.SatisfiesEveryGate,
+        record.BreakGlassReason);
 
     private static SessionOrigin Origin(
         ReadOnlySpan<byte> dataKey,

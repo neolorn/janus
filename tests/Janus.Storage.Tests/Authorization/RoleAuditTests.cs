@@ -48,6 +48,7 @@ public sealed class RoleAuditTests(DatabaseFixture database)
                 [Permission.Parse("document:edit"), Permission.Parse("document:read")],
                 "Editors now edit.",
                 actor,
+                breakGlassReason: null,
                 now,
                 TestContext.Current.CancellationToken);
 
@@ -84,6 +85,7 @@ public sealed class RoleAuditTests(DatabaseFixture database)
                 [Permission.Parse("document:read")],
                 "No longer used.",
                 actor,
+                breakGlassReason: null,
                 now,
                 TestContext.Current.CancellationToken);
 

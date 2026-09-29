@@ -39,9 +39,10 @@ internal sealed class AuditStore(
         """
         INSERT INTO identity.audit_records
             (id, category, occurred_at, action, acting_subject, effective_subject,
-             organization, details, enc_details, principal, principal_reason)
+             organization, details, enc_details, principal, principal_reason,
+             breakglass_reason)
         VALUES (@id, @category, @at, @action, @acting, @effective, @organization,
-                CAST(@details AS jsonb), @personal, @principal, @reason);
+                CAST(@details AS jsonb), @personal, @principal, @reason, @breakGlassReason);
         """;
 
     /// <inheritdoc/>
@@ -71,6 +72,7 @@ internal sealed class AuditStore(
                     personal,
                     principal = record.Principal,
                     reason = record.Reason,
+                    breakGlassReason = record.BreakGlassReason,
                 },
                 ambient.Transaction,
                 cancellationToken: cancellationToken))
@@ -161,7 +163,8 @@ internal sealed class AuditStore(
                     Located(row.EffectiveSubject),
                     row.PersonalDetails)),
             row.Principal,
-            row.PrincipalReason);
+            row.PrincipalReason,
+            row.BreakGlassReason);
 
     private async ValueTask<byte[]> SealedAsync(
         AuditRecord record,

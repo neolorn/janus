@@ -16,6 +16,10 @@ namespace Janus.Core;
 /// <param name="Effective">Whose identity the action was taken under.</param>
 /// <param name="Organization">The organization it belongs to, where one applies.</param>
 /// <param name="Details">The codes and references it carries.</param>
+/// <param name="BreakGlassReason">
+/// The reason given at the use of the break-glass credential, where the record was
+/// written in the session it opened (OPS-BOOT-002), or nothing.
+/// </param>
 /// <remarks>
 /// Implements PRIV-BREACH-002 and IDN-AUD-001. What a record holds under the subject's
 /// key is not part of the entry, so an entry reads the same before and after erasure
@@ -29,4 +33,5 @@ public sealed record AuditEntry(
     SubjectId Acting,
     SubjectId Effective,
     OrganizationId? Organization,
-    IReadOnlyDictionary<string, JsonElement> Details);
+    IReadOnlyDictionary<string, JsonElement> Details,
+    string? BreakGlassReason);

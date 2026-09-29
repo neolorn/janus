@@ -479,7 +479,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
             Noon,
             TimeSpan.FromDays(1),
             TimeSpan.FromDays(30),
-            satisfiesEveryGate: true);
+            breakGlassReason: "The operator cannot be reached.");
 
         await using StoreContext writing = database.Context();
 

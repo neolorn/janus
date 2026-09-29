@@ -32,6 +32,7 @@ internal sealed class RecoveryAudit(IAuditStore records, TimeProvider time) : IR
     /// <inheritdoc/>
     public async ValueTask ApprovedAsync(
         SubjectId approver,
+        string? breakGlassReason,
         SubjectId subject,
         string reason,
         IdentifierKind channel,
@@ -45,6 +46,7 @@ internal sealed class RecoveryAudit(IAuditStore records, TimeProvider time) : IR
                     at,
                     approver,
                     subject,
+                    breakGlassReason,
                     organization: null,
                     new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
                     {

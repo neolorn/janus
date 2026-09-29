@@ -44,7 +44,7 @@ internal sealed class ConfigurationAuditInMemory : IConfigurationAudit
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        Principals.Add(new ConfigurationChange(key, before, after, loosening, reason, default, at, principal.Name));
+        Principals.Add(new ConfigurationChange(key, before, after, loosening, reason, default, null, at, principal.Name));
 
         return ValueTask.CompletedTask;
     }

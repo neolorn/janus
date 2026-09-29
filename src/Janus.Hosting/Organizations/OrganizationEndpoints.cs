@@ -88,7 +88,7 @@ internal static class OrganizationEndpoints
         return Answers.Of(
             await organizations
                 .CreateAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     name,
                     reason,
                     cancellationToken)
@@ -119,7 +119,7 @@ internal static class OrganizationEndpoints
         return Answers.Of(
             await organizations
                 .RequestDeletionAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     new OrganizationId(id),
                     reason,
@@ -147,7 +147,7 @@ internal static class OrganizationEndpoints
         return Answers.Of(
             await organizations
                 .CancelDeletionAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     new OrganizationId(id),
                     reason,
@@ -167,7 +167,7 @@ internal static class OrganizationEndpoints
 
         return Answers.Of(
             await organizations
-                .PolicyAsync(AccessContext.Of(browser.Required.Subject), new OrganizationId(id), cancellationToken)
+                .PolicyAsync(browser.Asking, new OrganizationId(id), cancellationToken)
                 .ConfigureAwait(false),
             policy => TypedResults.Json(
                 OrganizationPolicyView.Of(policy),
@@ -200,7 +200,7 @@ internal static class OrganizationEndpoints
         return Answers.Of(
             await organizations
                 .ReplacePolicyAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     organization,
                     replacement,
@@ -221,7 +221,7 @@ internal static class OrganizationEndpoints
 
         return Answers.Of(
             await domains
-                .DomainsAsync(AccessContext.Of(browser.Required.Subject), new OrganizationId(id), cancellationToken)
+                .DomainsAsync(browser.Asking, new OrganizationId(id), cancellationToken)
                 .ConfigureAwait(false),
             held => TypedResults.Json<IReadOnlyList<OrganizationDomainView>>(
                 [.. held.Select(OrganizationDomainView.Of)],
@@ -256,7 +256,7 @@ internal static class OrganizationEndpoints
         return Answers.Of(
             await domains
                 .AddDomainAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     new OrganizationId(id),
                     domain,
@@ -290,7 +290,7 @@ internal static class OrganizationEndpoints
         return Answers.Of(
             await domains
                 .VerifyDomainAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     new OrganizationId(id),
                     domain,
@@ -326,7 +326,7 @@ internal static class OrganizationEndpoints
         return Answers.Of(
             await domains
                 .RemoveDomainAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     new OrganizationId(id),
                     domain,
@@ -359,7 +359,7 @@ internal static class OrganizationEndpoints
         return Answers.Of(
             await invitations
                 .IssueAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     new OrganizationId(id),
                     request,
@@ -386,7 +386,7 @@ internal static class OrganizationEndpoints
         return Answers.Of(
             await invitations
                 .RevokeAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     new OrganizationId(id),
                     new InvitationId(invitationId),
                     cancellationToken)
@@ -409,7 +409,7 @@ internal static class OrganizationEndpoints
         return Answers.Of(
             await invitations
                 .EndMembershipAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     new OrganizationId(id),
                     new SubjectId(subject),
                     RequestOrigin.Source(context.Request),

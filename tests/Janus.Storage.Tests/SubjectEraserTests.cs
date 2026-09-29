@@ -609,6 +609,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
                     occurred,
                     subject,
                     subject,
+                    breakGlassReason: null,
                     organization: null),
                 TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -714,6 +715,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
                     Noon.AddHours(-1),
                     member,
                     member,
+                    breakGlassReason: null,
                     organization,
                     personalDetails: new Dictionary<string, JsonElement>(StringComparer.Ordinal)
                     {
@@ -1081,7 +1083,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
                     Noon,
                     TimeSpan.FromDays(1),
                     TimeSpan.FromDays(30),
-                    satisfiesEveryGate: false),
+                    breakGlassReason: null),
                 OpaqueToken.Draw(_deployment.Randomness).Fingerprint(),
                 OpaqueToken.Draw(_deployment.Randomness).Fingerprint(),
                 TestContext.Current.CancellationToken);
@@ -1212,6 +1214,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
                     occurred,
                     subject,
                     subject,
+                    breakGlassReason: null,
                     organization: null),
                 TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);

@@ -23,6 +23,10 @@ internal interface ISessionAudit
     /// </summary>
     /// <param name="session">Which session.</param>
     /// <param name="subject">Whose.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="presented">What was presented.</param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
@@ -30,6 +34,7 @@ internal interface ISessionAudit
     ValueTask PresentedAsync(
         SessionId session,
         SubjectId subject,
+        string? breakGlassReason,
         IReadOnlyCollection<Factor> presented,
         DateTimeOffset at,
         CancellationToken cancellationToken);
@@ -57,6 +62,10 @@ internal interface ISessionAudit
     /// </summary>
     /// <param name="session">Which session.</param>
     /// <param name="subject">Whose.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="presented">Which factor was refused.</param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
@@ -64,6 +73,7 @@ internal interface ISessionAudit
     ValueTask StepUpFailedAsync(
         SessionId session,
         SubjectId subject,
+        string? breakGlassReason,
         Factor presented,
         DateTimeOffset at,
         CancellationToken cancellationToken);

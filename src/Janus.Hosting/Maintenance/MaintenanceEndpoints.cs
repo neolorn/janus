@@ -51,7 +51,7 @@ internal static class MaintenanceEndpoints
 
         return Answers.Of(
             await records
-                .LicencesAsync(AccessContext.Of(browser.Required.Subject), cancellationToken)
+                .LicencesAsync(browser.Asking, cancellationToken)
                 .ConfigureAwait(false),
             licences => TypedResults.Json(
                 new LicencesView([.. licences.Select(LicenceView.Of)]),
@@ -79,7 +79,7 @@ internal static class MaintenanceEndpoints
 
         return Answers.Of(
             await records
-                .ReplaceLicencesAsync(AccessContext.Of(browser.Required.Subject), licences, cancellationToken)
+                .ReplaceLicencesAsync(browser.Asking, licences, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }
@@ -94,7 +94,7 @@ internal static class MaintenanceEndpoints
 
         return Answers.Of(
             await records
-                .LogAsync(AccessContext.Of(browser.Required.Subject), cancellationToken)
+                .LogAsync(browser.Asking, cancellationToken)
                 .ConfigureAwait(false),
             entries => TypedResults.Json(
                 new MaintenanceLogView([.. entries.Select(MaintenanceEntryView.Of)]),
@@ -126,7 +126,7 @@ internal static class MaintenanceEndpoints
         return Answers.Of(
             await records
                 .RecordAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     task,
                     performedAt,
                     body.Note,

@@ -12,7 +12,9 @@ namespace Janus.Authentication.Sessions;
 /// Implements AUTH-SESS-001, AUTH-SESS-002, AUTH-SESS-004 and AUTH-SESS-005. The
 /// record holds the properties an authentication reached and never the factors that
 /// reached them: factor identity is the audit trail's, so adding a factor edits no
-/// rule that reads a session.
+/// rule that reads a session. The break-glass session keeps the reason given at the
+/// credential's use, set when the credential opens it and never changed; no other
+/// session has one (OPS-BOOT-002, D-170).
 /// </remarks>
 internal sealed class Session
 {
@@ -26,7 +28,8 @@ internal sealed class Session
         DateTimeOffset at,
         TimeSpan inactivity,
         DateTimeOffset absolute,
-        bool satisfiesEveryGate)
+        bool satisfiesEveryGate,
+        string? breakGlassReason)
     {
         Id = id;
         Spine = spine;
@@ -43,6 +46,7 @@ internal sealed class Session
         IdleExpiry = at + inactivity;
         AbsoluteExpiry = absolute;
         SatisfiesEveryGate = satisfiesEveryGate;
+        BreakGlassReason = breakGlassReason;
     }
 
     /// <summary>Which session.</summary>
@@ -99,6 +103,12 @@ internal sealed class Session
     public bool SatisfiesEveryGate { get; }
 
     /// <summary>
+    /// The reason given at the use of the break-glass credential, which only the session
+    /// it opened, and a session derived from it, carries.
+    /// </summary>
+    public string? BreakGlassReason { get; }
+
+    /// <summary>
     /// The record an authentication creates.
     /// </summary>
     /// <param name="id">The identifier issued for it.</param>
@@ -108,9 +118,10 @@ internal sealed class Session
     /// <param name="at">When it began.</param>
     /// <param name="inactivity">How long it survives without use.</param>
     /// <param name="absolute">How long it survives at all.</param>
-    /// <param name="satisfiesEveryGate">
-    /// Whether it passes every gate and the stated floor for its lifetime, which only
-    /// the emergency path sets (AUTH-SESS-005b, AUTH-STEP-004).
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, which only the
+    /// emergency path gives; a session opened with one passes every gate and the stated
+    /// floor for its lifetime (AUTH-SESS-005b, AUTH-STEP-004).
     /// </param>
     /// <returns>The session.</returns>
     /// <exception cref="ArgumentNullException">The origin is absent.</exception>
@@ -122,7 +133,7 @@ internal sealed class Session
         DateTimeOffset at,
         TimeSpan inactivity,
         TimeSpan absolute,
-        bool satisfiesEveryGate)
+        string? breakGlassReason)
     {
         ArgumentNullException.ThrowIfNull(origin);
 
@@ -136,7 +147,8 @@ internal sealed class Session
             at,
             inactivity,
             at + absolute,
-            satisfiesEveryGate);
+            satisfiesEveryGate: breakGlassReason is not null,
+            breakGlassReason);
     }
 
     /// <summary>
@@ -159,6 +171,7 @@ internal sealed class Session
     /// <param name="absoluteExpiry">When it lapses whatever happens.</param>
     /// <param name="endedAt">When it ended, or nothing while it stands.</param>
     /// <param name="satisfiesEveryGate">Whether it passes every gate while it lasts.</param>
+    /// <param name="breakGlassReason">The reason given at the credential's use, where one was.</param>
     /// <returns>The session.</returns>
     /// <exception cref="ArgumentNullException">An origin is absent.</exception>
     public static Session Existing(
@@ -177,7 +190,8 @@ internal sealed class Session
         DateTimeOffset idleExpiry,
         DateTimeOffset absoluteExpiry,
         DateTimeOffset? endedAt,
-        bool satisfiesEveryGate)
+        bool satisfiesEveryGate,
+        string? breakGlassReason)
     {
         ArgumentNullException.ThrowIfNull(origin);
         ArgumentNullException.ThrowIfNull(lastSeen);
@@ -192,7 +206,8 @@ internal sealed class Session
             createdAt,
             TimeSpan.Zero,
             absoluteExpiry,
-            satisfiesEveryGate)
+            satisfiesEveryGate,
+            breakGlassReason)
         {
             LastSeenAt = lastSeenAt,
             AttainedAt = attainedAt,
@@ -248,7 +263,8 @@ internal sealed class Session
             at,
             inactivity,
             AbsoluteExpiry,
-            SatisfiesEveryGate);
+            SatisfiesEveryGate,
+            BreakGlassReason);
     }
 
     /// <summary>

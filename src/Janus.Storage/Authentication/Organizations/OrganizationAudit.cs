@@ -31,6 +31,7 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
         OrganizationId organization,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
         await records
@@ -42,6 +43,7 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
                     at,
                     actor,
                     actor,
+                    breakGlassReason,
                     organization,
                     new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
                     {
@@ -77,6 +79,7 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
         string domain,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
         await records
@@ -88,6 +91,7 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
                     at,
                     actor,
                     actor,
+                    breakGlassReason,
                     organization,
                     new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
                     {
@@ -103,6 +107,7 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
         OrganizationId organization,
         InvitationId invitation,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
         await records
@@ -114,6 +119,7 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
                     at,
                     actor,
                     actor,
+                    breakGlassReason,
                     organization,
                     new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
                     {
@@ -128,6 +134,7 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
         MembershipId membership,
         SubjectId member,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
         await records
@@ -139,6 +146,7 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
                     at,
                     actor,
                     member,
+                    breakGlassReason,
                     organization,
                     new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
                     {

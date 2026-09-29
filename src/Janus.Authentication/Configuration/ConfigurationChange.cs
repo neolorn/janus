@@ -18,6 +18,10 @@ namespace Janus.Authentication.Configuration;
 /// <param name="Actor">
 /// Who made it, or the empty identifier where a system principal made it.
 /// </param>
+/// <param name="BreakGlassReason">
+/// The reason given at the use of the break-glass credential, where the change was made
+/// in the session it opened, or nothing.
+/// </param>
 /// <param name="At">When it was made.</param>
 /// <param name="Principal">
 /// The name of the system principal that made it, or nothing where a person did.
@@ -34,5 +38,6 @@ internal sealed record ConfigurationChange(
     bool Loosening,
     string? Reason,
     SubjectId Actor,
+    string? BreakGlassReason,
     DateTimeOffset At,
     string? Principal);

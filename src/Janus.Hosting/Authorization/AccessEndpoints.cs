@@ -58,7 +58,7 @@ internal static class AccessEndpoints
         return Answers.Of(
             await gate
                 .WhoCanAccessAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     new ResourceReference(type, ResourceId.Parse(resourceId)),
                     cancellationToken)
                 .ConfigureAwait(false),

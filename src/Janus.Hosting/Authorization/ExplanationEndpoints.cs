@@ -47,7 +47,7 @@ internal static class ExplanationEndpoints
         return Answers.Of(
             await gate
                 .ResolveAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     new AuditRecordId(correlationId),
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -66,7 +66,7 @@ internal static class ExplanationEndpoints
         return Answers.Of(
             await gate
                 .ResolveOwnAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     new AuditRecordId(correlationId),
                     cancellationToken)
                 .ConfigureAwait(false),

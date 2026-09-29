@@ -147,6 +147,7 @@ internal sealed class ExportOperations(
                         AuditRecordId.New(time),
                         context.Acting,
                         context.Effective,
+                        context.BreakGlassReason,
                         context.Principal,
                         organization,
                         permission,

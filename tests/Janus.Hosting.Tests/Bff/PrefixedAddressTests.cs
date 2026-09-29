@@ -134,7 +134,7 @@ public sealed class PrefixedAddressTests
                 deployment.Clock.GetUtcNow(),
                 TimeSpan.FromDays(1),
                 TimeSpan.FromDays(30),
-                satisfiesEveryGate: false),
+                breakGlassReason: null),
             secret.Fingerprint(),
             OpaqueToken.Draw(randomness).Fingerprint(),
             TestContext.Current.CancellationToken);

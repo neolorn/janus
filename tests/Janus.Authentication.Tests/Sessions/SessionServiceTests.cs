@@ -28,6 +28,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
     private const string AlexandriaAddress = "203.0.113.20";
     private const string AswanAddress = "203.0.113.60";
     private const string LondonAddress = "2001:db8::7";
+    private const string BreakGlassReason = "The operator cannot be reached.";
 
     private static readonly DateTimeOffset Noon =
         new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
@@ -116,7 +117,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
 
         await BegunAsync(subject, [Factor.Password]);
 
-        (SessionId _, SubjectId who, IReadOnlyCollection<Factor> presented) =
+        (SessionId _, SubjectId who, IReadOnlyCollection<Factor> presented, string? _) =
             Assert.Single(_audit.Records);
         Assert.Equal(subject, who);
         Assert.Equal([Factor.Password], presented);
@@ -437,6 +438,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
         IssuedSession issued = Value(await Service.BeginExemptAsync(
             subject,
             [Factor.BreakGlass],
+            BreakGlassReason,
             Somewhere,
             TestContext.Current.CancellationToken));
 
@@ -445,6 +447,31 @@ public sealed class SessionServiceTests : IAsyncDisposable
         Assert.Equal(AssuranceLevel.Aal1, session.Attained);
         Assert.True(session.SatisfiesEveryGate);
         Assert.Equal([Factor.BreakGlass], Assert.Single(_audit.Records).Presented);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC10: the session the credential opens keeps the reason given at its
+    /// use, and the record of its opening carries it; a session opened any other way
+    /// keeps none.
+    /// </summary>
+    [Fact]
+    public async Task OPS_BOOT_002_AC10_TheBreakGlassSessionKeepsTheReasonAsync()
+    {
+        SubjectId subject = Staff();
+
+        IssuedSession opened = Value(await Service.BeginExemptAsync(
+            subject,
+            [Factor.BreakGlass],
+            BreakGlassReason,
+            Somewhere,
+            TestContext.Current.CancellationToken));
+        IssuedSession ordinary = await BegunAsync(Subject(), [Factor.Password]);
+
+        Assert.Equal(BreakGlassReason, _sessions.Behind(opened.Secret)!.BreakGlassReason);
+        Assert.Null(_sessions.Behind(ordinary.Secret)!.BreakGlassReason);
+        Assert.Equal(
+            [BreakGlassReason, null],
+            _audit.Records.Select(record => record.BreakGlassReason));
     }
 
     /// <summary>
@@ -460,6 +487,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
         IssuedSession issued = Value(await Service.BeginExemptAsync(
             subject,
             [Factor.BreakGlass],
+            BreakGlassReason,
             Somewhere,
             TestContext.Current.CancellationToken));
         Session session = _sessions.Behind(issued.Secret)!;

@@ -127,6 +127,7 @@ public sealed class ModelTests
             // reason IDN-PRIN-001 records an action of background work under.
             "audit_records.acting_subject",
             "audit_records.action",
+            "audit_records.breakglass_reason",
             "audit_records.category",
             "audit_records.details",
             "audit_records.effective_subject",
@@ -792,6 +793,7 @@ public sealed class ModelTests
             "sessions.absolute_expiry",
             "sessions.attained",
             "sessions.attained_at",
+            "sessions.breakglass_reason",
             "sessions.created_at",
             "sessions.csrf_fingerprint",
             "sessions.ended_at",

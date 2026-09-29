@@ -766,7 +766,7 @@ internal static class AccountEndpoints
     {
         ArgumentNullException.ThrowIfNull(browser);
 
-        return AccessContext.Of(browser.Required.Subject);
+        return browser.Asking;
     }
 
     // D-148: the enrolment session the browser's first contact carries, which reaches

@@ -72,4 +72,10 @@ internal sealed class AuditRowRecord
     /// The <c>principal_reason</c> column: the reason that principal stated.
     /// </summary>
     public string? PrincipalReason { get; set; }
+
+    /// <summary>
+    /// The <c>breakglass_reason</c> column: the reason given at the use of the
+    /// break-glass credential, where the action was taken in the session it opened.
+    /// </summary>
+    public string? BreakGlassReason { get; set; }
 }

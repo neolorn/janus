@@ -612,7 +612,7 @@ internal sealed class AuthenticationService(
         if (open is null || open.Subject != asking)
         {
             return Result.Failure<SignInOutcome>(
-                await StepUpRefusedAsync(attempt, session, asking, presented.Factor, cancellationToken)
+                await StepUpRefusedAsync(attempt, live, presented.Factor, cancellationToken)
                     .ConfigureAwait(false)
                 ?? Error.From(ErrorCodes.FactorRejected));
         }
@@ -625,7 +625,7 @@ internal sealed class AuthenticationService(
         if (refusal is not null)
         {
             return Result.Failure<SignInOutcome>(
-                await StepUpRefusedAsync(attempt, session, asking, presented.Factor, cancellationToken)
+                await StepUpRefusedAsync(attempt, live, presented.Factor, cancellationToken)
                     .ConfigureAwait(false)
                 ?? refusal);
         }
@@ -1581,14 +1581,19 @@ internal sealed class AuthenticationService(
     // the delay as a factor refused at sign-in is (AUTH-ABUSE-001).
     private async ValueTask<Error?> StepUpRefusedAsync(
         ThrottleAttempt attempt,
-        SessionId session,
-        SubjectId asking,
+        Session session,
         Factor presented,
         CancellationToken cancellationToken)
     {
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await audit
-            .StepUpFailedAsync(session, asking, presented, time.GetUtcNow(), cancellationToken)
+            .StepUpFailedAsync(
+                session.Id,
+                session.Subject,
+                session.BreakGlassReason,
+                presented,
+                time.GetUtcNow(),
+                cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 

@@ -100,7 +100,7 @@ internal sealed class ExportService(
             .ConfigureAwait(false);
 
         await audit
-            .RecordedAsync(Assembled, subject, subject, now, Named(export), cancellationToken)
+            .RecordedAsync(Assembled, subject, context.BreakGlassReason, subject, now, Named(export), cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 

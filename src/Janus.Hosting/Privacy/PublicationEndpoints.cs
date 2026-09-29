@@ -77,7 +77,7 @@ internal static class PublicationEndpoints
         return Answers.Of(
             await documents
                 .PublishAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     new DocumentPublication(
                         document,
                         body.Text ?? string.Empty,
@@ -110,7 +110,7 @@ internal static class PublicationEndpoints
         return Answers.Of(
             await documents
                 .TranslateAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     document,
                     version,
                     new DocumentTranslation(language, text),

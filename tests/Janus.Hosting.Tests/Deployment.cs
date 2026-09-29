@@ -625,6 +625,11 @@ internal sealed class Deployment : IAsyncDisposable
     public Janus.Authentication.Tests.BreakGlass.BreakGlassAuditInMemory BreakGlassAudit { get; } = new();
 
     /// <summary>
+    /// What the approvals of a recovery wrote down.
+    /// </summary>
+    public RecoveryAuditInMemory RecoveryAudit { get; } = new();
+
+    /// <summary>
     /// The reserved emergency account as the authentication area reads it.
     /// </summary>
     private Janus.Authentication.Tests.BreakGlass.EmergencyAccountInMemory Emergency { get; } = new();
@@ -763,7 +768,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IRecoveryLinkStore>(Links);
         _ = services.AddSingleton<IRecoveryApprovalStore, RecoveryApprovalStoreInMemory>();
         _ = services.AddSingleton<ILossReportStore, LossReportStoreInMemory>();
-        _ = services.AddSingleton<IRecoveryAudit, RecoveryAuditInMemory>();
+        _ = services.AddSingleton<IRecoveryAudit>(RecoveryAudit);
         _ = services.AddSingleton<IKeyCeremonyStore, KeyCeremonyStoreInMemory>();
         _ = services.AddSingleton<IOidcClientStore>(Clients);
         _ = services.AddSingleton<ISigningKeyStore>(Keys);

@@ -42,20 +42,26 @@ internal sealed class AlertDestinationChange(
     /// and every change to one is classified as a loosening (OPS-CFG-002, D-079b).
     /// </param>
     /// <param name="challenge">What the <c>alerting:destinations</c> gate answered.</param>
-    /// <param name="actor">Who is making the change.</param>
+    /// <param name="context">Who is making the change.</param>
     /// <param name="cancellationToken">Abandons the change.</param>
     /// <returns>Whether the change was made, or why it was refused.</returns>
-    /// <exception cref="ArgumentNullException">A value or the challenge is absent.</exception>
+    /// <exception cref="ArgumentNullException">A value, the challenge or the context is absent.</exception>
     public async ValueTask<Result> ChangeAsync(
         SendKind channel,
         IReadOnlyList<string> replacement,
         string? reason,
         StepUpChallenge challenge,
-        SubjectId actor,
+        AccessContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(replacement);
         ArgumentNullException.ThrowIfNull(challenge);
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Acting is not SubjectId actor)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
 
         if (!StepUpRefusal.Met(challenge))
         {
@@ -93,7 +99,7 @@ internal sealed class AlertDestinationChange(
         // notice goes out, because a notice of a change that was then refused tells
         // the destinations something that did not happen.
         Result allowed = await administration
-            .AllowedAsync(setting, replacement, reason, challenge, AccessContext.Of(actor), cancellationToken)
+            .AllowedAsync(setting, replacement, reason, challenge, context, cancellationToken)
             .ConfigureAwait(false);
 
         if (allowed.Match(() => (Error?)null, error => error) is Error disallowed)
@@ -126,7 +132,7 @@ internal sealed class AlertDestinationChange(
         // it, gates it and writes it down, which is what the destination change was
         // missing.
         Result changed = await administration
-            .ChangeAsync(setting, replacement, reason, challenge, AccessContext.Of(actor), cancellationToken)
+            .ChangeAsync(setting, replacement, reason, challenge, context, cancellationToken)
             .ConfigureAwait(false);
 
         if (changed.Match(() => (Error?)null, error => error) is Error unchanged)

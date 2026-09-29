@@ -137,7 +137,7 @@ internal sealed class AccountService(
         }
 
         // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
-        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
             is Error restricted)
         {
             return Result.Failure(restricted);
@@ -197,7 +197,7 @@ internal sealed class AccountService(
             .ConfigureAwait(false);
 
         await audit
-            .RecordedAsync(ProfileChanged, Acting(context, subject), subject, now, cancellationToken)
+            .RecordedAsync(ProfileChanged, Acting(context, subject), context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -259,7 +259,7 @@ internal sealed class AccountService(
         }
 
         // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
-        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
             is Error restricted)
         {
             return Result.Failure(restricted);
@@ -302,7 +302,7 @@ internal sealed class AccountService(
         }
 
         await audit
-            .RecordedAsync(PreferencesChanged, Acting(context, subject), subject, now, cancellationToken)
+            .RecordedAsync(PreferencesChanged, Acting(context, subject), context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -345,7 +345,7 @@ internal sealed class AccountService(
         }
 
         // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
-        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
             is Error restricted)
         {
             return Result.Failure(restricted);
@@ -396,7 +396,7 @@ internal sealed class AccountService(
         await authenticators.RecordAsync(held, cancellationToken).ConfigureAwait(false);
 
         await audit
-            .RecordedAsync(CredentialLabelled, Acting(context, subject), subject, now, cancellationToken)
+            .RecordedAsync(CredentialLabelled, Acting(context, subject), context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -418,7 +418,7 @@ internal sealed class AccountService(
         }
 
         // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
-        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
             is Error restricted)
         {
             return Result.Failure(restricted);
@@ -465,7 +465,7 @@ internal sealed class AccountService(
         await authenticators.RecordAsync(chosen, cancellationToken).ConfigureAwait(false);
 
         await audit
-            .RecordedAsync(SecondStepPreferred, Acting(context, subject), subject, now, cancellationToken)
+            .RecordedAsync(SecondStepPreferred, Acting(context, subject), context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -746,7 +746,7 @@ internal sealed class AccountService(
         }
 
         await audit
-            .RecordedAsync(UsernameChanged, Acting(context, subject), subject, now, cancellationToken)
+            .RecordedAsync(UsernameChanged, Acting(context, subject), context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
 
         return null;

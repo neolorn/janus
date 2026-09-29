@@ -67,7 +67,7 @@ internal sealed class SessionService(
         IReadOnlyCollection<Factor> presented,
         SessionOrigin origin,
         CancellationToken cancellationToken) =>
-        BeginAsync(subject, presented, origin, Admission.Held, cancellationToken);
+        BeginAsync(subject, presented, origin, Admission.Held, breakGlassReason: null, cancellationToken);
 
     /// <summary>
     /// Begins a session that passes every gate and the stated floor for its lifetime,
@@ -79,6 +79,10 @@ internal sealed class SessionService(
     /// </summary>
     /// <param name="subject">Who signed in.</param>
     /// <param name="presented">What they presented.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the credential's use, which the session keeps and every
+    /// record it writes carries (OPS-BOOT-002).
+    /// </param>
     /// <param name="origin">Where from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The session and its secret.</returns>
@@ -86,9 +90,14 @@ internal sealed class SessionService(
     public ValueTask<Result<IssuedSession>> BeginExemptAsync(
         SubjectId subject,
         IReadOnlyCollection<Factor> presented,
+        string breakGlassReason,
         SessionOrigin origin,
-        CancellationToken cancellationToken) =>
-        BeginAsync(subject, presented, origin, Admission.Exempt, cancellationToken);
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(breakGlassReason);
+
+        return BeginAsync(subject, presented, origin, Admission.Exempt, breakGlassReason, cancellationToken);
+    }
 
     /// <summary>
     /// Begins a session for an account inside the run-up a raised requirement carries,
@@ -110,7 +119,13 @@ internal sealed class SessionService(
         IReadOnlyCollection<Factor> presented,
         SessionOrigin origin,
         CancellationToken cancellationToken) =>
-        BeginAsync(subject, presented, origin, Admission.WithinTheRunUp, cancellationToken);
+        BeginAsync(
+            subject,
+            presented,
+            origin,
+            Admission.WithinTheRunUp,
+            breakGlassReason: null,
+            cancellationToken);
 
     /// <summary>
     /// The session a presented secret belongs to, refreshed by the use that resolved
@@ -249,7 +264,8 @@ internal sealed class SessionService(
         await sessions
             .ReplaceSecretAsync(session.Id, secret.Fingerprint(), token.Fingerprint(), cancellationToken)
             .ConfigureAwait(false);
-        await audit.PresentedAsync(session.Id, session.Subject, presented, now, cancellationToken)
+        await audit
+            .PresentedAsync(session.Id, session.Subject, session.BreakGlassReason, presented, now, cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
@@ -345,7 +361,8 @@ internal sealed class SessionService(
                 restoredToken.Fingerprint(),
                 cancellationToken)
             .ConfigureAwait(false);
-        await audit.PresentedAsync(session.Id, session.Subject, presented, now, cancellationToken)
+        await audit
+            .PresentedAsync(session.Id, session.Subject, session.BreakGlassReason, presented, now, cancellationToken)
             .ConfigureAwait(false);
 
         if (await UnwatchedAsync(session, before, usedBefore, now, cancellationToken)
@@ -737,6 +754,7 @@ internal sealed class SessionService(
         IReadOnlyCollection<Factor> presented,
         SessionOrigin origin,
         Admission admission,
+        string? breakGlassReason,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(presented);
@@ -792,7 +810,7 @@ internal sealed class SessionService(
             now,
             inactivity,
             absolute,
-            satisfiesEveryGate);
+            breakGlassReason);
         var secret = OpaqueToken.Draw(randomness);
         var token = OpaqueToken.Draw(randomness);
 
@@ -800,7 +818,7 @@ internal sealed class SessionService(
         await sessions
             .AddAsync(session, secret.Fingerprint(), token.Fingerprint(), cancellationToken)
             .ConfigureAwait(false);
-        await audit.PresentedAsync(session.Id, subject, presented, now, cancellationToken)
+        await audit.PresentedAsync(session.Id, subject, breakGlassReason, presented, now, cancellationToken)
             .ConfigureAwait(false);
         await RestoreAsync(subject, presented, now, cancellationToken).ConfigureAwait(false);
 

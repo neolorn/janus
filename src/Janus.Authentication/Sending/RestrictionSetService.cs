@@ -88,12 +88,12 @@ internal sealed class RestrictionSetService(
                 context,
                 session,
                 StepUpAction.RestrictionEdit,
-                (challenge, actor) => administration.EditAsync(
+                challenge => administration.EditAsync(
                     replacement.Name,
                     replacement,
                     reason,
                     challenge,
-                    actor,
+                    context,
                     cancellationToken),
                 cancellationToken)
             .ConfigureAwait(false);
@@ -130,12 +130,12 @@ internal sealed class RestrictionSetService(
                 context,
                 session,
                 StepUpAction.RestrictionEdit,
-                (challenge, actor) => administration.EditAsync(
+                challenge => administration.EditAsync(
                     name,
                     replacement: null,
                     reason,
                     challenge,
-                    actor,
+                    context,
                     cancellationToken),
                 cancellationToken)
             .ConfigureAwait(false);
@@ -165,13 +165,13 @@ internal sealed class RestrictionSetService(
                 context,
                 session,
                 StepUpAction.RestrictionGrant,
-                (challenge, actor) => administration.GrantAsync(
+                challenge => administration.GrantAsync(
                     name,
                     keyValue,
                     credit,
                     reason,
                     challenge,
-                    actor,
+                    context,
                     cancellationToken),
                 cancellationToken)
             .ConfigureAwait(false);
@@ -196,7 +196,7 @@ internal sealed class RestrictionSetService(
         AccessContext context,
         SessionId session,
         StepUpAction action,
-        Func<StepUpChallenge, SubjectId, ValueTask<Result>> operation,
+        Func<StepUpChallenge, ValueTask<Result>> operation,
         CancellationToken cancellationToken)
     {
         if (context.Acting is not SubjectId actor)
@@ -216,6 +216,6 @@ internal sealed class RestrictionSetService(
             return Result.Failure(failure);
         }
 
-        return await operation(challenge, actor).ConfigureAwait(false);
+        return await operation(challenge).ConfigureAwait(false);
     }
 }

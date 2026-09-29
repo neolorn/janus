@@ -83,4 +83,7 @@ internal sealed class SessionRecord
 
     /// <summary>The <c>satisfies_every_gate</c> column.</summary>
     public bool SatisfiesEveryGate { get; set; }
+
+    /// <summary>The <c>breakglass_reason</c> column.</summary>
+    public string? BreakGlassReason { get; set; }
 }

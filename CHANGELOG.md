@@ -267,8 +267,9 @@ against the public contract of LIB-API-001.
   for a stepped-up system administrator or from a break-glass session, and answers the
   code once, in nine check-charactered groups of four, with the absolute `/break-glass`
   address the envelope prints; a new code invalidates the one before it, and only an
-  Argon2id hash of it is kept. `POST /auth/break-glass` takes the code on the machine
-  profile, ignoring any cookie the browser holds, and opens an auth session for the
+  Argon2id hash of it is kept. `POST /auth/break-glass` takes the code and the reason
+  the owner gives, free text that is required, on the machine profile, ignoring any
+  cookie the browser holds, and opens an auth session for the
   reserved `emergency` account that passes every step-up gate for
   `breakglass.session.lifetime`; idle past its policy's inactivity window, it asks for
   a full sign-in, never the one-factor restore. A code opens one session; a group whose
@@ -279,6 +280,10 @@ against the public contract of LIB-API-001.
   and `auth.breakglass.used`, and raise `breakglass-generated`
   (`AlertCondition.BreakGlassGenerated`) and `breakglass-used`, each High and scoped to
   the issue, to the operator and to the owner whatever `alerting.owner.enabled` says.
+  The session keeps the reason, and every audit record it writes carries it in a column
+  of its own, `auth.breakglass.used` included; the trail read returns it as
+  `breakGlassReason` (`AuditEntry.BreakGlassReason`), and a record of background work
+  never carries one.
   A host generates the credential in process through `IBreakGlass`, which also reads
   whether one stands and since when, and asks what the route asks: `system:administer`,
   and a step-up to generate. The reserved account is never suspended, taken down,

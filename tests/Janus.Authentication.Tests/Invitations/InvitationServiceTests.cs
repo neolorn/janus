@@ -1335,7 +1335,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             at,
             TimeSpan.FromDays(1),
             TimeSpan.FromDays(30),
-            satisfiesEveryGate: false);
+            breakGlassReason: null);
 
         _sessions.AddAsync(session, Drawn(), Drawn(), TestContext.Current.CancellationToken)
             .AsTask()

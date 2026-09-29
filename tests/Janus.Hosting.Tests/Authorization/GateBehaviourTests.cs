@@ -1493,7 +1493,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             proved,
             TimeSpan.FromDays(7),
             TimeSpan.FromDays(30),
-            satisfiesEveryGate: false);
+            breakGlassReason: null);
 
         IUnitOfWork work = services.GetRequiredService<IUnitOfWork>();
 
@@ -1534,7 +1534,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
 
         return await scope.ServiceProvider
             .GetRequiredService<ISettingsRestriction>()
-            .RefusedAsync(account, TestContext.Current.CancellationToken);
+            .RefusedAsync(AccessContext.Of(account), TestContext.Current.CancellationToken);
     }
 
     private async Task<ErrorCode?> RefusalAsync(

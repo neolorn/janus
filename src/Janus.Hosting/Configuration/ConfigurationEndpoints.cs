@@ -60,7 +60,7 @@ internal static class ConfigurationEndpoints
 
         return Answers.Of(
             await administration
-                .ReadAsync(AccessContext.Of(browser.Required.Subject), known, cancellationToken)
+                .ReadAsync(browser.Asking, known, cancellationToken)
                 .ConfigureAwait(false),
             setting => TypedResults.Json(
                 ConfiguredSettingView.Of(setting),
@@ -112,7 +112,7 @@ internal static class ConfigurationEndpoints
         return Answers.Of(
             await administration
                 .ChangeAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     known,
                     value,

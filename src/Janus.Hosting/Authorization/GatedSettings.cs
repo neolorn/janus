@@ -25,7 +25,7 @@ internal sealed class GatedSettings(Func<AccessContext, CancellationToken, Value
     : ISettingsRestriction
 {
     /// <inheritdoc/>
-    public async ValueTask<Error?> RefusedAsync(SubjectId subject, CancellationToken cancellationToken) =>
-        (await require(AccessContext.Of(subject), cancellationToken).ConfigureAwait(false))
+    public async ValueTask<Error?> RefusedAsync(AccessContext context, CancellationToken cancellationToken) =>
+        (await require(context, cancellationToken).ConfigureAwait(false))
             .Match(() => (Error?)null, error => error);
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Security.Cryptography;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
@@ -75,21 +76,35 @@ internal sealed class BreakGlassService(
     /// Presents the credential, which spends it and opens the emergency session.
     /// </summary>
     /// <param name="credential">The code as it was typed or scanned.</param>
+    /// <param name="reason">
+    /// Why the owner opens the emergency session, which the session keeps and every
+    /// record it writes carries (OPS-BOOT-002).
+    /// </param>
     /// <param name="origin">Where the request came from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The session, or <c>auth.throttled</c> where the global limit or the source's delay
-    /// holds, <c>auth.breakglass.consumed</c> where the code was already used, and
-    /// <c>auth.breakglass.invalid</c> for any other code.
+    /// The session, or <c>api.request.malformed</c> naming <c>reason</c> where the reason
+    /// is blank or longer than 1024 characters, <c>auth.throttled</c> where the global
+    /// limit or the source's delay holds, <c>auth.breakglass.consumed</c> where the code
+    /// was already used, and <c>auth.breakglass.invalid</c> for any other code.
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public async ValueTask<Result<IssuedSession>> PresentAsync(
         [NeverLogged] string credential,
+        string reason,
         SessionOrigin origin,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(credential);
+        ArgumentNullException.ThrowIfNull(reason);
         ArgumentNullException.ThrowIfNull(origin);
+
+        // API-CONV-002: the reason is free text, 1 to 1024 characters after trimming.
+        if (reason.Trim() is not { Length: > 0 and <= 1024 } stated)
+        {
+            return Result.Failure<IssuedSession>(
+                Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement("reason")));
+        }
 
         DateTimeOffset now = time.GetUtcNow();
 
@@ -141,7 +156,7 @@ internal sealed class BreakGlassService(
 
             if (standing is not null && Argon2idHasher.Verify(presented, standing.Hash))
             {
-                return await UsedAsync(standing, account, origin, attempt, now, cancellationToken)
+                return await UsedAsync(standing, account, stated, origin, attempt, now, cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -245,7 +260,9 @@ internal sealed class BreakGlassService(
         }
 
         await store.AddAsync(issued, cancellationToken).ConfigureAwait(false);
-        await audit.GeneratedAsync(acting, issued.Id, standing?.Id, now, cancellationToken).ConfigureAwait(false);
+        await audit
+            .GeneratedAsync(acting, context.BreakGlassReason, issued.Id, standing?.Id, now, cancellationToken)
+            .ConfigureAwait(false);
 
         // OPS-BOOT-004 AC2: generation is raised under its own condition, scoped to the
         // issue, and reaches the owner as use does, whatever alerting.owner.enabled says.
@@ -313,6 +330,7 @@ internal sealed class BreakGlassService(
     private async ValueTask<Result<IssuedSession>> UsedAsync(
         BreakGlassCredential standing,
         SubjectId account,
+        string reason,
         SessionOrigin origin,
         ThrottleAttempt attempt,
         DateTimeOffset now,
@@ -326,10 +344,10 @@ internal sealed class BreakGlassService(
         }
 
         return await (await sessions
-                .BeginExemptAsync(account, Presented, origin, cancellationToken)
+                .BeginExemptAsync(account, Presented, reason, origin, cancellationToken)
                 .ConfigureAwait(false))
             .Match(
-                issued => AnnouncedAsync(standing, account, issued, attempt, now, cancellationToken),
+                issued => AnnouncedAsync(standing, account, reason, issued, attempt, now, cancellationToken),
                 unbegun => ValueTask.FromResult(Result.Failure<IssuedSession>(unbegun)))
             .ConfigureAwait(false);
     }
@@ -337,12 +355,13 @@ internal sealed class BreakGlassService(
     private async ValueTask<Result<IssuedSession>> AnnouncedAsync(
         BreakGlassCredential standing,
         SubjectId account,
+        string reason,
         IssuedSession issued,
         ThrottleAttempt attempt,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        await audit.UsedAsync(account, standing.Id, issued.Id, now, cancellationToken).ConfigureAwait(false);
+        await audit.UsedAsync(account, reason, standing.Id, issued.Id, now, cancellationToken).ConfigureAwait(false);
 
         // OPS-BOOT-002 AC3: use is raised at once, on every channel, to the owner as
         // well as the operator, scoped to the issue it spent.

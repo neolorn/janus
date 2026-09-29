@@ -33,6 +33,7 @@ internal sealed class AuditTrailStore(IAuditStore records) : IAuditTrailStore
                     record.ActingSubject,
                     record.EffectiveSubject,
                     record.Organization,
-                    record.Details)),
+                    record.Details,
+                    record.BreakGlassReason)),
         ];
 }

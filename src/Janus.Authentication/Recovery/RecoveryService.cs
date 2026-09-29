@@ -271,6 +271,7 @@ internal sealed class RecoveryService(
 
         return await StandAsync(
                 approver,
+                context.BreakGlassReason,
                 subject,
                 reason.Trim(),
                 channel,
@@ -651,6 +652,7 @@ internal sealed class RecoveryService(
     // out only once as many approvers as the deployment requires have stood behind it.
     private async ValueTask<Result<ApprovedRecovery>> StandAsync(
         SubjectId approver,
+        string? breakGlassReason,
         SubjectId subject,
         string reason,
         Channel channel,
@@ -699,7 +701,7 @@ internal sealed class RecoveryService(
             .AddAsync(new RecoveryApproval(subject, approver, channel.Canonical, now), cancellationToken)
             .ConfigureAwait(false);
         await audit
-            .ApprovedAsync(approver, subject, reason, channel.Kind, now, cancellationToken)
+            .ApprovedAsync(approver, breakGlassReason, subject, reason, channel.Kind, now, cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 

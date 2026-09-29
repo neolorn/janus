@@ -695,7 +695,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
             Noon,
             TimeSpan.FromDays(1),
             TimeSpan.FromDays(30),
-            satisfiesEveryGate: false);
+            breakGlassReason: null);
 
         await using StoreContext writing = database.Context();
 

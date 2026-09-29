@@ -49,6 +49,7 @@ public sealed class GroupAuditTests(DatabaseFixture database)
                 member,
                 "Counter staff.",
                 actor,
+                breakGlassReason: null,
                 now,
                 TestContext.Current.CancellationToken);
 
@@ -86,6 +87,7 @@ public sealed class GroupAuditTests(DatabaseFixture database)
                 auditors,
                 "Quarterly review.",
                 actor,
+                breakGlassReason: null,
                 now,
                 TestContext.Current.CancellationToken);
 

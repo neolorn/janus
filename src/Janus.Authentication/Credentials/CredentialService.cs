@@ -757,6 +757,7 @@ internal sealed class CredentialService(
         ArgumentNullException.ThrowIfNull(authority);
 
         Acting acting;
+        AccessContext asking;
 
         if (authority.Enrolment is EnrolmentSessionId opened)
         {
@@ -767,10 +768,12 @@ internal sealed class CredentialService(
             }
 
             acting = new Acting(enrolment.Subject, Session: null, opened);
+            asking = AccessContext.Of(enrolment.Subject);
         }
-        else if (authority.Context?.Effective is SubjectId subject && authority.Session is SessionId live)
+        else if (authority.Context is { Effective: SubjectId subject } held && authority.Session is SessionId live)
         {
             acting = new Acting(subject, live, Enrolment: null);
+            asking = held;
         }
         else
         {
@@ -779,7 +782,7 @@ internal sealed class CredentialService(
 
         // IDN-ACCT-007 AC2: a restricted account changes none of its credentials, and
         // every operation here changes one.
-        return await restriction.RefusedAsync(acting.Subject, cancellationToken)
+        return await restriction.RefusedAsync(asking, cancellationToken)
                 .ConfigureAwait(false) is Error restricted
             ? Result.Failure<Acting>(restricted)
             : Result.Success(acting);

@@ -164,6 +164,7 @@ internal sealed class ConfigurationAdministration(
                     loosening,
                     reason?.Trim(),
                     actor,
+                    context.BreakGlassReason,
                     time.GetUtcNow(),
                     Principal: null),
                 cancellationToken)
@@ -192,6 +193,10 @@ internal sealed class ConfigurationAdministration(
     /// </param>
     /// <param name="reason">Why.</param>
     /// <param name="actor">Who made the change.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the change was
+    /// made in the session it opened, or nothing.
+    /// </param>
     /// <param name="cancellationToken">Abandons the change.</param>
     /// <returns>Success, or why the store refused the value.</returns>
     /// <remarks>
@@ -210,6 +215,7 @@ internal sealed class ConfigurationAdministration(
         bool loosening,
         string? reason,
         SubjectId actor,
+        string? breakGlassReason,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(family);
@@ -234,6 +240,7 @@ internal sealed class ConfigurationAdministration(
                     loosening,
                     reason,
                     actor,
+                    breakGlassReason,
                     time.GetUtcNow(),
                     Principal: null),
                 cancellationToken)

@@ -23,6 +23,10 @@ internal interface IOrganizationAudit
     /// <param name="organization">Which organization.</param>
     /// <param name="reason">Why.</param>
     /// <param name="actor">Who made the change.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of recording it.</returns>
@@ -31,6 +35,7 @@ internal interface IOrganizationAudit
         OrganizationId organization,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 
@@ -59,6 +64,10 @@ internal interface IOrganizationAudit
     /// <param name="domain">Which domain.</param>
     /// <param name="reason">Why.</param>
     /// <param name="actor">Who made the change.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of recording it.</returns>
@@ -68,6 +77,7 @@ internal interface IOrganizationAudit
         string domain,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 
@@ -80,6 +90,10 @@ internal interface IOrganizationAudit
     /// <param name="organization">Which organization.</param>
     /// <param name="invitation">Which invitation.</param>
     /// <param name="actor">Who made the change.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of recording it.</returns>
@@ -88,6 +102,7 @@ internal interface IOrganizationAudit
         OrganizationId organization,
         InvitationId invitation,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 
@@ -99,6 +114,10 @@ internal interface IOrganizationAudit
     /// <param name="membership">Which membership.</param>
     /// <param name="member">Whose membership it was.</param>
     /// <param name="actor">Who ended it.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of recording it.</returns>
@@ -107,6 +126,7 @@ internal interface IOrganizationAudit
         MembershipId membership,
         SubjectId member,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 }

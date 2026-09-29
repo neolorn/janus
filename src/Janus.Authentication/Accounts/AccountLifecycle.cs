@@ -136,7 +136,7 @@ internal sealed class AccountLifecycle(
             return Result.Failure(unpublished);
         }
 
-        await audit.RecordedAsync(Deactivated, subject, subject, now, cancellationToken)
+        await audit.RecordedAsync(Deactivated, subject, context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
@@ -196,7 +196,7 @@ internal sealed class AccountLifecycle(
             return Result.Failure(unpublished);
         }
 
-        await audit.RecordedAsync(Reactivated, link.Subject, link.Subject, now, cancellationToken)
+        await audit.RecordedAsync(Reactivated, link.Subject, breakGlassReason: null, link.Subject, now, cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
@@ -286,7 +286,7 @@ internal sealed class AccountLifecycle(
             return Result.Failure<DateTimeOffset>(unpublished);
         }
 
-        await audit.RecordedAsync(DeletionRequested, subject, subject, now, cancellationToken)
+        await audit.RecordedAsync(DeletionRequested, subject, context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
@@ -354,7 +354,7 @@ internal sealed class AccountLifecycle(
         }
 
         await audit
-            .RecordedAsync(DeletionCancelled, link.Subject, link.Subject, now, cancellationToken)
+            .RecordedAsync(DeletionCancelled, link.Subject, breakGlassReason: null, link.Subject, now, cancellationToken)
             .ConfigureAwait(false);
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 

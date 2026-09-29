@@ -120,7 +120,14 @@ internal sealed class MembershipEnd(
         }
 
         await audit
-            .MembershipEndedAsync(organization, ended, member, acting, now, cancellationToken)
+            .MembershipEndedAsync(
+                organization,
+                ended,
+                member,
+                acting,
+                context.BreakGlassReason,
+                now,
+                cancellationToken)
             .ConfigureAwait(false);
 
         foreach (DomainEvent happened in announced)

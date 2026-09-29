@@ -457,7 +457,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
             _clock.GetUtcNow(),
             TimeSpan.FromDays(1),
             TimeSpan.FromDays(30),
-            satisfiesEveryGate: false);
+            breakGlassReason: null);
 
         _sessions.AddAsync(session, Drawn(), Drawn(), TestContext.Current.CancellationToken)
             .AsTask()

@@ -56,9 +56,16 @@ internal static class BreakGlassEndpoints
             return Answers.Malformed("credential");
         }
 
+        // API-CONV-002: the reason is free text, 1 to 1024 characters after trimming,
+        // and is refused before the credential is looked at (OPS-BOOT-002).
+        if (request.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
+        {
+            return Answers.Malformed("reason");
+        }
+
         return Answers.Of(
             await breakGlass
-                .PresentAsync(credential, RequestOrigin.Of(context.Request), cancellationToken)
+                .PresentAsync(credential, reason, RequestOrigin.Of(context.Request), cancellationToken)
                 .ConfigureAwait(false),
             issued =>
             {
@@ -79,7 +86,7 @@ internal static class BreakGlassEndpoints
 
         return Answers.Of(
             await breakGlass
-                .GenerateAsync(AccessContext.Of(browser.Required.Subject), browser.Required.Id, cancellationToken)
+                .GenerateAsync(browser.Asking, browser.Required.Id, cancellationToken)
                 .ConfigureAwait(false),
             generated => TypedResults.Json(
                 new GeneratedBreakGlassView(

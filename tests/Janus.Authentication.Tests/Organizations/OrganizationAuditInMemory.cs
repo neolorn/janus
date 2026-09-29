@@ -35,10 +35,11 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
         OrganizationId organization,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        _changes.Add(new OrganizationChange(action, organization, reason, actor, at));
+        _changes.Add(new OrganizationChange(action, organization, reason, actor, at) { BreakGlassReason = breakGlassReason });
 
         return ValueTask.CompletedTask;
     }
@@ -63,10 +64,15 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
         string domain,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        _changes.Add(new OrganizationChange(action, organization, reason, actor, at) { Domain = domain });
+        _changes.Add(new OrganizationChange(action, organization, reason, actor, at)
+        {
+            Domain = domain,
+            BreakGlassReason = breakGlassReason,
+        });
 
         return ValueTask.CompletedTask;
     }
@@ -77,10 +83,15 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
         OrganizationId organization,
         InvitationId invitation,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        _changes.Add(new OrganizationChange(action, organization, string.Empty, actor, at) { Invitation = invitation });
+        _changes.Add(new OrganizationChange(action, organization, string.Empty, actor, at)
+        {
+            Invitation = invitation,
+            BreakGlassReason = breakGlassReason,
+        });
 
         return ValueTask.CompletedTask;
     }
@@ -91,6 +102,7 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
         MembershipId membership,
         SubjectId member,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
@@ -98,6 +110,7 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
         {
             Membership = membership,
             Member = member,
+            BreakGlassReason = breakGlassReason,
         });
 
         return ValueTask.CompletedTask;
@@ -137,5 +150,11 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
         /// Whose membership ended, where one did.
         /// </summary>
         public SubjectId? Member { get; init; }
+
+        /// <summary>
+        /// The reason given at the use of the break-glass credential, where the change
+        /// was made in the session it opened, or nothing.
+        /// </summary>
+        public string? BreakGlassReason { get; init; }
     }
 }

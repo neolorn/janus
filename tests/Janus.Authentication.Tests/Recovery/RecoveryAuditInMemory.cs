@@ -25,7 +25,14 @@ internal sealed class RecoveryAuditInMemory : IRecoveryAudit
         SubjectId Subject,
         string Reason,
         IdentifierKind Channel,
-        DateTimeOffset At);
+        DateTimeOffset At)
+    {
+        /// <summary>
+        /// The reason given at the use of the break-glass credential, where the change
+        /// was made in the session it opened, or nothing.
+        /// </summary>
+        public string? BreakGlassReason { get; init; }
+    }
 
     private readonly List<Entry> _written = [];
 
@@ -37,13 +44,14 @@ internal sealed class RecoveryAuditInMemory : IRecoveryAudit
     /// <inheritdoc/>
     public ValueTask ApprovedAsync(
         SubjectId approver,
+        string? breakGlassReason,
         SubjectId subject,
         string reason,
         IdentifierKind channel,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        _written.Add(new Entry(approver, subject, reason, channel, at));
+        _written.Add(new Entry(approver, subject, reason, channel, at) { BreakGlassReason = breakGlassReason });
 
         return ValueTask.CompletedTask;
     }

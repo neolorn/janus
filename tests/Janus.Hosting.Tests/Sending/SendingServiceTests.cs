@@ -969,7 +969,7 @@ public sealed class SendingServiceTests : IAsyncDisposable
                 [new Bucket(1, TimeSpan.FromHours(24), BucketWindow.Sliding)]),
             "an incident",
             Satisfied,
-            SubjectId.New(_randomness),
+            AccessContext.Of(SubjectId.New(_randomness)),
             TestContext.Current.CancellationToken)).Switch(
             () => { },
             error => throw new Xunit.Sdk.XunitException($"The edit was refused: {error.Code}."));

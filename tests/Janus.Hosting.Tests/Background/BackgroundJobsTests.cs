@@ -286,7 +286,7 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
                 noon,
                 TimeSpan.FromHours(1),
                 TimeSpan.FromDays(1),
-                satisfiesEveryGate: false),
+                breakGlassReason: null),
             RandomNumberGenerator.GetBytes(32),
             RandomNumberGenerator.GetBytes(32),
             cancellationToken);

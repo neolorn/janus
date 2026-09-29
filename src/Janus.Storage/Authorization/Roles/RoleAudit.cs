@@ -34,9 +34,10 @@ internal sealed class RoleAudit(IAuditStore records, TimeProvider time) : IRoleA
         IReadOnlyList<Permission> after,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
-        await AppendAsync(Defined, role, before, after, reason, actor, at, cancellationToken)
+        await AppendAsync(Defined, role, before, after, reason, actor, breakGlassReason, at, cancellationToken)
             .ConfigureAwait(false);
 
     /// <inheritdoc/>
@@ -70,9 +71,10 @@ internal sealed class RoleAudit(IAuditStore records, TimeProvider time) : IRoleA
         IReadOnlyList<Permission> before,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
-        await AppendAsync(Removed, role, before, after: null, reason, actor, at, cancellationToken)
+        await AppendAsync(Removed, role, before, after: null, reason, actor, breakGlassReason, at, cancellationToken)
             .ConfigureAwait(false);
 
     private static JsonElement Written(IReadOnlyList<Permission>? permissions) =>
@@ -98,6 +100,7 @@ internal sealed class RoleAudit(IAuditStore records, TimeProvider time) : IRoleA
         IReadOnlyList<Permission>? after,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
         await records
@@ -109,6 +112,7 @@ internal sealed class RoleAudit(IAuditStore records, TimeProvider time) : IRoleA
                     at,
                     actor,
                     actor,
+                    breakGlassReason,
                     organization: null,
                     Details(role, before, after, reason)),
                 cancellationToken)

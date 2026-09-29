@@ -24,6 +24,10 @@ internal interface IRoleAudit
     /// <param name="after">What it permits now.</param>
     /// <param name="reason">Why.</param>
     /// <param name="actor">Who defined it.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of recording it.</returns>
@@ -33,6 +37,7 @@ internal interface IRoleAudit
         IReadOnlyList<Permission> after,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 
@@ -60,6 +65,10 @@ internal interface IRoleAudit
     /// <param name="before">What it permitted.</param>
     /// <param name="reason">Why.</param>
     /// <param name="actor">Who removed it.</param>
+    /// <param name="breakGlassReason">
+    /// The reason given at the use of the break-glass credential, where the action was
+    /// taken in the session it opened, or nothing.
+    /// </param>
     /// <param name="at">When.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of recording it.</returns>
@@ -68,6 +77,7 @@ internal interface IRoleAudit
         IReadOnlyList<Permission> before,
         string reason,
         SubjectId actor,
+        string? breakGlassReason,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 }

@@ -26,6 +26,7 @@ internal sealed class PrivacyAudit(IAuditStore records, TimeProvider time) : IPr
     public async ValueTask RecordedAsync(
         AuditAction action,
         SubjectId? acting,
+        string? breakGlassReason,
         SubjectId? subject,
         DateTimeOffset at,
         IReadOnlyDictionary<string, JsonElement> details,
@@ -39,6 +40,7 @@ internal sealed class PrivacyAudit(IAuditStore records, TimeProvider time) : IPr
                     at,
                     acting ?? default,
                     subject ?? acting ?? default,
+                    breakGlassReason,
                     organization: null,
                     details),
                 cancellationToken)

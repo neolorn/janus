@@ -127,7 +127,7 @@ internal sealed class OrganizationDomainService(
 
         await domains.AddAsync(added, cancellationToken).ConfigureAwait(false);
 
-        if (await WrittenAsync(read, [.. before, read.Domain], loosening: true, cancellationToken)
+        if (await WrittenAsync(read, [.. before, read.Domain], loosening: true, context.BreakGlassReason, cancellationToken)
                 .ConfigureAwait(false)
             is Error unwritten)
         {
@@ -141,6 +141,7 @@ internal sealed class OrganizationDomainService(
                 read.Domain,
                 read.Reason,
                 read.Acting,
+                context.BreakGlassReason,
                 now,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -215,6 +216,7 @@ internal sealed class OrganizationDomainService(
                 read.Domain,
                 read.Reason,
                 read.Acting,
+                context.BreakGlassReason,
                 now,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -275,7 +277,7 @@ internal sealed class OrganizationDomainService(
 
         await domains.RecordAsync(listed, cancellationToken).ConfigureAwait(false);
 
-        if (await WrittenAsync(read, after, loosening, cancellationToken).ConfigureAwait(false)
+        if (await WrittenAsync(read, after, loosening, context.BreakGlassReason, cancellationToken).ConfigureAwait(false)
             is Error unwritten)
         {
             return Result.Failure(unwritten);
@@ -288,6 +290,7 @@ internal sealed class OrganizationDomainService(
                 read.Domain,
                 read.Reason,
                 read.Acting,
+                context.BreakGlassReason,
                 now,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -446,6 +449,7 @@ internal sealed class OrganizationDomainService(
         Change read,
         List<string> after,
         bool loosening,
+        string? breakGlassReason,
         CancellationToken cancellationToken) =>
         (await administration
             .ChangeMemberAsync(
@@ -456,6 +460,7 @@ internal sealed class OrganizationDomainService(
                 loosening,
                 read.Reason,
                 read.Acting,
+                breakGlassReason,
                 cancellationToken)
             .ConfigureAwait(false))
         .Match<Error?>(() => null, error => error);

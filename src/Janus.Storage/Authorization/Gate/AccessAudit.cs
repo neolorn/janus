@@ -46,24 +46,25 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
         """
         INSERT INTO identity.audit_records
             (id, category, occurred_at, action, acting_subject, effective_subject,
-             organization, details)
+             organization, details, breakglass_reason)
         VALUES (@id, @category, @at, @action, @acting, @effective, @organization,
-                CAST(@details AS jsonb));
+                CAST(@details AS jsonb), @breakGlassReason);
         """;
 
     private const string AppendExport =
         """
         INSERT INTO identity.audit_records
             (id, category, occurred_at, action, acting_subject, effective_subject,
-             organization, details, principal, principal_reason)
+             organization, details, principal, principal_reason, breakglass_reason)
         VALUES (@id, @category, @at, @action, @acting, @effective, @organization,
-                CAST(@details AS jsonb), @principal, @reason);
+                CAST(@details AS jsonb), @principal, @reason, @breakGlassReason);
         """;
 
     private const string ById =
         """
         SELECT acting_subject AS "Acting",
                effective_subject AS "Effective",
+               breakglass_reason AS "BreakGlassReason",
                organization AS "Organization",
                occurred_at AS "At",
                details AS "Details"
@@ -105,6 +106,7 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
                     action = Denied.ToString(),
                     acting = denial.Acting?.Value,
                     effective = denial.Effective?.Value,
+                    breakGlassReason = denial.BreakGlassReason,
                     organization = denial.Organization?.Value,
                     details = Written(denial),
                 },
@@ -138,6 +140,7 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
                     details = Written(export),
                     principal = export.Principal?.Name,
                     reason = export.Principal?.Reason,
+                    breakGlassReason = export.BreakGlassReason,
                 },
                 ambient.Transaction,
                 cancellationToken: cancellationToken))
@@ -254,6 +257,7 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
             correlation,
             row.Acting is Guid acting ? new SubjectId(acting) : null,
             row.Effective is Guid effective ? new SubjectId(effective) : null,
+            row.BreakGlassReason,
             row.Organization is Guid organization ? new OrganizationId(organization) : null,
             Core.Permission.Parse(Field(details, Permission)),
             Core.ResourceType.Parse(Field(details, ResourceType)),
@@ -300,6 +304,8 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
         public Guid? Acting { get; init; }
 
         public Guid? Effective { get; init; }
+
+        public string? BreakGlassReason { get; init; }
 
         public Guid? Organization { get; init; }
 

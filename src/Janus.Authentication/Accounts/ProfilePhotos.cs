@@ -113,7 +113,7 @@ internal sealed class ProfilePhotos(
         }
 
         // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
-        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
             is Error restricted)
         {
             return Result.Failure(restricted);
@@ -172,7 +172,7 @@ internal sealed class ProfilePhotos(
             .ConfigureAwait(false);
 
         await audit
-            .RecordedAsync(ProfileChanged, Acting(context, subject), subject, now, cancellationToken)
+            .RecordedAsync(ProfileChanged, Acting(context, subject), context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -201,7 +201,7 @@ internal sealed class ProfilePhotos(
         }
 
         // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
-        if (await restriction.RefusedAsync(subject, cancellationToken).ConfigureAwait(false)
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
             is Error restricted)
         {
             return Result.Failure(restricted);
@@ -214,7 +214,7 @@ internal sealed class ProfilePhotos(
         await directory.RemovePhotoAsync(subject, cancellationToken).ConfigureAwait(false);
 
         await audit
-            .RecordedAsync(ProfileChanged, Acting(context, subject), subject, now, cancellationToken)
+            .RecordedAsync(ProfileChanged, Acting(context, subject), context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);

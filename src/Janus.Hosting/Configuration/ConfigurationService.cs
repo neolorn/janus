@@ -127,7 +127,7 @@ internal sealed class ConfigurationService(
 
         if (key == Settings.AlertingEmailDestinations.Key || key == Settings.AlertingSmsDestinations.Key)
         {
-            return await DestinationsAsync(key, value, reason, actor, session, cancellationToken)
+            return await DestinationsAsync(key, value, reason, context, actor, session, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -154,6 +154,7 @@ internal sealed class ConfigurationService(
         ConfigurationKey key,
         JsonElement value,
         string reason,
+        AccessContext context,
         SubjectId actor,
         SessionId session,
         CancellationToken cancellationToken)
@@ -183,7 +184,7 @@ internal sealed class ConfigurationService(
         }
 
         return await destinations
-            .ChangeAsync(channel, replacement, reason, challenge, actor, cancellationToken)
+            .ChangeAsync(channel, replacement, reason, challenge, context, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -261,7 +262,16 @@ internal sealed class ConfigurationService(
         }
 
         if ((await administration
-                .ChangeMemberAsync(family, category, period, before, loosening, reason.Trim(), actor, cancellationToken)
+                .ChangeMemberAsync(
+                    family,
+                    category,
+                    period,
+                    before,
+                    loosening,
+                    reason.Trim(),
+                    actor,
+                    context.BreakGlassReason,
+                    cancellationToken)
                 .ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error unwritten)
         {

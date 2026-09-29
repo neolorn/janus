@@ -53,7 +53,7 @@ internal static class AppPasswordEndpoints
 
         return Answers.Of(
             await passwords
-                .ListAsync(AccessContext.Of(browser.Required.Subject), browser.Required.Id, cancellationToken)
+                .ListAsync(browser.Asking, browser.Required.Id, cancellationToken)
                 .ConfigureAwait(false),
             held => TypedResults.Json<IReadOnlyList<AppPasswordView>>(
                 [.. held.Select(AppPasswordView.Of)],
@@ -83,7 +83,7 @@ internal static class AppPasswordEndpoints
             : Answers.Of(
                 await passwords
                     .CreateAsync(
-                        AccessContext.Of(browser.Required.Subject),
+                        browser.Asking,
                         browser.Required.Id,
                         label,
                         request.ExpiresAt,
@@ -111,7 +111,7 @@ internal static class AppPasswordEndpoints
         return Answers.Of(
             await passwords
                 .RevokeAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     id,
                     RequestOrigin.Source(context.Request),

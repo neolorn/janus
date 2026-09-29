@@ -133,6 +133,7 @@ internal sealed class ErasureService(
             .RecordedAsync(
                 Completed,
                 context.Acting,
+                context.BreakGlassReason,
                 delivery.Subject,
                 time.GetUtcNow(),
                 Named(erasure, outstanding),

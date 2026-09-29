@@ -62,7 +62,7 @@ internal static class GroupEndpoints
         return Answers.Of(
             await groups
                 .InAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     new OrganizationId(whose),
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -101,7 +101,7 @@ internal static class GroupEndpoints
         return Answers.Of(
             await groups
                 .CreateAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     new OrganizationId(organization),
                     name,
                     reason,
@@ -135,7 +135,7 @@ internal static class GroupEndpoints
         return Answers.Of(
             await groups
                 .RemoveAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     new GroupId(id),
                     reason,
                     cancellationToken)
@@ -169,7 +169,7 @@ internal static class GroupEndpoints
         return Answers.Of(
             await groups
                 .AddMemberAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     new GroupId(id),
                     joining,
@@ -207,7 +207,7 @@ internal static class GroupEndpoints
         return Answers.Of(
             await groups
                 .RemoveMemberAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     new GroupId(id),
                     leaving,

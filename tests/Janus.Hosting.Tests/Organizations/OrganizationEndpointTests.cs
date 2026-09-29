@@ -412,7 +412,7 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
             _deployment.Clock.GetUtcNow(),
             TimeSpan.FromDays(1),
             TimeSpan.FromDays(30),
-            satisfiesEveryGate: false);
+            breakGlassReason: null);
 
         await _deployment.Sessions.AddAsync(
             session,

@@ -510,7 +510,7 @@ internal static class AuthenticationEndpoints
     {
         ArgumentNullException.ThrowIfNull(browser);
 
-        return AccessContext.Of(browser.Required.Subject);
+        return browser.Asking;
     }
 
     // How long the browser is to carry what it was just handed. A deployment that has

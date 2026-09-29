@@ -38,11 +38,12 @@ internal sealed class AccountAuditInMemory : IAccountAudit
     public ValueTask RecordedAsync(
         AuditAction action,
         SubjectId acting,
+        string? breakGlassReason,
         SubjectId subject,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        _recorded.Add(new RecordedChange(action, acting, subject, at));
+        _recorded.Add(new RecordedChange(action, acting, subject, at) { BreakGlassReason = breakGlassReason });
 
         return ValueTask.CompletedTask;
     }
@@ -51,11 +52,12 @@ internal sealed class AccountAuditInMemory : IAccountAudit
     public ValueTask AdministeredAsync(
         AuditAction action,
         SubjectId acting,
+        string? breakGlassReason,
         SubjectId subject,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        _administered.Add(new RecordedChange(action, acting, subject, at));
+        _administered.Add(new RecordedChange(action, acting, subject, at) { BreakGlassReason = breakGlassReason });
 
         return ValueTask.CompletedTask;
     }
@@ -63,12 +65,14 @@ internal sealed class AccountAuditInMemory : IAccountAudit
     /// <inheritdoc/>
     public ValueTask CancelledOnBehalfAsync(
         SubjectId acting,
+        string? breakGlassReason,
         SubjectId subject,
         PrivacyRequestId? request,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        _administered.Add(new RecordedChange(AuditActions.DeletionCancelled, acting, subject, at));
+        _administered.Add(
+            new RecordedChange(AuditActions.DeletionCancelled, acting, subject, at) { BreakGlassReason = breakGlassReason });
         _against.Add(request);
 
         return ValueTask.CompletedTask;

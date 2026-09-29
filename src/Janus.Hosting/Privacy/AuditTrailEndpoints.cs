@@ -52,7 +52,7 @@ internal static class AuditTrailEndpoints
         return Answers.Of(
             await trail
                 .OfSubjectAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     new SubjectId(whose),
                     cancellationToken)
                 .ConfigureAwait(false),

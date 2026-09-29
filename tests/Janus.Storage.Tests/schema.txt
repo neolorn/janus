@@ -61,6 +61,8 @@ table audit_records partitioned by LIST (category)
   column enc_details bytea
   column principal text
   column principal_reason text
+  column breakglass_reason text
+  constraint ck_audit_records_breakglass_reason CHECK (((breakglass_reason IS NULL) OR ((principal IS NULL) AND ((length(btrim(breakglass_reason)) >= 1) AND (length(btrim(breakglass_reason)) <= 1024)))))
   constraint ck_audit_records_identities CHECK (((action = 'authz.access.denied'::text) OR ((acting_subject IS NOT NULL) AND (effective_subject IS NOT NULL))))
   constraint ck_audit_records_principal CHECK ((((principal IS NULL) AND (principal_reason IS NULL)) OR ((principal IS NOT NULL) AND (principal_reason IS NOT NULL) AND (acting_subject = '00000000-0000-0000-0000-000000000000'::uuid))))
   constraint pk_audit_records PRIMARY KEY (category, occurred_at, id)
@@ -80,7 +82,9 @@ table audit_records_routine partition of audit_records FOR VALUES IN ('routine')
   column enc_details bytea
   column principal text
   column principal_reason text
+  column breakglass_reason text
   constraint audit_records_routine_pkey PRIMARY KEY (category, occurred_at, id)
+  constraint ck_audit_records_breakglass_reason CHECK (((breakglass_reason IS NULL) OR ((principal IS NULL) AND ((length(btrim(breakglass_reason)) >= 1) AND (length(btrim(breakglass_reason)) <= 1024)))))
   constraint ck_audit_records_identities CHECK (((action = 'authz.access.denied'::text) OR ((acting_subject IS NOT NULL) AND (effective_subject IS NOT NULL))))
   constraint ck_audit_records_principal CHECK ((((principal IS NULL) AND (principal_reason IS NULL)) OR ((principal IS NOT NULL) AND (principal_reason IS NOT NULL) AND (acting_subject = '00000000-0000-0000-0000-000000000000'::uuid))))
   index audit_records_routine_acting_subject_occurred_at_idx using btree (acting_subject, occurred_at)
@@ -99,7 +103,9 @@ table audit_records_security partition of audit_records FOR VALUES IN ('security
   column enc_details bytea
   column principal text
   column principal_reason text
+  column breakglass_reason text
   constraint audit_records_security_pkey PRIMARY KEY (category, occurred_at, id)
+  constraint ck_audit_records_breakglass_reason CHECK (((breakglass_reason IS NULL) OR ((principal IS NULL) AND ((length(btrim(breakglass_reason)) >= 1) AND (length(btrim(breakglass_reason)) <= 1024)))))
   constraint ck_audit_records_identities CHECK (((action = 'authz.access.denied'::text) OR ((acting_subject IS NOT NULL) AND (effective_subject IS NOT NULL))))
   constraint ck_audit_records_principal CHECK ((((principal IS NULL) AND (principal_reason IS NULL)) OR ((principal IS NOT NULL) AND (principal_reason IS NOT NULL) AND (acting_subject = '00000000-0000-0000-0000-000000000000'::uuid))))
   index audit_records_security_acting_subject_occurred_at_idx using btree (acting_subject, occurred_at)
@@ -954,7 +960,9 @@ table sessions
   column ended_at timestamp with time zone
   column satisfies_every_gate boolean not null
   column csrf_fingerprint bytea not null default '\x'::bytea
+  column breakglass_reason text
   constraint ck_sessions_attained CHECK ((attained = ANY (ARRAY['aal1'::text, 'aal2'::text, 'aal3'::text, 'delegated'::text])))
+  constraint ck_sessions_breakglass_reason CHECK (((breakglass_reason IS NULL) OR (satisfies_every_gate AND ((length(btrim(breakglass_reason)) >= 1) AND (length(btrim(breakglass_reason)) <= 1024)))))
   constraint ck_sessions_phishing_resistant CHECK ((phishing_resistant = (phishing_resistant_at IS NOT NULL)))
   constraint ck_sessions_type CHECK ((type = ANY (ARRAY['auth'::text, 'oidc-token'::text, 'per-app'::text])))
   constraint fk_sessions_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT

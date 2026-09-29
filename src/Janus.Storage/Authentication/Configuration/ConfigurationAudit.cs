@@ -49,6 +49,7 @@ internal sealed class ConfigurationAudit(
                     change.At,
                     change.Actor,
                     change.Actor,
+                    change.BreakGlassReason,
                     organization: null,
                     Details(change.Key, change.Before, change.After, change.Loosening, change.Reason)),
                 cancellationToken)
@@ -150,6 +151,7 @@ internal sealed class ConfigurationAudit(
             fields.GetProperty("loosening").GetBoolean(),
             fields.TryGetProperty("reason", out JsonElement reason) ? reason.GetString() : null,
             row.ActingSubject,
+            row.BreakGlassReason,
             row.OccurredAt,
             row.Principal);
     }

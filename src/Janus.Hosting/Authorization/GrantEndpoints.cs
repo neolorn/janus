@@ -83,7 +83,7 @@ internal static class GrantEndpoints
         return Answers.Of(
             await grants
                 .HeldAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     new OrganizationId(whose),
                     new GrantSubject(holderType, holder),
                     cancellationToken)
@@ -120,7 +120,7 @@ internal static class GrantEndpoints
         return Answers.Of(
             await grants
                 .GrantAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     request,
                     cancellationToken)
@@ -153,7 +153,7 @@ internal static class GrantEndpoints
         return Answers.Of(
             await grants
                 .RevokeAsync(
-                    AccessContext.Of(browser.Required.Subject),
+                    browser.Asking,
                     browser.Required.Id,
                     new GrantId(id),
                     reason,
