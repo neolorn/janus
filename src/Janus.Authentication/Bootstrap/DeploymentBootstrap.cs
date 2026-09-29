@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -29,14 +30,15 @@ namespace Janus.Authentication.Bootstrap;
 /// <param name="mailboxes">Where the administrator's mailbox is queued.</param>
 /// <param name="links">Where the enrolment link is held.</param>
 /// <param name="alerts">Where the alert that no emergency credential exists is raised.</param>
+/// <param name="events">Where each membership bootstrap attaches is announced.</param>
 /// <param name="configuration">Where the values bootstrap reads are.</param>
 /// <param name="work">The one transaction bootstrap runs in.</param>
 /// <param name="randomness">Where subject identifiers and the link's token come from.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements OPS-BOOT-001, OPS-BOOT-002, INT-MAIL-006 AC1a and AC1b, DR-007,
-/// IDN-PRIN-001, IDN-ACCT-004, IDN-ACCT-005, PRIV-MINOR-001, chapter 10 sections 3 and
-/// 4.1a, and D-133. There is no gate: whoever reaches the database already holds more
+/// IDN-PRIN-001, IDN-ACCT-004, IDN-ACCT-005, PRIV-MINOR-001, AUTHZ-GRANT-003, chapter
+/// 10 sections 3 and 4.1a, D-133 and D-162. There is no gate: whoever reaches the database already holds more
 /// than the first account will (D-028), and what stands in for one is that nothing
 /// runs while a system administrator exists. No break-glass credential is made here;
 /// the management application issues it (OPS-BOOT-004), and until it does the alert
@@ -50,6 +52,7 @@ internal sealed class DeploymentBootstrap(
     IMailboxStore mailboxes,
     IRecoveryLinkStore links,
     IRaisedAlerts alerts,
+    IEvents events,
     IConfigurationStore configuration,
     IUnitOfWork work,
     RandomNumberGenerator randomness,
@@ -66,6 +69,10 @@ internal sealed class DeploymentBootstrap(
     private const string CanaryName = "Restore canary";
 
     private static readonly RoleName SystemAdministrator = RoleName.Parse("system-administrator");
+
+    // AUTHZ-GRANT-003 and D-166 (308): no person granted what bootstrap grants, so the
+    // grants name the identity no account holds rather than their holders.
+    private static readonly SubjectId Ungranted = new(Guid.Empty);
 
     // IDN-PRIN-001: nobody is signed in while bootstrap runs, so what it defines and
     // sets is recorded under a principal of its own that may do nothing else.
@@ -400,18 +407,41 @@ internal sealed class DeploymentBootstrap(
     private static Uri Enrolment(string origin, OpaqueToken token) =>
         new(origin + "/link#enrolment." + token.Value);
 
+    private static string Key(MembershipId membership, DateTimeOffset at) =>
+        string.Create(CultureInfo.InvariantCulture, $"{membership.Value}@{at.UtcTicks}");
+
     // Bootstrap names no document, since none is published yet, and the subject holds no
-    // other membership, so the limit on memberships has nothing to count.
+    // other membership, so the limit on memberships has nothing to count. D-162: the
+    // membership is announced inside the transaction that attaches it.
     private async ValueTask<Error?> JoinAsync(
         SubjectId subject,
         OrganizationId organization,
         IReadOnlyList<RoleName> roles,
         DateTimeOffset at,
-        CancellationToken cancellationToken) =>
-        (await memberships
-                .AttachAsync(subject, organization, [], roles, subject, Reason, multiple: false, at, cancellationToken)
+        CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        MembershipId membership = (await memberships
+                .AttachAsync(subject, organization, [], roles, Ungranted, Reason, multiple: false, at, cancellationToken)
                 .ConfigureAwait(false))
-            .Match<Error?>(_ => null, error => error);
+            .Match(value => value, error => Withheld<MembershipId>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return failure;
+        }
+
+        return (await events
+                .PublishAsync(
+                    new MembershipChanged(at, Key(membership, at), membership, organization, MembershipChange.Began)
+                    {
+                        Subject = subject,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error);
+    }
 
     private sealed record Entered(string Value, string Canonical, EmailAddress? Address);
 }

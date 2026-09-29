@@ -228,7 +228,9 @@ against the public contract of LIB-API-001.
   `model.startup.labellimit`. It refuses to run where a system administrator exists or
   ever existed. A refusal is one JSON line on
   standard error, with exit code 1. What it defines and sets is audited under its own
-  principal, for which `SystemOperation` carries `Bootstrap`.
+  principal, for which `SystemOperation` carries `Bootstrap`. Its grants name the nil
+  subject as their granter, and each membership it attaches emits `MembershipChanged`
+  (`began`) with the rows.
 - A runtime change is decided on the value in force under its row's lock: the change
   of a key, of an organization's policy (with the system policy's row) and of its
   domain lock each take the row before reading the value and classifying, so a

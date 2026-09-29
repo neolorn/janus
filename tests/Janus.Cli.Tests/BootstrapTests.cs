@@ -444,6 +444,59 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
         Assert.Equal(named.Order(StringComparer.Ordinal), set.Order(StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// AUTHZ-GRANT-003: no grant bootstrap makes names its holder, or any person, as the
+    /// one who granted it; each names the nil subject and the reason bootstrap states.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_TheFirstGrantsNameNoPersonAsTheirGranterAsync()
+    {
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        List<(string GrantedBy, string Reason)> grants = [.. await connection
+            .QueryAsync<(string GrantedBy, string Reason)>(
+                """
+                SELECT g.granted_by::text, g.reason FROM identity.grants g
+                JOIN identity.organizations o ON o.id = g.organization
+                WHERE o.administrative
+                """)];
+
+        Assert.NotEmpty(grants);
+        Assert.All(grants, grant => Assert.Equal((Unheld, "OPS-BOOT-001"), grant));
+    }
+
+    /// <summary>
+    /// D-162: each membership bootstrap attaches (the administrator, <c>emergency</c> and
+    /// the canary) is announced by one <c>MembershipChanged</c> that says it began,
+    /// written with the rows it announces.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task D_162_EachMembershipBootstrapAttachesEmitsMembershipChangedAsync()
+    {
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        List<string> memberships = [.. await connection.QueryAsync<string>(
+            """
+            SELECT m.id::text FROM identity.memberships m
+            JOIN identity.organizations o ON o.id = m.organization
+            WHERE o.administrative
+            """)];
+        List<(string Membership, string Change)> announced = [.. await connection
+            .QueryAsync<(string Membership, string Change)>(
+                """
+                SELECT payload->'Membership'->>'Value', payload->>'Change'
+                FROM identity.events WHERE kind = 'MembershipChanged'
+                """)];
+
+        Assert.Equal(3, memberships.Count);
+        Assert.Equal(
+            memberships.Order(StringComparer.Ordinal),
+            announced.Select(one => one.Membership).Order(StringComparer.Ordinal));
+        Assert.All(announced, one => Assert.Equal("began", one.Change));
+    }
+
     // The identity a system principal acts under, which no account holds.
     private static string Unheld => Guid.Empty.ToString();
 
