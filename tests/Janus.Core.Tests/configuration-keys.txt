@@ -60,6 +60,7 @@ identifiers.username.changecooloff
 identifiers.username.enabled
 integration.callback.ratelimit
 integration.mail.endpoint
+integration.mailserver.endpoint
 integration.sms.endpoint
 legal.governinglanguage
 link.invitation.lifetime

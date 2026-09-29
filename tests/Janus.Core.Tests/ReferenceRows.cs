@@ -75,6 +75,13 @@ internal static class ReferenceRows
             .Where(Protected));
 
     /// <summary>
+    /// The keys chapter 10 section 4.8 holds a live row for: the one list of keys the
+    /// application cannot change, which OPS-CFG-004 states is its own.
+    /// </summary>
+    public static IReadOnlySet<string> ProtectedList { get; } =
+        Names(Rows(Subsection(Section(Lines(Reference), "## 4. "), "### 4.8 "), "Key"));
+
+    /// <summary>
     /// How a family of keys is written in the rows, so the catalogue's prefix can be
     /// compared with them.
     /// </summary>
@@ -113,6 +120,27 @@ internal static class ReferenceRows
         }
 
         return section;
+    }
+
+    // The lines of one section under the level-three heading opening with the text
+    // given, up to the next level-three heading. A missing heading is a failure, as it
+    // is for a section.
+    private static string[] Subsection(string[] lines, string heading)
+    {
+        string[] subsection =
+        [
+            .. lines
+                .SkipWhile(line => !line.StartsWith(heading, StringComparison.Ordinal))
+                .Skip(1)
+                .TakeWhile(line => !line.StartsWith("### ", StringComparison.Ordinal)),
+        ];
+
+        if (subsection.Length == 0)
+        {
+            throw new InvalidOperationException("No subsection opens with \"" + heading + "\".");
+        }
+
+        return subsection;
     }
 
     // The live rows of the tables whose header opens with the column given, each with

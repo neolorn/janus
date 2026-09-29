@@ -319,6 +319,13 @@ public static class Settings
     public static TextSetting IntegrationSmsEndpoint { get; } =
         new("integration.sms.endpoint", SettingScope.Protected, string.Empty);
 
+    /// <summary>
+    /// Where the library's mail-server adapter reaches the mail server. Empty while the
+    /// deployment uses a mail server integration of its own (INT-MAIL-001, LIB-EXT-001).
+    /// </summary>
+    public static TextSetting IntegrationMailServerEndpoint { get; } =
+        new("integration.mailserver.endpoint", SettingScope.Protected, string.Empty);
+
     /// <summary>Callbacks accepted from one source a minute, before any lookup.</summary>
     public static IntegerSetting IntegrationCallbackRateLimit { get; } =
         new("integration.callback.ratelimit", SettingScope.Runtime, 60, loosening: SettingDirection.Increase);
@@ -943,6 +950,7 @@ public static class Settings
         IntegrationCallbackRateLimit,
         IntegrationMailEndpoint,
         IntegrationSmsEndpoint,
+        IntegrationMailServerEndpoint,
         Restrictions,
         CodeVerificationLifetime,
         CodeVerificationAttempts,

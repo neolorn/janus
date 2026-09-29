@@ -16663,6 +16663,8 @@ could name these as failed authentication.
 
 *Chapter text that should change.* OPS-CFG-001 AC1 could read "listed in OPS-CFG-004 or marked P in `10` section 4 as a fact the deployment declares".
 
+**Superseded by D-166.**
+
 ---
 
 ## 405. The products searched for in the core are the caches and secrets managers in use, not the catalogue factors or the database

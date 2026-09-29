@@ -82,15 +82,17 @@ internal sealed class SendingValidation(
             JsonSerializer.SerializeToElement(key));
 
     // INT-GEN-001, INF-TLS-004: the addresses the library itself calls out to, the
-    // mail and text endpoints and the corpus a deployment hosts itself. A deployment
-    // that supplies a transport of its own leaves its endpoint empty and calls its
-    // provider wherever it decides; nothing of the host's is registered here.
+    // mail and text endpoints, the mail server adapter's endpoint and the corpus a
+    // deployment hosts itself. A deployment that supplies a transport of its own leaves
+    // its endpoint empty and calls its provider wherever it decides; nothing of the
+    // host's is registered here.
     private async ValueTask<Error?> InsecureAsync(CancellationToken cancellationToken)
     {
         foreach (TextSetting key in new[]
         {
             Settings.IntegrationMailEndpoint,
             Settings.IntegrationSmsEndpoint,
+            Settings.IntegrationMailServerEndpoint,
             Settings.PasswordBlocklistSelfHostedAddress,
         })
         {

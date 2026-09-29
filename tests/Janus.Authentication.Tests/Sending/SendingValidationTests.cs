@@ -216,6 +216,26 @@ public sealed class SendingValidationTests
     }
 
     /// <summary>
+    /// INT-GEN-001 AC1 and AC2: the mail server adapter's endpoint named over plain HTTP
+    /// stops the deployment, and the failure names its key; over TLS it starts.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_GEN_001_AC1_APlaintextMailServerEndpointStopsStartupAsync()
+    {
+        _configuration.Set(Settings.IntegrationMailServerEndpoint, "http://mailserver.example.test");
+
+        Error refusal = await RefusedAsync();
+
+        Assert.Equal(ErrorCodes.EndpointInsecure, refusal.Code);
+        Assert.Equal("integration.mailserver.endpoint", refusal.Details["key"].GetString());
+
+        _configuration.Set(Settings.IntegrationMailServerEndpoint, "https://mailserver.example.test");
+
+        await PassedAsync();
+    }
+
+    /// <summary>
     /// INF-TLS-004 AC1: a self-hosted password corpus named over plain HTTP stops the
     /// deployment, and the failure names the key it was read from.
     /// </summary>

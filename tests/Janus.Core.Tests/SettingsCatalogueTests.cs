@@ -15,15 +15,6 @@ namespace Janus.Core.Tests;
 [Trait("kind", "contract")]
 public sealed class SettingsCatalogueTests
 {
-    // Every key chapter 10 section 4 marks P: the nine of section 4.8 and the ones
-    // marked where they are declared, because they are facts about the deployment
-    // rather than runtime controls.
-    private static readonly string[] Protected =
-    [
-        .. ProtectedBySectionFourEight,
-        .. DeclaredAboutTheDeployment,
-    ];
-
     // The eleven keys of LIB-HOST-001 that name the deployment, and the three that
     // are named only where their condition holds.
     private static readonly string[] NamedByTheDeployment =
@@ -42,37 +33,6 @@ public sealed class SettingsCatalogueTests
         "password.blocklist.selfhosted.address",
         "privacy.calendar.timezone",
         "service.name",
-        "webauthn.origins",
-    ];
-
-    // Chapter 10 section 4.8, which OPS-CFG-004 states is the same list as its own:
-    // the settings whose change would hide the person changing them, and the
-    // governing language, which is protected because the text a document binds in is
-    // not a runtime toggle.
-    private static string[] ProtectedBySectionFourEight =>
-    [
-        "abuse.throttle.enabled",
-        "exfiltration.export.auditing",
-        "legal.governinglanguage",
-        "privacy.calendar.timezone",
-        "token.signing.algorithm",
-        "webauthn.rpid",
-    ];
-
-    // The protected keys outside the OPS-CFG-004 list, each a fact the deployment
-    // declares about itself: the origins, the hosting location and the cross-border
-    // basis LIB-HOST-001 names; the algorithms AUTH-FACT-010 fixes beside the relying
-    // party identifier; the two endpoints the shipped transports call (ledger entry
-    // 140); and the client the registry answers for an identifier it does not hold
-    // (ledger entry 145).
-    private static string[] DeclaredAboutTheDeployment =>
-    [
-        "hosting.crossborderbasis",
-        "hosting.location",
-        "integration.mail.endpoint",
-        "integration.sms.endpoint",
-        "redirect.defaultclient",
-        "webauthn.algorithms",
         "webauthn.origins",
     ];
 
@@ -102,30 +62,13 @@ public sealed class SettingsCatalogueTests
     }
 
     /// <summary>
-    /// Chapter 10 section 4 marks each key R or P, and the catalogue carries the mark
-    /// the chapter gives it.
+    /// OPS-CFG-001 AC1: a key the application cannot change is on the OPS-CFG-004 list,
+    /// which is chapter 10 section 4.8: the protected keys and families of the
+    /// catalogue are exactly the rows of that section. Every other key is
+    /// runtime-changeable.
     /// </summary>
     [Fact]
-    public void Scope_TheCatalogue_ProtectsTheKeysSectionFourMarks()
-    {
-        IEnumerable<string> protectedKeys = Settings.All
-            .Where(setting => setting.Scope == SettingScope.Protected)
-            .Select(setting => setting.Key.ToString())
-            .Concat(Settings.Families
-                .Where(family => family.Scope == SettingScope.Protected)
-                .Select(family => family.Prefix));
-
-        Assert.Equal(Protected.Order(StringComparer.Ordinal), protectedKeys.Order(StringComparer.Ordinal));
-    }
-
-    /// <summary>
-    /// OPS-CFG-001 AC1: a key the application cannot change is on the OPS-CFG-004
-    /// list or is a fact the deployment declares about itself, and each of the seven
-    /// that are the latter is marked P where its row stands, in chapter 10 section 4
-    /// or among the rows the ledger owes it. Every other key is runtime-changeable.
-    /// </summary>
-    [Fact]
-    public void OPS_CFG_001_AC1_ARedeployScopedKeyIsOnTheOpsCfg004ListOrDeclared()
+    public void OPS_CFG_001_AC1_ARedeployScopedKeyIsOnTheOpsCfg004List()
     {
         string[] redeployScoped =
         [
@@ -134,14 +77,21 @@ public sealed class SettingsCatalogueTests
                 .Select(setting => setting.Key.ToString())
                 .Concat(Settings.Families
                     .Where(family => family.Scope == SettingScope.Protected)
-                    .Select(family => family.Prefix))
-                .Except(ProtectedBySectionFourEight, StringComparer.Ordinal)
+                    .Select(family => ReferenceRows.Family(family.Prefix)))
                 .Order(StringComparer.Ordinal),
         ];
 
-        Assert.Equal(DeclaredAboutTheDeployment, redeployScoped);
-        Assert.All(DeclaredAboutTheDeployment, key => Assert.Contains(key, ReferenceRows.MarkedProtected));
+        Assert.Equal(ReferenceRows.ProtectedList.Order(StringComparer.Ordinal), redeployScoped);
     }
+
+    /// <summary>
+    /// OPS-CFG-004: the list and chapter 10 section 4.8 are one list, so a key whose row
+    /// in chapter 10 section 4, or among the rows the ledger owes it, marks it P is a
+    /// row of section 4.8, and no key is marked P outside it (D-152).
+    /// </summary>
+    [Fact]
+    public void OPS_CFG_004_AKeyMarkedProtectedIsOnTheOneList() =>
+        Assert.Empty(ReferenceRows.MarkedProtected.Except(ReferenceRows.ProtectedList, StringComparer.Ordinal));
 
     /// <summary>
     /// LIB-API-001: the key names are the contract, so a key that is renamed, added or
@@ -190,19 +140,6 @@ public sealed class SettingsCatalogueTests
             ReferenceRows.ChapterKeys.Concat(ReferenceRows.OwedKeys),
             StringComparer.Ordinal));
         Assert.Empty(ReferenceRows.OwedKeys.Except(declared, StringComparer.Ordinal));
-    }
-
-    /// <summary>
-    /// OPS-CFG-004 and chapter 10 section 4.8 are one list, so every key section 4.8
-    /// holds is one the application cannot change.
-    /// </summary>
-    [Fact]
-    public void Scope_TheOpsCfg004List_IsProtectedInTheCatalogue()
-    {
-        foreach (string key in ProtectedBySectionFourEight)
-        {
-            Assert.Equal(SettingScope.Protected, ScopeOf(key));
-        }
     }
 
     /// <summary>
@@ -267,11 +204,6 @@ public sealed class SettingsCatalogueTests
         Assert.Equal(
             Settings.All.Count,
             Settings.All.Select(setting => setting.Key.ToString()).Distinct(StringComparer.Ordinal).Count());
-
-    // The scope the catalogue carries for a key or a family, by its written name.
-    private static SettingScope ScopeOf(string key) =>
-        Settings.All.SingleOrDefault(setting => setting.Key.ToString() == key)?.Scope
-            ?? Settings.Families.Single(family => family.Prefix == key).Scope;
 
     // Reading the default of a setting whose type is only known at runtime. A setting
     // that resolves hands back a value; one that does not throws, which is the failure

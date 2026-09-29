@@ -3581,6 +3581,7 @@ static Janus.Core.Configuration.Settings.IdentifiersUsernameChangeCoolOff.get ->
 static Janus.Core.Configuration.Settings.IdentifiersUsernameEnabled.get -> Janus.Core.Configuration.FlagSetting!
 static Janus.Core.Configuration.Settings.IntegrationCallbackRateLimit.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.IntegrationMailEndpoint.get -> Janus.Core.Configuration.TextSetting!
+static Janus.Core.Configuration.Settings.IntegrationMailServerEndpoint.get -> Janus.Core.Configuration.TextSetting!
 static Janus.Core.Configuration.Settings.IntegrationSmsEndpoint.get -> Janus.Core.Configuration.TextSetting!
 static Janus.Core.Configuration.Settings.LegalGoverningLanguage.get -> Janus.Core.Configuration.TextSetting!
 static Janus.Core.Configuration.Settings.LinkInvitationLifetime.get -> Janus.Core.Configuration.DurationSetting!

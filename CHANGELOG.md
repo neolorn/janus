@@ -167,7 +167,12 @@ against the public contract of LIB-API-001.
   management application refuses: pipe the key document to it as to `bootstrap` and name
   each key as `--<key> <value>`, with `--reason`. It takes the keys chapter 10 section
   4.8 protects and refuses every other key. Audit logging, token signature verification
-  and step-up enforcement have no switch: the library performs them unconditionally. Each change is recorded under the
+  and step-up enforcement have no switch: the library performs them unconditionally.
+  The facts a deployment declares about itself (the WebAuthn origins and algorithms, the
+  hosting location and cross-border basis, the shipped transports' endpoints, the new
+  `integration.mailserver.endpoint` and the default client) are on that one list; a
+  mail server endpoint that is not an absolute `https` address stops startup with
+  `integration.endpoint.insecure` naming the key. Each change is recorded under the
   `configure` principal with its reason and raises `protected-setting-changed`; the
   governing language also raises `governing-language-changed`. A change that would leave
   the deployment unable to start is refused and nothing of it is written.
