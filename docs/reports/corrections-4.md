@@ -1,9 +1,9 @@
 # Corrections 4: D-166 and D-167
 
-Status: stopped at open questions 4 (Tier 2, with a Tier 3 point), 5 (Tier 2) and 6
-(Tier 3). D-168 settled questions 1 and 2 of the first stop, and D-169 settled question 3;
-all three are applied. Of the rest of D-166, section D.8 is applied up to break-glass
-part (7), where question 4 stops the run (section 2).
+Status: stopped at open question 7 (Tier 2, with a Tier 3 point). D-168 settled questions
+1 and 2 of the first stop, D-169 question 3, and D-170 questions 4 to 6; all are applied.
+Of the rest of D-166, section D.8 is applied up to its paragraph 121 and 336, where
+question 7 stops the run (section 2).
 
 ## 1. Items implemented
 
@@ -108,6 +108,11 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 | D-166 D.8, break-glass part (4): an idle break-glass session asks for a full sign-in | `9acc016` | OPS-BOOT-002 | `SessionServiceTests.OPS_BOOT_002_AnIdleBreakGlassSessionAsksForAFullSignInAsync`, `BreakGlassEndpointTests.OPS_BOOT_002_AC2_TheSessionEndsAfterItsInactivityWindowAsync` |
 | D-166 D.8, break-glass part (5): `IBreakGlass` in `Janus.Core`, generation and the standing read as a contract | `1867ce3` | LIB-API-005 | `IdentityEndpointsTests.LIB_API_005_AC3_EveryEndpointResolvesExactlyOneServiceOfTheContractAsync`, `BreakGlassServiceTests.LIB_API_005_AC2_AnInProcessGenerationIsHeldToTheEndpointsChecksAsync` |
 | D-166 D.8, break-glass part (6): codes drawn from the injected generator; the sweep for static randomness and clock reads | `0dc0ae0` | CONV-DESIGN-007 AC2 | `LibraryStructureTests.CONV_DESIGN_007_AC2_NoFileOutsideTheTestsReadsTheClockOrDrawsStaticRandomness`, `BreakGlassCodeTests.CONV_DESIGN_007_ACodeIsDrawnFromTheInjectedGenerator`, `RecoveryCodeServiceTests.CONV_DESIGN_007_ACodeIsDrawnFromTheInjectedGenerator`, `VerificationCodesTests.CONV_DESIGN_007_ACodeIsDrawnFromTheInjectedGenerator` |
+| The documentation of D-170 | `0483bba` | none | none |
+| D-170 item 1, break-glass part (7): the reason given at use kept by the session and written on every record the session writes, in a column of the record's own, read back as `breakGlassReason`; none on background work | `a1f64a1` | OPS-BOOT-002 AC10, PRIV-BREACH-002 AC4, IDN-AUD-001 | `BreakGlassEndpointTests.OPS_BOOT_002_AC10_TheReasonIsRequiredWithTheCredentialAsync`, `BreakGlassEndpointTests.OPS_BOOT_002_AC10_TheUseCarriesTheReasonAsync`, `BreakGlassEndpointTests.OPS_BOOT_002_AC10_ARoleDefinedInTheSessionCarriesTheReasonAsync`, `BreakGlassEndpointTests.OPS_BOOT_002_AC10_ARecoveryApprovedInTheSessionCarriesTheReasonAsync`, `BreakGlassEndpointTests.OPS_BOOT_002_AC10_AConfigurationChangeInTheSessionCarriesTheReasonAsync`, `BreakGlassEndpointTests.OPS_BOOT_002_AC10_BackgroundWorkTheSessionCausedCarriesNoneAsync`, `SessionServiceTests.OPS_BOOT_002_AC10_TheBreakGlassSessionKeepsTheReasonAsync`, `SessionStoreTests.OPS_BOOT_002_AC10_TheSessionKeepsTheReasonGivenAtItsUseAsync`, `AuditStoreTests.OPS_BOOT_002_AC10_TheTrailReadsTheBreakGlassReasonBackAsync`, `AuditStoreTests.OPS_BOOT_002_AC10_NoBackgroundRecordCarriesTheReasonAsync`, `AuditTrailEndpointTests.OPS_BOOT_002_AC10_TheReadReturnsTheBreakGlassReasonAsync` |
+| D-170 item 2: bootstrap's seed records the written default as `before` where no row stood, nothing only for a required key | `aec590e` | OPS-CFG-005 | `BootstrapTests.OPS_CFG_005_BootstrapRecordsWhatEachKeyWasBeforeItAsync` |
+| D-170 item 3: the limit alert with no scope on a deployment with no reserved account (no code change) | `5ad27b4` | OPS-BOOT-004 AC7 | `BreakGlassEndpointTests.OPS_BOOT_004_AC7_TheLimitReachedIsRaisedWithNoReservedAccountAsync` |
+| D-166 D.8, break-glass part (8): `GET /admin/break-glass`; the ledger lines of 291, 295, 297, 302 and 331 | `221654d` | OPS-BOOT-001 AC3 | `BreakGlassEndpointTests.OPS_BOOT_001_AC3_TheAbsenceIsReadByEverySystemAdministratorAsync`, `BreakGlassEndpointTests.OPS_BOOT_001_AC3_OnlyASystemAdministratorReadsTheStandingAsync` |
 
 **How and when the list was drawn.**
 - **The draw.** It ran from 2026-09-25 23:54 to 2026-09-26 02:30 UTC over all 1,048,576 ranges of `https://api.pwnedpasswords.com/range/{prefix}`, with 48 workers and gzip requested.
@@ -180,8 +185,17 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 
 **D-166 D.8, 290 part (2).** The worker raises every lapse through `IAlertChannels`, as OPS-ALERT-001 has every raise site do, and for `alert-dispatch` also delivers it through `AlertRouter` in the same transaction, as the destination change delivers its notice and writes its row. The router records the deduplication key, so the row is folded into that delivery when the carrier runs again.
 
+**D-170 item 1, how the reason reaches the record.**
+- The carrier is the access context the services already hand the writers. `AccessContext` gains a read-only `BreakGlassReason`, set only by an internal factory that the boundary calls from the session; a background job's context has none, and the principal overloads of the writers take none. No host can set it.
+- `RestrictionAdministration.EditAsync` and `GrantAsync`, `AlertDestinationChange.ChangeAsync` and `ISettingsRestriction.RefusedAsync` take the access context in place of the bare actor, so the records they write in the session carry the reason. All internal.
+- A session derived from the break-glass session (the management application's, a token's) keeps its reason, as it keeps satisfying every gate: an action there is an action in the break-glass session (BFF-SESS-006, OPS-BOOT-002 AC6). D-170's "no other session has one" is read as no session opened another way.
+- The database holds the rule too: `ck_sessions_breakglass_reason` (only on a session that satisfies every gate, 1 to 1024 characters after trimming) and `ck_audit_records_breakglass_reason` (never beside a principal). Migration `RecordBreakGlassReasons`.
+- X4: the endpoint refuses an absent, blank or longer reason with 400 `api.request.malformed` naming `reason` before the credential is looked at, and the service refuses the same before an attempt is counted.
+
 **Criteria no test decides.**
 - D-166 319 (1), the signing algorithm: `token.signing.algorithm` admits only `ES256` at its reading, so `configure` refuses any other value before the check of `SigningKeys` is reached. The check stands in `CompleteAsync`; no value reaches its refusal. Verified by review.
+- D-170 item 1, the writers that take no reason (`CredentialAudit`, `OidcAudit.ReusedAsync`, `BotDefenceAudit`, `PhoneSignalAudit`, `SessionAudit.FailedAsync`): none writes a record a break-glass session can cause, since every credential action is refused in the session (OPS-BOOT-002 AC9) and the others are written where no session acts. Verified by review.
+- PRIV-BREACH-002 AC4, the reach through `subject` of an action on another person's account: waits for 303 (the record's subject); the clause returning `breakGlassReason` is tested.
 - D-166 116 and X2, the sweep's completeness: every call of `IConfigurationStore` in the code was listed by a script and each one that turned a failure into a value is among the places above. Verified by review.
 
 **Commit type of `c440f0a`.** It adds the key `integration.mailserver.endpoint` and its startup rule, with its changelog line, under the type `test`; the type is `feat`. The history is not rewritten.
@@ -190,18 +204,16 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 
 | Item | Reason | Waits on |
 |---|---|---|
-| D-166 D.8, break-glass part (7): the reason given at use, kept by the session and carried by every record it writes | Open question 4 | Question 4 |
-| D-166 D.8, break-glass part (8): `GET /admin/break-glass` (`IBreakGlass.StandingAsync`, which it reads through, is in place) | Not reached: it follows part (7) | Question 4 |
-| D-166 D.8, the ledger lines of the break-glass paragraph (291, 295, 297, 302, 331) | They go in the commit that completes the paragraph | Question 4 |
-| D-166 D.8, the paragraphs after break-glass: 121 and 336 (the secret path), 316, 317, 318, 341, 303 (and the audit's subject), 304 and 334 parts (1) and (2), 323, the audit action rows | Not reached | Question 4 |
-| D-166 section D.2, the entries after 114 (115, 129, 146, 152, 208, 328, 401, 402 and 422, 417, 419, 421, 326, and the preferred second step) | Not reached | Question 4 |
-| D-166 section C, rules X1 and X3 to X9 as sweeps (X2 is applied, under 116; X3 on the configuration routes, under 178) | Not reached | Question 4 |
-| D-166 sections D.1 to D.7 and D.9 to D.11 | Not reached | Question 4 |
-| D-166 section E, every item other than E.6 | Not reached | Question 4 |
-| D-166 section F, the rows of chapter 10 other than those applied under D.8 (the retired step-up and device verification codes, `model.startup.secretunavailable`, `config.change.reasonrequired`, the retired switches, `integration.mailserver.endpoint`, `breakglass-generated`) | Not reached. The three contract tests that failed at `aa7c5e9` now pass at `0dc0ae0` | Question 4 |
-| D-166 section G, the ledger lines of the entries not yet applied | Each goes in the commit that applies its entry | Question 4 |
-| Truth-table rows for D-166 entries 396 and 265 | They state the D-166 outcomes, so they belong with those fixes | Question 4 |
-| The full gate, the pull request for `corrections-4` | The run stopped before step 4 of the work order (section 5) | Questions 4 to 6 |
+| D-166 D.8, 121 and 336 (the secret path) | Open question 7 | Question 7 |
+| D-166 D.8, the paragraphs after 121 and 336: 316, 317, 318, 341, 303 (and the audit's subject), 304 and 334 parts (1) and (2), 323, the audit action rows | Not reached: they follow 121 and 336 in the log's order | Question 7 |
+| D-166 section D.2, the entries after 114 (115, 129, 146, 152, 208, 328, 401, 402 and 422, 417, 419, 421, 326, and the preferred second step) | Not reached | Question 7 |
+| D-166 section C, rules X1 and X3 to X9 as sweeps (X2 is applied, under 116; X3 on the configuration routes, under 178) | Not reached | Question 7 |
+| D-166 sections D.1 to D.7 and D.9 to D.11 | Not reached | Question 7 |
+| D-166 section E, every item other than E.6 | Not reached | Question 7 |
+| D-166 section F, the rows of chapter 10 other than those applied under D.8 (the retired step-up and device verification codes, `model.startup.secretunavailable`, `config.change.reasonrequired`, the retired switches, `integration.mailserver.endpoint`, `breakglass-generated`) | Not reached. The three contract tests that failed at `aa7c5e9` now pass at `0dc0ae0` | Question 7 |
+| D-166 section G, the ledger lines of the entries not yet applied | Each goes in the commit that applies its entry | Question 7 |
+| Truth-table rows for D-166 entries 396 and 265 | They state the D-166 outcomes, so they belong with those fixes | Question 7 |
+| The full gate, the pull request for `corrections-4` | The run stopped before step 4 of the work order (section 5) | Question 7 |
 
 ## 3. Resolved by rule
 
@@ -300,6 +312,7 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 - Under every reading, `auth.breakglass.used` carries the reason too.
 - **What settles it.** The reading, the details key or column name, and point (a2).
 - Nothing of part (7) is committed; parts (1) to (6) are (section 1).
+- **Settled by D-170**, applied in `a1f64a1`.
 
 **5. Tier 2. D-166 D.8, 319 fix (2): whether it governs bootstrap's seed.**
 
@@ -313,6 +326,7 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 - **Readings.**
   - A. Fix (2) governs `configure`, whose paragraph it is. Smallest fix: none.
   - B. Fix (2) governs every configuration record, bootstrap's seed included. Smallest fix: the seed records the written form of each key's default as `before`, null only for a required key; one test carrying OPS-CFG-005.
+- **Settled by D-170** (reading B), applied in `aec590e`.
 
 **6. Tier 3. D-166 D.8 break-glass part (2): the limit-reached alert where no reserved account exists.**
 
@@ -323,18 +337,67 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
   alert is raised with no scope. No chapter states what the alert is, or whether it is
   raised, where no reserved account exists. This is an alert on the break-glass gate; no
   proposal is made. The committed behaviour stands until the owner decides.
+- **Settled by D-170**, applied in `5ad27b4`.
+
+**7. Tier 2, with one Tier 3 point. D-166 D.8, 121 and 336: the secret path.**
+
+- **Item.** D-166 121 and 336; LIB-HOST-001 and LIB-EXT-001 in `07`; CONV-DESIGN-007 in
+  `08`: every secret is read once through `ISecretSource`, asynchronously, in the startup
+  hosted service, before the server serves; no secret is an argument of `AddJanus`; every
+  member of the source, and `IUnitOfWork.BeginAsync` and `CommitAsync`, return a `Result`.
+  Nothing of the paragraph is committed.
+- **(a) Tier 2. What the paragraph applies before 340, 343 and 215.** It lists the source's
+  members as they stand after 340 (`ReadSignOnSecretAsync` removed; `SignOn` needs the
+  sign-on secret until 340 replaces it), 343 (`ReadProviderCredentialAsync`, answering the
+  `ProviderCredential` 343 introduces) and 215 (`ReadMailServerSecretAsync`, asked only
+  where the shipped mail server adapter, which 215 builds, is used). 340 and 343 are in D.9
+  and 215 in D.6; none is applied.
+  - Reading 1: apply 121 and 336 now with the members that exist, keep
+    `ReadSignOnSecretAsync` (read at startup like the others) until 340 removes it, declare
+    `ReadMailServerSecretAsync` now, asked by nothing until 215, and leave
+    `ReadProviderCredentialAsync` to 343. Smallest fix: the owner confirms the order.
+  - Reading 2: apply 340, 343 and 215 first, then 121 and 336 whole. Smallest fix: the
+    owner confirms the order.
+- **(b) Tier 3. Where the secrets are held between the startup read and their use.** Today
+  `AddJanus` takes the key-encryption keys, the fingerprint keys, the sign-on secret and
+  the maintenance credential as arguments: the factories of about 30 store registrations
+  close over the first two, the provider's token protection derives its keys from the
+  key-encryption keys when OpenIddict is configured, and `AuditRetention` and
+  `RestoreTest` build a second storage area with them. A read in the startup hosted
+  service gives none of these the values when services are registered, so the values
+  must be held for the process's lifetime from the read to each use. CONV-CODE-007 has
+  secrets live in `byte[]` inside a method and be cleared after use; no chapter says where
+  key material read at startup is held, for how long, or what a use before the read
+  answers, and `08` names no holder. This concerns keys; no proposal is made.
+- **(c) Tier 2. What a caller does with the `Result` of `BeginAsync` and `CommitAsync`.**
+  `10` names no failure either returns (a transaction's failure is a fault and throws,
+  CONV-ERR-001), so the result is always success. Of the 437 calls in `src`, 350 are in
+  methods that return a `Result` and pass a failure on. 87 calls in 40 methods return
+  none: middleware `InvokeAsync`, sweeps and rotation passes returning counts, and store,
+  alert and delivery helpers returning `bool`, `Error?` or a value.
+  - Reading 1: each such method returns a `Result` (or its `Error?` carries the failure) up
+    to a caller that returns one; middleware answers it as any failure is answered.
+    Smallest fix: internal signatures only.
+  - Reading 2: a caller with no `Result` to return treats a failure as a fault and throws,
+    the idiom the configuration reads use under X2. Smallest fix: one `Match` per call.
 
 ## 5. Gate result
 
-**`corrections-4`.** Not run. The run stopped at questions 4 to 6, before step 4 of the work
-order, so the full gate was not run and no pull request was opened. The branch is not
-pushed: `origin/corrections-4` stands at `4d12ba1`, and every later commit is local.
-- Fast checks at `0dc0ae0` (build with warnings as errors, format, the unit and contract
-  tests): green. Analyzers 20, Authentication 812, Authorization 126, Cli 19, Core 468,
-  Hosting 712, Identity 89, Privacy 222, Storage 33; no failure.
-- The integration, migration, contract and conformance suites of the full gate were not run.
-- Secret scanning: the pinned scanner, run locally as the pipeline runs it, over the 825
-  commits of the history at `0dc0ae0` before the push: no finding.
+**`corrections-4`.** Not run. The run stopped at question 7, before step 4 of the work order,
+so the full gate was not run and no pull request was opened. The branch is pushed so its
+commits can be read.
+- Push run 36558943751 on `40bd871` (the report of the stop at questions 4 to 6, pushed by the
+  owner): green.
+- Fast checks at `221654d` (build with warnings as errors, format, the unit and contract
+  tests): green. Analyzers 20, Authentication 813, Authorization 126, Cli 19, Core 468,
+  Hosting 722, Identity 89, Privacy 222, Storage 33; no failure.
+- The integration, migration, contract and conformance suites of the full gate were not
+  run. The database classes of part (7)'s migration and of the seed were run on their own
+  at `221654d`, all passing: `AuditStoreTests` 22, `SessionStoreTests` 14,
+  `BreakGlassEndpointTests` with `AuditTrailEndpointTests` 32, the command's
+  `BootstrapTests` 20.
+- Secret scanning: the pinned scanner, run locally as the pipeline runs it, over the 831
+  commits of the history at `221654d` before the push: no finding.
 
 **Pull request #6 (`phase-10-release`), merged as `b6d14fe`.**
 - Pull request run 36217259244 on `cdc185a`: every required check green. `Secret scanning` runs on push only, and push run 36217256269 was green, with job 108335588796.
