@@ -17,7 +17,8 @@ namespace Janus.Hosting.BreakGlass;
 /// Implements OPS-BOOT-002, OPS-BOOT-004, FE-BG-001 and CONV-DESIGN-006. Presentation
 /// is on the machine profile and reads no session, so a stale cookie for the domain
 /// neither helps nor refuses it; the session it opens is written as a sign-in writes
-/// one. Generation answers the code once and keeps nothing of it.
+/// one. Generation answers the code once and keeps nothing of it; the standing read
+/// answers whether one stands and nothing of it (OPS-BOOT-001 AC3).
 /// </remarks>
 internal static class BreakGlassEndpoints
 {
@@ -35,6 +36,7 @@ internal static class BreakGlassEndpoints
 
         _ = endpoints.MapPost("/auth/break-glass", PresentAsync);
         _ = SessionRequired.On(endpoints.MapPost("/admin/break-glass/generate", GenerateAsync));
+        _ = SessionRequired.On(endpoints.MapGet("/admin/break-glass", StandingAsync));
 
         return endpoints;
     }
@@ -94,6 +96,23 @@ internal static class BreakGlassEndpoints
                     generated.Address.AbsoluteUri,
                     generated.IssuedAt),
                 BreakGlassJson.Default.GeneratedBreakGlassView,
+                contentType: null,
+                StatusCodes.Status200OK));
+    }
+
+    private static async Task<IResult> StandingAsync(
+        IBreakGlass breakGlass,
+        RequestSession browser,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(breakGlass);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return Answers.Of(
+            await breakGlass.StandingAsync(browser.Asking, cancellationToken).ConfigureAwait(false),
+            issuedAt => TypedResults.Json(
+                new BreakGlassStandingView(issuedAt is not null, issuedAt),
+                BreakGlassJson.Default.BreakGlassStandingView,
                 contentType: null,
                 StatusCodes.Status200OK));
     }

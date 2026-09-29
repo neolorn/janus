@@ -11218,6 +11218,8 @@ the owner (OPS-ALERT-004), which is what AC2 asks. Under it:
 *Chapter text that should change.* OPS-ALERT-001's break-glass row could read "used or
 generated", and chapter 10 section 5.23 could name the `event` detail.
 
+**Superseded by D-166.**
+
 ---
 
 ## 292. Every attempt at the break-glass credential counts against the global limit
@@ -11378,6 +11380,8 @@ is itself the only session the account has.
 *Chapter text that should change.* OPS-BOOT-002 could name `authz.denied` as the
 refusal and list the gated actions the session does not pass.
 
+**Superseded by D-166.**
+
 ---
 
 ## 296. How long the break-glass session lives
@@ -11441,6 +11445,8 @@ analyser; `BreakGlassEndpointTests`.
 
 *Chapter text that should change.* Chapter 07 could say that the break-glass
 operations are reached through the endpoints alone.
+
+**Superseded by D-166.**
 
 ---
 
@@ -11610,6 +11616,8 @@ a page for someone who is not technical is what FE-BG-001 forbids. Under it:
 *Chapter text that should change.* Either OPS-BOOT-002 drops "and the owner's stated
 reason", or chapter 09 and FE-BG-001 gain the member and the control; the owner
 decides which.
+
+**Superseded by D-166.**
 
 ---
 
@@ -13281,6 +13289,8 @@ break-glass credential stands (for example `GET /admin/break-glass`, system
 administrators only, `{ "standing": true|false, "issuedAt": ... }`), so the management
 application can show the alert of OPS-BOOT-001 AC3; OPS-BOOT-001 AC3 could say the
 alert is raised again every window until one is generated, a spent one included.
+
+**Superseded by D-166.**
 
 ---
 

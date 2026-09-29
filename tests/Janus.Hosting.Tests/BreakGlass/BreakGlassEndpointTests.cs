@@ -43,6 +43,8 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
     private const string Generate = "/admin/break-glass/generate";
 
+    private const string Standing = "/admin/break-glass";
+
     private const string Reason = "The operator cannot be reached.";
 
     private static readonly OrganizationId Administration =
@@ -742,6 +744,82 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-BOOT-001 AC3: every system administrator reads whether a credential stands,
+    /// with no step-up: the absence before the first issue, when the standing one was
+    /// generated, and the absence again once it is spent, read by the administrator and
+    /// by the break-glass session alike; the read answers nothing of the credential.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_001_AC3_TheAbsenceIsReadByEverySystemAdministratorAsync()
+    {
+        Browser administrator = await SystemAdministratorAsync();
+
+        Answer none = await administrator.SendAsync("GET", Standing);
+
+        Assert.Equal(StatusCodes.Status200OK, none.Status);
+        Assert.False(none.Json().GetProperty("standing").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, none.Json().GetProperty("issuedAt").ValueKind);
+
+        Answer generated = await administrator.SendAsync("POST", Generate);
+        DateTimeOffset issued = _deployment.Clock.GetUtcNow();
+
+        // Past the step-up's recency, inside the session's inactivity window.
+        _deployment.Clock.Advance(Settings.SessionStepUpRecency.Default + TimeSpan.FromMinutes(1));
+
+        Answer stands = await administrator.SendAsync("GET", Standing);
+
+        Assert.Equal(StatusCodes.Status200OK, stands.Status);
+        Assert.True(stands.Json().GetProperty("standing").GetBoolean());
+        Assert.Equal(issued, stands.Json().GetProperty("issuedAt").GetDateTimeOffset());
+        Assert.Equal(
+            ["issuedAt", "standing"],
+            stands.Json().EnumerateObject().Select(member => member.Name).Order(StringComparer.Ordinal));
+
+        var owner = new Browser(_deployment);
+
+        Assert.Equal(StatusCodes.Status200OK, (await PresentedAsync(owner, generated.Text("credential"))).Status);
+
+        foreach (Browser reader in (Browser[])[administrator, owner])
+        {
+            Answer spent = await reader.SendAsync("GET", Standing);
+
+            Assert.Equal(StatusCodes.Status200OK, spent.Status);
+            Assert.False(spent.Json().GetProperty("standing").GetBoolean());
+            Assert.Equal(JsonValueKind.Null, spent.Json().GetProperty("issuedAt").ValueKind);
+        }
+    }
+
+    /// <summary>
+    /// OPS-BOOT-001 AC3: a signed-in person without <c>system:administer</c> in the
+    /// administrative organization is refused the read with <c>authz.denied</c>, one
+    /// who holds it in another organization included.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_001_AC3_OnlyASystemAdministratorReadsTheStandingAsync()
+    {
+        Browser member = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+
+        Answer unheld = await member.SendAsync("GET", Standing);
+
+        _deployment.Gate.Grant(subject, new OrganizationId(Guid.CreateVersion7()), Permissions.SystemAdminister);
+
+        Answer elsewhere = await member.SendAsync("GET", Standing);
+
+        _deployment.Gate.Grant(subject, Administration, Permissions.SystemAdminister);
+
+        Answer held = await member.SendAsync("GET", Standing);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, unheld.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), unheld.Text("code"));
+        Assert.Equal(StatusCodes.Status403Forbidden, elsewhere.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), elsewhere.Text("code"));
+        Assert.Equal(StatusCodes.Status200OK, held.Status);
+    }
+
+    /// <summary>
     /// BFF-ABUSE-001 AC2: a code presented from a source its own failures have delayed
     /// is answered 429 auth.throttled, with the instant the delay lifts in the body
     /// and the seconds to it in the header, the two agreeing.
@@ -922,13 +1000,21 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
     private async Task<string> GeneratedAsync() => (await AdministratorAsync()).Credential;
 
-    // A stepped-up system administrator generating the first issue from the management
-    // application.
-    private async Task<(Browser Browser, string Credential)> AdministratorAsync()
+    // A signed-in system administrator of the administrative organization.
+    private async Task<Browser> SystemAdministratorAsync()
     {
         Browser administrator = await Flow.SignedInAsync(_deployment);
 
         _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Administration, Permissions.SystemAdminister);
+
+        return administrator;
+    }
+
+    // A stepped-up system administrator generating the first issue from the management
+    // application.
+    private async Task<(Browser Browser, string Credential)> AdministratorAsync()
+    {
+        Browser administrator = await SystemAdministratorAsync();
 
         Answer generated = await administrator.SendAsync("POST", Generate);
 

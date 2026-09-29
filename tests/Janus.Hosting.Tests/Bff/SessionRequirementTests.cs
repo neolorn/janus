@@ -52,6 +52,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "GET /admin/accounts/{subject:guid}/photo",
         "GET /admin/accounts/{subject:guid}/takedown/",
         "GET /admin/audit",
+        "GET /admin/break-glass",
         "GET /admin/compliance/licences",
         "GET /admin/compliance/maintenance",
         "GET /admin/config/{key}",

@@ -286,9 +286,11 @@ against the public contract of LIB-API-001.
   of its own, `auth.breakglass.used` included; the trail read returns it as
   `breakGlassReason` (`AuditEntry.BreakGlassReason`), and a record of background work
   never carries one.
-  A host generates the credential in process through `IBreakGlass`, which also reads
-  whether one stands and since when, and asks what the route asks: `system:administer`,
-  and a step-up to generate. The reserved account is never suspended, taken down,
+  `GET /admin/break-glass` answers a system administrator, with no step-up, whether a
+  code stands and when it was generated, `{ "standing", "issuedAt" }`, and nothing of
+  the code. A host generates the credential in process through `IBreakGlass`, which
+  also reads whether one stands and since when, and asks what the routes ask:
+  `system:administer`, and a step-up to generate. The reserved account is never suspended, taken down,
   deleted, granted anything or added to a group, and is given no password, identifier,
   factor, provider link, recovery codes or mail credential; each is refused with
   `authz.denied`. The reserved account is marked on its row, and the credential and its
