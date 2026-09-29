@@ -158,7 +158,10 @@ internal sealed class DeploymentBootstrap(
             return Result.Failure<BootstrapEnrolment>(Error.From(ErrorCodes.Denied));
         }
 
-        await seed.ConfigureAsync(request.Named, Principal, now, cancellationToken).ConfigureAwait(false);
+        // Bootstrap takes only required keys, which have no default.
+        await seed
+            .ConfigureAsync(request.Named, new Dictionary<ConfigurationKey, string>(), Principal, now, cancellationToken)
+            .ConfigureAwait(false);
 
         TimeSpan recency = (await configuration.ReadAsync(Settings.SessionStepUpRecency, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<TimeSpan>(error, ref failure));
@@ -216,6 +219,11 @@ internal sealed class DeploymentBootstrap(
                 {
                     [Settings.OrganizationPolicy.For(organization.ToString())] =
                         Settings.OrganizationPolicy.Write(Administrative(recency)),
+                },
+                new Dictionary<ConfigurationKey, string>
+                {
+                    [Settings.OrganizationPolicy.For(organization.ToString())] =
+                        Settings.OrganizationPolicy.Write(Settings.OrganizationPolicy.Default),
                 },
                 Principal,
                 now,
@@ -306,6 +314,11 @@ internal sealed class DeploymentBootstrap(
                 new Dictionary<ConfigurationKey, string>
                 {
                     [Settings.BackupRestoreTestCanary.Key] = Settings.BackupRestoreTestCanary.Write(canary.ToString()),
+                },
+                new Dictionary<ConfigurationKey, string>
+                {
+                    [Settings.BackupRestoreTestCanary.Key] =
+                        Settings.BackupRestoreTestCanary.Write(Settings.BackupRestoreTestCanary.Default),
                 },
                 Principal,
                 now,

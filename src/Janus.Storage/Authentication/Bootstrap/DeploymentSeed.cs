@@ -73,20 +73,25 @@ internal sealed class DeploymentSeed(
     /// <inheritdoc/>
     public async ValueTask ConfigureAsync(
         IReadOnlyDictionary<ConfigurationKey, string> written,
+        IReadOnlyDictionary<ConfigurationKey, string> defaults,
         SystemPrincipal principal,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(written);
+        ArgumentNullException.ThrowIfNull(defaults);
 
         // OPS-CFG-004 and OPS-CFG-005: what bootstrap sets, protected keys among them, is
         // written by whoever holds the server and never through the application's
         // configuration store, and each value is recorded as any change is. It is the
         // value the deployment starts from, so it is recorded as no loosening:
-        // OPS-CFG-002 prices a change made through the application (entry 315).
+        // OPS-CFG-002 prices a change made through the application (entry 315). What the
+        // key was is the default where no row stood, and nothing only for a required key
+        // (D-170).
         foreach ((ConfigurationKey key, string value) in written)
         {
-            string? before = await settings.WriteAsync(key, value, cancellationToken).ConfigureAwait(false);
+            string? before = await settings.WriteAsync(key, value, cancellationToken).ConfigureAwait(false)
+                ?? defaults.GetValueOrDefault(key);
 
             await configurationAudit
                 .ChangedAsync(key, before, value, loosening: false, principal.Reason, principal, at, cancellationToken)

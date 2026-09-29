@@ -232,7 +232,9 @@ against the public contract of LIB-API-001.
   ever existed. A refusal is one JSON line on
   standard error, with exit code 1; a command the application does not carry is refused
   the same way, `api.request.malformed` naming it. What it defines and sets is audited under its own
-  principal, for which `SystemOperation` carries `Bootstrap`. Its grants name the nil
+  principal, for which `SystemOperation` carries `Bootstrap`; each value it sets is
+  recorded with what the key was, the written form of its default where no row stood and
+  nothing for a required key. Its grants name the nil
   subject as their granter, and each membership it attaches emits `MembershipChanged`
   (`began`) with the rows, as the missing emergency credential emits `AlertRaised`.
 - A runtime change is decided on the value in force under its row's lock: the change

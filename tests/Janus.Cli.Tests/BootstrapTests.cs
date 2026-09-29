@@ -445,6 +445,35 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
     }
 
     /// <summary>
+    /// OPS-CFG-005: each value bootstrap sets is recorded with what the key was, which is
+    /// the written form of its default where no row stood, and nothing only for a
+    /// required key (D-170).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_005_BootstrapRecordsWhatEachKeyWasBeforeItAsync()
+    {
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        var before = (await connection.QueryAsync<(string Key, string? Before)>(
+                """
+                SELECT details->>'key', details->>'before' FROM identity.audit_records
+                WHERE action = 'ops.configuration.changed' AND principal = 'bootstrap'
+                """))
+            .ToDictionary(row => row.Key, row => row.Before, StringComparer.Ordinal);
+        string organization = await connection.ExecuteScalarAsync<string>(
+            "SELECT id::text FROM identity.organizations WHERE administrative") ?? string.Empty;
+
+        Assert.All(Invocation.Named().Keys, key => Assert.Null(before[key.ToString()]));
+        Assert.Equal(
+            Settings.BackupRestoreTestCanary.Write(Settings.BackupRestoreTestCanary.Default),
+            before[Settings.BackupRestoreTestCanary.Key.ToString()]);
+        Assert.Equal(
+            Settings.OrganizationPolicy.Write(Settings.OrganizationPolicy.Default),
+            before[Settings.OrganizationPolicy.For(organization).ToString()]);
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-003: no grant bootstrap makes names its holder, or any person, as the
     /// one who granted it; each names the nil subject and the reason bootstrap states.
     /// </summary>
