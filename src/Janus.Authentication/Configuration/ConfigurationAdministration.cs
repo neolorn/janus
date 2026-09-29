@@ -77,7 +77,11 @@ internal sealed class ConfigurationAdministration(
 
         Error? failure = null;
 
+        // OPS-CFG-002 AC6, X3: the direction is decided on the value in force under the
+        // row's lock, so a concurrent change waits and cannot turn a tightening into a
+        // loosening.
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        await writes.HoldAsync(setting.Key, cancellationToken).ConfigureAwait(false);
 
         TValue before = (await configuration
                 .ReadAsync(setting, cancellationToken)
@@ -86,7 +90,7 @@ internal sealed class ConfigurationAdministration(
 
         if (failure is not null)
         {
-            return Result.Failure(failure);
+            return await EndedAsync(failure, cancellationToken).ConfigureAwait(false);
         }
 
         bool loosening = Loosens(setting, before, value);
@@ -94,7 +98,7 @@ internal sealed class ConfigurationAdministration(
         if (await RefusalAsync(setting, loosening, reason, challenge, context, cancellationToken)
                 .ConfigureAwait(false) is Error refused)
         {
-            return Result.Failure(refused);
+            return await EndedAsync(refused, cancellationToken).ConfigureAwait(false);
         }
 
         _ = (await writes
@@ -163,7 +167,10 @@ internal sealed class ConfigurationAdministration(
     /// <param name="family">The family, from <see cref="Settings"/>.</param>
     /// <param name="parameter">The organization identifier or the declared category.</param>
     /// <param name="value">What the member becomes.</param>
-    /// <param name="loosening">Whether the member's own route judged the change a loosening.</param>
+    /// <param name="loosening">
+    /// Whether the member's own route judged the change a loosening, on the value in
+    /// force it read under <see cref="HoldAsync{TValue}(SettingFamily{TValue}, string, CancellationToken)"/>.
+    /// </param>
     /// <param name="reason">Why.</param>
     /// <param name="actor">Who made the change.</param>
     /// <param name="cancellationToken">Abandons the change.</param>
@@ -171,7 +178,9 @@ internal sealed class ConfigurationAdministration(
     /// <remarks>
     /// What a change to a member costs is its family's own rule (a policy may not fall
     /// below the system's, AUTH-STEP-002a), so the member's route judges it before
-    /// calling this; what every change shares, the write and the record, is here.
+    /// calling this, inside the unit of work it began and under the member's row lock
+    /// (X3, OPS-CFG-002 AC6); what every change shares, the write and the record, is
+    /// here, in that same transaction.
     /// </remarks>
     /// <exception cref="ArgumentNullException">The family is absent.</exception>
     public async ValueTask<Result<TValue>> ChangeMemberAsync<TValue>(
@@ -188,6 +197,7 @@ internal sealed class ConfigurationAdministration(
         Error? failure = null;
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        await writes.HoldAsync(family.For(parameter), cancellationToken).ConfigureAwait(false);
 
         TValue before = (await writes
                 .WriteAsync(family, parameter, value, cancellationToken)
@@ -215,6 +225,52 @@ internal sealed class ConfigurationAdministration(
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success(before);
+    }
+
+    /// <summary>
+    /// Takes a setting's row under a lock held to the end of the caller's transaction,
+    /// so what the caller reads of it next is the committed value and a concurrent
+    /// change of it waits.
+    /// </summary>
+    /// <typeparam name="TValue">The type of the setting's value.</typeparam>
+    /// <param name="setting">The setting, from <see cref="Settings"/>.</param>
+    /// <param name="cancellationToken">Abandons the wait.</param>
+    /// <returns>The work of taking it.</returns>
+    /// <remarks>
+    /// Implements X3 of D-166 for runtime settings (178). The caller has begun its unit
+    /// of work; a route that decides on the value of a setting it does not write, as a
+    /// policy change decides on the system policy, holds that row too.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">The setting is absent.</exception>
+    public ValueTask HoldAsync<TValue>(Setting<TValue> setting, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(setting);
+
+        return writes.HoldAsync(setting.Key, cancellationToken);
+    }
+
+    /// <summary>
+    /// Takes one member's row under a lock held to the end of the caller's transaction,
+    /// before the member's route reads the value in force and classifies its change.
+    /// </summary>
+    /// <typeparam name="TValue">The type of the member's value.</typeparam>
+    /// <param name="family">The family, from <see cref="Settings"/>.</param>
+    /// <param name="parameter">The organization identifier or the declared category.</param>
+    /// <param name="cancellationToken">Abandons the wait.</param>
+    /// <returns>The work of taking it.</returns>
+    /// <remarks>
+    /// Implements X3 of D-166 for runtime settings (178) and OPS-CFG-002 AC6. The route
+    /// has begun its unit of work, and <see cref="ChangeMemberAsync{TValue}"/> joins it.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">The family is absent.</exception>
+    public ValueTask HoldAsync<TValue>(
+        SettingFamily<TValue> family,
+        string parameter,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(family);
+
+        return writes.HoldAsync(family.For(parameter), cancellationToken);
     }
 
     /// <summary>
@@ -313,6 +369,16 @@ internal sealed class ConfigurationAdministration(
             > 1024 => Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement("reason")),
             _ => null,
         };
+
+    // X9: a refusal made under the row's lock has written nothing, so the unit of work
+    // is ended before the refusal returns, which releases the row and leaves the scope
+    // clean for the next operation.
+    private async ValueTask<Result> EndedAsync(Error refusal, CancellationToken cancellationToken)
+    {
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        return Result.Failure(refusal);
+    }
 
     private static bool Relayed(ConfigurationKey key) =>
         key == Settings.PolicyDefault.Key

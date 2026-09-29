@@ -355,6 +355,16 @@ internal sealed class OrganizationService(
             return Result.Failure(Malformed("id"));
         }
 
+        // OPS-CFG-002 AC6, X3: the direction, the system's floor and the lock the change
+        // keeps are decided on the values in force under their rows' locks, taken in the
+        // order every change takes them, so a concurrent change waits and cannot turn
+        // this one into another.
+        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        await administration.HoldAsync(Settings.PolicyDefault, cancellationToken).ConfigureAwait(false);
+        await administration
+            .HoldAsync(Settings.OrganizationPolicy, organization.ToString(), cancellationToken)
+            .ConfigureAwait(false);
+
         Error? failure = null;
 
         Policy system = (await configuration.ReadAsync(Settings.PolicyDefault, cancellationToken).ConfigureAwait(false))
@@ -366,7 +376,7 @@ internal sealed class OrganizationService(
 
         if (failure is not null)
         {
-            return Result.Failure(failure);
+            return await EndedAsync(failure, cancellationToken).ConfigureAwait(false);
         }
 
         PolicyOverride after = replacement with { EmailDomains = before.EmailDomains };
@@ -375,10 +385,13 @@ internal sealed class OrganizationService(
         // below the system policy.
         if (PolicyStrictness.BelowSystem(system, after) is string looser)
         {
-            return Result.Failure(Error.From(
-                ErrorCodes.ConfigurationPolicyBelowSystem,
-                "field",
-                JsonSerializer.SerializeToElement(looser)));
+            return await EndedAsync(
+                    Error.From(
+                        ErrorCodes.ConfigurationPolicyBelowSystem,
+                        "field",
+                        JsonSerializer.SerializeToElement(looser)),
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
 
         Policy was = PolicyStrictness.Tighten(system, before);
@@ -388,10 +401,13 @@ internal sealed class OrganizationService(
         // AAL2, which no change of its policy takes it below.
         if (standing.IsAdministrative && becomes.RequiredAssurance < AssuranceLevel.Aal2)
         {
-            return Result.Failure(Error.From(
-                ErrorCodes.ConfigurationValueBelowFloor,
-                "field",
-                JsonSerializer.SerializeToElement("requiredAssurance")));
+            return await EndedAsync(
+                    Error.From(
+                        ErrorCodes.ConfigurationValueBelowFloor,
+                        "field",
+                        JsonSerializer.SerializeToElement("requiredAssurance")),
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
 
         bool loosening = PolicyStrictness.Loosens(was, becomes);
@@ -402,7 +418,7 @@ internal sealed class OrganizationService(
             && await scope.RefusedAsync(context, Permissions.SystemAdminister, cancellationToken).ConfigureAwait(false)
                 is Error withheld)
         {
-            return Result.Failure(withheld);
+            return await EndedAsync(withheld, cancellationToken).ConfigureAwait(false);
         }
 
         if (await stepUp
@@ -410,10 +426,8 @@ internal sealed class OrganizationService(
                 .ConfigureAwait(false)
             is Error challenged)
         {
-            return Result.Failure(challenged);
+            return await EndedAsync(challenged, cancellationToken).ConfigureAwait(false);
         }
-
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
         if ((await administration
                 .ChangeMemberAsync(
@@ -456,6 +470,16 @@ internal sealed class OrganizationService(
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
         return Result.Success();
+    }
+
+    // X9: a refusal made under the rows' locks has written nothing, so the unit of
+    // work is ended before the refusal returns, which releases the rows and leaves the
+    // scope clean for the next operation.
+    private async ValueTask<Result> EndedAsync(Error refusal, CancellationToken cancellationToken)
+    {
+        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        return Result.Failure(refusal);
     }
 
     private static TValue Held<TValue>(Error error, ref Error? failure)

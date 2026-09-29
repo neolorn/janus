@@ -18,6 +18,22 @@ namespace Janus.Authentication.Configuration;
 internal interface IConfigurationWrites
 {
     /// <summary>
+    /// Takes a key's row under a lock held to the end of the operation's transaction,
+    /// so the value in force read after it is the committed one and a concurrent change
+    /// of the key waits for this one.
+    /// </summary>
+    /// <param name="key">The key, or the member of a family.</param>
+    /// <param name="cancellationToken">Cancels the wait.</param>
+    /// <returns>The work of taking it.</returns>
+    /// <remarks>
+    /// Implements X3 of D-166 for runtime settings (178) and OPS-CFG-002 AC6. A key with
+    /// no row takes no lock; its first change inserts the row, and a concurrent first
+    /// change whose insert then fails on the key is a fault.
+    /// </remarks>
+    /// <exception cref="System.InvalidOperationException">No transaction is running.</exception>
+    ValueTask HoldAsync(ConfigurationKey key, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Writes the value in force for a key the application may change, so the next
     /// read of it anywhere in the deployment sees the change without a restart.
     /// </summary>

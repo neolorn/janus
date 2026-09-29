@@ -53,7 +53,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     private SubjectEraser Eraser(StoreContext context) => new(
         context,
         new SessionStore(context, _deployment.Keys, _deployment.Randomness),
-        new ConfigurationStore(context));
+        new ConfigurationStore(context, new DataConnections(context)));
 
     /// <summary>
     /// IDN-LIFE-003b AC4, PRIV-RIGHT-005a: the erasure commits as one thing. Afterwards

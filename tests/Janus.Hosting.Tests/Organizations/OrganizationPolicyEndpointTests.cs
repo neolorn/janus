@@ -177,6 +177,42 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-CFG-002 AC6 and X3 of D-166 (178): a policy change is decided on the values
+    /// in force under the locks of the system policy's row and the organization's,
+    /// taken in that order inside its one unit of work, which the write joins; a
+    /// refusal made under them ends that unit of work before it answers (X9).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_002_AC6_APolicyChangeIsDecidedUnderItsRowsLocksAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+        ConfigurationKey member = Settings.OrganizationPolicy.For(Branch.ToString());
+
+        _deployment.Configuration.Held.Clear();
+
+        Answer replaced = await administrator.SendAsync("PUT", PathOf(Branch), Tightened);
+
+        Assert.Equal(StatusCodes.Status204NoContent, replaced.Status);
+        Assert.Equal([Settings.PolicyDefault.Key, member, member], _deployment.Configuration.Held);
+
+        _deployment.Configuration.Held.Clear();
+        _deployment.Work.Reset();
+        _deployment.Configuration.Set(
+            Settings.PolicyDefault,
+            Janus.Core.Policies.SystemDefault with { RequiredAssurance = AssuranceLevel.Aal2 });
+
+        Answer refused = await administrator.SendAsync(
+            "PUT",
+            PathOf(Branch),
+            """{"requiredAssurance":"aal1","reason":"Fewer prompts."}""");
+
+        Assert.Equal("requiredAssurance", Below(refused));
+        Assert.Equal([Settings.PolicyDefault.Key, member], _deployment.Configuration.Held);
+        Assert.Equal(_deployment.Work.Opened, _deployment.Work.Committed);
+    }
+
+    /// <summary>
     /// OPS-CFG-002: giving up an override the organization held is a loosening, which
     /// also needs <c>system:administer</c> and is written down as one.
     /// </summary>

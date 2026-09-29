@@ -27,6 +27,19 @@ internal sealed class ConfigurationInMemory : IConfigurationStore, IConfiguratio
     public ConfigurationKey? Unreachable { get; set; }
 
     /// <summary>
+    /// The keys whose rows an operation held, in the order it took them.
+    /// </summary>
+    public List<ConfigurationKey> Held { get; } = [];
+
+    /// <inheritdoc/>
+    public ValueTask HoldAsync(ConfigurationKey key, CancellationToken cancellationToken)
+    {
+        Held.Add(key);
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
     /// Names a value for a key, as a deployment does.
     /// </summary>
     /// <typeparam name="TValue">The type of the setting's value.</typeparam>

@@ -91,7 +91,8 @@ internal sealed class OrganizationDomainService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(domain);
 
-        if (await ReadAsync(context, organization, domain, reason, cancellationToken).ConfigureAwait(false)
+        if (await ReadAsync(context, organization, domain, reason, holding: true, cancellationToken)
+                .ConfigureAwait(false)
             is not { } read)
         {
             return Result.Failure<OrganizationDomain>(Error.From(ErrorCodes.Denied));
@@ -104,6 +105,8 @@ internal sealed class OrganizationDomainService(
 
         if (read.Listed is LockedDomain listed)
         {
+            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
             return Result.Success(listed.Answered());
         }
 
@@ -113,6 +116,8 @@ internal sealed class OrganizationDomainService(
                 .ConfigureAwait(false)
             is Error withheld)
         {
+            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
             return Result.Failure<OrganizationDomain>(withheld);
         }
 
@@ -120,7 +125,6 @@ internal sealed class OrganizationDomainService(
         var added = LockedDomain.Listed(organization, read.Domain, randomness, now);
         IReadOnlyList<string> before = read.Stated.EmailDomains ?? [];
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await domains.AddAsync(added, cancellationToken).ConfigureAwait(false);
 
         if (await WrittenAsync(read, [.. before, read.Domain], loosening: true, cancellationToken)
@@ -157,7 +161,8 @@ internal sealed class OrganizationDomainService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(domain);
 
-        if (await ReadAsync(context, organization, domain, reason, cancellationToken).ConfigureAwait(false)
+        if (await ReadAsync(context, organization, domain, reason, holding: false, cancellationToken)
+                .ConfigureAwait(false)
             is not { } read)
         {
             return Result.Failure<OrganizationDomain>(Error.From(ErrorCodes.Denied));
@@ -230,7 +235,8 @@ internal sealed class OrganizationDomainService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(domain);
 
-        if (await ReadAsync(context, organization, domain, reason, cancellationToken).ConfigureAwait(false)
+        if (await ReadAsync(context, organization, domain, reason, holding: true, cancellationToken)
+                .ConfigureAwait(false)
             is not { } read)
         {
             return Result.Failure(Error.From(ErrorCodes.Denied));
@@ -243,6 +249,8 @@ internal sealed class OrganizationDomainService(
 
         if (read.Listed is not LockedDomain listed)
         {
+            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
             return Result.Success();
         }
 
@@ -256,6 +264,8 @@ internal sealed class OrganizationDomainService(
         if (await RefusedAsync(context, session, read.Acting, loosening, cancellationToken).ConfigureAwait(false)
             is Error withheld)
         {
+            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
             return Result.Failure(withheld);
         }
 
@@ -263,7 +273,6 @@ internal sealed class OrganizationDomainService(
 
         listed.Remove(now);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await domains.RecordAsync(listed, cancellationToken).ConfigureAwait(false);
 
         if (await WrittenAsync(read, after, loosening, cancellationToken).ConfigureAwait(false)
@@ -332,12 +341,17 @@ internal sealed class OrganizationDomainService(
     }
 
     // The part every change shares: the gate, the reason, the domain, the organization,
-    // its list and the domain's row, in that order.
+    // its list and the domain's row, in that order. A change that writes the list
+    // begins its unit of work and takes the list's row under a lock before it reads the
+    // list, so what it decides is decided on the list in force (X3, OPS-CFG-002 AC6),
+    // and ends that unit of work on every return from then on, a refusal included,
+    // which has written nothing (X9).
     private async ValueTask<Change?> ReadAsync(
         AccessContext context,
         OrganizationId organization,
         string domain,
         string reason,
+        bool holding,
         CancellationToken cancellationToken)
     {
         // A change is made by a person, whose identity the record carries.
@@ -367,6 +381,14 @@ internal sealed class OrganizationDomainService(
             return Change.Refused(acting, Malformed("id"));
         }
 
+        if (holding)
+        {
+            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            await administration
+                .HoldAsync(Settings.OrganizationPolicy, organization.ToString(), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         Error? failure = null;
 
         PolicyOverride held = (await configuration
@@ -376,6 +398,11 @@ internal sealed class OrganizationDomainService(
 
         if (failure is not null)
         {
+            if (holding)
+            {
+                await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             return Change.Refused(acting, failure);
         }
 

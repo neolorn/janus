@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Authentication.Configuration;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -15,6 +16,7 @@ namespace Janus.Storage.Settings;
 /// The value in force for a configuration key, over the <c>settings</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
+/// <param name="connections">The connection and transaction the operation holds.</param>
 /// <remarks>
 /// Implements OPS-CFG-008, OPS-CFG-001 and OPS-CFG-004. Every read goes to the table,
 /// so a change put in force anywhere in the deployment is seen by the next read
@@ -22,8 +24,40 @@ namespace Janus.Storage.Settings;
 /// default the catalogue gives it. A row that does not read under its key is a fault
 /// (CONV-ERR-001): the read throws, and nothing stands in for the value.
 /// </remarks>
-internal sealed class ConfigurationStore(StoreContext context) : IConfigurationStore, IConfigurationWrites
+internal sealed class ConfigurationStore(StoreContext context, DataConnections connections)
+    : IConfigurationStore, IConfigurationWrites
 {
+    private const string Hold =
+        """
+        SELECT 1 FROM identity.settings WHERE key = @key FOR UPDATE;
+        """;
+
+    /// <inheritdoc/>
+    public async ValueTask HoldAsync(ConfigurationKey key, CancellationToken cancellationToken)
+    {
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        if (ambient.Transaction is null)
+        {
+            throw new InvalidOperationException("A settings row is held only inside the operation's transaction.");
+        }
+
+        _ = await ambient.Connection
+            .ExecuteScalarAsync<int?>(new CommandDefinition(
+                Hold,
+                new { key = key.ToString() },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the operation decides on is the value committed when the lock was taken.
+        if (context.Settings.Local.FirstOrDefault(record => record.Key == key) is SettingRecord tracked)
+        {
+            await context.Entry(tracked).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     /// <inheritdoc/>
     public async ValueTask<Result<TValue>> ReadAsync<TValue>(
         Setting<TValue> setting,

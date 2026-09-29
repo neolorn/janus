@@ -25,7 +25,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     {
         await using (StoreContext writing = database.Context())
         {
-            Result<TimeSpan> before = await new ConfigurationStore(writing).WriteAsync(
+            Result<TimeSpan> before = await new ConfigurationStore(writing, new DataConnections(writing)).WriteAsync(
                 Catalogue.AbuseNonexistentWindow,
                 TimeSpan.FromMinutes(30),
                 TestContext.Current.CancellationToken);
@@ -35,7 +35,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
         }
 
         await using StoreContext reading = database.Context();
-        Result<TimeSpan> read = await new ConfigurationStore(reading).ReadAsync(
+        Result<TimeSpan> read = await new ConfigurationStore(reading, new DataConnections(reading)).ReadAsync(
             Catalogue.AbuseNonexistentWindow,
             TestContext.Current.CancellationToken);
 
@@ -73,7 +73,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     {
         await using StoreContext reading = database.Context();
 
-        Result<int> read = await new ConfigurationStore(reading).ReadAsync(
+        Result<int> read = await new ConfigurationStore(reading, new DataConnections(reading)).ReadAsync(
             Catalogue.AlertingCallbackThreshold,
             TestContext.Current.CancellationToken);
 
@@ -89,7 +89,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     {
         await using StoreContext writing = database.Context();
 
-        Result<bool> written = await new ConfigurationStore(writing).WriteAsync(
+        Result<bool> written = await new ConfigurationStore(writing, new DataConnections(writing)).WriteAsync(
             Catalogue.AbuseThrottleEnabled,
             false,
             TestContext.Current.CancellationToken);
@@ -107,7 +107,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     {
         await using StoreContext writing = database.Context();
 
-        Result<TimeSpan> written = await new ConfigurationStore(writing).WriteAsync(
+        Result<TimeSpan> written = await new ConfigurationStore(writing, new DataConnections(writing)).WriteAsync(
             Catalogue.SessionAal2Absolute,
             TimeSpan.FromHours(48),
             TestContext.Current.CancellationToken);
@@ -126,7 +126,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
         var organization = OrganizationId.New(TimeProvider.System);
 
         await using StoreContext context = database.Context();
-        var store = new ConfigurationStore(context);
+        var store = new ConfigurationStore(context, new DataConnections(context));
 
         Result<PolicyOverride> absent = await store.ReadAsync(
             Catalogue.OrganizationPolicy,
@@ -165,7 +165,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
 
         await using (StoreContext writing = database.Context())
         {
-            Result<PolicyOverride> before = await new ConfigurationStore(writing).WriteAsync(
+            Result<PolicyOverride> before = await new ConfigurationStore(writing, new DataConnections(writing)).WriteAsync(
                 Catalogue.OrganizationPolicy,
                 organization.ToString(),
                 changed,
@@ -176,7 +176,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
         }
 
         await using StoreContext reading = database.Context();
-        Result<PolicyOverride> read = await new ConfigurationStore(reading).ReadAsync(
+        Result<PolicyOverride> read = await new ConfigurationStore(reading, new DataConnections(reading)).ReadAsync(
             Catalogue.OrganizationPolicy,
             organization.ToString(),
             TestContext.Current.CancellationToken);
@@ -193,7 +193,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     {
         await using StoreContext writing = database.Context();
 
-        Result<TimeSpan> written = await new ConfigurationStore(writing).WriteAsync(
+        Result<TimeSpan> written = await new ConfigurationStore(writing, new DataConnections(writing)).WriteAsync(
             Catalogue.HostCategoryRetention,
             "ledgers",
             TimeSpan.FromDays(-1),
@@ -226,7 +226,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
         context.Settings.AddRange(written);
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var store = new ConfigurationStore(context);
+        var store = new ConfigurationStore(context, new DataConnections(context));
 
         try
         {
