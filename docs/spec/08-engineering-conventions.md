@@ -33,8 +33,8 @@ area**, published as a single package.
 | `Janus.Authorization` | Grants, model builder, gate | Core |
 | `Janus.Privacy` | Purposes and bases, consent and objection, legal documents, rights queue, erasure and export (chapter `04`) | Core |
 | `Janus.Storage` | EF Core, Dapper, migrations; implements the persistence ports the areas declare; the OIDC provider's stores | Core, Identity, Authentication, Authorization, Privacy (D-149) |
-| `Janus.Hosting` | Endpoints, middleware, wiring, the hosted background worker (INF-BG-001), the default notification handler (template resolution over the transports) and the shipped message catalogue, the outbox and event publishers, the alert router, the default mail and SMS transports and the JMAP mail-server adapter (chapter `05`, LIB-EXT-001 defaults) | all |
-| `Janus.Conformance` | The conformance suite a host runs (LIB-TEST-001); the one further project with public types, shipped as its own package | Core, Hosting |
+| `Janus.Hosting` | Endpoints, middleware, wiring, the hosted background worker (INF-BG-001), the default notification handler (template resolution over the transports) and the shipped message catalogue, the outbox and event publishers, the alert router, the default mail and SMS transports and the JMAP mail-server adapter (chapter `05`, LIB-EXT-001 defaults), and the provider probes of the conformance suite, made by the sign-on's client half (BFF-SESS-006, LIB-TEST-001) | all |
+| `Janus.Conformance` | The conformance suite a host runs (LIB-TEST-001), which asks for its provider probes through a contract in `Janus.Core` and holds no client secret; the one further project with public types, shipped as its own package | Core, Hosting |
 | `Janus.Analyzers` | The Roslyn analysers the gates rely on (CONV-CODE-008); targets `netstandard2.0` as analysers must, the one exemption to CONV-SETUP-001 AC1 | nothing (D-149) |
 | `tools/Janus.UnicodeTables` | The generator of the Unicode tables `Janus.Core` carries (IDN-ACCT-004, D-154), the IDNA mapping of UTS #46 that gives a domain its ASCII form among them (REG-DOM-001): a console project outside the package, with the Unicode Character Database files and the UTS #46 IDNA mapping table of the pinned version vendored beside it under their licence. Its output is checked in; a gate regenerates and diffs | nothing |
 | `Janus.Cli` | Bootstrap and key rotation | Core, Storage, Identity, Authentication — it creates the first organization, administrator, enrolment link, the credential-less `emergency` account and the restore-test canary (DR-007); **never the break-glass credential** (OPS-BOOT-001, D-133); it also carries the resumable key-encryption-key rotation of OPS-SEC-003 (`rotate-kek`) and the fingerprint key's (`rotate-fingerprint-key`), run under the maintenance credential (D-147), the change of a protected key from the server (`configure`, OPS-CFG-004), the erasure replay (`replay-erasures`, DR-016) and client registration (`register-client`, AUTH-OIDC-001) |
@@ -44,7 +44,7 @@ project that depends on the four area projects: it implements their persistence 
 (CONV-DESIGN-003), and no area depends on Storage. The OIDC provider (`02` section 8) is
 the `Oidc` feature of `Janus.Authentication` with its stores in `Janus.Storage`.
 
-*Source: LIB-PKG-001, LIB-PKG-002, D-147, D-149, D-162, D-166*
+*Source: LIB-PKG-001, LIB-PKG-002, D-147, D-149, D-162, D-166, D-172*
 
 Separate projects make the boundaries a compiler concern rather than a review
 concern. Under a single project with folders, LIB-PKG-001's acceptance criteria
@@ -262,7 +262,7 @@ step the check that the access context names an account, before any load. A reco
 an operation names by identifier SHALL be loaded after that check, and a record of
 another account SHALL be answered as an identifier that names no record.
 
-*Source: LIB-API-005, AUTHZ-IMP-001, D-149, D-162, D-166*
+*Source: LIB-API-005, AUTHZ-IMP-001, D-149, D-162, D-166, D-172*
 
 Explicit calls read top to bottom and are what a reviewer and a test can see. A
 pipeline hides the order in registration code, and the two mainstream mediator and
@@ -287,7 +287,9 @@ rule (CONV-DEP-003) would refuse in any case.
    to, read alone and used for nothing else before the gate) is part of the gate step;
    where it resolves nothing, the operation is refused as API-CONV-003 answers a path
    naming no record, with 404 `identity.organization.notfound` where the path names no
-   organization. Four operations meet no gate: read-volume counting (OPS-ALERT-005);
+organization. Five operations meet no gate: read-volume counting (OPS-ALERT-005); the
+provider probes of the conformance suite (LIB-TEST-001), which read no record of a
+person;
    derivation refresh (AUTHZ-DERIVE-005), which the host calls from its own gated
    operation and the daily drift check calls under its system principal
    `derivation-driftcheck`; loss-report cancellation, whose authority is the token its

@@ -144,7 +144,7 @@ applications SHALL re-establish silently through the authentication application
 AUTH-OIDC-006), acting as a **confidential client** of the library's provider, and SHALL
 retain no token afterwards.
 
-*Source: AUTH-SESS-012, D-104, D-162, D-164, D-166, D-171*
+*Source: AUTH-SESS-012, D-104, D-162, D-164, D-166, D-171, D-172*
 
 **What the BFF does.** Both halves are the library's. With no per-app session, the
 frontend sends the browser to `GET /auth/signon?returnTo=<path>` (FE-API-006), which
@@ -171,8 +171,10 @@ the stored return address with `error` `auth.session.expired`.
 **Values (D-166).** The client is the one the host declares for this application
 (`SignOnClient`, LIB-HOST-001). Its secret is the one the library generated for that
 client, read from the registry at each call that presents it (OPS-SEC-002); the
-application holds no secret of its own and caches none. The back-channel calls use the
-named HTTP client `identity-signon`, which a host may configure.
+application holds no secret of its own and caches none. The same half makes the provider
+probes of the conformance suite (LIB-TEST-001) as this client and under the same rule
+(D-172). The back-channel calls use the named HTTP client `identity-signon`, which a host
+may configure.
 
 **What it does not do.** It never receives a refresh token, never stores an access or
 ID token, never exchanges a code from the browser, and never accepts a `redirect_uri`

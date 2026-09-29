@@ -69,12 +69,12 @@ breaking.
 | **Ancestry closure table** | Structure and semantics of `identity.ancestry`, `identity.effective_grants` and `identity.consented_resources` |
 | **Error codes** | Machine-readable codes, their meanings and the status each answers |
 | **Audit actions and permissions** | The audit actions and the permissions `10` lists; each is an identifier, stable as a code is (CONV-NAME-003) |
-| **Conformance suite** | The public types of `Janus.Conformance` (LIB-TEST-001): the suite's four calls, the report, the finding, the check, the truth-table case and scenario, the host-rows seam and the client |
+| **Conformance suite** | The public types of `Janus.Conformance` (LIB-TEST-001): the suite's four calls, the report, the finding, the check, the truth-table case and scenario, the host-rows seam; and the contract in `Janus.Core` through which the suite asks for its provider probes (LIB-TEST-001) |
 | **BFF middleware pipeline** | Mounting API and stage ordering (D-052) |
 | **HTTP endpoints** | Method, path, body members, status codes and error codes of each endpoint, as `09-api-contract` gives them, held in a committed contract file generated from the endpoint data source |
 | **Configuration keys** | Names, types, scopes and value constraints, and the key families |
 
-*Source: D-026.4, D-017, D-041, D-106, D-146, D-166, D-171*
+*Source: D-026.4, D-017, D-041, D-106, D-146, D-166, D-171, D-172*
 
 The ancestry closure is public because hand-written SQL will query it. It cannot be
 restructured without a major version.
@@ -146,10 +146,11 @@ RFC leaves to the receiver, SHALL carry the `err` code again and never a sentenc
 
 **LIB-API-005** — Every library-owned operation SHALL exist **once**, as a service
 contract in `Janus.Core`, and SHALL be exposed **twice**: callable in-process by a
-host, and as an HTTP endpoint in `Janus.Hosting` mapped over the same contract. The two
+host, and as an HTTP endpoint in `Janus.Hosting` mapped over the same contract. The three
 operations named below as called in process only have no endpoint.
 
-*Source: D-106, D-166*
+*Source: D-106, D-166, D-172*
+
 
 The management application hosts the library in-process, so its natural call is the
 service; the frontends reach the same operation over HTTP. This is the pattern the
@@ -191,12 +192,13 @@ joins the host's own transaction, so neither has an endpoint, and neither takes 
 access context. Placing or moving a record is the host's own action, which the host asks
 of the gate before it writes.
 
-**Operations called in process only.** Two operations are called by a host in process
-only, and neither has an endpoint or meets a gate (CONV-DESIGN-002 AC3): read-volume
-counting (`IReadVolume`, OPS-ALERT-005), which reports what the host's own gate-filtered
-queries and exports returned, which no HTTP caller has to report; and derivation refresh
+**Operations called in process only.** Three operations are called in process only, and
+none has an endpoint or meets a gate (CONV-DESIGN-002 AC3): read-volume counting
+(`IReadVolume`, OPS-ALERT-005), which reports what the host's own gate-filtered queries
+and exports returned, which no HTTP caller has to report; derivation refresh
 (`IDerivationMaterialiser`, AUTHZ-DERIVE-005), which the host calls from its own gated
-operation that changes a relationship.
+operation that changes a relationship; and the conformance suite's provider probes
+(LIB-TEST-001), which the suite calls and which read no record of a person (D-172).
 
 **Acceptance criteria**
 1. Each endpoint in `09` other than those named above resolves to exactly one service in
@@ -453,10 +455,22 @@ versions.
 **LIB-TEST-001** — The library SHALL ship a conformance suite a host can run against
 its own configuration, as the `Janus.Conformance` package (`08` CONV-LAYOUT-001).
 
-*Source: P-003, AUTHZ-TEST-001, D-149, D-166*
+*Source: P-003, AUTHZ-TEST-001, D-149, D-166, D-172*
 
 The suite answers a report whose findings each carry the check and a `10` section 1 code
 with structured data; it writes no sentence (CONV-CONTENT-001).
+
+**The provider probes of criterion 4 are made by the library's own client half.** The
+library generates, holds and rotates every client secret and no one outside it holds one
+(AUTH-OIDC-001, D-166 340), and the suite is a package a host runs, so the suite never
+holds a secret either. The requests of criterion 4 are made in `Janus.Hosting` by the same
+client half that establishes each application's session (BFF-SESS-006): it authenticates
+as the application's own sign-on client (`SignOnClient`, LIB-HOST-001), reads that client's
+current secret from the registry at each request and keeps nothing, and sends through the
+same named HTTP client. No client is registered for the suite. The suite reaches the
+probes through a contract in `Janus.Core`, an operation called in process only
+(LIB-API-005), that answers the findings; no contract hands a secret to the suite or to
+the host (D-172).
 
 **Acceptance criteria**
 1. The suite verifies every entity the host's context maps has a registered policy as
@@ -469,11 +483,14 @@ with structured data; it writes no sentence (CONV-CONTENT-001).
 3. It validates the model declaration as startup does and reports each kind of failure
    under its own `10` section 1.5 code, stopping at the first; a refusal the model raises
    without a code fails the suite as the startup failure.
-4. It asks the deployment's provider, as a registered client and at the endpoints its
-   discovery document names, for each form AUTH-OIDC-006 retires that needs no signed-in
+4. It asks the deployment's provider, as the application's sign-on client through the
+   library's own client half, and at the endpoints its discovery document names, for each form AUTH-OIDC-006 retires that needs no signed-in
    person, a pushed request naming a destination other than the client's registered one
    included, and reports each form admitted, and each retired form the document lists,
-   under `auth.oidc.nonconformant`.
+      under `auth.oidc.nonconformant`.
+5. No public type of `Janus.Conformance`, and no member of the contract in `Janus.Core`
+   through which the suite asks for the provider probes, carries or receives a client
+   secret.
 
 ---
 

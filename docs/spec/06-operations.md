@@ -1252,13 +1252,13 @@ rotates it with the signing keys: the first read of a secret issued
 `token.signing.rotation` ago or more replaces it, and the replaced secret is accepted
 for `oidc.accesstoken.lifetime` plus 5 minutes. The library's own client middleware
 reads its application's current secret from the registry at each code exchange
-(BFF-SESS-006). No deployment supplies, stores or restarts for a client secret, and no
+(BFF-SESS-006) and at each provider probe of the conformance suite (LIB-TEST-001, D-172). No deployment supplies, stores or restarts for a client secret, and no
 sign-on secret exists; the key-encryption key's rotation re-wraps the key it sits
 under (OPS-SEC-003). A provider credential that expires is renewed by the library
 where the provider lets the client sign it (IDN-LIFE-012); no calendar renewal is a
 maintenance task.
 
-*Source: D-148; D-007, D-026.3, D-103, D-147, D-166*
+*Source: D-148; D-007, D-026.3, D-103, D-147, D-166, D-172*
 
 **Acceptance criteria**
 1. Rotation completes without restart or manual action.

@@ -11847,6 +11847,73 @@ BFF-SESS-006 · `18` FE-BG-001.
 
 ---
 
+## D-172 — Corrections-4 questions 8 and 9: the conformance suite's client, the deployment key's identifier
+
+**Date:** 2026-09-29 · **Status:** accepted · **Extends:** D-166 (316, 340), LIB-TEST-001
+
+**TL;DR.** After D-166 340 no one outside the library holds a client secret, so the
+conformance suite, which a host runs, cannot hold one either: its provider probes are made
+by the library's own client half, as the application's own sign-on client, and the suite
+receives their findings. The deployment's data key is held under the max UUID of RFC 9562,
+not the nil subject, because the nil subject already means "no subject" in grants and on
+the audit trail.
+
+**1. The conformance suite's client (the run's question 8).** LIB-TEST-001 criterion 4 has
+the suite ask the provider, as a registered client, for each retired form, and a probe
+made without a client's credentials proves nothing, since the provider refuses it for the
+credentials alone. The shipped suite took a client's secret from the host, which 340 makes
+impossible and which would undo 340's purpose. *Decision:*
+
+- The probes are made in `Janus.Hosting` by the client half of BFF-SESS-006, as the
+  application's own sign-on client (`SignOnClient`), reading its current secret from the
+  registry at each request, keeping nothing, and sending through the same named HTTP
+  client. No client is registered for the suite, so the registry carries no client that
+  exists only for a test, and a sample host that declares only the required values runs
+  the suite as it is.
+- The suite reaches the probes through a contract in `Janus.Core`, an operation called in
+  process only and meeting no gate (LIB-API-005, CONV-DESIGN-002), since the suite is run
+  by the host and the probes read no record of a person. The contract answers the
+  findings; no member of it, and no public type of `Janus.Conformance`, carries or
+  receives a secret.
+- *Rejected:* a client registered for the suite (a live confidential client that exists
+  only for tests, with a return address of its own to maintain); exporting a client's
+  secret to the host (a secret held outside the library, which rotation would break
+  without notice); a public contract that hands out a client secret; probes without
+  client authentication (they prove nothing about the retired forms).
+- Tests carrying LIB-TEST-001 criteria 4 and 5 prove the findings as before, and that no
+  public type of the suite, and no member of the contract, carries a secret.
+
+**2. The deployment key's identifier (the run's question 9).** 316 asks for "a reserved
+identifier no subject is issued and erasure never touches" and names none; the
+implementer used the nil subject and raised it, rightly, since it concerns keys and
+erasure. The nil subject already carries a meaning: no subject, as the granter of a grant
+no person made and as the acting identity of a system principal's work. A key row under it
+lets a lookup of "the key of this record's actor" find the deployment's key where it should
+find none. *Decision:*
+
+- The max UUID of RFC 9562 section 5.10, all 128 bits set, which the version 4 subject
+  identifiers of CONV-DESIGN-004 never take. Erasure refuses it and never touches its row,
+  and a check constraint keeps it out of every table of subjects other than the subject-key
+  table.
+- A value under the deployment's data key is bound by its additional authenticated data,
+  in the place a subject identifier takes, to its own row's identifier, as an invitation is
+  (D-166 234), never to the reserved identifier every such value shares, so a value moved
+  to another row does not decrypt.
+- `ced2208` moves the key's row to the max UUID in a migration of its own. Where it bound a
+  value to the key's identifier, the same migration re-encrypts that value under its row's
+  binding in the same transaction, so every value still decrypts (PRIV-RIGHT-005a
+  criterion 16).
+- A test carrying PRIV-RIGHT-005a criterion 18 proves the key is held under the max UUID,
+  that erasure refuses it, that no key row stands under the nil subject, that the
+  database refuses the max UUID in any other table of subjects, and that a value moved to
+  another row does not decrypt.
+
+**Propagated to:** `04` PRIV-RIGHT-005a (text and criterion 18) · `06` OPS-SEC-002 · `07`
+LIB-TEST-001 (text and criteria 4 and 5), LIB-API-001 (the conformance row), LIB-API-005 ·
+`08` CONV-LAYOUT-001, CONV-DESIGN-002 · `17` BFF-SESS-006.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -12028,6 +12095,7 @@ BFF-SESS-006 · `18` FE-BG-001.
 | Third-party data the package or the repository carries is kept as published; a name inside it is not a trace | D-169 |
 | Corrections-4 questions: the break-glass reason on the trail, bootstrap's `before`, the limit alert before bootstrap | D-170 |
 | Corrections-4 question 7: the key ring for startup secrets; the unit of work's result; the derived break-glass session | D-171 |
+| Corrections-4 questions 8 and 9: the conformance suite's client, the deployment key's identifier | D-172 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

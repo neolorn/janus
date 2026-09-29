@@ -895,7 +895,7 @@ with AES key wrap with padding (RFC 5649). The format marker is one byte, `0x01`
 this scheme. An erased wrapped key is 32 zero bytes under marker `0x00`; every decrypt
 refuses it, and the DR-016 ledger and a restore recognise it as erased.
 
-*Source: D-097, D-099, D-100, D-147, D-166, D-171*
+*Source: D-097, D-099, D-100, D-147, D-166, D-171, D-172*
 
 **Per column, not per row.** Name and phone on a host record are encrypted; its
 non-personal columns (dates, amounts, quantities, references) are not. Aggregates and
@@ -966,8 +966,13 @@ foreign key does that today.
   the library encrypts that belongs to no subject (a secret of the deployment, or data
   held for a person who is not yet a subject) SHALL be encrypted, or its own data key
   wrapped, under the **deployment's data key**: a row of the subject-key table under a
-  reserved identifier that no subject is issued and that erasure never touches, wrapped
-  under the key-encryption key like any subject key. A rotation of the key-encryption key
+  reserved identifier that no subject is issued: the max UUID of RFC 9562 (all 128 bits
+  set), never the nil subject, which means no subject. Erasure refuses that identifier and
+  never touches its row, and a check constraint keeps it out of every table of subjects
+  other than the subject-key table. The row is wrapped under the key-encryption key like
+  any subject key. A value under the deployment's data key is bound, in the place a
+  subject identifier takes, to its own row's identifier, as an invitation is, never to the
+  reserved identifier every such value shares (D-172). A rotation of the key-encryption key
   therefore re-wraps rows of that table and nothing else (OPS-SEC-003)
 - **Each stored value SHALL carry a format marker and its initialisation vector**:
 
@@ -1058,6 +1063,11 @@ carried.
     every value the library encrypted, a subject's or not, still decrypts.
 17. An account's TOTP secret is encrypted under its subject key, and after erasure it
     cannot be decrypted.
+18. The deployment's data key is held under the max UUID of RFC 9562 and no row of the
+    subject-key table stands under the nil subject; an erasure that names the max UUID is
+    refused and leaves the row as it was; a row of any other table of subjects carrying
+    the max UUID is refused by the database; a value under the deployment's data key moved
+    to another row does not decrypt.
 
 ---
 
