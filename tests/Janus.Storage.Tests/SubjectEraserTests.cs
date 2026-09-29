@@ -1178,12 +1178,12 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
-    /// PRIV-RIGHT-005a: the deployment's data key stands under the one identifier no
-    /// subject is issued, and an erasure naming it is refused with the key as it was.
+    /// PRIV-RIGHT-005a AC18: the deployment's data key stands under the max UUID, which no
+    /// subject is issued, and an erasure naming it is refused with the row as it was.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task PRIV_RIGHT_005a_ErasureNeverTouchesTheDeploymentDataKeyAsync()
+    public async Task PRIV_RIGHT_005a_AC18_AnErasureNamingTheMaxUuidIsRefusedAndLeavesTheRowAsync()
     {
         byte[] deploymentKey;
 
@@ -1192,14 +1192,31 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             deploymentKey = await _deployment.DataKey(writing).UnwrappedAsync(TestContext.Current.CancellationToken);
         }
 
+        SubjectKeyRecord before = await HeldKeyAsync(new SubjectId(Guid.AllBitsSet));
+
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await EraseAsync(DeploymentDataKeyStore.Subject, ErasureReason.ErasureRequest));
+            await EraseAsync(new SubjectId(Guid.AllBitsSet), ErasureReason.ErasureRequest));
+
+        SubjectKeyRecord after = await HeldKeyAsync(new SubjectId(Guid.AllBitsSet));
+
+        Assert.Equal((before.FormatMarker, before.KeyVersion), (after.FormatMarker, after.KeyVersion));
+        Assert.Equal(before.WrappedKey, after.WrappedKey);
 
         await using StoreContext reading = database.Context();
 
         Assert.Equal(
             deploymentKey,
             await _deployment.DataKey(reading).UnwrappedAsync(TestContext.Current.CancellationToken));
+        Assert.Null(await reading.Erasures.FindAsync([new SubjectId(Guid.AllBitsSet)], TestContext.Current.CancellationToken));
+    }
+
+    private async ValueTask<SubjectKeyRecord> HeldKeyAsync(SubjectId subject)
+    {
+        await using StoreContext reading = database.Context();
+
+        return await reading.SubjectKeys
+            .AsNoTracking()
+            .SingleAsync(key => key.Subject == subject, TestContext.Current.CancellationToken);
     }
 
     private async ValueTask EraseAsync(SubjectId subject, ErasureReason reason)

@@ -207,10 +207,15 @@ against the public contract of LIB-API-001.
 - Every value the library encrypts that belongs to no subject (an invitation's
   identifiers, a mailbox reserved for nobody, a registration session, a queued message,
   a sign-on proof, a signing key, a social provider's proof key) is under the
-  deployment's data key, a row of the subject-key table under the nil subject that the
-  key-encryption key wraps like any subject key and that erasure never touches; nothing
-  else is wrapped directly under the key-encryption key. The migration runs only on a
-  database that holds no such value, since the database cannot re-wrap it.
+  deployment's data key, a row of the subject-key table under the max UUID (all 128 bits
+  set), which no subject is issued, that the key-encryption key wraps like any subject
+  key and that erasure refuses to touch; nothing else is wrapped directly under the
+  key-encryption key. What is encrypted for such a row (an invitation's identifiers, an
+  unheld mailbox's address, a queued message naming no subject, a registration
+  session's staged values) is bound to that row, so it does not decrypt on another. The
+  migrations run only on a database that holds no such value, since the database can
+  neither re-wrap nor re-bind it; the move to the max UUID names the table where one
+  stands.
 - `rotate-kek` rotates the key-encryption key from the command line under the
   maintenance credential. Add the new version to the secrets manager as current, keep
   the previous one, restart the application on it, and pipe the document to the command:

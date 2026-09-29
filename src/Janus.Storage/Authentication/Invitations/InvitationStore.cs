@@ -137,8 +137,13 @@ internal sealed class InvitationStore(
                 cancellationToken)
             .ConfigureAwait(false);
 
-    private static PersonalFieldLocation Located() =>
-        new(default, InvitationConfiguration.Table, InvitationConfiguration.IdentifiersColumn);
+    // PRIV-RIGHT-005a, D-166 (234): what an invitation binds is bound to the invitation
+    // itself, so one invitation's value does not open on another row.
+    private static PersonalFieldLocation Located(InvitationId invitation) =>
+        new(
+            new SubjectId(invitation.Value),
+            InvitationConfiguration.Table,
+            InvitationConfiguration.IdentifiersColumn);
 
     // The identifiers are written once, when the invitation is issued, and only ever
     // forgotten after that.
@@ -162,7 +167,7 @@ internal sealed class InvitationStore(
                 record.WrappedKey = PersonalFieldCipher.Wrap(dataKey, deploymentKey);
                 record.EncryptedIdentifiers = PersonalFieldCipher.Encrypt(
                     dataKey,
-                    Located(),
+                    Located(invitation.Id),
                     JsonSerializer.SerializeToUtf8Bytes(
                         new InvitedIdentifiersDocument(
                             invitation.Identifiers.Email,
@@ -249,7 +254,7 @@ internal sealed class InvitationStore(
         try
         {
             InvitedIdentifiersDocument document = JsonSerializer.Deserialize(
-                    PersonalFieldCipher.Decrypt(dataKey, Located(), record.EncryptedIdentifiers),
+                    PersonalFieldCipher.Decrypt(dataKey, Located(record.Id), record.EncryptedIdentifiers),
                     InvitationJson.Default.InvitedIdentifiersDocument)
                 ?? throw new InvalidOperationException("The invitation's identifiers are not a document.");
 

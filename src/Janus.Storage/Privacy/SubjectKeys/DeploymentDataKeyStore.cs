@@ -10,7 +10,7 @@ using Janus.Privacy.SubjectKeys;
 namespace Janus.Storage.Privacy.SubjectKeys;
 
 /// <summary>
-/// The deployment's data key, over its row of the subject-key table under the nil subject,
+/// The deployment's data key, over its row of the subject-key table under the max UUID,
 /// which no subject is issued and erasure never touches. Every value the library
 /// encrypts that belongs to no subject is encrypted, or has its own data key wrapped,
 /// under it.
@@ -19,7 +19,7 @@ namespace Janus.Storage.Privacy.SubjectKeys;
 /// <param name="keyEncryptionKeys">The versions the key is wrapped under.</param>
 /// <param name="randomness">The randomness the key is drawn from, the first time it is needed.</param>
 /// <remarks>
-/// Implements PRIV-RIGHT-005a, AUTH-KEY-002 and OPS-SEC-003 (D-166, 316). The
+/// Implements PRIV-RIGHT-005a, AUTH-KEY-002 and OPS-SEC-003 (D-166, 316; D-172). The
 /// key-encryption key wraps it as it wraps every subject key, so a rotation re-wraps rows
 /// of the one table and nothing else. The row is written the first time a value needs
 /// it, by an insert that does nothing on conflict, so two processes writing it together
@@ -45,9 +45,11 @@ internal sealed class DeploymentDataKeyStore(
         """;
 
     /// <summary>
-    /// The identifier the key is held under: the nil subject, which no subject is issued.
+    /// The identifier the key is held under: the max UUID of RFC 9562, all 128 bits set,
+    /// which the version 4 subject identifiers never take. The nil subject is not used,
+    /// since it already means no subject.
     /// </summary>
-    public static SubjectId Subject => default;
+    public static SubjectId Subject => new(Guid.AllBitsSet);
 
     /// <summary>
     /// The key, unwrapped, written first where the deployment has none yet.

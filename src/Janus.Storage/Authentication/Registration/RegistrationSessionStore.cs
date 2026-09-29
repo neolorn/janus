@@ -161,9 +161,11 @@ internal sealed class RegistrationSessionStore(
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
 
-    private static PersonalFieldLocation Located(SubjectId provisional) =>
+    // PRIV-RIGHT-005a, D-173: the staged values belong to no subject yet, so they are
+    // bound to the session's own row.
+    private static PersonalFieldLocation Located(RegistrationSessionId session) =>
         new(
-            provisional,
+            new SubjectId(session.Value),
             RegistrationSessionConfiguration.Table,
             RegistrationSessionConfiguration.SessionColumn);
 
@@ -260,7 +262,7 @@ internal sealed class RegistrationSessionStore(
 
         return PersonalFieldCipher.Encrypt(
             dataKey,
-            Located(session.Provisional),
+            Located(session.Id),
             JsonSerializer.SerializeToUtf8Bytes(document, StagedSession.Default.StagedSessionDocument),
             randomness);
     }
@@ -291,7 +293,7 @@ internal sealed class RegistrationSessionStore(
         try
         {
             document = JsonSerializer.Deserialize(
-                PersonalFieldCipher.Decrypt(dataKey, Located(record.ProvisionalSubject), record.Session),
+                PersonalFieldCipher.Decrypt(dataKey, Located(record.Id), record.Session),
                 StagedSession.Default.StagedSessionDocument)
                 ?? throw new InvalidOperationException("The staged registration is not a document.");
         }

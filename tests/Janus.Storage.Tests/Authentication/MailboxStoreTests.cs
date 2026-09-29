@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Authentication.Mailboxes;
 using Janus.Core;
 using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Identity.Organizations;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Storage.Tests.Authentication;
@@ -187,6 +190,41 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
         await Assert.ThrowsAsync<DbUpdateException>(() => WrittenAsync(store => store.AddAsync(
             Mailbox.Reserved(Parsed("once@example.test"), Noon),
             TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a AC18: an address nobody holds is bound to its own mailbox, so its
+    /// value and wrapped key moved onto another unheld mailbox's row do not open there.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_AC18_AnUnheldAddressDoesNotOpenOnAnotherRowAsync()
+    {
+        var moved = Mailbox.Reserved(Parsed("moved@example.test"), Noon);
+        var other = Mailbox.Reserved(Parsed("other@example.test"), Noon);
+
+        await WrittenAsync(store => store.AddAsync(moved, TestContext.Current.CancellationToken));
+        await WrittenAsync(store => store.AddAsync(other, TestContext.Current.CancellationToken));
+
+        await using (NpgsqlConnection connection = await database.OpenAsync())
+        {
+            await connection.ExecuteAsync(
+                """
+                UPDATE identity.mailboxes AS other
+                SET wrapped_key = moved.wrapped_key, enc_canonical = moved.enc_canonical
+                FROM identity.mailboxes AS moved
+                WHERE other.id = @other AND moved.id = @moved;
+                """,
+                new { other = other.Id.Value, moved = moved.Id.Value });
+        }
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(
+            moved.Address,
+            (await Store(reading).FindAsync(moved.Id, TestContext.Current.CancellationToken))?.Address);
+        await Assert.ThrowsAnyAsync<CryptographicException>(async () =>
+            await Store(reading).FindAsync(other.Id, TestContext.Current.CancellationToken));
     }
 
     private async Task<OrganizationId> AdministrativeAsync()

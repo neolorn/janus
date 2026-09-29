@@ -1,13 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Authentication.Sending;
 using Janus.Core;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Sending;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Storage.Tests.Authentication;
@@ -182,6 +185,40 @@ public sealed class SendOutboxTests(DatabaseFixture database)
         Assert.Equal(
             "fifth@example.test",
             read.Single(one => one.Id == due.Id).Requested.Destination.Canonical);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a AC18: a message that names no subject is bound to its own row, so
+    /// its value and wrapped key moved onto another such row do not open there.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_AC18_AMessageNamingNoSubjectDoesNotOpenOnAnotherRowAsync()
+    {
+        SendDelivery moved = Delivery("moved@example.test", subject: null);
+        SendDelivery other = Delivery("other@example.test", subject: null);
+
+        await WrittenAsync(moved);
+        await WrittenAsync(other);
+
+        await using (NpgsqlConnection connection = await database.OpenAsync())
+        {
+            await connection.ExecuteAsync(
+                """
+                UPDATE identity.send_outbox AS other
+                SET wrapped_key = moved.wrapped_key, enc_message = moved.enc_message
+                FROM identity.send_outbox AS moved
+                WHERE other.id = @other AND moved.id = @moved;
+                """,
+                new { other = other.Id.Value, moved = moved.Id.Value });
+        }
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(
+            "moved@example.test",
+            (await Outbox(reading).FindAsync(moved.Id, TestContext.Current.CancellationToken))?.Requested.Destination.Canonical);
+        await Assert.ThrowsAnyAsync<CryptographicException>(async () =>
+            await Outbox(reading).FindAsync(other.Id, TestContext.Current.CancellationToken));
     }
 
     /// <inheritdoc/>

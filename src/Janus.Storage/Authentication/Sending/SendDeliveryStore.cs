@@ -45,7 +45,7 @@ internal sealed class SendDeliveryStore(
                 RecordedAt = delivery.RecordedAt,
                 Subject = delivery.Requested.Subject,
                 WrappedKey = PersonalFieldCipher.Wrap(dataKey, deploymentKey),
-                Message = Written(dataKey, delivery.Requested),
+                Message = Written(dataKey, delivery.Id, delivery.Requested),
             };
 
             Attempted(record, delivery);
@@ -158,11 +158,12 @@ internal sealed class SendDeliveryStore(
             SendDeliveryJson.Default.ListString);
     }
 
-    // A message concerning no account is bound to no subject; the data key is the
-    // row's own either way, so nothing else reads what this row holds.
-    private static PersonalFieldLocation Located(SubjectId? subject) =>
+    // A message concerning an account is bound to its subject, and one concerning no
+    // account to its own row (PRIV-RIGHT-005a, D-173); the data key is the row's own
+    // either way, so nothing else reads what this row holds.
+    private static PersonalFieldLocation Located(SendDeliveryId delivery, SubjectId? subject) =>
         new(
-            subject ?? default,
+            subject ?? new SubjectId(delivery.Value),
             SendDeliveryConfiguration.Table,
             SendDeliveryConfiguration.MessageColumn);
 
@@ -183,7 +184,7 @@ internal sealed class SendDeliveryStore(
             : throw new InvalidOperationException("The stored number is not a number.");
     }
 
-    private byte[] Written(ReadOnlySpan<byte> dataKey, SendRequest request)
+    private byte[] Written(ReadOnlySpan<byte> dataKey, SendDeliveryId delivery, SendRequest request)
     {
         var document = new SendDeliveryDocument(
             VocabularyConverter<SendKind>.Write(request.Kind),
@@ -197,7 +198,7 @@ internal sealed class SendDeliveryStore(
 
         return PersonalFieldCipher.Encrypt(
             dataKey,
-            Located(request.Subject),
+            Located(delivery, request.Subject),
             JsonSerializer.SerializeToUtf8Bytes(document, SendDeliveryJson.Default.SendDeliveryDocument),
             randomness);
     }
@@ -211,7 +212,7 @@ internal sealed class SendDeliveryStore(
         try
         {
             document = JsonSerializer.Deserialize(
-                PersonalFieldCipher.Decrypt(dataKey, Located(record.Subject), record.Message),
+                PersonalFieldCipher.Decrypt(dataKey, Located(record.Id, record.Subject), record.Message),
                 SendDeliveryJson.Default.SendDeliveryDocument)
                 ?? throw new InvalidOperationException("The undelivered message is not a document.");
         }

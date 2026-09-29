@@ -1,7 +1,9 @@
 using System;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Authentication;
 using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
@@ -9,6 +11,7 @@ using Janus.Core;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authentication.Mailboxes;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Storage.Tests.Authentication;
@@ -227,6 +230,40 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
         Assert.Equal(Noon.AddHours(1), byAddress?.ReleasedAt);
         Assert.Equal("found@example.test", byId?.Address.Value);
         Assert.Null(await Mailboxes(reading).FindAsync(Parsed("absent@example.test"), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a AC18 and D-166 (234): what an invitation binds is bound to the
+    /// invitation itself, so its value and wrapped key moved onto another invitation's
+    /// row do not open there, although every invitation's key is wrapped under the one
+    /// deployment key.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_AC18_AnInvitationsValueDoesNotOpenOnAnotherRowAsync()
+    {
+        Invitation moved = await IssuedAsync("moved@example.test");
+        Invitation other = await IssuedAsync("other@example.test");
+
+        await using (NpgsqlConnection connection = await database.OpenAsync())
+        {
+            await connection.ExecuteAsync(
+                """
+                UPDATE identity.invitations AS other
+                SET wrapped_key = moved.wrapped_key, enc_identifiers = moved.enc_identifiers
+                FROM identity.invitations AS moved
+                WHERE other.id = @other AND moved.id = @moved;
+                """,
+                new { other = other.Id.Value, moved = moved.Id.Value });
+        }
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(
+            moved.Identifiers,
+            (await Store(reading).FindAsync(moved.Id, TestContext.Current.CancellationToken))?.Identifiers);
+        await Assert.ThrowsAnyAsync<CryptographicException>(async () =>
+            await Store(reading).FindAsync(other.Id, TestContext.Current.CancellationToken));
     }
 
     /// <inheritdoc/>

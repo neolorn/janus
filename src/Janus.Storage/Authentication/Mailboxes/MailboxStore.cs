@@ -39,6 +39,19 @@ internal sealed class MailboxStore(
     FingerprintKeys fingerprintKeys,
     RandomNumberGenerator randomness) : IMailboxStore
 {
+    /// <summary>
+    /// Where a mailbox's address is stored: bound to its holder while one holds it, and
+    /// to the mailbox itself while nobody does (PRIV-RIGHT-005a, D-173).
+    /// </summary>
+    /// <param name="mailbox">The mailbox's identifier.</param>
+    /// <param name="holder">Who holds it, if anyone.</param>
+    /// <returns>The location.</returns>
+    public static PersonalFieldLocation Located(MailboxId mailbox, SubjectId? holder) =>
+        new(
+            holder ?? new SubjectId(mailbox.Value),
+            MailboxConfiguration.Table,
+            MailboxConfiguration.CanonicalColumn);
+
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<MailboxStanding>> AllAsync(CancellationToken cancellationToken)
     {
@@ -139,9 +152,6 @@ internal sealed class MailboxStore(
         await CarryAsync(mailbox, record, cancellationToken).ConfigureAwait(false);
     }
 
-    private static PersonalFieldLocation Located(SubjectId? holder) =>
-        new(holder ?? default, MailboxConfiguration.Table, MailboxConfiguration.CanonicalColumn);
-
     // The address is written again whenever it passes from one key to another: to the
     // holder's when a membership attaches, to a fresh key of the row's own when a
     // retired address is reserved for someone else.
@@ -166,7 +176,7 @@ internal sealed class MailboxStore(
                     : null;
                 record.EncryptedCanonical = PersonalFieldCipher.Encrypt(
                     dataKey,
-                    Located(mailbox.Holder),
+                    Located(mailbox.Id, mailbox.Holder),
                     Encoding.UTF8.GetBytes(mailbox.Address.Value),
                     randomness);
             }
@@ -234,7 +244,7 @@ internal sealed class MailboxStore(
             return Mailbox.Existing(
                 new MailboxId(record.Id),
                 Address(Encoding.UTF8.GetString(
-                    PersonalFieldCipher.Decrypt(dataKey, Located(record.Holder), record.EncryptedCanonical))),
+                    PersonalFieldCipher.Decrypt(dataKey, Located(new MailboxId(record.Id), record.Holder), record.EncryptedCanonical))),
                 record.ReservedAt,
                 record.Holder,
                 record.RetiredAt,

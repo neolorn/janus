@@ -163,7 +163,7 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
 
         foreach ((Guid subject, byte[] wrapped) in await WrappedUnderAsync(connection, 2))
         {
-            Assert.Equal(subject == Guid.Empty ? deploymentKey : seeded[subject], Unwrapped(wrapped, Next));
+            Assert.Equal(subject == Guid.AllBitsSet ? deploymentKey : seeded[subject], Unwrapped(wrapped, Next));
         }
     }
 
@@ -565,7 +565,7 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
     }
 
     // The deployment's data key, as the application writes it the first time a value of
-    // no subject needs it: a row of the subject-key table under the nil subject, wrapped
+    // no subject needs it: a row of the subject-key table under the max UUID, wrapped
     // under the previous version.
     private static async Task<byte[]> DeploymentKeyAsync(NpgsqlConnection connection)
     {
@@ -574,9 +574,9 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
         await connection.ExecuteAsync(
             """
             INSERT INTO identity.subject_keys (subject, format_marker, key_version, wrapped_key)
-            VALUES (@nil, 1, 1, @wrapped);
+            VALUES (@reserved, 1, 1, @wrapped);
             """,
-            new { nil = Guid.Empty, wrapped = Wrapped(deploymentKey, Previous) });
+            new { reserved = Guid.AllBitsSet, wrapped = Wrapped(deploymentKey, Previous) });
 
         return deploymentKey;
     }

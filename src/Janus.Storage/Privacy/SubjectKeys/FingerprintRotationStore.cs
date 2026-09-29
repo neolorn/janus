@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication.Mailboxes;
 using Janus.Core;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Factors;
@@ -382,10 +383,9 @@ internal sealed class FingerprintRotationStore(
 
             try
             {
-                var location = new PersonalFieldLocation(
-                    mailbox.Holder is Guid of ? new SubjectId(of) : default,
-                    MailboxConfiguration.Table,
-                    MailboxConfiguration.CanonicalColumn);
+                PersonalFieldLocation location = MailboxStore.Located(
+                    new MailboxId(mailbox.Id),
+                    mailbox.Holder is Guid of ? new SubjectId(of) : null);
 
                 recomputed += await RecomputedAsync(
                         MailboxColumn.Recompute,
