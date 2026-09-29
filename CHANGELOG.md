@@ -274,8 +274,9 @@ against the public contract of LIB-API-001.
   is wrong is refused before any hash is compared; at most five attempts an hour are
   taken from all sources together, besides the per-source delay. Generation and use are
   audited under `auth.breakglass.generated` and `auth.breakglass.used`, and raise
-  `breakglass-used` to the operator and to the owner whatever `alerting.owner.enabled`
-  says. The reserved account is never suspended, taken down, deleted, granted anything
+  `breakglass-generated` (`AlertCondition.BreakGlassGenerated`) and `breakglass-used`,
+  each High and scoped to the issue, to the operator and to the owner whatever
+  `alerting.owner.enabled` says. The reserved account is never suspended, taken down, deleted, granted anything
   or added to a group, and is given no password, identifier, factor, recovery codes or
   mail credential; each is refused with `authz.denied`. The reserved account is marked
   on its row, and the credential and its attempts are kept in two tables of their own.

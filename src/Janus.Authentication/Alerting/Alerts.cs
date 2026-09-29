@@ -34,6 +34,7 @@ internal static class Alerts
             AlertCondition.ApproverVolume => AlertSeverity.High,
             AlertCondition.ReadVolumeAnomaly => AlertSeverity.High,
             AlertCondition.BreakGlassUsed => AlertSeverity.High,
+            AlertCondition.BreakGlassGenerated => AlertSeverity.High,
             AlertCondition.ProtectedSettingChanged => AlertSeverity.High,
             AlertCondition.AlertDestinationChanged => AlertSeverity.High,
             AlertCondition.StepUpPolicyWeakened => AlertSeverity.High,

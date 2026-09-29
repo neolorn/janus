@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using System.Security.Cryptography;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
@@ -62,10 +60,6 @@ internal sealed class BreakGlassService(
 {
     // OPS-BOOT-004: at most five attempts an hour, from all sources together.
     private const int GlobalAttempts = 5;
-
-    private const string Generated = "generated";
-
-    private const string Used = "used";
 
     // FE-BG-001: the authentication application's route, which the envelope names.
     private const string Page = "/break-glass";
@@ -257,12 +251,11 @@ internal sealed class BreakGlassService(
         await store.AddAsync(issued, cancellationToken).ConfigureAwait(false);
         await audit.GeneratedAsync(acting, issued.Id, standing?.Id, now, cancellationToken).ConfigureAwait(false);
 
-        // OPS-BOOT-004 AC2: generation reaches the owner as use does, whatever
-        // alerting.owner.enabled says, and the one condition that does is the
-        // break-glass row.
+        // OPS-BOOT-004 AC2: generation is raised under its own condition, scoped to the
+        // issue, and reaches the owner as use does, whatever alerting.owner.enabled says.
         Result alerted = await alerts
             .RaiseAsync(
-                Alerts.Of(AlertCondition.BreakGlassUsed, Scope(Generated, issued.Id), now, Event(Generated)),
+                Alerts.Of(AlertCondition.BreakGlassGenerated, issued.Id.ToString(), now),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -278,17 +271,6 @@ internal sealed class BreakGlassService(
             new Uri(new Uri(addresses.Provider, UriKind.Absolute), Page),
             now));
     }
-
-    // OPS-ALERT-002: one issue is generated once and used once, and the two are two
-    // alerts, so the use of an issue is never folded into the alert its generation
-    // raised within the same window.
-    private static string Scope(string happened, BreakGlassCredentialId issue) => happened + ":" + issue;
-
-    private static Dictionary<string, JsonElement> Event(string happened) =>
-        new(StringComparer.Ordinal)
-        {
-            ["event"] = JsonSerializer.SerializeToElement(happened),
-        };
 
     private static TValue Held<TValue>(Error error, ref Error? failure)
     {
@@ -332,10 +314,10 @@ internal sealed class BreakGlassService(
         await audit.UsedAsync(account, standing.Id, issued.Id, now, cancellationToken).ConfigureAwait(false);
 
         // OPS-BOOT-002 AC3: use is raised at once, on every channel, to the owner as
-        // well as the operator.
+        // well as the operator, scoped to the issue it spent.
         Result alerted = await alerts
             .RaiseAsync(
-                Alerts.Of(AlertCondition.BreakGlassUsed, Scope(Used, standing.Id), now, Event(Used)),
+                Alerts.Of(AlertCondition.BreakGlassUsed, standing.Id.ToString(), now),
                 cancellationToken)
             .ConfigureAwait(false);
 

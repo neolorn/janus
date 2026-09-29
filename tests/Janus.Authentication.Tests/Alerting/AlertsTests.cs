@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Reflection;
 using Janus.Authentication.Alerting;
 using Janus.Core;
 using Xunit;
@@ -25,6 +26,7 @@ public sealed class AlertsTests
         "approver-volume",
         "read-volume-anomaly",
         "breakglass-used",
+        "breakglass-generated",
         "protected-setting-changed",
         "alert-destination-changed",
         "stepup-policy-weakened",
@@ -60,6 +62,7 @@ public sealed class AlertsTests
         AlertCondition.ApproverVolume,
         AlertCondition.ReadVolumeAnomaly,
         AlertCondition.BreakGlassUsed,
+        AlertCondition.BreakGlassGenerated,
         AlertCondition.ProtectedSettingChanged,
         AlertCondition.AlertDestinationChanged,
         AlertCondition.StepUpPolicyWeakened,
@@ -73,13 +76,27 @@ public sealed class AlertsTests
 
     /// <summary>
     /// OPS-ALERT-001 AC2: the conditions are the rows of the table and nothing else,
-    /// each carrying the identifier chapter 10 section 5.23 gives it, in table order.
+    /// each carrying the identifier chapter 10 section 5.23 gives it, declared in table
+    /// order. A condition added later takes the next free value (D-166, 291), so the
+    /// order is the declaration's and not the values'.
     /// </summary>
     [Fact]
     public void OPS_ALERT_001_AC2_TheConditionsAreTheTableInOrder() =>
         Assert.Equal(
             Identifiers,
-            Enum.GetValues<AlertCondition>().Select(condition => Alerts.Key(condition, null)));
+            typeof(AlertCondition)
+                .GetFields(BindingFlags.Public | BindingFlags.Static)
+                .Select(field => Alerts.Key((AlertCondition)field.GetValue(null)!, null)));
+
+    /// <summary>
+    /// D-166 (291): a condition is never renumbered; the one added for a generated
+    /// break-glass credential takes the next free value.
+    /// </summary>
+    [Fact]
+    public void OPS_ALERT_001_AGeneratedBreakGlassCredentialTakesTheNextFreeValue() =>
+        Assert.Equal(
+            AlertCondition.BreakGlassGenerated,
+            Enum.GetValues<AlertCondition>().Max());
 
     /// <summary>
     /// The severity of a condition is the table's and not the caller's, so two

@@ -90,6 +90,7 @@ Janus.Core.AlertCondition.AlertDestinationChanged = 6 -> Janus.Core.AlertConditi
 Janus.Core.AlertCondition.ApproverVolume = 2 -> Janus.Core.AlertCondition
 Janus.Core.AlertCondition.AuthFailuresSustained = 0 -> Janus.Core.AlertCondition
 Janus.Core.AlertCondition.BackgroundJobFailed = 11 -> Janus.Core.AlertCondition
+Janus.Core.AlertCondition.BreakGlassGenerated = 31 -> Janus.Core.AlertCondition
 Janus.Core.AlertCondition.BreakGlassUsed = 4 -> Janus.Core.AlertCondition
 Janus.Core.AlertCondition.CallbackVerificationFailed = 16 -> Janus.Core.AlertCondition
 Janus.Core.AlertCondition.CertificateRenewalFailed = 13 -> Janus.Core.AlertCondition

@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.BreakGlass;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Grants;
@@ -164,7 +165,14 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
         Assert.Equal(
             [OperatorNumber, OwnerNumber],
             _deployment.Sms.Taken.Select(message => message.Destination.Value).Order(StringComparer.Ordinal));
-        Assert.Equal("used", Raised().Details["event"].GetString());
+
+        AlertRaised used = Raised(AlertCondition.BreakGlassUsed);
+
+        Assert.Equal(AlertSeverity.High, used.Severity);
+        Assert.Equal(
+            Alerts.Key(AlertCondition.BreakGlassUsed, Assert.Single(_deployment.BreakGlassAudit.Used).Credential.ToString()),
+            Alerts.Deduplication(used.IdempotencyKey));
+        Assert.Empty(used.Details);
     }
 
     /// <summary>
@@ -330,14 +338,22 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
         _ = await _deployment.CarryAlertsAsync();
 
         SubjectId administrator = _deployment.Directory.Created[^1].Subject;
-        (SubjectId acting, _, BreakGlassCredentialId? replaced, _) =
+        (SubjectId acting, BreakGlassCredentialId issue, BreakGlassCredentialId? replaced, _) =
             Assert.Single(_deployment.BreakGlassAudit.Generated);
+        AlertRaised generated = Raised(AlertCondition.BreakGlassGenerated);
 
         Assert.Equal(administrator, acting);
         Assert.Null(replaced);
         Assert.Contains(_deployment.Mail.Taken, mail => string.Equals(mail.Destination.Value, Owner, StringComparison.Ordinal));
         Assert.Contains(_deployment.Sms.Taken, message => string.Equals(message.Destination.Value, OwnerNumber, StringComparison.Ordinal));
-        Assert.Equal("generated", Raised().Details["event"].GetString());
+        Assert.Equal(AlertSeverity.High, generated.Severity);
+        Assert.Equal(
+            Alerts.Key(AlertCondition.BreakGlassGenerated, issue.ToString()),
+            Alerts.Deduplication(generated.IdempotencyKey));
+        Assert.Empty(generated.Details);
+        Assert.DoesNotContain(
+            _deployment.Events.Of<AlertRaised>(),
+            raised => raised.Condition is AlertCondition.BreakGlassUsed);
     }
 
     /// <summary>
@@ -583,8 +599,8 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
     private string Drawn() => BreakGlassCode.Draw(_randomness);
 
-    private AlertRaised Raised() =>
-        _deployment.Events.Of<AlertRaised>().Last(raised => raised.Condition is AlertCondition.BreakGlassUsed);
+    private AlertRaised Raised(AlertCondition condition) =>
+        _deployment.Events.Of<AlertRaised>().Last(raised => raised.Condition == condition);
 
     private async Task<string> GeneratedAsync() => (await AdministratorAsync()).Credential;
 

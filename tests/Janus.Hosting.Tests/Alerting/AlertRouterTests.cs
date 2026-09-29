@@ -245,15 +245,18 @@ public sealed class AlertRouterTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-ALERT-004 AC3: with owner notification off, a break-glass use still
-    /// reaches the owner's address and number.
+    /// OPS-ALERT-004 AC3 and OPS-BOOT-004 AC2: with owner notification off, a
+    /// break-glass use, and a generation, still reach the owner's address and number.
     /// </summary>
-    [Fact]
-    public async Task OPS_ALERT_004_AC3_ABreakGlassUseReachesTheOwnerRegardlessAsync()
+    /// <param name="condition">The break-glass condition raised.</param>
+    [Theory]
+    [InlineData(AlertCondition.BreakGlassUsed)]
+    [InlineData(AlertCondition.BreakGlassGenerated)]
+    public async Task OPS_ALERT_004_AC3_ABreakGlassUseReachesTheOwnerRegardlessAsync(AlertCondition condition)
     {
         _configuration.Set(Settings.AlertingOwnerEnabled, false);
 
-        AlertDelivery delivered = await RaisedAsync(Raised(AlertCondition.BreakGlassUsed));
+        AlertDelivery delivered = await RaisedAsync(Raised(condition));
 
         Assert.Equal(3, delivered.Email);
         Assert.Equal(2, delivered.Sms);

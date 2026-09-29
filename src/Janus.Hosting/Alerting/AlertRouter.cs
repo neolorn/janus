@@ -182,10 +182,10 @@ internal sealed class AlertRouter(
             return Result.Failure<AlertAudience>(failure);
         }
 
-        // Break-glass use reaches the owner whether or not routine alerts do: the
-        // switch exists to spare them noise, not to hide the emergency credential
-        // being used (OPS-BOOT-002, OPS-ALERT-004).
-        if (!owner && raised.Condition is not AlertCondition.BreakGlassUsed)
+        // Break-glass use and generation reach the owner whether or not routine alerts
+        // do: the switch exists to spare them noise, not to hide the emergency
+        // credential being made or used (OPS-BOOT-002, OPS-BOOT-004, OPS-ALERT-004).
+        if (!owner && raised.Condition is not (AlertCondition.BreakGlassUsed or AlertCondition.BreakGlassGenerated))
         {
             return Result.Success(new AlertAudience(email, sms));
         }

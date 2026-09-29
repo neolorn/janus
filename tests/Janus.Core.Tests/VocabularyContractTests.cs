@@ -75,6 +75,7 @@ public sealed class VocabularyContractTests
         "approver-volume",
         "read-volume-anomaly",
         "breakglass-used",
+        "breakglass-generated",
         "protected-setting-changed",
         "alert-destination-changed",
         "stepup-policy-weakened",
