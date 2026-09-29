@@ -150,7 +150,11 @@ internal sealed class DeploymentBootstrap(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<BootstrapEnrolment>(notBegun);
+        }
 
         // OPS-BOOT-001 AC1: a deployment that has a system administrator is stood up.
         if (await seed.AdministeredAsync(cancellationToken).ConfigureAwait(false))
@@ -344,7 +348,11 @@ internal sealed class DeploymentBootstrap(
             return Result.Failure<BootstrapEnrolment>(unannounced);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<BootstrapEnrolment>(notCommitted);
+        }
 
         return Result.Success(new BootstrapEnrolment(Enrolment(origins[0], token), now + lifetime));
     }

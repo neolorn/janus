@@ -80,7 +80,12 @@ internal sealed class ConfigurationAdministration(
         // OPS-CFG-002 AC6, X3: the direction is decided on the value in force under the
         // row's lock, so a concurrent change waits and cannot turn a tightening into a
         // loosening.
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await writes.HoldAsync(setting.Key, cancellationToken).ConfigureAwait(false);
 
         TValue before = (await configuration
@@ -170,7 +175,11 @@ internal sealed class ConfigurationAdministration(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -220,7 +229,12 @@ internal sealed class ConfigurationAdministration(
     {
         ArgumentNullException.ThrowIfNull(family);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await writes.HoldAsync(family.For(parameter), cancellationToken).ConfigureAwait(false);
 
         if ((await writes
@@ -246,7 +260,11 @@ internal sealed class ConfigurationAdministration(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -440,7 +458,11 @@ internal sealed class ConfigurationAdministration(
     // clean for the next operation.
     private async ValueTask<Result> EndedAsync(Error refusal, CancellationToken cancellationToken)
     {
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Failure(refusal);
     }

@@ -125,9 +125,19 @@ internal sealed class WebAuthnService(
 
         Authenticator enrolled = Enrolled(subject, kind, label, registration, party);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<AuthenticatorId>(notBegun);
+        }
+
         await authenticators.AddAsync(enrolled, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<AuthenticatorId>(notCommitted);
+        }
 
         return Result.Success(enrolled.Id);
     }
@@ -183,12 +193,21 @@ internal sealed class WebAuthnService(
 
         Authenticator enrolled = Enrolled(subject, discoverable, label, registration, party);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<AuthenticatorId>(notBegun);
+        }
 
         upgrading.Invalidate();
         await authenticators.AddAsync(enrolled, cancellationToken).ConfigureAwait(false);
         await authenticators.RecordAsync(upgrading, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<AuthenticatorId>(notCommitted);
+        }
 
         return Result.Success(enrolled.Id);
     }
@@ -346,7 +365,11 @@ internal sealed class WebAuthnService(
             return Result.Failure<Authenticator>(Error.From(ErrorCodes.WebAuthnCounterMismatch));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<Authenticator>(notBegun);
+        }
 
         if (Kept(assertion.Counter))
         {
@@ -355,7 +378,12 @@ internal sealed class WebAuthnService(
 
         held.Used(now);
         await authenticators.RecordAsync(held, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<Authenticator>(notCommitted);
+        }
 
         return Result.Success(held);
     }

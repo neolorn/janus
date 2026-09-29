@@ -126,7 +126,11 @@ internal sealed class IdentifierService(
             return Result.Failure(Error.From(ErrorCodes.IdentifierMaximum));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         Error? refused = await StageAsync(
                 subject, session, held, kind, entered, canonical, maximum, source, cancellationToken)
@@ -137,7 +141,11 @@ internal sealed class IdentifierService(
             return Result.Failure(refused);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -234,17 +242,30 @@ internal sealed class IdentifierService(
 
         if (staged.CodeSpent || !VerificationCode.Matches(outstanding, code))
         {
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notBegunAgain)
+            {
+                return Result.Failure(notBegunAgain);
+            }
 
             staged.Missed(cap);
 
             await pending.RecordAsync(waiting, cancellationToken).ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+            {
+                return Result.Failure(notCommittedAgain);
+            }
 
             return Result.Failure(Error.From(ErrorCodes.CodeInvalid));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         staged.Verify(now);
 
@@ -256,7 +277,11 @@ internal sealed class IdentifierService(
             return Result.Failure(unsettled);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -290,7 +315,11 @@ internal sealed class IdentifierService(
                 return Result.Success(new LinkLanding(Verified: false, SameBrowser: false, Code: null));
             }
 
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notBegunAgain)
+            {
+                return Result.Failure<LinkLanding>(notBegunAgain);
+            }
 
             waiting.ConfirmOld(now);
 
@@ -302,7 +331,11 @@ internal sealed class IdentifierService(
                 return Result.Failure<LinkLanding>(unsettled);
             }
 
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+            {
+                return Result.Failure<LinkLanding>(notCommittedAgain);
+            }
 
             return Result.Success(new LinkLanding(Verified: true, SameBrowser: false, Code: null));
         }
@@ -325,7 +358,11 @@ internal sealed class IdentifierService(
                 sameBrowser || staged.Code is null ? null : VerificationCode.Read(staged.Code)));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<LinkLanding>(notBegun);
+        }
 
         staged.Verify(now);
 
@@ -337,7 +374,11 @@ internal sealed class IdentifierService(
             return Result.Failure<LinkLanding>(unlanded);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<LinkLanding>(notCommitted);
+        }
 
         return Result.Success(new LinkLanding(Verified: true, SameBrowser: true, Code: null));
     }
@@ -355,7 +396,11 @@ internal sealed class IdentifierService(
             return Result.Success();
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         await pending.RemoveAsync(waiting.Identifier, cancellationToken).ConfigureAwait(false);
 
@@ -368,7 +413,11 @@ internal sealed class IdentifierService(
                 .ConfigureAwait(false);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -411,7 +460,11 @@ internal sealed class IdentifierService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         await directory.PromoteAsync(subject, identifier, cancellationToken).ConfigureAwait(false);
 
@@ -440,7 +493,11 @@ internal sealed class IdentifierService(
             return Result.Failure(unpublished);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -477,7 +534,11 @@ internal sealed class IdentifierService(
             return Result.Failure(refused);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         await directory
             .SettleBackupAsync(subject, kind, choice, named, cancellationToken)
@@ -492,7 +553,11 @@ internal sealed class IdentifierService(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -565,7 +630,11 @@ internal sealed class IdentifierService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         await pending.RemoveAsync(identifier, cancellationToken).ConfigureAwait(false);
 
@@ -597,7 +666,11 @@ internal sealed class IdentifierService(
             return Result.Failure(unpublished);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -637,7 +710,11 @@ internal sealed class IdentifierService(
             return Result.Failure(failure);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         await directory.TakeBackAsync(given.Id, maximum, cancellationToken).ConfigureAwait(false);
 
@@ -667,7 +744,11 @@ internal sealed class IdentifierService(
             return Result.Failure(unpublished);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -800,12 +881,20 @@ internal sealed class IdentifierService(
             return Result.Failure(Error.From(ErrorCodes.ChangePending));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         if (await TakenAsync(subject, changing.Kind, canonical, source, cancellationToken)
             .ConfigureAwait(false))
         {
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+            {
+                return Result.Failure(notCommittedAgain);
+            }
 
             return Result.Success();
         }
@@ -835,7 +924,12 @@ internal sealed class IdentifierService(
         }
 
         await pending.RecordAsync(waiting, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }

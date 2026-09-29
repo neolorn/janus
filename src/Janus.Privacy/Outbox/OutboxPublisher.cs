@@ -144,10 +144,12 @@ internal sealed class OutboxPublisher(
             delivery.Fail();
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await outbox.RecordAsync(delivery, cancellationToken).ConfigureAwait(false);
         await ErasedAsync(delivery, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         // IDN-LIFE-003a: a spent budget is a diagnostic signal and not somewhere
         // failures go quietly, so it is raised the moment it is recorded.

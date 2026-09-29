@@ -149,7 +149,11 @@ internal sealed class PasswordService(
         DateTimeOffset now = time.GetUtcNow();
         Password? held = await passwords.FindAsync(subject, cancellationToken).ConfigureAwait(false);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<PasswordFeedback>(notBegun);
+        }
 
         if (held is null)
         {
@@ -163,7 +167,11 @@ internal sealed class PasswordService(
             await passwords.SetAsync(held, cancellationToken).ConfigureAwait(false);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<PasswordFeedback>(notCommitted);
+        }
 
         return Result.Success(prepared.Feedback);
     }
@@ -220,12 +228,20 @@ internal sealed class PasswordService(
 
         if (Raised(held.Hash, parameters, parallelism))
         {
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notBegun)
+            {
+                return Result.Failure<PasswordVerification>(notBegun);
+            }
 
             held.Rehash(hasher.Hash(password, parameters, parallelism));
             await passwords.RehashAsync(held, cancellationToken).ConfigureAwait(false);
 
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommitted)
+            {
+                return Result.Failure<PasswordVerification>(notCommitted);
+            }
         }
 
         // AUTH-RECOV-007a: an invalidation that left the account on this password

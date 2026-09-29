@@ -112,7 +112,8 @@ internal sealed class DeletionSweep(
     {
         ErasureReason reason = Because(deletion.By);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         _ = await eraser.EraseAsync(deletion.Subject, reason, now, cancellationToken)
             .ConfigureAwait(false);
@@ -134,7 +135,8 @@ internal sealed class DeletionSweep(
                 Named(deletion, reason),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }
 
     private static Dictionary<string, JsonElement> Named(

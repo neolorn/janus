@@ -108,9 +108,19 @@ internal sealed class BreakGlassService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<IssuedSession>(notBegun);
+        }
+
         int attempted = await store.AttemptedAsync(now, now - GlobalWindow, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<IssuedSession>(notCommitted);
+        }
 
         // The limit makes an attack loud rather than infeasible, so an hour from the
         // refused attempt is the earliest the answer promises (OPS-BOOT-004 AC7).
@@ -149,7 +159,12 @@ internal sealed class BreakGlassService(
 
         try
         {
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notBegunAgain)
+            {
+                return Result.Failure<IssuedSession>(notBegunAgain);
+            }
+
             await store.HoldAsync(cancellationToken).ConfigureAwait(false);
 
             BreakGlassCredential? standing = await store.StandingAsync(cancellationToken).ConfigureAwait(false);
@@ -164,7 +179,11 @@ internal sealed class BreakGlassService(
                 is BreakGlassCredential last
                 && Argon2idHasher.Verify(presented, last.Hash);
 
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+            {
+                return Result.Failure<IssuedSession>(notCommittedAgain);
+            }
 
             return await RefusedAsync(
                     attempt,
@@ -247,7 +266,12 @@ internal sealed class BreakGlassService(
         DateTimeOffset now = time.GetUtcNow();
         var issued = BreakGlassCredential.Issue(hash, acting, now);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<GeneratedBreakGlass>(notBegun);
+        }
+
         await store.HoldAsync(cancellationToken).ConfigureAwait(false);
 
         BreakGlassCredential? standing = await store.StandingAsync(cancellationToken).ConfigureAwait(false);
@@ -277,7 +301,11 @@ internal sealed class BreakGlassService(
             return Result.Failure<GeneratedBreakGlass>(unalerted);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<GeneratedBreakGlass>(notCommitted);
+        }
 
         return Result.Success(new GeneratedBreakGlass(
             code,
@@ -376,7 +404,12 @@ internal sealed class BreakGlassService(
             return Result.Failure<IssuedSession>(unalerted);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<IssuedSession>(notCommitted);
+        }
+
         await throttle.SucceededAsync(attempt, cancellationToken).ConfigureAwait(false);
 
         return Result.Success(issued);
@@ -391,9 +424,19 @@ internal sealed class BreakGlassService(
         SubjectId? account,
         CancellationToken cancellationToken)
     {
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<IssuedSession>(notBegun);
+        }
+
         await refusals.FailedAsync(account, Factor.BreakGlass, time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<IssuedSession>(notCommitted);
+        }
 
         Result counted = await throttle.FailedAsync(attempt, cancellationToken).ConfigureAwait(false);
 

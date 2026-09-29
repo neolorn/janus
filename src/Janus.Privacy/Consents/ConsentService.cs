@@ -103,7 +103,12 @@ internal sealed class ConsentService(
             WithdrawnAt: null,
             SupersededAt: null);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await consents.RecordAsync(subject, granted, cancellationToken).ConfigureAwait(false);
         await AnnouncedAsync(subject, purpose, ConsentChange.Granted, now, cancellationToken)
             .ConfigureAwait(false);
@@ -117,7 +122,12 @@ internal sealed class ConsentService(
                 Named(purpose, version, mechanism, kind),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -159,7 +169,12 @@ internal sealed class ConsentService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await consents
             .RecordAsync(subject, consent with { WithdrawnAt = now }, cancellationToken)
             .ConfigureAwait(false);
@@ -175,7 +190,12 @@ internal sealed class ConsentService(
                 Named(purpose, consent.NoticeVersion, consent.Mechanism, consent.Kind),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -226,7 +246,12 @@ internal sealed class ConsentService(
         DateTimeOffset now = time.GetUtcNow();
         var objection = new ObjectionRecord(purpose, version, mechanism, now, WithdrawnAt: null);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await consents.RecordAsync(subject, objection, cancellationToken).ConfigureAwait(false);
         await ObjectedAsync(subject, purpose, objecting: true, now, cancellationToken)
             .ConfigureAwait(false);
@@ -240,7 +265,12 @@ internal sealed class ConsentService(
                 Named(purpose, version, mechanism),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -275,7 +305,12 @@ internal sealed class ConsentService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await consents
             .RecordAsync(subject, objection with { WithdrawnAt = now }, cancellationToken)
             .ConfigureAwait(false);
@@ -291,7 +326,12 @@ internal sealed class ConsentService(
                 Named(purpose, objection.NoticeVersion, objection.Mechanism),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }

@@ -226,7 +226,11 @@ internal sealed class BackgroundWorker(
 
                     // The lapse is claimed and raised in one transaction, so a raise that
                     // fails leaves the lapse to be claimed again rather than marked as told.
-                    await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+                    if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                        .Match<Error?>(() => null, error => error) is Error notBegun)
+                    {
+                        return Result.Failure(notBegun);
+                    }
 
                     if (!await services.GetRequiredService<IJobRuns>()
                             .LapsedAsync(job.Name, now, interval, window, cancellationToken)
@@ -259,7 +263,11 @@ internal sealed class BackgroundWorker(
                         return Result.Failure(failure);
                     }
 
-                    await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                        .Match<Error?>(() => null, error => error) is Error notCommitted)
+                    {
+                        return Result.Failure(notCommitted);
+                    }
 
                     return Result.Success();
                 },

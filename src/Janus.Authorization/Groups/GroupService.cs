@@ -106,12 +106,22 @@ internal sealed class GroupService(
 
         var group = Group.Create(GroupId.New(time), organization, named);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<GroupId>(notBegun);
+        }
+
         await groups.CreateAsync(group, cancellationToken).ConfigureAwait(false);
         await audit
             .CreatedAsync(group, stated, acting, context.BreakGlassReason, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<GroupId>(notCommitted);
+        }
 
         return Result.Success(group.Id);
     }
@@ -145,7 +155,11 @@ internal sealed class GroupService(
             return Result.Failure(Malformed("reason"));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         // AUTHZ-GRANT-003 AC3: a grant's history names the group it was given to,
         // revoked or not, and a member or a containing group would lose what it holds
@@ -159,7 +173,12 @@ internal sealed class GroupService(
         await audit
             .RemovedAsync(held, stated, acting, context.BreakGlassReason, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -224,7 +243,11 @@ internal sealed class GroupService(
             return Result.Failure(refused);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         if ((await groups.MembersAsync(group, cancellationToken).ConfigureAwait(false)).Contains(member))
         {
@@ -236,7 +259,11 @@ internal sealed class GroupService(
             .MemberAddedAsync(held, member, stated, acting, context.BreakGlassReason, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -278,7 +305,11 @@ internal sealed class GroupService(
             return Result.Failure(refused);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         if (!(await groups.MembersAsync(group, cancellationToken).ConfigureAwait(false)).Contains(member))
         {
@@ -290,7 +321,11 @@ internal sealed class GroupService(
             .MemberRemovedAsync(held, member, stated, acting, context.BreakGlassReason, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }

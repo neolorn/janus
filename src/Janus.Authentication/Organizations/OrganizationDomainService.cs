@@ -105,7 +105,11 @@ internal sealed class OrganizationDomainService(
 
         if (read.Listed is LockedDomain listed)
         {
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+            {
+                return Result.Failure<OrganizationDomain>(notCommittedAgain);
+            }
 
             return Result.Success(listed.Answered());
         }
@@ -116,7 +120,11 @@ internal sealed class OrganizationDomainService(
                 .ConfigureAwait(false)
             is Error withheld)
         {
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+            {
+                return Result.Failure<OrganizationDomain>(notCommittedAgain);
+            }
 
             return Result.Failure<OrganizationDomain>(withheld);
         }
@@ -145,7 +153,12 @@ internal sealed class OrganizationDomainService(
                 now,
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<OrganizationDomain>(notCommitted);
+        }
 
         return Result.Success(added.Answered());
     }
@@ -207,7 +220,12 @@ internal sealed class OrganizationDomainService(
 
         listed.Checked(passed: true, now);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<OrganizationDomain>(notBegun);
+        }
+
         await domains.RecordAsync(listed, cancellationToken).ConfigureAwait(false);
         await audit
             .DomainChangedAsync(
@@ -220,7 +238,12 @@ internal sealed class OrganizationDomainService(
                 now,
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<OrganizationDomain>(notCommitted);
+        }
 
         return Result.Success(listed.Answered());
     }
@@ -251,7 +274,11 @@ internal sealed class OrganizationDomainService(
 
         if (read.Listed is not LockedDomain listed)
         {
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+            {
+                return Result.Failure(notCommittedAgain);
+            }
 
             return Result.Success();
         }
@@ -266,7 +293,11 @@ internal sealed class OrganizationDomainService(
         if (await RefusedAsync(context, session, read.Acting, loosening, cancellationToken).ConfigureAwait(false)
             is Error withheld)
         {
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+            {
+                return Result.Failure(notCommittedAgain);
+            }
 
             return Result.Failure(withheld);
         }
@@ -311,7 +342,11 @@ internal sealed class OrganizationDomainService(
             return Result.Failure(unalerted);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -386,7 +421,8 @@ internal sealed class OrganizationDomainService(
 
         if (holding)
         {
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
             await administration
                 .HoldAsync(Settings.OrganizationPolicy, organization.ToString(), cancellationToken)
                 .ConfigureAwait(false);
@@ -403,7 +439,8 @@ internal sealed class OrganizationDomainService(
         {
             if (holding)
             {
-                await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+                (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                    .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
             }
 
             return Change.Refused(acting, failure);

@@ -102,7 +102,12 @@ internal sealed class EventPublisher(
                     Jitter());
             }
 
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notBegun)
+            {
+                return Result.Failure<int>(notBegun);
+            }
+
             await events.RecordAsync(pending, cancellationToken).ConfigureAwait(false);
 
             // IDN-LIFE-003a: a spent budget is a diagnostic signal and not somewhere
@@ -124,7 +129,11 @@ internal sealed class EventPublisher(
                 return Result.Failure<int>(unalerted);
             }
 
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommitted)
+            {
+                return Result.Failure<int>(notCommitted);
+            }
         }
 
         return Result.Success(published);

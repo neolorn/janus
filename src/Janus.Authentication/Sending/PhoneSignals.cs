@@ -60,11 +60,13 @@ internal sealed class PhoneSignals(
             return true;
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await audit
             .ConsideredAsync(factor, answered, subject, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         return false;
     }
@@ -91,11 +93,13 @@ internal sealed class PhoneSignals(
             : await provider.Signal(request.Destination.Canonical, cancellationToken)
                 .ConfigureAwait(false);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await audit
             .ConsideredAsync(factor, answered, request.Subject, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }
 
     // Which entry a message amounts to follows from the channel it goes out on and

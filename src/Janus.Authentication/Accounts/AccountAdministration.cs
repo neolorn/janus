@@ -103,7 +103,12 @@ internal sealed class AccountAdministration(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await directory.SuspendAsync(subject, cancellationToken).ConfigureAwait(false);
 
         // AUTH-SESS-010: the sessions end in the transaction that suspends, so the
@@ -134,7 +139,11 @@ internal sealed class AccountAdministration(
             .AdministeredAsync(AuditActions.AccountSuspended, acting, context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -182,7 +191,12 @@ internal sealed class AccountAdministration(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await directory.ReinstateAsync(subject, cancellationToken).ConfigureAwait(false);
 
         Result published = await events
@@ -204,7 +218,11 @@ internal sealed class AccountAdministration(
             .AdministeredAsync(AuditActions.AccountReactivated, acting, context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -243,12 +261,22 @@ internal sealed class AccountAdministration(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await directory.LiftRestrictionAsync(subject, now, cancellationToken).ConfigureAwait(false);
         await audit
             .AdministeredAsync(AuditActions.RestrictionLifted, acting, context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -305,7 +333,12 @@ internal sealed class AccountAdministration(
             ? await directory.ErasureRequestAsync(subject, deleting.Since, cancellationToken).ConfigureAwait(false)
             : null;
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await directory.CancelDeletionAsync(subject, cancellationToken).ConfigureAwait(false);
         await links.RemoveAsync(subject, cancellationToken).ConfigureAwait(false);
 
@@ -327,7 +360,12 @@ internal sealed class AccountAdministration(
         await audit
             .CancelledOnBehalfAsync(acting, context.BreakGlassReason, subject, request, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }

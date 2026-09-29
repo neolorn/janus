@@ -67,7 +67,12 @@ internal sealed class DomainReverification(
 
             domain.Checked(passed, now);
 
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notBegun)
+            {
+                return Result.Failure<int>(notBegun);
+            }
+
             await domains.RecordAsync(domain, cancellationToken).ConfigureAwait(false);
 
             if (!passed
@@ -85,7 +90,11 @@ internal sealed class DomainReverification(
                 return Result.Failure<int>(unalerted);
             }
 
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommitted)
+            {
+                return Result.Failure<int>(notCommitted);
+            }
         }
 
         return Result.Success(due.Count);

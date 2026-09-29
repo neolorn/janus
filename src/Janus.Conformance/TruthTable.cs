@@ -335,7 +335,8 @@ internal sealed class TruthTable<TResource>(
         {
             IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
             (await scope.ServiceProvider.GetRequiredService<IDerivationMaterialiser>()
                     .RefreshAsync(
@@ -349,7 +350,8 @@ internal sealed class TruthTable<TResource>(
                     _ => { },
                     error => throw new InvalidOperationException(error.Code.ToString()));
 
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         }
     }
 

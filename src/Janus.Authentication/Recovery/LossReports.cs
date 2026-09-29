@@ -168,7 +168,11 @@ internal sealed class LossReports(
         var cancel = OpaqueToken.Draw(randomness);
         var report = LossReport.Open(held.Id, held.Subject, cancel, now, window);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<LossReported>(notBegun);
+        }
 
         held.Suspend(report.InvalidatesAt);
 
@@ -177,15 +181,30 @@ internal sealed class LossReports(
         await audit
             .RecordedAsync(Reported, held.Subject, held.Id, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<LossReported>(notCommitted);
+        }
 
         report.Notified(
             await TellAsync(report, source, cancellationToken).ConfigureAwait(false),
             now);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegunAgain)
+        {
+            return Result.Failure<LossReported>(notBegunAgain);
+        }
+
         await reports.RecordAsync(report, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+        {
+            return Result.Failure<LossReported>(notCommittedAgain);
+        }
 
         if (await AnnouncedAsync(
                 new CredentialSuspended(
@@ -243,7 +262,11 @@ internal sealed class LossReports(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         if (held is not null)
         {
@@ -256,7 +279,12 @@ internal sealed class LossReports(
         await audit
             .RecordedAsync(Cancelled, report.Subject, credential, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         // AUTH-RECOV-007: a report is cancelled whether or not the credential is
         // still there to restore, and the event states what was restored.
@@ -357,12 +385,22 @@ internal sealed class LossReports(
         {
             report.Hold(now);
 
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notBegun)
+            {
+                return Result.Failure<int>(notBegun);
+            }
+
             await reports.RecordAsync(report, cancellationToken).ConfigureAwait(false);
             await audit
                 .RecordedAsync(Held, principal, report.Subject, report.Credential, now, cancellationToken)
                 .ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommitted)
+            {
+                return Result.Failure<int>(notCommitted);
+            }
 
             return Result.Success(1);
         }
@@ -381,9 +419,11 @@ internal sealed class LossReports(
             await TellAsync(report, Origin, cancellationToken).ConfigureAwait(false),
             now);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await reports.RecordAsync(report, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         return 1;
     }
@@ -397,7 +437,11 @@ internal sealed class LossReports(
         Authenticator? held = await authenticators.FindAsync(report.Credential, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<int>(notBegun);
+        }
 
         if (held is not null)
         {
@@ -437,7 +481,12 @@ internal sealed class LossReports(
         await audit
             .RecordedAsync(Invalidated, principal, report.Subject, report.Credential, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<int>(notCommitted);
+        }
 
         // AUTH-RECOV-007: invalidation is the one point at which the account's
         // reachable assurance is recomputed, so it is the one a consumer hears about.

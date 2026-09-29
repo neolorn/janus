@@ -172,7 +172,11 @@ internal sealed class RecoveryService(
             return Result.Failure(failure);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         link.Spend(session: null, now);
 
@@ -186,7 +190,11 @@ internal sealed class RecoveryService(
             await accounts.ReinstateAsync(link.Subject, cancellationToken).ConfigureAwait(false);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         // IDN-LIFE-008: a changed password ends every session that was held under the
         // old one, wherever it is held.
@@ -302,12 +310,21 @@ internal sealed class RecoveryService(
 
         var opened = EnrolmentSessionId.New(time);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<EnrolmentSession>(notBegun);
+        }
 
         link.Spend(opened, now);
 
         await links.RecordAsync(link, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<EnrolmentSession>(notCommitted);
+        }
 
         // D-147: the session the link opens is capped by the link's own lifetime and
         // never given one of its own.
@@ -491,13 +508,23 @@ internal sealed class RecoveryService(
             return Result.Failure(failure);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await links
             .ReplaceAsync(
                 RecoveryLink.Issue(token, subject, RecoveryPurpose.SelfService, now, lifetime),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -696,14 +723,24 @@ internal sealed class RecoveryService(
             return Result.Failure<ApprovedRecovery>(ThrottleService.Refusal(lifts));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<ApprovedRecovery>(notBegun);
+        }
+
         await approvals
             .AddAsync(new RecoveryApproval(subject, approver, channel.Canonical, now), cancellationToken)
             .ConfigureAwait(false);
         await audit
             .ApprovedAsync(approver, breakGlassReason, subject, reason, channel.Kind, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<ApprovedRecovery>(notCommitted);
+        }
 
         Result raised = await RaiseAsync(
                 subject,
@@ -777,7 +814,12 @@ internal sealed class RecoveryService(
             return Result.Failure<ApprovedRecovery>(failure);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<ApprovedRecovery>(notBegun);
+        }
+
         await links
             .ReplaceAsync(
                 RecoveryLink.Issue(
@@ -795,7 +837,12 @@ internal sealed class RecoveryService(
                 cancellationToken)
             .ConfigureAwait(false);
         await approvals.SpendAsync(subject, now, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<ApprovedRecovery>(notCommitted);
+        }
 
         _ = await NotifyAsync(
                 subject,

@@ -94,7 +94,8 @@ internal sealed class DeadlineSweep(
     {
         bool carried = false;
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         if (request.WarnedAt is null && now >= request.WarnAt)
         {
@@ -126,7 +127,8 @@ internal sealed class DeadlineSweep(
             await requests.RecordAsync(request, cancellationToken).ConfigureAwait(false);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         return carried;
     }

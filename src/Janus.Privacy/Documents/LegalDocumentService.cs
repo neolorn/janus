@@ -132,7 +132,12 @@ internal sealed class LegalDocumentService(
             return Result.Failure(Error.From(ErrorCodes.DocumentNotFound));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await store.TranslateAsync(document, version, translation, cancellationToken).ConfigureAwait(false);
         await audit
             .RecordedAsync(
@@ -144,7 +149,12 @@ internal sealed class LegalDocumentService(
                 Named(document, version, translation.Language),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -199,7 +209,12 @@ internal sealed class LegalDocumentService(
             [.. publication.Translations],
             time.GetUtcNow());
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<DocumentVersion>(notBegun);
+        }
+
         await store.AddAsync(version, cancellationToken).ConfigureAwait(false);
 
         // PRIV-CONS-007: a material revision ends the live consents on the purposes
@@ -232,7 +247,12 @@ internal sealed class LegalDocumentService(
                 Named(version, publication.Material, superseded),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<DocumentVersion>(notCommitted);
+        }
 
         return Result.Success(version);
     }

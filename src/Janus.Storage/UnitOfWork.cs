@@ -23,7 +23,7 @@ internal sealed class UnitOfWork(StoreContext context) : IUnitOfWork
     private int _depth;
 
     /// <inheritdoc/>
-    public async ValueTask BeginAsync(CancellationToken cancellationToken)
+    public async ValueTask<Result> BeginAsync(CancellationToken cancellationToken)
     {
         // An operation that calls another does not start a second transaction: the
         // outermost one is the one transaction the whole operation runs in, and the
@@ -32,16 +32,18 @@ internal sealed class UnitOfWork(StoreContext context) : IUnitOfWork
         {
             _depth++;
 
-            return;
+            return Result.Success();
         }
 
         _transaction = await context.Database
             .BeginTransactionAsync(cancellationToken)
             .ConfigureAwait(false);
+
+        return Result.Success();
     }
 
     /// <inheritdoc/>
-    public async ValueTask CommitAsync(CancellationToken cancellationToken)
+    public async ValueTask<Result> CommitAsync(CancellationToken cancellationToken)
     {
         if (_transaction is null)
         {
@@ -52,7 +54,7 @@ internal sealed class UnitOfWork(StoreContext context) : IUnitOfWork
         {
             _depth--;
 
-            return;
+            return Result.Success();
         }
 
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -60,6 +62,8 @@ internal sealed class UnitOfWork(StoreContext context) : IUnitOfWork
 
         await _transaction.DisposeAsync().ConfigureAwait(false);
         _transaction = null;
+
+        return Result.Success();
     }
 
     /// <inheritdoc/>

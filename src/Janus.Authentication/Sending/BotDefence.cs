@@ -84,7 +84,11 @@ internal sealed class BotDefence(
             return Result.Success();
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         if (verifier is null)
         {
@@ -94,7 +98,11 @@ internal sealed class BotDefence(
                 .SignalledAsync(signal, source, challenged: false, now, cancellationToken)
                 .ConfigureAwait(false);
 
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+            {
+                return Result.Failure(notCommittedAgain);
+            }
 
             return Result.Success();
         }
@@ -103,7 +111,11 @@ internal sealed class BotDefence(
             .SignalledAsync(signal, source, challenged: true, now, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         if (token is null
             || !await verifier.Passes(token, cancellationToken).ConfigureAwait(false))

@@ -140,7 +140,12 @@ internal sealed class RegistrationService(
             }
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<RegistrationSessionId>(notBegun);
+        }
+
         await sessions.AddAsync(session, cancellationToken).ConfigureAwait(false);
 
         if (invitation is not null)
@@ -148,7 +153,11 @@ internal sealed class RegistrationService(
             await invitations.RecordAsync(invitation, cancellationToken).ConfigureAwait(false);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<RegistrationSessionId>(notCommitted);
+        }
 
         return Result.Success(session.Id);
     }
@@ -276,14 +285,23 @@ internal sealed class RegistrationService(
         DateTimeOffset now = time.GetUtcNow();
         bool adult = IsAdult(dateOfBirth, DateOnly.FromDateTime(now.UtcDateTime));
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<RegistrationState>(notBegun);
+        }
 
         if (affirmation is not AttributeRequirement.Off && !adult)
         {
             live.RefuseAge(now);
 
             await sessions.RecordAsync(live, cancellationToken).ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+            {
+                return Result.Failure<RegistrationState>(notCommittedAgain);
+            }
 
             return Result.Failure<RegistrationState>(Error.From(ErrorCodes.ProfileUnderage));
         }
@@ -295,7 +313,12 @@ internal sealed class RegistrationService(
             now);
 
         await sessions.RecordAsync(live, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<RegistrationState>(notCommitted);
+        }
 
         return Result.Success(State(live));
     }
@@ -377,12 +400,21 @@ internal sealed class RegistrationService(
             return OutOfStep();
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<RegistrationState>(notBegun);
+        }
 
         live.SkipPhone();
 
         await sessions.RecordAsync(live, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<RegistrationState>(notCommitted);
+        }
 
         return Result.Success(State(live));
     }
@@ -472,7 +504,11 @@ internal sealed class RegistrationService(
             return Result.Failure<RegistrationState>(outside);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<RegistrationState>(notBegun);
+        }
 
         staged.Change(entered, canonical);
 
@@ -482,7 +518,12 @@ internal sealed class RegistrationService(
         }
 
         await sessions.RecordAsync(live, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<RegistrationState>(notCommitted);
+        }
 
         return Result.Success(State(live));
     }
@@ -513,12 +554,21 @@ internal sealed class RegistrationService(
             return Result.Failure<RegistrationState>(Error.From(ErrorCodes.IdentifierLastOfKind));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<RegistrationState>(notBegun);
+        }
 
         live.Discard(staged);
 
         await sessions.RecordAsync(live, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<RegistrationState>(notCommitted);
+        }
 
         return Result.Success(State(live));
     }
@@ -570,14 +620,23 @@ internal sealed class RegistrationService(
             return Result.Failure<RegistrationState>(Error.From(ErrorCodes.CodeExpired));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<RegistrationState>(notBegun);
+        }
 
         if (!VerificationCode.Matches(held, code))
         {
             staged.Missed(cap);
 
             await sessions.RecordAsync(live, cancellationToken).ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+            {
+                return Result.Failure<RegistrationState>(notCommittedAgain);
+            }
 
             return Result.Failure<RegistrationState>(Error.From(ErrorCodes.CodeInvalid));
         }
@@ -585,7 +644,12 @@ internal sealed class RegistrationService(
         staged.Verify(now);
 
         await sessions.RecordAsync(live, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<RegistrationState>(notCommitted);
+        }
 
         return Result.Success(State(live));
     }
@@ -626,12 +690,21 @@ internal sealed class RegistrationService(
                 sameBrowser || staged.Code is null ? null : VerificationCode.Read(staged.Code)));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<LinkLanding>(notBegun);
+        }
 
         staged.Verify(now);
 
         await sessions.RecordAsync(sender, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<LinkLanding>(notCommitted);
+        }
 
         return Result.Success(new LinkLanding(Verified: true, SameBrowser: true, Code: null));
     }
@@ -673,7 +746,11 @@ internal sealed class RegistrationService(
             return OutOfStep();
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<RegistrationState>(notBegun);
+        }
 
         live.Reached(RegistrationStep.Security);
 
@@ -724,7 +801,11 @@ internal sealed class RegistrationService(
                 return Result.Failure<RegistrationState>(failure);
             }
 
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notBegun)
+            {
+                return Result.Failure<RegistrationState>(notBegun);
+            }
 
             live.SetPassword(prepared.Hash, prepared.StandsAlone);
 
@@ -866,7 +947,11 @@ internal sealed class RegistrationService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<RegistrationOutcome>(notBegun);
+        }
 
         live.AcceptTerms(termsVersion, noticeVersion);
 
@@ -942,7 +1027,11 @@ internal sealed class RegistrationService(
             return Result.Failure<RegistrationOutcome>(unpublished);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<RegistrationOutcome>(notCommitted);
+        }
 
         return Result.Success(new RegistrationOutcome(live.Provisional, issued, browser));
     }
@@ -1005,9 +1094,19 @@ internal sealed class RegistrationService(
             return Result.Success();
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await sessions.RemoveAsync(live.Id, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -1019,13 +1118,15 @@ internal sealed class RegistrationService(
     /// <returns>How many were swept.</returns>
     public async ValueTask<int> SweepAsync(CancellationToken cancellationToken)
     {
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         int swept = await sessions
             .SweepAsync(time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         return swept;
     }
@@ -1062,7 +1163,11 @@ internal sealed class RegistrationService(
             return OutOfStep();
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<RegistrationState>(notBegun);
+        }
 
         live.Enrol(credential);
 
@@ -1140,12 +1245,21 @@ internal sealed class RegistrationService(
         // with it; a provider that supplied no address leaves the step to a typed one.
         if (address is null || live.Bound(IdentifierKind.Email) is not null)
         {
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notBegun)
+            {
+                return Result.Failure<ProvidedRegistration>(notBegun);
+            }
 
             live.Link(credential);
 
             await sessions.RecordAsync(live, cancellationToken).ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommitted)
+            {
+                return Result.Failure<ProvidedRegistration>(notCommitted);
+            }
 
             return Result.Success(new ProvidedRegistration(Linked: false, State(live)));
         }
@@ -1393,7 +1507,12 @@ internal sealed class RegistrationService(
                 : RegistrationStep.Security);
 
         await sessions.RecordAsync(session, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<RegistrationState>(notCommitted);
+        }
 
         return Result.Success(State(session, drawn));
     }
@@ -1455,7 +1574,11 @@ internal sealed class RegistrationService(
             return Result.Failure<RegistrationState>(Error.From(ErrorCodes.IdentifierLocked));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<RegistrationState>(notBegun);
+        }
 
         if (await DispatchAsync(session, bound, cancellationToken).ConfigureAwait(false) is Error refused)
         {
@@ -1468,7 +1591,12 @@ internal sealed class RegistrationService(
         }
 
         await sessions.RecordAsync(session, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<RegistrationState>(notCommitted);
+        }
 
         return Result.Success(State(session));
     }
@@ -1504,7 +1632,11 @@ internal sealed class RegistrationService(
             isLocked: false,
             isExtra);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<RegistrationState>(notBegun);
+        }
 
         session.Stage(staged);
 
@@ -1522,7 +1654,12 @@ internal sealed class RegistrationService(
         }
 
         await sessions.RecordAsync(session, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<RegistrationState>(notCommitted);
+        }
 
         return Result.Success(State(session));
     }
@@ -1565,7 +1702,11 @@ internal sealed class RegistrationService(
             isLocked: vouched,
             isExtra: false);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<RegistrationState>(notBegun);
+        }
 
         session.Link(credential);
         session.Stage(staged);
@@ -1583,7 +1724,12 @@ internal sealed class RegistrationService(
         session.Reached(RegistrationStep.Phone);
 
         await sessions.RecordAsync(session, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<RegistrationState>(notCommitted);
+        }
 
         return Result.Success(State(session));
     }

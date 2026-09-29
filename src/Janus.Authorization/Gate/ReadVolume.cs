@@ -120,7 +120,11 @@ internal sealed class ReadVolume(
                 .ConfigureAwait(false))
             .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<int>(notBegun);
+        }
 
         int baselined = await store
             .RebaselineAsync(
@@ -129,7 +133,11 @@ internal sealed class ReadVolume(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<int>(notCommitted);
+        }
 
         return Result.Success(baselined);
     }

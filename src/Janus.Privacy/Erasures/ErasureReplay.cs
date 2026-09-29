@@ -107,7 +107,8 @@ internal sealed class ErasureReplay(
 
     private async ValueTask ReappliedAsync(ErasureLedgerLine line, CancellationToken cancellationToken)
     {
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         _ = await eraser
             .ReapplyAsync(line.Subject, line.Reason, Origin(line.Reason), line.ErasedAt, cancellationToken)
@@ -130,6 +131,7 @@ internal sealed class ErasureReplay(
                 Named(line),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }
 }

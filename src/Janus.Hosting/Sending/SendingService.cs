@@ -101,7 +101,11 @@ internal sealed class SendingService(
             return Result.Failure(failure);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         foreach (Worded _ in worded)
         {
@@ -115,7 +119,11 @@ internal sealed class SendingService(
                 .ConfigureAwait(false);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -168,11 +176,19 @@ internal sealed class SendingService(
         // publisher leaves it to this path for the first retry delay.
         var delivery = SendDelivery.Of(request, now, schedule.Initial);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<SendReference>(notBegun);
+        }
 
         await outbox.AddAsync(delivery, cancellationToken).ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<SendReference>(notCommitted);
+        }
 
         SendDelivery written = await outbox.FindAsync(delivery.Id, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("The message just written has no row.");
@@ -346,7 +362,11 @@ internal sealed class SendingService(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         // IDN-PRIN-003: a message a transport has taken is spent, and what is spent is
         // removed rather than kept as a record of where somebody was written to. A
@@ -401,7 +421,11 @@ internal sealed class SendingService(
                 .ConfigureAwait(false);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }

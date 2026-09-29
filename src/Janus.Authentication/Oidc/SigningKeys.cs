@@ -185,7 +185,8 @@ internal sealed class SigningKeys(
                 publicKey,
                 now);
 
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
             if (signing is not null)
             {
@@ -195,7 +196,8 @@ internal sealed class SigningKeys(
             }
 
             await keys.AddAsync(key, privateKey, cancellationToken).ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
             return key;
         }

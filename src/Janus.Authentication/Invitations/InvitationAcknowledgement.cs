@@ -150,7 +150,11 @@ internal sealed class InvitationAcknowledgement(
             return Result.Failure(Error.From(ErrorCodes.IdentifierMaximum));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         MembershipId membership = (await memberships
                 .AttachAsync(
@@ -221,7 +225,11 @@ internal sealed class InvitationAcknowledgement(
             }
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }

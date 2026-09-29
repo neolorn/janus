@@ -48,7 +48,8 @@ internal sealed class SignedCallbackGuard(ISignedCallback callback) : IMiddlewar
         TimeProvider time = context.RequestServices.GetRequiredService<TimeProvider>();
         ILogger log = context.RequestServices.GetRequiredService<ILogger<SignedCallbackGuard>>();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         if (!await CallbackIntake
                 .AdmittedAsync(context, callback.Name, callback.Sources, admission, work, log, cancellationToken)
@@ -77,7 +78,8 @@ internal sealed class SignedCallbackGuard(ISignedCallback callback) : IMiddlewar
             .ClaimAsync(callback.Name, identifier, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         if (!claimed)
         {
@@ -175,11 +177,13 @@ internal sealed class SignedCallbackGuard(ISignedCallback callback) : IMiddlewar
 
         IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await scope.ServiceProvider
             .GetRequiredService<CallbackAdmission>()
             .ReleaseAsync(callback.Name, identifier, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }
 }

@@ -272,9 +272,19 @@ internal sealed class CredentialService(
             return Result.Failure<EnrolledCredential>(failure);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<EnrolledCredential>(notBegun);
+        }
+
         await ceremonies.RemoveAsync(acting.Subject, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<EnrolledCredential>(notCommitted);
+        }
 
         return await SettledAsync(acting, enrolled, ceremony.Kind, source, cancellationToken)
             .ConfigureAwait(false);
@@ -491,12 +501,22 @@ internal sealed class CredentialService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await authenticators.RemoveAsync(credential, cancellationToken).ConfigureAwait(false);
         await audit
             .RecordedAsync(Removed, acting.Subject, credential, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         _ = await TellAsync(acting.Subject, MessageKind.SecurityNotice, source, cancellationToken)
             .ConfigureAwait(false);
@@ -572,12 +592,22 @@ internal sealed class CredentialService(
         DateTimeOffset now = time.GetUtcNow();
         var linked = Authenticator.Linked(AuthenticatorId.New(time), acting.Subject, provider, label, now);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await authenticators.LinkAsync(linked, providerSubject, cancellationToken).ConfigureAwait(false);
         await audit
             .RecordedAsync(Enrolled, acting.Subject, linked.Id, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         _ = await TellAsync(acting.Subject, MessageKind.CredentialEnrolled, source, cancellationToken)
             .ConfigureAwait(false);
@@ -648,12 +678,22 @@ internal sealed class CredentialService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await authenticators.RemoveAsync(linked.Id, cancellationToken).ConfigureAwait(false);
         await audit
             .RecordedAsync(Removed, acting.Subject, linked.Id, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         _ = await TellAsync(acting.Subject, MessageKind.SecurityNotice, source, cancellationToken)
             .ConfigureAwait(false);
@@ -873,7 +913,12 @@ internal sealed class CredentialService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<CredentialCeremony>(notBegun);
+        }
+
         await ceremonies
             .ReplaceAsync(
                 KeyCeremony.Existing(
@@ -885,7 +930,12 @@ internal sealed class CredentialService(
                     now + lifetime),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<CredentialCeremony>(notCommitted);
+        }
 
         return Result.Success(new CredentialCeremony(
             ceremony.RelyingPartyId,

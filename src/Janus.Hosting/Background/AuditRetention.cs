@@ -91,7 +91,12 @@ internal sealed class AuditRetention(
             .DropExpiredAsync(security, routine, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<int>(notBegun);
+        }
+
         await audit
             .RecordedAsync(
                 AuditActions.AuditPartitionsMaintained,
@@ -101,7 +106,12 @@ internal sealed class AuditRetention(
                 Maintained(created, dropped, security, routine),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<int>(notCommitted);
+        }
 
         return Result.Success(dropped);
     }

@@ -1388,8 +1388,8 @@ Janus.Core.ITakedowns.ExecuteAsync(Janus.Core.AccessContext! context, Janus.Core
 Janus.Core.ITakedowns.ReadAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.TakedownProgress!>>
 Janus.Core.ITakedowns.ReverseAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IUnitOfWork
-Janus.Core.IUnitOfWork.BeginAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
-Janus.Core.IUnitOfWork.CommitAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+Janus.Core.IUnitOfWork.BeginAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IUnitOfWork.CommitAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IdentifierAdded
 Janus.Core.IdentifierAdded.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.IdentifierId Identifier, out Janus.Core.IdentifierKind Kind) -> void
 Janus.Core.IdentifierAdded.Equals(Janus.Core.IdentifierAdded? other) -> bool

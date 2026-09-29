@@ -43,7 +43,11 @@ internal sealed class AlertDispatch(IRaisedAlerts alerts, AlertRouter router, IU
 
         foreach (RaisedAlert alert in waiting)
         {
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notBegun)
+            {
+                return Result.Failure<int>(notBegun);
+            }
 
             Result<AlertDelivery> delivered = await router.RaiseAsync(alert.Raised, cancellationToken)
                 .ConfigureAwait(false);
@@ -54,7 +58,12 @@ internal sealed class AlertDispatch(IRaisedAlerts alerts, AlertRouter router, IU
             }
 
             await alerts.RemoveAsync(alert.Id, cancellationToken).ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommitted)
+            {
+                return Result.Failure<int>(notCommitted);
+            }
 
             carried++;
         }

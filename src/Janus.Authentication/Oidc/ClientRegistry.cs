@@ -63,7 +63,11 @@ internal sealed class ClientRegistry(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         bool changed = await clients.FindAsync(client.ClientId, cancellationToken).ConfigureAwait(false) is not null;
 
@@ -88,7 +92,12 @@ internal sealed class ClientRegistry(
         await audit
             .RegisteredAsync(Principal, client.ClientId, client.Kind, changed, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }

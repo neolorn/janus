@@ -60,9 +60,19 @@ internal sealed class TotpService(
             return Result.Failure<TotpEnrolment>(Error.From(ErrorCodes.FactorNotPermitted));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<TotpEnrolment>(notBegun);
+        }
+
         await authenticators.AddAsync(enrolling, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<TotpEnrolment>(notCommitted);
+        }
 
         return Result.Success(new TotpEnrolment(enrolling.Id, secret));
     }
@@ -105,12 +115,21 @@ internal sealed class TotpService(
             return Result.Failure(Error.From(ErrorCodes.CodeInvalid));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         enrolling.Consumed(step.Value);
         enrolling.Confirm(now);
         await authenticators.RecordAsync(enrolling, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -138,9 +157,19 @@ internal sealed class TotpService(
             return Result.Failure(Error.From(ErrorCodes.FactorRejected));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await authenticators.RemoveAsync(id, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -177,12 +206,21 @@ internal sealed class TotpService(
                 continue;
             }
 
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notBegun)
+            {
+                return Result.Failure<AuthenticatorId>(notBegun);
+            }
 
             generator.Consumed(step);
             generator.Used(now);
             await authenticators.RecordAsync(generator, cancellationToken).ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommitted)
+            {
+                return Result.Failure<AuthenticatorId>(notCommitted);
+            }
 
             return Result.Success(generator.Id);
         }

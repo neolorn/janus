@@ -51,9 +51,19 @@ internal sealed class PreAuthenticationService(
         var token = OpaqueToken.Draw(randomness);
         var issued = PreAuthentication.Issue(secret, token, time.GetUtcNow(), lifetime);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<IssuedPreAuthentication>(notBegun);
+        }
+
         await store.AddAsync(issued, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<IssuedPreAuthentication>(notCommitted);
+        }
 
         return Result.Success(new IssuedPreAuthentication(secret, token, issued));
     }
@@ -95,9 +105,11 @@ internal sealed class PreAuthenticationService(
 
         preAuthentication.Carry(registration, expiresAt);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await store.RecordAsync(preAuthentication, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }
 
     /// <summary>
@@ -119,9 +131,11 @@ internal sealed class PreAuthenticationService(
 
         preAuthentication.Carry(enrolment, expiresAt);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await store.RecordAsync(preAuthentication, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }
 
     /// <summary>
@@ -142,9 +156,11 @@ internal sealed class PreAuthenticationService(
 
         preAuthentication.Carry(attempt);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await store.RecordAsync(preAuthentication, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }
 
     /// <summary>
@@ -163,9 +179,11 @@ internal sealed class PreAuthenticationService(
 
         preAuthentication.Abandon();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await store.RecordAsync(preAuthentication, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }
 
     /// <summary>
@@ -184,9 +202,11 @@ internal sealed class PreAuthenticationService(
 
         preAuthentication.Release();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await store.RecordAsync(preAuthentication, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }
 
     /// <summary>
@@ -198,9 +218,11 @@ internal sealed class PreAuthenticationService(
     /// <returns>The work of ending it.</returns>
     public async ValueTask RotateAsync(OpaqueToken secret, CancellationToken cancellationToken)
     {
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await store.RemoveAsync(secret.Fingerprint(), cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)

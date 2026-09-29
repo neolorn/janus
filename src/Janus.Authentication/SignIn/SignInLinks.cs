@@ -178,7 +178,11 @@ internal sealed class SignInLinks(
         {
             held.Missed();
 
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notBegunAgain)
+            {
+                return Result.Failure(notBegunAgain);
+            }
 
             // Enough wrong codes end the link, which is what stops a six-digit code
             // being guessed at leisure (AUTH-FACT-004).
@@ -191,15 +195,29 @@ internal sealed class SignInLinks(
                 await pending.RecordAsync(held, cancellationToken).ConfigureAwait(false);
             }
 
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+            {
+                return Result.Failure(notCommittedAgain);
+            }
 
             return Result.Failure(
                 Error.From(held.WrongAttempts >= attempts ? ErrorCodes.CodeExpired : ErrorCodes.CodeInvalid));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await pending.RemoveAsync(held.Fingerprint, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -258,11 +276,21 @@ internal sealed class SignInLinks(
     {
         if (linkToken is { Length: > 0 })
         {
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notBegun)
+            {
+                return Result.Failure(notBegun);
+            }
+
             await pending
                 .RemoveAsync(OpaqueToken.Of(linkToken).Fingerprint(), cancellationToken)
                 .ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommitted)
+            {
+                return Result.Failure(notCommitted);
+            }
         }
 
         return Result.Success();
@@ -474,7 +502,12 @@ internal sealed class SignInLinks(
             return Result.Failure(failure);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await pending
             .ReplaceAsync(
                 PendingSignIn.Issue(
@@ -488,7 +521,12 @@ internal sealed class SignInLinks(
                     lifetime),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }

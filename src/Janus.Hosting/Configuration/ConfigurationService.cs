@@ -241,7 +241,12 @@ internal sealed class ConfigurationService(
             return Result.Failure(failure);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await administration.HoldAsync(family, category, cancellationToken).ConfigureAwait(false);
 
         TimeSpan before = (await retention.ReadAsync(category, cancellationToken).ConfigureAwait(false))
@@ -278,7 +283,11 @@ internal sealed class ConfigurationService(
             return Result.Failure(unwritten);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -301,7 +310,11 @@ internal sealed class ConfigurationService(
     // clean for the next operation.
     private async ValueTask<Result> EndedAsync(Error refusal, CancellationToken cancellationToken)
     {
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Failure(refusal);
     }

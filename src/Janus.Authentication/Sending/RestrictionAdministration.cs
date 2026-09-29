@@ -131,7 +131,11 @@ internal sealed class RestrictionAdministration(
             written.Add(replacement with { Name = name });
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         // OPS-CFG-002, OPS-CFG-005: every runtime write goes through the one operation
         // that classifies it, gates it and writes it down. The restriction set carries
@@ -195,7 +199,11 @@ internal sealed class RestrictionAdministration(
             }
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -268,7 +276,11 @@ internal sealed class RestrictionAdministration(
                     }));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         await ledger
             .GrantAsync(new RestrictionKey(name, keyValue), credit, cancellationToken)
@@ -312,7 +324,11 @@ internal sealed class RestrictionAdministration(
             return Result.Failure(unalerted);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }

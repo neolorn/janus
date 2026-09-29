@@ -45,7 +45,11 @@ internal sealed class DeliveryReports(
     {
         ArgumentNullException.ThrowIfNull(source);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         // Answered before any lookup, so a flood costs the deployment nothing beyond
         // the count it was already keeping (INT-GEN-003).
@@ -84,7 +88,11 @@ internal sealed class DeliveryReports(
     {
         if (outcome.Match(() => true, error => error.Code == ErrorCodes.CallbackRejected))
         {
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommitted)
+            {
+                return Result.Failure(notCommitted);
+            }
         }
 
         return outcome;

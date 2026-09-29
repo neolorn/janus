@@ -67,7 +67,8 @@ internal sealed class ProviderEventIntake(
         string callback = ProviderEvents.CallbackOf(provider);
         Delivery delivered = Deliveries[provider];
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         if (!await CallbackIntake
                 .AdmittedAsync(context, callback, Anywhere, admission, work, log, cancellationToken)
@@ -123,7 +124,8 @@ internal sealed class ProviderEventIntake(
             return;
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         if (!taken.Match(carried => carried, _ => false))
         {

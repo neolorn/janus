@@ -158,13 +158,23 @@ internal sealed class AuthenticationService(
         var handle = OpaqueToken.Draw(randomness);
         var ceremony = OpaqueToken.Draw(randomness);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<SignInChallenge>(notBegun);
+        }
+
         await challenges
             .AddAsync(
                 Challenge.Open(handle, subject, email, counted, ceremony.Value, time.GetUtcNow(), lifetime),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<SignInChallenge>(notCommitted);
+        }
 
         // The list is the deployment's enabled primary set and never the account's, so
         // that the answer is the same for an identifier that exists and one that does
@@ -460,9 +470,19 @@ internal sealed class AuthenticationService(
 
         await throttle.SucceededAsync(attempt, cancellationToken).ConfigureAwait(false);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<SignInOutcome>(notBegun);
+        }
+
         await challenges.RecordAsync(open, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<SignInOutcome>(notCommitted);
+        }
 
         return await SettleAsync(
                 open,
@@ -644,9 +664,19 @@ internal sealed class AuthenticationService(
             return Result.Failure<SignInOutcome>(failure);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<SignInOutcome>(notBegun);
+        }
+
         await challenges.RemoveAsync(open.Fingerprint, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<SignInOutcome>(notCommitted);
+        }
 
         return Result.Success(new SignInOutcome(
             new SignInProgress(
@@ -743,10 +773,20 @@ internal sealed class AuthenticationService(
 
         await throttle.SucceededAsync(attempt, cancellationToken).ConfigureAwait(false);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<LandedSignIn>(notBegun);
+        }
+
         await challenges.RecordAsync(open, cancellationToken).ConfigureAwait(false);
         await links.SpendAsync(held, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<LandedSignIn>(notCommitted);
+        }
 
         return (await SettleAsync(
                     open,
@@ -1382,9 +1422,19 @@ internal sealed class AuthenticationService(
 
         if (completed.Match(_ => true, _ => false))
         {
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notBegun)
+            {
+                return Result.Failure<SignInOutcome>(notBegun);
+            }
+
             await challenges.RemoveAsync(open.Fingerprint, cancellationToken).ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommitted)
+            {
+                return Result.Failure<SignInOutcome>(notCommitted);
+            }
         }
 
         return completed;
@@ -1554,9 +1604,19 @@ internal sealed class AuthenticationService(
         string? trusted,
         CancellationToken cancellationToken)
     {
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return notBegun;
+        }
+
         await audit.FailedAsync(attempt.Account, presented, time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return notCommitted;
+        }
 
         Error? failure = null;
 
@@ -1585,7 +1645,12 @@ internal sealed class AuthenticationService(
         Factor presented,
         CancellationToken cancellationToken)
     {
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return notBegun;
+        }
+
         await audit
             .StepUpFailedAsync(
                 session.Id,
@@ -1595,7 +1660,12 @@ internal sealed class AuthenticationService(
                 time.GetUtcNow(),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return notCommitted;
+        }
 
         return (await throttle.FailedAsync(attempt, cancellationToken).ConfigureAwait(false))
             .Match(() => (Error?)null, error => error);

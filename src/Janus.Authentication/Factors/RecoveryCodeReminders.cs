@@ -115,12 +115,14 @@ internal sealed class RecoveryCodeReminders(
             return 0;
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         held.Reminded(now);
         await sets.RecordAsync(held, cancellationToken).ConfigureAwait(false);
         _ = await TellAsync(subject, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         return 1;
     }

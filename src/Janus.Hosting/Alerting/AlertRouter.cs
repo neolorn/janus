@@ -63,7 +63,11 @@ internal sealed class AlertRouter(
             return Result.Failure<AlertDelivery>(failure);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<AlertDelivery>(notBegun);
+        }
 
         bool first = await ledger
             .FirstAsync(Alerts.Deduplication(raised.IdempotencyKey), raised.RaisedAt, window, cancellationToken)
@@ -73,7 +77,11 @@ internal sealed class AlertRouter(
             ? await DeliverAsync(raised, audience, cancellationToken).ConfigureAwait(false)
             : Result.Success(new AlertDelivery(0, 0, SmsUnreachable: false, Deduplicated: true));
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<AlertDelivery>(notCommitted);
+        }
 
         return delivered;
     }

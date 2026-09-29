@@ -89,9 +89,19 @@ internal sealed class MailboxPublisher(
             // under the same key, when the process returns.
             if (mailbox.PendingKey != outstanding)
             {
-                await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+                if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                    .Match<Error?>(() => null, error => error) is Error notBegunAgain)
+                {
+                    return Result.Failure<int>(notBegunAgain);
+                }
+
                 await mailboxes.RecordAsync(mailbox, cancellationToken).ConfigureAwait(false);
-                await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+                if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                    .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+                {
+                    return Result.Failure<int>(notCommittedAgain);
+                }
             }
 
             if (push is null)
@@ -117,7 +127,12 @@ internal sealed class MailboxPublisher(
                     Jitter());
             }
 
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notBegun)
+            {
+                return Result.Failure<int>(notBegun);
+            }
+
             await mailboxes.RecordAsync(mailbox, cancellationToken).ConfigureAwait(false);
 
             // INT-MAIL-007 AC3: a push the server never took is visible the moment
@@ -133,7 +148,11 @@ internal sealed class MailboxPublisher(
                 return Result.Failure<int>(unalerted);
             }
 
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommitted)
+            {
+                return Result.Failure<int>(notCommitted);
+            }
         }
 
         return Result.Success(confirmed);

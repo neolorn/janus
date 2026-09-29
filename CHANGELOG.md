@@ -1493,7 +1493,9 @@ against the public contract of LIB-API-001.
   and hand-written SQL takes its connection from the one accessor, so a query written by
   hand runs on the same connection and inside the same transaction as the rest of the
   operation and can never miss a write the operation has already made. An operation that
-  fails part way through leaves nothing written.
+  fails part way through leaves nothing written. `BeginAsync` and `CommitAsync` return a
+  `Result`: an operation that returns a result returns their failure, and background
+  work, which returns none, throws it as a fault naming its code.
 - Per-subject encryption of personal fields: one data key per subject, wrapped in the
   database under the deployment's key-encryption key, with every value bound to the
   subject, table and column it was written to, so a value moved elsewhere does not

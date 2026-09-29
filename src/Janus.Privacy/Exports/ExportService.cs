@@ -88,7 +88,12 @@ internal sealed class ExportService(
             now,
             await SectionsAsync(subject, cancellationToken).ConfigureAwait(false));
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<SubjectExport>(notBegun);
+        }
+
         await ledger.RecordAsync(subject, now, cancellationToken).ConfigureAwait(false);
 
         // PRIV-RIGHT-005b: the host holds the half the library cannot produce, and is
@@ -102,7 +107,12 @@ internal sealed class ExportService(
         await audit
             .RecordedAsync(Assembled, subject, context.BreakGlassReason, subject, now, Named(export), cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<SubjectExport>(notCommitted);
+        }
 
         return Result.Success(export);
     }

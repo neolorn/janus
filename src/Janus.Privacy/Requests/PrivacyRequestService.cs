@@ -201,7 +201,12 @@ internal sealed class PrivacyRequestService(
 
         held.Fulfil(now);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await DoneAsync(held, now, cancellationToken).ConfigureAwait(false);
         await requests.RecordAsync(held, cancellationToken).ConfigureAwait(false);
         await audit
@@ -214,7 +219,12 @@ internal sealed class PrivacyRequestService(
                 Named(held),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -244,7 +254,12 @@ internal sealed class PrivacyRequestService(
 
         held.Refuse(now, reason);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await requests.RecordAsync(held, cancellationToken).ConfigureAwait(false);
         await audit
             .RecordedAsync(
@@ -256,7 +271,12 @@ internal sealed class PrivacyRequestService(
                 Named(held),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -353,7 +373,12 @@ internal sealed class PrivacyRequestService(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<PrivacyRequestReceipt>(notBegun);
+        }
+
         await requests.AddAsync(request, cancellationToken).ConfigureAwait(false);
         await audit
             .RecordedAsync(
@@ -365,7 +390,12 @@ internal sealed class PrivacyRequestService(
                 Named(request),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<PrivacyRequestReceipt>(notCommitted);
+        }
 
         // PRIV-RIGHT-002: the receipt follows the commit, because a receipt for a
         // request that was not queued would be the one thing worse than none, and a

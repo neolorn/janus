@@ -143,7 +143,8 @@ internal static class CallbackIntake
     {
         if (error.Code == ErrorCodes.CallbackRejected)
         {
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         }
 
         await Refusal.WriteAsync(context, error, cancellationToken).ConfigureAwait(false);

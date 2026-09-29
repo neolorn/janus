@@ -241,10 +241,12 @@ internal sealed class AppPasswords(
     {
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         _ = await TellAsync(subject, source, cancellationToken).ConfigureAwait(false);
         await audit.MailCredentialAsync(action, subject, credential, now, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }
 
     private async ValueTask<int> TellAsync(

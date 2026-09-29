@@ -67,7 +67,11 @@ internal sealed class FingerprintKeyRotation(
             return Result.Failure<KeyRotationProgress>(Error.From(ErrorCodes.Denied));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<KeyRotationProgress>(notBegun);
+        }
 
         DateTimeOffset now = time.GetUtcNow();
         KeyRotationProgress? latest = await rotations.LatestAsync(Kind, cancellationToken).ConfigureAwait(false);
@@ -104,7 +108,12 @@ internal sealed class FingerprintKeyRotation(
                 retired: null,
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<KeyRotationProgress>(notCommitted);
+        }
 
         if (progress.CompletedAt is null)
         {
@@ -115,7 +124,11 @@ internal sealed class FingerprintKeyRotation(
 
         if (progress.CompletedAt is null)
         {
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notBegunAgain)
+            {
+                return Result.Failure<KeyRotationProgress>(notBegunAgain);
+            }
 
             DateTimeOffset completed = time.GetUtcNow();
             progress.Complete(completed);
@@ -123,7 +136,12 @@ internal sealed class FingerprintKeyRotation(
             await rotations.RecordAsync(progress, cancellationToken).ConfigureAwait(false);
             await RecordedAsync(AuditActions.KeyRotationCompleted, progress, completed, retired: null, cancellationToken)
                 .ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+            {
+                return Result.Failure<KeyRotationProgress>(notCommittedAgain);
+            }
         }
 
         return Result.Success(progress);
@@ -149,11 +167,19 @@ internal sealed class FingerprintKeyRotation(
             return Result.Failure<KeyRetirement>(Error.From(ErrorCodes.Denied));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<KeyRetirement>(notBegun);
+        }
 
         KeyRotationProgress? latest = await rotations.LatestAsync(Kind, cancellationToken).ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<KeyRetirement>(notCommitted);
+        }
 
         if (latest is not null && latest.Version != fingerprintKeys.CurrentVersion)
         {
@@ -174,14 +200,22 @@ internal sealed class FingerprintKeyRotation(
         // all the same.
         int swept = await SweepAsync(latest, cancellationToken).ConfigureAwait(false);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegunAgain)
+        {
+            return Result.Failure<KeyRetirement>(notBegunAgain);
+        }
 
         DateTimeOffset now = time.GetUtcNow();
         int pending = swept + await store.StandingAsync(now, cancellationToken).ConfigureAwait(false);
 
         if (pending > 0)
         {
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommittedLater)
+            {
+                return Result.Failure<KeyRetirement>(notCommittedLater);
+            }
 
             return Result.Failure<KeyRetirement>(SealRefused(pending));
         }
@@ -194,7 +228,12 @@ internal sealed class FingerprintKeyRotation(
 
         await rotations.RecordAsync(latest, cancellationToken).ConfigureAwait(false);
         await RecordedAsync(AuditActions.KeyRotationRetired, latest, now, retired, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+        {
+            return Result.Failure<KeyRetirement>(notCommittedAgain);
+        }
 
         return Result.Success(new KeyRetirement(latest, retired));
     }
@@ -225,7 +264,8 @@ internal sealed class FingerprintKeyRotation(
     {
         while (true)
         {
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
             KeyRotationBatch batch = await store
                 .RecomputeSubjectsAfterAsync(progress.LastKey, KeyRotation.BatchSize, time.GetUtcNow(), cancellationToken)
@@ -233,7 +273,8 @@ internal sealed class FingerprintKeyRotation(
 
             if (batch.Last is not SubjectKeyId last)
             {
-                await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+                (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                    .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
                 return;
             }
@@ -241,7 +282,8 @@ internal sealed class FingerprintKeyRotation(
             progress.Passed(last, batch.Processed);
 
             await rotations.RecordAsync(progress, cancellationToken).ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         }
     }
 
@@ -255,7 +297,8 @@ internal sealed class FingerprintKeyRotation(
 
         do
         {
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
             taken = await store
                 .RecomputeRemainingAsync(KeyRotation.BatchSize, time.GetUtcNow(), cancellationToken)
@@ -263,7 +306,8 @@ internal sealed class FingerprintKeyRotation(
             progress.Swept(taken);
 
             await rotations.RecordAsync(progress, cancellationToken).ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
             swept += taken;
         }

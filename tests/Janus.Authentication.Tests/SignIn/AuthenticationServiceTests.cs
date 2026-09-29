@@ -370,6 +370,27 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC7: a service method that returns a result returns the failure
+    /// its transaction answers, at the opening and at the commit alike.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC7_AServiceReturnsTheFailureItsTransactionAnswersAsync()
+    {
+        await AccountAsync();
+
+        _work.RefusesBegin = Error.From(ErrorCodes.SystemFault);
+
+        Result<SignInChallenge> unopened = await Service.BeginAsync(Address, Fresh, TestContext.Current.CancellationToken);
+
+        _work.RefusesCommit = Error.From(ErrorCodes.SystemFault);
+
+        Result<SignInChallenge> uncommitted = await Service.BeginAsync(Address, Fresh, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, unopened.Match(_ => (ErrorCode?)null, error => error.Code));
+        Assert.Equal(ErrorCodes.SystemFault, uncommitted.Match(_ => (ErrorCode?)null, error => error.Code));
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-001 AC1, AUTH-ABUSE-003: failures against an identifier no account
     /// holds are counted against the identifier as failures against one an account
     /// holds are, so from a source that has failed nothing both are held alike and a

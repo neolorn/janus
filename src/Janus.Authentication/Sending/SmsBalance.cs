@@ -78,7 +78,11 @@ internal sealed class SmsBalance(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<decimal>(notBegun);
+        }
 
         await readings
             .RecordAsync(new BalanceReading(now, balance), Baseline + interval, cancellationToken)
@@ -105,7 +109,11 @@ internal sealed class SmsBalance(
             }
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<decimal>(notCommitted);
+        }
 
         return Result.Success(balance);
     }

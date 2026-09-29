@@ -94,7 +94,11 @@ internal sealed class OrganizationErasureSweep(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return notBegun;
+        }
 
         IReadOnlyList<EndedMembership> ended = await organizations
             .EraseAsync(deletion.Organization, now, grace, cancellationToken)
@@ -109,7 +113,12 @@ internal sealed class OrganizationErasureSweep(
                 Named(deletion, ended.Count),
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return notCommitted;
+        }
 
         // The erasure has committed, so the announcements are the outstanding work and
         // a consumer that refuses one stops the pass rather than the erasure.

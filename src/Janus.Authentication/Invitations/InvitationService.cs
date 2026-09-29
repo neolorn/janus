@@ -175,7 +175,11 @@ internal sealed class InvitationService(
             return Result.Failure<IssuedInvitation>(unsent);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<IssuedInvitation>(notBegun);
+        }
 
         if (reservation is not null)
         {
@@ -193,7 +197,12 @@ internal sealed class InvitationService(
                 now,
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<IssuedInvitation>(notCommitted);
+        }
 
         // The token is answered only where no email is bound for the link to go to:
         // the administrator hands it over, and nothing else ever shows it again.
@@ -243,7 +252,12 @@ internal sealed class InvitationService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await WithdrawnAsync(held, acting, context.BreakGlassReason, now, cancellationToken).ConfigureAwait(false);
 
         // REG-MAIL-001: a reservation nobody ever took is given up with the invitation
@@ -257,7 +271,11 @@ internal sealed class InvitationService(
             await mailboxes.RecordAsync(mailbox, cancellationToken).ConfigureAwait(false);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -575,13 +593,15 @@ internal sealed class InvitationService(
     /// <returns>How many were swept.</returns>
     public async ValueTask<int> SweepAsync(CancellationToken cancellationToken)
     {
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         int swept = await invitations
             .SweepAsync(time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         return swept;
     }

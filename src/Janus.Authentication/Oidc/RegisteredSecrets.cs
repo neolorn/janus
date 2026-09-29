@@ -140,13 +140,21 @@ internal sealed class RegisteredSecrets(
     {
         byte[] fresh = Draw(randomness);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<byte[]>(notBegun);
+        }
 
         bool replaced = await clients
             .ReplaceSecretAsync(clientId, issuedAt, fresh, now, replacedUntil, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<byte[]>(notCommitted);
+        }
 
         if (replaced)
         {

@@ -94,7 +94,11 @@ internal sealed class RoleService(
             return Result.Failure<bool>(Malformed("reason"));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<bool>(notBegun);
+        }
 
         Role? held = await roles.FindAsync(role.Name, cancellationToken).ConfigureAwait(false);
         var defined = Role.Of(role.Name, role.Permissions);
@@ -131,7 +135,11 @@ internal sealed class RoleService(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<bool>(notCommitted);
+        }
 
         return Result.Success(held is null);
     }
@@ -162,7 +170,11 @@ internal sealed class RoleService(
             return Result.Failure(Malformed("reason"));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         if (await roles.FindAsync(role, cancellationToken).ConfigureAwait(false) is not Role held)
         {
@@ -199,7 +211,11 @@ internal sealed class RoleService(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }

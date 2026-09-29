@@ -71,7 +71,11 @@ internal sealed class KeyRotation(
             return Result.Failure<KeyRotationProgress>(Error.From(ErrorCodes.Denied));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<KeyRotationProgress>(notBegun);
+        }
 
         KeyRotationProgress? latest = await store.LatestAsync(Kind, cancellationToken).ConfigureAwait(false);
         IReadOnlySet<int> wrapping = await store.WrappingVersionsAsync(cancellationToken).ConfigureAwait(false);
@@ -107,7 +111,12 @@ internal sealed class KeyRotation(
                 retired: null,
                 cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<KeyRotationProgress>(notCommitted);
+        }
 
         if (progress.CompletedAt is null)
         {
@@ -118,7 +127,11 @@ internal sealed class KeyRotation(
 
         if (progress.CompletedAt is null)
         {
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notBegunAgain)
+            {
+                return Result.Failure<KeyRotationProgress>(notBegunAgain);
+            }
 
             DateTimeOffset completed = time.GetUtcNow();
             progress.Complete(completed);
@@ -126,7 +139,12 @@ internal sealed class KeyRotation(
             await store.RecordAsync(progress, cancellationToken).ConfigureAwait(false);
             await RecordedAsync(AuditActions.KeyRotationCompleted, progress, completed, retired: null, cancellationToken)
                 .ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+            {
+                return Result.Failure<KeyRotationProgress>(notCommittedAgain);
+            }
         }
 
         return Result.Success(progress);
@@ -151,11 +169,19 @@ internal sealed class KeyRotation(
             return Result.Failure<KeyRetirement>(Error.From(ErrorCodes.Denied));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<KeyRetirement>(notBegun);
+        }
 
         KeyRotationProgress? latest = await store.LatestAsync(Kind, cancellationToken).ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<KeyRetirement>(notCommitted);
+        }
 
         if (latest is not null && latest.Version != keyEncryptionKeys.CurrentVersion)
         {
@@ -179,7 +205,11 @@ internal sealed class KeyRotation(
             return Result.Failure<KeyRetirement>(SealRefused(pending));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegunAgain)
+        {
+            return Result.Failure<KeyRetirement>(notBegunAgain);
+        }
 
         DateTimeOffset now = time.GetUtcNow();
         latest.Retire(now);
@@ -188,7 +218,12 @@ internal sealed class KeyRotation(
 
         await store.RecordAsync(latest, cancellationToken).ConfigureAwait(false);
         await RecordedAsync(AuditActions.KeyRotationRetired, latest, now, retired, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+        {
+            return Result.Failure<KeyRetirement>(notCommittedAgain);
+        }
 
         return Result.Success(new KeyRetirement(latest, retired));
     }
@@ -219,7 +254,8 @@ internal sealed class KeyRotation(
     {
         while (true)
         {
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
             KeyRotationBatch batch = await store
                 .ReWrapSubjectKeysAfterAsync(progress.LastKey, BatchSize, cancellationToken)
@@ -227,7 +263,8 @@ internal sealed class KeyRotation(
 
             if (batch.Last is not SubjectKeyId last)
             {
-                await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+                (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                    .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
                 return;
             }
@@ -235,7 +272,8 @@ internal sealed class KeyRotation(
             progress.Passed(last, batch.Processed);
 
             await store.RecordAsync(progress, cancellationToken).ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         }
     }
 
@@ -248,13 +286,15 @@ internal sealed class KeyRotation(
 
         do
         {
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+            (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
             taken = await store.ReWrapRemainingSubjectKeysAsync(BatchSize, cancellationToken).ConfigureAwait(false);
             progress.Swept(taken);
 
             await store.RecordAsync(progress, cancellationToken).ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
             swept += taken;
         }

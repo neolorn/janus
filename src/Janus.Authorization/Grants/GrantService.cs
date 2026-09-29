@@ -200,7 +200,11 @@ internal sealed class GrantService(
             return Result.Failure(challenged);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         if (held.Revoke(acting, time.GetUtcNow(), reason).Match<Error?>(() => null, error => error)
             is Error refused)
@@ -209,7 +213,12 @@ internal sealed class GrantService(
         }
 
         await grants.RecordAsync(held, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -332,7 +341,11 @@ internal sealed class GrantService(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<GrantId>(notBegun);
+        }
 
         if (await grants.ExistsAsync(grant, now, cancellationToken).ConfigureAwait(false))
         {
@@ -340,7 +353,12 @@ internal sealed class GrantService(
         }
 
         await grants.CreateAsync(grant, cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<GrantId>(notCommitted);
+        }
 
         return Result.Success(grant.Id);
     }

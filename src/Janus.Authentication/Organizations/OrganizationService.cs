@@ -97,7 +97,12 @@ internal sealed class OrganizationService(
         DateTimeOffset now = time.GetUtcNow();
         var organization = OrganizationId.New(time);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<OrganizationId>(notBegun);
+        }
+
         await directory.CreateAsync(organization, named, now, cancellationToken).ConfigureAwait(false);
 
         // IDN-ORG-002 and chapter 10 section 4: the organization's policy key is created
@@ -123,7 +128,11 @@ internal sealed class OrganizationService(
             .RecordedAsync(AuditActions.OrganizationCreated, organization, stated, acting, context.BreakGlassReason, now, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<OrganizationId>(notCommitted);
+        }
 
         return Result.Success(organization);
     }
@@ -182,7 +191,11 @@ internal sealed class OrganizationService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         if ((await directory.RequestDeletionAsync(organization, now, cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error protectedOrganization)
@@ -201,7 +214,11 @@ internal sealed class OrganizationService(
             .RecordedAsync(AuditActions.OrganizationDeletionRequested, organization, stated, acting, context.BreakGlassReason, now, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -266,13 +283,22 @@ internal sealed class OrganizationService(
             return Result.Failure(challenged);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await directory.CancelDeletionAsync(organization, cancellationToken).ConfigureAwait(false);
         await audit
             .RecordedAsync(AuditActions.OrganizationDeletionCancelled, organization, stated, acting, context.BreakGlassReason, now, cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -361,7 +387,12 @@ internal sealed class OrganizationService(
         // keeps are decided on the values in force under their rows' locks, taken in the
         // order every change takes them, so a concurrent change waits and cannot turn
         // this one into another.
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await administration.HoldAsync(Settings.PolicyDefault, cancellationToken).ConfigureAwait(false);
         await administration
             .HoldAsync(Settings.OrganizationPolicy, organization.ToString(), cancellationToken)
@@ -471,7 +502,11 @@ internal sealed class OrganizationService(
             return Result.Failure(unalerted);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -481,7 +516,11 @@ internal sealed class OrganizationService(
     // scope clean for the next operation.
     private async ValueTask<Result> EndedAsync(Error refusal, CancellationToken cancellationToken)
     {
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Failure(refusal);
     }

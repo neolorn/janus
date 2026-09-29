@@ -40,11 +40,21 @@ internal sealed class CallbackReferences(
 
         string reference = Base64Url.EncodeToString(drawn);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<string>(notBegun);
+        }
+
         await references
             .AddAsync(callback, Hashed(reference), time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<string>(notCommitted);
+        }
 
         return Result.Success(reference);
     }

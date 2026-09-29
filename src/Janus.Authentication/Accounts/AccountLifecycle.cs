@@ -100,7 +100,12 @@ internal sealed class AccountLifecycle(
         DateTimeOffset now = time.GetUtcNow();
         var token = OpaqueToken.Draw(randomness);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await directory.DeactivateAsync(subject, cancellationToken).ConfigureAwait(false);
 
         await links
@@ -138,7 +143,12 @@ internal sealed class AccountLifecycle(
 
         await audit.RecordedAsync(Deactivated, subject, context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -177,7 +187,12 @@ internal sealed class AccountLifecycle(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await directory.ReinstateAsync(link.Subject, cancellationToken).ConfigureAwait(false);
         await links.RemoveAsync(link.Subject, cancellationToken).ConfigureAwait(false);
 
@@ -198,7 +213,12 @@ internal sealed class AccountLifecycle(
 
         await audit.RecordedAsync(Reactivated, link.Subject, breakGlassReason: null, link.Subject, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -255,7 +275,12 @@ internal sealed class AccountLifecycle(
         DateTimeOffset erasesAt = now + grace;
         var token = OpaqueToken.Draw(randomness);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<DateTimeOffset>(notBegun);
+        }
+
         await directory.BeginDeletionAsync(subject, now, cancellationToken).ConfigureAwait(false);
 
         await links
@@ -288,7 +313,12 @@ internal sealed class AccountLifecycle(
 
         await audit.RecordedAsync(DeletionRequested, subject, context.BreakGlassReason, subject, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<DateTimeOffset>(notCommitted);
+        }
 
         return Result.Success(erasesAt);
     }
@@ -334,7 +364,12 @@ internal sealed class AccountLifecycle(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await directory.CancelDeletionAsync(link.Subject, cancellationToken).ConfigureAwait(false);
         await links.RemoveAsync(link.Subject, cancellationToken).ConfigureAwait(false);
 
@@ -356,7 +391,12 @@ internal sealed class AccountLifecycle(
         await audit
             .RecordedAsync(DeletionCancelled, link.Subject, breakGlassReason: null, link.Subject, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }

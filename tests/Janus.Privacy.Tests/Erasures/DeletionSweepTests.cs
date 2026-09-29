@@ -67,6 +67,32 @@ public sealed class DeletionSweepTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC7: a background pass returns no result, so a transaction that
+    /// does not open, or does not commit, is thrown as a fault naming the failure's code.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC7_ABackgroundPassThrowsTheFailureItsTransactionAnswersAsync()
+    {
+        _accounts.Deletes(Ahmed, DeletionOrigin.Self, Noon);
+        _clock.Advance(Settings.AccountDeletionGrace.Default);
+
+        _work.RefusesBegin = Error.From(ErrorCodes.SystemFault);
+
+        InvalidOperationException unopened = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
+
+        _work.RefusesCommit = Error.From(ErrorCodes.SystemFault);
+
+        InvalidOperationException uncommitted = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.SystemFault.ToString(), unopened.Message);
+        Assert.Equal(ErrorCodes.SystemFault.ToString(), uncommitted.Message);
+        Assert.Equal(0, _work.Committed);
+    }
+
+    /// <summary>
     /// IDN-ACCT-007 AC4: a window the subject cancelled is not reached by the pass,
     /// whatever the clock has done since.
     /// </summary>

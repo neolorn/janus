@@ -12,7 +12,9 @@ namespace Janus.Core;
 /// Implements CONV-DESIGN-003 and OPS-DATA-002. Disposal without a commit rolls the
 /// transaction back, so an operation that returns a failure leaves nothing behind.
 /// The same transaction is attached to the connection hand-written SQL runs on, so
-/// both tools see the same uncommitted writes.
+/// both tools see the same uncommitted writes. Neither member names a failure code: a
+/// caller that returns a result passes a failure up, and one that returns none throws it
+/// as a fault naming its code (D-171).
 /// </remarks>
 public interface IUnitOfWork : IAsyncDisposable
 {
@@ -20,13 +22,13 @@ public interface IUnitOfWork : IAsyncDisposable
     /// Opens the transaction the operation runs in.
     /// </summary>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The work of opening it.</returns>
-    ValueTask BeginAsync(CancellationToken cancellationToken);
+    /// <returns>Whether it opened.</returns>
+    ValueTask<Result> BeginAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Commits everything the operation wrote.
     /// </summary>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The work of committing it.</returns>
-    ValueTask CommitAsync(CancellationToken cancellationToken);
+    /// <returns>Whether it committed.</returns>
+    ValueTask<Result> CommitAsync(CancellationToken cancellationToken);
 }

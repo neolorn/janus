@@ -100,7 +100,11 @@ internal sealed class TakedownService(
         var delivery = Delivery.Of(subject, SubjectEventKind.TakedownExecuted, now);
         var takedown = new ExecutedTakedown(new TakedownId(delivery.Id.Value), now + grace);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<ExecutedTakedown>(notBegun);
+        }
 
         // AUTH-SESS-010 AC2: the suspension and the end of every session are both the
         // library's, so they are one transaction and not two steps.
@@ -124,7 +128,11 @@ internal sealed class TakedownService(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<ExecutedTakedown>(notCommitted);
+        }
 
         // IDN-LIFE-003: the suspension is announced at the trigger, and no deletion is,
         // because the subject is sent nothing that would let them cancel it.
@@ -230,7 +238,11 @@ internal sealed class TakedownService(
             return Result.Failure(Error.From(ErrorCodes.TakedownWindowElapsed));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
 
         if (!await accounts.ReverseTakedownAsync(subject, cancellationToken).ConfigureAwait(false))
         {
@@ -248,7 +260,11 @@ internal sealed class TakedownService(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return await events
             .PublishAsync(

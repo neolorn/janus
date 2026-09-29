@@ -199,7 +199,11 @@ internal sealed class SessionService(
         SessionOrigin before = session.LastSeen;
         DateTimeOffset usedBefore = session.LastSeenAt;
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<Session>(notBegun);
+        }
 
         session.Touch(used, now, inactivity);
         await sessions.RecordAsync(session, cancellationToken).ConfigureAwait(false);
@@ -219,7 +223,11 @@ internal sealed class SessionService(
             return Result.Failure<Session>(unraised);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<Session>(notCommitted);
+        }
 
         return Result.Success(session);
     }
@@ -250,7 +258,11 @@ internal sealed class SessionService(
         var secret = OpaqueToken.Draw(randomness);
         var token = OpaqueToken.Draw(randomness);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<IssuedSession>(notBegun);
+        }
 
         // A combination that proves nothing here, a second factor with no first
         // factor of ours beside it or an email factor, moves nothing and is still
@@ -267,7 +279,12 @@ internal sealed class SessionService(
         await audit
             .PresentedAsync(session.Id, session.Subject, session.BreakGlassReason, presented, now, cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<IssuedSession>(notCommitted);
+        }
 
         return Result.Success(new IssuedSession(session.Id, secret, token));
     }
@@ -349,7 +366,11 @@ internal sealed class SessionService(
         SessionOrigin before = session.LastSeen;
         DateTimeOffset usedBefore = session.LastSeenAt;
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<IssuedSession>(notBegun);
+        }
 
         session.Present(proved, now);
         session.Touch(located.Match(one => one, _ => origin), now, inactivity);
@@ -371,7 +392,11 @@ internal sealed class SessionService(
             return Result.Failure<IssuedSession>(unraised);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<IssuedSession>(notCommitted);
+        }
 
         return Result.Success(new IssuedSession(session.Id, restored, restoredToken));
     }
@@ -393,11 +418,21 @@ internal sealed class SessionService(
         var secret = OpaqueToken.Draw(randomness);
         var token = OpaqueToken.Draw(randomness);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<IssuedSession>(notBegun);
+        }
+
         await sessions
             .ReplaceSecretAsync(session.Id, secret.Fingerprint(), token.Fingerprint(), cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<IssuedSession>(notCommitted);
+        }
 
         return Result.Success(new IssuedSession(session.Id, secret, token));
     }
@@ -467,7 +502,12 @@ internal sealed class SessionService(
         var secret = OpaqueToken.Draw(randomness);
         var token = OpaqueToken.Draw(randomness);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<IssuedSession>(notBegun);
+        }
+
         await sessions
             .AddAsync(derived, secret.Fingerprint(), token.Fingerprint(), cancellationToken)
             .ConfigureAwait(false);
@@ -478,7 +518,11 @@ internal sealed class SessionService(
             return Result.Failure<IssuedSession>(unraised);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<IssuedSession>(notCommitted);
+        }
 
         return Result.Success(new IssuedSession(derived.Id, secret, token));
     }
@@ -566,10 +610,20 @@ internal sealed class SessionService(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await sessions.EndSpineAsync(ending.Spine, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -615,9 +669,19 @@ internal sealed class SessionService(
             return Result.Failure(refused);
         }
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await sessions.EndEveryAsync(time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -633,10 +697,20 @@ internal sealed class SessionService(
         SubjectId subject,
         CancellationToken cancellationToken)
     {
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         await sessions.EndAccountAsync(subject, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         return Result.Success();
     }
@@ -814,7 +888,12 @@ internal sealed class SessionService(
         var secret = OpaqueToken.Draw(randomness);
         var token = OpaqueToken.Draw(randomness);
 
-        await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<IssuedSession>(notBegun);
+        }
+
         await sessions
             .AddAsync(session, secret.Fingerprint(), token.Fingerprint(), cancellationToken)
             .ConfigureAwait(false);
@@ -828,7 +907,11 @@ internal sealed class SessionService(
             return Result.Failure<IssuedSession>(unraised);
         }
 
-        await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<IssuedSession>(notCommitted);
+        }
 
         return Result.Success(new IssuedSession(session.Id, secret, token));
     }
