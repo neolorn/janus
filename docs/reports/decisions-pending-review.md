@@ -13165,6 +13165,8 @@ one export is, that the limit is per actor over a rolling hour and answered with
 `auth.throttled` and `retryAt`, what a system principal meets at the gate, and whether
 an export carries a reason (and so whether the gate should take one).
 
+**Superseded by D-166.**
+
 ---
 
 ## 330. How the library learns of clock drift and a failed certificate renewal

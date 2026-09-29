@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Configuration;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -588,6 +589,42 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
         }
 
         Assert.Empty(_deployment.Changes.Written);
+    }
+
+    /// <summary>
+    /// OPS-ALERT-001 and OPS-ALERT-006 AC5: turning the export step-up off raises the
+    /// High <c>stepup-policy-weakened</c> alert naming the key as the change is made;
+    /// turning it back on weakens nothing and raises nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_001_TurningExportStepUpOffRaisesStepUpPolicyWeakenedAsync()
+    {
+        Browser administrator = await AuthorisedAsync(
+            Permissions.ConfigurationManage,
+            Permissions.SystemAdminister);
+
+        Answer off = await administrator.SendAsync(
+            "PUT",
+            "/admin/config/exfiltration.export.stepuprequired",
+            ("value", false),
+            ("reason", "a supervised migration"));
+        Answer on = await administrator.SendAsync(
+            "PUT",
+            "/admin/config/exfiltration.export.stepuprequired",
+            ("value", true),
+            ("reason", "the migration ended"));
+
+        AlertRaised raised = Assert.Single(
+            _deployment.Events.Of<AlertRaised>(),
+            alert => alert.Condition is AlertCondition.StepUpPolicyWeakened);
+
+        Assert.Equal(StatusCodes.Status204NoContent, off.Status);
+        Assert.Equal(StatusCodes.Status204NoContent, on.Status);
+        Assert.Equal(AlertSeverity.High, raised.Severity);
+        Assert.Equal(
+            Settings.ExfiltrationExportStepUpRequired.Key.ToString(),
+            raised.Details["key"].GetString());
     }
 
     private static Task<Answer> RetainedAsync(Browser browser, string period, string category = "statement") =>

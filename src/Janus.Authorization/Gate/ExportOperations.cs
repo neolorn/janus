@@ -38,6 +38,19 @@ internal sealed class ExportOperations(
     private static readonly TimeSpan Window = TimeSpan.FromHours(1);
 
     /// <summary>
+    /// Forgets the exports no limit counts again: every actor's admitted before the
+    /// window of the last hour.
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>How many were forgotten.</returns>
+    /// <remarks>
+    /// Implements OPS-OBS-003 and IDN-PRIN-003 AC4 (D-166, 329): an actor that exports
+    /// once leaves nothing behind past the hour, whether or not it exports again.
+    /// </remarks>
+    public ValueTask<int> SweepAsync(CancellationToken cancellationToken) =>
+        ledger.SweepAsync(time.GetUtcNow() - Window, cancellationToken);
+
+    /// <summary>
     /// The step-up gate an export asks for while <c>exfiltration.export.stepuprequired</c>
     /// is on, which is named by the export itself.
     /// </summary>

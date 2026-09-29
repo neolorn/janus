@@ -118,7 +118,11 @@ against the public contract of LIB-API-001.
   with `auth.throttled` and `retryAt`. Every admitted export is recorded as
   `authz.access.exported`, naming who exported, the operation, the kind of record and
   the one record a check named. A check, a list filter and an SQL fragment exercising
-  the permission each count as one export; a capability page does not.
+  the permission each count as one export; a capability page does not. The expiry
+  sweep forgets every export admitted more than an hour ago. Turning
+  `exfiltration.export.stepuprequired` off raises the High `stepup-policy-weakened`
+  alert naming the key as the change is made, and a change whose alert cannot be
+  raised is not made.
 - A host reports through `IReadVolume` how many records each gate-filtered query or
   export returned to a person. Each person's count for the day in
   `privacy.calendar.timezone` is compared with their own daily mean over

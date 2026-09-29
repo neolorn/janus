@@ -39,6 +39,11 @@ internal sealed class BulkExportLedger(DataConnections connections) : IBulkExpor
         VALUES (@id, @actor::uuid, @principal::text, @at);
         """;
 
+    private const string Sweep =
+        """
+        DELETE FROM identity.bulk_exports WHERE admitted_at <= @since;
+        """;
+
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<DateTimeOffset>> SinceAsync(
         SubjectId? actor,
@@ -81,6 +86,20 @@ internal sealed class BulkExportLedger(DataConnections connections) : IBulkExpor
                     at = at.ToUniversalTime(),
                     since = since.ToUniversalTime(),
                 },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<int> SweepAsync(DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        return await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                Sweep,
+                new { since = since.ToUniversalTime() },
                 ambient.Transaction,
                 cancellationToken: cancellationToken))
             .ConfigureAwait(false);

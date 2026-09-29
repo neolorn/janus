@@ -339,6 +339,8 @@ internal static class BackgroundJobs
             .SweepAsync(cancellationToken).ConfigureAwait(false);
         _ = await services.GetRequiredService<BreakGlassService>()
             .SweepAsync(cancellationToken).ConfigureAwait(false);
+        _ = await services.GetRequiredService<ExportOperations>()
+            .SweepAsync(cancellationToken).ConfigureAwait(false);
         _ = await services.GetRequiredService<SigningKeys>()
             .SweepAsync(cancellationToken).ConfigureAwait(false);
         _ = await services.GetRequiredService<IOpenIddictTokenManager>()

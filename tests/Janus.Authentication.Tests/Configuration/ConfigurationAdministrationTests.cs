@@ -614,6 +614,28 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
         Assert.Equal(0, _work.Committed);
     }
 
+    /// <summary>
+    /// OPS-ALERT-006 AC5 and OPS-ALERT-001 (D-166, 329): the export step-up turned off is
+    /// announced in the change's transaction, so a change whose alert cannot be raised
+    /// is refused, unmade and unwritten.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_ALERT_001_AnExportStepUpTurnedOffWithoutItsAlertIsNotMadeAsync()
+    {
+        _events.Refusal = Error.From(ErrorCodes.Denied);
+
+        Error refusal = await RefusedAsync(
+            Settings.ExfiltrationExportStepUpRequired,
+            false,
+            "a supervised migration",
+            Satisfied);
+
+        Assert.Equal(ErrorCodes.Denied, refusal.Code);
+        Assert.Empty(_changes.Written);
+        Assert.Equal(0, _work.Committed);
+    }
+
     // The one change OPS-CFG-005 AC1 and OPS-CFG-008 AC2 read the record of: the
     // actor given lengthens the AAL2 inactivity for a support window, stepped up.
     private async Task<ConfigurationChange> LengthenedAsync(SubjectId actor)

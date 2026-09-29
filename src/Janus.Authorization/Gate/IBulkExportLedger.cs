@@ -47,4 +47,14 @@ internal interface IBulkExportLedger
         DateTimeOffset at,
         DateTimeOffset since,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Forgets every actor's exports admitted at or before an instant, which no limit
+    /// counts again.
+    /// </summary>
+    /// <param name="since">The start of the window.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>How many were forgotten.</returns>
+    /// <remarks>Implements OPS-OBS-003 and IDN-PRIN-003 AC4 (D-166, 329).</remarks>
+    ValueTask<int> SweepAsync(DateTimeOffset since, CancellationToken cancellationToken);
 }

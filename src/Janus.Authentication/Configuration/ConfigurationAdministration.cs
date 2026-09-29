@@ -132,6 +132,20 @@ internal sealed class ConfigurationAdministration(
             }
         }
 
+        // OPS-ALERT-006 AC5 (D-166, 329): turning the export step-up off is told as it is
+        // made, in the change's transaction, and a change whose alert cannot be raised
+        // is not made.
+        if (setting.Key == Settings.ExfiltrationExportStepUpRequired.Key
+            && before is true
+            && value is false
+            && (await alerts
+                    .RaiseAsync(StepUpWeakening.Of(setting.Key, time.GetUtcNow()), cancellationToken)
+                    .ConfigureAwait(false))
+                .Match(() => (Error?)null, error => error) is Error unannounced)
+        {
+            return Result.Failure(unannounced);
+        }
+
         // INT-MAIL-011 AC2 (entry 269): a change to what decides whether mail reaches a
         // relay address is read with the value it made, inside its transaction.
         if (Relayed(setting.Key)

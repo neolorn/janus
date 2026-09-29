@@ -49,6 +49,10 @@ internal sealed class BulkExportLedgerInMemory : IBulkExportLedger
         return ValueTask.CompletedTask;
     }
 
+    /// <inheritdoc/>
+    public ValueTask<int> SweepAsync(DateTimeOffset since, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_admitted.RemoveAll(one => one.At <= since));
+
     private IEnumerable<DateTimeOffset> Of(SubjectId? actor, string? principal) =>
         _admitted
             .Where(one => one.Actor == actor && string.Equals(one.Principal, principal, StringComparison.Ordinal))

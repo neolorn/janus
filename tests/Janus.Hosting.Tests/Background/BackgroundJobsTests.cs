@@ -154,6 +154,54 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
     }
 
     /// <summary>
+    /// IDN-PRIN-003 AC4 and OPS-ALERT-006: an export admitted more than an hour ago is
+    /// counted by no limit again, so one pass of the worker, which nobody started, clears
+    /// it; one inside the hour stays.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_PRIN_003_AC4_AnExportPastItsHourIsClearedWithNobodyAskingAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await ForgetEarlierRunsAsync();
+
+        DateTimeOffset noon = Authorization.Deployment.Noon;
+        var spent = Guid.CreateVersion7();
+        var counted = Guid.CreateVersion7();
+
+        await using (NpgsqlConnection seeding = await host.OpenAsync())
+        {
+            _ = await seeding.ExecuteAsync(
+                """
+                INSERT INTO identity.bulk_exports (id, actor, principal, admitted_at)
+                VALUES (@spent, NULL, 'an-exporting-principal', @past),
+                       (@counted, NULL, 'an-exporting-principal', @recent);
+                """,
+                new
+                {
+                    spent,
+                    counted,
+                    past = (noon - TimeSpan.FromMinutes(61)).UtcDateTime,
+                    recent = (noon - TimeSpan.FromMinutes(59)).UtcDateTime,
+                });
+        }
+
+        await using ServiceProvider services = Deployed(noon);
+
+        _ = await services.GetServices<IHostedService>().OfType<BackgroundWorker>().Single()
+            .RunDueAsync(cancellationToken);
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        Assert.Equal(
+            [counted],
+            await connection.QueryAsync<Guid>(
+                "SELECT id FROM identity.bulk_exports WHERE id = ANY(@ids)",
+                new { ids = new[] { spent, counted } }));
+    }
+
+    /// <summary>
     /// INT-SMS-004: no poll succeeds without a balance read, so in a deployment that
     /// registered no SMS transport the balance poll fails, naming the transport, and no
     /// success is recorded for it; its lapse then raises <c>background-job-failed</c>.
