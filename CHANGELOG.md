@@ -176,7 +176,10 @@ against the public contract of LIB-API-001.
   `integration.endpoint.insecure` naming the key. Each change is recorded under the
   `configure` principal with its reason and raises `protected-setting-changed`; the
   governing language also raises `governing-language-changed`. A change that would leave
-  the deployment unable to start is refused and nothing of it is written.
+  the deployment unable to start is refused and nothing of it is written: the command
+  runs the start's checks over the written values (the keys to name, the relying party,
+  the endpoints, the signing algorithm and the default client) and refuses with the
+  code the start would give.
 - A change to the system policy or to an organization's policy that leaves any step-up
   gate asking less (a lower level, phishing resistance dropped, or a longer maximum age)
   raises the High `stepup-policy-weakened` alert as it is made, naming the policy key

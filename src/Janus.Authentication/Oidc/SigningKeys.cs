@@ -105,10 +105,21 @@ internal sealed class SigningKeys(
         return default!;
     }
 
-    // ES256 is the one algorithm the key admits (chapter 10 section 4.9), and P-256 is
-    // the one curve it names.
+    /// <summary>
+    /// Whether this version signs with an algorithm: ES256 is the one the key admits
+    /// (chapter 10 section 4.9), and P-256 the one curve it names.
+    /// </summary>
+    /// <param name="algorithm">The algorithm <c>token.signing.algorithm</c> holds.</param>
+    /// <returns>Whether a key can be made for it.</returns>
+    /// <remarks>
+    /// Implements AUTH-KEY-001, for the key made at rotation and for a change of the
+    /// key from the server (D-166, 319).
+    /// </remarks>
+    internal static bool Signs(string algorithm) =>
+        string.Equals(algorithm, "ES256", StringComparison.Ordinal);
+
     private static ECCurve Curve(string algorithm) =>
-        string.Equals(algorithm, "ES256", StringComparison.Ordinal)
+        Signs(algorithm)
             ? ECCurve.NamedCurves.nistP256
             : throw new InvalidOperationException("The signing algorithm names no curve this version holds.");
 

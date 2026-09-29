@@ -187,6 +187,29 @@ public sealed class ConfigureTests(BootstrappedDeployment deployment) : IClassFi
             new { Key = key }));
     }
 
+    /// <summary>
+    /// OPS-CFG-004, AUTH-FACT-010 AC1 and LIB-HOST-001: the checks the host's start runs
+    /// over the relying party run over the written values before the commit, so an
+    /// identifier that no configured origin sits under is refused with the code the
+    /// start gives, and nothing of the change stays.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_004_ARelyingPartyIdentifierNoOriginSharesIsRefusedAsync()
+    {
+        string key = Settings.WebAuthnRelyingPartyId.Key.ToString();
+
+        Invocation run = await ConfiguredAsync("--" + key, "elsewhere.example.org", "--reason", Reason);
+
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        Assert.Equal(1, run.ExitCode);
+        Assert.Empty(run.Output);
+        Assert.Equal("model.startup.rpid", Refusal(run));
+        Assert.Null(await ValueAsync(connection, key));
+        Assert.Empty(await RaisedAsync(connection, key));
+    }
+
     private static async Task<string?> ValueAsync(NpgsqlConnection connection, string key) =>
         await connection.ExecuteScalarAsync<string?>(
             "SELECT value FROM identity.settings WHERE key = @Key",

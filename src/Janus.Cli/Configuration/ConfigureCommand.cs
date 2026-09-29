@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Configuration;
+using Janus.Authentication.Oidc;
 using Janus.Core;
 using Janus.Storage;
 using Microsoft.Extensions.DependencyInjection;
@@ -109,6 +110,7 @@ internal static class ConfigureCommand
         services.AddSingleton(TimeProvider.System);
         services.AddStorageArea(keys.Connection, keys.KeyEncryptionKeys, keys.FingerprintKeys);
         services.AddScoped<SchemaValidation>();
+        services.AddScoped<RedirectValidation>();
         services.AddScoped<ProtectedConfiguration>();
 
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });

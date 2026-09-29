@@ -38,7 +38,7 @@ internal sealed class SendingValidation(
     /// <returns>Nothing, or the failure that stops startup.</returns>
     public async ValueTask<Result> ValidateAsync(CancellationToken cancellationToken)
     {
-        if (await InsecureAsync(cancellationToken).ConfigureAwait(false) is Error insecure)
+        if (await InsecureAsync(configuration, cancellationToken).ConfigureAwait(false) is Error insecure)
         {
             return Result.Failure(insecure);
         }
@@ -81,12 +81,24 @@ internal sealed class SendingValidation(
             "key",
             JsonSerializer.SerializeToElement(key));
 
-    // INT-GEN-001, INF-TLS-004: the addresses the library itself calls out to, the
-    // mail and text endpoints, the mail server adapter's endpoint and the corpus a
-    // deployment hosts itself. A deployment that supplies a transport of its own leaves
-    // its endpoint empty and calls its provider wherever it decides; nothing of the
-    // host's is registered here.
-    private async ValueTask<Error?> InsecureAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// The endpoint rule: every address the library itself calls out to is an absolute
+    /// https address, or empty.
+    /// </summary>
+    /// <param name="configuration">Where the addresses are read.</param>
+    /// <param name="cancellationToken">Abandons the reads.</param>
+    /// <returns>Nothing, or <c>integration.endpoint.insecure</c> naming the key.</returns>
+    /// <remarks>
+    /// Implements INT-GEN-001 and INF-TLS-004 for the start and for a change of a
+    /// protected key from the server (D-166, 319). The addresses are the mail and text
+    /// endpoints, the mail server adapter's endpoint and the corpus a deployment hosts
+    /// itself. A deployment that supplies a transport of its own leaves its endpoint
+    /// empty and calls its provider wherever it decides; nothing of the host's is
+    /// registered here.
+    /// </remarks>
+    internal static async ValueTask<Error?> InsecureAsync(
+        IConfigurationStore configuration,
+        CancellationToken cancellationToken)
     {
         foreach (TextSetting key in new[]
         {
