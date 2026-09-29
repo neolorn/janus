@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
@@ -348,15 +349,19 @@ internal static class BackgroundJobs
         return Result.Success();
     }
 
-    // LIB-HOST-001: the transport is the deployment's, and one that registered none
-    // has no balance to read.
+    // INT-SMS-004: no poll succeeds without a balance read, so a deployment that
+    // registered no transport fails the poll, and its lapse raises
+    // background-job-failed, naming the declaration the balance needs (LIB-HOST-001).
     private static async ValueTask<Result> PollBalanceAsync(
         IServiceProvider services,
         CancellationToken cancellationToken)
     {
         if (services.GetService<ISmsTransport>() is null)
         {
-            return Result.Success();
+            return Result.Failure(Error.From(
+                ErrorCodes.StartupDeclarationMissing,
+                "key",
+                JsonSerializer.SerializeToElement("smsTransport")));
         }
 
         return Done(await services.GetRequiredService<SmsBalance>()

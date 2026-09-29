@@ -650,9 +650,12 @@ public static class Settings
             floor: "PT1H",
             loosening: SettingDirection.Increase);
 
-    /// <summary>The outbox publisher's cadence.</summary>
+    /// <summary>
+    /// The cadence of the outbox publisher and of the passes it paces, the carrying of
+    /// raised alerts among them, so its ceiling bounds how long an alert can wait.
+    /// </summary>
     public static DurationSetting OutboxPollInterval { get; } =
-        new("outbox.poll.interval", SettingScope.Runtime, "PT5S");
+        new("outbox.poll.interval", SettingScope.Runtime, "PT5S", ceiling: "PT1M");
 
     /// <summary>The first retry delay, to which full jitter is applied.</summary>
     public static DurationSetting OutboxRetryInitial { get; } =

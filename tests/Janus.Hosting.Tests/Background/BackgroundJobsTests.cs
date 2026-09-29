@@ -153,6 +153,39 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
                 .Order());
     }
 
+    /// <summary>
+    /// INT-SMS-004: no poll succeeds without a balance read, so in a deployment that
+    /// registered no SMS transport the balance poll fails, naming the transport, and no
+    /// success is recorded for it; its lapse then raises <c>background-job-failed</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_SMS_004_TheBalancePollFailsWithoutATransportAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await ForgetEarlierRunsAsync();
+
+        BackgroundJob poll = BackgroundJobs.All.Single(job => job.Name == "sms-balance");
+
+        await using ServiceProvider services = Deployed(Authorization.Deployment.Noon, sms: false);
+        await using AsyncServiceScope scope = services.CreateAsyncScope();
+
+        Error refusal = (await poll.RunAsync(scope.ServiceProvider, cancellationToken)).Match(
+            () => throw new Xunit.Sdk.XunitException("The poll succeeded."),
+            error => error);
+
+        _ = await services.GetServices<IHostedService>().OfType<BackgroundWorker>().Single()
+            .RunDueAsync(cancellationToken);
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refusal.Code);
+        Assert.Equal("smsTransport", refusal.Details["key"].GetString());
+        Assert.Null(await connection.ExecuteScalarAsync<DateTimeOffset?>(
+            "SELECT succeeded_at FROM identity.background_jobs WHERE name = 'sms-balance'"));
+    }
+
     // Each case owns its job state: the runs another case recorded, at its own clock, are
     // removed first, so every job is due at this case's clock and no case reads another's
     // run, whatever order the class runs in.
@@ -250,14 +283,21 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
     }
 
     // A deployment over the fixture's database at one instant, with what a host declares
-    // for itself: where the events go, the two transports, its sign-in screen and its
-    // client.
-    private ServiceProvider Deployed(DateTimeOffset now) =>
-        new ServiceCollection()
+    // for itself: where the events go, the two transports (the text one only where the
+    // case keeps it), its sign-in screen and its client.
+    private ServiceProvider Deployed(DateTimeOffset now, bool sms = true)
+    {
+        var services = new ServiceCollection();
+
+        if (sms)
+        {
+            services.AddSingleton<ISmsTransport>(new SmsTransportInMemory());
+        }
+
+        return services
             .AddSingleton<TimeProvider>(new FixedTime(now))
             .AddSingleton<IEvents>(new EventsInMemory())
             .AddSingleton<IMailTransport>(new MailTransportInMemory())
-            .AddSingleton<ISmsTransport>(new SmsTransportInMemory())
             .AddSingleton(new AuthenticationAddresses(
                 "https://accounts.example.test/signin",
                 "https://accounts.example.test"))
@@ -271,4 +311,5 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
                 HostFixture.Declaration(),
                 ApplicationKind.Public)
             .BuildServiceProvider();
+    }
 }

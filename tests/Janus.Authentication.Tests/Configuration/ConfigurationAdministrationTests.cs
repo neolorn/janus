@@ -242,6 +242,27 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-CFG-003: the outbox interval paces the carrying of alerts, so it has a
+    /// ceiling of a minute; a longer one is refused as above it, even stepped up and
+    /// with a reason, and nothing is written.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_CFG_003_AnOutboxIntervalAboveItsCeilingIsRefusedAsync()
+    {
+        Error refusal = await RefusedAsync(
+            Settings.OutboxPollInterval,
+            TimeSpan.FromMinutes(2),
+            "a quieter publisher",
+            Satisfied);
+
+        Assert.Equal(ErrorCodes.ConfigurationValueAboveCeiling, refusal.Code);
+        Assert.Equal(Settings.OutboxPollInterval.Key.ToString(), refusal.Details["key"].GetString());
+        Assert.Empty(_changes.Written);
+        Assert.Equal(Settings.OutboxPollInterval.Default, await InForceAsync(Settings.OutboxPollInterval));
+    }
+
+    /// <summary>
     /// API-CONV-002 and CONV-CODE-006 AC3: a reason is 1 to 1024 characters after
     /// trimming, and the service refuses one past the bound for an in-process caller
     /// as the route does, naming the member, and writes nothing.

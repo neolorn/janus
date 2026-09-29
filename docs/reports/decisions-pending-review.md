@@ -11722,6 +11722,8 @@ would raise `background-job-failed` every hour for a gateway that does not exist
 *Chapter text that should change.* The `outbox.poll.interval` row of `10` could name
 OPS-ALERT-001 among the passes it paces.
 
+**Superseded by D-166.**
+
 ---
 
 ## 306. How far back the token sweep reaches, and the one sweep not scheduled

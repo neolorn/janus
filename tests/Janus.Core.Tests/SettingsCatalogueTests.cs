@@ -196,6 +196,15 @@ public sealed class SettingsCatalogueTests
     }
 
     /// <summary>
+    /// OPS-CFG-003 and chapter 10 section 4: the outbox interval paces the carrying of
+    /// raised alerts, and its ceiling of a minute is what keeps one loosening from
+    /// holding every alert back.
+    /// </summary>
+    [Fact]
+    public void OPS_CFG_003_TheOutboxIntervalHasItsCeiling() =>
+        Assert.Equal(TimeSpan.FromMinutes(1), Settings.OutboxPollInterval.Ceiling);
+
+    /// <summary>
     /// Every key is named once. A duplicate would make one of the two unreachable
     /// through the store.
     /// </summary>

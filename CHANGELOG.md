@@ -215,6 +215,10 @@ against the public contract of LIB-API-001.
   where a system administrator exists or ever existed. A refusal is one JSON line on
   standard error, with exit code 1. What it defines and sets is audited under its own
   principal, for which `SystemOperation` carries `Bootstrap`.
+- `outbox.poll.interval`, which also paces the carrying of raised alerts, has a ceiling
+  of one minute and is refused above it with `config.value.aboveceiling`. The balance
+  poll fails where no SMS transport is registered, so its lapse raises
+  `background-job-failed`.
 - The library runs its own scheduled work. A worker `AddJanus` registers sweeps expired
   sessions, codes, links and tokens, ends the windows of account deletion, organization
   erasure, loss reports and privacy-request deadlines, re-verifies locked domains,
