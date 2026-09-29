@@ -11849,6 +11849,8 @@ BFF-SESS-006 · `18` FE-BG-001.
 
 ## D-172 — Corrections-4 questions 8 and 9: the conformance suite's client, the deployment key's identifier
 
+> **Amended.** Item 2: only what the field cipher encrypts under the deployment key is bound to its row, RFC 5649 wraps take no additional data, and the moving migration refuses where a value bound the old way stands instead of re-encrypting (D-173).
+
 **Date:** 2026-09-29 · **Status:** accepted · **Extends:** D-166 (316, 340), LIB-TEST-001
 
 **TL;DR.** After D-166 340 no one outside the library holds a client secret, so the
@@ -11911,6 +11913,63 @@ find none. *Decision:*
 **Propagated to:** `04` PRIV-RIGHT-005a (text and criterion 18) · `06` OPS-SEC-002 · `07`
 LIB-TEST-001 (text and criteria 4 and 5), LIB-API-001 (the conformance row), LIB-API-005 ·
 `08` CONV-LAYOUT-001, CONV-DESIGN-002 · `17` BFF-SESS-006.
+
+---
+
+## D-173 — Corrections-4 question 10: which values under the deployment key are bound to their row, and the migration that moves the key
+
+**Date:** 2026-09-29 · **Status:** accepted · **Amends:** D-172 (item 2) · **Extends:** D-166 (234, 316)
+
+**TL;DR.** D-172 asked every value under the deployment's data key to be bound to its own
+row and the moving migration to re-encrypt what it found bound otherwise. Neither holds as
+written: a migration holds no key-encryption key and cannot re-encrypt, and the keys and
+secrets the library wraps with RFC 5649 take no additional data at all. The binding applies
+to what the field cipher encrypts; key wraps stay unbound, as the data keys are; and the
+migration refuses where a value bound the old way stands. No deployment exists before the
+first release, so nothing real is refused.
+
+**What the implementer found.** Three kinds of value are AES-GCM ciphertexts of the field
+cipher for rows that belong to no subject, with the nil subject in their additional data:
+an invitation's identifiers, an unheld mailbox's address, and a queued message that names
+no subject. Changing their binding means decrypting and encrypting again, which needs the
+key-encryption key, and migrations run as `identity_migrate`, which holds none; PostgreSQL
+has no AES-GCM or RFC 5649 of its own. Signing keys, the sign-on and provider verifiers
+and, with 340, client secrets are RFC 5649 key wraps, which take no additional data.
+D-166 234, which binds an invitation to its own identifier, is not applied yet, so D-172's
+"as an invitation is" pointed at a state the code does not have.
+
+**Decision.**
+
+1. **The field cipher's values are bound to their own row.** A value the field cipher
+   encrypts for a row that belongs to no subject, whether under the deployment's data key
+   or under a data key of the row's own that the deployment's data key wraps (an
+   invitation's identifiers, an unheld mailbox's address, a queued message that names no
+   subject, a registration session's staged values), is bound by its additional
+   authenticated data,
+   in the place a subject identifier takes, to its own row's identifier (the invitation's,
+   the reservation's, the queued message's), never to the reserved identifier every such
+   value shares. 234 is that rule for invitations; it is applied with this item, not left
+   for D.6.
+2. **RFC 5649 wraps stay as they are.** A key or secret the library wraps under the
+   deployment's data key takes no additional data, exactly as every data key wrapped under
+   the key-encryption key takes none. Changing their format would add a second encryption
+   path for the same kind of value, and moving one wrapped key between rows gains nothing
+   to anyone without the database already open to them.
+3. **The migration refuses instead of re-encrypting.** The migration that moves the key's
+   row to the max UUID refuses, naming the table, where any such field-cipher value bound
+   the old way stands, as the implementer's migration for 316 (`ced2208`) refuses where a
+   value still stands under the key-encryption key. No deployment exists before the first release, so this refuses
+   only a development database, which is recreated. *Rejected:* a re-encryption command in
+   `Janus.Cli` under the key document (a tool built to migrate data no deployment holds);
+   giving the migration role the key-encryption key (the one credential that must never
+   hold it).
+4. Tests carrying PRIV-RIGHT-005a criterion 18 prove the key is held under the max UUID
+   and that a field-cipher value for a row that belongs to no subject does not decrypt
+   once moved to another row; a test of the migration proves that it moves the row and
+   that it refuses, naming the table, where such a value bound the old way stands.
+
+**Propagated to:** `04` PRIV-RIGHT-005a (text, criterion 18 and the invitation paragraph)
+· `08` CONV-DESIGN-003.
 
 ---
 
@@ -12096,6 +12155,7 @@ LIB-TEST-001 (text and criteria 4 and 5), LIB-API-001 (the conformance row), LIB
 | Corrections-4 questions: the break-glass reason on the trail, bootstrap's `before`, the limit alert before bootstrap | D-170 |
 | Corrections-4 question 7: the key ring for startup secrets; the unit of work's result; the derived break-glass session | D-171 |
 | Corrections-4 questions 8 and 9: the conformance suite's client, the deployment key's identifier | D-172 |
+| Corrections-4 question 10: which values under the deployment key are bound to their row, and the migration that moves the key | D-173 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

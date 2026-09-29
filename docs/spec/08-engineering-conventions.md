@@ -316,8 +316,11 @@ translates between the aggregate and its records in both directions, and that
 translation is the one place per-subject encryption happens: it calls the field cipher
 with the subject identifier read from the record's declared subject column
 (PRIV-RIGHT-005a) and the table and column names as associated data. A value that
-belongs to no subject is encrypted there too, under the deployment's data key, which the
-subject-key table holds under a reserved identifier (PRIV-RIGHT-005a). No value
+belongs to no subject and that the field cipher encrypts is encrypted there too, under
+the deployment's data key or a data key of its row's own that the deployment's data key
+wraps, with its own row's identifier in the place of the subject identifier, never the
+reserved identifier the subject-key table holds that key under (PRIV-RIGHT-005a); a key
+or secret wrapped with RFC 5649 takes no associated data (D-173). No value
 converter, interceptor or shadow state encrypts anything; a domain entity never holds
 ciphertext, a record never holds plaintext of an encrypted column.
 The **unit of work is the operation**: a service method runs inside one transaction
@@ -343,7 +346,7 @@ added `NOT NULL` without a default; which of them stop a deploy is OPS-DEP-001's
 serialized model of AUTHZ-MODEL-005 is JSON written by `System.Text.Json` source
 generation to `artifacts/model.json`.
 
-*Source: OPS-DATA-001 to 003, OPS-MIG-001, OPS-DEP-002, LIB-PKG-002, D-149, D-166, D-171*
+*Source: OPS-DATA-001 to 003, OPS-MIG-001, OPS-DEP-002, LIB-PKG-002, D-149, D-166, D-171, D-173*
 
 **Acceptance criteria**
 1. No area project references EF Core or Npgsql.

@@ -895,7 +895,7 @@ with AES key wrap with padding (RFC 5649). The format marker is one byte, `0x01`
 this scheme. An erased wrapped key is 32 zero bytes under marker `0x00`; every decrypt
 refuses it, and the DR-016 ledger and a restore recognise it as erased.
 
-*Source: D-097, D-099, D-100, D-147, D-166, D-171, D-172*
+*Source: D-097, D-099, D-100, D-147, D-166, D-171, D-172, D-173*
 
 **Per column, not per row.** Name and phone on a host record are encrypted; its
 non-personal columns (dates, amounts, quantities, references) are not. Aggregates and
@@ -970,10 +970,16 @@ foreign key does that today.
   set), never the nil subject, which means no subject. Erasure refuses that identifier and
   never touches its row, and a check constraint keeps it out of every table of subjects
   other than the subject-key table. The row is wrapped under the key-encryption key like
-  any subject key. A value under the deployment's data key is bound, in the place a
-  subject identifier takes, to its own row's identifier, as an invitation is, never to the
-  reserved identifier every such value shares (D-172). A rotation of the key-encryption key
-  therefore re-wraps rows of that table and nothing else (OPS-SEC-003)
+  any subject key, so a rotation of the key-encryption key re-wraps rows of that table and
+  nothing else (OPS-SEC-003). A value the field cipher encrypts for a row that belongs to
+  no subject (an invitation's identifiers, an unheld mailbox's address, a queued message
+  that names no subject, a registration session's staged values), whether under the
+  deployment's data key or under a data key of the row's own that the deployment's data
+  key wraps, is bound by its additional authenticated data, in the place a subject
+  identifier takes, to its own row's identifier, never to the reserved identifier every
+  such value shares. A key or secret wrapped under it with RFC 5649 (a signing key,
+  a verifier, a client secret) takes no additional data, as the data keys wrapped under
+  the key-encryption key take none (D-172, D-173)
 - **Each stored value SHALL carry a format marker and its initialisation vector**:
 
   ```
@@ -1013,9 +1019,10 @@ subject's fields. Erasure of pre-erasure backups therefore completes when those 
 expire — bounded by retention, and stated rather than implied.
 
 **Before any account exists.** The identifiers an invitation binds (REG-INV-001) SHALL be
-encrypted as one value under a data key of the invitation's own, wrapped under the
-deployment's data key and bound by the additional authenticated data to the invitation's
-identifier, in the place a subject identifier takes. The value and its wrapped key SHALL
+encrypted as one value under a data key of the invitation's own, which the deployment's
+data key wraps. The value SHALL be bound by the additional authenticated data to the
+invitation's identifier, in the place a subject identifier takes; the wrapped key takes
+none (D-173). The value and its wrapped key SHALL
 be overwritten when the invitation is revoked, acknowledged or found expired by the
 sweep, and an erasure SHALL overwrite them, in the erasure transaction, for every
 invitation attached to the subject. The invitation link's token SHALL be stored only as a one-way
@@ -1066,8 +1073,8 @@ carried.
 18. The deployment's data key is held under the max UUID of RFC 9562 and no row of the
     subject-key table stands under the nil subject; an erasure that names the max UUID is
     refused and leaves the row as it was; a row of any other table of subjects carrying
-    the max UUID is refused by the database; a value under the deployment's data key moved
-    to another row does not decrypt.
+    the max UUID is refused by the database; a value the field cipher encrypted for a row
+    that belongs to no subject does not decrypt once moved to another row.
 
 ---
 
