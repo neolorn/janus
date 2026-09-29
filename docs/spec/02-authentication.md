@@ -476,7 +476,8 @@ to the first origin.
 **Values (D-166).** Registrable suffixes and labels are judged against the Public
 Suffix List, its ICANN and its private sections alike, as browsers apply them. The list
 ships unmodified, with its header, as a resource embedded in the package and dated,
-downloaded from publicsuffix.org when each release is built (CONV-VCS-005); NOTICE
+drawn from publicsuffix.org when each release is prepared and committed with its date,
+as the offline leaked-password list is (CONV-VCS-005, D-169); NOTICE
 names the list, its licence (Mozilla Public License 2.0) and its source address. The
 library uses it only to validate the deployment's own configured origins (this item and
 AUTH-FACT-012 AC2).

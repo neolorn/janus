@@ -8486,6 +8486,8 @@ the working guide sections 3 and 6.
 
 > **Amended.** Items 22, 23, 26, 31 and 66, C.55, C.68 at `POST /auth/link`, C.103 and the status of `identity.identifier.invalid` in section E are revised, and the reconciliation pass it promised is done (D-166).
 
+> **Amended.** The whole-history search of section A skips the third-party data files D-169 names; a name inside one is not a trace (D-169).
+
 **Date:** 2026-09-22 · **Status:** accepted · **Amends:** D-149, D-153, D-155, D-160, D-161 and the items named below · **Extends:** D-161
 
 **TL;DR.** The ledger of decisions taken in the owner's absence (phases 2 to 7, entries 1
@@ -8947,6 +8949,8 @@ section 7 · `19` · `20` · `docs/guide/janus-explained.md`,
 ## D-166 — Review of entries 110 to 423: 101 reversed, 14 settled, the exit gate prepared, the chapters reconciled
 
 > **Amended.** Section B's two Tier 1 allowances become three: an allow-list entry of exactly the form D-167 states, for a flagged value that is specification text, is Tier 1 too (D-167).
+
+> **Amended.** R3's Public Suffix List is drawn when a release is prepared and committed with its date, not downloaded by each build (D-169).
 
 **Date:** 2026-09-25 · **Status:** accepted · **Amends:** D-161 (item 4, the working mode; item 2, where the drift check's rows come from), D-162 (item 22, where the governed send path lives; item 23, when the first attempt is made; item 26, the budget of a text message carrying a link; item 31, where destination records are kept and when they are swept; item 66, where a client secret comes from; C.55, where photo availability is held and what bootstrap writes; C.68 at `POST /auth/link`; C.103, the condition of the mail server row; E, the status of `identity.identifier.invalid`), D-153 (owner decision 2, the source a flood limit counts; owner decision 7, the word lists; the `backup.restoretest.interval` default; the address the bootstrap command prints), D-147 (the retirement of a key-encryption-key version; the name of the startup code for an unavailable secret), D-146 (item 17: a restriction's channel, the notices to a holder, a reason on every edit), D-143 (the policy object gains `photos`), D-129 (the break-glass page takes a reason), D-127 (a takedown reversal restores the state the takedown found), D-079a (a recognised device is exempt from the hold, not from the count), D-071 (three protected switches retired), D-060 (photos are off for the administrative organization until a codec is declared), D-057 (an authorization request's `redirect_uri` is refused at the push, not replaced), D-164 (item 3: the mail server verifies `aud` itself), D-165 (the developer recipient row is a declared example; the provider callback row and INT-GEN-003's sentence restored) · **Extends:** D-162, D-164, D-165
 
@@ -11642,6 +11646,45 @@ and criteria 2 and 3) · `10` the `ErasureRequested` row.
 
 ---
 
+## D-169 — Third-party data the package or the repository carries is kept as published; a name inside it is not a trace
+
+**Date:** 2026-09-29 · **Status:** accepted · **Amends:** D-162 (section A, the whole-history search), D-166 (R3, how the list reaches the repository) · **Extends:** D-166 (R1)
+
+**TL;DR.** The private section of the Public Suffix List holds entries that AI vendors
+submitted for their own domains, and the 3esl dictionary list holds ordinary English words
+that are also product names. The working guide forbids any file that names an AI tool,
+model or vendor. That rule keeps the tooling that produced the code out of the
+repository; it does not reach third-party data the specification requires the package or
+the repository to carry. Such data is kept exactly as its source publishes it.
+
+**What the rule protects.** Section 8 of the working guide opens with its reason: the
+tooling that produced the code is nobody's business. A name inside a public data set says
+nothing about how the code was made. The Public Suffix List names the domains of
+thousands of companies; the 3esl list is ordinary English words.
+
+**Why not the literal reading.** Removing entries from the Public Suffix List would make the
+library's validation disagree with the browsers' own list for those domains, and would
+break R3's "unmodified", which lets anyone compare the file with its source. Keeping the
+file out of the repository would not remove the entries either, since they ship inside the
+package. The list is drawn when a release is prepared and committed with its date, as the
+offline leaked-password list is, so every build of a commit embeds the same list; R3's
+"downloads it at build time" meant that draw, not a download by each build. Removing words from the 3esl list would weaken screening for those words and
+break the list's provenance.
+
+**The scope.** The third-party data sets the specification names: the offline
+leaked-password list (AUTH-PASS-004), the source of the English dictionary list (R1), the
+Public Suffix List (R3) and the Unicode data files vendored beside the Unicode tables
+generator (D-154). The steps the specification states for building two of them, the
+dated draw of the leaked list (AUTH-PASS-004, D-166 item 114) and the four-letter filter of
+the English list (R1), act on that data and are not edits under this rule. Everything
+written for the project keeps the rule without exception,
+the Arabic dictionary list included, since the implementer writes it. The implementer's
+own trace check skips those data files and nothing else.
+
+**Propagated to:** `02` AUTH-FACT-010 · the working guide sections 8 and 9.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -11820,6 +11863,7 @@ and criteria 2 and 3) · `10` the `ErasureRequested` row.
 | Review of entries 110 to 423: 101 reversed, 14 settled; the working mode ends; the chapters reconciled; the ledger closed | D-166 |
 | Secret scanning over the full history: the scanner's own release, checksum-pinned; an allow-list entry names the file and the value | D-167 |
 | Corrections-4 questions: the library's version without reflection; what the host does on erasure | D-168 |
+| Third-party data the package or the repository carries is kept as published; a name inside it is not a trace | D-169 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
