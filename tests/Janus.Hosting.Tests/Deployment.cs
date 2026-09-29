@@ -659,6 +659,13 @@ internal sealed class Deployment : IAsyncDisposable
     }
 
     /// <summary>
+    /// Opens a scope of the deployment's container, as a host calling the library in
+    /// process does.
+    /// </summary>
+    /// <returns>The scope, which the caller disposes.</returns>
+    public AsyncServiceScope Scope() => _application.Services.CreateAsyncScope();
+
+    /// <summary>
     /// Runs one pass of the alert channels, in a scope of its own as the worker would.
     /// </summary>
     /// <returns>How many raised conditions were carried.</returns>
@@ -920,6 +927,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Authentication.BreakGlass.IBreakGlassStore>(BreakGlass);
         _ = services.AddSingleton<Janus.Authentication.BreakGlass.IBreakGlassAudit>(BreakGlassAudit);
         _ = services.AddScoped<Janus.Authentication.BreakGlass.BreakGlassService>();
+        _ = services.AddScoped<IBreakGlass>(
+            provider => provider.GetRequiredService<Janus.Authentication.BreakGlass.BreakGlassService>());
         _ = services.AddScoped<AlertDestinationChange>();
         _ = services.AddScoped<IConfigurationAdministration, ConfigurationService>();
         _ = services.AddSingleton<ISendAudit, SendAuditInMemory>();

@@ -34,7 +34,10 @@ namespace Janus.Authentication.BreakGlass;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where the code is drawn from.</param>
 /// <remarks>
-/// Implements OPS-BOOT-002, OPS-BOOT-004, AUTH-STEP-004 and CONV-LOG-005. Every attempt
+/// Implements OPS-BOOT-002, OPS-BOOT-004, AUTH-STEP-004, LIB-API-005 and CONV-LOG-005.
+/// Generation and the read of the standing credential are the host's contract,
+/// <see cref="IBreakGlass"/>; presentation and the sweep are the boundary's and the
+/// worker's, and stay internal. Every attempt
 /// is counted against the global limit before anything else is looked at, and in a
 /// transaction of its own, so a refused attempt is counted as surely as one that
 /// succeeds. A group whose check symbol does not hold is refused before any hash is
@@ -56,7 +59,7 @@ internal sealed class BreakGlassService(
     AuthenticationAddresses addresses,
     IUnitOfWork work,
     TimeProvider time,
-    RandomNumberGenerator randomness)
+    RandomNumberGenerator randomness) : IBreakGlass
 {
     // OPS-BOOT-004: at most five attempts an hour, from all sources together.
     private const int GlobalAttempts = 5;
@@ -169,17 +172,7 @@ internal sealed class BreakGlassService(
     public ValueTask<int> SweepAsync(CancellationToken cancellationToken) =>
         store.SweepAsync(time.GetUtcNow() - GlobalWindow, cancellationToken);
 
-    /// <summary>
-    /// Generates the credential, a first issue or a replacement that invalidates the
-    /// one before it, and answers it the one time it is shown.
-    /// </summary>
-    /// <param name="context">Who is asking.</param>
-    /// <param name="session">The session the request arrived on.</param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>
-    /// The code, or the refusal where the caller does not administer the deployment or
-    /// the session has not stepped up.
-    /// </returns>
+    /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">The context is absent.</exception>
     public async ValueTask<Result<GeneratedBreakGlass>> GenerateAsync(
         AccessContext context,
@@ -273,6 +266,28 @@ internal sealed class BreakGlassService(
             code,
             new Uri(new Uri(addresses.Provider, UriKind.Absolute), Page),
             now));
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    public async ValueTask<Result<DateTimeOffset?>> StandingAsync(
+        AccessContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        // OPS-BOOT-001 AC3: every system administrator reads whether the deployment is
+        // without its emergency credential; the read shows nothing of the credential and
+        // asks for no step-up.
+        if (await scope.RefusedAsync(context, Permissions.SystemAdminister, cancellationToken).ConfigureAwait(false)
+            is Error refused)
+        {
+            return Result.Failure<DateTimeOffset?>(refused);
+        }
+
+        BreakGlassCredential? standing = await store.StandingAsync(cancellationToken).ConfigureAwait(false);
+
+        return Result.Success(standing?.IssuedAt);
     }
 
     private static TValue Held<TValue>(Error error, ref Error? failure)

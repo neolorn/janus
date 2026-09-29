@@ -1,7 +1,6 @@
 using System;
-using Janus.Core;
 
-namespace Janus.Authentication.BreakGlass;
+namespace Janus.Core;
 
 /// <summary>
 /// A break-glass credential as it is shown the one time it is shown.
@@ -10,10 +9,10 @@ namespace Janus.Authentication.BreakGlass;
 /// <param name="Address">The page it is presented at, which the envelope names.</param>
 /// <param name="IssuedAt">When it was generated.</param>
 /// <remarks>
-/// Implements OPS-BOOT-004. Nothing keeps this: the page it feeds is the only place the
-/// code exists once the response is sent.
+/// Implements OPS-BOOT-004 and LIB-API-005. Nothing keeps this: the page it feeds is the
+/// only place the code exists once the response is sent.
 /// </remarks>
-internal sealed record GeneratedBreakGlass(
+public sealed record GeneratedBreakGlass(
     [property: NeverLogged] string Credential,
     Uri Address,
     DateTimeOffset IssuedAt);

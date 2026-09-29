@@ -70,7 +70,7 @@ internal static class BreakGlassEndpoints
     }
 
     private static async Task<IResult> GenerateAsync(
-        BreakGlassService breakGlass,
+        IBreakGlass breakGlass,
         RequestSession browser,
         CancellationToken cancellationToken)
     {

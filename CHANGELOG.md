@@ -270,19 +270,22 @@ against the public contract of LIB-API-001.
   Argon2id hash of it is kept. `POST /auth/break-glass` takes the code on the machine
   profile, ignoring any cookie the browser holds, and opens an auth session for the
   reserved `emergency` account that passes every step-up gate for
-  `breakglass.session.lifetime`; idle past its policy's inactivity window, it asks for a
-  full sign-in, never the one-factor restore. A code opens one session; a group whose check character
-  is wrong is refused before any hash is compared; at most five attempts an hour are
-  taken from all sources together, besides the per-source delay, and the first attempt
-  the limit refuses raises `auth-failures-sustained` for the reserved account.
-  Generation and use are audited under `auth.breakglass.generated` and
-  `auth.breakglass.used`, and raise
-  `breakglass-generated` (`AlertCondition.BreakGlassGenerated`) and `breakglass-used`,
-  each High and scoped to the issue, to the operator and to the owner whatever
-  `alerting.owner.enabled` says. The reserved account is never suspended, taken down, deleted, granted anything
-  or added to a group, and is given no password, identifier, factor, provider link,
-  recovery codes or mail credential; each is refused with `authz.denied`. The reserved account is marked
-  on its row, and the credential and its attempts are kept in two tables of their own.
+  `breakglass.session.lifetime`; idle past its policy's inactivity window, it asks for
+  a full sign-in, never the one-factor restore. A code opens one session; a group whose
+  check character is wrong is refused before any hash is compared; at most five
+  attempts an hour are taken from all sources together, besides the per-source delay,
+  and the first attempt the limit refuses raises `auth-failures-sustained` for the
+  reserved account. Generation and use are audited under `auth.breakglass.generated`
+  and `auth.breakglass.used`, and raise `breakglass-generated`
+  (`AlertCondition.BreakGlassGenerated`) and `breakglass-used`, each High and scoped to
+  the issue, to the operator and to the owner whatever `alerting.owner.enabled` says.
+  A host generates the credential in process through `IBreakGlass`, which also reads
+  whether one stands and since when, and asks what the route asks: `system:administer`,
+  and a step-up to generate. The reserved account is never suspended, taken down,
+  deleted, granted anything or added to a group, and is given no password, identifier,
+  factor, provider link, recovery codes or mail credential; each is refused with
+  `authz.denied`. The reserved account is marked on its row, and the credential and its
+  attempts are kept in two tables of their own.
 - `POST /callbacks/providers/google` and `POST /callbacks/providers/apple` take the
   security events Google (Cross-Account Protection) and Sign in with Apple send about an
   identity linked to an account, on the machine profile and held to

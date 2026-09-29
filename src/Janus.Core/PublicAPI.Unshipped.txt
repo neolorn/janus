@@ -1032,6 +1032,17 @@ Janus.Core.GateLevel
 Janus.Core.GateLevel.Aal1 = 1 -> Janus.Core.GateLevel
 Janus.Core.GateLevel.Aal2 = 2 -> Janus.Core.GateLevel
 Janus.Core.GateLevel.Reachable = 0 -> Janus.Core.GateLevel
+Janus.Core.GeneratedBreakGlass
+Janus.Core.GeneratedBreakGlass.<Clone>$() -> Janus.Core.GeneratedBreakGlass!
+Janus.Core.GeneratedBreakGlass.Address.get -> System.Uri!
+Janus.Core.GeneratedBreakGlass.Address.init -> void
+Janus.Core.GeneratedBreakGlass.Credential.get -> string!
+Janus.Core.GeneratedBreakGlass.Credential.init -> void
+Janus.Core.GeneratedBreakGlass.Deconstruct(out string! Credential, out System.Uri! Address, out System.DateTimeOffset IssuedAt) -> void
+Janus.Core.GeneratedBreakGlass.Equals(Janus.Core.GeneratedBreakGlass? other) -> bool
+Janus.Core.GeneratedBreakGlass.GeneratedBreakGlass(string! Credential, System.Uri! Address, System.DateTimeOffset IssuedAt) -> void
+Janus.Core.GeneratedBreakGlass.IssuedAt.get -> System.DateTimeOffset
+Janus.Core.GeneratedBreakGlass.IssuedAt.init -> void
 Janus.Core.GeneratedRecoveryCodes
 Janus.Core.GeneratedRecoveryCodes.<Clone>$() -> Janus.Core.GeneratedRecoveryCodes!
 Janus.Core.GeneratedRecoveryCodes.Codes.get -> System.Collections.Generic.IReadOnlyList<string!>!
@@ -1185,6 +1196,9 @@ Janus.Core.IAuthentication.SendCodeAsync(string! identifier, string! language, s
 Janus.Core.IAuthentication.SendLinkAsync(string! identifier, string! language, string! source, string? browser, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAuthentication.StepUpAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, string! challenge, Janus.Core.FactorPresentation! presented, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SignInProgress!>>
 Janus.Core.IAuthentication.VerifyDeviceAsync(string! challenge, string! code, Janus.Core.DeviceDescription! device, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SignInProgress!>>
+Janus.Core.IBreakGlass
+Janus.Core.IBreakGlass.GenerateAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.GeneratedBreakGlass!>>
+Janus.Core.IBreakGlass.StandingAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.DateTimeOffset?>>
 Janus.Core.ICallbackReferences
 Janus.Core.ICallbackReferences.IssueAsync(string! callback, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<string!>>
 Janus.Core.ICertificateRenewal
@@ -3013,6 +3027,9 @@ override Janus.Core.FingerprintKeys.ToString() -> string!
 override Janus.Core.Gate.Equals(object? obj) -> bool
 override Janus.Core.Gate.GetHashCode() -> int
 override Janus.Core.Gate.ToString() -> string!
+override Janus.Core.GeneratedBreakGlass.Equals(object? obj) -> bool
+override Janus.Core.GeneratedBreakGlass.GetHashCode() -> int
+override Janus.Core.GeneratedBreakGlass.ToString() -> string!
 override Janus.Core.GeneratedRecoveryCodes.Equals(object? obj) -> bool
 override Janus.Core.GeneratedRecoveryCodes.GetHashCode() -> int
 override Janus.Core.GeneratedRecoveryCodes.ToString() -> string!
@@ -3890,6 +3907,8 @@ static Janus.Core.FingerprintKeys.operator !=(Janus.Core.FingerprintKeys? left, 
 static Janus.Core.FingerprintKeys.operator ==(Janus.Core.FingerprintKeys? left, Janus.Core.FingerprintKeys? right) -> bool
 static Janus.Core.Gate.operator !=(Janus.Core.Gate? left, Janus.Core.Gate? right) -> bool
 static Janus.Core.Gate.operator ==(Janus.Core.Gate? left, Janus.Core.Gate? right) -> bool
+static Janus.Core.GeneratedBreakGlass.operator !=(Janus.Core.GeneratedBreakGlass? left, Janus.Core.GeneratedBreakGlass? right) -> bool
+static Janus.Core.GeneratedBreakGlass.operator ==(Janus.Core.GeneratedBreakGlass? left, Janus.Core.GeneratedBreakGlass? right) -> bool
 static Janus.Core.GeneratedRecoveryCodes.operator !=(Janus.Core.GeneratedRecoveryCodes? left, Janus.Core.GeneratedRecoveryCodes? right) -> bool
 static Janus.Core.GeneratedRecoveryCodes.operator ==(Janus.Core.GeneratedRecoveryCodes? left, Janus.Core.GeneratedRecoveryCodes? right) -> bool
 static Janus.Core.GeneratorEnrolment.operator !=(Janus.Core.GeneratorEnrolment? left, Janus.Core.GeneratorEnrolment? right) -> bool
