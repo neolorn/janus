@@ -371,12 +371,13 @@ methods, no public setters, no domain framework or base class. Identifiers SHALL
 strongly typed `readonly record struct` wrappers (`SubjectId`, `OrganizationId`,
 `SessionId`) over a UUID value: **version 4** for `SubjectId`, because it is the OIDC
 `sub` and IDN-ACCT-002 requires it opaque and a version 7 value would carry the account's
-creation instant; **version 7** from `Guid.CreateVersion7()` for every other identifier,
+creation instant; `SubjectId` also refuses the max UUID of RFC 9562, under which the
+deployment's data key is held, at construction (PRIV-RIGHT-005a, D-174); **version 7** from `Guid.CreateVersion7()` for every other identifier,
 for index locality. Values with rules
 (canonical email, E.164 phone, permission string) SHALL be value types that cannot be
 constructed in an invalid state.
 
-*Source: IDN-ACCT-002, IDN-ACCT-004, D-149, D-166*
+*Source: IDN-ACCT-002, IDN-ACCT-004, D-149, D-166, D-174*
 
 **Acceptance criteria**
 1. No entity exposes a public or internal property setter.

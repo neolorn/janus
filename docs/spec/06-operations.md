@@ -1278,11 +1278,11 @@ credential (OPS-MIG-003a), and SHALL NOT be an endpoint of the management applic
 
 **Values (D-153, D-166).** The commands are `rotate-kek` and `rotate-fingerprint-key`
 of `Janus.Cli`. The batch is 500 subject keys per transaction ordered
-by subject identifier; the progress row holds the key version, the last subject
-identifier processed, the processed count, and the started, completed and retired
+by subject identifier; the progress row holds the key version, the key of the last row of the subject-key
+table processed (a row's key, not a subject identifier, PRIV-RIGHT-005a, D-174), the processed count, and the started, completed and retired
 instants.
 
-*Source: D-148; D-147; DR-009a, PRIV-RIGHT-005a, OPS-SEC-001, D-166*
+*Source: D-148; D-147; DR-009a, PRIV-RIGHT-005a, OPS-SEC-001, D-166, D-174*
 
 **The shape.** The operator adds the new key version to the secrets manager as
 current, keeping the previous one, and restarts the application on it; `rotate-kek`,

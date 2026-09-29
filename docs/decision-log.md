@@ -11851,6 +11851,8 @@ BFF-SESS-006 · `18` FE-BG-001.
 
 > **Amended.** Item 2: only what the field cipher encrypts under the deployment key is bound to its row, RFC 5649 wraps take no additional data, and the moving migration refuses where a value bound the old way stands instead of re-encrypting (D-173).
 
+> **Amended.** Item 2: the check constraint stands on every column of a library-owned table that can hold a subject identifier in any row; the subject-key table's key and the rotation's cursor into it are not subject identifiers; `SubjectId` refuses the max UUID (D-174).
+
 **Date:** 2026-09-29 · **Status:** accepted · **Extends:** D-166 (316, 340), LIB-TEST-001
 
 **TL;DR.** After D-166 340 no one outside the library holds a client secret, so the
@@ -11970,6 +11972,56 @@ D-166 234, which binds an invitation to its own identifier, is not applied yet, 
 
 **Propagated to:** `04` PRIV-RIGHT-005a (text, criterion 18 and the invitation paragraph)
 · `08` CONV-DESIGN-003.
+
+---
+
+## D-174 — Corrections-4 question 11: where the database refuses the deployment key's identifier
+
+**Date:** 2026-09-30 · **Status:** accepted · **Amends:** D-172 (item 2, the check constraint)
+
+**TL;DR.** D-172 kept the max UUID out of "every table of subjects", which no text defines.
+The refusal is taken at its strictest: `SubjectId` cannot be made from the max UUID, and
+every column of a library-owned table that can hold a subject identifier in any row
+refuses it by a check constraint, whatever the table's key and whether or not the column
+has a foreign key; the subject-key table's key and the rotation's cursor into it name a
+row of that table, not a subject, and are typed as such. A schema test finds every such column from
+the model, so a column added later cannot miss the check.
+
+**The question.** The implementer found three possible readings: tables whose primary key is
+the subject (`accounts`, `passwords`), tables whose primary key begins with it (`consents`,
+`recovery_codes`), and every column that names a subject, several of them with no foreign
+key to `accounts` (the audit identities, `grants`, `devices`, `resources`, `send_outbox`,
+`verification_codes`). The choice decides where the database refuses the deployment key's
+identifier, which touches keys, so it stopped.
+
+**Decision.** The third reading, the strictest, as D-166 section A asks of anything touching
+security semantics. The point of the reserved identifier is that nothing may ever treat the
+deployment key as a subject's: not a lookup of an actor's key, not an erasure, not a record
+naming someone. The first two readings leave exactly the columns with no foreign key open,
+which are the ones a wrong value could reach without the database noticing. So:
+
+1. `SubjectId` refuses the max UUID at construction, as it refuses any value it cannot
+   hold, so no code path holds it as a subject.
+2. Every column of a library-owned table that can hold a subject identifier in any row
+   carries a check constraint refusing the max UUID: a grant's holder and a group's
+   member, which name a subject in some rows and a group in others, included. The nil
+   subject stays admitted where a column admits it today. The subject-key table's key and
+   the key rotation's cursor into it (OPS-SEC-003) are not subject identifiers: they name
+   a row of that table, a subject's or the deployment's, are typed as such and never as
+   `SubjectId`, and take no such check, since the rotation walks the table in key order
+   and its last row is the deployment key's.
+3. A schema test enumerates from the model every such column, the audit identities, a
+   grant's holder and a group's member included, and proves each carries the check, so a
+   column added later fails the build until it has one.
+
+Tests carrying PRIV-RIGHT-005a criterion 18 prove all three.
+
+**The ledger line for 234.** The implementer was right not to write one: section G lists 234
+neither as superseded nor as revised, and D-166 keeps it with a fix, so the closed ledger
+takes no line for it. The work order that asked for one was wrong.
+
+**Propagated to:** `04` PRIV-RIGHT-005a (text and criterion 18) · `06` OPS-SEC-003 · `08`
+CONV-DESIGN-004.
 
 ---
 
@@ -12156,6 +12208,7 @@ D-166 234, which binds an invitation to its own identifier, is not applied yet, 
 | Corrections-4 question 7: the key ring for startup secrets; the unit of work's result; the derived break-glass session | D-171 |
 | Corrections-4 questions 8 and 9: the conformance suite's client, the deployment key's identifier | D-172 |
 | Corrections-4 question 10: which values under the deployment key are bound to their row, and the migration that moves the key | D-173 |
+| Corrections-4 question 11: where the database refuses the deployment key's identifier | D-174 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

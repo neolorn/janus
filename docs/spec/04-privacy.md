@@ -895,7 +895,7 @@ with AES key wrap with padding (RFC 5649). The format marker is one byte, `0x01`
 this scheme. An erased wrapped key is 32 zero bytes under marker `0x00`; every decrypt
 refuses it, and the DR-016 ledger and a restore recognise it as erased.
 
-*Source: D-097, D-099, D-100, D-147, D-166, D-171, D-172, D-173*
+*Source: D-097, D-099, D-100, D-147, D-166, D-171, D-172, D-173, D-174*
 
 **Per column, not per row.** Name and phone on a host record are encrypted; its
 non-personal columns (dates, amounts, quantities, references) are not. Aggregates and
@@ -968,8 +968,12 @@ foreign key does that today.
   wrapped, under the **deployment's data key**: a row of the subject-key table under a
   reserved identifier that no subject is issued: the max UUID of RFC 9562 (all 128 bits
   set), never the nil subject, which means no subject. Erasure refuses that identifier and
-  never touches its row, and a check constraint keeps it out of every table of subjects
-  other than the subject-key table. The row is wrapped under the key-encryption key like
+  never touches its row. `SubjectId` refuses it at construction, and every column of a
+  library-owned table that can hold a subject identifier in any row carries a check
+  constraint that refuses it, whatever that table's key and whether or not the column has
+  a foreign key. The subject-key table's key and the key rotation's cursor into it are not
+  subject identifiers: they name a row of that table, a subject's or the deployment's, and
+  are typed as such, never as `SubjectId` (D-174). The row is wrapped under the key-encryption key like
   any subject key, so a rotation of the key-encryption key re-wraps rows of that table and
   nothing else (OPS-SEC-003). A value the field cipher encrypts for a row that belongs to
   no subject (an invitation's identifiers, an unheld mailbox's address, a queued message
@@ -1072,8 +1076,11 @@ carried.
     cannot be decrypted.
 18. The deployment's data key is held under the max UUID of RFC 9562 and no row of the
     subject-key table stands under the nil subject; an erasure that names the max UUID is
-    refused and leaves the row as it was; a row of any other table of subjects carrying
-    the max UUID is refused by the database; a value the field cipher encrypted for a row
+    refused and leaves the row as it was; `SubjectId` cannot be made from it; a schema test
+    enumerates from the model every column of a library-owned table that can hold a
+    subject identifier in any row, the audit identities, a grant's holder and a group's
+    member included, and proves each carries a check constraint refusing the max UUID, so
+    a column added later fails the build until it has one; a value the field cipher encrypted for a row
     that belongs to no subject does not decrypt once moved to another row.
 
 ---
