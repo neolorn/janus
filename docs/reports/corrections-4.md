@@ -1,9 +1,9 @@
 # Corrections 4: D-166 and D-167
 
-Status: stopped at open question 7 (Tier 2, with a Tier 3 point). D-168 settled questions
-1 and 2 of the first stop, D-169 question 3, and D-170 questions 4 to 6; all are applied.
-Of the rest of D-166, section D.8 is applied up to its paragraph 121 and 336, where
-question 7 stops the run (section 2).
+Status: stopped at open questions 8 and 9 (Tier 3). D-168 settled questions 1 and 2 of the
+first stop, D-169 question 3, D-170 questions 4 to 6, and D-171 question 7; all are applied
+or, for question 7, being applied in the order D-171 gives. Of the rest of D-166, section
+D.8 is applied up to its paragraph 340, where question 8 stops the run (section 2).
 
 ## 1. Items implemented
 
@@ -113,6 +113,9 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 | D-170 item 2: bootstrap's seed records the written default as `before` where no row stood, nothing only for a required key | `aec590e` | OPS-CFG-005 | `BootstrapTests.OPS_CFG_005_BootstrapRecordsWhatEachKeyWasBeforeItAsync` |
 | D-170 item 3: the limit alert with no scope on a deployment with no reserved account (no code change) | `5ad27b4` | OPS-BOOT-004 AC7 | `BreakGlassEndpointTests.OPS_BOOT_004_AC7_TheLimitReachedIsRaisedWithNoReservedAccountAsync` |
 | D-166 D.8, break-glass part (8): `GET /admin/break-glass`; the ledger lines of 291, 295, 297, 302 and 331 | `221654d` | OPS-BOOT-001 AC3 | `BreakGlassEndpointTests.OPS_BOOT_001_AC3_TheAbsenceIsReadByEverySystemAdministratorAsync`, `BreakGlassEndpointTests.OPS_BOOT_001_AC3_OnlyASystemAdministratorReadsTheStandingAsync` |
+| The documentation of D-171 | `24bccd9` | none | none |
+| D-171 item 4: a session opened from the break-glass session carries its reason; one opened by an ordinary sign-in carries none (no code change) | `5ebabcd` | OPS-BOOT-002 AC10 | `BreakGlassEndpointTests.OPS_BOOT_002_AC10_ASessionOpenedFromTheBreakGlassSessionCarriesTheReasonAsync` |
+| D-166 D.8, 316: one data key of the deployment, a row of `subject_keys`, under which every value of no subject is held; the rotation re-wraps subject-key rows only, writing back only where the value read still stands; ledger line 316 | `ced2208` | OPS-SEC-003, OPS-MIG-003a AC4, AUTH-KEY-002, PRIV-RIGHT-005a | `KeyRotationTests.OPS_SEC_003_AC3_AfterRetirementEveryValueOfNoSubjectStillReadsAsync`, `KeyRotationTests.OPS_SEC_003_AC3_AProofKeyInFlightStillReadsAfterRetirementAsync`, `KeyRotationTests.OPS_SEC_003_ARotationTouchesNoTableButTheSubjectKeysAndItsProgressAsync`, `KeyRotationTests.OPS_SEC_003_ARotationDoesNotOverwriteAKeyRewrittenAtTheSameVersionAsync`, `DatabaseRoleTests.OPS_MIG_003a_AC4_TheMaintenanceRoleReachesNoValueBesideTheSubjectKeysAsync`, `OidcStoreTests.AUTH_KEY_002_ThePrivateHalfIsWrappedUnderTheDeploymentDataKeyAsync`, `SubjectEraserTests.PRIV_RIGHT_005a_ErasureNeverTouchesTheDeploymentDataKeyAsync`, `SerializedModelTests` (the maintenance grants) |
 
 **How and when the list was drawn.**
 - **The draw.** It ran from 2026-09-25 23:54 to 2026-09-26 02:30 UTC over all 1,048,576 ranges of `https://api.pwnedpasswords.com/range/{prefix}`, with 48 workers and gzip requested.
@@ -192,6 +195,14 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 - The database holds the rule too: `ck_sessions_breakglass_reason` (only on a session that satisfies every gate, 1 to 1024 characters after trimming) and `ck_audit_records_breakglass_reason` (never beside a principal). Migration `RecordBreakGlassReasons`.
 - X4: the endpoint refuses an absent, blank or longer reason with 400 `api.request.malformed` naming `reason` before the credential is looked at, and the service refuses the same before an attempt is counted.
 
+**D-166 D.8, 316.**
+- The order: 340 wraps client secrets under 316's deployment key, so 316 is applied first (D-166 section B, D-171 item 2).
+- The deployment key is the `subject_keys` row under the nil subject (question 9), written on first need by an insert that does nothing on conflict, then read back. `SubjectEraser` refuses the nil subject before anything.
+- Invitations, reserved mailboxes, registration sessions, the send outbox, the sign-on proof, signing keys and provider attempts moved under it; their `key_version` columns and the checks on them are dropped. A list read unwraps the deployment key once for the batch (D-171).
+- Migration `MoveValuesUnderTheDeploymentKey` refuses where any value is still wrapped under the key-encryption key outside `subject_keys`, since the database cannot re-wrap it, and revokes the maintenance role's grants on those tables except the mailbox reads the fingerprint rotation needs. Its `Down` refuses where values under the deployment key stand.
+- A mutation check: with the `wrapped_key = @read` condition removed, `OPS_SEC_003_ARotationDoesNotOverwriteAKeyRewrittenAtTheSameVersionAsync` fails.
+- Not done here, as other sections' items: 234 (the invitation's identifier in its additional data, D.6) and the outbox's erasure marker (PRIV-RIGHT-005a).
+
 **Criteria no test decides.**
 - D-166 319 (1), the signing algorithm: `token.signing.algorithm` admits only `ES256` at its reading, so `configure` refuses any other value before the check of `SigningKeys` is reached. The check stands in `CompleteAsync`; no value reaches its refusal. Verified by review.
 - D-170 item 1, the writers that take no reason (`CredentialAudit`, `OidcAudit.ReusedAsync`, `BotDefenceAudit`, `PhoneSignalAudit`, `SessionAudit.FailedAsync`): none writes a record a break-glass session can cause, since every credential action is refused in the session (OPS-BOOT-002 AC9) and the others are written where no session acts. Verified by review.
@@ -204,16 +215,17 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 
 | Item | Reason | Waits on |
 |---|---|---|
-| D-166 D.8, 121 and 336 (the secret path) | Open question 7 | Question 7 |
-| D-166 D.8, the paragraphs after 121 and 336: 316, 317, 318, 341, 303 (and the audit's subject), 304 and 334 parts (1) and (2), 323, the audit action rows | Not reached: they follow 121 and 336 in the log's order | Question 7 |
-| D-166 section D.2, the entries after 114 (115, 129, 146, 152, 208, 328, 401, 402 and 422, 417, 419, 421, 326, and the preferred second step) | Not reached | Question 7 |
-| D-166 section C, rules X1 and X3 to X9 as sweeps (X2 is applied, under 116; X3 on the configuration routes, under 178) | Not reached | Question 7 |
-| D-166 sections D.1 to D.7 and D.9 to D.11 | Not reached | Question 7 |
-| D-166 section E, every item other than E.6 | Not reached | Question 7 |
-| D-166 section F, the rows of chapter 10 other than those applied under D.8 (the retired step-up and device verification codes, `model.startup.secretunavailable`, `config.change.reasonrequired`, the retired switches, `integration.mailserver.endpoint`, `breakglass-generated`) | Not reached. The three contract tests that failed at `aa7c5e9` now pass at `0dc0ae0` | Question 7 |
-| D-166 section G, the ledger lines of the entries not yet applied | Each goes in the commit that applies its entry | Question 7 |
-| Truth-table rows for D-166 entries 396 and 265 | They state the D-166 outcomes, so they belong with those fixes | Question 7 |
-| The full gate, the pull request for `corrections-4` | The run stopped before step 4 of the work order (section 5) | Question 7 |
+| D-166 D.8, 340 | Open question 8. The work stands uncommitted in the working tree and is kept in `tmp/c4/held/`: the registry drawing and holding each secret wrapped with its rotation, the client half reading it per exchange, the sign-on secret and its source member removed, and the migration `HoldClientSecretsWrapped`. It builds; its tests are not all written or run | Question 8 |
+| D-166 D.9 343 and 349, D.6 215, then D.8 121 and 336 (the key ring of D-171) | Not reached: D-171 item 2 puts them after 340 | Question 8 |
+| D-166 D.8, the paragraphs after 121 and 336: 317, 318, 341, 303 (and the audit's subject), 304 and 334 parts (1) and (2), 323, the audit action rows | Not reached: they follow 121 and 336 in the log's order | Question 8 |
+| D-166 section D.2, the entries after 114 (115, 129, 146, 152, 208, 328, 401, 402 and 422, 417, 419, 421, 326, and the preferred second step) | Not reached | Question 8 |
+| D-166 section C, rules X1 and X3 to X9 as sweeps (X2 is applied, under 116; X3 on the configuration routes, under 178) | Not reached | Question 8 |
+| D-166 sections D.1 to D.7 and D.9 to D.11 | Not reached | Question 8 |
+| D-166 section E, every item other than E.6 | Not reached | Question 8 |
+| D-166 section F, the rows of chapter 10 other than those applied under D.8 (the retired step-up and device verification codes, `model.startup.secretunavailable`, `config.change.reasonrequired`, the retired switches, `integration.mailserver.endpoint`, `breakglass-generated`) | Not reached. The three contract tests that failed at `aa7c5e9` now pass at `0dc0ae0` | Question 8 |
+| D-166 section G, the ledger lines of the entries not yet applied | Each goes in the commit that applies its entry | Question 8 |
+| Truth-table rows for D-166 entries 396 and 265 | They state the D-166 outcomes, so they belong with those fixes | Question 8 |
+| The full gate, the pull request for `corrections-4` | The run stopped before step 4 of the work order (section 5) | Question 8 |
 
 ## 3. Resolved by rule
 
@@ -228,6 +240,7 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 | `ProtectedConfiguration.CompleteAsync` (`aa76682`) | D-166 319 (1) refuses "with the code each gives", and the algorithm check of `SigningKeys` gives none (it throws) | OPS-CFG-003; `10` section 1.5 | A value its key does not admit is `config.value.notallowed` naming the key (`token.signing.algorithm`) |
 | `Program.RunAsync` (`82fa429`) | D-166 308 (4) names the command in the refusal; an invocation with no argument names none | `10` section 1, `api.request.malformed` | A request refused before any member is read carries the code alone |
 | `ConformanceSuite.ProviderAsync` and `ConformanceSuite.Validated` (`0dc0ae0`) | Neither is given a container, and each drew from the static `RandomNumberGenerator` | CONV-DESIGN-007 AC2 | Randomness comes from a generator instance made where the work is composed and handed to what draws, as the command compositions and `StorageRegistration` make theirs |
+| `tests/Janus.Storage.Tests` `Deployment` and `DatabaseFixture` (`ced2208`) | Each test drew its own key-encryption key while the class shares one database, and the deployment key of 316 is one row of that database, so a second test could not unwrap it | OPS-SEC-003; the working guide's section 3, test infrastructure | The key-encryption key is the fixture's, one per database, and the tests build the deployment key's store from it; no runtime code changed |
 | `AlertsTests` (`72f0e85`) | `breakglass-generated` takes the next free value, 31, but is declared after `breakglass-used` in the table's order, so the test that read the order from the values failed | OPS-ALERT-001; the working guide's section 3, test infrastructure | The test reads the declaration order from the enumeration's fields |
 
 ## 4. Open questions
@@ -380,24 +393,54 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
     Smallest fix: internal signatures only.
   - Reading 2: a caller with no `Result` to return treats a failure as a fault and throws,
     the idiom the configuration reads use under X2. Smallest fix: one `Match` per call.
+- **Settled by D-171**: (a) 340, 343 and 215 first; (b) the key ring; (c) passed up or thrown as a fault. Being applied (section 2).
+
+**8. Tier 3. D-166 340 against LIB-TEST-001 AC4 and AUTH-OIDC-006 AC1: how the conformance suite authenticates as a registered client.**
+
+- D-166 340: no person chooses, supplies, carries or is asked for a client secret; the
+  library draws it at the first registration, holds it wrapped, reads it only for its own
+  client half, and rotates it at `token.signing.rotation`. `register-client` loses the key
+  document member `clientSecret`.
+- LIB-TEST-001 AC4 and AUTH-OIDC-006 AC1: the suite, which the host runs, asks the
+  deployment's provider "as a registered client" for each retired form. The shipped
+  surface is `ConformanceSuite.ProviderAsync(HttpClient, Uri, ConformanceClient,
+  CancellationToken)`, and `ConformanceClient(ClientId, Secret, Destination)` takes the
+  secret from the host; the probe sends it as `client_secret` on every probe but the one
+  that asks whether a client that does not authenticate is refused.
+- After 340 no host holds a registered client's secret, and a secret read once goes stale
+  at the cadence. No chapter, D-166 paragraph or D-171 item says how the suite
+  authenticates. The sample host's conformance test registers the relying party with a
+  `clientSecret` and hands the same bytes to `ConformanceClient`; under 340 its provider
+  probe cannot authenticate.
+- This decides who outside the library may hold a client secret, and changes the shipped
+  `Janus.Conformance` surface. No proposal is made.
+
+**9. Tier 3. D-166 316: the reserved identifier of the deployment key.**
+
+- 316 holds the deployment key "as a row of `subject_keys` under a reserved identifier no
+  subject is issued and erasure never touches", and names no identifier.
+- `ced2208` uses the nil subject, the one identifier `10` reserves; it is also the acting
+  identity of every system principal's work (IDN-AUD-001). `SubjectEraser` refuses it.
+- Which identifier holds the key, and whether the nil subject may, concerns keys and
+  erasure. No proposal is made; the committed choice stands until the owner decides.
 
 ## 5. Gate result
 
-**`corrections-4`.** Not run. The run stopped at question 7, before step 4 of the work order,
-so the full gate was not run and no pull request was opened. The branch is pushed so its
-commits can be read.
-- Push run 36558943751 on `40bd871` (the report of the stop at questions 4 to 6, pushed by the
-  owner): green.
-- Fast checks at `221654d` (build with warnings as errors, format, the unit and contract
-  tests): green. Analyzers 20, Authentication 813, Authorization 126, Cli 19, Core 468,
-  Hosting 722, Identity 89, Privacy 222, Storage 33; no failure.
-- The integration, migration, contract and conformance suites of the full gate were not
-  run. The database classes of part (7)'s migration and of the seed were run on their own
-  at `221654d`, all passing: `AuditStoreTests` 22, `SessionStoreTests` 14,
-  `BreakGlassEndpointTests` with `AuditTrailEndpointTests` 32, the command's
-  `BootstrapTests` 20.
-- Secret scanning: the pinned scanner, run locally as the pipeline runs it, over the 831
-  commits of the history at `221654d` before the push: no finding.
+**`corrections-4`.** Not run. The run stopped at questions 8 and 9, before step 4 of the work
+order, so the full gate was not run and no pull request was opened. The branch is pushed so
+its commits can be read; the 340 work in the working tree is not.
+- Push runs on the reports of the earlier stops: 36558943751 on `40bd871` and 36566244433 on
+  `927de12`, both green.
+- Fast checks at `ced2208` (build with warnings as errors, format, the unit and contract
+  tests), in a scratch checkout of that commit so the uncommitted 340 work took no part:
+  Analyzers 20, Authentication 813, Authorization 126, Cli 19, Core 468, Hosting 723,
+  Identity 89, Privacy 222, Storage 33. One failure, of the scratch checkout and not of the
+  code: `ProductNameTests.CONV_NAME_001_AC2_...` read the checkout's `.git` file, whose
+  `gitdir` path names the product; in the repository `.git` is a directory.
+- The integration suite of `Janus.Storage.Tests` at `ced2208`: 407, no failure. The other
+  suites of the full gate were not run.
+- Secret scanning: the pinned scanner, run locally as the pipeline runs it, over the 835
+  commits of the history at `ced2208` before the push: no finding.
 
 **Pull request #6 (`phase-10-release`), merged as `b6d14fe`.**
 - Pull request run 36217259244 on `cdc185a`: every required check green. `Secret scanning` runs on push only, and push run 36217256269 was green, with job 108335588796.
