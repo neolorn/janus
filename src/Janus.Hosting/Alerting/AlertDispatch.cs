@@ -20,6 +20,12 @@ namespace Janus.Hosting.Alerting;
 /// </remarks>
 internal sealed class AlertDispatch(IRaisedAlerts alerts, AlertRouter router, IUnitOfWork work)
 {
+    /// <summary>
+    /// The name of the job that runs the passes, whose own lapse the worker delivers
+    /// without waiting for it.
+    /// </summary>
+    public const string Job = "alert-dispatch";
+
     // A pass never holds more than this many in memory; the rest wait for the next.
     private const int Batch = 100;
 

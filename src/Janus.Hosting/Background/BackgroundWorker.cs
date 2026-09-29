@@ -8,6 +8,7 @@ using Janus.Authentication.Alerting;
 using Janus.Authentication.Background;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Alerting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -234,12 +235,24 @@ internal sealed class BackgroundWorker(
                         return Result.Success();
                     }
 
+                    AlertRaised lapse = Alerts.Of(AlertCondition.BackgroundJobFailed, job.Name, now, Lapse(job));
+
                     failure = (await services.GetRequiredService<IAlertChannels>()
-                            .RaiseAsync(
-                                Alerts.Of(AlertCondition.BackgroundJobFailed, job.Name, now, Lapse(job)),
-                                cancellationToken)
+                            .RaiseAsync(lapse, cancellationToken)
                             .ConfigureAwait(false))
                         .Match(() => (Error?)null, error => error);
+
+                    // OPS-ALERT-001 AC4 and INF-BG-001 AC2 (D-166, 290): the carrier cannot
+                    // carry the news of its own stall, so its lapse is also delivered by the
+                    // router here; the row it raised is folded into this delivery by the
+                    // deduplication ledger once the carrier runs again.
+                    if (failure is null && job.Name == AlertDispatch.Job)
+                    {
+                        failure = (await services.GetRequiredService<AlertRouter>()
+                                .RaiseAsync(lapse, cancellationToken)
+                                .ConfigureAwait(false))
+                            .Match(_ => (Error?)null, error => error);
+                    }
 
                     if (failure is not null)
                     {

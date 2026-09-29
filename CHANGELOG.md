@@ -251,7 +251,9 @@ against the public contract of LIB-API-001.
   server daily and reads the gateway balance. Two passes that carry the same condition
   at once deliver it once. Each job runs as a named principal of its
   own, once across the processes of a deployment, and a job whose last success is older
-  than twice its interval raises `background-job-failed`. `SystemOperation` carries
+  than twice its interval raises `background-job-failed`; the lapse of `alert-dispatch`
+  itself is also delivered straight from the worker, so a stalled carrier still reports
+  itself. `SystemOperation` carries
   `Delivery` and `Monitoring` for this work, and the runs are kept in a table of their
   own.
 - Background work acts as a named system principal that states its reason, and is

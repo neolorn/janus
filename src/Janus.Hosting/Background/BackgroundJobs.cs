@@ -201,7 +201,7 @@ internal static class BackgroundJobs
                     .PublishAsync(cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(
-            "alert-dispatch",
+            AlertDispatch.Job,
             "OPS-ALERT-001",
             SystemOperation.Delivery,
             Settings.OutboxPollInterval,
