@@ -1,4 +1,5 @@
 using System;
+using System.Buffers.Binary;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -29,6 +30,10 @@ internal sealed class VerificationCode
     public const int Digits = 6;
 
     private const int Ceiling = 1000000;
+
+    // The largest multiple of the ceiling a drawn number can reach; a number at or above
+    // it is drawn again, so every code is equally likely.
+    private const uint Unbiased = uint.MaxValue / Ceiling * Ceiling;
 
     private VerificationCode(
         byte[] holder,
@@ -113,7 +118,19 @@ internal sealed class VerificationCode
     {
         ArgumentNullException.ThrowIfNull(randomness);
 
-        return RandomNumberGenerator.GetInt32(Ceiling)
+        Span<byte> bytes = stackalloc byte[sizeof(uint)];
+        uint drawn;
+
+        do
+        {
+            randomness.GetBytes(bytes);
+            drawn = BinaryPrimitives.ReadUInt32LittleEndian(bytes);
+        }
+        while (drawn >= Unbiased);
+
+        CryptographicOperations.ZeroMemory(bytes);
+
+        return (drawn % Ceiling)
             .ToString(CultureInfo.InvariantCulture)
             .PadLeft(Digits, '0');
     }

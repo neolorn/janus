@@ -131,8 +131,12 @@ internal sealed class TruthTable<TResource>(
         throw new InvalidOperationException("No type of the chain declares a derivation.");
     }
 
-    private static ResourceReference Reference(ResourceType type) =>
-        new(type, ResourceId.Parse(Guid.NewGuid().ToString()));
+    private ResourceReference Reference(ResourceType type) =>
+        new(
+            type,
+            ResourceId.Parse(Guid
+                .CreateVersion7(services.GetRequiredService<TimeProvider>().GetUtcNow())
+                .ToString("D", CultureInfo.InvariantCulture)));
 
     private async ValueTask<Written> WriteAsync(
         TruthTableCase row,

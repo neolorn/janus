@@ -143,7 +143,10 @@ public static class ConformanceSuite
         ArgumentNullException.ThrowIfNull(connect);
         ArgumentNullException.ThrowIfNull(rows);
 
-        var library = new CaseRows(connect, services.GetRequiredService<TimeProvider>());
+        var library = new CaseRows(
+            connect,
+            services.GetRequiredService<TimeProvider>(),
+            services.GetRequiredService<RandomNumberGenerator>());
 
         return await new TruthTable<TResource>(services, library, rows)
             .RunAsync(cases, cancellationToken)
@@ -181,16 +184,26 @@ public static class ConformanceSuite
         ArgumentNullException.ThrowIfNull(issuer);
         ArgumentNullException.ThrowIfNull(registered);
 
-        return await new ProviderProbe(client, issuer, registered)
+        // The suite runs outside the deployment's container, so the probe's randomness
+        // is made here, where the probe is composed.
+        using var randomness = RandomNumberGenerator.Create();
+
+        return await new ProviderProbe(client, issuer, registered, randomness)
             .RunAsync(cancellationToken)
             .ConfigureAwait(false);
     }
 
     private static Result Validated(AuthorizationDeclaration declaration)
     {
-        byte[] encryption = RandomNumberGenerator.GetBytes(32);
-        byte[] fingerprint = RandomNumberGenerator.GetBytes(FingerprintKeys.MinimumLength);
-        byte[] signOn = RandomNumberGenerator.GetBytes(32);
+        using var randomness = RandomNumberGenerator.Create();
+
+        byte[] encryption = new byte[32];
+        byte[] fingerprint = new byte[FingerprintKeys.MinimumLength];
+        byte[] signOn = new byte[32];
+
+        randomness.GetBytes(encryption);
+        randomness.GetBytes(fingerprint);
+        randomness.GetBytes(signOn);
 
         try
         {

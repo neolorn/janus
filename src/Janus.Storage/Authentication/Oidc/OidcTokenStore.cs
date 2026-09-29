@@ -16,6 +16,7 @@ namespace Janus.Storage.Authentication.Oidc;
 /// The codes and tokens the provider issued, over the <c>oidc_tokens</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
+/// <param name="time">The clock the rows' identifiers and concurrency tokens are ordered by.</param>
 /// <remarks>
 /// Implements AUTH-OIDC-003, AUTH-OIDC-004, AUTH-KEY-003 and CONV-DESIGN-003. A
 /// redeemed row is kept rather than removed, because a second presentation of the same
@@ -23,7 +24,7 @@ namespace Janus.Storage.Authentication.Oidc;
 /// row carries a token a write must hold to succeed, so two presentations of one token
 /// cannot both redeem it.
 /// </remarks>
-internal sealed class OidcTokenStore(StoreContext context)
+internal sealed class OidcTokenStore(StoreContext context, TimeProvider time)
     : IOpenIddictTokenStore<OidcTokenRecord>
 {
     /// <inheritdoc/>
@@ -45,7 +46,7 @@ internal sealed class OidcTokenStore(StoreContext context)
     {
         ArgumentNullException.ThrowIfNull(token);
 
-        token.ConcurrencyToken = Guid.CreateVersion7();
+        token.ConcurrencyToken = Guid.CreateVersion7(time.GetUtcNow());
 
         _ = await context.OidcTokens.AddAsync(token, cancellationToken).ConfigureAwait(false);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -283,7 +284,7 @@ internal sealed class OidcTokenStore(StoreContext context)
 
     /// <inheritdoc/>
     public ValueTask<OidcTokenRecord> InstantiateAsync(CancellationToken cancellationToken) =>
-        ValueTask.FromResult(new OidcTokenRecord { Id = Guid.CreateVersion7() });
+        ValueTask.FromResult(new OidcTokenRecord { Id = Guid.CreateVersion7(time.GetUtcNow()) });
 
     /// <inheritdoc/>
     public IAsyncEnumerable<OidcTokenRecord> ListAsync(
@@ -563,7 +564,7 @@ internal sealed class OidcTokenStore(StoreContext context)
     {
         ArgumentNullException.ThrowIfNull(token);
 
-        token.ConcurrencyToken = Guid.CreateVersion7();
+        token.ConcurrencyToken = Guid.CreateVersion7(time.GetUtcNow());
 
         await SavedAsync(cancellationToken).ConfigureAwait(false);
     }

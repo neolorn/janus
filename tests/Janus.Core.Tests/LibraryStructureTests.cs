@@ -244,9 +244,13 @@ public sealed class LibraryStructureTests
     ];
 
     // CONV-DESIGN-007 AC2: the wall clock read in place of the TimeProvider a service
-    // is given, and the one random source that is not the RandomNumberGenerator.
+    // is given, the one random source that is not the RandomNumberGenerator, a draw from
+    // the static RandomNumberGenerator in place of the one a service is given, and an
+    // identifier made from the wall clock or from the static randomness.
     private static readonly Regex Ambient = new(
-        @"\bDateTime(Offset)?\s*\.\s*(Now|UtcNow|Today)\b|\bRandom\b",
+        @"\bDateTime(Offset)?\s*\.\s*(Now|UtcNow|Today)\b|\bRandom\b"
+            + @"|\bRandomNumberGenerator\s*\.\s*(GetInt32|GetBytes|GetNonZeroBytes|Fill|GetItems|GetString|GetHexString|Shuffle)\b"
+            + @"|\bGuid\s*\.\s*(NewGuid\s*\(|CreateVersion7\s*\(\s*\))",
         RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(5));
 
@@ -889,12 +893,12 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
-    /// CONV-DESIGN-007 AC2: nothing outside the tests reads the wall clock or makes a
-    /// <c>Random</c>, so time comes from the injected TimeProvider and randomness from
-    /// the injected RandomNumberGenerator.
+    /// CONV-DESIGN-007 AC2: nothing outside the tests reads the wall clock, makes a
+    /// <c>Random</c> or draws from the static RandomNumberGenerator, so time comes from
+    /// the injected TimeProvider and randomness from the injected RandomNumberGenerator.
     /// </summary>
     [Fact]
-    public void CONV_DESIGN_007_AC2_NoFileOutsideTheTestsReadsTheClockOrMakesARandom()
+    public void CONV_DESIGN_007_AC2_NoFileOutsideTheTestsReadsTheClockOrDrawsStaticRandomness()
     {
         IEnumerable<string> reading = Sources()
             .Where(file => Ambient.IsMatch(File.ReadAllText(file)));

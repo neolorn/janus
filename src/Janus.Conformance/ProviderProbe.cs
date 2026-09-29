@@ -20,6 +20,7 @@ namespace Janus.Conformance;
 /// <param name="client">What reaches the deployment.</param>
 /// <param name="issuer">The provider's issuer, which its discovery document sits under.</param>
 /// <param name="registered">A client the deployment's registry holds.</param>
+/// <param name="randomness">Where the verifier and each state are drawn from.</param>
 /// <remarks>
 /// Implements AUTH-OIDC-006 AC1 and LIB-TEST-001, as entry 280 of the decisions pending
 /// review carries the library's own suite into the one a host runs. Each form the two
@@ -27,7 +28,11 @@ namespace Janus.Conformance;
 /// refused is the form. The endpoints are the ones the discovery document names, so
 /// the suite assumes no route of the deployment's (LIB-HOST-003).
 /// </remarks>
-internal sealed class ProviderProbe(HttpClient client, Uri issuer, ConformanceClient registered)
+internal sealed class ProviderProbe(
+    HttpClient client,
+    Uri issuer,
+    ConformanceClient registered,
+    RandomNumberGenerator randomness)
 {
     private const string UnsupportedResponseType = "unsupported_response_type";
 
@@ -59,7 +64,9 @@ internal sealed class ProviderProbe(HttpClient client, Uri issuer, ConformanceCl
         "urn:ietf:params:oauth:grant-type:token-exchange",
     ];
 
-    private readonly string _verifier = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(32));
+    private readonly RandomNumberGenerator _randomness = randomness;
+
+    private readonly string _verifier = Drawn(randomness, 32);
 
     /// <summary>
     /// Asks every refusal.
@@ -239,6 +246,15 @@ internal sealed class ProviderProbe(HttpClient client, Uri issuer, ConformanceCl
             (name, value),
         ];
 
+    private static string Drawn(RandomNumberGenerator randomness, int length)
+    {
+        byte[] bytes = new byte[length];
+
+        randomness.GetBytes(bytes);
+
+        return Base64Url.EncodeToString(bytes);
+    }
+
     private static string? Sent((string Name, string? Value)[] fields, string name) =>
         fields.FirstOrDefault(field => string.Equals(field.Name, name, StringComparison.Ordinal)).Value;
 
@@ -249,7 +265,7 @@ internal sealed class ProviderProbe(HttpClient client, Uri issuer, ConformanceCl
         ("client_secret", Encoding.UTF8.GetString(registered.Secret.Span)),
         ("redirect_uri", registered.Destination.AbsoluteUri),
         ("scope", "openid"),
-        ("state", Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(16))),
+        ("state", Drawn(_randomness, 16)),
         ("code_challenge", Base64Url.EncodeToString(SHA256.HashData(Encoding.ASCII.GetBytes(_verifier)))),
         ("code_challenge_method", "S256"),
     ];

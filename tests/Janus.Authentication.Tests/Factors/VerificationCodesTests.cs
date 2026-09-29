@@ -134,6 +134,18 @@ public sealed class VerificationCodesTests : IAsyncDisposable
         Assert.False(await Service.OutstandingAsync(Holder, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// CONV-DESIGN-007 AC2: the digits are drawn from the generator the service is
+    /// given, as four bytes read as one number below the million.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_007_ACodeIsDrawnFromTheInjectedGenerator()
+    {
+        using var randomness = new FixedRandomness(0x2A, 0x00, 0x00, 0x00);
+
+        Assert.Equal("000042", VerificationCode.Draw(randomness));
+    }
+
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {

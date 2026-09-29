@@ -224,14 +224,14 @@ public sealed class OidcStoreTests(DatabaseFixture database)
         await using (StoreContext sweeping = database.Context())
         {
             Assert.True(
-                await new OidcTokenStore(sweeping).PruneAsync(
+                await new OidcTokenStore(sweeping, TimeProvider.System).PruneAsync(
                     Noon + TimeSpan.FromMinutes(5),
                     TestContext.Current.CancellationToken) >= 2);
         }
 
         await using StoreContext reading = database.Context();
 
-        var tokens = new OidcTokenStore(reading);
+        var tokens = new OidcTokenStore(reading, TimeProvider.System);
 
         Assert.Null(await FoundAsync(tokens, gone));
         Assert.Null(await FoundAsync(tokens, spent));
@@ -260,14 +260,14 @@ public sealed class OidcStoreTests(DatabaseFixture database)
         {
             Assert.Equal(
                 2,
-                await new OidcTokenStore(revoking).RevokeByAuthorizationIdAsync(
+                await new OidcTokenStore(revoking, TimeProvider.System).RevokeByAuthorizationIdAsync(
                     reused.ToString(),
                     TestContext.Current.CancellationToken));
         }
 
         await using StoreContext reading = database.Context();
 
-        var tokens = new OidcTokenStore(reading);
+        var tokens = new OidcTokenStore(reading, TimeProvider.System);
 
         Assert.Equal(OpenIddictConstants.Statuses.Revoked, (await FoundAsync(tokens, first))!.Status);
         Assert.Equal(OpenIddictConstants.Statuses.Revoked, (await FoundAsync(tokens, second))!.Status);
@@ -291,8 +291,8 @@ public sealed class OidcStoreTests(DatabaseFixture database)
         await using StoreContext first = database.Context();
         await using StoreContext second = database.Context();
 
-        var one = new OidcTokenStore(first);
-        var two = new OidcTokenStore(second);
+        var one = new OidcTokenStore(first, TimeProvider.System);
+        var two = new OidcTokenStore(second, TimeProvider.System);
         OidcTokenRecord held = (await FoundAsync(one, issued))!;
         OidcTokenRecord same = (await FoundAsync(two, issued))!;
 
@@ -325,7 +325,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
 
         await using (StoreContext writing = database.Context())
         {
-            var tokens = new OidcTokenStore(writing);
+            var tokens = new OidcTokenStore(writing, TimeProvider.System);
             OidcTokenRecord token = await tokens.InstantiateAsync(TestContext.Current.CancellationToken);
 
             await tokens.SetApplicationIdAsync(token, Browser, TestContext.Current.CancellationToken);
@@ -356,7 +356,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
 
         await using StoreContext reading = database.Context();
 
-        var read = new OidcTokenStore(reading);
+        var read = new OidcTokenStore(reading, TimeProvider.System);
         OidcTokenRecord held = (await FoundAsync(read, pushed))!;
 
         Assert.Null(await read.GetSubjectAsync(held, TestContext.Current.CancellationToken));
@@ -385,7 +385,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
     {
         await using StoreContext writing = database.Context();
 
-        var authorizations = new OidcAuthorizationStore(writing);
+        var authorizations = new OidcAuthorizationStore(writing, TimeProvider.System);
         OidcAuthorizationRecord grant = await authorizations.InstantiateAsync(
             TestContext.Current.CancellationToken);
 
@@ -421,7 +421,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
     {
         await using StoreContext writing = database.Context();
 
-        var tokens = new OidcTokenStore(writing);
+        var tokens = new OidcTokenStore(writing, TimeProvider.System);
         OidcTokenRecord token = await tokens.InstantiateAsync(TestContext.Current.CancellationToken);
 
         await tokens.SetApplicationIdAsync(token, ClientId, TestContext.Current.CancellationToken);

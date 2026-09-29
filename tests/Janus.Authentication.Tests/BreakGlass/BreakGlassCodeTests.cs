@@ -37,6 +37,21 @@ public sealed class BreakGlassCodeTests : IDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-007 AC2: the symbols are drawn from the generator the service is
+    /// given, each from the five low bits of one byte, so the code is what those bytes
+    /// make and nothing else.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_007_ACodeIsDrawnFromTheInjectedGenerator()
+    {
+        using var randomness = new FixedRandomness(0x21);
+
+        Assert.Equal(
+            string.Join('-', Enumerable.Repeat("1116", 9)),
+            BreakGlassCode.Draw(randomness));
+    }
+
+    /// <summary>
     /// OPS-BOOT-004 AC6: a code read back as it was printed holds every check, whatever
     /// the case it was typed in and with the confusable letters folded.
     /// </summary>

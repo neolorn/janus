@@ -38,6 +38,18 @@ public sealed class RecoveryCodeServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-007 AC2: the symbols are drawn from the generator the service is
+    /// given, each from the five low bits of one byte.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_007_ACodeIsDrawnFromTheInjectedGenerator()
+    {
+        using var randomness = new FixedRandomness(0x3F);
+
+        Assert.Equal("ZZZZZ-ZZZZZ", RecoveryCode.Draw(randomness));
+    }
+
+    /// <summary>
     /// AUTH-FACT-008: codes are issued in sets of ten, each ten symbols of Crockford
     /// base32 shown as two groups of five.
     /// </summary>
