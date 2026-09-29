@@ -197,7 +197,7 @@ internal sealed class ExportService(
     {
         int limit = (await configuration
                 .ReadAsync(Settings.PrivacyExportRateLimit, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => Settings.PrivacyExportRateLimit.Default);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         // A deployment that set the limit to nothing has closed the door, and the
         // answer is still a refusal with a time on it rather than an index fault.

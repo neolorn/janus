@@ -27,8 +27,10 @@ internal sealed class ProtectedSettingValue<TValue>(Setting<TValue> setting, TVa
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
+        // A key the deployment has not named yet has no value in force to loosen; a
+        // stored value that does not read is the store's fault, thrown there.
         return (await configuration.ReadAsync(setting, cancellationToken).ConfigureAwait(false)).Match(
             before => setting.Loosens(before, value),
-            failure => failure.Code != ErrorCodes.StartupDeclarationMissing);
+            _ => false);
     }
 }

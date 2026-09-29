@@ -303,5 +303,5 @@ internal sealed class TakedownService(
 
     private async ValueTask<TimeSpan> GraceAsync(CancellationToken cancellationToken) =>
         (await configuration.ReadAsync(Settings.TakedownGrace, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => Settings.TakedownGrace.Default);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 }

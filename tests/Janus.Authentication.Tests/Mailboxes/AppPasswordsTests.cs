@@ -64,6 +64,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
     public AppPasswordsTests()
     {
         _tokens = new MailServerTokensInMemory(_sessions, _clock);
+        _configuration.Set(Settings.NotificationLanguages, ["en"]);
         _person = SubjectId.New(_randomness);
         _accounts.Stands(_person, AccountState.Active);
         _passwords.Hold(_person, Noon);

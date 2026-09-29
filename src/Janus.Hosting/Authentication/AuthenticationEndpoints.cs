@@ -520,7 +520,7 @@ internal static class AuthenticationEndpoints
         DurationSetting setting,
         CancellationToken cancellationToken) =>
         (await configuration.ReadAsync(setting, cancellationToken).ConfigureAwait(false))
-            .Match(value => value, _ => setting.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
     private static string? Carried(HttpRequest request, string cookie) =>
         request.Cookies[cookie] is { Length: > 0 } value ? value : null;

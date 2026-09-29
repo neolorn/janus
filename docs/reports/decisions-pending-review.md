@@ -3687,6 +3687,8 @@ malformed row read as the key's default.
 beside `ConfigurationStoreTests.OPS_CFG_008_AC1_AChangedSettingIsInForceForTheNextReadAsync`
 and the registration the hosting tests exercise end to end.
 
+**Superseded by D-166.**
+
 ---
 
 ## 117. The library resolves a session's city from the address it already holds

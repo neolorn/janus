@@ -205,5 +205,5 @@ internal sealed class TotpService(
     private async ValueTask<int> DriftAsync(CancellationToken cancellationToken) =>
         (await configuration.ReadAsync(Settings.FactorTotpDrift, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.FactorTotpDrift.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 }

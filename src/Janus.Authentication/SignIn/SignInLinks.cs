@@ -438,7 +438,7 @@ internal sealed class SignInLinks(
 
         IReadOnlyList<string> languages = (await configuration
                 .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => (IReadOnlyList<string>)[]);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         string code = VerificationCode.Draw(randomness);
         var token = OpaqueToken.Draw(randomness);

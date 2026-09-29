@@ -63,7 +63,7 @@ internal sealed class ConcurrentSessions(
         TimeSpan window = (await configuration
                 .ReadAsync(Settings.AlertingSessionsWindow, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.AlertingSessionsWindow.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         if (before is not null
             && usedBefore is DateTimeOffset at
@@ -76,7 +76,7 @@ internal sealed class ConcurrentSessions(
         int distance = (await configuration
                 .ReadAsync(Settings.AlertingSessionsDistance, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.AlertingSessionsDistance.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         foreach (Session other in await sessions
                      .LiveOfAsync(session.Subject, now, cancellationToken)

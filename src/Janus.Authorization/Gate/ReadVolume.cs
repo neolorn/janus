@@ -64,21 +64,20 @@ internal sealed class ReadVolume(
             .AddAsync(actor, today.Match(day => day, _ => default), records, cancellationToken)
             .ConfigureAwait(false);
 
-        // An unreadable setting does not silence the condition: its default stands.
         bool alerting = (await configuration
                 .ReadAsync(Settings.ExfiltrationReadVolumeAlerting, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.ExfiltrationReadVolumeAlerting.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         decimal factor = (await configuration
                 .ReadAsync(Settings.ExfiltrationReadVolumeFactor, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.ExfiltrationReadVolumeFactor.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         int minimum = (await configuration
                 .ReadAsync(Settings.ExfiltrationReadVolumeMinimum, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.ExfiltrationReadVolumeMinimum.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         decimal mean = await store.BaselineAsync(actor, cancellationToken).ConfigureAwait(false);
 
@@ -119,7 +118,7 @@ internal sealed class ReadVolume(
         TimeSpan window = (await configuration
                 .ReadAsync(Settings.ExfiltrationReadVolumeBaselineWindow, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.ExfiltrationReadVolumeBaselineWindow.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 

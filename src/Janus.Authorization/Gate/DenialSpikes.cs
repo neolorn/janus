@@ -40,11 +40,10 @@ internal sealed class DenialSpikes(
     {
         ArgumentNullException.ThrowIfNull(denial);
 
-        // An unreadable threshold does not silence the condition: the default stands.
         int threshold = (await configuration
                 .ReadAsync(Settings.AlertingDenialsThreshold, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(read => read, _ => Settings.AlertingDenialsThreshold.Default);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         DateTimeOffset opened = Opened(denial.At);
 

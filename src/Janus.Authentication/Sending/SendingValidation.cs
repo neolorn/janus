@@ -96,9 +96,15 @@ internal sealed class SendingValidation(
             Settings.PasswordBlocklistSelfHostedAddress,
         })
         {
+            // The self-hosted corpus's address is a key the deployment names only where
+            // it hosts the corpus, so one never named is no endpoint to call.
             string endpoint = (await configuration.ReadAsync(key, cancellationToken)
                 .ConfigureAwait(false))
-                .Match(value => value, _ => string.Empty);
+                .Match(
+                    value => value,
+                    error => error.Code == ErrorCodes.StartupDeclarationMissing
+                        ? string.Empty
+                        : throw new InvalidOperationException(error.Code.ToString()));
 
             if (endpoint.Length is not 0 && !Secure(endpoint))
             {

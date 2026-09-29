@@ -224,15 +224,15 @@ internal sealed class OutboxPublisher(
     {
         TimeSpan initial = (await configuration
                 .ReadAsync(Settings.OutboxRetryInitial, cancellationToken).ConfigureAwait(false))
-            .Match(value => value, _ => TimeSpan.FromSeconds(30));
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         decimal factor = (await configuration
                 .ReadAsync(Settings.OutboxRetryFactor, cancellationToken).ConfigureAwait(false))
-            .Match(value => value, _ => 2.0m);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         int attempts = (await configuration
                 .ReadAsync(Settings.OutboxRetryMaxAttempts, cancellationToken).ConfigureAwait(false))
-            .Match(value => value, _ => 10);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         return new Schedule(initial, factor, attempts);
     }

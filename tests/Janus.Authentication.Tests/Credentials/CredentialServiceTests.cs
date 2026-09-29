@@ -97,6 +97,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     {
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.ServiceName, "Example");
+        _configuration.Set(Settings.NotificationLanguages, [Language]);
         _configuration.Set(
             Settings.WebAuthnOrigins,
             (IReadOnlyList<string>)[Origin, "https://id.example.com"]);

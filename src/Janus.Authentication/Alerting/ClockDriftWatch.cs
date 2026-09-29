@@ -53,11 +53,10 @@ internal sealed class ClockDriftWatch(
             return await alerts.RaiseAsync(Degraded(Unread), cancellationToken).ConfigureAwait(false);
         }
 
-        // An unreadable tolerance is the default's, so the pass still judges the clock.
         int steps = (await configuration
                 .ReadAsync(Settings.FactorTotpDrift, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.FactorTotpDrift.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         var tolerance = TimeSpan.FromSeconds((long)steps * TotpCodes.StepSeconds);
 

@@ -770,7 +770,7 @@ internal sealed class RegistrationService(
     private async ValueTask<string> DefaultClientAsync(CancellationToken cancellationToken) =>
         (await configuration
             .ReadAsync(Settings.RedirectDefaultClient, cancellationToken).ConfigureAwait(false))
-        .Match(value => value, _ => string.Empty);
+        .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
     private async ValueTask<string> LandingAsync(
         RegistrationSessionId session,

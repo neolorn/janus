@@ -72,17 +72,15 @@ internal sealed class RestoreTest(
     {
         SystemPrincipal principal = Monitoring(context);
 
-        // An unreadable objective is the default's, which is also its ceiling, so the test
-        // is never judged more loosely than the chapter allows.
         TimeSpan objective = (await configuration
                 .ReadAsync(Settings.BackupRestoreTestObjective, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.BackupRestoreTestObjective.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         SubjectId? canary = (await configuration
                 .ReadAsync(Settings.BackupRestoreTestCanary, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(Canary, _ => null);
+            .Match(Canary, error => throw new InvalidOperationException(error.Code.ToString()));
 
         RestoreTestOutcome outcome = RestoreTestOutcome.Unrestored;
         TimeSpan elapsed = TimeSpan.Zero;

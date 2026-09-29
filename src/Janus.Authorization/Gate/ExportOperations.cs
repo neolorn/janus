@@ -51,11 +51,10 @@ internal sealed class ExportOperations(
             return null;
         }
 
-        // An unreadable flag does not lift the gate: its default, on, stands.
         bool required = (await configuration
                 .ReadAsync(Settings.ExfiltrationExportStepUpRequired, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.ExfiltrationExportStepUpRequired.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         // D-160: a gate no policy states values for costs what the dearest gate of the
         // person's policy costs, so an export is never cheaper than any named action.
@@ -98,7 +97,7 @@ internal sealed class ExportOperations(
         int limit = (await configuration
                 .ReadAsync(Settings.ExfiltrationExportRateLimit, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.ExfiltrationExportRateLimit.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         IReadOnlyList<DateTimeOffset> taken = await ledger
             .SinceAsync(context.Acting, principal, now - Window, cancellationToken)
@@ -121,11 +120,11 @@ internal sealed class ExportOperations(
             .ConfigureAwait(false);
 
         // OPS-CFG-004: the flag is protected, so what turns the record off is a redeploy
-        // and never the person about to export. An unreadable flag records.
+        // and never the person about to export.
         bool auditing = (await configuration
                 .ReadAsync(Settings.ExfiltrationExportAuditing, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.ExfiltrationExportAuditing.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         if (auditing)
         {

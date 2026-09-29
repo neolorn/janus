@@ -54,7 +54,7 @@ internal sealed class OrganizationErasureSweep(
 
         TimeSpan grace = (await configuration
                 .ReadAsync(Settings.OrganizationDeletionGrace, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => Settings.OrganizationDeletionGrace.Default);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         IReadOnlyList<PendingOrganizationDeletion> elapsed = await organizations
             .DeletingSinceAsync(now - grace, cancellationToken)

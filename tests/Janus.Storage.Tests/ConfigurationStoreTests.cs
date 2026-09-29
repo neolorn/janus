@@ -204,33 +204,62 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     }
 
     /// <summary>
-    /// `10` section 4: the row carries the key's written form, so a row that does not
-    /// parse is a fault and never a default quietly standing in for it.
+    /// OPS-CFG-008 and `10` section 4: the row carries the key's written form, so a row
+    /// that does not parse is a fault, for a key that exists once, for a member of a
+    /// family and among the members written: the read throws, naming the key and never
+    /// the stored text, and no default stands in for the value.
     /// </summary>
     [Fact]
     public async Task ReadAsync_AStoredValueThatDoesNotParse_IsAFaultAsync()
     {
         await using StoreContext context = database.Context();
 
-        var written = new SettingRecord
+        const string organization = "unreadable";
+        const string stored = "a quarter of an hour";
+
+        SettingRecord[] written =
+        [
+            new() { Key = Catalogue.LinkMagicLifetime.Key, Value = stored },
+            new() { Key = Catalogue.OrganizationPhoto.For(organization), Value = stored },
+        ];
+
+        context.Settings.AddRange(written);
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var store = new ConfigurationStore(context);
+
+        try
         {
-            Key = Catalogue.LinkMagicLifetime.Key,
-            Value = "a quarter of an hour",
-        };
+            InvalidOperationException single = await Assert.ThrowsAsync<InvalidOperationException>(
+                async () => await store.ReadAsync(
+                    Catalogue.LinkMagicLifetime,
+                    TestContext.Current.CancellationToken));
 
-        context.Settings.Add(written);
-        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+            InvalidOperationException member = await Assert.ThrowsAsync<InvalidOperationException>(
+                async () => await store.ReadAsync(
+                    Catalogue.OrganizationPhoto,
+                    organization,
+                    TestContext.Current.CancellationToken));
 
-        Result<TimeSpan> read = await new ConfigurationStore(context).ReadAsync(
-            Catalogue.LinkMagicLifetime,
-            TestContext.Current.CancellationToken);
+            InvalidOperationException members = await Assert.ThrowsAsync<InvalidOperationException>(
+                async () => await store.ReadWrittenAsync(
+                    Catalogue.OrganizationPhoto,
+                    TestContext.Current.CancellationToken));
 
-        // The row is the class's database, which the other cases read too, so what
-        // this one wrote goes out with it.
-        context.Settings.Remove(written);
-        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
-
-        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, Code(read));
+            Assert.Contains(Catalogue.LinkMagicLifetime.Key.ToString(), single.Message, StringComparison.Ordinal);
+            Assert.Contains(written[1].Key.ToString(), member.Message, StringComparison.Ordinal);
+            Assert.Contains(written[1].Key.ToString(), members.Message, StringComparison.Ordinal);
+            Assert.All(
+                new[] { single, member, members },
+                fault => Assert.DoesNotContain(stored, fault.Message, StringComparison.Ordinal));
+        }
+        finally
+        {
+            // The rows are the class's database, which the other cases read too, so
+            // what this one wrote goes out with it.
+            context.Settings.RemoveRange(written);
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
     }
 
     private static TValue? Value<TValue>(Result<TValue> outcome)

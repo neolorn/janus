@@ -145,7 +145,7 @@ internal sealed class ReverseLookup(
         TimeSpan budget = (await configuration
                 .ReadAsync(Settings.AuthzReverseLookupBudget, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(read => read, _ => Settings.AuthzReverseLookupBudget.Default);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         using var bounded = new CancellationTokenSource(budget, time);
 

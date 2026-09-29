@@ -125,7 +125,9 @@ internal static class BootstrapArguments
     private static Result Complete(Dictionary<ConfigurationKey, string> named)
     {
         HostingLocation? location = named.TryGetValue(Settings.HostingLocation.Key, out string? written)
-            ? Settings.HostingLocation.Read(written).Match(value => (HostingLocation?)value, _ => null)
+            ? Settings.HostingLocation.Read(written).Match(
+                value => (HostingLocation?)value,
+                error => throw new InvalidOperationException(error.Code.ToString()))
             : null;
 
         try

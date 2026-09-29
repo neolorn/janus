@@ -369,12 +369,12 @@ internal sealed class PrivacyRequestService(
     {
         int days = (await configuration
                 .ReadAsync(Settings.PrivacyRequestDecision, cancellationToken).ConfigureAwait(false))
-            .Match(value => value, _ => Settings.PrivacyRequestDecision.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         int lead = (await configuration
                 .ReadAsync(Settings.PrivacyRequestWarningLead, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.PrivacyRequestWarningLead.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         Error? failure = null;
 

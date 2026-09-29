@@ -72,7 +72,7 @@ internal static class RegistrationStream
         TimeSpan interval = (await configuration
                 .ReadAsync(Settings.RegistrationEventsPollInterval, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(read => read, _ => Settings.RegistrationEventsPollInterval.Default);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         string? last = null;
 

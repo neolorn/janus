@@ -406,7 +406,7 @@ internal sealed class AccountLifecycle(
     {
         TimeSpan grace = (await configuration
                 .ReadAsync(Settings.AccountDeletionGrace, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => TimeSpan.Zero);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         return time.GetUtcNow() >= deleting.Since + grace;
     }
@@ -465,7 +465,7 @@ internal sealed class AccountLifecycle(
 
         IReadOnlyList<string> languages = (await configuration
                 .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => (IReadOnlyList<string>)[]);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         return RecipientLanguage.Of(settled, requested: null, languages);
     }

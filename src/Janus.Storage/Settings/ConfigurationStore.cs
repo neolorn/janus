@@ -18,7 +18,8 @@ namespace Janus.Storage.Settings;
 /// Implements OPS-CFG-008, OPS-CFG-001 and OPS-CFG-004. Every read goes to the table,
 /// so a change put in force anywhere in the deployment is seen by the next read
 /// without a restart; a key the deployment never wrote has no row and reads as the
-/// default the catalogue gives it.
+/// default the catalogue gives it. A row that does not read under its key is a fault
+/// (CONV-ERR-001): the read throws, and nothing stands in for the value.
 /// </remarks>
 internal sealed class ConfigurationStore(StoreContext context) : IConfigurationStore
 {
@@ -33,7 +34,7 @@ internal sealed class ConfigurationStore(StoreContext context) : IConfigurationS
 
         if (record is not null)
         {
-            return setting.Read(record.Value);
+            return Result.Success(Readable(setting.Key, setting.Read(record.Value)));
         }
 
         return setting.IsRequired
@@ -54,7 +55,7 @@ internal sealed class ConfigurationStore(StoreContext context) : IConfigurationS
 
         if (record is not null)
         {
-            return family.Read(parameter, record.Value);
+            return Result.Success(Readable(key, family.Read(parameter, record.Value)));
         }
 
         return family.HasDefault
@@ -91,15 +92,8 @@ internal sealed class ConfigurationStore(StoreContext context) : IConfigurationS
             }
 
             string parameter = key[prefix.Length..];
-            Error? refused = null;
 
-            family.Read(parameter, row.Value)
-                .Switch(value => written[parameter] = value, error => refused = error);
-
-            if (refused is Error failure)
-            {
-                return Result.Failure<IReadOnlyDictionary<string, TValue>>(failure);
-            }
+            written[parameter] = Readable(row.Key, family.Read(parameter, row.Value));
         }
 
         return Result.Success<IReadOnlyDictionary<string, TValue>>(written);
@@ -189,6 +183,15 @@ internal sealed class ConfigurationStore(StoreContext context) : IConfigurationS
     // catalogue is what says so.
     private static bool Deployment(ConfigurationKey key) =>
         Janus.Core.Configuration.Settings.All.Any(setting => setting.Key == key);
+
+    // OPS-CFG-008, D-166: a stored value that does not read is a fault, named by its key
+    // and the code of the constraint it misses, and never by the stored text, which
+    // can be anything a write once put there.
+    private static TValue Readable<TValue>(ConfigurationKey key, Result<TValue> read) =>
+        read.Match(
+            value => value,
+            failure => throw new InvalidOperationException(
+                "The stored value of " + key + " does not read (" + failure.Code + ")."));
 
     private static Error Undeclared(ConfigurationKey key) =>
         new(ErrorCodes.StartupDeclarationMissing, Naming(key));

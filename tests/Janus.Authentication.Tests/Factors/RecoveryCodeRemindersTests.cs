@@ -33,6 +33,13 @@ public sealed class RecoveryCodeRemindersTests : IAsyncDisposable
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
+    /// <summary>
+    /// A deployment that names the one language its notices are written in, as every
+    /// deployment names at least one.
+    /// </summary>
+    public RecoveryCodeRemindersTests() =>
+        _configuration.Set(Settings.NotificationLanguages, ["en"]);
+
     private RecoveryCodeReminders Reminders =>
         new(_sets, _identifiers, _notifications, _configuration, _work, _clock);
 

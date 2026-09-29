@@ -46,7 +46,7 @@ internal sealed class RedirectValidation(IOidcClientStore clients, IConfiguratio
         string named = (await configuration
                 .ReadAsync(Settings.RedirectDefaultClient, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => string.Empty);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         if (named.Length is 0)
         {

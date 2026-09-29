@@ -306,6 +306,30 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-CFG-008: a grace that does not read is a fault, as the store throws it, and
+    /// never a window of no length: the link inside the window is not told the window
+    /// has run out, and the account stays as it was.
+    /// </summary>
+    [Fact]
+    public async Task OPS_CFG_008_AMalformedGraceIsAFaultAndNotAnElapsedWindowAsync()
+    {
+        _ = Value(await Lifecycle.DeleteAsync(
+            Acting,
+            Stepped(),
+            Source,
+            TestContext.Current.CancellationToken));
+
+        string link = Link();
+
+        _configuration.Unreachable = Settings.AccountDeletionGrace.Key;
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await Lifecycle.CancelDeletionAsync(link, TestContext.Current.CancellationToken));
+
+        Assert.Equal(AccountState.Deleting, await StateAsync());
+    }
+
+    /// <summary>
     /// IDN-LIFE-003: a takedown is not the subject's to undo, and says so rather
     /// than answering as a window that has run out.
     /// </summary>

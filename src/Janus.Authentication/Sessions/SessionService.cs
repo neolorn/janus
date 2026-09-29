@@ -703,7 +703,7 @@ internal sealed class SessionService(
         DurationSetting setting,
         CancellationToken cancellationToken) =>
         (await configuration.ReadAsync(setting, cancellationToken).ConfigureAwait(false))
-            .Match(value => value, _ => setting.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
     // INT-GEN-006: the address is the session's own and the city is what the local
     // database makes of it, so nothing outside the library writes a place into one.

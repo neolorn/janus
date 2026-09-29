@@ -1309,7 +1309,7 @@ internal sealed class AuthenticationService(
 
         IReadOnlyList<string> languages = (await configuration
                 .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => (IReadOnlyList<string>)[]);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         string code = (await codes.IssueAsync(open.Fingerprint, cancellationToken)
                 .ConfigureAwait(false))

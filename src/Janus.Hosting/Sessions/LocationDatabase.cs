@@ -62,7 +62,7 @@ internal sealed class LocationDatabase(
         TimeSpan maximumAge = (await configuration
                 .ReadAsync(Settings.LocationDatabaseMaxAge, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, _ => Settings.LocationDatabaseMaxAge.Default);
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         if (DateOnly.FromDateTime(time.GetUtcNow().UtcDateTime).DayNumber - file.Produced.DayNumber
             > maximumAge.TotalDays)

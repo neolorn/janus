@@ -94,7 +94,7 @@ internal sealed class DeletionSweep(
         DurationSetting setting,
         CancellationToken cancellationToken) =>
         (await configuration.ReadAsync(setting, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => setting.Default);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
     // IDN-LIFE-003: a takedown ends in the same erasure as a request, and the
     // subscribers are told which of the two reached them.

@@ -291,7 +291,7 @@ internal sealed class AccountAdministration(
 
         TimeSpan grace = (await configuration
                 .ReadAsync(Settings.AccountDeletionGrace, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => TimeSpan.Zero);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
         DateTimeOffset now = time.GetUtcNow();
 
         if (now >= deleting.Since + grace)

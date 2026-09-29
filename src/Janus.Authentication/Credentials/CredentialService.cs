@@ -1143,14 +1143,20 @@ internal sealed class CredentialService(
 
         IReadOnlyList<string> languages = (await configuration
                 .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => (IReadOnlyList<string>)[]);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         return RecipientLanguage.Of(settled, requested: null, languages);
     }
 
+    // The service name is a key the deployment names only where the context source is
+    // on, so one never named is no name for the authenticator app to show.
     private async ValueTask<string> IssuerAsync(CancellationToken cancellationToken) =>
         (await configuration.ReadAsync(Settings.ServiceName, cancellationToken).ConfigureAwait(false))
-            .Match(value => value, _ => string.Empty);
+            .Match(
+                value => value,
+                error => error.Code == ErrorCodes.StartupDeclarationMissing
+                    ? string.Empty
+                    : throw new InvalidOperationException(error.Code.ToString()));
 
     // What the authenticator app shows beside the code: the account's primary
     // identifier, and the first it holds where it has settled no primary.

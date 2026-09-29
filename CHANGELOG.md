@@ -976,9 +976,11 @@ against the public contract of LIB-API-001.
   rather than in a file, so a value changed anywhere in the deployment, through the
   management application included, is in force for the next read of it without a
   restart. A key the deployment never wrote reads as the default the catalogue gives it,
-  a stored value a tightened floor or ceiling does not admit comes back as a failure
-  naming the constraint, and a key the application may not change is refused whatever
-  the caller asks. `WriteAsync` for one member of a key that exists once per
+  a stored value that does not read under its key (one a tightened floor or ceiling no
+  longer admits included) is a fault: the read throws `InvalidOperationException`
+  naming the key and never the stored text, and nothing in the library puts a default
+  or any other value in its place, so a request fails as `system.fault` and a job fails
+  its run. A key the application may not change is refused whatever the caller asks. `WriteAsync` for one member of a key that exists once per
   organization or once per declared category puts the value in force for the next read,
   answers what was in force before, and refuses a protected family or a value the family
   does not admit.

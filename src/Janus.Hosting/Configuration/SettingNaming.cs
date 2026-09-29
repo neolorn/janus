@@ -11,9 +11,9 @@ namespace Janus.Hosting.Configuration;
 /// <param name="configuration">Where the value in force is read.</param>
 /// <param name="cancellationToken">Abandons the read.</param>
 /// <remarks>
-/// Implements LIB-HOST-001. A key with no default reads as undeclared until the
-/// deployment names it; any other failure is a value that was named and cannot be
-/// read, which the caller is told of rather than counting it as either.
+/// Implements LIB-HOST-001 and OPS-CFG-008. A key with no default reads as undeclared
+/// until the deployment names it, which is the one failure a read answers; a value
+/// that was named and does not read is a fault the store throws.
 /// </remarks>
 internal sealed class SettingNaming(
     IConfigurationStore configuration,
@@ -23,7 +23,5 @@ internal sealed class SettingNaming(
     public async ValueTask<Result<bool>> On<TValue>(Setting<TValue> setting) =>
         (await configuration.ReadAsync(setting, cancellationToken).ConfigureAwait(false)).Match(
             _ => Result.Success(true),
-            failure => failure.Code == ErrorCodes.StartupDeclarationMissing
-                ? Result.Success(false)
-                : Result.Failure<bool>(failure));
+            _ => Result.Success(false));
 }

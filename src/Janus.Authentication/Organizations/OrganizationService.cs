@@ -245,7 +245,7 @@ internal sealed class OrganizationService(
 
         TimeSpan grace = (await configuration
                 .ReadAsync(Settings.OrganizationDeletionGrace, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => Settings.OrganizationDeletionGrace.Default);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         // IDN-ORG-003: cancellable at any point before the window closes, whether or not
         // the pass that erases has reached it yet.

@@ -170,7 +170,7 @@ internal sealed class RecoveryCodeReminders(
 
         IReadOnlyList<string> languages = (await configuration
                 .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, _ => (IReadOnlyList<string>)[]);
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
         return RecipientLanguage.Of(settled, requested: null, languages);
     }
