@@ -3463,6 +3463,8 @@ people least able to work around it.
 
 > **Superseded in part.** The host business rules and vendor facts this entry records (orders, payments, shipments, couriers, addresses) moved to the host under D-165; the reasoning stands as the host's inheritance.
 
+> **Amended.** The application's step on `ErasureRequested` is clearing the copies the destroyed key does not reach, not redacting its fields (D-168).
+
 **Date:** 2026-08-27 · **Status:** accepted · **Amends:** D-026.1, D-037 · **Resolves:** F-04
 
 **TL;DR.** Erasure, restriction and export were routed "through the access gate,"
@@ -11581,6 +11583,65 @@ already pushed.
 
 ---
 
+## D-168 — Corrections-4 questions: the library's version without reflection; what the host does on erasure
+
+**Date:** 2026-09-29 · **Status:** accepted · **Amends:** D-068 (the application's step on erasure) · **Extends:** D-082, D-163, D-166 (item 114)
+
+**TL;DR.** Two questions stopped the corrections-4 run. The user agent D-166 item 114 and
+INT-PWD-001 require must carry the library's version, and reading it from an assembly
+attribute needs reflection, which CONV-CODE-004 forbids where a generator serves. The
+build now writes the version into a constant. And `PRIV-RIGHT-005b`'s table and chapter
+`10` still told the host to redact personal fields on `ErasureRequested`, which D-082
+withdrew and PRIV-RIGHT-005c criterion 6 forbids requiring. The host's step is to clear
+what the destroyed key does not reach.
+
+**1. The library's version.** CONV-CODE-004 bans reflection "where a type, a generic or a
+source generator serves", and something that serves exists: the build knows the version
+before it compiles. A target in `Directory.Build.props` runs after MinVer has set the
+version and writes `internal` constants into the intermediate output of the project that
+needs them; nothing is committed, so LIB-VER-001 (no version in a project file) holds. The
+version constant is the package version, without build metadata: the `+<commit>` suffix
+the SDK adds to the informational version names a commit, which is no business of the
+range API's provider and is not the version a host installed. The user agent must also
+name the library, and CONV-NAME-001 (D-163) allows the product name in source only as the
+first segment of a dotted project or package name. The agent therefore names the package
+that makes the request by its package identifier, from a second generated constant:
+`<package identifier>/<package version>`. No committed source spells the name; D-163
+stands, and CONV-NAME-001 names this generated constant as its one exception. Which
+identifier the library's one package carries is settled with the package feed (Milestone
+2 step 2); the constant follows it. Reading the package's own embedded resources
+(`Assembly.GetManifestResourceStream`), which AUTH-PASS-004 and AUTH-FACT-010 require, is
+named as the one use of `System.Reflection` outside the model builder and tests, since no
+type, generic or generator serves it. *Rejected:* an exemption from
+CONV-CODE-004 AC2 for one file (the rule's own condition is met by the generated
+constant, so the exemption would have no reason); a package that generates such constants
+(a dependency outside CONV-DESIGN-008 for a few lines of build file).
+
+**2. What the host does on `ErasureRequested`.** PRIV-RIGHT-005a encrypts every personal
+field the host keeps in the schemas that serve public applications under the subject's
+data key (PRIV-SENS-002), so erasure reaches those host tables without the host acting. A
+personal field is never left in plaintext for the sake of a query; PRIV-SENS-002's
+sentence that seemed to allow it now says so. D-082 therefore withdrew D-068's per-application redaction
+routine, and PRIV-RIGHT-005c criterion 6 says no requirement obliges one. D-068's table
+row survived in PRIV-RIGHT-005b ("Redacts personal fields wherever it holds them") and in
+chapter `10`'s event row ("host-side redaction is due"). The implementer found the
+contradiction and changed no code, rightly. What the destroyed key cannot reach is the
+copies outside the encrypted columns: what the host derived from them (caches, search
+indexes, files it produced) and what it passed to its own processors. That is the host's
+step, a fixed list of places rather than a procedure that follows its schema. The event
+stays required, since confirmation is how the request knows those copies are cleared.
+Personal fields in management-only schemas are outside the event; their erasure stays
+manual (PRIV-SENS-002, D-101).
+The question as the implementer's last report named it ("PRIV-RESTRICT-005c AC6") names
+no item; the implementer's reconstruction, PRIV-RIGHT-005c AC6 against PRIV-RIGHT-005b and
+`10`, is the contradiction this settles.
+
+**Propagated to:** `01` IDN-LIFE-003a · `04` PRIV-SENS-002, PRIV-RIGHT-005b (table row and
+text) · `05` INT-PWD-001 (text and criterion 3) · `08` CONV-NAME-001, CONV-CODE-004 (text
+and criteria 2 and 3) · `10` the `ErasureRequested` row.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -11758,6 +11819,7 @@ already pushed.
 | Host business content moved out of the specification; library-true rows and seams only | D-165 |
 | Review of entries 110 to 423: 101 reversed, 14 settled; the working mode ends; the chapters reconciled; the ledger closed | D-166 |
 | Secret scanning over the full history: the scanner's own release, checksum-pinned; an allow-list entry names the file and the value | D-167 |
+| Corrections-4 questions: the library's version without reflection; what the host does on erasure | D-168 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

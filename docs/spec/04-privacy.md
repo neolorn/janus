@@ -193,10 +193,12 @@ for authenticator secrets.
 | Database dump | Per-subject encryption of personal fields (PRIV-RIGHT-005a) |
 | Backup file | Backup encryption under a key not on the host (DR-010) |
 
-**Which fields are encrypted is declared, not universal.** Fields used for filtering
-and search stay in plaintext: encrypting a column a host record is queried by would
-break the query that uses it. The declaration names personal fields; the rest of the
-record is not encrypted.
+**Which fields are encrypted is declared, not universal.** A column a host record is
+queried by (a reference, a date, an amount, a status) is not personal and stays in
+plaintext: encrypting it would break the query that uses it. A personal field in a schema
+that serves a public application is never left in plaintext in its column for the sake of
+a query; an identifier is found by its fingerprint (PRIV-RIGHT-005c). The declaration names personal fields; the rest of the record is not
+encrypted (D-168).
 
 **And per-subject encryption is scoped by schema, not by field.**
 
@@ -234,7 +236,7 @@ automated routine can be built later without first auditing the schema cold.
 
 **Building that routine is the user's decision**, not a threshold that fires on its own.
 
-*Source: D-078, D-098, D-162, D-166*
+*Source: D-078, D-098, D-162, D-166, D-168*
 
 **Acceptance criteria**
 1. Processing a sensitive type **for a consent-based purpose** without the data
@@ -1152,15 +1154,15 @@ pre-erasure backups completes when they expire.
 ---
 
 **PRIV-RIGHT-005b** — The library SHALL raise lifecycle events; the **host application
-SHALL perform the work in its own tables and confirm completion**.
+SHALL perform the work on what it holds and confirm completion**.
 
 | Event | The application does |
 |---|---|
-| `ErasureRequested` | Redacts personal fields wherever it holds them |
+| `ErasureRequested` | Clears what destroying the subject's key does not reach: the copies it derived from the subject's fields (caches, search indexes, files it produced) and what it passed to its own processors |
 | `RestrictionChanged` | Stops acting on that subject's records |
 | `ExportRequested` | Returns everything it holds about the subject |
 
-*Source: D-068*
+*Source: D-068, D-082, D-168*
 
 The permission gate answers "may this principal do this to that record." Erasure,
 restriction and export ask "which records are **about** this person" — a different
@@ -1174,9 +1176,13 @@ required subscribers have.
 
 **Applications no longer maintain a redaction routine.** D-082 removed that
 requirement: everything encrypted is handled by destroying the subject key, and the
-only other step is neutralising the fingerprint (PRIV-RIGHT-005c). Applications still handle
-**restriction** and **export**, which concern data they hold rather than data they must
-redact.
+library's only other step is neutralising the fingerprint (PRIV-RIGHT-005c). On `ErasureRequested` an
+application clears only what the destroyed key does not reach: the copies it derived from
+the subject's fields and what it passed to its own processors. That is a fixed list of
+places, not a procedure that follows its schema (D-168). Personal fields in
+management-only schemas are outside this event; their erasure is manual (PRIV-SENS-002,
+D-101). Applications still handle **restriction** and **export**, which concern data they
+hold and which no key destruction reaches.
 
 **Acceptance criteria**
 1. The request remains open until every required subscriber confirms completion.

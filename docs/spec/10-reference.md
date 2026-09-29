@@ -1462,7 +1462,7 @@ IDN-LIFE-003a).
 | `IdentifierPrimaryChanged` | The primary of a kind changed (REG-IDENT-005), including on invitation acknowledgement when the corporate address becomes primary (REG-INV-001) and when a membership ends (REG-MAIL-003) | Host |
 | `AccountSuspended` · `AccountReactivated` | State enters or leaves `suspended`, by the subject or an administrator. `AccountSuspended` is also written at every takedown trigger, whatever state the account held, announcing that access stopped (IDN-LIFE-003) | Host |
 | `AccountDeletionRequested` · `AccountDeletionCancelled` | The grace window starts or is cancelled | Host (pause its own processing for the subject) |
-| `ErasureRequested` | The erasure transaction has committed; host-side redaction is due (PRIV-RIGHT-005b) | Every registered subject-event handler — **required** |
+| `ErasureRequested` | The erasure transaction has committed; the host clears the copies the destroyed key does not reach (PRIV-RIGHT-005b) | Every registered subject-event handler — **required** |
 | `RestrictionChanged` | `restricted` set or lifted | Every registered subject-event handler — **required** |
 | `SendingRestrictionChanged` | A named restriction was created, edited or deleted through `/admin/restrictions/{name}` (AUTH-ABUSE-004); carries the restriction name, the actor and whether the change was a loosening. | Audit, alerting (OPS-ALERT-001) |
 | `SendingRestrictionGranted` | Support added credit to one key under a restriction (AUTH-ABUSE-004); carries the restriction name, the credit, the actor and the reason, never the plain key value | Audit, alerting (OPS-ALERT-001) |
@@ -1480,7 +1480,7 @@ IDN-LIFE-003a).
 Mail provisioning consumes no event: it reads the state these events announce
 (INT-MAIL-006).
 
-*Source: LIB-API-001, IDN-LIFE-003a, PRIV-RIGHT-005b, CONV-DESIGN-002, D-022, D-132, D-141, D-146, D-162, D-166*
+*Source: LIB-API-001, IDN-LIFE-003a, PRIV-RIGHT-005b, CONV-DESIGN-002, D-022, D-132, D-141, D-146, D-162, D-166, D-168*
 
 ## 6. Status code usage
 

@@ -701,7 +701,7 @@ changes freely.
 **transactional outbox**, and SHALL be **generic** — the library publishes facts about
 identity and knows nothing of who consumes them.
 
-*Source: D-148; D-090, D-102, D-166*
+*Source: D-148; D-090, D-102, D-166, D-168*
 
 **The flow:**
 
@@ -716,7 +716,7 @@ identity and knows nothing of who consumes them.
    subscriber's confirmation, so the completion of the host-side work is visible from
    the trigger onward
 2. **The worker publishes** to every registered subscriber
-3. **Subscribers act** in their own tables
+3. **Subscribers act** on what they hold
 4. **Each confirms** independently
 5. **Complete** only when every required subscriber has confirmed
 
@@ -751,10 +751,12 @@ subscriber and the library changes not at all.
   live in the database (PRIV-RIGHT-005a, PRIV-RIGHT-005c) — so they share the
   transaction with the state change. The outbox carries only the host-side work
 
-**Completeness is wider than the obvious applications.** Any overlooked copy — a
-cache, a log, a derived analytics store — means the request was not honoured. Logs
-hold identifiers rather than attributes (CONV-LOG-004) and caches hold identifiers
-only, so both are in scope by having been considered rather than by assumption.
+**Completeness is wider than the obvious applications.** Any overlooked copy (a cache,
+a search index, a file, a log, a derived analytics store, or data handed to a processor)
+means the request was not honoured. The library's logs hold identifiers rather than
+attributes (CONV-LOG-004) and its caches hold identifiers only, so neither needs an
+erasure pass; what a host derived from the subject's fields is the host's to clear on
+`ErasureRequested` (PRIV-RIGHT-005b, D-168).
 
 **Acceptance criteria**
 1. The identity change and the outbox record share one transaction, and the erasures

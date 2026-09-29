@@ -729,15 +729,20 @@ password SHALL NEVER leave the system.
 **Values (D-153, D-166).** The prefix is the first 5 upper-case hexadecimal characters of the
 SHA-1 of the UTF-8 password; the remaining 35 are matched locally against the range
 returned (D-041). Every range request SHALL send a user agent naming the library and its
-version, since the provider's acceptable use asks callers to identify themselves.
+version, since the provider's acceptable use asks callers to identify themselves. The
+agent is `<package identifier>/<package version>` of the library's package, both taken
+from the constants of CONV-CODE-004: the identifier names the library as a host installed
+it, and the version carries no build metadata, so no commit identifier leaves the
+deployment (D-168).
 
-*Source: D-011, D-166*
+*Source: D-011, D-166, D-168*
 
 **Acceptance criteria**
 1. Outbound requests contain a prefix only.
 2. A test asserts the request contains no full hash.
 3. A test asserts every range request carries a user agent naming the library and its
-   version.
+   version, that the version equals the version constant of CONV-CODE-004, and that it
+   contains no `+`.
 
 ---
 
