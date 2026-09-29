@@ -711,6 +711,37 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-BOOT-004 AC7: where no reserved account exists yet, the first arrival the
+    /// limit refuses still raises <c>auth-failures-sustained</c>, with no scope (D-170).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_004_AC7_TheLimitReachedIsRaisedWithNoReservedAccountAsync()
+    {
+        await using var unreserved = new Deployment();
+        Flow.Prepare(unreserved);
+        var browser = new Browser(unreserved);
+
+        for (int attempt = 1; attempt <= 5; attempt++)
+        {
+            Answer counted = await PresentedAsync(browser, Drawn(), IPAddress.Parse("198.51.100." + attempt));
+
+            Assert.Equal(StatusCodes.Status422UnprocessableEntity, counted.Status);
+        }
+
+        Answer refused = await PresentedAsync(browser, Drawn(), IPAddress.Parse("198.51.100.6"));
+
+        AlertRaised raised = Assert.Single(
+            unreserved.Events.Of<AlertRaised>(),
+            raised => raised.Condition is AlertCondition.AuthFailuresSustained);
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, refused.Status);
+        Assert.Equal(
+            Alerts.Key(AlertCondition.AuthFailuresSustained, scope: null),
+            Alerts.Deduplication(raised.IdempotencyKey));
+    }
+
+    /// <summary>
     /// BFF-ABUSE-001 AC2: a code presented from a source its own failures have delayed
     /// is answered 429 auth.throttled, with the instant the delay lifts in the body
     /// and the seconds to it in the header, the two agreeing.
