@@ -24,8 +24,9 @@ public sealed class ConfigureTests(BootstrappedDeployment deployment) : IClassFi
     /// <summary>
     /// OPS-CFG-004 AC2, OPS-CFG-005 and OPS-ALERT-001: a protected key the application
     /// refuses is changed from the server, written down under the command's principal
-    /// with the values, the direction and the reason, and raised as a High condition.
-    /// No row stood for the key, so what it was is its default, the value in force.
+    /// with the values, the direction and the reason, and raised as a High condition
+    /// whose <c>AlertRaised</c> event is written with it. No row stood for the key, so
+    /// what it was is its default, the value in force.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -55,6 +56,7 @@ public sealed class ConfigureTests(BootstrappedDeployment deployment) : IClassFi
             (Settings.AbuseThrottleEnabled.Write(true), Settings.AbuseThrottleEnabled.Write(false), true, Reason, "OPS-CFG-004"),
             recorded);
         Assert.Equal(["protected-setting-changed"], await RaisedAsync(connection, key));
+        Assert.Equal(["protected-setting-changed"], await AnnouncedAsync(connection, key));
     }
 
     /// <summary>
@@ -265,6 +267,14 @@ public sealed class ConfigureTests(BootstrappedDeployment deployment) : IClassFi
     private static async Task<IReadOnlyList<string>> RaisedAsync(NpgsqlConnection connection, string key) =>
         [.. await connection.QueryAsync<string>(
             "SELECT condition FROM identity.raised_alerts WHERE details->>'key' = @Key",
+            new { Key = key })];
+
+    private static async Task<IReadOnlyList<string>> AnnouncedAsync(NpgsqlConnection connection, string key) =>
+        [.. await connection.QueryAsync<string>(
+            """
+            SELECT payload->>'Condition' FROM identity.events
+            WHERE kind = 'AlertRaised' AND payload->'Details'->>'key' = @Key
+            """,
             new { Key = key })];
 
     private static string? Refusal(Invocation run)

@@ -29,7 +29,7 @@ namespace Janus.Authentication.Bootstrap;
 /// <param name="identifiers">Where the administrator takes on the corporate address.</param>
 /// <param name="mailboxes">Where the administrator's mailbox is queued.</param>
 /// <param name="links">Where the enrolment link is held.</param>
-/// <param name="alerts">Where the alert that no emergency credential exists is raised.</param>
+/// <param name="alerts">Where the alert that no emergency credential exists is raised, with its event.</param>
 /// <param name="events">Where each membership bootstrap attaches is announced.</param>
 /// <param name="configuration">Where the values bootstrap reads are.</param>
 /// <param name="work">The one transaction bootstrap runs in.</param>
@@ -51,7 +51,7 @@ internal sealed class DeploymentBootstrap(
     IIdentifierDirectory identifiers,
     IMailboxStore mailboxes,
     IRecoveryLinkStore links,
-    IRaisedAlerts alerts,
+    IAlertChannels alerts,
     IEvents events,
     IConfigurationStore configuration,
     IUnitOfWork work,
@@ -320,13 +320,16 @@ internal sealed class DeploymentBootstrap(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        // OPS-BOOT-001 AC3 and D-133: the deployment has no emergency credential until the
-        // management application issues one, and the alert says so from the start.
-        await alerts
-            .AddAsync(
-                new RaisedAlert(RaisedAlertId.Of(now), Alerts.Of(AlertCondition.NoEmergencyCredential, scope: null, now)),
-                cancellationToken)
-            .ConfigureAwait(false);
+        // OPS-BOOT-001 AC3, D-133 and OPS-ALERT-001: the deployment has no emergency
+        // credential until the management application issues one, and the alert says so
+        // from the start, its event written with it in the one transaction.
+        if ((await alerts
+                .RaiseAsync(Alerts.Of(AlertCondition.NoEmergencyCredential, scope: null, now), cancellationToken)
+                .ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error) is Error unannounced)
+        {
+            return Result.Failure<BootstrapEnrolment>(unannounced);
+        }
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 

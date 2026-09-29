@@ -497,6 +497,26 @@ public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFi
         Assert.All(announced, one => Assert.Equal("began", one.Change));
     }
 
+    /// <summary>
+    /// OPS-ALERT-001 and OPS-BOOT-001 AC3: that no emergency credential exists is raised
+    /// through the alert channels, so the <c>AlertRaised</c> event is written with the
+    /// raised row, in bootstrap's transaction.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_001_TheMissingEmergencyCredentialIsAnnouncedAsync()
+    {
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        long raised = await connection.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM identity.raised_alerts WHERE condition = 'no-emergency-credential'");
+        IEnumerable<string?> announced = await connection.QueryAsync<string?>(
+            "SELECT payload->>'Condition' FROM identity.events WHERE kind = 'AlertRaised'");
+
+        Assert.Equal(1, raised);
+        Assert.Equal(["no-emergency-credential"], announced);
+    }
+
     // The identity a system principal acts under, which no account holds.
     private static string Unheld => Guid.Empty.ToString();
 

@@ -20,7 +20,7 @@ namespace Janus.Authentication.Configuration;
 /// <param name="configuration">Where the value in force is read.</param>
 /// <param name="settings">Where a protected key's value is written.</param>
 /// <param name="audit">Where each change is written down.</param>
-/// <param name="alerts">Where each change is raised.</param>
+/// <param name="alerts">Where each change is raised, with its event, in the change's transaction.</param>
 /// <param name="redirects">The start's check of the default client a browser lands on.</param>
 /// <param name="work">The one transaction the change runs in.</param>
 /// <param name="time">When.</param>
@@ -37,7 +37,7 @@ internal sealed class ProtectedConfiguration(
     IConfigurationStore configuration,
     IProtectedSettings settings,
     IConfigurationAudit audit,
-    IRaisedAlerts alerts,
+    IAlertChannels alerts,
     RedirectValidation redirects,
     IUnitOfWork work,
     TimeProvider time)
@@ -84,13 +84,19 @@ internal sealed class ProtectedConfiguration(
                 .ChangedAsync(value.Key, before, value.Written, loosening, reason, Principal, now, cancellationToken)
                 .ConfigureAwait(false);
 
-            await RaiseAsync(AlertCondition.ProtectedSettingChanged, value.Key, now, cancellationToken).ConfigureAwait(false);
+            if (await RaiseAsync(AlertCondition.ProtectedSettingChanged, value.Key, now, cancellationToken).ConfigureAwait(false)
+                is Error unannounced)
+            {
+                return Result.Failure(unannounced);
+            }
 
             // OPS-CFG-004: the governing language is protected on its own ground and its
             // change is told under its own condition as well.
-            if (value.Key == Settings.LegalGoverningLanguage.Key)
+            if (value.Key == Settings.LegalGoverningLanguage.Key
+                && await RaiseAsync(AlertCondition.GoverningLanguageChanged, value.Key, now, cancellationToken).ConfigureAwait(false)
+                    is Error unannouncedLanguage)
             {
-                await RaiseAsync(AlertCondition.GoverningLanguageChanged, value.Key, now, cancellationToken).ConfigureAwait(false);
+                return Result.Failure(unannouncedLanguage);
             }
         }
 
@@ -105,7 +111,10 @@ internal sealed class ProtectedConfiguration(
         return Result.Success();
     }
 
-    private async ValueTask RaiseAsync(
+    // OPS-ALERT-001 and D-166 (308): the alert is raised through the channels, so its
+    // event is written with the row in the change's transaction, and a change whose
+    // alert cannot be raised is not made.
+    private async ValueTask<Error?> RaiseAsync(
         AlertCondition condition,
         ConfigurationKey key,
         DateTimeOffset now,
@@ -116,9 +125,10 @@ internal sealed class ProtectedConfiguration(
             ["key"] = JsonSerializer.SerializeToElement(key.ToString()),
         };
 
-        await alerts
-            .AddAsync(new RaisedAlert(RaisedAlertId.Of(now), Alerts.Of(condition, key.ToString(), now, details)), cancellationToken)
-            .ConfigureAwait(false);
+        return (await alerts
+                .RaiseAsync(Alerts.Of(condition, key.ToString(), now, details), cancellationToken)
+                .ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error);
     }
 
     // LIB-HOST-001 and D-166 (319): the rules the host's start applies, over what the

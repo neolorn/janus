@@ -181,7 +181,9 @@ against the public contract of LIB-API-001.
   `configure` principal with its reason and what the key was (its default where no
   value was written, nothing only for a key the deployment names and never named) and
   raises `protected-setting-changed`; the
-  governing language also raises `governing-language-changed`. A change that would leave
+  governing language also raises `governing-language-changed`, each with its
+  `AlertRaised` event written in the change's transaction; a change whose alert cannot
+  be raised is not made. A change that would leave
   the deployment unable to start is refused and nothing of it is written: the command
   runs the start's checks over the written values (the keys to name, the relying party,
   the endpoints, the signing algorithm and the default client) and refuses with the
@@ -230,7 +232,7 @@ against the public contract of LIB-API-001.
   standard error, with exit code 1. What it defines and sets is audited under its own
   principal, for which `SystemOperation` carries `Bootstrap`. Its grants name the nil
   subject as their granter, and each membership it attaches emits `MembershipChanged`
-  (`began`) with the rows.
+  (`began`) with the rows, as the missing emergency credential emits `AlertRaised`.
 - A runtime change is decided on the value in force under its row's lock: the change
   of a key, of an organization's policy (with the system policy's row) and of its
   domain lock each take the row before reading the value and classifying, so a

@@ -5,7 +5,9 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Alerting;
 using Janus.Authentication.Configuration;
+using Janus.Authentication.Events;
 using Janus.Authentication.Oidc;
 using Janus.Core;
 using Janus.Storage;
@@ -111,6 +113,8 @@ internal static class ConfigureCommand
         services.AddStorageArea(keys.Connection, keys.KeyEncryptionKeys, keys.FingerprintKeys);
         services.AddScoped<SchemaValidation>();
         services.AddScoped<RedirectValidation>();
+        services.AddScoped<IEvents, EventOutbox>();
+        services.AddScoped<IAlertChannels, AlertChannels>();
         services.AddScoped<ProtectedConfiguration>();
 
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
