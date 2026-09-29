@@ -446,6 +446,43 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-BOOT-004 AC7 and OPS-ALERT-001: the limit reached is an attack made loud, so
+    /// the first arrival it refuses raises <c>auth-failures-sustained</c> for the
+    /// reserved account, once; the arrivals refused after it raise nothing more.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_004_AC7_TheLimitReachedIsRaisedAsync()
+    {
+        _ = await GeneratedAsync();
+        var browser = new Browser(_deployment);
+
+        for (int attempt = 1; attempt <= 5; attempt++)
+        {
+            Answer counted = await PresentedAsync(browser, Drawn(), IPAddress.Parse("198.51.100." + attempt));
+
+            Assert.Equal(StatusCodes.Status422UnprocessableEntity, counted.Status);
+        }
+
+        Assert.DoesNotContain(
+            _deployment.Events.Of<AlertRaised>(),
+            raised => raised.Condition is AlertCondition.AuthFailuresSustained);
+
+        Answer first = await PresentedAsync(browser, Drawn(), IPAddress.Parse("198.51.100.6"));
+        Answer second = await PresentedAsync(browser, Drawn(), IPAddress.Parse("198.51.100.7"));
+
+        AlertRaised raised = Assert.Single(
+            _deployment.Events.Of<AlertRaised>(),
+            raised => raised.Condition is AlertCondition.AuthFailuresSustained);
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, first.Status);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, second.Status);
+        Assert.Equal(
+            Alerts.Key(AlertCondition.AuthFailuresSustained, _emergency.ToString()),
+            Alerts.Deduplication(raised.IdempotencyKey));
+    }
+
+    /// <summary>
     /// BFF-ABUSE-001 AC2: a code presented from a source its own failures have delayed
     /// is answered 429 auth.throttled, with the instant the delay lifts in the body
     /// and the seconds to it in the header, the two agreeing.

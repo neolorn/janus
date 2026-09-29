@@ -98,7 +98,10 @@ internal sealed class BreakGlassService(
         // refused attempt is the earliest the answer promises (OPS-BOOT-004 AC7).
         if (attempted > GlobalAttempts)
         {
-            return Result.Failure<IssuedSession>(ThrottleService.Refusal(now + GlobalWindow));
+            return attempted == GlobalAttempts + 1
+                && await LimitReachedAsync(now, cancellationToken).ConfigureAwait(false) is Error unraised
+                ? Result.Failure<IssuedSession>(unraised)
+                : Result.Failure<IssuedSession>(ThrottleService.Refusal(now + GlobalWindow));
         }
 
         var attempt = new ThrottleAttempt(origin.Address, Identifier: null);
@@ -277,6 +280,19 @@ internal sealed class BreakGlassService(
         failure = error;
 
         return default!;
+    }
+
+    // OPS-BOOT-004 AC7 and OPS-ALERT-001 (D-166, 292): the first arrival the limit
+    // refuses is raised against the reserved account, in a transaction of its own, so
+    // the attack is heard while the limit holds it.
+    private async ValueTask<Error?> LimitReachedAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        SubjectId? account = await emergency.FindAsync(cancellationToken).ConfigureAwait(false);
+
+        return (await alerts
+                .RaiseAsync(Alerts.Of(AlertCondition.AuthFailuresSustained, account?.ToString(), now), cancellationToken)
+                .ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error);
     }
 
     private async ValueTask<Result<IssuedSession>> UsedAsync(

@@ -272,8 +272,10 @@ against the public contract of LIB-API-001.
   reserved `emergency` account that passes every step-up gate for
   `breakglass.session.lifetime`. A code opens one session; a group whose check character
   is wrong is refused before any hash is compared; at most five attempts an hour are
-  taken from all sources together, besides the per-source delay. Generation and use are
-  audited under `auth.breakglass.generated` and `auth.breakglass.used`, and raise
+  taken from all sources together, besides the per-source delay, and the first attempt
+  the limit refuses raises `auth-failures-sustained` for the reserved account.
+  Generation and use are audited under `auth.breakglass.generated` and
+  `auth.breakglass.used`, and raise
   `breakglass-generated` (`AlertCondition.BreakGlassGenerated`) and `breakglass-used`,
   each High and scoped to the issue, to the operator and to the owner whatever
   `alerting.owner.enabled` says. The reserved account is never suspended, taken down, deleted, granted anything
