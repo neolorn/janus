@@ -1,4 +1,5 @@
 using System;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -54,6 +55,13 @@ public sealed class DatabaseFixture : IAsyncLifetime
         """;
 
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:17-alpine").Build();
+
+    /// <summary>
+    /// The key-encryption key the class's tests run under. The deployment's data key is
+    /// one row of the database, wrapped under it, so the tests that share the database
+    /// share the key (PRIV-RIGHT-005a, D-166).
+    /// </summary>
+    internal ReadOnlyMemory<byte> KeyEncryptionKey { get; } = RandomNumberGenerator.GetBytes(32);
 
     /// <summary>
     /// How to reach the library's database.

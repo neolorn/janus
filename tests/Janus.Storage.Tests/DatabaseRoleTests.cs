@@ -209,13 +209,21 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     }
 
     /// <summary>
-    /// OPS-MIG-003a AC4: the maintenance role reads and writes the rotation's progress,
-    /// and of a table holding a value wrapped beside the subject keys it reaches the
-    /// row's key, the version and the wrapped value and no other column (entry 316 of
-    /// the decisions pending review).
+    /// OPS-MIG-003a AC4, OPS-SEC-003: the maintenance role reads and writes the rotation's
+    /// progress, and reaches no value wrapped under the deployment's data key, since the
+    /// rotation re-wraps rows of the subject-key table and nothing else (D-166, 316).
     /// </summary>
-    [Fact]
-    public async Task OPS_MIG_003a_AC4_TheMaintenanceRoleReachesTheWrappedValuesAndNoOtherColumnAsync()
+    /// <param name="refusedStatement">A statement over a value beside the subject keys.</param>
+    [Theory]
+    [InlineData("SELECT count(wrapped_key)::int FROM identity.invitations")]
+    [InlineData("UPDATE identity.mailboxes SET wrapped_key = wrapped_key WHERE id = id")]
+    [InlineData("SELECT count(wrapped_key)::int FROM identity.registration_sessions")]
+    [InlineData("SELECT count(wrapped_key)::int FROM identity.send_outbox")]
+    [InlineData("SELECT count(private_key)::int FROM identity.signing_keys")]
+    [InlineData("SELECT count(signon_verifier)::int FROM identity.preauthentication_sessions")]
+    [InlineData("SELECT count(verifier)::int FROM identity.provider_attempts")]
+    public async Task OPS_MIG_003a_AC4_TheMaintenanceRoleReachesNoValueBesideTheSubjectKeysAsync(
+        string refusedStatement)
     {
         await using NpgsqlConnection connection = await AsAsync("identity_maintenance");
 
@@ -223,14 +231,9 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
             "SELECT count(*)::int FROM identity.key_rotations"));
         Assert.Equal(0, await connection.ExecuteAsync(
             "UPDATE identity.key_rotations SET processed = processed"));
-        Assert.Equal(0, await connection.ExecuteScalarAsync<int>(
-            "SELECT count(key_version)::int FROM identity.invitations"));
-        Assert.Equal(0, await connection.ExecuteAsync(
-            "UPDATE identity.signing_keys SET key_version = key_version WHERE key_id = key_id"));
 
         PostgresException refused = await Assert.ThrowsAsync<PostgresException>(async () =>
-            await connection.ExecuteScalarAsync<int>(
-                "SELECT count(enc_identifiers)::int FROM identity.invitations"));
+            await connection.ExecuteAsync(refusedStatement));
 
         Assert.Equal(InsufficientPrivilege, refused.SqlState);
 

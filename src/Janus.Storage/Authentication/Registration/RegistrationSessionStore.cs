@@ -9,7 +9,7 @@ using Janus.Authentication.Factors;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Registration;
 using Janus.Core;
-using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Registration;
@@ -19,7 +19,7 @@ namespace Janus.Storage.Authentication.Registration;
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <param name="connections">The operation's connection, for the channel.</param>
-/// <param name="keyEncryptionKeys">The versions a data key may be wrapped under.</param>
+/// <param name="deployment">The deployment's data key, which the row's own key is wrapped under.</param>
 /// <param name="randomness">The randomness the key and the vectors are drawn from.</param>
 /// <remarks>
 /// Implements REG-SESS-001, REG-SESS-002, REG-SESS-003 and OPS-SEC-001. Everything
@@ -29,7 +29,7 @@ namespace Janus.Storage.Authentication.Registration;
 internal sealed class RegistrationSessionStore(
     StoreContext context,
     DataConnections connections,
-    KeyEncryptionKeys keyEncryptionKeys,
+    DeploymentDataKeyStore deployment,
     RandomNumberGenerator randomness) : IRegistrationSessionStore
 {
     /// <inheritdoc/>
@@ -41,7 +41,7 @@ internal sealed class RegistrationSessionStore(
             .FindAsync([id], cancellationToken)
             .ConfigureAwait(false);
 
-        return record is null ? null : Read(record);
+        return record is null ? null : await ReadAsync(record, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -66,6 +66,7 @@ internal sealed class RegistrationSessionStore(
         ArgumentNullException.ThrowIfNull(session);
 
         byte[] dataKey = PersonalFieldCipher.NewDataKey(randomness);
+        byte[] deploymentKey = await deployment.UnwrappedAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -74,8 +75,7 @@ internal sealed class RegistrationSessionStore(
                 Id = session.Id,
                 ProvisionalSubject = session.Provisional,
                 ExpiresAt = session.ExpiresAt,
-                KeyVersion = keyEncryptionKeys.CurrentVersion,
-                WrappedKey = PersonalFieldCipher.Wrap(dataKey, keyEncryptionKeys.Current.Span),
+                WrappedKey = PersonalFieldCipher.Wrap(dataKey, deploymentKey),
                 Session = Written(dataKey, session),
             };
 
@@ -85,6 +85,7 @@ internal sealed class RegistrationSessionStore(
         finally
         {
             CryptographicOperations.ZeroMemory(dataKey);
+            CryptographicOperations.ZeroMemory(deploymentKey);
         }
 
         Relink(session, []);
@@ -100,7 +101,7 @@ internal sealed class RegistrationSessionStore(
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The registration session has no row.");
 
-        byte[] dataKey = DataKey(record);
+        byte[] dataKey = await DataKeyAsync(record, cancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -264,16 +265,27 @@ internal sealed class RegistrationSessionStore(
             randomness);
     }
 
-    private byte[] DataKey(RegistrationSessionRecord record) =>
-        PersonalFieldCipher.Unwrap(
-            PersonalDataFormat.Marker,
-            record.KeyVersion,
-            record.WrappedKey,
-            keyEncryptionKeys);
-
-    private RegistrationSession Read(RegistrationSessionRecord record)
+    private async ValueTask<byte[]> DataKeyAsync(
+        RegistrationSessionRecord record,
+        CancellationToken cancellationToken)
     {
-        byte[] dataKey = DataKey(record);
+        byte[] deploymentKey = await deployment.UnwrappedAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            return PersonalFieldCipher.Unwrap(record.WrappedKey, deploymentKey);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(deploymentKey);
+        }
+    }
+
+    private async ValueTask<RegistrationSession> ReadAsync(
+        RegistrationSessionRecord record,
+        CancellationToken cancellationToken)
+    {
+        byte[] dataKey = await DataKeyAsync(record, cancellationToken).ConfigureAwait(false);
         StagedSessionDocument document;
 
         try

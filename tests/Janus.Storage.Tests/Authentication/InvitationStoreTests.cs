@@ -131,7 +131,6 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
 
         Assert.Null(row.EncryptedIdentifiers);
         Assert.Null(row.WrappedKey);
-        Assert.Null(row.KeyVersion);
         Assert.Null(read.Identifiers);
         Assert.Equal(Noon.AddHours(1), read.RevokedAt);
         Assert.Equal(issued.Inviter, read.Inviter);
@@ -158,7 +157,6 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
 
         Assert.Null(row.EncryptedIdentifiers);
         Assert.Null(row.WrappedKey);
-        Assert.Null(row.KeyVersion);
         Assert.Equal(issued.Token, row.Token);
         Assert.Equal(issued.Mailbox?.Value, row.Mailbox);
         Assert.Equal((issued.Inviter, issued.Organization), (row.Inviter, row.Organization));
@@ -250,7 +248,7 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
     private static string Fresh(string name) => name + "." + Guid.NewGuid().ToString("N") + "@example.test";
 
     private InvitationStore Store(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness);
+        new(context, _deployment.DataKey(context), _deployment.Randomness);
 
     private async Task<int> SweptAsync(DateTimeOffset now)
     {
@@ -268,7 +266,7 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     private MailboxStore Mailboxes(StoreContext context) =>
-        new(context, _deployment.Keys, Deployment.FingerprintKeys, _deployment.Randomness);
+        new(context, _deployment.DataKey(context), _deployment.Keys, Deployment.FingerprintKeys, _deployment.Randomness);
 
     private async Task<Invitation> IssuedAsync(string email, string? corporate = null)
     {

@@ -33,7 +33,7 @@ internal sealed class InvitationConfiguration : IEntityTypeConfiguration<Invitat
         {
             table.HasCheckConstraint(
                 "ck_invitations_key",
-                "(enc_identifiers IS NULL) = (wrapped_key IS NULL) AND (wrapped_key IS NULL) = (key_version IS NULL)");
+                "(enc_identifiers IS NULL) = (wrapped_key IS NULL)");
             table.HasCheckConstraint(
                 "ck_invitations_forgotten",
                 "enc_identifiers IS NULL OR (revoked_at IS NULL AND acknowledged_at IS NULL)");
@@ -60,7 +60,6 @@ internal sealed class InvitationConfiguration : IEntityTypeConfiguration<Invitat
             .HasConversion(subject => subject.Value, value => new SubjectId(value));
 
         builder.Property(invitation => invitation.Token).HasColumnName("token");
-        builder.Property(invitation => invitation.KeyVersion).HasColumnName("key_version");
         builder.Property(invitation => invitation.WrappedKey).HasColumnName("wrapped_key");
         builder.Property(invitation => invitation.EncryptedIdentifiers).HasColumnName(IdentifiersColumn);
         builder.Property(invitation => invitation.Roles).HasColumnName("roles");

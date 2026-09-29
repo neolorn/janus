@@ -50,15 +50,10 @@ internal sealed class ProviderAttemptRecord
 
     /// <summary>
     /// The <c>verifier</c> column: the proof key the token request presents, wrapped
-    /// under the key-encryption key, where the provider takes one.
+    /// under the deployment's data key, where the provider takes one.
     /// </summary>
     [NeverLogged]
     public byte[]? Verifier { get; set; }
-
-    /// <summary>
-    /// The <c>key_version</c> column: which version the proof key is wrapped under.
-    /// </summary>
-    public int? KeyVersion { get; set; }
 
     /// <summary>
     /// The <c>return_to</c> column: the path on this application the browser is sent

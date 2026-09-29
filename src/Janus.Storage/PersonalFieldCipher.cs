@@ -37,15 +37,16 @@ internal static class PersonalFieldCipher
     }
 
     /// <summary>
-    /// Wraps a data key under a key-encryption key.
+    /// Wraps a data key under a key-encryption key, or a value that belongs to no subject
+    /// under the deployment's data key.
     /// </summary>
-    /// <param name="dataKey">The data key.</param>
-    /// <param name="keyEncryptionKey">The key-encryption key to wrap it under.</param>
+    /// <param name="dataKey">The data key or the value.</param>
+    /// <param name="wrappingKey">The key to wrap it under.</param>
     /// <returns>The wrapped key, as it is stored.</returns>
-    public static byte[] Wrap(ReadOnlySpan<byte> dataKey, ReadOnlySpan<byte> keyEncryptionKey)
+    public static byte[] Wrap(ReadOnlySpan<byte> dataKey, ReadOnlySpan<byte> wrappingKey)
     {
         using var aes = Aes.Create();
-        byte[] material = keyEncryptionKey.ToArray();
+        byte[] material = wrappingKey.ToArray();
 
         try
         {
@@ -104,6 +105,29 @@ internal static class PersonalFieldCipher
         finally
         {
             CryptographicOperations.ZeroMemory(keyEncryptionKey);
+        }
+    }
+
+    /// <summary>
+    /// Unwraps a value wrapped under the deployment's data key (PRIV-RIGHT-005a, D-166).
+    /// </summary>
+    /// <param name="wrapped">The wrapped value as it is stored.</param>
+    /// <param name="wrappingKey">The deployment's data key.</param>
+    /// <returns>The plaintext value, to be cleared after use.</returns>
+    /// <exception cref="CryptographicException">The value does not unwrap under the key.</exception>
+    public static byte[] Unwrap(ReadOnlySpan<byte> wrapped, ReadOnlySpan<byte> wrappingKey)
+    {
+        using var aes = Aes.Create();
+        byte[] material = wrappingKey.ToArray();
+
+        try
+        {
+            aes.Key = material;
+            return aes.DecryptKeyWrapPadded(wrapped);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(material);
         }
     }
 

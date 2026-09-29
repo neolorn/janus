@@ -240,8 +240,7 @@ internal sealed class KeyRotation(
     }
 
     // What the ordered pass cannot reach: subject keys written under a previous version
-    // behind the point it had reached, and the values held wrapped beside the subject
-    // keys. Returns how many were re-wrapped.
+    // behind the point it had reached. Returns how many were re-wrapped.
     private async ValueTask<int> SweepAsync(KeyRotationProgress progress, CancellationToken cancellationToken)
     {
         int swept = 0;
@@ -255,18 +254,6 @@ internal sealed class KeyRotation(
             progress.Swept(taken);
 
             await store.RecordAsync(progress, cancellationToken).ConfigureAwait(false);
-            await work.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-            swept += taken;
-        }
-        while (taken == BatchSize);
-
-        do
-        {
-            await work.BeginAsync(cancellationToken).ConfigureAwait(false);
-
-            taken = await store.ReWrapHeldValuesAsync(BatchSize, cancellationToken).ConfigureAwait(false);
-
             await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
             swept += taken;

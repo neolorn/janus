@@ -7,8 +7,8 @@ namespace Janus.Privacy.SubjectKeys;
 
 /// <summary>
 /// What the key-encryption key's rotation reads and writes: the progress of every
-/// rotation, which the fingerprint key's shares, and every value held wrapped under a
-/// version of the key.
+/// rotation, which the fingerprint key's shares, and the subject keys, the only values
+/// wrapped under a version of the key.
 /// </summary>
 /// <remarks>
 /// Implements OPS-SEC-003, OPS-MIG-003a and CONV-DESIGN-003. Every value is unwrapped
@@ -79,14 +79,4 @@ internal interface IKeyRotationStore
     /// <param name="cancellationToken">Abandons the batch.</param>
     /// <returns>How many keys were re-wrapped.</returns>
     ValueTask<int> ReWrapRemainingSubjectKeysAsync(int count, CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Re-wraps, under the current version, the values held wrapped under another beside
-    /// the subject keys: an invitation's, a reserved mailbox's, a registration's and a
-    /// queued message's own data key, a sign-on proof, and a token signing key.
-    /// </summary>
-    /// <param name="count">How many values the batch takes at most.</param>
-    /// <param name="cancellationToken">Abandons the batch.</param>
-    /// <returns>How many values were re-wrapped.</returns>
-    ValueTask<int> ReWrapHeldValuesAsync(int count, CancellationToken cancellationToken);
 }

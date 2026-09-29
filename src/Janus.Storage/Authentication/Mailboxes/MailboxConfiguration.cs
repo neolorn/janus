@@ -45,7 +45,7 @@ internal sealed class MailboxConfiguration : IEntityTypeConfiguration<MailboxRec
                 "released_at IS NULL OR (holder IS NULL AND retired_at IS NULL)");
             table.HasCheckConstraint(
                 "ck_mailboxes_key",
-                "(holder IS NULL) = (wrapped_key IS NOT NULL) AND (wrapped_key IS NULL) = (key_version IS NULL)");
+                "(holder IS NULL) = (wrapped_key IS NOT NULL)");
         });
 
         builder.HasKey(mailbox => mailbox.Id).HasName("pk_mailboxes");
@@ -58,7 +58,6 @@ internal sealed class MailboxConfiguration : IEntityTypeConfiguration<MailboxRec
             .HasColumnName("canonicalisation_version");
 
         builder.Property(mailbox => mailbox.EncryptedCanonical).HasColumnName(CanonicalColumn);
-        builder.Property(mailbox => mailbox.KeyVersion).HasColumnName("key_version");
         builder.Property(mailbox => mailbox.WrappedKey).HasColumnName("wrapped_key");
         builder.Property(mailbox => mailbox.ReservedAt).HasColumnName("reserved_at");
 

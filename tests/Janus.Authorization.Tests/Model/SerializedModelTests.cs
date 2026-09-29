@@ -27,8 +27,9 @@ public sealed class SerializedModelTests
 
     /// <summary>
     /// OPS-MIG-003a AC2, AC4: the maintenance credential's functions and the rights it
-    /// holds on the wrapped keys, the rotation's progress and the trail are read in the
-    /// serialized model, not only in the migration that grants them.
+    /// holds on the wrapped keys, the rotation's progress, the fingerprints and the trail
+    /// are read in the serialized model, not only in the migration that grants them; no
+    /// value wrapped under the deployment's data key is among them (D-166, 316).
     /// </summary>
     [Fact]
     public void OPS_MIG_003a_AC4_TheMaintenanceGrantsAreListedInTheSerializedModel()
@@ -45,11 +46,13 @@ public sealed class SerializedModelTests
                 "TABLE identity.subject_keys",
                 "TABLE identity.key_rotations",
                 "TABLE identity.audit_records",
-                "COLUMN identity.signing_keys.private_key",
+                "COLUMN identity.identifiers.fingerprint",
             })
         {
             Assert.Contains(listed, written, StringComparison.Ordinal);
         }
+
+        Assert.DoesNotContain("COLUMN identity.signing_keys", written, StringComparison.Ordinal);
 
         Assert.Contains("\"maintenanceGrants\"", written, StringComparison.Ordinal);
     }

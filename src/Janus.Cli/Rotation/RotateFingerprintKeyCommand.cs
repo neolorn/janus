@@ -137,6 +137,7 @@ internal static class RotateFingerprintKeyCommand
             keys.KeyEncryptionKeys));
         services.AddScoped<IFingerprintRotationStore>(provider => new FingerprintRotationStore(
             provider.GetRequiredService<DataConnections>(),
+            provider.GetRequiredService<DeploymentDataKeyStore>(),
             keys.KeyEncryptionKeys,
             keys.FingerprintKeys));
         services.AddScoped(provider => new FingerprintKeyRotation(

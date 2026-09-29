@@ -963,7 +963,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         InvitationRecord kept = await reading.Invitations
             .SingleAsync(row => row.Id == standing.Id, TestContext.Current.CancellationToken);
 
-        Assert.Equal((null, null, null), (forgotten.EncryptedIdentifiers, forgotten.WrappedKey, forgotten.KeyVersion));
+        Assert.Equal((null, null), (forgotten.EncryptedIdentifiers, forgotten.WrappedKey));
         Assert.Equal((subject, inviter, organization), (forgotten.Invitee, forgotten.Inviter, forgotten.Organization));
         Assert.NotNull(kept.EncryptedIdentifiers);
     }
@@ -1041,10 +1041,10 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             TimeSpan.FromDays(7));
 
     private InvitationStore Invitations(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness);
+        new(context, _deployment.DataKey(context), _deployment.Randomness);
 
     private MailboxStore Mailboxes(StoreContext context) =>
-        new(context, _deployment.Keys, Deployment.FingerprintKeys, _deployment.Randomness);
+        new(context, _deployment.DataKey(context), _deployment.Keys, Deployment.FingerprintKeys, _deployment.Randomness);
 
     // The deployment's own records, which the library neither maps nor writes: a
     // record names its subject and outlives the subject's erasure (PRIV-RIGHT-005).
@@ -1175,6 +1175,31 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             .SingleAsync(photo => photo.Subject == subject, TestContext.Current.CancellationToken);
 
         return record.Image ?? [];
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a: the deployment's data key stands under the one identifier no
+    /// subject is issued, and an erasure naming it is refused with the key as it was.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_ErasureNeverTouchesTheDeploymentDataKeyAsync()
+    {
+        byte[] deploymentKey;
+
+        await using (StoreContext writing = database.Context())
+        {
+            deploymentKey = await _deployment.DataKey(writing).UnwrappedAsync(TestContext.Current.CancellationToken);
+        }
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await EraseAsync(DeploymentDataKeyStore.Subject, ErasureReason.ErasureRequest));
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(
+            deploymentKey,
+            await _deployment.DataKey(reading).UnwrappedAsync(TestContext.Current.CancellationToken));
     }
 
     private async ValueTask EraseAsync(SubjectId subject, ErasureReason reason)

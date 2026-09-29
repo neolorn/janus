@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Oidc;
 using Janus.Core;
-using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Oidc;
@@ -14,15 +15,15 @@ namespace Janus.Storage.Authentication.Oidc;
 /// The token signing keys, over the <c>signing_keys</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <param name="keyEncryptionKeys">The versions the private material is wrapped under.</param>
+/// <param name="deployment">The deployment's data key, which the private material is wrapped under.</param>
 /// <remarks>
-/// Implements AUTH-KEY-001, AUTH-KEY-002 and CONV-DESIGN-003. The private material is
-/// wrapped on the way in and unwrapped for the one caller that signs with it, so it is
-/// at rest under the key-encryption key and nowhere else.
+/// Implements AUTH-KEY-001, AUTH-KEY-002, PRIV-RIGHT-005a and CONV-DESIGN-003. The
+/// private material is wrapped on the way in and unwrapped for the one caller that
+/// signs with it, so it is at rest under the deployment's data key and nowhere else.
 /// </remarks>
 internal sealed class SigningKeyStore(
     StoreContext context,
-    KeyEncryptionKeys keyEncryptionKeys) : ISigningKeyStore
+    DeploymentDataKeyStore deployment) : ISigningKeyStore
 {
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<SigningKey>> PublishedAsync(
@@ -46,13 +47,21 @@ internal sealed class SigningKeyStore(
     {
         SigningKeyRecord? record = await HeldAsync(keyId, cancellationToken).ConfigureAwait(false);
 
-        return record is null
-            ? null
-            : PersonalFieldCipher.Unwrap(
-                PersonalDataFormat.Marker,
-                record.KeyVersion,
-                record.PrivateKey,
-                keyEncryptionKeys);
+        if (record is null)
+        {
+            return null;
+        }
+
+        byte[] deploymentKey = await deployment.UnwrappedAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            return PersonalFieldCipher.Unwrap(record.PrivateKey, deploymentKey);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(deploymentKey);
+        }
     }
 
     /// <inheritdoc/>
@@ -64,21 +73,29 @@ internal sealed class SigningKeyStore(
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(privateKey);
 
-        await context.SigningKeys
-            .AddAsync(
-                new SigningKeyRecord
-                {
-                    KeyId = key.KeyId,
-                    Algorithm = key.Algorithm,
-                    PublicKey = key.PublicKey,
-                    PrivateKey = PersonalFieldCipher.Wrap(privateKey, keyEncryptionKeys.Current.Span),
-                    KeyVersion = keyEncryptionKeys.CurrentVersion,
-                    CreatedAt = key.CreatedAt,
-                    SupersededAt = key.SupersededAt,
-                    RetiresAt = key.RetiresAt,
-                },
-                cancellationToken)
-            .ConfigureAwait(false);
+        byte[] deploymentKey = await deployment.UnwrappedAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            await context.SigningKeys
+                .AddAsync(
+                    new SigningKeyRecord
+                    {
+                        KeyId = key.KeyId,
+                        Algorithm = key.Algorithm,
+                        PublicKey = key.PublicKey,
+                        PrivateKey = PersonalFieldCipher.Wrap(privateKey, deploymentKey),
+                        CreatedAt = key.CreatedAt,
+                        SupersededAt = key.SupersededAt,
+                        RetiresAt = key.RetiresAt,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(deploymentKey);
+        }
     }
 
     /// <inheritdoc/>

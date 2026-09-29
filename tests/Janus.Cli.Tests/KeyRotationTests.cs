@@ -126,77 +126,70 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
     }
 
     /// <summary>
-    /// OPS-SEC-003 AC3: once the rotation retires the previous version, no value the
-    /// library holds is wrapped under it, the ones held beside the subject keys
-    /// included, and each reads under the new version as it did under the old.
+    /// OPS-SEC-003 AC3, PRIV-RIGHT-005a AC13 and AC16: once the rotation retires the
+    /// previous version, no row of the subject-key table is wrapped under it, the
+    /// deployment's data key among them, and every value that belongs to no subject
+    /// reads under that key as it did before (D-166, 316).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_SEC_003_AC3_AfterRetirementNoValueIsWrappedUnderThePreviousVersionAsync()
+    public async Task OPS_SEC_003_AC3_AfterRetirementEveryValueOfNoSubjectStillReadsAsync()
     {
         await using NpgsqlConnection connection = await ResetAsync();
         IReadOnlyDictionary<Guid, byte[]> seeded = await SeedAsync(connection, 3);
+        byte[] deploymentKey = await DeploymentKeyAsync(connection);
         byte[] signing = RandomNumberGenerator.GetBytes(121);
         byte[] message = RandomNumberGenerator.GetBytes(32);
 
         await connection.ExecuteAsync(
             """
-            INSERT INTO identity.signing_keys (key_id, algorithm, public_key, private_key, key_version, created_at)
-            VALUES ('k1', 'ES256', '\x00', @wrapped, 1, now());
+            INSERT INTO identity.signing_keys (key_id, algorithm, public_key, private_key, created_at)
+            VALUES ('k1', 'ES256', '\x00', @signing, now());
+            INSERT INTO identity.send_outbox (id, recorded_at, wrapped_key, enc_message)
+            VALUES (gen_random_uuid(), now(), @message, '\x00');
             """,
-            new { wrapped = Wrapped(signing, Previous) });
-        await connection.ExecuteAsync(
-            """
-            INSERT INTO identity.send_outbox (id, recorded_at, key_version, wrapped_key, enc_message)
-            VALUES (gen_random_uuid(), now(), 1, @wrapped, '\x00');
-            """,
-            new { wrapped = Wrapped(message, Previous) });
+            new { signing = Wrapped(signing, deploymentKey), message = Wrapped(message, deploymentKey) });
 
         Assert.Equal(0, (await Invocation.PipedAsync([Command], Rotating())).ExitCode);
         Assert.Equal(0, (await Invocation.PipedAsync([Command, Sealed], Rotating())).ExitCode);
 
-        Assert.Equal(
-            [2],
-            await connection.QueryAsync<int>(
-                """
-                SELECT key_version FROM identity.subject_keys
-                UNION SELECT key_version FROM identity.signing_keys
-                UNION SELECT key_version FROM identity.send_outbox
-                """));
+        Assert.Equal([2], await connection.QueryAsync<int>("SELECT DISTINCT key_version FROM identity.subject_keys"));
         Assert.Equal(
             signing,
-            Unwrapped(await connection.QuerySingleAsync<byte[]>("SELECT private_key FROM identity.signing_keys"), Next));
+            Unwrapped(await connection.QuerySingleAsync<byte[]>("SELECT private_key FROM identity.signing_keys"), deploymentKey));
         Assert.Equal(
             message,
-            Unwrapped(await connection.QuerySingleAsync<byte[]>("SELECT wrapped_key FROM identity.send_outbox"), Next));
+            Unwrapped(await connection.QuerySingleAsync<byte[]>("SELECT wrapped_key FROM identity.send_outbox"), deploymentKey));
 
         foreach ((Guid subject, byte[] wrapped) in await WrappedUnderAsync(connection, 2))
         {
-            Assert.Equal(seeded[subject], Unwrapped(wrapped, Next));
+            Assert.Equal(subject == Guid.Empty ? deploymentKey : seeded[subject], Unwrapped(wrapped, Next));
         }
     }
 
     /// <summary>
     /// OPS-SEC-003 AC3 and IDN-LIFE-012: the proof key a round trip to a social provider
-    /// holds while the browser is away is wrapped under the key-encryption key too, so
-    /// it is re-wrapped with the rest and reads under the new version as it did before.
+    /// holds while the browser is away is under the deployment's data key, so the
+    /// rotation leaves it where it is and it reads after the retirement as it did
+    /// before (D-166, 316).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_SEC_003_AC3_AProofKeyInFlightIsReWrappedAsync()
+    public async Task OPS_SEC_003_AC3_AProofKeyInFlightStillReadsAfterRetirementAsync()
     {
         await using NpgsqlConnection connection = await ResetAsync();
+        byte[] deploymentKey = await DeploymentKeyAsync(connection);
         byte[] verifier = RandomNumberGenerator.GetBytes(43);
         byte[] browser = RandomNumberGenerator.GetBytes(32);
+        byte[] wrapped = Wrapped(verifier, deploymentKey);
 
-        _ = await SeedAsync(connection, 1);
         await connection.ExecuteAsync(
             """
             INSERT INTO identity.preauthentication_sessions (fingerprint, csrf_fingerprint, created_at, expires_at)
             VALUES (@browser, @csrf, now(), now() + interval '1 hour');
             INSERT INTO identity.provider_attempts
-                (id, preauthentication, provider, intent, state, nonce, verifier, key_version, return_to, created_at)
-            VALUES (gen_random_uuid(), @browser, 'google', 'signin', @state, @nonce, @wrapped, 1, '/', now());
+                (id, preauthentication, provider, intent, state, nonce, verifier, return_to, created_at)
+            VALUES (gen_random_uuid(), @browser, 'google', 'signin', @state, @nonce, @wrapped, '/', now());
             """,
             new
             {
@@ -204,18 +197,83 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
                 csrf = RandomNumberGenerator.GetBytes(32),
                 state = RandomNumberGenerator.GetBytes(32),
                 nonce = RandomNumberGenerator.GetBytes(32),
-                wrapped = Wrapped(verifier, Previous),
+                wrapped,
             });
 
         Assert.Equal(0, (await Invocation.PipedAsync([Command], Rotating())).ExitCode);
         Assert.Equal(0, (await Invocation.PipedAsync([Command, Sealed], Rotating())).ExitCode);
 
+        byte[] held = await connection.QuerySingleAsync<byte[]>("SELECT verifier FROM identity.provider_attempts");
+
+        Assert.Equal(wrapped, held);
+        Assert.Equal(verifier, Unwrapped(held, deploymentKey));
+    }
+
+    /// <summary>
+    /// OPS-SEC-003, OPS-MIG-003a AC4: the rotation writes to the subject-key table and to
+    /// its own progress, appends to the trail (AC5), and leaves every other table as it
+    /// found it, whatever those hold under the deployment's data key (D-166, 316).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_003_ARotationTouchesNoTableButTheSubjectKeysAndItsProgressAsync()
+    {
+        await using NpgsqlConnection connection = await ResetAsync();
+        await SeedAsync(connection, 3);
+        byte[] deploymentKey = await DeploymentKeyAsync(connection);
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO identity.signing_keys (key_id, algorithm, public_key, private_key, created_at)
+            VALUES ('k1', 'ES256', '\x00', @wrapped, now());
+            """,
+            new { wrapped = Wrapped(RandomNumberGenerator.GetBytes(121), deploymentKey) });
+
+        IReadOnlyList<(string Table, string? Digest)> before = await TablesAsync(connection);
+
+        Assert.Equal(0, (await Invocation.PipedAsync([Command], Rotating())).ExitCode);
+        Assert.Equal(0, (await Invocation.PipedAsync([Command, Sealed], Rotating())).ExitCode);
+
+        Assert.Equal(before, await TablesAsync(connection));
+    }
+
+    /// <summary>
+    /// OPS-SEC-003, PRIV-RIGHT-005a: a key rewritten at the same version between the
+    /// rotation's read and its write is not overwritten with what the rotation read; the
+    /// rotation finds it again and re-wraps the value that stands (D-166, 316).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_003_ARotationDoesNotOverwriteAKeyRewrittenAtTheSameVersionAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using NpgsqlConnection connection = await ResetAsync();
+        Guid subject = (await SeedAsync(connection, 1)).Keys.Single();
+        byte[] rewritten = RandomNumberGenerator.GetBytes(32);
+
+        // The row is held by another transaction, so the run reads it and waits on it
+        // with its write; the holder rewrites it at the same version meanwhile.
+        await using NpgsqlConnection holder = await database.OpenAsync();
+        await using NpgsqlTransaction holding = await holder.BeginTransactionAsync(cancellationToken);
+        await holder.ExecuteAsync(
+            "UPDATE identity.subject_keys SET wrapped_key = @wrapped WHERE subject = @subject",
+            new { subject, wrapped = Wrapped(rewritten, Previous) },
+            holding);
+
+        Task<Invocation> run = Invocation.PipedAsync([Command], Rotating());
+
+        await WaitingAsync(connection);
+        await holding.CommitAsync(cancellationToken);
+
+        Assert.Equal(0, (await run).ExitCode);
         Assert.Equal(
-            2,
-            await connection.QuerySingleAsync<int>("SELECT key_version FROM identity.provider_attempts"));
-        Assert.Equal(
-            verifier,
-            Unwrapped(await connection.QuerySingleAsync<byte[]>("SELECT verifier FROM identity.provider_attempts"), Next));
+            rewritten,
+            Unwrapped(
+                await connection.QuerySingleAsync<byte[]>(
+                    "SELECT wrapped_key FROM identity.subject_keys WHERE subject = @subject AND key_version = 2",
+                    new { subject }),
+                Next));
     }
 
     /// <summary>
@@ -378,15 +436,16 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
     {
         await using NpgsqlConnection connection = await ResetAsync();
         await SeedAsync(connection, 3);
+        byte[] deploymentKey = await DeploymentKeyAsync(connection);
         byte[] message = RandomNumberGenerator.GetBytes(32);
         byte[] ciphertext = RandomNumberGenerator.GetBytes(64);
 
         await connection.ExecuteAsync(
             """
-            INSERT INTO identity.send_outbox (id, recorded_at, key_version, wrapped_key, enc_message)
-            VALUES (gen_random_uuid(), now(), 1, @wrapped, @ciphertext);
+            INSERT INTO identity.send_outbox (id, recorded_at, wrapped_key, enc_message)
+            VALUES (gen_random_uuid(), now(), @wrapped, @ciphertext);
             """,
-            new { wrapped = Wrapped(message, Previous), ciphertext });
+            new { wrapped = Wrapped(message, deploymentKey), ciphertext });
 
         IReadOnlyList<(string Column, string? Digest)> before = await CiphertextsAsync(connection);
 
@@ -397,7 +456,7 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
         Assert.Equal(ciphertext, await connection.QuerySingleAsync<byte[]>("SELECT enc_message FROM identity.send_outbox"));
         Assert.Equal(
             message,
-            Unwrapped(await connection.QuerySingleAsync<byte[]>("SELECT wrapped_key FROM identity.send_outbox"), Next));
+            Unwrapped(await connection.QuerySingleAsync<byte[]>("SELECT wrapped_key FROM identity.send_outbox"), deploymentKey));
     }
 
     /// <summary>
@@ -479,18 +538,61 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
         return digests;
     }
 
-    private static byte[] Wrapped(byte[] value, byte[] keyEncryptionKey)
+    // A digest of every table of the library's schema but the subject keys, the
+    // rotation's progress and the trail, by its name.
+    private static async Task<IReadOnlyList<(string Table, string? Digest)>> TablesAsync(NpgsqlConnection connection)
+    {
+        IReadOnlyList<string> tables = [.. await connection.QueryAsync<string>(
+            """
+            SELECT table_name FROM information_schema.tables
+            WHERE table_schema = 'identity' AND table_type = 'BASE TABLE'
+              AND table_name NOT IN ('subject_keys', 'key_rotations')
+              AND table_name NOT LIKE 'audit\_records%'
+            ORDER BY table_name
+            """)];
+
+        var digests = new List<(string, string?)>(tables.Count);
+
+        foreach (string table in tables)
+        {
+            digests.Add((
+                table,
+                await connection.ExecuteScalarAsync<string?>(
+                    $"SELECT md5(string_agg(held::text, ',' ORDER BY held::text)) FROM identity.{table} AS held")));
+        }
+
+        return digests;
+    }
+
+    // The deployment's data key, as the application writes it the first time a value of
+    // no subject needs it: a row of the subject-key table under the nil subject, wrapped
+    // under the previous version.
+    private static async Task<byte[]> DeploymentKeyAsync(NpgsqlConnection connection)
+    {
+        byte[] deploymentKey = RandomNumberGenerator.GetBytes(32);
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO identity.subject_keys (subject, format_marker, key_version, wrapped_key)
+            VALUES (@nil, 1, 1, @wrapped);
+            """,
+            new { nil = Guid.Empty, wrapped = Wrapped(deploymentKey, Previous) });
+
+        return deploymentKey;
+    }
+
+    private static byte[] Wrapped(byte[] value, byte[] wrappingKey)
     {
         using var aes = Aes.Create();
-        aes.Key = keyEncryptionKey;
+        aes.Key = wrappingKey;
 
         return aes.EncryptKeyWrapPadded(value);
     }
 
-    private static byte[] Unwrapped(byte[] wrapped, byte[] keyEncryptionKey)
+    private static byte[] Unwrapped(byte[] wrapped, byte[] wrappingKey)
     {
         using var aes = Aes.Create();
-        aes.Key = keyEncryptionKey;
+        aes.Key = wrappingKey;
 
         return aes.DecryptKeyWrapPadded(wrapped);
     }
@@ -523,6 +625,18 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
             WHERE action LIKE 'ops.keyrotation.%'
             ORDER BY occurred_at, id
             """)];
+
+    // Waits until the running command waits on a row another transaction holds.
+    private static async Task WaitingAsync(NpgsqlConnection connection)
+    {
+        using var patience = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        patience.CancelAfter(TimeSpan.FromSeconds(60));
+
+        while (await connection.ExecuteScalarAsync<int>("SELECT count(*)::int FROM pg_locks WHERE NOT granted") == 0)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(50), patience.Token);
+        }
+    }
 
     // Waits until the running command has committed the given count.
     private static async Task ProcessedAsync(NpgsqlConnection connection, int processed)

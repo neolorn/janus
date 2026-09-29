@@ -61,5 +61,5 @@ public sealed class RegistrationSessionStoreTests(DatabaseFixture database) : IC
             TimeSpan.FromHours(24));
 
     private RegistrationSessionStore Store(StoreContext context) =>
-        new(context, new DataConnections(context), _deployment.Keys, _deployment.Randomness);
+        new(context, new DataConnections(context), _deployment.DataKey(context), _deployment.Randomness);
 }

@@ -17,7 +17,8 @@ namespace Janus.Storage.Authentication.Mailboxes;
 /// The mailboxes the library provisions, over the <c>mailboxes</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <param name="keyEncryptionKeys">The versions a data key may be wrapped under.</param>
+/// <param name="deployment">The deployment's data key, which a reserved row's own key is wrapped under.</param>
+/// <param name="keyEncryptionKeys">The versions a holder's subject key may be wrapped under.</param>
 /// <param name="fingerprintKeys">The versions the address's fingerprint is computed under.</param>
 /// <param name="randomness">The randomness the keys and the vectors are drawn from.</param>
 /// <remarks>
@@ -26,12 +27,14 @@ namespace Janus.Storage.Authentication.Mailboxes;
 /// the account's state and its memberships of the administrative organization, so the
 /// state owed is never a copy that could lag. The address is the holder's personal
 /// field, under the holder's key, so erasing the holder leaves it unreadable where it
-/// is; while nobody holds the mailbox it is under a key of the row's own. A row whose
+/// is; while nobody holds the mailbox it is under a key of the row's own, wrapped under
+/// the deployment's data key. A row whose
 /// holder was erased is not read at all. An address is found under each version of the
 /// fingerprint key held (OPS-SEC-003).
 /// </remarks>
 internal sealed class MailboxStore(
     StoreContext context,
+    DeploymentDataKeyStore deployment,
     KeyEncryptionKeys keyEncryptionKeys,
     FingerprintKeys fingerprintKeys,
     RandomNumberGenerator randomness) : IMailboxStore
@@ -57,16 +60,10 @@ internal sealed class MailboxStore(
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var standing = new List<MailboxStanding>(rows.Count);
+        IReadOnlyList<Mailbox> mailboxes = await ReadAsync([.. rows.Select(row => row.Row)], cancellationToken)
+            .ConfigureAwait(false);
 
-        foreach (var row in rows)
-        {
-            standing.Add(new MailboxStanding(
-                await ReadAsync(row.Row, cancellationToken).ConfigureAwait(false),
-                row.Stands));
-        }
-
-        return standing;
+        return [.. mailboxes.Zip(rows, (mailbox, row) => new MailboxStanding(mailbox, row.Stands))];
     }
 
     /// <inheritdoc/>
@@ -158,12 +155,14 @@ internal sealed class MailboxStore(
             byte[] dataKey = mailbox.Holder is SubjectId holder
                 ? await HolderKeyAsync(holder, cancellationToken).ConfigureAwait(false)
                 : PersonalFieldCipher.NewDataKey(randomness);
+            byte[] deploymentKey = mailbox.Holder is null
+                ? await deployment.UnwrappedAsync(cancellationToken).ConfigureAwait(false)
+                : [];
 
             try
             {
-                record.KeyVersion = mailbox.Holder is null ? keyEncryptionKeys.CurrentVersion : null;
                 record.WrappedKey = mailbox.Holder is null
-                    ? PersonalFieldCipher.Wrap(dataKey, keyEncryptionKeys.Current.Span)
+                    ? PersonalFieldCipher.Wrap(dataKey, deploymentKey)
                     : null;
                 record.EncryptedCanonical = PersonalFieldCipher.Encrypt(
                     dataKey,
@@ -174,6 +173,7 @@ internal sealed class MailboxStore(
             finally
             {
                 CryptographicOperations.ZeroMemory(dataKey);
+                CryptographicOperations.ZeroMemory(deploymentKey);
             }
         }
 
@@ -188,15 +188,46 @@ internal sealed class MailboxStore(
         record.FailedAt = mailbox.FailedAt;
     }
 
-    private async ValueTask<Mailbox> ReadAsync(MailboxRecord record, CancellationToken cancellationToken)
+    private async ValueTask<Mailbox> ReadAsync(MailboxRecord record, CancellationToken cancellationToken) =>
+        (await ReadAsync([record], cancellationToken).ConfigureAwait(false))[0];
+
+    // PRIV-RIGHT-005a: the deployment's data key is unwrapped once for every row the
+    // read returns, and only where one of them is reserved for nobody.
+    private async ValueTask<IReadOnlyList<Mailbox>> ReadAsync(
+        IReadOnlyList<MailboxRecord> records,
+        CancellationToken cancellationToken)
+    {
+        byte[] deploymentKey = records.Any(record => record.Holder is null)
+            ? await deployment.UnwrappedAsync(cancellationToken).ConfigureAwait(false)
+            : [];
+
+        try
+        {
+            var mailboxes = new List<Mailbox>(records.Count);
+
+            foreach (MailboxRecord record in records)
+            {
+                mailboxes.Add(await ReadAsync(record, deploymentKey, cancellationToken).ConfigureAwait(false));
+            }
+
+            return mailboxes;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(deploymentKey);
+        }
+    }
+
+    private async ValueTask<Mailbox> ReadAsync(
+        MailboxRecord record,
+        byte[] deploymentKey,
+        CancellationToken cancellationToken)
     {
         byte[] dataKey = record.Holder is SubjectId holder
             ? await HolderKeyAsync(holder, cancellationToken).ConfigureAwait(false)
             : PersonalFieldCipher.Unwrap(
-                PersonalDataFormat.Marker,
-                record.KeyVersion ?? throw new InvalidOperationException("The mailbox has no key."),
                 record.WrappedKey ?? throw new InvalidOperationException("The mailbox has no key."),
-                keyEncryptionKeys);
+                deploymentKey);
 
         try
         {

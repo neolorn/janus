@@ -17,6 +17,7 @@ namespace Janus.Storage.Privacy.SubjectKeys;
 /// The fingerprint key's rotation over every column that holds a keyed fingerprint.
 /// </summary>
 /// <param name="connections">Where the statements take their connection from.</param>
+/// <param name="deployment">The deployment's data key, which a reserved mailbox's own key is wrapped under.</param>
 /// <param name="keyEncryptionKeys">The versions the values' keys are wrapped under.</param>
 /// <param name="fingerprintKeys">The versions the command was handed, the new one current.</param>
 /// <remarks>
@@ -30,6 +31,7 @@ namespace Janus.Storage.Privacy.SubjectKeys;
 /// </remarks>
 internal sealed class FingerprintRotationStore(
     DataConnections connections,
+    DeploymentDataKeyStore deployment,
     KeyEncryptionKeys keyEncryptionKeys,
     FingerprintKeys fingerprintKeys) : IFingerprintRotationStore
 {
@@ -59,7 +61,7 @@ internal sealed class FingerprintRotationStore(
 
     private const string Mailboxes =
         """
-        SELECT id, holder, fingerprint_version, fingerprint, enc_canonical, key_version, wrapped_key
+        SELECT id, holder, fingerprint_version, fingerprint, enc_canonical, wrapped_key
         FROM identity.mailboxes
         WHERE fingerprint_version <> @current AND fingerprint <> @neutral
         ORDER BY id
@@ -325,8 +327,9 @@ internal sealed class FingerprintRotationStore(
     }
 
     // The mailboxes' addresses: under the holder's key while the mailbox is held, under
-    // the row's own otherwise. One whose holder was erased has a neutralised fingerprint
-    // and is not read.
+    // the row's own otherwise, wrapped under the deployment's data key, which is unwrapped
+    // once for the batch. One whose holder was erased has a neutralised fingerprint and
+    // is not read.
     private async ValueTask<int> RecomputedMailboxesAsync(int count, CancellationToken cancellationToken)
     {
         if (count == 0)
@@ -336,27 +339,46 @@ internal sealed class FingerprintRotationStore(
 
         AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
 
-        IEnumerable<(Guid Id, Guid? Holder, int Version, byte[] Fingerprint, byte[] Value, int? KeyVersion, byte[]? WrappedKey)> rows =
-            await ambient.Connection
-                .QueryAsync<(Guid, Guid?, int, byte[], byte[], int?, byte[]?)>(new CommandDefinition(
+        List<(Guid Id, Guid? Holder, int Version, byte[] Fingerprint, byte[] Value, byte[]? WrappedKey)> rows =
+        [
+            .. await ambient.Connection
+                .QueryAsync<(Guid, Guid?, int, byte[], byte[], byte[]?)>(new CommandDefinition(
                     Mailboxes,
                     new { current = fingerprintKeys.CurrentVersion, neutral = Neutral, count },
                     ambient.Transaction,
                     cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                .ConfigureAwait(false),
+        ];
 
+        byte[] deploymentKey = rows.Exists(mailbox => mailbox.Holder is null)
+            ? await deployment.UnwrappedAsync(cancellationToken).ConfigureAwait(false)
+            : [];
+
+        try
+        {
+            return await RecomputedMailboxesAsync(rows, deploymentKey, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(deploymentKey);
+        }
+    }
+
+    private async ValueTask<int> RecomputedMailboxesAsync(
+        List<(Guid Id, Guid? Holder, int Version, byte[] Fingerprint, byte[] Value, byte[]? WrappedKey)> rows,
+        byte[] deploymentKey,
+        CancellationToken cancellationToken)
+    {
         int recomputed = 0;
 
-        foreach ((Guid Id, Guid? Holder, int Version, byte[] Fingerprint, byte[] Value, int? KeyVersion, byte[]? WrappedKey) mailbox
+        foreach ((Guid Id, Guid? Holder, int Version, byte[] Fingerprint, byte[] Value, byte[]? WrappedKey) mailbox
             in rows)
         {
             byte[] dataKey = mailbox.Holder is Guid held
                 ? await HolderKeyAsync(new SubjectId(held), cancellationToken).ConfigureAwait(false)
                 : PersonalFieldCipher.Unwrap(
-                    PersonalDataFormat.Marker,
-                    mailbox.KeyVersion ?? throw new InvalidOperationException("The mailbox has no key."),
                     mailbox.WrappedKey ?? throw new InvalidOperationException("The mailbox has no key."),
-                    keyEncryptionKeys);
+                    deploymentKey);
 
             try
             {

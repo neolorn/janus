@@ -8,8 +8,8 @@ namespace Janus.Authentication.Oidc;
 
 /// <summary>
 /// Where the token signing keys are held. The private material is wrapped under the
-/// deployment's key-encryption key and is handed back only to the one caller that
-/// signs with it (AUTH-KEY-002).
+/// deployment's data key and is handed back only to the one caller that signs with it
+/// (AUTH-KEY-002, PRIV-RIGHT-005a).
 /// </summary>
 internal interface ISigningKeyStore
 {

@@ -40,7 +40,6 @@ internal sealed class RegistrationSessionConfiguration
             .HasConversion(subject => subject.Value, value => new SubjectId(value));
 
         builder.Property(session => session.ExpiresAt).HasColumnName("expires_at");
-        builder.Property(session => session.KeyVersion).HasColumnName("key_version");
         builder.Property(session => session.WrappedKey).HasColumnName("wrapped_key");
         builder.Property(session => session.Session).HasColumnName(SessionColumn);
 

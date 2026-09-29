@@ -12,7 +12,7 @@ namespace Janus.Authentication.Sessions;
 /// </param>
 /// <param name="Verifier">
 /// The proof key the token request presents, which never leaves this server and is at
-/// rest under the key-encryption key.
+/// rest under the deployment's data key.
 /// </param>
 /// <param name="ReturnTo">
 /// The path on this application the browser was going to, which it is sent back to

@@ -222,5 +222,5 @@ public sealed class SendOutboxTests(DatabaseFixture database)
     }
 
     private SendDeliveryStore Outbox(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness);
+        new(context, _deployment.DataKey(context), _deployment.Randomness);
 }

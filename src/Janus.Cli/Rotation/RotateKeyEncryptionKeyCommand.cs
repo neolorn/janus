@@ -14,9 +14,10 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Janus.Cli.Rotation;
 
 /// <summary>
-/// The <c>rotate-kek</c> command: re-wraps every value held under the key-encryption key
-/// under its current version and prints that version's escrow copy, or, given
-/// <c>--sealed</c> once the copy is sealed, retires the versions before it.
+/// The <c>rotate-kek</c> command: re-wraps every row of the subject-key table, the only
+/// values held under the key-encryption key, under its current version and prints that
+/// version's escrow copy, or, given <c>--sealed</c> once the copy is sealed, retires the
+/// versions before it.
 /// </summary>
 /// <remarks>
 /// Implements OPS-SEC-003, DR-009, DR-009a and OPS-SEC-001, as entries 316 and 317 of the

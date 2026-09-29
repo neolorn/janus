@@ -42,13 +42,8 @@ internal sealed class MailboxRecord
     public byte[] EncryptedCanonical { get; set; } = [];
 
     /// <summary>
-    /// The <c>key_version</c> column: the key-encryption key the row's own key is
-    /// wrapped under, while nobody holds the mailbox.
-    /// </summary>
-    public int? KeyVersion { get; set; }
-
-    /// <summary>
-    /// The <c>wrapped_key</c> column: the row's own key, while nobody holds the mailbox.
+    /// The <c>wrapped_key</c> column: the row's own key, wrapped under the deployment's
+    /// data key, while nobody holds the mailbox.
     /// </summary>
     public byte[]? WrappedKey { get; set; }
 

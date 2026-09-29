@@ -28,12 +28,9 @@ internal sealed class InvitationRecord
     public byte[] Token { get; set; } = [];
 
     /// <summary>
-    /// The <c>key_version</c> column: the key-encryption key version the data key is
-    /// wrapped under, while the identifiers are kept.
+    /// The <c>wrapped_key</c> column: the row's data key, wrapped under the deployment's
+    /// data key, while the identifiers are kept.
     /// </summary>
-    public int? KeyVersion { get; set; }
-
-    /// <summary>The <c>wrapped_key</c> column: the row's data key, wrapped.</summary>
     public byte[]? WrappedKey { get; set; }
 
     /// <summary>The <c>enc_identifiers</c> column: what the invitation binds.</summary>

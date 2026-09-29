@@ -24,8 +24,6 @@ internal sealed class SigningKeyConfiguration : IEntityTypeConfiguration<Signing
 
         builder.ToTable(Table, table =>
         {
-            table.HasCheckConstraint("ck_signing_keys_version", "key_version >= 1");
-
             // AUTH-KEY-001: a key stops signing and leaves the published set together,
             // so the one that is still signing carries neither moment.
             table.HasCheckConstraint(
@@ -40,14 +38,10 @@ internal sealed class SigningKeyConfiguration : IEntityTypeConfiguration<Signing
         builder.Property(key => key.Algorithm).HasColumnName("algorithm");
         builder.Property(key => key.PublicKey).HasColumnName("public_key");
         builder.Property(key => key.PrivateKey).HasColumnName("private_key");
-        builder.Property(key => key.KeyVersion).HasColumnName("key_version");
         builder.Property(key => key.CreatedAt).HasColumnName("created_at");
         builder.Property(key => key.SupersededAt).HasColumnName("superseded_at");
         builder.Property(key => key.RetiresAt).HasColumnName("retires_at");
 
         builder.HasIndex(key => key.RetiresAt).HasDatabaseName("ix_signing_keys_retires_at");
-
-        // OPS-SEC-003: the re-wrap reads the keys still under the previous version.
-        builder.HasIndex(key => key.KeyVersion).HasDatabaseName("ix_signing_keys_key_version");
     }
 }

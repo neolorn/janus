@@ -64,6 +64,13 @@ internal sealed class SubjectEraser(
         Action<Account> erased,
         CancellationToken cancellationToken)
     {
+        // PRIV-RIGHT-005a: the deployment's data key stands under an identifier no subject
+        // is issued, and erasure never touches it.
+        if (subject == DeploymentDataKeyStore.Subject)
+        {
+            throw new InvalidOperationException("The deployment's data key belongs to no subject.");
+        }
+
         if (await context.Erasures.FindAsync([subject], cancellationToken).ConfigureAwait(false)
             is not null)
         {
@@ -244,7 +251,6 @@ internal sealed class SubjectEraser(
 
         foreach (InvitationRecord invitation in invitations)
         {
-            invitation.KeyVersion = null;
             invitation.WrappedKey = null;
             invitation.EncryptedIdentifiers = null;
         }

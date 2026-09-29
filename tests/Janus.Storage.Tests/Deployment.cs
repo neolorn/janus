@@ -20,8 +20,9 @@ namespace Janus.Storage.Tests;
 /// </summary>
 /// <param name="database">The database the subjects are written to.</param>
 /// <remarks>
-/// One of these belongs to one test, which is one class instance, so what a test writes
-/// is unreadable to every other test.
+/// One of these belongs to one test, which is one class instance. The tests of a class
+/// share the database and so its key-encryption key, since the deployment's data key is
+/// one row of it; each test reads only the rows it wrote.
 /// </remarks>
 internal sealed class Deployment(DatabaseFixture database) : IDisposable
 {
@@ -54,9 +55,7 @@ internal sealed class Deployment(DatabaseFixture database) : IDisposable
         {
             if (_versions.Count == 0)
             {
-                byte[] material = new byte[PersonalDataFormat.DataKeyLength];
-                _randomness.GetBytes(material);
-                _versions[1] = material;
+                _versions[1] = database.KeyEncryptionKey;
             }
 
             return _versions;
@@ -129,6 +128,14 @@ internal sealed class Deployment(DatabaseFixture database) : IDisposable
 
         return organization;
     }
+
+    /// <summary>
+    /// The deployment's data key, over the context's connection and transaction.
+    /// </summary>
+    /// <param name="context">The context the operation runs in.</param>
+    /// <returns>The key.</returns>
+    public DeploymentDataKeyStore DataKey(StoreContext context) =>
+        new(new DataConnections(context), Keys, _randomness);
 
     /// <summary>
     /// Destroys a subject's data key, as the erasure transaction does.

@@ -12217,6 +12217,8 @@ key rather than the subject keys alone, and say what becomes of tokens protected
 a derived key; OPS-MIG-003a AC4 could list the column rights on the six tables and the
 append to the trail beside the subject-key and progress tables.
 
+**Superseded by D-166.**
+
 ---
 
 ## 317. How a key-encryption key rotation starts, is confirmed and retires

@@ -7,7 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Sending;
 using Janus.Core;
-using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Sending;
@@ -16,7 +16,7 @@ namespace Janus.Storage.Authentication.Sending;
 /// The messages undertaken but not yet carried in full, over the <c>send_outbox</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <param name="keyEncryptionKeys">The versions a data key may be wrapped under.</param>
+/// <param name="deployment">The deployment's data key, which the row's own key is wrapped under.</param>
 /// <param name="randomness">The randomness the key and the vectors are drawn from.</param>
 /// <remarks>
 /// Implements D-022, INF-BG-001, IDN-PRIN-003 and PRIV-RIGHT-005a. The whole message is
@@ -25,7 +25,7 @@ namespace Janus.Storage.Authentication.Sending;
 /// </remarks>
 internal sealed class SendDeliveryStore(
     StoreContext context,
-    KeyEncryptionKeys keyEncryptionKeys,
+    DeploymentDataKeyStore deployment,
     RandomNumberGenerator randomness) : ISendOutbox
 {
     /// <inheritdoc/>
@@ -35,6 +35,7 @@ internal sealed class SendDeliveryStore(
         ArgumentNullException.ThrowIfNull(delivery);
 
         byte[] dataKey = PersonalFieldCipher.NewDataKey(randomness);
+        byte[] deploymentKey = await deployment.UnwrappedAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -43,8 +44,7 @@ internal sealed class SendDeliveryStore(
                 Id = delivery.Id,
                 RecordedAt = delivery.RecordedAt,
                 Subject = delivery.Requested.Subject,
-                KeyVersion = keyEncryptionKeys.CurrentVersion,
-                WrappedKey = PersonalFieldCipher.Wrap(dataKey, keyEncryptionKeys.Current.Span),
+                WrappedKey = PersonalFieldCipher.Wrap(dataKey, deploymentKey),
                 Message = Written(dataKey, delivery.Requested),
             };
 
@@ -55,6 +55,7 @@ internal sealed class SendDeliveryStore(
         finally
         {
             CryptographicOperations.ZeroMemory(dataKey);
+            CryptographicOperations.ZeroMemory(deploymentKey);
         }
     }
 
@@ -67,7 +68,21 @@ internal sealed class SendDeliveryStore(
             .FindAsync([delivery], cancellationToken)
             .ConfigureAwait(false);
 
-        return record is null ? null : Read(record);
+        if (record is null)
+        {
+            return null;
+        }
+
+        byte[] deploymentKey = await deployment.UnwrappedAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            return Read(record, deploymentKey);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(deploymentKey);
+        }
     }
 
     /// <inheritdoc/>
@@ -84,7 +99,21 @@ internal sealed class SendDeliveryStore(
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return [.. rows.Select(Read)];
+        if (rows.Count is 0)
+        {
+            return [];
+        }
+
+        byte[] deploymentKey = await deployment.UnwrappedAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            return [.. rows.Select(row => Read(row, deploymentKey))];
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(deploymentKey);
+        }
     }
 
     /// <inheritdoc/>
@@ -173,13 +202,9 @@ internal sealed class SendDeliveryStore(
             randomness);
     }
 
-    private SendDelivery Read(SendDeliveryRecord record)
+    private static SendDelivery Read(SendDeliveryRecord record, ReadOnlySpan<byte> deploymentKey)
     {
-        byte[] dataKey = PersonalFieldCipher.Unwrap(
-            PersonalDataFormat.Marker,
-            record.KeyVersion,
-            record.WrappedKey,
-            keyEncryptionKeys);
+        byte[] dataKey = PersonalFieldCipher.Unwrap(record.WrappedKey, deploymentKey);
 
         SendDeliveryDocument document;
 

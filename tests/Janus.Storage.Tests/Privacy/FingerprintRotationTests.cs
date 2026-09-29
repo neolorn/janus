@@ -472,7 +472,7 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
         new(context, _deployment.Keys, _deployment.Randomness, fingerprintKeys);
 
     private MailboxStore Mailboxes(StoreContext context, FingerprintKeys fingerprintKeys) =>
-        new(context, _deployment.Keys, fingerprintKeys, _deployment.Randomness);
+        new(context, _deployment.DataKey(context), _deployment.Keys, fingerprintKeys, _deployment.Randomness);
 
     // A value of every column the rotation computes again, written under the previous
     // version as an application holding only that version writes it: an identifier kept
@@ -602,6 +602,7 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
             _deployment.Keys));
         services.AddScoped<IFingerprintRotationStore>(provider => new FingerprintRotationStore(
             provider.GetRequiredService<DataConnections>(),
+            provider.GetRequiredService<DeploymentDataKeyStore>(),
             _deployment.Keys,
             Rotating));
         services.AddScoped(provider => new FingerprintKeyRotation(

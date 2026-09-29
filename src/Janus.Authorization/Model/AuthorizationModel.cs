@@ -339,9 +339,8 @@ internal sealed class AuthorizationModel
 
     // OPS-MIG-003a AC2, AC4: what the maintenance credential may reach, written out
     // here so it is read in the serialized model and not only in the migration that
-    // grants it. DatabaseRoleTests holds the two against each other. The columns and
-    // the audit append are the key rotations' (entries 316 and 318 of the decisions
-    // pending review).
+    // grants it. DatabaseRoleTests holds the two against each other. The subject-key
+    // table and the audit append are the key rotations' (D-166, 316).
     private static readonly SerializedModel.MaintenanceGrant[] MaintenanceGrants =
     [
         new("COLUMN identity.authenticators.enc_provider_subject", "SELECT"),
@@ -367,11 +366,6 @@ internal sealed class AuthorizationModel
         new("COLUMN identity.identifiers.fingerprint_version", "UPDATE"),
         new("COLUMN identity.identifiers.identifier_id", "SELECT"),
         new("COLUMN identity.identifiers.subject", "SELECT"),
-        new("COLUMN identity.invitations.id", "SELECT"),
-        new("COLUMN identity.invitations.key_version", "SELECT"),
-        new("COLUMN identity.invitations.key_version", "UPDATE"),
-        new("COLUMN identity.invitations.wrapped_key", "SELECT"),
-        new("COLUMN identity.invitations.wrapped_key", "UPDATE"),
         new("COLUMN identity.mailboxes.enc_canonical", "SELECT"),
         new("COLUMN identity.mailboxes.fingerprint", "SELECT"),
         new("COLUMN identity.mailboxes.fingerprint", "UPDATE"),
@@ -379,41 +373,13 @@ internal sealed class AuthorizationModel
         new("COLUMN identity.mailboxes.fingerprint_version", "UPDATE"),
         new("COLUMN identity.mailboxes.holder", "SELECT"),
         new("COLUMN identity.mailboxes.id", "SELECT"),
-        new("COLUMN identity.mailboxes.key_version", "SELECT"),
-        new("COLUMN identity.mailboxes.key_version", "UPDATE"),
         new("COLUMN identity.mailboxes.wrapped_key", "SELECT"),
-        new("COLUMN identity.mailboxes.wrapped_key", "UPDATE"),
         new("COLUMN identity.nonexistence_notices.fingerprint_version", "SELECT"),
-        new("COLUMN identity.preauthentication_sessions.fingerprint", "SELECT"),
-        new("COLUMN identity.preauthentication_sessions.signon_key_version", "SELECT"),
-        new("COLUMN identity.preauthentication_sessions.signon_key_version", "UPDATE"),
-        new("COLUMN identity.preauthentication_sessions.signon_verifier", "SELECT"),
-        new("COLUMN identity.preauthentication_sessions.signon_verifier", "UPDATE"),
-        new("COLUMN identity.provider_attempts.id", "SELECT"),
-        new("COLUMN identity.provider_attempts.key_version", "SELECT"),
-        new("COLUMN identity.provider_attempts.key_version", "UPDATE"),
-        new("COLUMN identity.provider_attempts.verifier", "SELECT"),
-        new("COLUMN identity.provider_attempts.verifier", "UPDATE"),
-        new("COLUMN identity.registration_sessions.id", "SELECT"),
-        new("COLUMN identity.registration_sessions.key_version", "SELECT"),
-        new("COLUMN identity.registration_sessions.key_version", "UPDATE"),
-        new("COLUMN identity.registration_sessions.wrapped_key", "SELECT"),
-        new("COLUMN identity.registration_sessions.wrapped_key", "UPDATE"),
         new("COLUMN identity.registration_sources.fingerprint_version", "SELECT"),
         new("COLUMN identity.send_counters.fingerprint_version", "SELECT"),
         new("COLUMN identity.send_grants.fingerprint_version", "SELECT"),
-        new("COLUMN identity.send_outbox.id", "SELECT"),
-        new("COLUMN identity.send_outbox.key_version", "SELECT"),
-        new("COLUMN identity.send_outbox.key_version", "UPDATE"),
-        new("COLUMN identity.send_outbox.wrapped_key", "SELECT"),
-        new("COLUMN identity.send_outbox.wrapped_key", "UPDATE"),
         new("COLUMN identity.sends.fingerprint_version", "SELECT"),
         new("COLUMN identity.signin_challenges.fingerprint_version", "SELECT"),
-        new("COLUMN identity.signing_keys.key_id", "SELECT"),
-        new("COLUMN identity.signing_keys.key_version", "SELECT"),
-        new("COLUMN identity.signing_keys.key_version", "UPDATE"),
-        new("COLUMN identity.signing_keys.private_key", "SELECT"),
-        new("COLUMN identity.signing_keys.private_key", "UPDATE"),
         new("COLUMN identity.throttle_counters.fingerprint_version", "SELECT"),
         new("COLUMN identity.username_holds.fingerprint_version", "SELECT"),
         new("COLUMN identity.username_holds.releases_at", "SELECT"),

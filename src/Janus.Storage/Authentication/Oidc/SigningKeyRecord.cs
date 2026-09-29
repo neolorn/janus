@@ -23,12 +23,9 @@ internal sealed class SigningKeyRecord
     /// <summary>The <c>public_key</c> column, in subject public key information format.</summary>
     public byte[] PublicKey { get; set; } = [];
 
-    /// <summary>The <c>private_key</c> column, wrapped under the key-encryption key.</summary>
+    /// <summary>The <c>private_key</c> column, wrapped under the deployment's data key.</summary>
     [NeverLogged]
     public byte[] PrivateKey { get; set; } = [];
-
-    /// <summary>The <c>key_version</c> column: which key-encryption key wrapped it.</summary>
-    public int KeyVersion { get; set; }
 
     /// <summary>The <c>created_at</c> column: when it began signing.</summary>
     public DateTimeOffset CreatedAt { get; set; }

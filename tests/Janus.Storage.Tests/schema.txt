@@ -413,7 +413,6 @@ table invitations
   column organization uuid not null
   column inviter uuid not null
   column token bytea not null
-  column key_version integer
   column wrapped_key bytea
   column enc_identifiers bytea
   column roles text[] not null
@@ -428,7 +427,7 @@ table invitations
   column revoked_at timestamp with time zone
   constraint ck_invitations_attached CHECK (((session IS NULL) OR (invitee IS NULL)))
   constraint ck_invitations_forgotten CHECK (((enc_identifiers IS NULL) OR ((revoked_at IS NULL) AND (acknowledged_at IS NULL))))
-  constraint ck_invitations_key CHECK ((((enc_identifiers IS NULL) = (wrapped_key IS NULL)) AND ((wrapped_key IS NULL) = (key_version IS NULL))))
+  constraint ck_invitations_key CHECK (((enc_identifiers IS NULL) = (wrapped_key IS NULL)))
   constraint ck_invitations_outcome CHECK (((revoked_at IS NULL) OR (acknowledged_at IS NULL)))
   constraint fk_invitations_invitee FOREIGN KEY (invitee) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
   constraint fk_invitations_inviter FOREIGN KEY (inviter) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
@@ -523,7 +522,6 @@ table mailboxes
   column fingerprint bytea not null
   column canonicalisation_version text not null
   column enc_canonical bytea not null
-  column key_version integer
   column wrapped_key bytea
   column reserved_at timestamp with time zone not null
   column holder uuid
@@ -536,7 +534,7 @@ table mailboxes
   column next_attempt_at timestamp with time zone
   column failed_at timestamp with time zone
   column fingerprint_version integer not null
-  constraint ck_mailboxes_key CHECK ((((holder IS NULL) = (wrapped_key IS NOT NULL)) AND ((wrapped_key IS NULL) = (key_version IS NULL))))
+  constraint ck_mailboxes_key CHECK (((holder IS NULL) = (wrapped_key IS NOT NULL)))
   constraint ck_mailboxes_pending CHECK (((pending IS NULL) OR (pending = ANY (ARRAY['disabled'::text, 'enabled'::text, 'removed'::text]))))
   constraint ck_mailboxes_pending_key CHECK (((pending IS NULL) = (pending_key IS NULL)))
   constraint ck_mailboxes_pushed CHECK (((pushed IS NULL) OR (pushed = ANY (ARRAY['disabled'::text, 'enabled'::text, 'removed'::text]))))
@@ -723,13 +721,12 @@ table preauthentication_sessions
   column expires_at timestamp with time zone not null
   column registration uuid
   column enrolment uuid
-  column signon_key_version integer
   column signon_return text
   column signon_state bytea
   column signon_verifier bytea
   constraint ck_preauthentication_sessions_expires_at CHECK ((expires_at > created_at))
   constraint ck_preauthentication_sessions_fingerprint CHECK (((octet_length(fingerprint) = 32) AND (octet_length(csrf_fingerprint) = 32)))
-  constraint ck_preauthentication_sessions_signon CHECK ((num_nulls(signon_state, signon_verifier, signon_key_version, signon_return) = ANY (ARRAY[0, 4])))
+  constraint ck_preauthentication_sessions_signon CHECK ((num_nulls(signon_state, signon_verifier, signon_return) = ANY (ARRAY[0, 3])))
   constraint fk_preauthentication_sessions_registration FOREIGN KEY (registration) REFERENCES identity.registration_sessions(id) ON DELETE SET NULL
   constraint pk_preauthentication_sessions PRIMARY KEY (fingerprint)
   index ix_preauthentication_sessions_expires_at using btree (expires_at)
@@ -787,14 +784,12 @@ table provider_attempts
   column state bytea not null
   column nonce bytea not null
   column verifier bytea
-  column key_version integer
   column return_to text not null
   column created_at timestamp with time zone not null
   constraint ck_provider_attempts_binding CHECK ((num_nonnulls(preauthentication, session) = 1))
   constraint ck_provider_attempts_fingerprints CHECK (((octet_length(state) = 32) AND (octet_length(nonce) = 32)))
   constraint ck_provider_attempts_intent CHECK ((intent = ANY (ARRAY['link'::text, 'register'::text, 'signin'::text])))
   constraint ck_provider_attempts_provider CHECK ((provider = ANY (ARRAY['apple'::text, 'breakGlass'::text, 'emailCode'::text, 'emailLink'::text, 'google'::text, 'passkey'::text, 'password'::text, 'phoneCode'::text, 'phoneLink'::text, 'recoveryCodes'::text, 'securityKey'::text, 'totp'::text])))
-  constraint ck_provider_attempts_verifier CHECK ((num_nulls(verifier, key_version) = ANY (ARRAY[0, 2])))
   constraint fk_provider_attempts_preauthentication FOREIGN KEY (preauthentication) REFERENCES identity.preauthentication_sessions(fingerprint) ON DELETE CASCADE
   constraint fk_provider_attempts_session FOREIGN KEY (session) REFERENCES identity.sessions(id) ON DELETE CASCADE
   constraint pk_provider_attempts PRIMARY KEY (id)
@@ -873,7 +868,6 @@ table registration_sessions
   column id uuid not null
   column provisional_subject uuid not null
   column expires_at timestamp with time zone not null
-  column key_version integer not null
   column wrapped_key bytea not null
   column enc_session bytea not null
   constraint pk_registration_sessions PRIMARY KEY (id)
@@ -921,7 +915,6 @@ table send_outbox
   column id uuid not null
   column recorded_at timestamp with time zone not null
   column subject uuid
-  column key_version integer not null
   column wrapped_key bytea not null
   column enc_message bytea not null
   column attempts integer not null default 0
@@ -1013,14 +1006,11 @@ table signing_keys
   column algorithm text not null
   column public_key bytea not null
   column private_key bytea not null
-  column key_version integer not null
   column created_at timestamp with time zone not null
   column superseded_at timestamp with time zone
   column retires_at timestamp with time zone
   constraint ck_signing_keys_retirement CHECK ((((superseded_at IS NULL) AND (retires_at IS NULL)) OR ((superseded_at IS NOT NULL) AND (retires_at > superseded_at))))
-  constraint ck_signing_keys_version CHECK ((key_version >= 1))
   constraint pk_signing_keys PRIMARY KEY (key_id)
-  index ix_signing_keys_key_version using btree (key_version)
   index ix_signing_keys_retires_at using btree (retires_at)
 table sms_balance_readings
   column read_at timestamp with time zone not null

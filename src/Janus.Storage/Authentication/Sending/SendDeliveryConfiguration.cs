@@ -51,7 +51,6 @@ internal sealed class SendDeliveryConfiguration : IEntityTypeConfiguration<SendD
             .HasColumnName("subject")
             .HasConversion(subject => subject!.Value.Value, value => new SubjectId(value));
 
-        builder.Property(delivery => delivery.KeyVersion).HasColumnName("key_version");
         builder.Property(delivery => delivery.WrappedKey).HasColumnName("wrapped_key");
         builder.Property(delivery => delivery.Message).HasColumnName(MessageColumn);
 

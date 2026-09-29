@@ -142,6 +142,10 @@ internal static class StorageRegistration
         services.AddScoped<DataConnections>();
 
         services.AddSingleton<RandomNumberGenerator>(_ => RandomNumberGenerator.Create());
+        services.AddScoped(provider => new DeploymentDataKeyStore(
+            provider.GetRequiredService<DataConnections>(),
+            keyEncryptionKeys,
+            provider.GetRequiredService<RandomNumberGenerator>()));
 
         services.AddScoped<IConfigurationStore, ConfigurationStore>();
         services.AddScoped<IConfigurationWrites, ConfigurationStore>();
@@ -200,7 +204,7 @@ internal static class StorageRegistration
         services.AddScoped<IRegistrationSessionStore>(provider => new RegistrationSessionStore(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<DataConnections>(),
-            keyEncryptionKeys,
+            provider.GetRequiredService<DeploymentDataKeyStore>(),
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IRegistrationDirectory>(provider => new RegistrationDirectory(
             provider.GetRequiredService<StoreContext>(),
@@ -227,7 +231,7 @@ internal static class StorageRegistration
         services.AddScoped<IBreakGlassAudit, BreakGlassAudit>();
         services.AddScoped<IPreAuthenticationStore>(provider => new PreAuthenticationStore(
             provider.GetRequiredService<StoreContext>(),
-            keyEncryptionKeys));
+            provider.GetRequiredService<DeploymentDataKeyStore>()));
         services.AddScoped<IChallengeStore>(provider => new ChallengeStore(
             provider.GetRequiredService<StoreContext>(),
             fingerprintKeys));
@@ -235,7 +239,7 @@ internal static class StorageRegistration
         services.AddScoped<IKeyCeremonyStore, KeyCeremonyStore>();
         services.AddScoped<IProviderAttemptStore>(provider => new ProviderAttemptStore(
             provider.GetRequiredService<StoreContext>(),
-            keyEncryptionKeys,
+            provider.GetRequiredService<DeploymentDataKeyStore>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IPendingSignInStore>(provider => new PendingSignInStore(
             provider.GetRequiredService<StoreContext>(),
@@ -258,7 +262,7 @@ internal static class StorageRegistration
         services.AddScoped<IOpenIddictTokenStore<OidcTokenRecord>, OidcTokenStore>();
         services.AddScoped<ISigningKeyStore>(provider => new SigningKeyStore(
             provider.GetRequiredService<StoreContext>(),
-            keyEncryptionKeys));
+            provider.GetRequiredService<DeploymentDataKeyStore>()));
         services.AddScoped<IOidcAudit, OidcAudit>();
         services.AddScoped<IRecoveryAudit, RecoveryAudit>();
         services.AddScoped<ISessionAudit, SessionAudit>();
@@ -279,12 +283,13 @@ internal static class StorageRegistration
         services.AddScoped<IDomainStore, DomainStore>();
         services.AddScoped<IMailboxStore>(provider => new MailboxStore(
             provider.GetRequiredService<StoreContext>(),
+            provider.GetRequiredService<DeploymentDataKeyStore>(),
             keyEncryptionKeys,
             fingerprintKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IInvitationStore>(provider => new InvitationStore(
             provider.GetRequiredService<StoreContext>(),
-            keyEncryptionKeys,
+            provider.GetRequiredService<DeploymentDataKeyStore>(),
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<IMembershipAttachment, MembershipAttachment>();
         services.AddScoped<IMembershipEnding, MembershipEnding>();
@@ -305,7 +310,7 @@ internal static class StorageRegistration
 
         services.AddScoped<ISendOutbox>(provider => new SendDeliveryStore(
             provider.GetRequiredService<StoreContext>(),
-            keyEncryptionKeys,
+            provider.GetRequiredService<DeploymentDataKeyStore>(),
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<ISendLedger>(provider => new SendLedger(
             provider.GetRequiredService<StoreContext>(),

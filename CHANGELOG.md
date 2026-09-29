@@ -59,8 +59,8 @@ against the public contract of LIB-API-001.
   credential endpoint, is refused with `409 identity.link.lastcredential`.
 - A round trip to a social provider is kept in a table of the library's schema while the
   browser is away, one row per browser. The proof key is kept wrapped under the
-  key-encryption key and is re-wrapped with the rest when the key is rotated; the row
-  goes when it is taken or when the session it belongs to ends.
+  deployment's data key; the row goes when it is taken or when the session it belongs
+  to ends.
 - The annual operation on the envelope, in which the key-encryption key is rotated, is
   warned of: a daily job, `envelope-rotation`, raises `expiry-approaching` from
   `maintenance.expiry.warninglead` before a year has passed since the last
@@ -204,11 +204,20 @@ against the public contract of LIB-API-001.
   kept under a previous version, so any of those not touched since the new version
   became current start again from nothing. A social sign-in link also holds the
   provider's subject encrypted under the account's key.
+- Every value the library encrypts that belongs to no subject (an invitation's
+  identifiers, a mailbox reserved for nobody, a registration session, a queued message,
+  a sign-on proof, a signing key, a social provider's proof key) is under the
+  deployment's data key, a row of the subject-key table under the nil subject that the
+  key-encryption key wraps like any subject key and that erasure never touches; nothing
+  else is wrapped directly under the key-encryption key. The migration runs only on a
+  database that holds no such value, since the database cannot re-wrap it.
 - `rotate-kek` rotates the key-encryption key from the command line under the
   maintenance credential. Add the new version to the secrets manager as current, keep
   the previous one, restart the application on it, and pipe the document to the command:
-  it re-wraps every value held under the key in batches of 500, resumes where it stopped
-  when run again, and prints the new version's escrow copy. Once the copy is sealed,
+  it re-wraps every row of the subject-key table in batches of 500, the deployment's
+  data key among them, writing a key back only where it still holds what was read,
+  and touches no other table; it resumes where it stopped when run again, and prints
+  the new version's escrow copy. Once the copy is sealed,
   `rotate-kek --sealed` retires the previous versions and names them for removal from
   the secrets manager; it refuses while anything is still wrapped under them. Each step
   is audited under the `rotate-kek` principal. Refresh tokens issued before the rotation
@@ -697,7 +706,7 @@ against the public contract of LIB-API-001.
   transport has taken it. An operation that fails sends nothing, a message undertaken by
   one that succeeds is not lost with the process, and a transport that refuses leaves
   the message waiting rather than dropped. The row holds the whole of the message
-  encrypted under a key of its own.
+  encrypted under a key of its own, wrapped under the deployment's data key.
 - Startup refuses a declaration whose encrypted field names no subject column, a column
   the declared type does not hold, or one holding something that is not a subject.
   Ciphertext an erasure could not reach stops the deployment instead of reaching
@@ -953,7 +962,7 @@ against the public contract of LIB-API-001.
   tokens are encrypted under a key derived from the deployment's key-encryption key, so
   every instance reads what any other wrote, a restart loses nothing, and a key rotation
   leaves the ones already issued readable. A signing key's private half is wrapped under
-  the deployment's key-encryption key.
+  the deployment's data key.
 - Every message the library sends goes down one path, and the named restrictions decide
   whether it goes: a fourth text message to one number inside a day is refused 429 with
   the time the restriction lifts, a message a transport would not take is not counted

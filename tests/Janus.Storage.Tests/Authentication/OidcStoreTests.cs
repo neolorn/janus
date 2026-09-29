@@ -159,12 +159,12 @@ public sealed class OidcStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
-    /// AUTH-KEY-002: the private half of a signing key is at rest under the
-    /// key-encryption key, with the version that wrapped it beside it, and is readable
-    /// again only through the store.
+    /// AUTH-KEY-002, PRIV-RIGHT-005a AC16: the private half of a signing key is at rest
+    /// under the deployment's data key and not under the key-encryption key itself, and
+    /// is readable again only through the store.
     /// </summary>
     [Fact]
-    public async Task AUTH_KEY_002_ThePrivateHalfIsWrappedUnderTheKeyEncryptionKeyAsync()
+    public async Task AUTH_KEY_002_ThePrivateHalfIsWrappedUnderTheDeploymentDataKeyAsync()
     {
         using var created = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
@@ -179,14 +179,17 @@ public sealed class OidcStoreTests(DatabaseFixture database)
 
         await using NpgsqlConnection connection = await database.OpenAsync();
 
-        (byte[] Stored, int Version) held = await connection.QuerySingleAsync<(byte[], int)>(
-            "SELECT private_key, key_version FROM identity.signing_keys WHERE key_id = @keyId",
+        byte[] held = await connection.QuerySingleAsync<byte[]>(
+            "SELECT private_key FROM identity.signing_keys WHERE key_id = @keyId",
             new { keyId = key.KeyId });
 
-        Assert.NotEqual(privateKey, held.Stored);
-        Assert.Equal(_deployment.Keys.CurrentVersion, held.Version);
-
         await using StoreContext reading = database.Context();
+
+        byte[] deploymentKey = await _deployment.DataKey(reading).UnwrappedAsync(TestContext.Current.CancellationToken);
+
+        Assert.NotEqual(privateKey, held);
+        Assert.Equal(privateKey, PersonalFieldCipher.Unwrap(held, deploymentKey));
+        Assert.Throws<CryptographicException>(() => PersonalFieldCipher.Unwrap(held, _deployment.Keys.Current.Span));
 
         Assert.Equal(
             privateKey,
@@ -379,7 +382,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
     private static async Task<OidcTokenRecord?> FoundAsync(OidcTokenStore tokens, Guid id) =>
         await tokens.FindByIdAsync(id.ToString(), TestContext.Current.CancellationToken);
 
-    private SigningKeyStore Keys(StoreContext context) => new(context, _deployment.Keys);
+    private SigningKeyStore Keys(StoreContext context) => new(context, _deployment.DataKey(context));
 
     private async Task<Guid> GrantedAsync(SubjectId subject)
     {
