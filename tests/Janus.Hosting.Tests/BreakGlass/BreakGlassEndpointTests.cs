@@ -586,22 +586,44 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-BOOT-002: no factor can be enrolled on the reserved account, even from the
-    /// session that passes every other gate.
+    /// OPS-BOOT-002: nothing that would give the reserved account a sign-in method or a
+    /// mailbox, or end it, is done from the session that passes every other gate: each
+    /// member of the list is refused with <c>authz.denied</c>, a provider link among
+    /// them though the account's policy names the provider.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task OPS_BOOT_002_NoSignInMethodIsGivenToTheReservedAccountAsync()
     {
+        _deployment.Configuration.Set(Settings.IdentifiersUsernameEnabled, true);
+
         string credential = await GeneratedAsync();
         var owner = new Browser(_deployment);
 
         _ = await PresentedAsync(owner, credential);
 
-        Answer password = await owner.SendAsync("POST", "/account/password", ("password", Flow.Password));
+        (string Method, string Path, (string, object?)[] Body)[] withheld =
+        [
+            ("POST", "/account/password", [("password", Flow.Password)]),
+            ("POST", "/account/identifiers", [("kind", "email"), ("value", "reserved@example.test")]),
+            ("PUT", "/account/profile", [("username", "reserved")]),
+            ("POST", "/auth/webauthn/register/begin", [("kind", "passkey")]),
+            ("POST", "/account/recoverycodes", []),
+            ("POST", "/account/mail/apppasswords/", [("label", "Phone")]),
+            ("POST", "/account/deactivate", []),
+            ("POST", "/account/delete", []),
+            ("POST", "/account/link/google", []),
+        ];
 
-        Assert.Equal(StatusCodes.Status403Forbidden, password.Status);
-        Assert.Equal(ErrorCodes.Denied.ToString(), password.Text("code"));
+        foreach ((string method, string path, (string, object?)[] body) in withheld)
+        {
+            Answer refused = await owner.SendAsync(method, path, body);
+
+            Assert.True(
+                refused.Status == StatusCodes.Status403Forbidden
+                    && string.Equals(ErrorCodes.Denied.ToString(), refused.Text("code"), StringComparison.Ordinal),
+                $"{method} {path} answered {refused.Status} {refused.Body}.");
+        }
     }
 
     // The deployment is one origin here, so what a browser would follow across two

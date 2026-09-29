@@ -42,6 +42,7 @@ internal sealed class StepUpGuard(
         StepUpAction.IdentifierAdd,
         StepUpAction.UsernameChange,
         StepUpAction.FactorEnrol,
+        StepUpAction.ProviderLink,
         StepUpAction.RecoveryCodesGenerate,
         StepUpAction.MailCredentialCreate,
         StepUpAction.AccountDeactivate,

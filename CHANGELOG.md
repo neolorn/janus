@@ -279,8 +279,8 @@ against the public contract of LIB-API-001.
   `breakglass-generated` (`AlertCondition.BreakGlassGenerated`) and `breakglass-used`,
   each High and scoped to the issue, to the operator and to the owner whatever
   `alerting.owner.enabled` says. The reserved account is never suspended, taken down, deleted, granted anything
-  or added to a group, and is given no password, identifier, factor, recovery codes or
-  mail credential; each is refused with `authz.denied`. The reserved account is marked
+  or added to a group, and is given no password, identifier, factor, provider link,
+  recovery codes or mail credential; each is refused with `authz.denied`. The reserved account is marked
   on its row, and the credential and its attempts are kept in two tables of their own.
 - `POST /callbacks/providers/google` and `POST /callbacks/providers/apple` take the
   security events Google (Cross-Account Protection) and Sign in with Apple send about an
