@@ -334,11 +334,12 @@ public static class HostingRegistration
         services.AddSingleton<IWordList>(_ => new WordList(Corpus));
 
         // INT-PWD-001: the range API is reached over the framework's client, which
-        // rotates its connections; the list the package carries answers when it
-        // cannot (INT-PWD-002).
+        // rotates its connections, and every request it makes names the library; the
+        // list the package carries answers when it cannot (INT-PWD-002).
         services.AddHttpClient<ILeakedPasswordCorpus, LeakedPasswordCorpus>((requests, provider) =>
         {
             requests.BaseAddress = LeakedPasswordCorpus.Provider;
+            requests.DefaultRequestHeaders.UserAgent.Add(LeakedPasswordCorpus.Agent);
 
             return new LeakedPasswordCorpus(
                 requests,

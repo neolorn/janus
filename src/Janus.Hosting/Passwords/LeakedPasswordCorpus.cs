@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Passwords;
@@ -37,6 +38,13 @@ internal sealed class LeakedPasswordCorpus(
     /// relative address against it.
     /// </summary>
     public static readonly Uri Provider = new("https://api.pwnedpasswords.com/range/");
+
+    /// <summary>
+    /// What every range request names itself as: the library's package and its version,
+    /// since the provider's acceptable use asks its callers to identify themselves. Both
+    /// are the constants the build writes (D-168), so the version carries no commit.
+    /// </summary>
+    public static readonly ProductInfoHeaderValue Agent = new(LibraryPackage.Identifier, LibraryPackage.Version);
 
     private const char Separator = ':';
 

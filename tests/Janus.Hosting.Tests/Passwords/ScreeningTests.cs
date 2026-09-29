@@ -9,10 +9,14 @@ using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Tests;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Bff;
 using Janus.Hosting.Passwords;
 using Janus.Hosting.Tests.Authorization;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Passwords;
@@ -29,6 +33,7 @@ public sealed class ScreeningTests : IDisposable
     private const string Listed = "password";
     private const string SelfHosted = "https://corpus.example/range";
     private const string Line = "\n";
+    private const string Connection = "Host=nowhere;Database=identity";
 
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 
@@ -77,6 +82,56 @@ public sealed class ScreeningTests : IDisposable
         Assert.DoesNotContain(Hash(Password), asked.AbsoluteUri, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(Suffix(Password), asked.AbsoluteUri, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(Password, asked.AbsoluteUri, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// INT-PWD-001 AC3: every range request the client the library registers makes names
+    /// the library's package and its version, the version being the constant the build
+    /// writes and carrying no build metadata.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_PWD_001_AC3_EveryRangeRequestNamesTheLibraryAndItsVersionAsync()
+    {
+        await using ServiceProvider deployed = new ServiceCollection()
+            .AddSingleton<IEvents>(_events)
+            .AddSingleton<IMailTransport>(new MailTransportInMemory())
+            .AddSingleton<ISmsTransport>(new SmsTransportInMemory())
+            .AddSingleton(new AuthenticationAddresses(
+                "https://accounts.example.test/signin",
+                "https://accounts.example.test"))
+            .AddSingleton(new SignOnClient("this-application"))
+            .AddJanus(
+                Connection,
+                new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
+                new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
+                Encoding.UTF8.GetBytes("the secret this application presents"),
+                Encoding.UTF8.GetBytes(Connection),
+                HostFixture.Declaration(),
+                ApplicationKind.Public)
+            .Configure<HttpClientFactoryOptions>(
+                nameof(ILeakedPasswordCorpus),
+                options => options.HttpMessageHandlerBuilderActions.Add(
+                    builder => builder.PrimaryHandler = _service))
+            .BuildServiceProvider();
+
+        ILeakedPasswordCorpus corpus = deployed.GetRequiredService<ILeakedPasswordCorpus>();
+
+        foreach (string password in new[] { Password, Listed })
+        {
+            _service.Holds(Prefix(password), Suffix(password) + ":1");
+
+            _ = await corpus.RangeAsync(
+                BlocklistSource.RangeApi,
+                Prefix(password),
+                TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(2, _service.Agents.Count);
+        Assert.All(
+            _service.Agents,
+            agent => Assert.Equal(LibraryPackage.Identifier + "/" + LibraryPackage.Version, agent));
+        Assert.DoesNotContain('+', LibraryPackage.Version);
     }
 
     /// <summary>
