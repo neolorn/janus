@@ -3,6 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Core;
+using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Privacy.SubjectKeys;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Npgsql;
 using Xunit;
 
@@ -10,8 +15,9 @@ namespace Janus.Storage.Tests;
 
 /// <summary>
 /// The library-owned schema as a host reads it: every table and view in the library's
-/// schema, with its columns, constraints and indexes, and the type every instant is
-/// stored as, read from a migrated database (LIB-API-001, LIB-TEST-002, PRIV-RET-003).
+/// schema, with its columns, constraints and indexes, the type every instant is stored
+/// as, and the columns that refuse the deployment key's identifier, read from a migrated
+/// database (LIB-API-001, LIB-TEST-002, PRIV-RET-003, PRIV-RIGHT-005a).
 /// </summary>
 /// <remarks>
 /// The schema is read from the database and not from the model, because the view a
@@ -161,6 +167,117 @@ public sealed class SchemaContractTests(DatabaseFixture database) : IClassFixtur
 
         Assert.NotEmpty(carried);
         Assert.All(carried, column => Assert.EndsWith(" timestamptz", column, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a AC18 (D-174): every column of a library table that can hold a
+    /// subject identifier in any row, found from the model and not from a list, refuses
+    /// the max UUID in the migrated database: a column typed as a subject, and the
+    /// identifier a subject-type discriminator pairs with, which names a subject in some
+    /// rows and a group in others. A column added later fails here until it has the check.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_AC18_EveryColumnThatCanHoldASubjectRefusesTheMaxUuidAsync()
+    {
+        IReadOnlyList<(string Table, string Column)> columns = SubjectColumns();
+
+        Assert.Contains(("audit_records", "acting_subject"), columns);
+        Assert.Contains(("audit_records", "effective_subject"), columns);
+        Assert.Contains(("grants", "subject_id"), columns);
+        Assert.Contains(("group_members", "member_id"), columns);
+        Assert.Contains(("group_closure", "member_id"), columns);
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        foreach ((string table, string column) in columns)
+        {
+            IEnumerable<string> checks = await connection.QueryAsync<string>(
+                """
+                SELECT pg_get_constraintdef(bound.oid)
+                FROM pg_constraint AS bound
+                JOIN pg_class AS held ON held.oid = bound.conrelid
+                JOIN pg_namespace AS owner ON owner.oid = held.relnamespace
+                WHERE owner.nspname = 'identity' AND held.relname = @table AND bound.contype = 'c'
+                """,
+                new { table });
+
+            Assert.True(
+                checks.Contains($"CHECK (({column} <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))"),
+                $"{table}.{column} does not refuse the max UUID.");
+        }
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a AC18 (D-174): the subject-key table's key and the key rotation's
+    /// cursor into it name a row of that table, a subject's or the deployment's, so
+    /// neither is typed as a subject and neither refuses the max UUID.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_AC18_TheSubjectKeyTableAndTheRotationCursorNameARowAsync()
+    {
+        using StoreContext context = new DesignTimeContextFactory().CreateDbContext([]);
+
+        Assert.Equal(
+            typeof(SubjectKeyId),
+            context.Model.FindEntityType(typeof(SubjectKeyRecord))!.FindPrimaryKey()!.Properties.Single().ClrType);
+        Assert.Equal(
+            typeof(SubjectKeyId?),
+            context.Model.FindEntityType(typeof(KeyRotationRecord))!.FindProperty(nameof(KeyRotationRecord.LastKey))!.ClrType);
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        Assert.Empty(await connection.QueryAsync<string>(
+            """
+            SELECT bound.conname
+            FROM pg_constraint AS bound
+            JOIN pg_class AS held ON held.oid = bound.conrelid
+            JOIN pg_namespace AS owner ON owner.oid = held.relnamespace
+            WHERE owner.nspname = 'identity'
+                AND held.relname IN ('subject_keys', 'key_rotations')
+                AND pg_get_constraintdef(bound.oid) LIKE '%ffffffff-ffff-ffff-ffff-ffffffffffff%'
+            """));
+    }
+
+    // Every column of a mapped table that can hold a subject identifier: one whose type is
+    // a subject's, and the identifier beside each subject-type discriminator, which the
+    // discriminator's name gives with Id in place of Type.
+    private static List<(string Table, string Column)> SubjectColumns()
+    {
+        using StoreContext context = new DesignTimeContextFactory().CreateDbContext([]);
+
+        List<(string Table, string Column)> columns = [];
+
+        foreach (IEntityType entity in context.Model.GetEntityTypes())
+        {
+            if (entity.GetTableName() is not string table)
+            {
+                continue;
+            }
+
+            var stored = StoreObjectIdentifier.Table(table, entity.GetSchema());
+
+            foreach (IProperty property in entity.GetProperties())
+            {
+                Type type = Nullable.GetUnderlyingType(property.ClrType) ?? property.ClrType;
+
+                if (type == typeof(SubjectId))
+                {
+                    columns.Add((table, property.GetColumnName(stored)!));
+                }
+                else if (type == typeof(SubjectType))
+                {
+                    string paired = property.Name[..^"Type".Length] + "Id";
+                    IProperty identifier = entity.FindProperty(paired)
+                        ?? throw new InvalidOperationException($"{table} has a subject type and no {paired} beside it.");
+
+                    columns.Add((table, identifier.GetColumnName(stored)!));
+                }
+            }
+        }
+
+        return columns;
     }
 
     private async Task<IReadOnlyList<string>> SchemaAsync()

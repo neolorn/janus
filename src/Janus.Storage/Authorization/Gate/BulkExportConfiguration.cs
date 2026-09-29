@@ -16,9 +16,16 @@ internal sealed class BulkExportConfiguration : IEntityTypeConfiguration<BulkExp
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable("bulk_exports", table => table.HasCheckConstraint(
-            "ck_bulk_exports_actor",
-            "(actor IS NULL) <> (principal IS NULL)"));
+        builder.ToTable("bulk_exports", table =>
+        {
+            table.HasCheckConstraint(
+                "ck_bulk_exports_actor",
+                "(actor IS NULL) <> (principal IS NULL)");
+
+            table.HasCheckConstraint(
+                "ck_bulk_exports_actor_not_max_uuid",
+                MaxUuid.Refused("actor"));
+        });
 
         builder.HasKey(export => export.Id).HasName("pk_bulk_exports");
 

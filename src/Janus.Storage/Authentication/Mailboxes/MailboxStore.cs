@@ -265,7 +265,7 @@ internal sealed class MailboxStore(
     private async ValueTask<byte[]> HolderKeyAsync(SubjectId holder, CancellationToken cancellationToken)
     {
         SubjectKeyRecord key = await context.SubjectKeys
-            .FindAsync([holder], cancellationToken)
+            .FindAsync([SubjectKeyId.Of(holder)], cancellationToken)
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The holder has no key to read the mailbox under.");
 
@@ -277,7 +277,8 @@ internal sealed class MailboxStore(
         context.Mailboxes
             .Where(mailbox => mailbox.Holder == null
                 || context.SubjectKeys.Any(key =>
-                    key.Subject == mailbox.Holder && key.FormatMarker == PersonalDataFormat.Marker));
+                    key.Id == EF.Property<SubjectKeyId?>(mailbox, nameof(MailboxRecord.Holder))
+                    && key.FormatMarker == PersonalDataFormat.Marker));
 
     // What the row holds was canonical when it was written, so a form that no longer
     // parses is a defect rather than a mailbox to read.

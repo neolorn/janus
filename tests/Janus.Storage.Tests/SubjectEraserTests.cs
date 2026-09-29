@@ -141,7 +141,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         Assert.Equal(AccountState.Deleting, account.State);
 
         SubjectKeyRecord key = await reading.SubjectKeys
-            .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
+            .SingleAsync(row => row.Id == SubjectKeyId.Of(subject), TestContext.Current.CancellationToken);
 
         Assert.Equal(PersonalDataFormat.Marker, key.FormatMarker);
     }
@@ -1156,7 +1156,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         AccountRecord account = await reading.Accounts
             .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
         SubjectKeyRecord key = await reading.SubjectKeys
-            .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
+            .SingleAsync(row => row.Id == SubjectKeyId.Of(subject), TestContext.Current.CancellationToken);
 
         return (
             account.State,
@@ -1178,8 +1178,9 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
-    /// PRIV-RIGHT-005a AC18: the deployment's data key stands under the max UUID, which no
-    /// subject is issued, and an erasure naming it is refused with the row as it was.
+    /// PRIV-RIGHT-005a AC18 (D-174): the deployment's data key stands under the max UUID,
+    /// which no subject can be made from, so an erasure naming it is refused before it
+    /// reaches the store, and the row stays as it was.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -1192,31 +1193,39 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             deploymentKey = await _deployment.DataKey(writing).UnwrappedAsync(TestContext.Current.CancellationToken);
         }
 
-        SubjectKeyRecord before = await HeldKeyAsync(new SubjectId(Guid.AllBitsSet));
+        SubjectKeyRecord before = await HeldKeyAsync(SubjectKeyId.Deployment);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        await Assert.ThrowsAsync<ArgumentException>(async () =>
             await EraseAsync(new SubjectId(Guid.AllBitsSet), ErasureReason.ErasureRequest));
 
-        SubjectKeyRecord after = await HeldKeyAsync(new SubjectId(Guid.AllBitsSet));
+        SubjectKeyRecord after = await HeldKeyAsync(SubjectKeyId.Deployment);
 
         Assert.Equal((before.FormatMarker, before.KeyVersion), (after.FormatMarker, after.KeyVersion));
         Assert.Equal(before.WrappedKey, after.WrappedKey);
 
-        await using StoreContext reading = database.Context();
+        await using (StoreContext reading = database.Context())
+        {
+            Assert.Equal(
+                deploymentKey,
+                await _deployment.DataKey(reading).UnwrappedAsync(TestContext.Current.CancellationToken));
+        }
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
 
         Assert.Equal(
-            deploymentKey,
-            await _deployment.DataKey(reading).UnwrappedAsync(TestContext.Current.CancellationToken));
-        Assert.Null(await reading.Erasures.FindAsync([new SubjectId(Guid.AllBitsSet)], TestContext.Current.CancellationToken));
+            0,
+            await connection.ExecuteScalarAsync<int>(
+                "SELECT count(*) FROM identity.erasures WHERE subject = @reserved",
+                new { reserved = Guid.AllBitsSet }));
     }
 
-    private async ValueTask<SubjectKeyRecord> HeldKeyAsync(SubjectId subject)
+    private async ValueTask<SubjectKeyRecord> HeldKeyAsync(SubjectKeyId id)
     {
         await using StoreContext reading = database.Context();
 
         return await reading.SubjectKeys
             .AsNoTracking()
-            .SingleAsync(key => key.Subject == subject, TestContext.Current.CancellationToken);
+            .SingleAsync(key => key.Id == id, TestContext.Current.CancellationToken);
     }
 
     private async ValueTask EraseAsync(SubjectId subject, ErasureReason reason)

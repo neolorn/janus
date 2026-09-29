@@ -219,7 +219,7 @@ internal sealed class FingerprintKeyRotation(
         return new Error(ErrorCodes.RequestMalformed, details);
     }
 
-    // The ordered pass: the subjects in order after the last one reached, a batch to a
+    // The ordered pass: the subject-key rows in order after the last one reached, a batch to a
     // transaction, each committing with the point it reached.
     private async ValueTask PassAsync(KeyRotationProgress progress, CancellationToken cancellationToken)
     {
@@ -228,10 +228,10 @@ internal sealed class FingerprintKeyRotation(
             await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
             KeyRotationBatch batch = await store
-                .RecomputeSubjectsAfterAsync(progress.LastSubject, KeyRotation.BatchSize, time.GetUtcNow(), cancellationToken)
+                .RecomputeSubjectsAfterAsync(progress.LastKey, KeyRotation.BatchSize, time.GetUtcNow(), cancellationToken)
                 .ConfigureAwait(false);
 
-            if (batch.Last is not SubjectId last)
+            if (batch.Last is not SubjectKeyId last)
             {
                 await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 

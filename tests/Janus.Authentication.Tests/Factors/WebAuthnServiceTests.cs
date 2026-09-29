@@ -557,6 +557,23 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-PM-001 and PRIV-RIGHT-005a AC18: a handle carrying the max UUID, which no
+    /// subject can be made from, names no account and is refused as a stranger's is.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_AC18_AnAssertionWhoseHandleIsTheMaxUuidIsRefusedAsync()
+    {
+        await EnrolledAsync(Subject(), Registration());
+
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            Refusal(await Service.PresentAsync(
+                Assertion() with { UserHandle = Base64Url.EncodeToString(Guid.AllBitsSet.ToByteArray(bigEndian: true)) },
+                TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
     /// AUTH-FACT-014: a kind no ceremony creates begins none.
     /// </summary>
     /// <returns>The work of running it.</returns>

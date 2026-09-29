@@ -756,7 +756,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
         await using StoreContext context = database.Context();
 
         SubjectKeyRecord key = await context.SubjectKeys
-            .SingleAsync(held => held.Subject == subject, TestContext.Current.CancellationToken);
+            .SingleAsync(held => held.Id == SubjectKeyId.Of(subject), TestContext.Current.CancellationToken);
 
         key.FormatMarker = PersonalDataFormat.ErasedMarker;
         key.WrappedKey = new byte[PersonalDataFormat.DataKeyLength];

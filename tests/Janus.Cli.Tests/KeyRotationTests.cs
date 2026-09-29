@@ -126,6 +126,33 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
     }
 
     /// <summary>
+    /// PRIV-RIGHT-005a AC18 and OPS-SEC-003 (D-174): the rotation walks the subject-key
+    /// table in key order, and its point in it is a row of that table, not a subject, so
+    /// the last row it reaches is the deployment's data key under the max UUID, which it
+    /// re-wraps and records as it does any other.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_AC18_TheRotationsPointReachesTheDeploymentKeysRowAsync()
+    {
+        await using NpgsqlConnection connection = await ResetAsync();
+        IReadOnlyDictionary<Guid, byte[]> seeded = await SeedAsync(connection, 3);
+        byte[] deploymentKey = await DeploymentKeyAsync(connection);
+
+        Assert.Equal(0, (await Invocation.PipedAsync([Command], Rotating())).ExitCode);
+
+        Assert.Equal(
+            Guid.AllBitsSet,
+            await connection.QuerySingleAsync<Guid>("SELECT last_subject FROM identity.key_rotations"));
+        Assert.Equal(4, await UnderAsync(connection, 2));
+
+        foreach ((Guid subject, byte[] wrapped) in await WrappedUnderAsync(connection, 2))
+        {
+            Assert.Equal(subject == Guid.AllBitsSet ? deploymentKey : seeded[subject], Unwrapped(wrapped, Next));
+        }
+    }
+
+    /// <summary>
     /// OPS-SEC-003 AC3, PRIV-RIGHT-005a AC13 and AC16: once the rotation retires the
     /// previous version, no row of the subject-key table is wrapped under it, the
     /// deployment's data key among them, and every value that belongs to no subject

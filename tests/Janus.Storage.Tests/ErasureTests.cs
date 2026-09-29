@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
+using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Privacy.SubjectKeys;
@@ -58,7 +59,7 @@ public sealed class ErasureTests(DatabaseFixture database) : IClassFixture<Datab
             await work.BeginAsync(TestContext.Current.CancellationToken);
 
             SubjectKeyRecord key = await erasing.SubjectKeys
-                .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
+                .SingleAsync(row => row.Id == SubjectKeyId.Of(subject), TestContext.Current.CancellationToken);
             key.FormatMarker = Erased;
             key.WrappedKey = new byte[DataKeyLength];
 
@@ -82,7 +83,7 @@ public sealed class ErasureTests(DatabaseFixture database) : IClassFixture<Datab
 
         await using StoreContext reading = database.Context();
         SubjectKeyRecord erased = await reading.SubjectKeys
-            .SingleAsync(row => row.Subject == subject, TestContext.Current.CancellationToken);
+            .SingleAsync(row => row.Id == SubjectKeyId.Of(subject), TestContext.Current.CancellationToken);
 
         Assert.Equal(Erased, erased.FormatMarker);
         Assert.Throws<CryptographicException>(() =>
@@ -294,7 +295,7 @@ public sealed class ErasureTests(DatabaseFixture database) : IClassFixture<Datab
 
             context.SubjectKeys.Add(new SubjectKeyRecord
             {
-                Subject = subject,
+                Id = SubjectKeyId.Of(subject),
                 FormatMarker = Scheme,
                 KeyVersion = keys.CurrentVersion,
                 WrappedKey = PersonalFieldCipher.Wrap(dataKey, keys.Current.Span),

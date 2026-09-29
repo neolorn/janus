@@ -36,13 +36,13 @@ internal interface IFingerprintRotationStore
     /// identifiers, the reservations of the identifiers they removed, and the subjects
     /// their linked providers know them by.
     /// </summary>
-    /// <param name="after">The last subject reached, or nothing to start at the first.</param>
-    /// <param name="count">How many subjects the batch takes.</param>
+    /// <param name="after">The last row of the subject-key table reached, or nothing to start at the first.</param>
+    /// <param name="count">How many rows the batch takes.</param>
     /// <param name="now">The instant a reservation is read at.</param>
     /// <param name="cancellationToken">Abandons the batch.</param>
-    /// <returns>The last subject taken, or nothing where none was left, and how many fingerprints were computed again.</returns>
+    /// <returns>The last row taken, or nothing where none was left, and how many fingerprints were computed again.</returns>
     ValueTask<KeyRotationBatch> RecomputeSubjectsAfterAsync(
-        SubjectId? after,
+        SubjectKeyId? after,
         int count,
         DateTimeOffset now,
         CancellationToken cancellationToken);

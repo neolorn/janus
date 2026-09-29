@@ -43,6 +43,10 @@ internal sealed class PendingVerificationConfiguration
                 "ck_identifier_verifications_old",
                 "is_replacement OR (NOT old_must_confirm AND old_confirmed_at IS NULL "
                     + "AND old_link IS NULL)");
+
+            table.HasCheckConstraint(
+                "ck_identifier_verifications_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
         });
 
         builder.HasKey(pending => pending.Identifier).HasName("pk_identifier_verifications");

@@ -90,7 +90,7 @@ internal sealed class Deployment(DatabaseFixture database) : IDisposable
 
             context.SubjectKeys.Add(new SubjectKeyRecord
             {
-                Subject = subject,
+                Id = SubjectKeyId.Of(subject),
                 FormatMarker = PersonalDataFormat.Marker,
                 KeyVersion = Keys.CurrentVersion,
                 WrappedKey = PersonalFieldCipher.Wrap(dataKey, Keys.Current.Span),
@@ -147,7 +147,7 @@ internal sealed class Deployment(DatabaseFixture database) : IDisposable
         await using StoreContext context = database.Context();
 
         SubjectKeyRecord key = await context.SubjectKeys
-            .SingleAsync(held => held.Subject == subject, TestContext.Current.CancellationToken);
+            .SingleAsync(held => held.Id == SubjectKeyId.Of(subject), TestContext.Current.CancellationToken);
 
         key.FormatMarker = PersonalDataFormat.ErasedMarker;
         key.WrappedKey = new byte[PersonalDataFormat.DataKeyLength];

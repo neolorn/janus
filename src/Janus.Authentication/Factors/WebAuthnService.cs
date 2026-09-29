@@ -314,7 +314,7 @@ internal sealed class WebAuthnService(
         // was created for, so it is what says whose credential answered. A handle
         // naming another account, or none the library ever issued, is refused exactly
         // as a wrong credential is: whose it is is not disclosed.
-        if (assertion.UserHandle is { Length: > 0 } returned && Named(returned) != held.Subject)
+        if (assertion.UserHandle is { Length: > 0 } returned && Named(returned) != held.Subject.Value)
         {
             return Result.Failure<Authenticator>(Error.From(ErrorCodes.FactorRejected));
         }
@@ -384,9 +384,11 @@ internal sealed class WebAuthnService(
 
     private static bool Kept(uint? counter) => counter is > 0;
 
-    private static SubjectId? Named(string handle) =>
+    // The identifier a handle carries, read as bytes and never made a subject: the max
+    // UUID, which no subject is issued, is refused here as any other stranger is (D-174).
+    private static Guid? Named(string handle) =>
         Read(handle) is { Length: 16 } bytes
-            ? new SubjectId(new Guid(bytes, bigEndian: true))
+            ? new Guid(bytes, bigEndian: true)
             : null;
 
     private static byte[]? Read(string value) =>

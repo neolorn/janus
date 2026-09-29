@@ -133,12 +133,12 @@ internal sealed class FingerprintRotationStore(
 
     /// <inheritdoc/>
     public async ValueTask<KeyRotationBatch> RecomputeSubjectsAfterAsync(
-        SubjectId? after,
+        SubjectKeyId? after,
         int count,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        IReadOnlyList<SubjectKey> keys = after is SubjectId last
+        IReadOnlyList<SubjectKey> keys = after is SubjectKeyId last
             ? await SubjectKeysAsync(After, new { after = last.Value, count }, cancellationToken).ConfigureAwait(false)
             : await SubjectKeysAsync(First, new { count }, cancellationToken).ConfigureAwait(false);
 
@@ -147,7 +147,7 @@ internal sealed class FingerprintRotationStore(
             return new KeyRotationBatch(Last: null, Processed: 0);
         }
 
-        Guid[] live = [.. keys.Where(key => !key.IsErased).Select(key => key.Subject.Value)];
+        Guid[] live = [.. keys.Where(key => !key.IsErased).Select(key => key.Id.Value)];
         int recomputed = 0;
 
         foreach (SubjectColumn column in Subjects)
@@ -161,7 +161,7 @@ internal sealed class FingerprintRotationStore(
             recomputed += await RecomputedAsync(column, stale, keys, cancellationToken).ConfigureAwait(false);
         }
 
-        return new KeyRotationBatch(keys[^1].Subject, recomputed);
+        return new KeyRotationBatch(keys[^1].Id, recomputed);
     }
 
     /// <inheritdoc/>
@@ -271,7 +271,7 @@ internal sealed class FingerprintRotationStore(
 
         return
         [
-            .. rows.Select(row => SubjectKey.Existing(new SubjectId(row.Subject), (byte)row.Marker, row.Version, row.Wrapped)),
+            .. rows.Select(row => SubjectKey.Existing(new SubjectKeyId(row.Subject), (byte)row.Marker, row.Version, row.Wrapped)),
         ];
     }
 
@@ -305,14 +305,15 @@ internal sealed class FingerprintRotationStore(
 
         foreach (IGrouping<Guid, Stale> ofSubject in stale.GroupBy(row => row.Subject))
         {
-            SubjectKey key = keys.Single(held => held.Subject.Value == ofSubject.Key);
+            var subject = new SubjectId(ofSubject.Key);
+            SubjectKey key = keys.Single(held => held.Id == SubjectKeyId.Of(subject));
             byte[] dataKey = PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey.Span, keyEncryptionKeys);
 
             try
             {
                 foreach (Stale row in ofSubject)
                 {
-                    var location = new PersonalFieldLocation(key.Subject, column.Table, column.Value);
+                    var location = new PersonalFieldLocation(subject, column.Table, column.Value);
 
                     recomputed += await RecomputedAsync(column.Recompute, row, dataKey, location, cancellationToken)
                         .ConfigureAwait(false);

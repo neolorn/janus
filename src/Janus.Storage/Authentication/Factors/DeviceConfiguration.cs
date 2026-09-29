@@ -19,9 +19,16 @@ internal sealed class DeviceConfiguration : IEntityTypeConfiguration<DeviceRecor
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable("devices", table => table.HasCheckConstraint(
-            "ck_devices_kind",
-            Vocabulary.Admits<DeviceKind>("kind")));
+        builder.ToTable("devices", table =>
+        {
+            table.HasCheckConstraint(
+                "ck_devices_kind",
+                Vocabulary.Admits<DeviceKind>("kind"));
+
+            table.HasCheckConstraint(
+                "ck_devices_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
+        });
 
         builder.HasKey(device => device.Id).HasName("pk_devices");
 

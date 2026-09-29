@@ -45,13 +45,6 @@ internal sealed class DeploymentDataKeyStore(
         """;
 
     /// <summary>
-    /// The identifier the key is held under: the max UUID of RFC 9562, all 128 bits set,
-    /// which the version 4 subject identifiers never take. The nil subject is not used,
-    /// since it already means no subject.
-    /// </summary>
-    public static SubjectId Subject => new(Guid.AllBitsSet);
-
-    /// <summary>
     /// The key, unwrapped, written first where the deployment has none yet.
     /// </summary>
     /// <param name="cancellationToken">Abandons the operation.</param>
@@ -74,7 +67,7 @@ internal sealed class DeploymentDataKeyStore(
                         Written,
                         new
                         {
-                            subject = Subject.Value,
+                            subject = SubjectKeyId.Deployment.Value,
                             marker = (short)PersonalDataFormat.Marker,
                             version = keyEncryptionKeys.CurrentVersion,
                             wrapped = PersonalFieldCipher.Wrap(dataKey, keyEncryptionKeys.Current.Span),
@@ -105,7 +98,7 @@ internal sealed class DeploymentDataKeyStore(
             .. await ambient.Connection
                 .QueryAsync<(short, int, byte[])>(new CommandDefinition(
                     Held,
-                    new { subject = Subject.Value },
+                    new { subject = SubjectKeyId.Deployment.Value },
                     ambient.Transaction,
                     cancellationToken: cancellationToken))
                 .ConfigureAwait(false),

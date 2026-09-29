@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
+using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Privacy.SubjectKeys;
@@ -58,7 +59,7 @@ public sealed class DeploymentDataKeyTests(DatabaseFixture database)
 
         await using NpgsqlConnection connection = await database.OpenAsync();
 
-        Assert.Equal(MaxUuid, DeploymentDataKeyStore.Subject.Value);
+        Assert.Equal(MaxUuid, SubjectKeyId.Deployment.Value);
         Assert.Equal(
             1,
             await connection.ExecuteScalarAsync<int>(

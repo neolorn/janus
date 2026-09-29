@@ -29,6 +29,10 @@ internal sealed class PrivacyRequestConfiguration : IEntityTypeConfiguration<Pri
             table.HasCheckConstraint(
                 "ck_privacy_requests_status",
                 Vocabulary.Admits<PrivacyRequestStatus>("status"));
+
+            table.HasCheckConstraint(
+                "ck_privacy_requests_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
         });
 
         builder.HasKey(request => request.Id).HasName("pk_privacy_requests");

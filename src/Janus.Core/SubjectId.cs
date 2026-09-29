@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.Security.Cryptography;
+using System.Text.Json.Serialization;
 
 namespace Janus.Core;
 
@@ -9,14 +10,40 @@ namespace Janus.Core;
 /// reused. Audit records, grants and tokens reference it, which is what lets erasure
 /// anonymise a record rather than destroy it.
 /// </summary>
-/// <param name="Value">The identifier as the database and the wire carry it.</param>
 /// <remarks>
-/// Implements IDN-ACCT-002 and CONV-DESIGN-004. This is the OIDC <c>sub</c>, so it is
-/// a version 4 value: a version 7 value would carry the account's creation instant and
-/// the identifier would no longer be opaque.
+/// Implements IDN-ACCT-002, CONV-DESIGN-004 and PRIV-RIGHT-005a. This is the OIDC
+/// <c>sub</c>, so it is a version 4 value: a version 7 value would carry the account's
+/// creation instant and the identifier would no longer be opaque. The max UUID of
+/// RFC 9562 is the deployment's data key's row of the subject-key table, which no
+/// subject is issued, so no subject can be made from it (D-174).
 /// </remarks>
-public readonly record struct SubjectId(Guid Value)
+public readonly record struct SubjectId
 {
+    /// <summary>
+    /// Reads the identifier of an account.
+    /// </summary>
+    /// <param name="value">The identifier as the database and the wire carry it.</param>
+    /// <exception cref="ArgumentException">The value is the max UUID.</exception>
+    /// <remarks>
+    /// A stored event reads its subjects back through this constructor, so the refusal
+    /// holds for what is read as for what is made.
+    /// </remarks>
+    [JsonConstructor]
+    public SubjectId(Guid value)
+    {
+        if (value == Guid.AllBitsSet)
+        {
+            throw new ArgumentException("No subject is issued the max UUID.", nameof(value));
+        }
+
+        Value = value;
+    }
+
+    /// <summary>
+    /// The identifier as the database and the wire carry it.
+    /// </summary>
+    public Guid Value { get; }
+
     /// <summary>
     /// Issues an identifier for a new account.
     /// </summary>

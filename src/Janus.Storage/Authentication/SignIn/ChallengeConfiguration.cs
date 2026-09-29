@@ -35,6 +35,10 @@ internal sealed class ChallengeConfiguration : IEntityTypeConfiguration<Challeng
                 "ck_signin_challenges_identifier",
                 "(identifier IS NULL) = (fingerprint_version IS NULL) AND "
                     + $"(identifier IS NULL OR octet_length(identifier) = {Fingerprint.Length})");
+
+            table.HasCheckConstraint(
+                "ck_signin_challenges_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
         });
 
         builder.HasKey(challenge => challenge.Handle).HasName("pk_signin_challenges");

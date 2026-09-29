@@ -61,12 +61,12 @@ internal interface IKeyRotationStore
     /// Re-wraps, under the current version, the keys among the next subjects after the
     /// point the ordered pass has reached that are under another.
     /// </summary>
-    /// <param name="after">The last subject reached, or nothing to start at the first.</param>
-    /// <param name="count">How many subjects the batch takes.</param>
+    /// <param name="after">The last row of the subject-key table reached, or nothing to start at the first.</param>
+    /// <param name="count">How many rows the batch takes.</param>
     /// <param name="cancellationToken">Abandons the batch.</param>
-    /// <returns>The last subject taken, or nothing where none was left, and how many keys were re-wrapped.</returns>
+    /// <returns>The last row taken, or nothing where none was left, and how many keys were re-wrapped.</returns>
     ValueTask<KeyRotationBatch> ReWrapSubjectKeysAfterAsync(
-        SubjectId? after,
+        SubjectKeyId? after,
         int count,
         CancellationToken cancellationToken);
 

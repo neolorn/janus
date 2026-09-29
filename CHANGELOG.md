@@ -210,7 +210,10 @@ against the public contract of LIB-API-001.
   deployment's data key, a row of the subject-key table under the max UUID (all 128 bits
   set), which no subject is issued, that the key-encryption key wraps like any subject
   key and that erasure refuses to touch; nothing else is wrapped directly under the
-  key-encryption key. What is encrypted for such a row (an invitation's identifiers, an
+  key-encryption key. `SubjectId` cannot be made from the max UUID, and every column of
+  the library's tables that can hold a subject identifier, the audit identities, a
+  grant's holder and a group's member included, refuses it by a check constraint; only
+  the subject-key table's key and the key rotation's point in it hold it. What is encrypted for such a row (an invitation's identifiers, an
   unheld mailbox's address, a queued message naming no subject, a registration
   session's staged values) is bound to that row, so it does not decrypt on another. The
   migrations run only on a database that holds no such value, since the database can

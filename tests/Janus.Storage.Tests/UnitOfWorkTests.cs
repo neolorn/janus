@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
+using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Privacy.SubjectKeys;
 using Npgsql;
@@ -92,7 +93,7 @@ public sealed class UnitOfWorkTests(DatabaseFixture database) : IClassFixture<Da
 
         context.SubjectKeys.Add(new SubjectKeyRecord
         {
-            Subject = subject,
+            Id = SubjectKeyId.Of(subject),
             FormatMarker = Scheme,
             KeyVersion = 1,
             WrappedKey = new byte[WrappedKeyLength],

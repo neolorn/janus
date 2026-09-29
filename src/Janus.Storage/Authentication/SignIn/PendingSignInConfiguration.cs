@@ -40,6 +40,10 @@ internal sealed class PendingSignInConfiguration : IEntityTypeConfiguration<Pend
                 "ck_signin_links_factor",
                 Vocabulary.Admits<Factor>("factor"));
             table.HasCheckConstraint("ck_signin_links_wrong_attempts", "wrong_attempts >= 0");
+
+            table.HasCheckConstraint(
+                "ck_signin_links_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
         });
 
         builder.HasKey(pending => pending.Token).HasName("pk_signin_links");

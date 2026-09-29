@@ -29,7 +29,9 @@ internal sealed class SendDeliveryConfiguration : IEntityTypeConfiguration<SendD
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        _ = builder.ToTable(Table);
+        _ = builder.ToTable(Table, table => table.HasCheckConstraint(
+            "ck_send_outbox_subject_not_max_uuid",
+            MaxUuid.Refused("subject")));
 
         builder.HasKey(delivery => delivery.Id).HasName("pk_send_outbox");
 

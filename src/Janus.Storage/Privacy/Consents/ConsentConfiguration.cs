@@ -29,6 +29,10 @@ internal sealed class ConsentConfiguration : IEntityTypeConfiguration<ConsentRec
                 Vocabulary.Admits<ConsentMechanism>("mechanism"));
             table.HasCheckConstraint("ck_consents_kind", Vocabulary.Admits<ConsentKind>("kind"));
             table.HasCheckConstraint("ck_consents_purpose", "length(trim(purpose)) > 0");
+
+            table.HasCheckConstraint(
+                "ck_consents_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
         });
 
         builder.HasKey(consent => new { consent.Subject, consent.Purpose })

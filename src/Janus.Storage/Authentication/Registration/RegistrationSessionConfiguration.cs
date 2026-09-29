@@ -27,7 +27,9 @@ internal sealed class RegistrationSessionConfiguration
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        _ = builder.ToTable(Table);
+        _ = builder.ToTable(Table, table => table.HasCheckConstraint(
+            "ck_registration_sessions_provisional_subject_not_max_uuid",
+            MaxUuid.Refused("provisional_subject")));
 
         builder.HasKey(session => session.Id).HasName("pk_registration_sessions");
 

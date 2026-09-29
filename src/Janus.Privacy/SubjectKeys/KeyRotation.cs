@@ -213,7 +213,7 @@ internal sealed class KeyRotation(
         return new Error(ErrorCodes.RequestMalformed, details);
     }
 
-    // The ordered pass: the subjects in order after the last one reached, a batch to a
+    // The ordered pass: the subject-key rows in order after the last one reached, a batch to a
     // transaction, each committing with the point it reached.
     private async ValueTask PassAsync(KeyRotationProgress progress, CancellationToken cancellationToken)
     {
@@ -222,10 +222,10 @@ internal sealed class KeyRotation(
             await work.BeginAsync(cancellationToken).ConfigureAwait(false);
 
             KeyRotationBatch batch = await store
-                .ReWrapSubjectKeysAfterAsync(progress.LastSubject, BatchSize, cancellationToken)
+                .ReWrapSubjectKeysAfterAsync(progress.LastKey, BatchSize, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (batch.Last is not SubjectId last)
+            if (batch.Last is not SubjectKeyId last)
             {
                 await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 

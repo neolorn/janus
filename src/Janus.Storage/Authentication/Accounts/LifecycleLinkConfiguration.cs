@@ -33,6 +33,10 @@ internal sealed class LifecycleLinkConfiguration : IEntityTypeConfiguration<Life
             table.HasCheckConstraint(
                 "ck_lifecycle_links_kind",
                 Vocabulary.Admits<LifecycleLinkKind>("kind"));
+
+            table.HasCheckConstraint(
+                "ck_lifecycle_links_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
         });
 
         builder.HasKey(link => link.Token).HasName("pk_lifecycle_links");

@@ -2684,12 +2684,10 @@ Janus.Core.SubjectExport.Subject.get -> Janus.Core.SubjectId
 Janus.Core.SubjectExport.Subject.init -> void
 Janus.Core.SubjectExport.SubjectExport(Janus.Core.SubjectId Subject, System.DateTimeOffset AssembledAt, System.Collections.Generic.IReadOnlyList<Janus.Core.ExportSection!>! Sections) -> void
 Janus.Core.SubjectId
-Janus.Core.SubjectId.Deconstruct(out System.Guid Value) -> void
 Janus.Core.SubjectId.Equals(Janus.Core.SubjectId other) -> bool
 Janus.Core.SubjectId.SubjectId() -> void
-Janus.Core.SubjectId.SubjectId(System.Guid Value) -> void
+Janus.Core.SubjectId.SubjectId(System.Guid value) -> void
 Janus.Core.SubjectId.Value.get -> System.Guid
-Janus.Core.SubjectId.Value.init -> void
 Janus.Core.SubjectType
 Janus.Core.SubjectType.Group = 1 -> Janus.Core.SubjectType
 Janus.Core.SubjectType.User = 0 -> Janus.Core.SubjectType

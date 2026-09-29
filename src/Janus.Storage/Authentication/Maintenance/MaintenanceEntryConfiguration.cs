@@ -19,7 +19,9 @@ internal sealed class MaintenanceEntryConfiguration : IEntityTypeConfiguration<M
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable("maintenance_log");
+        builder.ToTable("maintenance_log", table => table.HasCheckConstraint(
+            "ck_maintenance_log_actor_not_max_uuid",
+            MaxUuid.Refused("actor")));
 
         builder.HasKey(entry => entry.Id).HasName("pk_maintenance_log");
 

@@ -21,7 +21,9 @@ internal sealed class PasswordConfiguration : IEntityTypeConfiguration<PasswordR
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable("passwords");
+        builder.ToTable("passwords", table => table.HasCheckConstraint(
+            "ck_passwords_subject_not_max_uuid",
+            MaxUuid.Refused("subject")));
 
         builder.HasKey(password => password.Subject).HasName("pk_passwords");
 

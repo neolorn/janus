@@ -33,6 +33,10 @@ internal sealed class MembershipConfiguration : IEntityTypeConfiguration<Members
             table.HasCheckConstraint(
                 "ck_memberships_acknowledged",
                 "(acknowledged_at IS NULL) = (acknowledged_documents IS NULL)");
+
+            table.HasCheckConstraint(
+                "ck_memberships_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
         });
 
         builder.HasKey(membership => membership.Id).HasName("pk_memberships");

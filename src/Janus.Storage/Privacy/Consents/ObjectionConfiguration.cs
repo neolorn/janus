@@ -27,6 +27,10 @@ internal sealed class ObjectionConfiguration : IEntityTypeConfiguration<Objectio
                 "ck_objections_mechanism",
                 Vocabulary.Admits<ConsentMechanism>("mechanism"));
             table.HasCheckConstraint("ck_objections_purpose", "length(trim(purpose)) > 0");
+
+            table.HasCheckConstraint(
+                "ck_objections_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
         });
 
         builder.HasKey(objection => new { objection.Subject, objection.Purpose })

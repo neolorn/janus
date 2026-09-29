@@ -49,7 +49,7 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
         await using StoreContext reading = database.Context();
         SubjectKey read = await ReadAsync(reading, subject);
 
-        Assert.Equal(subject, read.Subject);
+        Assert.Equal(SubjectKeyId.Of(subject), read.Id);
         Assert.Equal(keys.CurrentVersion, read.KeyVersion);
         Assert.False(read.IsErased);
         Assert.Equal(Secret, Decrypted(read, keys, location, stored));
@@ -212,7 +212,7 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
         await using StoreContext context = database.Context();
 
         var key = SubjectKey.Wrapped(
-            Subjects.New(),
+            SubjectKeyId.Of(Subjects.New()),
             1,
             new byte[PersonalDataFormat.WrappedKeyLength]);
 
@@ -266,7 +266,7 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
 
         await Store(context).AddAsync(
             SubjectKey.Wrapped(
-                subject,
+                SubjectKeyId.Of(subject),
                 keys.CurrentVersion,
                 PersonalFieldCipher.Wrap(dataKey, keys.Current.Span)),
             TestContext.Current.CancellationToken);

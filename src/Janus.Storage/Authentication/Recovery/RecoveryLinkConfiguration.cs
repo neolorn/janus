@@ -41,6 +41,14 @@ internal sealed class RecoveryLinkConfiguration : IEntityTypeConfiguration<Recov
             table.HasCheckConstraint(
                 "ck_recovery_links_session",
                 "session IS NULL OR spent_at IS NOT NULL");
+
+            table.HasCheckConstraint(
+                "ck_recovery_links_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
+
+            table.HasCheckConstraint(
+                "ck_recovery_links_approver_not_max_uuid",
+                MaxUuid.Refused("approver"));
         });
 
         builder.HasKey(link => link.Token).HasName("pk_recovery_links");

@@ -30,7 +30,9 @@ internal sealed class ProfilePhotoConfiguration : IEntityTypeConfiguration<Profi
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable(Table);
+        builder.ToTable(Table, table => table.HasCheckConstraint(
+            "ck_profile_photos_subject_not_max_uuid",
+            MaxUuid.Refused("subject")));
 
         builder.HasKey(photo => photo.Subject).HasName("pk_profile_photos");
 

@@ -107,7 +107,7 @@ internal sealed class KeyRotationStore(
         return record is null ? null : KeyRotationProgress.Existing(
             record.Kind,
             record.Version,
-            record.LastSubject,
+            record.LastKey,
             record.Processed,
             record.StartedAt,
             record.CompletedAt,
@@ -125,7 +125,7 @@ internal sealed class KeyRotationStore(
                 {
                     Kind = progress.Kind,
                     Version = progress.Version,
-                    LastSubject = progress.LastSubject,
+                    LastKey = progress.LastKey,
                     Processed = progress.Processed,
                     StartedAt = progress.StartedAt,
                     CompletedAt = progress.CompletedAt,
@@ -145,7 +145,7 @@ internal sealed class KeyRotationStore(
                 .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The rotation has no row to carry its progress.");
 
-        record.LastSubject = progress.LastSubject;
+        record.LastKey = progress.LastKey;
         record.Processed = progress.Processed;
         record.CompletedAt = progress.CompletedAt;
         record.RetiredAt = progress.RetiredAt;
@@ -169,11 +169,11 @@ internal sealed class KeyRotationStore(
 
     /// <inheritdoc/>
     public async ValueTask<KeyRotationBatch> ReWrapSubjectKeysAfterAsync(
-        SubjectId? after,
+        SubjectKeyId? after,
         int count,
         CancellationToken cancellationToken)
     {
-        IReadOnlyList<SubjectKey> keys = after is SubjectId last
+        IReadOnlyList<SubjectKey> keys = after is SubjectKeyId last
             ? await SubjectKeysAsync(After, new { after = last.Value, count }, cancellationToken).ConfigureAwait(false)
             : await SubjectKeysAsync(First, new { count }, cancellationToken).ConfigureAwait(false);
 
@@ -194,7 +194,7 @@ internal sealed class KeyRotationStore(
             }
         }
 
-        return new KeyRotationBatch(keys[^1].Subject, reWrapped);
+        return new KeyRotationBatch(keys[^1].Id, reWrapped);
     }
 
     /// <inheritdoc/>
@@ -236,7 +236,7 @@ internal sealed class KeyRotationStore(
 
         return
         [
-            .. rows.Select(row => SubjectKey.Existing(new SubjectId(row.Subject), (byte)row.Marker, row.Version, row.Wrapped)),
+            .. rows.Select(row => SubjectKey.Existing(new SubjectKeyId(row.Subject), (byte)row.Marker, row.Version, row.Wrapped)),
         ];
     }
 
@@ -265,7 +265,7 @@ internal sealed class KeyRotationStore(
                 ReWrap,
                 new
                 {
-                    subject = key.Subject.Value,
+                    subject = key.Id.Value,
                     marker = (short)key.FormatMarker,
                     previous,
                     read,

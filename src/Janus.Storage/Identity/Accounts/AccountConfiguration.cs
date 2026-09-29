@@ -67,6 +67,10 @@ internal sealed class AccountConfiguration : IEntityTypeConfiguration<AccountRec
             table.HasCheckConstraint(
                 "ck_accounts_documents",
                 "(terms_version IS NULL) = (notice_version IS NULL)");
+
+            table.HasCheckConstraint(
+                "ck_accounts_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
         });
 
         builder.HasKey(account => account.Subject).HasName("pk_accounts");

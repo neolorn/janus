@@ -97,7 +97,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
         Assert.Equal(
             PersonalDataFormat.Marker,
             (await reading.SubjectKeys.SingleAsync(
-                key => key.Subject == subject,
+                key => key.Id == SubjectKeyId.Of(subject),
                 TestContext.Current.CancellationToken)).FormatMarker);
         Assert.False(await reading.Erasures.AnyAsync(
             erasure => erasure.Subject == subject,

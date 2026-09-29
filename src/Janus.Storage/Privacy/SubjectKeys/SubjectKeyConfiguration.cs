@@ -1,6 +1,5 @@
 using System;
 using System.Globalization;
-using Janus.Core;
 using Janus.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -39,11 +38,13 @@ internal sealed class SubjectKeyConfiguration : IEntityTypeConfiguration<Subject
             table.HasCheckConstraint("ck_subject_keys_version", "key_version >= 1");
         });
 
-        builder.HasKey(key => key.Subject).HasName("pk_subject_keys");
+        builder.HasKey(key => key.Id).HasName("pk_subject_keys");
 
-        builder.Property(key => key.Subject)
+        // PRIV-RIGHT-005a: the key names a row, a subject's or the deployment's, so it
+        // takes no refusal of the max UUID (D-174).
+        builder.Property(key => key.Id)
             .HasColumnName("subject")
-            .HasConversion(subject => subject.Value, value => new SubjectId(value));
+            .HasConversion(id => id.Value, value => new SubjectKeyId(value));
 
         builder.Property(key => key.FormatMarker)
             .HasColumnName("format_marker")

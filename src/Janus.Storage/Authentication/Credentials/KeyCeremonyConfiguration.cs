@@ -33,6 +33,10 @@ internal sealed class KeyCeremonyConfiguration : IEntityTypeConfiguration<KeyCer
             table.HasCheckConstraint(
                 "ck_key_ceremonies_expiry",
                 "expires_at > issued_at");
+
+            table.HasCheckConstraint(
+                "ck_key_ceremonies_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
         });
 
         builder.HasKey(ceremony => ceremony.Subject).HasName("pk_key_ceremonies");

@@ -54,6 +54,10 @@ internal sealed class IdentifierRemovalConfiguration : IEntityTypeConfiguration<
             table.HasCheckConstraint(
                 "ck_identifier_removals_window",
                 "expires_at > removed_at");
+
+            table.HasCheckConstraint(
+                "ck_identifier_removals_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
         });
 
         builder.HasKey(removal => removal.Id).HasName("pk_identifier_removals");

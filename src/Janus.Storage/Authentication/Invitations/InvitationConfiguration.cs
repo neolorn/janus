@@ -43,6 +43,14 @@ internal sealed class InvitationConfiguration : IEntityTypeConfiguration<Invitat
             table.HasCheckConstraint(
                 "ck_invitations_outcome",
                 "revoked_at IS NULL OR acknowledged_at IS NULL");
+
+            table.HasCheckConstraint(
+                "ck_invitations_inviter_not_max_uuid",
+                MaxUuid.Refused("inviter"));
+
+            table.HasCheckConstraint(
+                "ck_invitations_invitee_not_max_uuid",
+                MaxUuid.Refused("invitee"));
         });
 
         builder.HasKey(invitation => invitation.Id).HasName("pk_invitations");

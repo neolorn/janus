@@ -64,13 +64,6 @@ internal sealed class SubjectEraser(
         Action<Account> erased,
         CancellationToken cancellationToken)
     {
-        // PRIV-RIGHT-005a: the deployment's data key stands under an identifier no subject
-        // is issued, and erasure never touches it.
-        if (subject == DeploymentDataKeyStore.Subject)
-        {
-            throw new InvalidOperationException("The deployment's data key belongs to no subject.");
-        }
-
         if (await context.Erasures.FindAsync([subject], cancellationToken).ConfigureAwait(false)
             is not null)
         {
@@ -133,12 +126,12 @@ internal sealed class SubjectEraser(
     private async ValueTask DestroyKeyAsync(SubjectId subject, CancellationToken cancellationToken)
     {
         SubjectKeyRecord record = await context.SubjectKeys
-            .FindAsync([subject], cancellationToken)
+            .FindAsync([SubjectKeyId.Of(subject)], cancellationToken)
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The subject has no key to destroy.");
 
         var key = SubjectKey.Existing(
-            record.Subject,
+            record.Id,
             record.FormatMarker,
             record.KeyVersion,
             record.WrappedKey);

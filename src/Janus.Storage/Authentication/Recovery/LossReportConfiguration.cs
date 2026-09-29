@@ -28,9 +28,16 @@ internal sealed class LossReportConfiguration : IEntityTypeConfiguration<LossRep
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable(Table, table => table.HasCheckConstraint(
-            "ck_loss_reports_window",
-            "invalidates_at > reported_at"));
+        builder.ToTable(Table, table =>
+        {
+            table.HasCheckConstraint(
+                "ck_loss_reports_window",
+                "invalidates_at > reported_at");
+
+            table.HasCheckConstraint(
+                "ck_loss_reports_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
+        });
 
         builder.HasKey(report => report.Credential).HasName("pk_loss_reports");
 

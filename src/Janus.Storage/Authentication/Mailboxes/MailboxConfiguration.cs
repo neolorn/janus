@@ -46,6 +46,10 @@ internal sealed class MailboxConfiguration : IEntityTypeConfiguration<MailboxRec
             table.HasCheckConstraint(
                 "ck_mailboxes_key",
                 "(holder IS NULL) = (wrapped_key IS NOT NULL)");
+
+            table.HasCheckConstraint(
+                "ck_mailboxes_holder_not_max_uuid",
+                MaxUuid.Refused("holder"));
         });
 
         builder.HasKey(mailbox => mailbox.Id).HasName("pk_mailboxes");

@@ -100,7 +100,7 @@ internal sealed class ProfilePhotoStore(
     private async ValueTask<byte[]> DataKeyAsync(SubjectId subject, CancellationToken cancellationToken)
     {
         SubjectKeyRecord key = await context.SubjectKeys
-            .FindAsync([subject], cancellationToken)
+            .FindAsync([SubjectKeyId.Of(subject)], cancellationToken)
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The subject has no key to read its photo under.");
 

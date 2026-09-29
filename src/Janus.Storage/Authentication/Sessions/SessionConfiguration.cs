@@ -52,6 +52,10 @@ internal sealed class SessionConfiguration : IEntityTypeConfiguration<SessionRec
             table.HasCheckConstraint(
                 "ck_sessions_breakglass_reason",
                 "breakglass_reason IS NULL OR (satisfies_every_gate AND length(btrim(breakglass_reason)) BETWEEN 1 AND 1024)");
+
+            table.HasCheckConstraint(
+                "ck_sessions_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
         });
 
         builder.HasKey(session => session.Id).HasName("pk_sessions");

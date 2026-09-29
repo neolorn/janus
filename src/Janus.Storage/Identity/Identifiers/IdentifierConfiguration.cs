@@ -61,6 +61,10 @@ internal sealed class IdentifierConfiguration : IEntityTypeConfiguration<Identif
             table.HasCheckConstraint(
                 "ck_identifiers_personal",
                 "NOT is_personal OR (kind = 'email' AND verified_at IS NOT NULL AND NOT is_primary)");
+
+            table.HasCheckConstraint(
+                "ck_identifiers_subject_not_max_uuid",
+                MaxUuid.Refused("subject"));
         });
 
         builder.HasKey(identifier => identifier.Id).HasName("pk_identifiers");
