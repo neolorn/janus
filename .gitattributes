@@ -1,0 +1,2 @@
+# D-169: third-party data is kept exactly as its source publishes it, line endings included.
+src/Janus.Hosting/Passwords/3esl.txt -text

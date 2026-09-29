@@ -1,9 +1,11 @@
 using System;
 using System.IO;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Hosting.Passwords;
+using Janus.Hosting.Tests.Bff;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Passwords;
@@ -26,6 +28,21 @@ public sealed class WordListTests
 
         Assert.True(words.Length >= 10_000, $"The English list holds {words.Length} words.");
         Assert.All(words, word => Assert.Matches("^[a-z]{4,}$", word));
+    }
+
+    /// <summary>
+    /// AUTH-PASS-004, D-169: the English list's source is the 3esl list byte for byte as
+    /// the 12dicts 6.0.2 package publishes it; only the build's filter acts on it.
+    /// </summary>
+    [Fact]
+    public void AUTH_PASS_004_TheEnglishSourceIsTheListAsItsPackagePublishesIt()
+    {
+        byte[] vendored = File.ReadAllBytes(
+            Path.Combine(Repository.Root(), "src", "Janus.Hosting", "Passwords", "3esl.txt"));
+
+        Assert.Equal(
+            "EB70E6169534511CAFF9E06971B3FA71981A83F0355B29532B710EA5A9DF253B",
+            Convert.ToHexString(SHA256.HashData(vendored)));
     }
 
     /// <summary>
