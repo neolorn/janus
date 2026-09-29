@@ -3754,6 +3754,7 @@ static Janus.Core.ErrorCodes.ChangeWindowElapsed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.CodeExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.CodeInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.CodeReplayed.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.ConfigurationChangeReasonRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationChangeStepUpRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationKeyProtected.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ConfigurationLastDestination.get -> Janus.Core.ErrorCode
@@ -3839,7 +3840,6 @@ static Janus.Core.ErrorCodes.RequestReceivedFuture.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ResourceNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.Restricted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RestrictionExceeded.get -> Janus.Core.ErrorCode
-static Janus.Core.ErrorCodes.RestrictionReasonRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RoleInUse.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ScreeningUnavailable.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.SessionCsrfInvalid.get -> Janus.Core.ErrorCode

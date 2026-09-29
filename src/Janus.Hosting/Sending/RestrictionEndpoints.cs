@@ -166,7 +166,7 @@ internal static class RestrictionEndpoints
         // of one without, so an absent one is answered by it rather than as malformed.
         if (body.Reason is not { Length: > 0 } reason)
         {
-            return Answers.Refused(Error.From(ErrorCodes.RestrictionReasonRequired));
+            return Answers.Refused(Error.From(ErrorCodes.ConfigurationChangeReasonRequired));
         }
 
         return Answers.Of(

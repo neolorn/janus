@@ -115,13 +115,13 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
     {
         var actor = SubjectId.New(_randomness);
 
-        await EditedAsync("sms.destination", Tightened(), reason: null, actor);
+        await EditedAsync("sms.destination", Tightened(), "an incident", actor);
 
         SendAuditInMemory.Edit written = Assert.Single(_audit.Edits);
 
         Assert.Equal("sms.destination", written.Name);
         Assert.False(written.Loosening);
-        Assert.Null(written.Reason);
+        Assert.Equal("an incident", written.Reason);
         Assert.Equal(actor, written.Actor);
 
         SendingRestrictionChanged announced = Assert.Single(_events.Of<SendingRestrictionChanged>());
@@ -185,8 +185,35 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
             SubjectId.New(_randomness),
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired, Refusal(refused));
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired, Refusal(refused));
         Assert.Empty(_audit.Edits);
+    }
+
+    /// <summary>
+    /// OPS-CFG-008 AC2: an edit of the set is a change to a runtime setting, so a
+    /// tightening carries its reason as a loosening does; one with none is refused
+    /// naming the set, and nothing is written or announced.
+    /// </summary>
+    [Fact]
+    public async Task OPS_CFG_008_AC2_ARestrictionTighteningWithNoReasonIsRefusedAsync()
+    {
+        Result refused = await Administration.EditAsync(
+            "sms.destination",
+            Tightened(),
+            reason: null,
+            Satisfied,
+            SubjectId.New(_randomness),
+            TestContext.Current.CancellationToken);
+
+        Error refusal = refused.Match(
+            () => throw new Xunit.Sdk.XunitException("The change was not refused."),
+            error => error);
+
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired, refusal.Code);
+        Assert.Equal(Settings.Restrictions.Key.ToString(), refusal.Details["key"].GetString());
+        Assert.Empty(_audit.Edits);
+        Assert.Empty(_changes.Written);
+        Assert.Empty(_events.Published);
     }
 
     /// <summary>
@@ -204,7 +231,7 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
             SubjectId.New(_randomness),
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired, Refusal(refused));
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired, Refusal(refused));
         Assert.Empty(_audit.Grants);
     }
 

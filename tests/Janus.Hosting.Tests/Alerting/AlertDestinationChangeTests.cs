@@ -290,7 +290,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
     {
         Error refusal = await RefusedAsync(SendKind.Email, Elsewhere, reason: null);
 
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired, refusal.Code);
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired, refusal.Code);
         Assert.Equal("alerting.email.destinations", refusal.Details["key"].GetString());
         Assert.Equal(ThreeAddresses, await DestinationsAsync(Settings.AlertingEmailDestinations));
         Assert.Empty(_changes.Written);

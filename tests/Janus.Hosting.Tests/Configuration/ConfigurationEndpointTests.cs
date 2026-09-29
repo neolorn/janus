@@ -235,7 +235,9 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
 
     /// <summary>
     /// OPS-CFG-005 and chapter 09 section 8: every change carries a reason, a
-    /// tightening included, and one without is refused with the reason code.
+    /// tightening included. One without, or with nothing but spaces, is refused with
+    /// the reason code naming the key; one past the 1024 characters of API-CONV-002 is
+    /// a request the boundary does not read, naming <c>reason</c>.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -248,9 +250,30 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
             "/admin/config/session.aal2.inactivity",
             ("value", "PT30M"));
 
+        Answer blank = await administrator.SendAsync(
+            "PUT",
+            "/admin/config/session.aal2.inactivity",
+            ("value", "PT30M"),
+            ("reason", "   "));
+
+        Answer overlong = await administrator.SendAsync(
+            "PUT",
+            "/admin/config/session.aal2.inactivity",
+            ("value", "PT30M"),
+            ("reason", new string('r', 1025)));
+
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, changed.Status);
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired.ToString(), changed.Text("code"));
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired.ToString(), changed.Text("code"));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, blank.Status);
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired.ToString(), blank.Text("code"));
+        Assert.Equal(
+            Settings.SessionAal2Inactivity.Key.ToString(),
+            blank.Json().GetProperty("details").GetProperty("key").GetString());
+        Assert.Equal(StatusCodes.Status400BadRequest, overlong.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), overlong.Text("code"));
+        Assert.Equal("reason", overlong.Json().GetProperty("details").GetProperty("member").GetString());
         Assert.Equal(Settings.SessionAal2Inactivity.Default, await InForceAsync(Settings.SessionAal2Inactivity));
+        Assert.Empty(_deployment.Changes.Written);
     }
 
     /// <summary>
@@ -468,7 +491,7 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
             ("reason", null));
 
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, changed.Status);
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired.ToString(), changed.Text("code"));
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired.ToString(), changed.Text("code"));
         Assert.Equal(
             Settings.SessionAal2Inactivity.Key.ToString(),
             changed.Json().GetProperty("details").GetProperty("key").GetString());

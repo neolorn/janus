@@ -63,7 +63,7 @@ internal sealed class RestrictionAdministration(
     /// <param name="replacement">
     /// What it becomes, or nothing to delete it. Its name is the one given.
     /// </param>
-    /// <param name="reason">The written reason, which a loosening requires.</param>
+    /// <param name="reason">The written reason, which every edit requires.</param>
     /// <param name="challenge">What the <c>restriction:edit</c> gate answered.</param>
     /// <param name="actor">Who is making the change.</param>
     /// <param name="cancellationToken">Abandons the change.</param>
@@ -107,9 +107,14 @@ internal sealed class RestrictionAdministration(
 
         bool loosening = Restrictions.IsLoosening(before, replacement);
 
-        if (loosening && string.IsNullOrWhiteSpace(reason))
+        // OPS-CFG-008: an edit of the set is a change to a runtime setting, and every
+        // such change carries its reason whichever way it moves.
+        if (string.IsNullOrWhiteSpace(reason))
         {
-            return Result.Failure(Error.From(ErrorCodes.RestrictionReasonRequired));
+            return Result.Failure(Error.From(
+                ErrorCodes.ConfigurationChangeReasonRequired,
+                "key",
+                JsonSerializer.SerializeToElement(Settings.Restrictions.Key.ToString())));
         }
 
         List<Restriction> written =
@@ -213,7 +218,7 @@ internal sealed class RestrictionAdministration(
 
         if (string.IsNullOrWhiteSpace(reason))
         {
-            return Result.Failure(Error.From(ErrorCodes.RestrictionReasonRequired));
+            return Result.Failure(Error.From(ErrorCodes.ConfigurationChangeReasonRequired));
         }
 
         Error? failure = null;

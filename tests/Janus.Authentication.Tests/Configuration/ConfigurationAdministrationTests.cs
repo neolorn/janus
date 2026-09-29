@@ -134,7 +134,7 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
             reason: "   ",
             Satisfied);
 
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired, refusal.Code);
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired, refusal.Code);
         Assert.Equal(
             Settings.SessionAal2Inactivity.Key.ToString(),
             refusal.Details["key"].GetString());
@@ -160,7 +160,7 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
                 Wanting)).Code);
 
         Assert.Equal(
-            ErrorCodes.RestrictionReasonRequired,
+            ErrorCodes.ConfigurationChangeReasonRequired,
             (await RefusedAsync(
                 Settings.AlertingEmailDestinations,
                 ["two@example.test"],
@@ -234,11 +234,31 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
         Error absent = await RefusedAsync(Settings.SessionAal2Inactivity, TimeSpan.FromMinutes(30), reason: null, Wanting);
         Error blank = await RefusedAsync(Settings.SessionAal2Inactivity, TimeSpan.FromMinutes(30), "   ", Wanting);
 
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired, absent.Code);
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired, blank.Code);
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired, absent.Code);
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired, blank.Code);
         Assert.Equal(Settings.SessionAal2Inactivity.Key.ToString(), absent.Details["key"].GetString());
         Assert.Empty(_changes.Written);
         Assert.Equal(Settings.SessionAal2Inactivity.Default, await InForceAsync(Settings.SessionAal2Inactivity));
+    }
+
+    /// <summary>
+    /// API-CONV-002 and CONV-CODE-006 AC3: a reason is 1 to 1024 characters after
+    /// trimming, and the service refuses one past the bound for an in-process caller
+    /// as the route does, naming the member, and writes nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task API_CONV_002_AReasonPastItsBoundIsRefusedAsync()
+    {
+        Error refusal = await RefusedAsync(
+            Settings.SessionAal2Inactivity,
+            TimeSpan.FromMinutes(30),
+            new string('r', 1025),
+            Wanting);
+
+        Assert.Equal(ErrorCodes.RequestMalformed, refusal.Code);
+        Assert.Equal("reason", refusal.Details["member"].GetString());
+        Assert.Empty(_changes.Written);
     }
 
     /// <summary>

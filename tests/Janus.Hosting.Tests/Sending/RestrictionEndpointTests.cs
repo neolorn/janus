@@ -131,7 +131,8 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
 
     /// <summary>
     /// AUTH-ABUSE-004 AC3: a tightening from a session that has proved itself recently
-    /// takes effect, needs no reason, and is announced.
+    /// takes effect with its reason and needs no <c>system:administer</c>, and is
+    /// announced.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -139,7 +140,7 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
     {
         Browser administrator = await AuthorisedAsync(Permissions.RestrictionEdit);
 
-        Answer edited = await EditedAsync(administrator, Tighter, reason: null);
+        Answer edited = await EditedAsync(administrator, Tighter, "a flood from one range");
 
         Assert.Equal(StatusCodes.Status204NoContent, edited.Status);
         Assert.Equal(2, (await SmsDestinationAsync()).Buckets[0].Maximum);
@@ -158,7 +159,7 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
         Answer edited = await EditedAsync(administrator, Looser, reason: null);
 
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, edited.Status);
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired.ToString(), edited.Text("code"));
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired.ToString(), edited.Text("code"));
         Assert.Equal(3, (await SmsDestinationAsync()).Buckets[0].Maximum);
     }
 
@@ -343,7 +344,7 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
             ("credit", 3));
 
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, unreasoned.Status);
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired.ToString(), unreasoned.Text("code"));
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired.ToString(), unreasoned.Text("code"));
         Assert.Empty(_deployment.Events.Of<SendingRestrictionGranted>());
     }
 
@@ -387,7 +388,7 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
             ("reason", null));
 
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, unreasoned.Status);
-        Assert.Equal(ErrorCodes.RestrictionReasonRequired.ToString(), unreasoned.Text("code"));
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired.ToString(), unreasoned.Text("code"));
         Assert.Empty(_deployment.Events.Of<SendingRestrictionGranted>());
     }
 

@@ -88,14 +88,21 @@ internal static class ConfigurationEndpoints
             return Answers.Malformed("value");
         }
 
-        // A missing reason is refused with the code chapter 09 section 8 names for it,
-        // naming the key as the service names it, rather than as a malformed request.
-        if (body.Reason is not { Length: > 0 } reason)
+        // A missing or blank reason is refused with the code chapter 09 section 8 names
+        // for it, naming the key as the service names it, rather than as a malformed
+        // request; one past the bound of API-CONV-002 is a request the boundary does not
+        // read.
+        if (body.Reason?.Trim() is not { Length: > 0 } reason)
         {
             return Answers.Refused(Error.From(
-                ErrorCodes.RestrictionReasonRequired,
+                ErrorCodes.ConfigurationChangeReasonRequired,
                 "key",
                 JsonSerializer.SerializeToElement(known.ToString())));
+        }
+
+        if (reason.Length > 1024)
+        {
+            return Answers.Malformed("reason");
         }
 
         return Answers.Of(

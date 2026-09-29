@@ -63,7 +63,7 @@ internal sealed class ProtectedConfiguration(
 
         if (string.IsNullOrWhiteSpace(reason))
         {
-            return Result.Failure(Error.From(ErrorCodes.RestrictionReasonRequired));
+            return Result.Failure(Error.From(ErrorCodes.ConfigurationChangeReasonRequired));
         }
 
         DateTimeOffset now = time.GetUtcNow();

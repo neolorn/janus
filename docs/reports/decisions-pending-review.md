@@ -4194,6 +4194,8 @@ whose chapter states its direction governs, naming the restriction set as the on
 does. Chapter 10 needs a row for the audit action `ops.configuration.changed`, listed
 under **Rows for chapter 10**.
 
+**Revised by entry 407.**
+
 ---
 
 ## 125. A signed-in browser asking to register is refused, and no account document crosses a registration route
@@ -16757,6 +16759,8 @@ Every request that was refused is still refused; only which refusal comes first 
 *Chapter text that should change.*
 - `09` section 8's `422` line could read "`auth.restriction.reasonrequired` where a change arrives without a reason", matching its body.
 - OPS-CFG-002 could say that a tightening costs a reason but no step-up.
+
+**Superseded by D-166.**
 
 ---
 

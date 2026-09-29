@@ -1030,8 +1030,12 @@ against the public contract of LIB-API-001.
   (`hosting`, `transfer`, `hosting-transfer`, `cross-border-transfer`) that rests on a
   consent basis, with `model.startup.declarationmissing`.
 - A runtime setting changed in process is refused without a reason,
-  `auth.restriction.reasonrequired` naming the key, whichever way it moves, as over
-  HTTP; the named restriction set asks a reason of a loosening only.
+  `config.change.reasonrequired` naming the key, whichever way it moves, as over HTTP;
+  an edit of the named restriction set, a tightening included, is refused the same way,
+  naming `restrictions`, and so is a restriction grant. A reason is 1 to 1024 characters
+  after trimming: a blank one is refused with that code, and one past 1024 characters
+  with `api.request.malformed` naming `reason`, at `PUT /admin/config/{key}` and in
+  process alike.
 - Every endpoint the library mounts calls its operation through a public service
   contract. `ICredentials.LinkableAsync` and `ICredentials.UnlinkAsync` check and unlink
   an identity at a social provider in process, under the same checks as `POST` and
@@ -1048,7 +1052,7 @@ against the public contract of LIB-API-001.
   one the key reduces to nothing as `api.request.malformed`.
 - A management or account request missing a member its body requires is refused before
   anything else is judged: a missing reason by its own code
-  (`authz.grant.reasonrequired`, `auth.restriction.reasonrequired`,
+  (`authz.grant.reasonrequired`, `config.change.reasonrequired`,
   `auth.recovery.reasonrequired`), any other member as `api.request.malformed` naming it.
 - `bootstrap` requires the first administrator's date of birth as `--dateofbirth`
   (`yyyy-MM-dd`) and refuses an administrator under eighteen as

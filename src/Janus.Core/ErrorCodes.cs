@@ -37,6 +37,19 @@ public static class ErrorCodes
     public static ErrorCode ConfigurationValueNotAllowed { get; } = ErrorCode.Parse("config.value.notallowed");
 
     /// <summary>
+    /// A configuration change arrived without a written reason: a runtime key, an
+    /// organization's policy or its locked domains, any edit of the restriction set, a
+    /// tightening included, a restriction grant, or a protected key set from the server.
+    /// The details name the setting where one is changed. State the reason and submit it
+    /// again.
+    /// </summary>
+    /// <remarks>
+    /// Implements OPS-CFG-002, OPS-CFG-004, OPS-CFG-005, OPS-CFG-008, AUTH-ABUSE-004,
+    /// chapter 10 section 1.5.
+    /// </remarks>
+    public static ErrorCode ConfigurationChangeReasonRequired { get; } = ErrorCode.Parse("config.change.reasonrequired");
+
+    /// <summary>
     /// Loosening a control requires step-up authentication and a written reason.
     /// Present both and repeat the change.
     /// </summary>
@@ -726,19 +739,6 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements AUTH-ABUSE-004, AUTH-ABUSE-002, chapter 10 section 1.2.</remarks>
     public static ErrorCode RestrictionExceeded { get; } = ErrorCode.Parse("auth.restriction.exceeded");
-
-    /// <summary>
-    /// A runtime configuration change, a restriction grant, or an edit that loosens a
-    /// restriction, arrived without a written reason. State the reason and submit it
-    /// again.
-    /// </summary>
-    /// <remarks>
-    /// Implements AUTH-ABUSE-004, OPS-CFG-002, OPS-CFG-005, chapter 9
-    /// <c>PUT /admin/config/{key}</c> and chapter 10 section 1.2. The code is the one
-    /// chapter 9 names for a configuration change with no reason, which is why a code
-    /// of the restriction area answers for every setting.
-    /// </remarks>
-    public static ErrorCode RestrictionReasonRequired { get; } = ErrorCode.Parse("auth.restriction.reasonrequired");
 
     /// <summary>
     /// A conformance finding: the provider admitted a request it refuses, or its
