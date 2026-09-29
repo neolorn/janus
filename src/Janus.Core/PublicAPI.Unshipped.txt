@@ -3546,7 +3546,6 @@ static Janus.Core.Configuration.Settings.AlertingSmsDestinations.get -> Janus.Co
 static Janus.Core.Configuration.Settings.AlertingSmsSeverityThreshold.get -> Janus.Core.Configuration.ChoiceSetting<Janus.Core.AlertSeverity>!
 static Janus.Core.Configuration.Settings.All.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Configuration.Setting!>!
 static Janus.Core.Configuration.Settings.Argon2StrengthClasses.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Configuration.Argon2StrengthClass!>!
-static Janus.Core.Configuration.Settings.AuditEnabled.get -> Janus.Core.Configuration.FlagSetting!
 static Janus.Core.Configuration.Settings.AuthzReverseLookupBudget.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.BackupRestoreTestCanary.get -> Janus.Core.Configuration.TextSetting!
 static Janus.Core.Configuration.Settings.BackupRestoreTestInterval.get -> Janus.Core.Configuration.DurationSetting!
@@ -3598,7 +3597,6 @@ static Janus.Core.Configuration.Settings.OrganizationDeletionGrace.get -> Janus.
 static Janus.Core.Configuration.Settings.OrganizationMultipleMemberships.get -> Janus.Core.Configuration.FlagSetting!
 static Janus.Core.Configuration.Settings.OrganizationPhoto.get -> Janus.Core.Configuration.SettingFamily<bool>!
 static Janus.Core.Configuration.Settings.OrganizationPolicy.get -> Janus.Core.Configuration.SettingFamily<Janus.Core.PolicyOverride!>!
-static Janus.Core.Configuration.Settings.OrganizationStepUpEnforcement.get -> Janus.Core.Configuration.SettingFamily<bool>!
 static Janus.Core.Configuration.Settings.OutboxPollInterval.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.OutboxRetryFactor.get -> Janus.Core.Configuration.DecimalSetting!
 static Janus.Core.Configuration.Settings.OutboxRetryInitial.get -> Janus.Core.Configuration.DurationSetting!
@@ -3652,7 +3650,6 @@ static Janus.Core.Configuration.Settings.SessionStepUpRecency.get -> Janus.Core.
 static Janus.Core.Configuration.Settings.SweepInterval.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.TakedownGrace.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.ThrowIfIncomplete(System.Collections.Generic.IReadOnlySet<Janus.Core.Configuration.ConfigurationKey>! named, Janus.Core.Configuration.HostingLocation? location, Janus.Core.Configuration.BlocklistSource blocklistSource, System.Collections.Generic.IReadOnlySet<Janus.Core.Configuration.BlocklistRejectionSource>! blocklistSources, bool recordsOfProcessing) -> void
-static Janus.Core.Configuration.Settings.TokenSignatureVerification.get -> Janus.Core.Configuration.FlagSetting!
 static Janus.Core.Configuration.Settings.TokenSigningAlgorithm.get -> Janus.Core.Configuration.ChoiceSetting<string!>!
 static Janus.Core.Configuration.Settings.TokenSigningRotation.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.WebAuthnAlgorithms.get -> Janus.Core.Configuration.IntegerListSetting!

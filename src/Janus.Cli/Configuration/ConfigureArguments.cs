@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using Janus.Authentication.Configuration;
@@ -73,31 +72,12 @@ internal static class ConfigureArguments
             : Result.Success(new ConfigureRequest(values, given.GetValueOrDefault(Reason)));
     }
 
-    // A protected key that exists once, or one organization's member of a protected
-    // family, named with the organization identifier as the key holds it.
-    private static Result<ProtectedValue> Read(string name, string entered)
-    {
-        if (Settings.All.FirstOrDefault(setting => string.Equals(setting.Key.ToString(), name, StringComparison.Ordinal))
-            is { Scope: SettingScope.Protected } setting)
-        {
-            return setting.Apply(new ProtectedReading(entered));
-        }
-
-        foreach (SettingFamily family in Settings.Families.Where(family => family.Scope is SettingScope.Protected))
-        {
-            string parameter = name.StartsWith(family.Prefix + ".", StringComparison.Ordinal)
-                ? name[(family.Prefix.Length + 1)..]
-                : string.Empty;
-
-            if (Guid.TryParseExact(parameter, "D", out Guid identifier)
-                && string.Equals(parameter, identifier.ToString("D", CultureInfo.InvariantCulture), StringComparison.Ordinal))
-            {
-                return family.Apply(new ProtectedMemberReading(new OrganizationId(identifier), entered));
-            }
-        }
-
-        return Result.Failure<ProtectedValue>(Malformed(Prefix + name));
-    }
+    // A protected key, which exists once for the deployment: no family is protected.
+    private static Result<ProtectedValue> Read(string name, string entered) =>
+        Settings.All.FirstOrDefault(setting => string.Equals(setting.Key.ToString(), name, StringComparison.Ordinal))
+            is { Scope: SettingScope.Protected } setting
+            ? setting.Apply(new ProtectedReading(entered))
+            : Result.Failure<ProtectedValue>(Malformed(Prefix + name));
 
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));

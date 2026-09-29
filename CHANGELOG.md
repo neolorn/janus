@@ -166,8 +166,8 @@ against the public contract of LIB-API-001.
 - `configure` changes protected keys from the server, the one way to change a key the
   management application refuses: pipe the key document to it as to `bootstrap` and name
   each key as `--<key> <value>`, with `--reason`. It takes the keys chapter 10 section
-  4.8 protects and `stepup.enforcement.<organization>` for an organization the
-  deployment holds, and refuses every other key. Each change is recorded under the
+  4.8 protects and refuses every other key. Audit logging, token signature verification
+  and step-up enforcement have no switch: the library performs them unconditionally. Each change is recorded under the
   `configure` principal with its reason and raises `protected-setting-changed`; the
   governing language also raises `governing-language-changed`. A change that would leave
   the deployment unable to start is refused and nothing of it is written.

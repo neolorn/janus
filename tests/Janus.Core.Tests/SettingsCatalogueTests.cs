@@ -52,12 +52,9 @@ public sealed class SettingsCatalogueTests
     private static string[] ProtectedBySectionFourEight =>
     [
         "abuse.throttle.enabled",
-        "audit.enabled",
         "exfiltration.export.auditing",
         "legal.governinglanguage",
         "privacy.calendar.timezone",
-        "stepup.enforcement",
-        "token.signature.verification",
         "token.signing.algorithm",
         "webauthn.rpid",
     ];
@@ -171,7 +168,7 @@ public sealed class SettingsCatalogueTests
     {
         string[] declared = [.. Settings.Families.Select(family => family.Prefix).Order(StringComparer.Ordinal)];
 
-        Assert.Equal(["photo.enabled", "policy", "retention", "stepup.enforcement"], declared);
+        Assert.Equal(["photo.enabled", "policy", "retention"], declared);
     }
 
     /// <summary>
@@ -223,14 +220,14 @@ public sealed class SettingsCatalogueTests
 
     /// <summary>
     /// The same rule for a boolean, which loosens away from its default whichever way
-    /// that is, and for the one family of booleans.
+    /// that is, and for a family of booleans.
     /// </summary>
     [Fact]
     public void Loosening_ABoolean_LoosensAwayFromItsDefault()
     {
-        Assert.Equal(SettingDirection.Decrease, Settings.AuditEnabled.Loosening);
+        Assert.Equal(SettingDirection.Decrease, Settings.AbuseThrottleEnabled.Loosening);
         Assert.Equal(SettingDirection.Increase, Settings.AlertingOwnerEnabled.Loosening);
-        Assert.Equal(SettingDirection.Decrease, Settings.OrganizationStepUpEnforcement.Loosening);
+        Assert.Equal(SettingDirection.Increase, Settings.OrganizationPhoto.Loosening);
     }
 
     /// <summary>

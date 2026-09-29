@@ -5,7 +5,6 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
-using Janus.Authentication.Organizations;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -17,7 +16,6 @@ namespace Janus.Authentication.Configuration;
 /// </summary>
 /// <param name="configuration">Where the value in force is read.</param>
 /// <param name="settings">Where a protected key's value is written.</param>
-/// <param name="organizations">Whether the organization a member names exists.</param>
 /// <param name="audit">Where each change is written down.</param>
 /// <param name="alerts">Where each change is raised.</param>
 /// <param name="work">The one transaction the change runs in.</param>
@@ -33,7 +31,6 @@ namespace Janus.Authentication.Configuration;
 internal sealed class ProtectedConfiguration(
     IConfigurationStore configuration,
     IProtectedSettings settings,
-    IOrganizationDirectory organizations,
     IConfigurationAudit audit,
     IRaisedAlerts alerts,
     IUnitOfWork work,
@@ -72,18 +69,6 @@ internal sealed class ProtectedConfiguration(
 
         foreach (ProtectedValue value in values)
         {
-            if (value.Organization is OrganizationId organization
-                && await organizations.FindAsync(organization, cancellationToken).ConfigureAwait(false) is null)
-            {
-                return Result.Failure(new Error(
-                    ErrorCodes.ConfigurationValueNotAllowed,
-                    new Dictionary<string, JsonElement>(StringComparer.Ordinal)
-                    {
-                        ["key"] = JsonSerializer.SerializeToElement(value.Key.ToString()),
-                        ["field"] = JsonSerializer.SerializeToElement("organization"),
-                    }));
-            }
-
             bool loosening = await value.LoosensAsync(configuration, cancellationToken).ConfigureAwait(false);
             string? before = await settings.WriteAsync(value.Key, value.Written, cancellationToken).ConfigureAwait(false);
 

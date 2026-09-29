@@ -487,29 +487,6 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)).Match(value => value.SelfServiceRecovery, _ => null));
     }
 
-    /// <summary>
-    /// OPS-CFG-004: a member of a family the application cannot change is refused
-    /// whatever its route judged, and nothing is written down.
-    /// </summary>
-    /// <returns>The work of running it.</returns>
-    [Fact]
-    public async Task OPS_CFG_004_AMemberOfAProtectedFamilyIsRefusedAsync()
-    {
-        Result<bool> refused = await Administration.ChangeMemberAsync(
-            Settings.OrganizationStepUpEnforcement,
-            OrganizationId.New(_clock).ToString(),
-            false,
-            loosening: true,
-            "an outage",
-            SubjectId.New(_randomness),
-            TestContext.Current.CancellationToken);
-
-        Assert.Equal(
-            ErrorCodes.ConfigurationKeyProtected,
-            refused.Match(_ => throw new Xunit.Sdk.XunitException("The change was not refused."), error => error.Code));
-        Assert.Empty(_changes.Written);
-    }
-
     private static async Task<IReadOnlyList<ConfigurationKey>> KeysAsync(
         ValueTask<IReadOnlyList<ConfigurationChange>> reading)
     {

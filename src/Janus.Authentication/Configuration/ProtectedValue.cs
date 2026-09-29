@@ -1,6 +1,5 @@
 using System.Threading;
 using System.Threading.Tasks;
-using Janus.Core;
 using Janus.Core.Configuration;
 
 namespace Janus.Authentication.Configuration;
@@ -20,12 +19,6 @@ internal abstract class ProtectedValue
     /// The value in the form the settings table holds it.
     /// </summary>
     public abstract string Written { get; }
-
-    /// <summary>
-    /// The organization whose member of a family the key is, or nothing for a key that
-    /// exists once for the deployment.
-    /// </summary>
-    public abstract OrganizationId? Organization { get; }
 
     /// <summary>
     /// Whether putting the value in force loosens the deployment against the value in

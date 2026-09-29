@@ -22,9 +22,6 @@ internal sealed class ProtectedSettingValue<TValue>(Setting<TValue> setting, TVa
     public override string Written => setting.Write(value);
 
     /// <inheritdoc/>
-    public override OrganizationId? Organization => null;
-
-    /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">The configuration is absent.</exception>
     public override async ValueTask<bool> LoosensAsync(IConfigurationStore configuration, CancellationToken cancellationToken)
     {

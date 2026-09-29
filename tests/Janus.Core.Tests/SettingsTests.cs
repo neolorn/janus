@@ -301,8 +301,8 @@ public sealed class SettingsTests
     [Fact]
     public void For_OrganizationIdentifier_NamesTheMembersKey() =>
         Assert.Equal(
-            "stepup.enforcement.acme",
-            Settings.OrganizationStepUpEnforcement.For("acme").ToString());
+            "photo.enabled.acme",
+            Settings.OrganizationPhoto.For("acme").ToString());
 
     /// <summary>
     /// Chapter 10 section 4 and the <c>policy.&lt;organization&gt;</c> row: the

@@ -185,25 +185,6 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     }
 
     /// <summary>
-    /// A family the application cannot change is refused for every member, whatever
-    /// the caller asks, and no row is written for it (OPS-CFG-004).
-    /// </summary>
-    [Fact]
-    public async Task WriteAsync_AMemberOfAProtectedFamily_IsRefusedAndWritesNothingAsync()
-    {
-        await using StoreContext writing = database.Context();
-
-        Result<bool> written = await new ConfigurationStore(writing).WriteAsync(
-            Catalogue.OrganizationStepUpEnforcement,
-            OrganizationId.New(TimeProvider.System).ToString(),
-            false,
-            TestContext.Current.CancellationToken);
-
-        Assert.Equal(ErrorCodes.ConfigurationKeyProtected, Code(written));
-        Assert.Empty(writing.ChangeTracker.Entries<SettingRecord>());
-    }
-
-    /// <summary>
     /// A member's value that would not read back as one the family admits is refused
     /// rather than stored, so no row the next read faults on is ever written.
     /// </summary>

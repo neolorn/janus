@@ -814,14 +814,6 @@ public static class Settings
     public static TextSetting LegalGoverningLanguage { get; } =
         new("legal.governinglanguage", SettingScope.Protected);
 
-    /// <summary>Whether the audit log is written.</summary>
-    public static FlagSetting AuditEnabled { get; } =
-        new("audit.enabled", SettingScope.Protected, true);
-
-    /// <summary>Whether a token's signature is verified.</summary>
-    public static FlagSetting TokenSignatureVerification { get; } =
-        new("token.signature.verification", SettingScope.Protected, true);
-
     /// <summary>
     /// How long an access token lives, which for a relying party that validates
     /// offline is the revocation latency.
@@ -884,13 +876,6 @@ public static class Settings
     /// </summary>
     public static SettingFamily<TimeSpan> HostCategoryRetention { get; } =
         new("retention", SettingScope.Runtime, SettingForms.Duration);
-
-    /// <summary>
-    /// Whether step-up is enforced for an organization: one key per organization, and
-    /// the protected kill switch rather than a field of the policy object.
-    /// </summary>
-    public static SettingFamily<bool> OrganizationStepUpEnforcement { get; } =
-        new("stepup.enforcement", SettingScope.Protected, SettingForms.Flag, true);
 
     /// <summary>
     /// The (memory, iterations) pairs the Argon2id floor admits. A deployment is at or
@@ -1037,8 +1022,6 @@ public static class Settings
         HostingLocation,
         HostingCrossBorderBasis,
         LegalGoverningLanguage,
-        AuditEnabled,
-        TokenSignatureVerification,
         OidcAccessTokenLifetime,
         OidcCodeLifetime,
         RedirectDefaultClient,
@@ -1051,7 +1034,7 @@ public static class Settings
     /// per host-declared category.
     /// </summary>
     public static IReadOnlyList<SettingFamily> Families { get; } =
-        [OrganizationPhoto, OrganizationPolicy, HostCategoryRetention, OrganizationStepUpEnforcement];
+        [OrganizationPhoto, OrganizationPolicy, HostCategoryRetention];
 
     /// <summary>
     /// The keys a deployment has to name, because they name the deployment and the

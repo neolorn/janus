@@ -76,35 +76,26 @@ public sealed class ConfigureTests(BootstrappedDeployment deployment) : IClassFi
     }
 
     /// <summary>
-    /// OPS-CFG-004 and chapter 10 section 4.8: an organization's step-up enforcement is
-    /// switched from the server by its member of the protected family, and a member for
-    /// an organization the deployment does not hold is refused.
+    /// OPS-CFG-004: audit logging, token signature verification and step-up enforcement
+    /// have no switch, so the command refuses each former switch by name as it refuses
+    /// any key that is not protected, and writes nothing.
     /// </summary>
+    /// <param name="key">The former switch, a member of the former family included.</param>
     /// <returns>The work of the test.</returns>
-    [Fact]
-    public async Task OPS_CFG_004_AnOrganizationsStepUpEnforcementIsSwitchedFromTheServerAsync()
+    [Theory]
+    [InlineData("audit.enabled")]
+    [InlineData("token.signature.verification")]
+    [InlineData("stepup.enforcement.0199a1b2-c3d4-7e5f-8a6b-7c8d9e0f1a2b")]
+    public async Task OPS_CFG_004_ARetiredSwitchIsRefusedAsync(string key)
     {
+        Invocation run = await ConfiguredAsync("--" + key, "false", "--reason", Reason);
+
         await using NpgsqlConnection connection = await deployment.OpenAsync();
 
-        string organization = await connection.ExecuteScalarAsync<string>(
-            "SELECT id::text FROM identity.organizations WHERE administrative") ?? string.Empty;
-        string key = Settings.OrganizationStepUpEnforcement.For(organization).ToString();
-        string unheld = Settings.OrganizationStepUpEnforcement.For(Guid.NewGuid().ToString()).ToString();
-
-        Invocation run = await ConfiguredAsync("--" + key, "false", "--reason", "An incident on the gate.");
-        Invocation refused = await ConfiguredAsync("--" + unheld, "false", "--reason", "An incident on the gate.");
-
-        Assert.Equal(0, run.ExitCode);
-        Assert.Equal(Settings.OrganizationStepUpEnforcement.Write(false), await ValueAsync(connection, key));
-        Assert.True(await connection.ExecuteScalarAsync<bool>(
-            """
-            SELECT (details->>'loosening')::boolean FROM identity.audit_records
-            WHERE action = 'ops.configuration.changed' AND principal = 'configure' AND details->>'key' = @Key
-            """,
-            new { Key = key }));
-        Assert.Equal(1, refused.ExitCode);
-        Assert.Equal(("config.value.notallowed", unheld, "organization"), Refusal(refused, "key", "field"));
-        Assert.Null(await ValueAsync(connection, unheld));
+        Assert.Equal(1, run.ExitCode);
+        Assert.Empty(run.Output);
+        Assert.Equal(("api.request.malformed", "--" + key), Refusal(run, "member"));
+        Assert.Null(await ValueAsync(connection, key));
     }
 
     /// <summary>
