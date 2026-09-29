@@ -1046,9 +1046,10 @@ account, taking it down or adding it to a group, SHALL be refused with 403
 `account:delete`, whatever the reserved account's policy lists. It holds a subject key
 like any account, so what a break-glass session records under it is sealed as any
 account's is. The reason given at use is not such a value: it is the owner's statement
-of why the emergency session exists, kept with the session and written in plain text on
-every audit record the session writes, in a field of the record's own; it is plain, as
-every stated reason is, so the trail reads it back (D-170). The session may approve any
+of why the emergency session exists, kept with the session and written in plain text on every audit record the session writes,
+in a field of the record's own; a session another application opens from the break-glass
+session (BFF-SESS-006) takes it from the record it is bound to and writes it the same way;
+it is plain, as every stated reason is, so the trail reads it back (D-170, D-171). The session may approve any
 recovery, including the sole administrator's (AUTH-RECOV-002a). The session SHALL
 satisfy step-up for its lifetime (AUTH-STEP-004). Lifetime is configurable with an
 enforced ceiling (D-138): the session ends `breakglass.session.lifetime` after the use
@@ -1077,7 +1078,7 @@ credential, one field for the reason, one button. The endpoint
 free-text member under API-CONV-002, and kept with the session. The owner is not technical
 (`12` §1); an API endpoint is not a procedure they can follow.
 
-*Source: D-065, D-129, D-166, D-170*
+*Source: D-065, D-129, D-166, D-170, D-171*
 
 **Acceptance criteria**
 1. Use consumes it; a second attempt fails.
@@ -1097,8 +1098,9 @@ free-text member under API-CONV-002, and kept with the session. The owner is not
 9. From a break-glass session each step-up action listed above is refused with
    `authz.denied`; an administrator's suspension, takedown, grant or group addition
    naming the reserved account is refused the same way.
-10. Every audit record written in a break-glass session carries the reason given at
-    its use, `auth.breakglass.used` included, and the trail read returns it as
+10. Every audit record written in a break-glass session, or in a session another
+    application opened from it (BFF-SESS-006), carries the reason given at the
+    credential's use, `auth.breakglass.used` included, and the trail read returns it as
     `breakGlassReason`; a record written by background work the session caused
     carries none.
 

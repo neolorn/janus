@@ -62,7 +62,7 @@ breaking.
 |---|---|
 | **Model builder API** | Resource type declaration, containment, concealment, sensitivity, purposes with their data and subject categories, roles, the step-up gate and the purpose bound to an action, **derivations**; and the processing read back from them, `DeclaredProcessing` and `DeclaredPurpose` with its `ConsentKind` (`10` section 5.10) |
 | **Permission filter shape** | The expression form and the SQL fragment form |
-| **Operations contract** | The service contracts for every library-owned operation (LIB-API-005), the strongly typed identifiers they take and return (CONV-DESIGN-004), `PrivacyRequestId` among them, and the gates one area asks of another, `IAccessGate` and `IStepUpGate` |
+| **Operations contract** | The service contracts for every library-owned operation (LIB-API-005), the strongly typed identifiers they take and return (CONV-DESIGN-004), `PrivacyRequestId` among them, and the gates one area asks of another, `IAccessGate` and `IStepUpGate`, and the key ring's contract (CONV-CODE-007), which every area borrows a key through and no host implements |
 | **Extension contracts** | The interfaces a host implements or replaces for the library to call: the mail and SMS transports, `INotificationHandler` with `SendRequest`, `SendDestination` and `SendReference`, and `ISecretSource` (LIB-EXT-001); the declarations and environment seams of LIB-HOST-001; the assurance provider of LIB-HOST-004 |
 | **Emitted events** | Notification and lifecycle event contracts, including the identifier, restriction and device events of D-146 (`IdentifierAdded`, `IdentifierRemoved`, `IdentifierPrimaryChanged`, `SendingRestrictionChanged`, `SendingRestrictionGranted`, `DeviceVerified`; `10` section 5b), each delivered to every registered `IEventConsumer<TEvent>` from a row written in the emitting transaction, retried under `outbox.retry.*`, and on exhaustion failed with `degradation`; publication is not replaceable (CONV-DESIGN-002). And the host registrations that answer for them: `ISubjectEventSubscriber`, naming the resource types it covers (`Covers`), and `IPurposeHandler`, naming the purposes it handles (`Purposes`) |
 | **Database schema** | All library-owned tables |
@@ -74,7 +74,7 @@ breaking.
 | **HTTP endpoints** | Method, path, body members, status codes and error codes of each endpoint, as `09-api-contract` gives them, held in a committed contract file generated from the endpoint data source |
 | **Configuration keys** | Names, types, scopes and value constraints, and the key families |
 
-*Source: D-026.4, D-017, D-041, D-106, D-146, D-166*
+*Source: D-026.4, D-017, D-041, D-106, D-146, D-166, D-171*
 
 The ancestry closure is public because hand-written SQL will query it. It cannot be
 restructured without a major version.

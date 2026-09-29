@@ -1818,8 +1818,9 @@ browser that may hold a stale session for the domain.
 ```
 
 `reason` is required: the owner's words, trimmed, at most 1024 characters; absent or
-blank is **400** `api.request.malformed` naming `reason`. It is kept with the session and
-recorded on every audit record the session writes (OPS-BOOT-002).
+blank is **400** `api.request.malformed` naming `reason`. It is kept with the session, and by the session another application opens
+from it (BFF-SESS-006), and recorded on every audit record either writes (OPS-BOOT-002,
+D-171).
 
 **200** — a time-boxed **auth session** (`breakglass.session.lifetime`) whose subject
 is the reserved `emergency` account (D-138), which holds the `system-administrator`
@@ -2147,7 +2148,7 @@ organization (API-CONV-003). The reserved `emergency` account is refused as a me
 
 | Endpoint | Does |
 |---|---|
-| `GET /admin/audit?subject=...` | Every audit record naming one subject, as the acting identity or as the data subject the record concerns (`subject`), most recent first, without a full scan (PRIV-BREACH-002): each entry carries the record's identifier, category, action, occurrence, acting and effective subjects, data subject, organization and plain details, and never a value held under a subject's key (PRIV-RET-002), so it reads the same before and after erasure; a record of background work carries `principal` and `principalReason` (IDN-AUD-001); a record written in a break-glass session carries `breakGlassReason`, the reason given at its use (OPS-BOOT-002, D-170) |
+| `GET /admin/audit?subject=...` | Every audit record naming one subject, as the acting identity or as the data subject the record concerns (`subject`), most recent first, without a full scan (PRIV-BREACH-002): each entry carries the record's identifier, category, action, occurrence, acting and effective subjects, data subject, organization and plain details, and never a value held under a subject's key (PRIV-RET-002), so it reads the same before and after erasure; a record of background work carries `principal` and `principalReason` (IDN-AUD-001); a record written in a break-glass session, or in a session another application opened from it, carries `breakGlassReason`, the reason given at its use (OPS-BOOT-002, D-170, D-171) |
 | `GET /admin/explanations/{correlationId}` | Resolves a concealed denial's correlation identifier to the permission and principal (AUTHZ-GATE-004, AUTHZ-CONCEAL-004), with the outcome `allowed` or `denied` (the explanation outcomes of `10`); any recorded refusal resolves |
 
 Self-service explanation for **non-concealed** types is `GET /account/explanations/{correlationId}`, requiring only the subject's own session: it resolves a refusal whose acting and effective principal are both the caller, on a type that discloses or on no record (AUTHZ-CONCEAL-005); any other identifier answers `authz.denied` (D-166).

@@ -8954,6 +8954,8 @@ section 7 · `19` · `20` · `docs/guide/janus-explained.md`,
 
 > **Amended.** D.8 break-glass part (7): the reason is kept in a field of the session and of each audit record, plain, carried with the acting identity; part (2): the limit alert is raised with no scope where no reserved account exists (D-170).
 
+> **Amended.** Paragraph 215: the mail server's management key is read once at startup into the key ring and borrowed for each call, not read from the source and cleared at each use (D-171).
+
 **Date:** 2026-09-25 · **Status:** accepted · **Amends:** D-161 (item 4, the working mode; item 2, where the drift check's rows come from), D-162 (item 22, where the governed send path lives; item 23, when the first attempt is made; item 26, the budget of a text message carrying a link; item 31, where destination records are kept and when they are swept; item 66, where a client secret comes from; C.55, where photo availability is held and what bootstrap writes; C.68 at `POST /auth/link`; C.103, the condition of the mail server row; E, the status of `identity.identifier.invalid`), D-153 (owner decision 2, the source a flood limit counts; owner decision 7, the word lists; the `backup.restoretest.interval` default; the address the bootstrap command prints), D-147 (the retirement of a key-encryption-key version; the name of the startup code for an unavailable secret), D-146 (item 17: a restriction's channel, the notices to a holder, a reason on every edit), D-143 (the policy object gains `photos`), D-129 (the break-glass page takes a reason), D-127 (a takedown reversal restores the state the takedown found), D-079a (a recognised device is exempt from the hold, not from the count), D-071 (three protected switches retired), D-060 (photos are off for the administrative organization until a codec is declared), D-057 (an authorization request's `redirect_uri` is refused at the push, not replaced), D-164 (item 3: the mail server verifies `aud` itself), D-165 (the developer recipient row is a declared example; the provider callback row and INT-GEN-003's sentence restored) · **Extends:** D-162, D-164, D-165
 
 **TL;DR.** The ledger entries 110 to 423 were audited entry by entry against the
@@ -11689,6 +11691,8 @@ own trace check skips those data files and nothing else.
 
 ## D-170 — Corrections-4 questions: the break-glass reason on the trail, bootstrap's `before`, the limit alert before bootstrap
 
+> **Amended.** A session another application opens from the break-glass session keeps its reason; "no other session has one" means no session opened any other way (D-171).
+
 **Date:** 2026-09-29 · **Status:** accepted · **Amends:** D-166 (D.8, break-glass parts (2) and (7)) · **Extends:** D-166 (319 fix (2) and section G)
 
 **TL;DR.** The corrections-4 run stopped on three questions. The reason the owner gives
@@ -11745,6 +11749,101 @@ on a deployment with no reserved account.
 **Propagated to:** `01` IDN-AUD-001 · `04` PRIV-BREACH-002 · `06` OPS-BOOT-002 (text and
 criterion 10), OPS-BOOT-004 (text and criterion 7) · `09` `GET /admin/audit` · `10`
 section 5.24.
+
+---
+
+## D-171 — Corrections-4 question 7: the key ring for startup secrets; the unit of work's result; the derived break-glass session
+
+**Date:** 2026-09-29 · **Status:** accepted · **Amends:** D-170 (item 1, which sessions keep the reason), D-166 (215, the mail server's secret is borrowed from the ring, not read and cleared at each use) · **Extends:** D-166 (121 and 336, X9)
+
+**TL;DR.** D-166 has every secret read once through the host's secret source at startup,
+and CONV-CODE-007 has secrets live inside a method and be cleared after use. Long-lived key
+material cannot do both, and no chapter said where it lives between the startup read and
+each use. It lives in one key ring, its contract public in `Janus.Core` and its
+implementation internal, pinned, lent per use, cleared at stop; the OIDC provider's
+credentials are the one other place key material lives. The
+result of `BeginAsync` and `CommitAsync` is passed up where the caller returns a result
+and thrown as a fault where it returns none. A session derived from the break-glass
+session keeps its reason.
+
+**1. The key ring (the run's question 7 (b), Tier 3).** The key-encryption keys, the
+fingerprint keys, the maintenance credential, the mail server's secret and the social
+providers' credentials are used for the life of the process: every decryption needs a
+key-encryption key, every lookup a fingerprint key. Today about thirty stores, the token
+protection and two storage areas receive keys when services are registered, which
+D-166 121 removes. The decision:
+
+- One key ring holds every secret the startup read returns, every version the deployment
+  holds, each in a pinned `byte[]` allocated once. Pinning keeps the runtime from moving
+  the array, so clearing it removes the only copy. Its contract is a public interface in
+  `Janus.Core`, since several areas use it (CONV-LAYOUT-002), and its implementation is
+  internal to `Janus.Core`, registered by `Janus.Hosting` and `Janus.Cli`, the two
+  projects that already see `Janus.Core`'s internals. A host could resolve it, but every
+  secret in it is one the host's own `ISecretSource` supplied, so nothing is exposed that
+  the host does not already hold. Its methods return results (CONV-DESIGN-005).
+    Asked for a version it does not hold, it answers `model.startup.secretunavailable` with
+  `details.key` and `details.version`. `Janus.Core` grants its own test project sight of
+  the implementation, so a test can see the clearing leave the arrays zero; tests in the
+  host and command projects prove a read throws after a stop or the command's end. The
+  ring is a singleton.
+- The ring never hands out its arrays. A use borrows a key as `ReadOnlySpan<byte>` or
+  `ReadOnlyMemory<byte>` for the length of that use and keeps nothing.
+- No service receives a key at registration or construction; each asks the ring at its
+  use. A read before the ring is filled, or after it is cleared, is a fault.
+- The ring clears every array when the application stops, after the worker and the server
+  have stopped, or when a `Janus.Cli` command ends.
+- What a use derives from a key (an unwrapped data key) is a secret of that method,
+  cleared after use, as CONV-CODE-007 already says. The second exception is the OIDC
+  provider's credentials: its signing credentials, made from the signing keys the database
+  holds wrapped, and its encryption credential, derived from each held key-encryption key
+  version (AUTH-KEY-002). The maintained provider takes its keys as credential objects in
+  its own server options, and its symmetric key object keeps its own copy of the bytes and
+  cannot be cleared; replacing that with a hand-written key path is the risk
+  CONV-DESIGN-008 rejects. They are held there, made after the ring is filled, with the
+  library's own copy of the bytes cleared at once. A signing credential a rotation
+  replaces stays for the overlap of AUTH-KEY-001 and leaves the options when the overlap
+  ends; the encryption credential changes only at a restart. Nothing else holds key
+  material outside the ring, and no other options object holds key bytes.
+- The mail server's management key (D-166 215) is borrowed from the ring for each call,
+  not read from the source and cleared at each use.
+- A plaintext data key is kept no longer than the method that unwrapped it, so
+  PRIV-RIGHT-005a's "request scope" becomes that method, and its criterion 12 asks one
+  unwrap per method that decrypts several fields of one subject.
+- *Rejected:* reading the source at each use (the host's secrets manager on the path of
+  every request, and a startup that proves nothing); keys held by each store (thirty
+  copies, none cleared); keys in the options objects (copied by the options system and
+  readable by any code that resolves them).
+- Tests carrying CONV-CODE-007 criteria 3 and 4 prove that no service receives a key at
+  registration, that a read before the ring is filled throws, that the ring's clearing
+  leaves every array zero, that a read throws after the host stops or the command ends,
+  and that the provider's credentials are the only key material outside the ring, made
+  from bytes the library clears at once.
+
+**2. The order (question 7 (a)).** D-166 section B leaves the order of its corrections to
+the implementer. 121 and 336 name the source's members as they stand after 340, 343 and
+215, so those go first and the secret path is built once, in its final form.
+
+**3. The unit of work's result (question 7 (c)).** `BeginAsync` and `CommitAsync` return a
+result and name no failure code, so a failure there is not an expected outcome of any
+operation. A caller that returns a result passes it up. A caller that returns none
+(background work, a hosted service) throws it as a fault naming its code, the idiom the
+configuration reads already use; CONV-ERR-001 criterion 2 is met because the failure is
+handled, not ignored. No signature gains a result only to carry theirs. A test carrying
+CONV-DESIGN-003 criterion 7 proves both callers.
+
+**4. The derived break-glass session.** A session another application opens from the
+break-glass session (BFF-SESS-006) is the same emergency: the management application is
+where the owner acts. It takes the reason from the session record it is bound to, and
+every record it writes carries it. D-170's "no other session has one" means no session
+opened any other way. A test carrying OPS-BOOT-002 criterion 10 proves that a record
+written in a session opened from the break-glass session reads back with the reason, and
+that one written in a session opened by an ordinary sign-in reads back with none.
+
+**Propagated to:** `01` IDN-AUD-001 · `02` AUTH-SESS-012, AUTH-STEP-004 · `04`
+PRIV-RIGHT-005a, PRIV-BREACH-002 · `06` OPS-BOOT-002 · `07` LIB-API-001 · `08`
+CONV-CODE-007 (text and criteria 3 and 4), CONV-DESIGN-007, CONV-DESIGN-003 (text and
+criterion 7), CONV-LAYOUT-001, CONV-LAYOUT-002 (text and criterion 1) · `09` `POST /auth/break-glass`, `GET /admin/audit` · `10` section 5.24 · `17`
+BFF-SESS-006 · `18` FE-BG-001.
 
 ---
 
@@ -11928,6 +12027,7 @@ section 5.24.
 | Corrections-4 questions: the library's version without reflection; what the host does on erasure | D-168 |
 | Third-party data the package or the repository carries is kept as published; a name inside it is not a trace | D-169 |
 | Corrections-4 questions: the break-glass reason on the trail, bootstrap's `before`, the limit alert before bootstrap | D-170 |
+| Corrections-4 question 7: the key ring for startup secrets; the unit of work's result; the derived break-glass session | D-171 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

@@ -1362,7 +1362,7 @@ identity, effective identity, event time, and organization — **where one appli
 Events on a principal holding no membership (a customer) carry no organization; the
 field is nullable and its absence is the recorded fact, not an omission.
 
-*Source: D-014, D-026.2, D-125, D-166, D-170*
+*Source: D-014, D-026.2, D-125, D-166, D-170, D-171*
 
 Acting and effective identity are separate values, identical in every current path.
 This is the impersonation seam — two fields where one would do, defensible on its
@@ -1379,8 +1379,9 @@ An action a system principal took (IDN-PRIN-001) SHALL be recorded with the nil 
 as acting and effective identity and with the principal's name and its stated reason; a
 record SHALL carry both the name and the reason or neither, and neither where a person
 acted. Every read of the trail SHALL return them. A record written in a break-glass
-session SHALL also carry the reason given at the credential's use, in a field of its own,
-and every read of the trail SHALL return it as `breakGlassReason` (OPS-BOOT-002, D-170).
+session, or in a session another application opened from it (BFF-SESS-006), SHALL also
+carry the reason given at the credential's use, in a field of its own, and every read of
+the trail SHALL return it as `breakGlassReason` (OPS-BOOT-002, D-170, D-171).
 A failed authentication establishes no
 actor: its acting and effective identity are the nil subject, and its subject is the
 account attempted, where one was resolved.

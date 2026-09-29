@@ -895,7 +895,7 @@ with AES key wrap with padding (RFC 5649). The format marker is one byte, `0x01`
 this scheme. An erased wrapped key is 32 zero bytes under marker `0x00`; every decrypt
 refuses it, and the DR-016 ledger and a restore recognise it as erased.
 
-*Source: D-097, D-099, D-100, D-147, D-166*
+*Source: D-097, D-099, D-100, D-147, D-166, D-171*
 
 **Per column, not per row.** Name and phone on a host record are encrypted; its
 non-personal columns (dates, amounts, quantities, references) are not. Aggregates and
@@ -959,8 +959,8 @@ foreign key does that today.
   fails when moved
 - **The KEK SHALL be versioned**, with prior versions held by the application until
   re-wrapping completes. Rotation otherwise strands everything encrypted under the old
-  version. A retired version leaves the application at once and stays in the secrets
-  manager and the envelope until every backup taken before the rotation completed has
+  version. A retired version leaves the application's key document at once
+  and the running application when it next starts, and stays in the secrets manager and the envelope until every backup taken before the rotation completed has
   expired (OPS-SEC-003, DR-009)
 - **Everything under the key-encryption key is a row of the subject-key table.** A value
   the library encrypts that belongs to no subject (a secret of the deployment, or data
@@ -996,7 +996,8 @@ foreign key does that today.
   There is **no key version in the marker.** Rotating the KEK re-wraps the rows of the
   subject-key table and leaves ciphertext untouched, so nothing about a stored value
   changes.
-- **A plaintext data key SHALL NOT be logged**, nor retained beyond request scope
+- **A plaintext data key SHALL NOT be logged**, nor retained beyond the method that
+  unwrapped it (CONV-CODE-007, D-171)
 - **Primitives SHALL come from a maintained cryptographic library**, not be
   hand-written. The pattern is standardised — authenticated encryption for data, key
   wrapping for keys — and implementing it directly is a documented source of error
@@ -1043,7 +1044,8 @@ carried.
    system, **including fields held in host tables**, with no application involvement.
 10. Ciphertext moved to another row or subject fails to decrypt.
 11. Aggregate queries over non-encrypted columns are unaffected.
-12. Displaying one subject's details performs one unwrap, not one per field.
+12. A method that decrypts several fields of one subject performs one unwrap, not one
+    per field.
 13. A KEK rotation (the `Janus.Cli` operation OPS-SEC-003, D-147) re-wraps the rows of
     the subject-key table, the deployment's data key among them, without re-encrypting
     any data.
@@ -1319,11 +1321,12 @@ acted and are the same on every record (AUTHZ-IMP-001); they do not name whom th
 concerns. The query by data subject reads, through an index, the records naming the
 person as `subject` or as acting identity (`GET /admin/audit?subject=`, `09` section
 8a). It returns each record's codes, instants, identifiers and plain details, and the
-reason given at the use of a break-glass session where the record was written in one
-(`breakGlassReason`, OPS-BOOT-002), and never a value held under a subject's key
+reason given at the use of a break-glass session where the record was written in one, or
+in a session another application opened from it (`breakGlassReason`, OPS-BOOT-002,
+D-171), and never a value held under a subject's key
 (PRIV-RET-002), so it reads the same before and after an erasure.
 
-*Source: D-025, D-166, D-170*
+*Source: D-025, D-166, D-170, D-171*
 
 Answering "who was affected" fast is what makes the 72-hour clock achievable. An
 indexing decision made now or a painful one made during an incident.
@@ -1336,7 +1339,7 @@ indexing decision made now or a painful one made during an incident.
 3. The query returns no value a record holds under a subject's key.
 4. An action taken on another person's account, from a break-glass session included, is
    returned by the query for that person through `subject`, names the actor as both
-   acting and effective identity, and, from a break-glass session, carries the reason
+   acting and effective identity, and, from a break-glass session or a session opened from one, carries the reason
    given at its use as `breakGlassReason`.
 
 ---

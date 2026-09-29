@@ -996,7 +996,7 @@ same session record.
 the **OIDC authorization code flow with PKCE**, with each browser application's BFF a
 **confidential client** in the client registry. The BFF SHALL retain no token.
 
-*Source: D-104, D-007, D-033.3, D-147, D-166*
+*Source: D-104, D-007, D-033.3, D-147, D-166, D-171*
 
 **The flow.** A BFF holding no session pushes an authorization request with
 `prompt=none` to `POST /oidc/par` over the back channel and redirects the browser to
@@ -1006,8 +1006,10 @@ authorization code where a session exists, `login_required` where none does, in 
 case the BFF pushes again without `prompt=none` and the person signs in. The BFF
 exchanges the code **back-channel** on the machine profile (BFF-MACH-001) with its
 client secret and PKCE verifier, reads the `sid` claim that names the session record,
-creates its per-app session bound to that record, and discards the ID token. The per-app session inherits the record's assurance properties
-(AUTH-SESS-002).
+creates its per-app session bound to that record, and discards the ID token. The per-app
+session inherits the record's assurance properties (AUTH-SESS-002) and, where the record
+belongs to a break-glass session, takes its reason from the record it is bound to
+(OPS-BOOT-002, D-171).
 
 **What this reuses rather than invents:** the client registry (AUTH-OIDC-001,
 API-REDIR-002), exact-match `redirect_uri` (API-REDIR-001), single-use short-lived
@@ -1615,7 +1617,7 @@ OPS-BOOT-002 refuses from the break-glass session (giving the reserved account a
 sign-in method among them) stay refused with `authz.denied`, whatever the reserved
 account's policy lists.
 
-*Source: D-065, D-166*
+*Source: D-065, D-166, D-171*
 
 A printed single-use secret is not phishing-resistant, so under the ordinary rule a
 break-glass session could perform none of the actions it exists for — approving a
@@ -1630,8 +1632,9 @@ audited.
 **Acceptance criteria**
 1. A break-glass session can approve a recovery, grant `system:administer`, and
    change alert destinations.
-2. Every action in the session is audited as break-glass-originated, carrying the
-   reason given with the credential at its use (OPS-BOOT-002).
+2. Every action in the session, or in a session another application opened from it
+   (BFF-SESS-006), is audited as break-glass-originated, carrying the reason given with
+   the credential at its use (OPS-BOOT-002, D-171).
 3. The exception applies only for the session lifetime and does not persist.
 
 ---

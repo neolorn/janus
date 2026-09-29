@@ -27,7 +27,7 @@ area**, published as a single package.
 
 | Project | Contains | Depends on |
 |---|---|---|
-| `Janus.Core` | Contracts, abstractions, the public surface | nothing |
+| `Janus.Core` | Contracts, abstractions, the public surface; internally, the key ring's implementation (CONV-CODE-007) | nothing |
 | `Janus.Identity` | The account, identifier, organization and membership aggregates, their rules and their persistence ports | Core |
 | `Janus.Authentication` | Factors, sessions, flows; the services of the account, identifier, registration, organization and invitation operations, which gate through this area's step-up guard; the sending restrictions and the governed send path (evaluation, outbox row, counting), whose contract `Janus.Core` declares so that every area sends through it | Core |
 | `Janus.Authorization` | Grants, model builder, gate | Core |
@@ -72,18 +72,21 @@ Where one area needs a rule another area owns, the contract SHALL be a public in
 in `Janus.Core` that the owning area implements: `IAccessGate` (`Janus.Authorization`),
 `IStepUpGate` (`Janus.Authentication`), which `Janus.Privacy` asks before an export
 (`10` section 5a, `privacy:export`), and the governed send, which `Janus.Authentication`
-implements and `Janus.Identity` and `Janus.Privacy` call (AUTH-ABUSE-004). No area
+implements and `Janus.Identity` and `Janus.Privacy` call (AUTH-ABUSE-004). The key ring's
+contract (CONV-CODE-007), which every area borrows a key through and no area owns, is a
+public interface in `Janus.Core` whose implementation is internal to `Janus.Core`. No area
 reaches another area's internals.
 
-*Source: LIB-API-001, LIB-API-002, D-162, D-166*
+*Source: LIB-API-001, LIB-API-002, D-162, D-166, D-171*
 
 Makes the public surface reviewable by reading one project.
 
 **Acceptance criteria**
 1. A public type outside `Janus.Core`, `Janus.Hosting`'s mounting types and
    `Janus.Conformance` fails the build (CONV-SETUP-003). The only `InternalsVisibleTo`
-   grants permitted are: every non-Core source project except `Janus.Conformance` to its
-   own test project; each area project to `Janus.Storage` (persistence ports), to
+   grants permitted are: every source project except `Janus.Conformance` to its own test
+   project (`Janus.Core`'s for the key ring's clearing, D-171); each area project to
+   `Janus.Storage` (persistence ports), to
    `Janus.Storage.Tests` (a port implementation is tested against the aggregate it
    translates, D-156), to `Janus.Hosting` and to `Janus.Cli` (service registration) and
    to `Janus.Hosting.Tests` (the ports `Janus.Hosting` implements are tested against the
@@ -319,7 +322,11 @@ The **unit of work is the operation**: a service method runs inside one transact
 opened by an `IUnitOfWork` port and committed once, at the end, after every write. A
 refusal that needs no write SHALL be returned before the unit of work begins; a failure
 after a write SHALL roll the unit of work back; a later operation in the same scope SHALL
-open and commit its own. A read, decide and write on a row whose value decides a security
+open and commit its own. `BeginAsync` and `CommitAsync` return a result and name no
+failure code; a caller that returns a result passes their failure up, and a caller that
+returns none (background work, a hosted service) throws it as a fault naming the code its
+`Error` carries, as a configuration read throws naming its key (OPS-CFG-008). No
+signature gains a result only to carry theirs (D-171). A read, decide and write on a row whose value decides a security
 or state outcome SHALL take a row lock (`SELECT ... FOR UPDATE`) inside the transaction,
 or a constraint SHALL make the race impossible.
 Hand-written SQL (OPS-DATA-001) lives in `Janus.Storage` beside the port implementation
@@ -334,7 +341,7 @@ added `NOT NULL` without a default; which of them stop a deploy is OPS-DEP-001's
 serialized model of AUTHZ-MODEL-005 is JSON written by `System.Text.Json` source
 generation to `artifacts/model.json`.
 
-*Source: OPS-DATA-001 to 003, OPS-MIG-001, OPS-DEP-002, LIB-PKG-002, D-149, D-166*
+*Source: OPS-DATA-001 to 003, OPS-MIG-001, OPS-DEP-002, LIB-PKG-002, D-149, D-166, D-171*
 
 **Acceptance criteria**
 1. No area project references EF Core or Npgsql.
@@ -346,6 +353,9 @@ generation to `artifacts/model.json`.
    scope commits.
 6. Two concurrent operations that read and decide on one such row leave the outcome of
    one run after the other.
+7. Where `BeginAsync` or `CommitAsync` returns a failure (a fake in the test project), a
+   service method that returns a result returns that failure, and a hosted service or
+   background job throws a fault naming the failure's code.
 
 ---
 
@@ -419,8 +429,8 @@ identifier or value exists (CONV-DESIGN-004) binds to that type at the edge thro
 **CONV-DESIGN-007** — Dependency injection SHALL use the built-in container only.
 Each project exposes exactly one `internal static` registration method
 (`AddIdentityArea(this IServiceCollection)`), called from the single public
-`AddJanus` entry point in `Janus.Hosting`. Lifetimes: services and ports scoped;
-stateless helpers singleton; nothing transient without a recorded reason. Options
+`AddJanus` entry point in `Janus.Hosting`. Lifetimes: services and ports scoped; stateless helpers singleton; the key ring of
+CONV-CODE-007 singleton; nothing transient without a recorded reason. Options
 SHALL be bound through `IOptions<T>` with `ValidateOnStart`; the runtime-changeable
 keys of `10` section 4 are read through the configuration store abstraction, never
 through `IOptions`. A stored value that does not read under its key is a fault: the read
@@ -429,12 +439,13 @@ Time comes from `TimeProvider`; randomness from
 `RandomNumberGenerator`; both injected, never static. Every secret the library needs
 (the members LIB-HOST-001 lists for the secret source) is read once, through the
 host-supplied `ISecretSource` of LIB-EXT-001, asynchronously, when the application starts
-and before the server serves a request; no secret is an argument of `AddJanus`. A
-`Janus.Cli` command reads the same values once, at its start, from one JSON key document
-on standard input that the operator pipes from the secrets manager's own client
+and before the server serves a request, into the key ring of CONV-CODE-007; no secret is
+an argument of `AddJanus`. A
+`Janus.Cli` command reads the same values once, at its start, into the same key ring, from one JSON key
+document on standard input that the operator pipes from the secrets manager's own client
 (OPS-SEC-001). The library ships no secrets-manager client.
 
-*Source: OPS-CFG-001, OPS-CFG-008, D-149, D-166*
+*Source: OPS-CFG-001, OPS-CFG-008, D-149, D-166, D-171*
 
 **Acceptance criteria**
 1. A host calls one method to register the library.
@@ -657,7 +668,37 @@ is API-CONV-003's.
 they cross a port, and be cleared after use; nothing SHALL derive its own primitive
 where the base class library or a permitted package provides one (CONV-DESIGN-008).
 
-*Source: AUTH-PASS-007, AUTH-KEY-002, D-149, D-166*
+*Source: AUTH-PASS-007, AUTH-KEY-002, D-149, D-166, D-171*
+
+**The key ring.** The secrets read once at startup (CONV-DESIGN-007) are needed for the
+life of the process, so they are the first exception to "inside a method" and to "cleared
+after use". They are held in one key ring, a singleton whose contract is a public
+interface in `Janus.Core` (every area borrows a key through it and no area owns it,
+CONV-LAYOUT-002) and whose implementation is internal to `Janus.Core`, registered by
+`Janus.Hosting` and `Janus.Cli`. A host could resolve it, but every secret it holds is one
+the host's own `ISecretSource` supplied. It holds each secret, every version the
+deployment holds, in a pinned `byte[]` allocated once, so the runtime never moves it and
+leaves no copy behind. The ring never hands out its arrays: a use borrows a key as
+`ReadOnlySpan<byte>` or `ReadOnlyMemory<byte>` for the length of that use and keeps
+nothing. Its methods return results (CONV-DESIGN-005): asked for a version it does not
+hold, it answers `model.startup.secretunavailable` with `details.key` naming the secret and
+`details.version` the version. No service receives a key when it is registered or
+constructed; each asks the ring at its use. A read before the ring is filled, or after it
+is cleared, is a fault. The ring clears every array when the application stops, after the
+worker and the server have stopped, or when a `Janus.Cli` command ends.
+
+What a use derives from a key follows the rule above: inside the method, cleared after
+use. The second exception is the OIDC provider's credentials: its signing credentials,
+made from the signing keys the database holds wrapped (AUTH-KEY-001), and its encryption
+credential, derived from each held key-encryption key version (AUTH-KEY-002). The
+maintained provider takes its keys as credential objects in its own server options, and
+replacing that with a hand-written key path is the risk CONV-DESIGN-008 rejects, so they
+are held there, made after the ring is filled, with the library's own copy of the bytes
+they were made from cleared at once. A signing credential a rotation replaces stays for
+the overlap of AUTH-KEY-001 and leaves the options when the overlap ends; the encryption
+credential changes only at a restart, since a key-encryption key version leaves only then
+(OPS-SEC-003). Nothing else holds key material outside the ring, and no other options
+object holds key bytes (D-171).
 
 **Acceptance criteria**
 1. No equality or ordering comparison other than `CryptographicOperations.FixedTimeEquals`
@@ -668,6 +709,13 @@ where the base class library or a permitted package provides one (CONV-DESIGN-00
    compiles in or publishes (a literal, a constant, a member of its error-code or factor
    catalogue) is not a secret.
 2. No custom implementation of a hash, cipher, key derivation or random source exists.
+3. No service receives a key at registration or construction; a read before the ring is
+   filled throws; the ring's clearing leaves every array zero; after the application
+   stops or the command ends, a read throws.
+4. The only key material outside the key ring is the OIDC provider's signing and
+   encryption credentials in its own server options; the library's copy of the bytes each
+   was made from is zero when the making returns, and a signing credential a rotation
+   replaces leaves the options when its overlap ends.
 
 ---
 

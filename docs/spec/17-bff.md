@@ -144,7 +144,7 @@ applications SHALL re-establish silently through the authentication application
 AUTH-OIDC-006), acting as a **confidential client** of the library's provider, and SHALL
 retain no token afterwards.
 
-*Source: AUTH-SESS-012, D-104, D-162, D-164, D-166*
+*Source: AUTH-SESS-012, D-104, D-162, D-164, D-166, D-171*
 
 **What the BFF does.** Both halves are the library's. With no per-app session, the
 frontend sends the browser to `GET /auth/signon?returnTo=<path>` (FE-API-006), which
@@ -157,8 +157,9 @@ verifier on the pre-authentication session, encrypted under the deployment's dat
 (PRIV-RIGHT-005a), and redirects the browser to `/oidc/authorize` with the client
 identifier and the returned `request_uri` alone. On return, `GET /auth/signon/return`
 forgets the attempt, validates `state`, exchanges the code back-channel with its client
-secret and PKCE verifier, reads `sid` from the ID token, creates the per-app session
-bound to that session record, rotates the cookie (BFF-SESS-004), discards the token and
+secret and PKCE verifier, reads `sid` from the ID token, creates the per-app session bound to that session record, which carries its
+break-glass reason where it has one (OPS-BOOT-002, D-171), rotates the cookie
+(BFF-SESS-004), discards the token and
 sends the browser to the stored return address, which is followed only as a path of
 this application (`09` section 3). On `login_required` it pushes again without
 `prompt=none`, so the person signs in at the authentication application and the flow

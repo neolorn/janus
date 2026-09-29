@@ -543,11 +543,12 @@ precedes every identifier field (REG-PROF-002).
 **FE-BG-001** — The authentication application SHALL provide a route `/break-glass`:
 one field for the sealed credential, one labelled field for the reason, one button, no
 other controls. The reason is required and is sent with the credential
-(`POST /auth/break-glass`); the session keeps it, and every audit record the session
-writes carries it (OPS-BOOT-002). On success it SHALL land the person on the management
+(`POST /auth/break-glass`); the session keeps it, the session the management application opens from it takes
+it from the record it is bound to (BFF-SESS-006), and every audit record either writes
+carries it (OPS-BOOT-002, D-171). On success it SHALL land the person on the management
 application. Its address is what the sealed envelope names.
 
-*Source: OPS-BOOT-002, D-129, D-138, D-166*
+*Source: OPS-BOOT-002, D-129, D-138, D-166, D-171*
 
 The owner is not technical. The endpoint behind this page (`POST /auth/break-glass`)
 is not a procedure a non-technical person can follow; this page is.
