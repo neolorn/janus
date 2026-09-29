@@ -1,10 +1,7 @@
 # Corrections 4: D-166 and D-167
 
-Status: stopped at a Tier 2 question (section 4, question 1) while applying D-166
-item 114. The branch holds the corrected documentation, the offline leaked-password list
-and its draw, and one Tier 1 allow-list entry. The rest of D-166 is not applied
-(section 2). Before the branch was cut, pull request #6 (phase 10) was merged with the
-fixes the owner asked for, and section 1 records them.
+Status: in progress. D-168 settled questions 1 and 2 of the first stop, and D-169 settled
+question 3; all three are applied. The rest of D-166 follows (section 2).
 
 ## 1. Items implemented
 
@@ -78,6 +75,15 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 | D-166 item 114, the draw, committed under `tools/` with its checkpoints and user agent, and a test against a local fake | `d283185` | AUTH-PASS-004, CONV-VCS-005 | `test_draw.DrawTests.test_CONV_VCS_005_AC4_EveryRangeRequestNamesTheDraw`, `test_draw.DrawTests.test_AUTH_PASS_004_TheListIsTheMostPrevalentHashesInOrderUnderItsDate`, `test_draw.DrawTests.test_CONV_VCS_005_AC4_AStoppedDrawResumesFromItsCheckpoint` (`python -B -m unittest discover tools/leaked-passwords`) |
 | D-166 item 114, the 100,000 most prevalent hashes in place of the old list, with the `NOTICE` paragraph | `52e4b29` | AUTH-PASS-004, INT-PWD-002 | `OfflineCorpusTests.AUTH_PASS_004_TheShippedListIsTheHundredThousandItNames`, `LibraryStructureTests.AUTH_PASS_004_TheNoticeNamesTheLeakedListsSource` |
 | Secret scanning before the push | `9e6f4d3` | OPS-DEP-004 | The pinned scanner run locally, as the pipeline runs it, over every commit (section 3) |
+| The documentation of D-168 | `3f1cb1c` | none | none |
+| D-168 question 1: the package identifier and version written by the build as internal constants after MinVer sets the version, in the intermediate output, never committed | `0f4c5e1` | CONV-CODE-004, CONV-NAME-001, LIB-VER-001 | `LibraryIdentityTests.CONV_CODE_004_AC3_TheVersionConstantIsThePackageVersionWithoutBuildMetadata`, `LibraryIdentityTests.CONV_CODE_004_AC3_TheConstantsAreGeneratedAndNeverCommitted`, `LibraryIdentityTests.CONV_CODE_004_AC3_NoProjectFileSetsAVersion`, `PublicSurfaceTests.CONV_CODE_004_AC2_AnAssemblyIsReachedOnlyForItsOwnResources`, `PublicSurfaceTests.CONV_CODE_004_AC2_NoShippedFileUsesReflection` |
+| D-168 question 1: the range requests' user agent, `<package identifier>/<package version>` | `ad7acd9` | INT-PWD-001 AC3 | `ScreeningTests.INT_PWD_001_AC3_EveryRangeRequestNamesTheLibraryAndItsVersionAsync` |
+| D-168 question 2: the library's text on what a host clears on `ErasureRequested` | `0961899` | PRIV-RIGHT-005b | No test can decide it. Verified by reading: the summary of `ErasureRequested` was the one library text that told a host to redact its fields; the library holds no message catalogue |
+| D-166 item 114 and R1: the English and Arabic word lists embedded, `WordList.Directory`, `WordsFile` and the path `AddJanus` built removed, the optional `DictionaryWords` declaration, the `NOTICE` line, and the ledger line under entry 114 | `9b77185` | AUTH-PASS-004 AC8, LIB-HOST-001 | `WordListTests.AUTH_PASS_004_AC8_TheEnglishListHoldsTenThousandLowerCaseWords`, `WordListTests.AUTH_PASS_004_TheArabicListCarriesArabiziFormsAndTheirVariants`, `WordListTests.AUTH_PASS_004_AnArabiziFormIsMatchedByTheArabicListAsync`, `WordListTests.AUTH_PASS_004_DigitsCountTowardTheFourCharactersAMatchNeedsAsync`, `WordListTests.AUTH_PASS_004_AWordTheHostDeclaresIsMatchedAsync`, `WordListTests.AUTH_PASS_004_AListThePackageCannotOpenAnswersTheScreeningFailureAsync`, `ScreeningTests.AUTH_PASS_004_AC8_AnArabiziFormIsRefusedAndNothingNamesTheWordAsync`, `ScreeningTests.ScreenAsync_TheDictionarySourceWithAListItCannotOpen_RefusesAsync`, `ScreeningTests.ScreenAsync_TheDictionarySourceAndAListedWord_RefusesAsync`, `LibraryStructureTests.AUTH_PASS_004_TheNoticeAcknowledgesTheEnglishWordList`. The build's refusal below 10,000 words is verified by mutation (below) |
+| D-166 R3, the Public Suffix List embedded unmodified with its header and date, read over both sections, for the relying party identifier and the label count | `bb59be1` | AUTH-FACT-010 AC1, AC2, AUTH-FACT-012 AC2 | `RelyingPartyTests.AUTH_FACT_012_AC2_ShopComAndShopCoUkCountAsOneLabel`, `RelyingPartyTests.AUTH_FACT_012_AC2_ACoUkAndBCoUkCountAsTwoLabels`, `RelyingPartyTests.AUTH_FACT_012_AC2_ThePrivateSectionCountsAsTheIcannSectionDoes`, `RelyingPartyTests.AUTH_FACT_010_AC1_AnIdentifierThatIsAPublicSuffixIsRefused`, `RelyingPartyTests.AUTH_FACT_010_AC2_TheDerivedParentIsARegistrableDomain`, `PublicSuffixListTests.AUTH_FACT_010_TheShippedListIsUnmodifiedWithItsHeaderAndDate`, `PublicSuffixListTests.AUTH_FACT_012_AC2_TheLabelIsTheOneBeforeThePublicSuffix`, `PublicSuffixListTests.AUTH_FACT_010_WildcardAndExceptionRulesAreRead`, `PublicSuffixListTests.AUTH_FACT_010_ANameNoRuleCoversEndsAtItsLastLabel`, `LibraryStructureTests.AUTH_FACT_010_TheNoticeNamesThePublicSuffixList` |
+| The documentation of D-169 | `e636451` | none | none |
+| DR-007 AC2, a run the objective cut short recorded as `overrun` (section 3) | `021060f` | DR-007 AC2, AC3 | `RestoreTestTests.DR_007_AC2_TheMeasuredTimeIsRecordedAgainstTheObjectiveAsync`, now timed on a clock the test moves |
+| D-169, the 3esl source committed byte for byte as 12dicts publishes it (section 3) | `539a4dc` | AUTH-PASS-004 | `WordListTests.AUTH_PASS_004_TheEnglishSourceIsTheListAsItsPackagePublishesIt` |
 
 **How and when the list was drawn.**
 - **The draw.** It ran from 2026-09-25 23:54 to 2026-09-26 02:30 UTC over all 1,048,576 ranges of `https://api.pwnedpasswords.com/range/{prefix}`, with 48 workers and gzip requested.
@@ -87,21 +93,65 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 - **Verification.** The committed file was checked to be equal to the checkpoint's kept set.
 - **The terms**, read on 2026-09-26 at haveibeenpwned.com: the range API has no rate limit, and callers must send a user agent. No licence is required for Pwned Passwords, and attribution is welcomed.
 
+**D-168, question 1.**
+- The target `LibraryPackageConstants` in `Directory.Build.props` runs after the target `MinVer` and before compilation, in the projects that set `LibraryPackageConstants` (only `Janus.Hosting`). It writes `LibraryPackage.g.cs`, headed `// <auto-generated/>`, into the intermediate output: `internal const string Identifier` from `PackageId` and `Version` from `PackageVersion`, which MinVer sets without build metadata.
+- `tmp/c4/user-agent.patch` is discarded.
+- Mutation checks:
+  - with the user agent line removed from the registration, the INT-PWD-001 AC3 test fails;
+  - with a `typeof(WordList).Assembly.FullName` read added to a shipped file, the CONV-CODE-004 AC2 test fails;
+  - with a `<Version>` element added to a project file, `CONV_CODE_004_AC3_NoProjectFileSetsAVersion` fails.
+
+**D-166 item 114 and R1, the word lists.**
+- **English.** `12dicts-6.0.2.zip` from `http://downloads.sourceforge.net/wordlist/12dicts-6.0.2.zip`, downloaded on 2026-09-29, SHA-256 `64ac1d35acb66b550c7ebc56e080b62e0bad8f5984d72059dc2e05ac48780e52`. The package's read-me, read the same day, releases the lists to the public domain and asks for acknowledgment.
+  - `American/3esl.txt` is vendored whole as `src/Janus.Hosting/Passwords/3esl.txt`, 21,877 lines, byte for byte as published (SHA-256 `eb70e6169534511caff9e06971b3fa71981a83f0355b29532b710ea5a9df253b`), from `539a4dc`.
+  - The build keeps the lines that are single lower-case words of four letters or more: 18,693 words. It fails below 10,000.
+  - Mutation check: with the floor raised to 20,000, the build fails with the count.
+- **Arabic.** `src/Janus.Hosting/Passwords/arabic-transliteration.txt` is original work, 3,101 entries in sections:
+  - given names, men's and women's;
+  - Coptic and Christian names;
+  - family names;
+  - religious words;
+  - everyday words;
+  - slang;
+  - profanity;
+  - football clubs and players;
+  - places.
+
+  Arabizi forms use the digits 2, 3, 5 and 7.
+- **Arabic variants.** The build applies each rule on its own to every entry and keeps the results of four characters or more: 5,081 words. The rules:
+  - each digit to its letter (7 to h, 5 to kh, 3 to a, 2 to a);
+  - the same, with 3 and 2 written as nothing;
+  - `ou` and `oo` to `u`;
+  - `ee` to `i`;
+  - `g` to `j`;
+  - a final `a` to `ah`;
+  - a leading `el` to `al`.
+
+  The list waits for the owner's review before release, as AUTH-PASS-004 states.
+- **Matching.** The matcher keeps digits, counts every character toward the four a match needs, and answers only whether a word matched.
+  - Mutation check: with the Arabic list left out of `WordList`, the three Arabizi tests fail.
+
+**D-166 R3, the Public Suffix List.**
+- Drawn from `https://publicsuffix.org/list/public_suffix_list.dat` on 2026-09-29 at 02:25 UTC, once: version `2026-09-24_13-26-36_UTC`, commit `a179a48c465e818cfd8d626691cb317985da87fb`, 334,786 bytes, SHA-256 `257b298daca42f6d8ec964e238c2a55518e14f09d3117917ec8acee6f188503e`. It is committed unmodified as `src/Janus.Authentication/Factors/public_suffix_list.dat`.
+- `PublicSuffixList` applies the list's own algorithm: an exception rule prevails and gives up its leftmost label, otherwise the rule with the most labels, wildcards included, and a name no rule covers ends at its last label. Names are compared in their ASCII form.
+- A relying party identifier that is a public suffix is refused (it was refused only when it had one label); a label is the one before the public suffix (it was the second label from the right).
+
+**DR-007.**
+- The rewritten test moves the clock to the objective and no further. With the old code it failed every time with `unrestored`; with the fix it passes with `overrun` and an elapsed time of exactly the objective.
+- `ManualTime` (`tests/Janus.Storage.Tests`) is made public and takes the instant it starts at, so the Hosting tests reach it and read back what the run recorded at its own instant.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
 |---|---|---|
-| D-166 item 114, the range requests' `User-Agent` (INT-PWD-001 AC3) | Section 4, question 1. The patch and its test are ready, and the test fails when the registration line is removed; none of it is committed | The owner's answer |
-| D-166 item 114, the rest | Not reached, because the run stopped at question 1. This covers the dictionary lists (R1): the 12dicts 6.0.2 `3esl` list and the Arabic and Arabizi list, embedded, and the removal of `WordList.Directory`, `WordsFile` and the path `AddJanus` builds. It also covers the ledger line under entry 114, which is written when the paragraph is complete | Question 1 |
-| D-166 R3, the dated Public Suffix List for AUTH-FACT-012 AC2 | Not reached | Question 1 |
-| D-166 section C, rules X1 to X9 as sweeps | Not reached | Question 1 |
-| D-166 section D, every reversal and settlement other than item 114 | Not reached | Question 1 |
-| D-166 section E, every item other than E.6; E.2 is section 4, question 2 | Not reached | Question 1 |
-| D-166 section F, the rows of chapter 10 | Not reached. Three unit tests fail at the head of the branch because the code still carries the codes and keys that the documentation commit renames or retires: `SettingsCatalogueTests.REF_001_AC1_EveryKeyInTheSourceIsARowOfTheReference`, `ErrorCodesTests.REF_001_AC1_EveryCodeInTheSourceIsARowOfTheReference`, `ErrorCodesTests.BFF_ERR_001_AC3_EveryCodeTheBoundaryCanAnswerIsInTheReference` | Question 1 |
-| D-166 section G, the ledger lines | None written; each goes in the commit that applies its entry | Question 1 |
+| D-166 section D.2, the entries after 114 (115, 129, 146, 152, 208, 328, 401, 402 and 422, 417, 419, 421, 326, and the preferred second step) | Not reached | In progress |
+| D-166 section C, rules X1 to X9 as sweeps | Not reached | In progress |
+| D-166 sections D.1 and D.3 to D.11 | Not reached | In progress |
+| D-166 section E, every item other than E.6 | Not reached | In progress |
+| D-166 section F, the rows of chapter 10 | Not reached. Three contract tests fail at the head of the branch because the code still carries the codes and keys that the documentation commit renames or retires: `SettingsCatalogueTests.REF_001_AC1_EveryKeyInTheSourceIsARowOfTheReference`, `ErrorCodesTests.REF_001_AC1_EveryCodeInTheSourceIsARowOfTheReference`, `ErrorCodesTests.BFF_ERR_001_AC3_EveryCodeTheBoundaryCanAnswerIsInTheReference` | In progress |
+| D-166 section G, the ledger lines other than entry 114's | Each goes in the commit that applies its entry | In progress |
 | Truth-table rows for D-166 entries 396 and 265 | They state the D-166 outcomes, so they belong with those fixes | Section D of D-166 |
-| DR-007 AC2, a stalled restore test recorded as `unrestored` instead of overrun | A defect found in the container runs; not reached. `src/Janus.Hosting/Background/RestoreTest.cs:110` decides the overrun with a stopwatch (`elapsed > objective`), but the deadline is a timer on the same `TimeProvider`, which can fire before the stopwatch reaches the objective. The run is then recorded `unrestored`. It was seen in the container on SDK 10.0.302 and 10.0.303, not in pipeline run 36203591546. The fix is to treat the run as overrun when the deadline fired, and to move the test's timing onto a fake clock as `cdc185a` does | Question 1 |
-| The full gate, the pull request for `corrections-4` | Section 5 | Question 1 |
+| The full gate, the pull request for `corrections-4` | Section 5 | In progress |
 
 ## 3. Resolved by rule
 
@@ -110,6 +160,8 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 | `.github/gates/changelog.sh`, `truth-table-change.sh`, `release.sh`, `dependency-vulnerabilities.sh` (`551d6ee`) | Each piped `git` output into a search that stops at its first match. Under `pipefail`, the closed pipe failed `git` whenever the output was larger than the pipe buffer, so the gate failed on something its chapter does not say | CONV-VCS-005, CONV-VCS-004, LIB-VER-001, CONV-DEP-002; the working guide's section 3, a gate that mis-implements its own rule | Each gate reads the output whole before searching it, and checks exactly what its chapter states |
 | `tests/Janus.Conformance.Tests` (`b9fbbbf`) | The test ran the command from the test project's output, which the SDK's conflict resolution leaves without an assembly the command loads | LIB-TEST-001; the working guide's section 3, test infrastructure | The test runs the command from the command's own build output. No runtime code and no shipped project changed |
 | `.gitleaks.toml` (`9e6f4d3`) | The scan of the full history flagged `PRIV-BREACH-002` in `docs/decision-log.md` line 11505 (commit `6866d9c`), under the `generic-api-key` rule. It is D-167's own quotation of the comment its first entry exempts | OPS-DEP-004, D-167 item 2; the working guide's section 3, an allow-list entry for specification text | One entry: the file `docs/decision-log.md` and the exact value `PRIV-BREACH-002`, `condition = "AND"`, reason "an item identifier the decision log quotes from a documentation comment". It is an item identifier, not a credential |
+| `src/Janus.Hosting/Background/RestoreTest.cs` (`021060f`) | A run the deadline cut short was judged by a stopwatch that can read short of the objective at the instant the deadline's timer fires, and was then recorded `unrestored` | DR-007: the job "is abandoned at `backup.restoretest.objective`", and a run that exceeds it fails as `overrun` | A run is `overrun` when its deadline fired or its measured time passed the objective |
+| `src/Janus.Hosting/Passwords/3esl.txt` and `.gitattributes` (`539a4dc`) | `9b77185` committed the list with its line endings changed from those the 12dicts package publishes, and the repository's line-ending conversion would change them again | D-169: third-party data "is kept exactly as its source publishes it" | The file is the published bytes, and one git attribute keeps git from converting that one file |
 
 ## 4. Open questions
 
@@ -137,6 +189,8 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
   - `08` would need to name the pattern.
 - **The patch** is kept out of history until the answer arrives.
 
+- **Settled by D-168**, applied in `0f4c5e1` and `ad7acd9`.
+
 **2. Tier 3. The "PRIV-RESTRICT-005c AC6 tension" (D-166 E.2).**
 
 - No item of that name exists. No report, ledger entry or working note holds the original statement of the tension; only the label was carried forward. The nearest item is PRIV-RIGHT-005c, whose AC6 is the one criterion the label fits. The text puts it in tension as follows.
@@ -148,24 +202,34 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 - **The question.** Is a host that holds personal fields in its own tables obliged to redact them on `ErasureRequested`, or not? AC6 says no requirement obliges it; the table, chapter 10 and AC3 say one does.
 - No code was changed.
 
+- **Settled by D-168**, applied in `0961899`.
+
+**3. Tier 2. D-166 R3 and R1 against the working guide's section 9: third-party lists that hold the names of AI tools and their vendors.**
+
+- **Items.**
+  - D-166 R3: "Ship the list unmodified, with its header, as an embedded dated resource". AUTH-FACT-010, Values (D-166): "The list ships unmodified, with its header".
+  - D-166 R1 and AUTH-PASS-004: the English list is Alan Beale's 3esl list from the 12dicts 6.0.2 package, filtered at build time.
+- **What the code needs.** Both lists as files of the repository, from which the build embeds them.
+- **What the working guide says.**
+  - Section 8: no "file that names an AI tool, model, agent, assistant or vendor".
+  - Section 9: "Never let a tool, model or vendor name into the repository or its history."
+- **What the lists hold.**
+  - **The Public Suffix List** (version 2026-09-24_13-26-36_UTC). Its private section holds the entries of seven vendors of AI models, assistants and coding tools: a comment naming each vendor, its address and the person who submitted the entry, then the suffixes of its products. They are at lines 12331 to 12339, 14098 to 14099, 15164 to 15167, 15264 to 15265, 15482 to 15514 and 16373 to 16376.
+    In the ICANN section, the comment at line 10853 names a registry company that shares a model's name.
+  - **The 3esl list.** Six ordinary English words that are also the names of AI tools or models, at lines 4017, 4451, 7909, 11274 and 21547; line 14210 holds a vendor's name inside a longer word. The build keeps five of them as words the dictionary source refuses; line 7909 is capitalised and dropped.
+- **Reading A.** Sections 8 and 9 concern traces of the tooling that produced the work. A third-party list carried as it is published, holding these names as data, is not such a trace.
+  - Smallest fix: none. `9b77185` is pushed as it is, and the held R3 patch is committed as it is.
+- **Reading B.** The rule applies to every file in the repository, whatever its origin.
+  - **For the Public Suffix List**, one of two fixes:
+    - The build downloads the list from publicsuffix.org into the intermediate output, at most once a day, and embeds it; the repository never holds it. Every build then needs the network, and "refreshed at every release" becomes "refreshed at every build".
+    - The list is carried with those entries removed. It is then no longer unmodified, so AUTH-FACT-010 and D-166 R3 would need to change.
+  - **For the 3esl list:** the vendored copy without those six lines, stated in `NOTICE`. The build still counts well over 10,000 words.
+  - Under reading B, `9b77185` leaves the local history before anything is pushed.
+- **Settled by D-169** (reading A). `9b77185` stands, and the R3 work is committed as it was staged, in `bb59be1`.
+
 ## 5. Gate result
 
-**`corrections-4`, not run.**
-- The full gate was not run. At the head of the branch, the fast checks fail the three `Janus.Core` unit tests of section 2 (D-166 section F not applied), so a full gate there would not be a gate of record.
-- **Fast checks, apart from those three:** green. Build with warnings as errors, analysers and `dotnet format --verify-no-changes` were run over `Janus.slnx`.
-- **Local unit and contract counts at the head of the branch:**
-  - `Janus.Analyzers.Tests` 20
-  - `Janus.Authentication.Tests` 790
-  - `Janus.Authorization.Tests` 126
-  - `Janus.Cli.Tests` 14
-  - `Janus.Core.Tests` 464, 3 failing
-  - `Janus.Hosting.Tests` 690
-  - `Janus.Identity.Tests` 89
-  - `Janus.Privacy.Tests` 222
-  - `Janus.Storage.Tests` 33
-- **Draw tool tests:** 3, passing.
-- **Secret scanning:** gitleaks 8.30.1, checked against its pinned SHA-256, was run locally over every commit of every branch and tag (738 commits). No finding after `9e6f4d3`.
-- **Push and pull request.** The branch is pushed so that its commits can be read. Its pull request is not opened; it waits until D-166 is applied and the full gate is green.
+**`corrections-4`.** The full gate runs once, at the end of the run, and its result is written here then.
 
 **Pull request #6 (`phase-10-release`), merged as `b6d14fe`.**
 - Pull request run 36217259244 on `cdc185a`: every required check green. `Secret scanning` runs on push only, and push run 36217256269 was green, with job 108335588796.
