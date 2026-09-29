@@ -344,7 +344,6 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
 
         return services
             .AddSingleton<TimeProvider>(new FixedTime(now))
-            .AddSingleton<IEvents>(new EventsInMemory())
             .AddSingleton<IMailTransport>(new MailTransportInMemory())
             .AddSingleton(new AuthenticationAddresses(
                 "https://accounts.example.test/signin",

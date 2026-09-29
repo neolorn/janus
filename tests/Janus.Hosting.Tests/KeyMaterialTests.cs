@@ -93,7 +93,6 @@ public sealed class KeyMaterialTests
     public void AUTH_KEY_002_EveryStoreIsHandedTheKeysTheHostPassedIn()
     {
         IServiceCollection services = new ServiceCollection()
-            .AddSingleton<IEvents>(new EventsInMemory())
             .AddSingleton<IMailTransport>(new MailTransportInMemory())
             .AddSingleton<ISmsTransport>(new SmsTransportInMemory())
             .AddSingleton(new AuthenticationAddresses(

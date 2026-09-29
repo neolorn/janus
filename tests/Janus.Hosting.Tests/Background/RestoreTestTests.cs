@@ -384,7 +384,6 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
     {
         IServiceCollection services = new ServiceCollection()
             .AddSingleton(time ?? new FixedTime(at))
-            .AddSingleton<IEvents>(new EventsInMemory())
             .AddSingleton<IMailTransport>(new MailTransportInMemory())
             .AddSingleton<ISmsTransport>(new SmsTransportInMemory())
             .AddSingleton(new AuthenticationAddresses(

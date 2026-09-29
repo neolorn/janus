@@ -136,7 +136,6 @@ public sealed class AuditRetentionTests(HostFixture host) : IClassFixture<HostFi
     private ServiceProvider Deployed(DateTimeOffset at, string maintenance) =>
         new ServiceCollection()
             .AddSingleton<TimeProvider>(new FixedTime(at))
-            .AddSingleton<IEvents>(new EventsInMemory())
             .AddSingleton<IMailTransport>(new MailTransportInMemory())
             .AddSingleton<ISmsTransport>(new SmsTransportInMemory())
             .AddSingleton(new AuthenticationAddresses(

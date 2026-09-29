@@ -1,15 +1,20 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Events;
 using Janus.Authentication.Tests;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Bff;
 using Janus.Hosting.Events;
+using Janus.Hosting.Tests.Authorization;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Events;
@@ -150,6 +155,47 @@ public sealed class EventPublisherTests : IAsyncDisposable
 
         Assert.Equal(0, await PassAsync());
         Assert.Equal(2, _refusing.Offered);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002 and LIB-EXT-001: event publication is not a default a host
+    /// replaces, so an <c>IEvents</c> the host registered before <c>AddJanus</c> is not
+    /// what the library publishes through: the publication writes its row, and the
+    /// host's is never called.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AnIEventsTheHostRegisteredFirstDoesNotBypassTheRowAsync()
+    {
+        var bypassing = new EventsInMemory();
+
+        IServiceCollection services = new ServiceCollection()
+            .AddSingleton<IEvents>(bypassing)
+            .AddJanus(
+                "Host=nowhere.invalid;Database=identity",
+                new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
+                new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
+                Encoding.UTF8.GetBytes("the secret this application presents"),
+                Encoding.UTF8.GetBytes("Host=nowhere.invalid;Database=identity"),
+                HostFixture.Declaration(),
+                ApplicationKind.Public);
+
+        // The events table and the transaction, over the area's fakes, so the row the
+        // library writes is read here without a database.
+        services.Replace(ServiceDescriptor.Singleton<IPendingEvents>(_events));
+        services.Replace(ServiceDescriptor.Singleton<IUnitOfWork>(_work));
+
+        await using ServiceProvider deployed = services.BuildServiceProvider();
+        await using AsyncServiceScope scope = deployed.CreateAsyncScope();
+
+        var registered = new AccountRegistered(Noon, "registered");
+
+        Result published = await scope.ServiceProvider.GetRequiredService<IEvents>()
+            .PublishAsync(registered, TestContext.Current.CancellationToken);
+
+        Assert.Null(published.Match(() => (Error?)null, error => error));
+        Assert.Equal(registered.IdempotencyKey, Assert.Single(_events.Held).Raised.IdempotencyKey);
+        Assert.Empty(bypassing.Published);
     }
 
     /// <summary>

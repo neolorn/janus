@@ -53,8 +53,6 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         + Settings.NotificationEmailRelayRegistered.Key
         + "';";
 
-    private readonly EventsInMemory _events = new();
-
     private static readonly string Undefaulted =
         "DELETE FROM identity.settings WHERE key = '"
         + Settings.RedirectDefaultClient.Key
@@ -499,17 +497,17 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
+        int before = (await AnnouncedAsync()).Count;
+
         using (IHost undeclared = Deployed())
         {
             await undeclared.StartAsync(cancellationToken);
             await undeclared.StopAsync(cancellationToken);
         }
 
-        AlertRaised raised = Assert.Single(_events.Of<AlertRaised>());
+        IReadOnlyList<(string?, string?, string?)> warned = [.. (await AnnouncedAsync()).Skip(before)];
 
-        Assert.Equal(AlertCondition.RelayDomainUnregistered, raised.Condition);
-        Assert.Equal(AlertSeverity.Normal, raised.Severity);
-        Assert.Equal("mail.example.test", raised.Details["domain"].GetString());
+        Assert.Equal([("relay-domain-unregistered", "normal", "mail.example.test")], warned);
 
         await WriteAsync(Declaring, cancellationToken);
 
@@ -520,7 +518,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
             await declared.StartAsync(cancellationToken);
             await declared.StopAsync(cancellationToken);
 
-            Assert.Single(_events.Published);
+            Assert.Equal(before + 1, (await AnnouncedAsync()).Count);
         }
         finally
         {
@@ -724,9 +722,6 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         string? connection = null,
         IReadOnlyList<SocialProvider>? providers = null)
     {
-        // Where what the library announces goes, the host's own (LIB-HOST-001).
-        services.AddSingleton<IEvents>(_events);
-
         if (codec)
         {
             services.AddSingleton(new ImageCodecInMemory().Declared);
@@ -817,6 +812,19 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
         return await Assert.ThrowsAsync<StartupException>(
             async () => await deployment.StartAsync(cancellationToken));
+    }
+
+    // What the library announced, as the rows of its events table: an alert is
+    // written with its event (OPS-ALERT-001, CONV-DESIGN-002).
+    private async Task<IReadOnlyList<(string?, string?, string?)>> AnnouncedAsync()
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return [.. await connection.QueryAsync<(string?, string?, string?)>(
+            """
+            SELECT payload->>'Condition', payload->>'Severity', payload->'Details'->>'domain'
+            FROM identity.events WHERE kind = 'AlertRaised' ORDER BY id
+            """)];
     }
 
     private async Task WriteAsync(string statement, CancellationToken cancellationToken)

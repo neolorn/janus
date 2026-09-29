@@ -11182,6 +11182,8 @@ that can raise. Under it:
 after the transaction that raised it commits, and chapter 10 section 5b that the alert
 channels read it from the committed row.
 
+**Revised by entry 320.**
+
 ---
 
 ## 291. Generating the break-glass credential raises the break-glass alert
@@ -12578,6 +12580,10 @@ library carries its events through a row of its own and that a host consumes the
 registering `IEventConsumer<TEvent>`; INF-BG-001 should name the event publisher beside
 the outbox publisher; chapter 10 should name a retention for a marked row, or say that
 a marked row is removed.
+
+**Superseded by D-166.**
+
+**Revised by entry 366.**
 
 ---
 

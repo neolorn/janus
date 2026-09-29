@@ -266,7 +266,11 @@ public static class HostingRegistration
 
         // LIB-API-001, CONV-DESIGN-002: an emitted event is a row on the transaction
         // that made it true, offered to the host's consumers once that has committed.
-        services.TryAddScoped<IEvents, EventOutbox>();
+        // Publication is not a default a host replaces (LIB-EXT-001, D-166, 320), so an
+        // IEvents registered before this one does not pre-empt it; a host consumes an
+        // event through IEventConsumer<TEvent>.
+        services.RemoveAll<IEvents>();
+        services.AddScoped<IEvents, EventOutbox>();
         services.AddScoped<EventConsumers>();
         services.AddScoped<EventPublisher>();
 
