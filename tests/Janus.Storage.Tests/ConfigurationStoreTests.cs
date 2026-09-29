@@ -154,8 +154,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
 
     /// <summary>
     /// OPS-CFG-008 AC1: a member of a family written through the store is in force for
-    /// the next read on a context that knew nothing of the write, and the write answers
-    /// what was in force before it.
+    /// the next read on a context that knew nothing of the write.
     /// </summary>
     [Fact]
     public async Task OPS_CFG_008_AC1_AWrittenMemberOfAFamilyIsInForceForTheNextReadAsync()
@@ -165,13 +164,13 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
 
         await using (StoreContext writing = database.Context())
         {
-            Result<PolicyOverride> before = await new ConfigurationStore(writing, new DataConnections(writing)).WriteAsync(
+            Result written = await new ConfigurationStore(writing, new DataConnections(writing)).WriteAsync(
                 Catalogue.OrganizationPolicy,
                 organization.ToString(),
                 changed,
                 TestContext.Current.CancellationToken);
 
-            Assert.Equal(PolicyOverride.None, Value(before));
+            Assert.True(written.Match(() => true, _ => false));
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
@@ -193,13 +192,13 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
     {
         await using StoreContext writing = database.Context();
 
-        Result<TimeSpan> written = await new ConfigurationStore(writing, new DataConnections(writing)).WriteAsync(
+        Result written = await new ConfigurationStore(writing, new DataConnections(writing)).WriteAsync(
             Catalogue.HostCategoryRetention,
             "ledgers",
             TimeSpan.FromDays(-1),
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, Code(written));
+        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, written.Match<ErrorCode?>(() => null, failure => failure.Code));
         Assert.Empty(writing.ChangeTracker.Entries<SettingRecord>());
     }
 

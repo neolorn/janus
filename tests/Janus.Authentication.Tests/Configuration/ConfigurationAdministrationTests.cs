@@ -484,10 +484,11 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
         var actor = SubjectId.New(_randomness);
         PolicyOverride withdrawn = PolicyOverride.None with { SelfServiceRecovery = false };
 
-        Result<PolicyOverride> before = await Administration.ChangeMemberAsync(
+        Result changed = await Administration.ChangeMemberAsync(
             Settings.OrganizationPolicy,
             organization.ToString(),
             withdrawn,
+            PolicyOverride.None,
             loosening: false,
             "no recovery by mail",
             actor,
@@ -495,7 +496,7 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
 
         ConfigurationChange written = Assert.Single(_changes.Written);
 
-        Assert.Equal(PolicyOverride.None, before.Match<PolicyOverride?>(value => value, _ => null));
+        Assert.True(changed.Match(() => true, _ => false));
         Assert.Equal(Settings.OrganizationPolicy.For(organization.ToString()), written.Key);
         Assert.Equal(Settings.OrganizationPolicy.Write(PolicyOverride.None), written.Before);
         Assert.Equal(Settings.OrganizationPolicy.Write(withdrawn), written.After);

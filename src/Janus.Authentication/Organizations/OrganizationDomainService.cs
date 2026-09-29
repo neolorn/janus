@@ -452,12 +452,13 @@ internal sealed class OrganizationDomainService(
                 Settings.OrganizationPolicy,
                 read.Organization.ToString(),
                 read.Stated with { EmailDomains = after.Count is 0 ? null : after },
+                read.Stated,
                 loosening,
                 read.Reason,
                 read.Acting,
                 cancellationToken)
             .ConfigureAwait(false))
-        .Match<Error?>(_ => null, error => error);
+        .Match<Error?>(() => null, error => error);
 
     private sealed record Change(
         SubjectId Acting,

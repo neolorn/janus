@@ -174,7 +174,7 @@ internal sealed class ConfigurationStore(StoreContext context, DataConnections c
     }
 
     /// <inheritdoc/>
-    public async ValueTask<Result<TValue>> WriteAsync<TValue>(
+    public async ValueTask<Result> WriteAsync<TValue>(
         SettingFamily<TValue> family,
         string parameter,
         TValue value,
@@ -186,7 +186,7 @@ internal sealed class ConfigurationStore(StoreContext context, DataConnections c
 
         if (family.Scope is SettingScope.Protected)
         {
-            return Result.Failure<TValue>(new Error(ErrorCodes.ConfigurationKeyProtected, Naming(key)));
+            return Result.Failure(new Error(ErrorCodes.ConfigurationKeyProtected, Naming(key)));
         }
 
         string written = family.Write(value);
@@ -196,10 +196,9 @@ internal sealed class ConfigurationStore(StoreContext context, DataConnections c
 
         if (refused is { } failure)
         {
-            return Result.Failure<TValue>(failure);
+            return Result.Failure(failure);
         }
 
-        Result<TValue> before = await ReadAsync(family, parameter, cancellationToken).ConfigureAwait(false);
         SettingRecord? record = await RowAsync(key, cancellationToken).ConfigureAwait(false);
 
         if (record is null)
@@ -210,7 +209,7 @@ internal sealed class ConfigurationStore(StoreContext context, DataConnections c
 
         record.Value = written;
 
-        return before;
+        return Result.Success();
     }
 
     // A key that exists once for the deployment can sit under a family's prefix, as

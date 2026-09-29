@@ -128,7 +128,7 @@ internal sealed class ConfigurationInMemory : IConfigurationStore, IConfiguratio
     }
 
     /// <inheritdoc/>
-    public async ValueTask<Result<TValue>> WriteAsync<TValue>(
+    public ValueTask<Result> WriteAsync<TValue>(
         SettingFamily<TValue> family,
         string parameter,
         TValue value,
@@ -136,18 +136,16 @@ internal sealed class ConfigurationInMemory : IConfigurationStore, IConfiguratio
     {
         if (family.Scope is SettingScope.Protected)
         {
-            return Result.Failure<TValue>(new Error(ErrorCodes.ConfigurationKeyProtected, Nothing));
+            return ValueTask.FromResult(Result.Failure(new Error(ErrorCodes.ConfigurationKeyProtected, Nothing)));
         }
 
-        Result<TValue> before = await ReadAsync(family, parameter, cancellationToken);
-
-        return family.Read(parameter, family.Write(value)).Match(
+        return ValueTask.FromResult(family.Read(parameter, family.Write(value)).Match(
             admitted =>
             {
                 _values[family.For(parameter)] = admitted!;
-                return before;
+                return Result.Success();
             },
-            Result.Failure<TValue>);
+            Result.Failure));
     }
 
     // A required key the deployment never named is undeclared, not a value nobody

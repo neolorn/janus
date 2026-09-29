@@ -61,15 +61,16 @@ internal interface IConfigurationWrites
     /// <param name="value">The value to put in force.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>
-    /// What was in force for that member before the write, or the failure where the
-    /// family is one the application cannot change (OPS-CFG-004) or the value does not
-    /// read back as one the family admits.
+    /// Success, or the failure where the family is one the application cannot change
+    /// (OPS-CFG-004) or the value does not read back as one the family admits.
     /// </returns>
     /// <remarks>
     /// As for a key that exists once, the caller gates, audits and alerts; the store
-    /// only puts the value in force.
+    /// only puts the value in force. What stood before is the value the member's route
+    /// read and classified against under the row's lock, which for a family whose
+    /// value the host declares is not the store's to know.
     /// </remarks>
-    ValueTask<Result<TValue>> WriteAsync<TValue>(
+    ValueTask<Result> WriteAsync<TValue>(
         SettingFamily<TValue> family,
         string parameter,
         TValue value,

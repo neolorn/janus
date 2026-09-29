@@ -167,6 +167,10 @@ internal sealed class ConfigurationAdministration(
     /// <param name="family">The family, from <see cref="Settings"/>.</param>
     /// <param name="parameter">The organization identifier or the declared category.</param>
     /// <param name="value">What the member becomes.</param>
+    /// <param name="before">
+    /// The value in force the member's route read under the row's lock and classified
+    /// the change against, which the record carries as what the member was.
+    /// </param>
     /// <param name="loosening">
     /// Whether the member's own route judged the change a loosening, on the value in
     /// force it read under <see cref="HoldAsync{TValue}(SettingFamily{TValue}, string, CancellationToken)"/>.
@@ -174,7 +178,7 @@ internal sealed class ConfigurationAdministration(
     /// <param name="reason">Why.</param>
     /// <param name="actor">Who made the change.</param>
     /// <param name="cancellationToken">Abandons the change.</param>
-    /// <returns>What was in force before, or why the store refused the value.</returns>
+    /// <returns>Success, or why the store refused the value.</returns>
     /// <remarks>
     /// What a change to a member costs is its family's own rule (a policy may not fall
     /// below the system's, AUTH-STEP-002a), so the member's route judges it before
@@ -183,10 +187,11 @@ internal sealed class ConfigurationAdministration(
     /// here, in that same transaction.
     /// </remarks>
     /// <exception cref="ArgumentNullException">The family is absent.</exception>
-    public async ValueTask<Result<TValue>> ChangeMemberAsync<TValue>(
+    public async ValueTask<Result> ChangeMemberAsync<TValue>(
         SettingFamily<TValue> family,
         string parameter,
         TValue value,
+        TValue before,
         bool loosening,
         string? reason,
         SubjectId actor,
@@ -194,19 +199,15 @@ internal sealed class ConfigurationAdministration(
     {
         ArgumentNullException.ThrowIfNull(family);
 
-        Error? failure = null;
-
         await work.BeginAsync(cancellationToken).ConfigureAwait(false);
         await writes.HoldAsync(family.For(parameter), cancellationToken).ConfigureAwait(false);
 
-        TValue before = (await writes
+        if ((await writes
                 .WriteAsync(family, parameter, value, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(one => one, error => Held<TValue>(error, ref failure));
-
-        if (failure is not null)
+            .Match<Error?>(() => null, error => error) is Error refused)
         {
-            return Result.Failure<TValue>(failure);
+            return Result.Failure(refused);
         }
 
         await audit
@@ -224,7 +225,7 @@ internal sealed class ConfigurationAdministration(
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        return Result.Success(before);
+        return Result.Success();
     }
 
     /// <summary>
