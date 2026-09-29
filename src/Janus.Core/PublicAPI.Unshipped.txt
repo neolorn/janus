@@ -736,6 +736,8 @@ Janus.Core.DeviceVerified.Browser.init -> void
 Janus.Core.DeviceVerified.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.DeviceId Browser) -> void
 Janus.Core.DeviceVerified.DeviceVerified(System.DateTimeOffset RaisedAt, string! IdempotencyKey, Janus.Core.DeviceId Browser) -> void
 Janus.Core.DeviceVerified.Equals(Janus.Core.DeviceVerified? other) -> bool
+Janus.Core.DictionaryWords
+Janus.Core.DictionaryWords.Added.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
 Janus.Core.DisplayName
 Janus.Core.DisplayName.DisplayName() -> void
 Janus.Core.DisplayName.Equals(Janus.Core.DisplayName other) -> bool
@@ -3701,6 +3703,8 @@ static Janus.Core.DeviceSummary.operator !=(Janus.Core.DeviceSummary? left, Janu
 static Janus.Core.DeviceSummary.operator ==(Janus.Core.DeviceSummary? left, Janus.Core.DeviceSummary? right) -> bool
 static Janus.Core.DeviceVerified.operator !=(Janus.Core.DeviceVerified? left, Janus.Core.DeviceVerified? right) -> bool
 static Janus.Core.DeviceVerified.operator ==(Janus.Core.DeviceVerified? left, Janus.Core.DeviceVerified? right) -> bool
+static Janus.Core.DictionaryWords.Default.get -> Janus.Core.DictionaryWords!
+static Janus.Core.DictionaryWords.Of(System.Collections.Generic.IEnumerable<string!>! added) -> Janus.Core.DictionaryWords!
 static Janus.Core.DisplayName.TryParse(string! entered, out Janus.Core.DisplayName name) -> bool
 static Janus.Core.DisplayName.operator !=(Janus.Core.DisplayName left, Janus.Core.DisplayName right) -> bool
 static Janus.Core.DisplayName.operator ==(Janus.Core.DisplayName left, Janus.Core.DisplayName right) -> bool

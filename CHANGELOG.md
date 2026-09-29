@@ -1089,7 +1089,10 @@ against the public contract of LIB-API-001.
   under the scope `password.blocklist.fallback`, naming both corpora. Where the alert
   cannot be raised, where neither corpus can answer, or where the corpus is older than
   the deployment admits, the password is refused rather than accepted unscreened. The
-  directory beside the application that holds the word lists is `identity-corpus`.
+  `dictionary` source reads two word lists the package carries, the 12dicts 3esl English
+  list and an Arabic transliteration list with its Arabizi forms, and nothing from the
+  deployment's files; a host adds words to them by declaring `DictionaryWords`, and a
+  refusal never names the word matched.
 - Sessions, passwords, enrolled credentials, recovery codes and known browsers are
   stored in PostgreSQL. A session's record carries what it reached and the fingerprint
   of its cookie, never the cookie, and where it was used from is held under the person's

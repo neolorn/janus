@@ -3618,6 +3618,8 @@ which holds no file at all,
 `StartupConfigurationTests.ThrowIfIncomplete_TheCorpusIsSelfHosted_RequiresItsAddress`,
 `StartupConfigurationTests.ThrowIfIncomplete_TheCorpusIsNotSelfHosted_NeedsNoAddress`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 115. The verification code is an aggregate of its own, and the device check issues through it

@@ -10,3 +10,10 @@ SHA-1 hashes of Pwned Passwords, from Have I Been Pwned (https://haveibeenpwned.
 drawn on 2026-09-26 over the range API. The list is in
 src/Janus.Hosting/Passwords/leaked-passwords.txt, and tools/leaked-passwords/draw.py
 draws it.
+
+This package contains the English word list of the dictionary password source: the
+3esl list of the 12dicts package, version 6.0.2, compiled by Alan Beale, who releases
+the 12dicts lists to the public domain and asks that their use be acknowledged
+(http://wordlist.aspell.net/12dicts/). The list is in
+src/Janus.Hosting/Passwords/3esl.txt, and the build keeps its single lower-case words
+of four letters or more.

@@ -36,6 +36,55 @@
     <EmbeddedResource Include="Passwords\leaked-passwords.txt" />
   </ItemGroup>
 
+  <!-- AUTH-PASS-004, D-166: the dictionary source's lists travel in the package. The
+       English list is the 3esl list of 12dicts 6.0.2, kept to single lower-case words of
+       four letters or more and refused below 10,000; the Arabic list gains the variants
+       its rules generate, each rule applied on its own to every entry. -->
+  <Target Name="DictionaryWords" BeforeTargets="BeforeBuild">
+    <PropertyGroup>
+      <DictionaryWordsFolder>$(IntermediateOutputPath)Passwords\</DictionaryWordsFolder>
+      <EnglishWords>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\Passwords\3esl.txt'))</EnglishWords>
+      <EnglishWords>$([System.Text.RegularExpressions.Regex]::Replace($(EnglishWords), '(?m)^(?![a-z]{4,}\r?$).*(?:\r?\n|$)', ''))</EnglishWords>
+      <EnglishWords>$([System.Text.RegularExpressions.Regex]::Replace($(EnglishWords), '\r?\n', ';'))</EnglishWords>
+      <ArabicWords>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\Passwords\arabic-transliteration.txt'))</ArabicWords>
+      <ArabicWords>$([System.Text.RegularExpressions.Regex]::Replace($(ArabicWords), '(?m)^(?![a-z2357]{4,}\r?$).*(?:\r?\n|$)', ''))</ArabicWords>
+      <ArabicWords>$([System.Text.RegularExpressions.Regex]::Replace($(ArabicWords), '\r', ''))</ArabicWords>
+      <!-- The letter each Arabizi digit stands for, and the digit written as nothing. -->
+      <ArabicLetters>$(ArabicWords.Replace('7', 'h').Replace('5', 'kh').Replace('3', 'a').Replace('2', 'a'))</ArabicLetters>
+      <ArabicSilent>$(ArabicWords.Replace('7', 'h').Replace('5', 'kh').Replace('3', '').Replace('2', ''))</ArabicSilent>
+      <!-- The spellings one vowel or consonant is written in. -->
+      <ArabicVowels>$([System.Text.RegularExpressions.Regex]::Replace($(ArabicWords), 'ou|oo', 'u'))</ArabicVowels>
+      <ArabicLongE>$(ArabicWords.Replace('ee', 'i'))</ArabicLongE>
+      <ArabicJeem>$(ArabicWords.Replace('g', 'j'))</ArabicJeem>
+      <ArabicEnding>$([System.Text.RegularExpressions.Regex]::Replace($(ArabicWords), '(?m)a$', 'ah'))</ArabicEnding>
+      <ArabicArticle>$([System.Text.RegularExpressions.Regex]::Replace($(ArabicWords), '(?m)^el', 'al'))</ArabicArticle>
+      <ArabicWords>$(ArabicWords)&#10;$(ArabicLetters)&#10;$(ArabicSilent)&#10;$(ArabicVowels)&#10;$(ArabicLongE)&#10;$(ArabicJeem)&#10;$(ArabicEnding)&#10;$(ArabicArticle)</ArabicWords>
+      <ArabicWords>$([System.Text.RegularExpressions.Regex]::Replace($(ArabicWords), '(?m)^(?![a-z2357]{4,}$).*(?:\n|$)', ''))</ArabicWords>
+      <ArabicWords>$([System.Text.RegularExpressions.Regex]::Replace($(ArabicWords), '\n', ';'))</ArabicWords>
+    </PropertyGroup>
+    <ItemGroup>
+      <EnglishWord Include="$([MSBuild]::Unescape($(EnglishWords)))" />
+      <ArabicWord Include="$([MSBuild]::Unescape($(ArabicWords)))" />
+    </ItemGroup>
+    <Error Condition="@(EnglishWord->Count()) &lt; 10000"
+           Text="The English word list holds @(EnglishWord->Count()) words; AUTH-PASS-004 asks for at least 10,000." />
+    <WriteLinesToFile File="$(DictionaryWordsFolder)english-words.txt"
+                      Lines="@(EnglishWord->Distinct())"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+    <WriteLinesToFile File="$(DictionaryWordsFolder)arabic-words.txt"
+                      Lines="@(ArabicWord->Distinct())"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(DictionaryWordsFolder)english-words.txt"
+                        LogicalName="$(RootNamespace).Passwords.english-words.txt" />
+      <EmbeddedResource Include="$(DictionaryWordsFolder)arabic-words.txt"
+                        LogicalName="$(RootNamespace).Passwords.arabic-words.txt" />
+      <FileWrites Include="$(DictionaryWordsFolder)english-words.txt;$(DictionaryWordsFolder)arabic-words.txt" />
+    </ItemGroup>
+  </Target>
+
   <!-- INT-PWD-001, CONV-CODE-004: the range requests name the library's package, whose
        identifier and version the build writes as constants (D-168). -->
   <PropertyGroup>

@@ -37,16 +37,13 @@ public sealed class ScreeningTests : IDisposable
 
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 
-    private readonly string _directory = Path.Combine(
-        AppContext.BaseDirectory,
-        "corpus-" + Guid.NewGuid().ToString("n"));
-
     private readonly RangeApiInMemory _service = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly ScreeningLogInMemory _log = new();
     private readonly EventsInMemory _events = new();
 
     private OfflineCorpus _offline = new();
+    private WordList _words = new(DictionaryWords.Default);
     private DateTimeOffset _now = Noon;
 
     /// <summary>
@@ -261,54 +258,60 @@ public sealed class ScreeningTests : IDisposable
     }
 
     /// <summary>
-    /// AUTH-PASS-004: a deployment that rejects on a word list and holds none refuses
-    /// the password, because a source that cannot answer never answers yes.
+    /// AUTH-PASS-004: a deployment that rejects on the word lists and cannot open one
+    /// refuses the password, because a source that cannot answer never answers yes.
     /// </summary>
     [Fact]
-    public async Task ScreenAsync_TheDictionarySourceWithNoList_RefusesAsync()
+    public async Task ScreenAsync_TheDictionarySourceWithAListItCannotOpen_RefusesAsync()
     {
         _service.Holds(Prefix(Password), "0000000000000000000000000000000000000");
-        _configuration.Set<IReadOnlySet<BlocklistRejectionSource>>(
-            Settings.PasswordBlocklistSources,
-            new HashSet<BlocklistRejectionSource>
-            {
-                BlocklistRejectionSource.Leaked,
-                BlocklistRejectionSource.Dictionary,
-            });
+        _words = new WordList(DictionaryWords.Default, _ => null);
+        RejectingOnTheDictionary();
 
         Assert.Equal(ErrorCodes.ScreeningUnavailable, await RefusalAsync());
     }
 
     /// <summary>
-    /// AUTH-PASS-004: a word the list holds is a word the password is refused for,
-    /// where the deployment rejects on the list.
+    /// AUTH-PASS-004: a word the English list holds is a word the password is refused
+    /// for, where the deployment rejects on the lists.
     /// </summary>
     [Fact]
     public async Task ScreenAsync_TheDictionarySourceAndAListedWord_RefusesAsync()
     {
         _service.Holds(Prefix(Password), "0000000000000000000000000000000000000");
-        await WrittenAsync(WordList.WordsFile, "# an English list" + Line + "HORSE" + Line + "FIELD" + Line);
-        _configuration.Set<IReadOnlySet<BlocklistRejectionSource>>(
-            Settings.PasswordBlocklistSources,
-            new HashSet<BlocklistRejectionSource>
-            {
-                BlocklistRejectionSource.Leaked,
-                BlocklistRejectionSource.Dictionary,
-            });
+        RejectingOnTheDictionary();
 
         Assert.Equal(ErrorCodes.PasswordBlocklisted, await RefusalAsync());
     }
 
-    /// <inheritdoc/>
-    public void Dispose()
+    /// <summary>
+    /// AUTH-PASS-004 AC8: a password built on an Arabizi form is refused, and nothing the
+    /// refusal, the events or the screening log carry names the word it matched.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_PASS_004_AC8_AnArabiziFormIsRefusedAndNothingNamesTheWordAsync()
     {
-        _service.Dispose();
+        const string arabizi = "zq 7abibi zq";
+        const string matched = "7abibi";
 
-        if (Directory.Exists(_directory))
-        {
-            Directory.Delete(_directory, recursive: true);
-        }
+        _service.Holds(Prefix(arabizi), "0000000000000000000000000000000000000");
+        RejectingOnTheDictionary();
+
+        Error refusal = (await ScreenedAsync(arabizi)).Match(
+            () => throw new Xunit.Sdk.XunitException("The password was accepted."),
+            error => error);
+
+        Assert.Equal(ErrorCodes.PasswordBlocklisted, refusal.Code);
+        Assert.Empty(refusal.Details);
+        Assert.All(_events.Published, raised => Assert.DoesNotContain(
+            matched,
+            raised.ToString(),
+            StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(_log.Entries);
     }
+
+    /// <inheritdoc/>
+    public void Dispose() => _service.Dispose();
 
     // The corpus is published as ranges of this hash (INT-PWD-001), so the test
     // computes the same lookup key the screening does; it is no security claim.
@@ -341,7 +344,7 @@ public sealed class ScreeningTests : IDisposable
 
         var screening = new PasswordScreening(
             new LeakedPasswordCorpus(client, _configuration, new FixedTime(_now), _offline),
-            new WordList(_directory),
+            _words,
             _configuration,
             _log,
             _events,
@@ -353,13 +356,12 @@ public sealed class ScreeningTests : IDisposable
             TestContext.Current.CancellationToken);
     }
 
-    private async Task WrittenAsync(string file, string contents)
-    {
-        _ = Directory.CreateDirectory(_directory);
-
-        await File.WriteAllTextAsync(
-            Path.Combine(_directory, file),
-            contents,
-            TestContext.Current.CancellationToken);
-    }
+    private void RejectingOnTheDictionary() =>
+        _configuration.Set<IReadOnlySet<BlocklistRejectionSource>>(
+            Settings.PasswordBlocklistSources,
+            new HashSet<BlocklistRejectionSource>
+            {
+                BlocklistRejectionSource.Leaked,
+                BlocklistRejectionSource.Dictionary,
+            });
 }

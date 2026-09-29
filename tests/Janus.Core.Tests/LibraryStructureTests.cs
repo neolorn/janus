@@ -466,6 +466,22 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
+    /// AUTH-PASS-004: the notice acknowledges the English word list the dictionary source
+    /// carries, as its author asks.
+    /// </summary>
+    [Fact]
+    public void AUTH_PASS_004_TheNoticeAcknowledgesTheEnglishWordList()
+    {
+        string notice = string.Join(
+            ' ',
+            File.ReadAllText(Path.Combine(Repository.Root, "NOTICE"))
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        Assert.Contains("3esl list of the 12dicts package, version 6.0.2", notice, StringComparison.Ordinal);
+        Assert.Contains("Alan Beale", notice, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// CONV-LAYOUT-001 AC3: every project's library dependencies are exactly the ones
     /// the table gives, so a dependency pointing outward does not build.
     /// </summary>

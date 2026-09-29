@@ -331,7 +331,7 @@ public static class HostingRegistration
         services.AddScoped<Janus.Authentication.Policies.AdministrativeScope>();
         services.AddSingleton<Argon2idHasher>();
         services.AddScoped<IScreeningLog, ScreeningLog>();
-        services.AddSingleton<IWordList>(_ => new WordList(Corpus));
+        services.AddSingleton<IWordList>(provider => new WordList(provider.GetRequiredService<DictionaryWords>()));
 
         // INT-PWD-001: the range API is reached over the framework's client, which
         // rotates its connections, and every request it makes names the library; the
@@ -375,6 +375,7 @@ public static class HostingRegistration
 
         services.TryAddSingleton(PreferenceDeclarations.None);
         services.TryAddSingleton(ReservedUsernames.Default);
+        services.TryAddSingleton(DictionaryWords.Default);
 
         // REG-PM-001, LIB-HOST-001: the frontend's pages are the host's to declare and
         // the library has no address to fall back on, so a deployment that registered
@@ -679,11 +680,6 @@ public static class HostingRegistration
         options.SerializerOptions.TypeInfoResolverChain.Add(AuthorizationJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(OrganizationJson.Default);
     }
-
-    // The word list is a file a deployment holds beside the application, where it
-    // rejects on one (AUTH-PASS-004).
-    private static string Corpus =>
-        Path.Combine(AppContext.BaseDirectory, WordList.Directory);
 
     // The fingerprint key computes an HMAC-SHA256, so a version shorter than that hash
     // is a key that weakens the code it is used by and is not a key the library runs on.
