@@ -611,6 +611,45 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
     // LIB-HOST-001: the deployment started with one key it has to name left unnamed,
     // which is named again afterwards whatever the start did.
+    /// <summary>
+    /// OPS-CFG-003 AC3 and D-166: a value outside its bounds is refused at startup and
+    /// not at first use, so an outbox interval stored above its ceiling, as a ceiling a
+    /// later version tightened leaves it, stops the deployment before the server
+    /// starts, naming the key and the ceiling's code and never the stored value.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_CFG_003_AC3_AStoredValueAboveItsCeilingStopsStartupAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        string key = Settings.OutboxPollInterval.Key.ToString();
+
+        await WriteAsync(
+            "INSERT INTO identity.settings (key, value) VALUES ('" + key + "', 'PT2M');",
+            cancellationToken);
+
+        try
+        {
+            var served = new ServerStandIn();
+            using IHost deployment = new HostBuilder()
+                .ConfigureServices(services => Declared(services.AddSingleton<IHostedService>(served)))
+                .Build();
+
+            InvalidOperationException refused = await Assert.ThrowsAsync<InvalidOperationException>(
+                async () => await deployment.StartAsync(cancellationToken));
+
+            Assert.False(served.Started);
+            Assert.Contains(key, refused.Message, StringComparison.Ordinal);
+            Assert.Contains(ErrorCodes.ConfigurationValueAboveCeiling.ToString(), refused.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain("PT2M", refused.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            await WriteAsync("DELETE FROM identity.settings WHERE key = '" + key + "';", cancellationToken);
+        }
+    }
+
     private async Task<StartupException> RefusedWithoutAsync(ConfigurationKey key, string value)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;

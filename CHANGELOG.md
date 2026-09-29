@@ -217,7 +217,9 @@ against the public contract of LIB-API-001.
   standard error, with exit code 1. What it defines and sets is audited under its own
   principal, for which `SystemOperation` carries `Bootstrap`.
 - `outbox.poll.interval`, which also paces the carrying of raised alerts, has a ceiling
-  of one minute and is refused above it with `config.value.aboveceiling`. The balance
+  of one minute and is refused above it with `config.value.aboveceiling`, at the change
+  and, for a stored value, as the deployment starts: startup reads every key, so any
+  stored value its key does not admit stops it there. The balance
   poll fails where no SMS transport is registered, so its lapse raises
   `background-job-failed`.
 - The library runs its own scheduled work. A worker `AddJanus` registers sweeps expired
