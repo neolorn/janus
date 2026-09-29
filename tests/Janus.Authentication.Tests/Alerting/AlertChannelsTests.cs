@@ -44,12 +44,12 @@ public sealed class AlertChannelsTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// CONV-DESIGN-005 AC1: a host that does not take the event fails the raise, which
-    /// commits nothing.
+    /// CONV-DESIGN-002 and OPS-ALERT-001: an <c>IEvents</c> unable to write the event's
+    /// row fails the raise, which commits nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task CONV_DESIGN_005_AC1_AnEventTheHostRefusedFailsTheRaiseAsync()
+    public async Task CONV_DESIGN_002_AnEventWhoseRowCannotBeWrittenFailsTheRaiseAsync()
     {
         _events.Refusal = Error.From(ErrorCodes.SystemFault);
 
