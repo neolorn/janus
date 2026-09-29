@@ -12055,6 +12055,8 @@ action where a person stood behind the command. Under this:
 administrator, and OPS-BOOT-001 could name the granter of the first grants and say the
 alert is queued rather than sent.
 
+**Superseded by D-166.**
+
 ---
 
 ## 314. What bootstrap records in the audit trail

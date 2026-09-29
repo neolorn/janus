@@ -19,7 +19,7 @@ namespace Janus.Cli;
 /// Entry point of the command-line application of CONV-LAYOUT-001.
 /// </summary>
 /// <remarks>
-/// Implements OPS-BOOT-001, API-CONV-002 and CONV-CONTENT-001. What a command produces
+/// Implements OPS-BOOT-001, OPS-SEC-001, API-CONV-002 and CONV-CONTENT-001. What a command produces
 /// goes to standard output; a refusal goes to standard error as the code and the
 /// structured data the API carries, never as a sentence.
 /// </remarks>
@@ -67,9 +67,18 @@ internal static class Program
         ArgumentNullException.ThrowIfNull(arguments);
         ArgumentNullException.ThrowIfNull(terminal);
 
+        // OPS-SEC-001 and D-166 (308): a command the executable does not carry is refused
+        // as any unreadable argument is, naming it; an invocation that names none failed
+        // before any member was read and carries the code alone.
         if (arguments.Count is 0
             || !Commands.TryGetValue(arguments[0], out Func<IReadOnlyList<string>, Terminal, CancellationToken, Task<Result<string>>>? command))
         {
+            Error unknown = arguments.Count is 0
+                ? Error.From(ErrorCodes.RequestMalformed)
+                : Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(arguments[0]));
+
+            await terminal.Error.WriteLineAsync(Written(unknown)).ConfigureAwait(false);
+
             return UnknownCommandExitCode;
         }
 

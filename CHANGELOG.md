@@ -229,7 +229,8 @@ against the public contract of LIB-API-001.
   identifier sits over are refused with `model.startup.rpid` or
   `model.startup.labellimit`. It refuses to run where a system administrator exists or
   ever existed. A refusal is one JSON line on
-  standard error, with exit code 1. What it defines and sets is audited under its own
+  standard error, with exit code 1; a command the application does not carry is refused
+  the same way, `api.request.malformed` naming it. What it defines and sets is audited under its own
   principal, for which `SystemOperation` carries `Bootstrap`. Its grants name the nil
   subject as their granter, and each membership it attaches emits `MembershipChanged`
   (`began`) with the rows, as the missing emergency credential emits `AlertRaised`.
