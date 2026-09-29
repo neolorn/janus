@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Frozen;
 using System.Linq;
 using System.Net;
 using System.Security.Cryptography;
@@ -54,9 +55,10 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     private readonly SubjectId _emergency;
 
     /// <summary>
-    /// A deployment administered by one organization, whose reserved account holds the
-    /// system administrator's permissions there, and whose owner has routine alerts
-    /// turned off.
+    /// A deployment administered by one organization, whose reserved account is a member
+    /// there, as bootstrap makes it, under a policy that requires AAL2 and names
+    /// <c>google</c> among its ways in, holds the system administrator's permissions
+    /// there, and whose owner has routine alerts turned off.
     /// </summary>
     public BreakGlassEndpointTests()
     {
@@ -72,6 +74,17 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
         _emergency = SubjectId.New(_randomness);
         _deployment.Reserves(_emergency);
         _deployment.Accounts.Stands(_emergency, AccountState.Active);
+        _deployment.Memberships.Place(_emergency, Administration);
+        _deployment.Configuration.Set(
+            Settings.OrganizationPolicy,
+            Administration.ToString(),
+            new PolicyOverride(
+                AssuranceLevel.Aal2,
+                new[] { Factor.Passkey, Factor.Google }.ToFrozenSet(),
+                null,
+                null,
+                null,
+                null));
 
         foreach (Permission permission in Permissions.All)
         {
@@ -131,16 +144,45 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
         Assert.True(opened.SatisfiesEveryGate);
         Assert.Equal(_deployment.Clock.GetUtcNow().AddHours(2), opened.AbsoluteExpiry);
 
-        _deployment.Clock.Advance(TimeSpan.FromMinutes(119));
+        // In use inside every inactivity window, so only the lifetime ends it.
+        foreach (int minutes in new[] { 40, 40, 39 })
+        {
+            _deployment.Clock.Advance(TimeSpan.FromMinutes(minutes));
 
-        Answer live = await owner.SendAsync("GET", "/auth/session");
+            Assert.Equal(StatusCodes.Status200OK, (await owner.SendAsync("GET", "/auth/session")).Status);
+        }
 
         _deployment.Clock.Advance(TimeSpan.FromMinutes(2));
 
         Answer ended = await owner.SendAsync("GET", "/auth/session");
 
-        Assert.Equal(StatusCodes.Status200OK, live.Status);
         Assert.Equal(StatusCodes.Status401Unauthorized, ended.Status);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002 AC2: the session also ends once it has been idle for the inactivity
+    /// window of the reserved account's policy, inside its lifetime, and what it asks
+    /// for then is a full sign-in, which only the sealed credential gives.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AC2_TheSessionEndsAfterItsInactivityWindowAsync()
+    {
+        string credential = await GeneratedAsync();
+        var owner = new Browser(_deployment);
+
+        Assert.Equal(StatusCodes.Status200OK, (await PresentedAsync(owner, credential)).Status);
+
+        Session opened = _deployment.Sessions.All.Single(session => session.Subject == _emergency);
+
+        Assert.Equal(_deployment.Clock.GetUtcNow() + Settings.SessionAal2Inactivity.Default, opened.IdleExpiry);
+
+        _deployment.Clock.Advance(Settings.SessionAal2Inactivity.Default);
+
+        Answer ended = await owner.SendAsync("GET", "/auth/session");
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, ended.Status);
+        Assert.Equal("full", ended.Json().GetProperty("details").GetProperty("reauthenticate").GetString());
     }
 
     /// <summary>
@@ -191,7 +233,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
         _ = await PresentedAsync(owner, credential);
 
-        _deployment.Clock.Advance(TimeSpan.FromHours(1));
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(59));
 
         Answer granted = await owner.SendAsync(
             "POST",
@@ -227,7 +269,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
         _ = await PresentedAsync(owner, credential);
 
-        _deployment.Clock.Advance(TimeSpan.FromHours(1));
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(59));
 
         Answer approved = await owner.SendAsync(
             "POST",
@@ -313,7 +355,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
         _ = await PresentedAsync(owner, credential);
 
-        _deployment.Clock.Advance(TimeSpan.FromHours(1));
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(59));
 
         Answer replaced = await owner.SendAsync("POST", Generate);
 
@@ -525,7 +567,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
         _ = await PresentedAsync(owner, credential);
 
-        _deployment.Clock.Advance(TimeSpan.FromHours(1));
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(59));
 
         Answer approved = await ApprovedAsync(owner, administrator);
         DateTimeOffset counted = _deployment.Clock.GetUtcNow();

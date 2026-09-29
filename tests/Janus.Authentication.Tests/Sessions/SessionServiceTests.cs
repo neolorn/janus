@@ -448,6 +448,37 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-BOOT-002 AC2: a break-glass session idle past its inactivity window, inside
+    /// its lifetime, asks for a full sign-in, which only the sealed credential gives;
+    /// the one factor that restores a staff session never restores it.
+    /// </summary>
+    [Fact]
+    public async Task OPS_BOOT_002_AnIdleBreakGlassSessionAsksForAFullSignInAsync()
+    {
+        SubjectId subject = Staff();
+
+        IssuedSession issued = Value(await Service.BeginExemptAsync(
+            subject,
+            [Factor.BreakGlass],
+            Somewhere,
+            TestContext.Current.CancellationToken));
+        Session session = _sessions.Behind(issued.Secret)!;
+
+        _clock.Advance(TimeSpan.FromHours(2));
+
+        Assert.True(_clock.GetUtcNow() >= session.IdleExpiry);
+        Assert.True(_clock.GetUtcNow() < session.AbsoluteExpiry);
+        Assert.Equal("full", await AskedAsync(issued.Secret));
+        Assert.Equal(
+            ErrorCodes.SessionExpired,
+            Refusal(await Service.RestoreAsync(
+                issued.Secret,
+                [Factor.Passkey],
+                Somewhere,
+                TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
     /// AUTH-SESS-006 AC1 and AC2: a combination presented on a session issues a new
     /// secret and the one before it stops working.
     /// </summary>

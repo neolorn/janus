@@ -270,7 +270,8 @@ against the public contract of LIB-API-001.
   Argon2id hash of it is kept. `POST /auth/break-glass` takes the code on the machine
   profile, ignoring any cookie the browser holds, and opens an auth session for the
   reserved `emergency` account that passes every step-up gate for
-  `breakglass.session.lifetime`. A code opens one session; a group whose check character
+  `breakglass.session.lifetime`; idle past its policy's inactivity window, it asks for a
+  full sign-in, never the one-factor restore. A code opens one session; a group whose check character
   is wrong is refused before any hash is compared; at most five attempts an hour are
   taken from all sources together, besides the per-source delay, and the first attempt
   the limit refuses raises `auth-failures-sustained` for the reserved account.
