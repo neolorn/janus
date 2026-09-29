@@ -42,7 +42,7 @@ public interface IConfigurationAdministration
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Success, or the refusal: <c>config.key.protected</c>, the value codes of
-    /// chapter 10 section 1.5, <c>auth.restriction.reasonrequired</c>, or
+    /// chapter 10 section 1.5, <c>config.change.reasonrequired</c>, or
     /// <c>auth.stepup.required</c> for a loosening the session has not proved.
     /// </returns>
     ValueTask<Result> ChangeAsync(

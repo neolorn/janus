@@ -143,8 +143,8 @@ public sealed class ConfigureTests(BootstrappedDeployment deployment) : IClassFi
         await using NpgsqlConnection connection = await deployment.OpenAsync();
 
         Assert.Equal(1, run.ExitCode);
-        Assert.Equal("auth.restriction.reasonrequired", Refusal(run));
-        Assert.Equal("auth.restriction.reasonrequired", Refusal(blank));
+        Assert.Equal("config.change.reasonrequired", Refusal(run));
+        Assert.Equal("config.change.reasonrequired", Refusal(blank));
         Assert.Null(await ValueAsync(connection, key));
         Assert.Empty(await RaisedAsync(connection, key));
     }
