@@ -140,11 +140,13 @@ public sealed class PublicSurfaceTests
     // the token its notification carried or by its holder, judged against the one
     // report, and every other case is refused alike (AUTH-RECOV-007). A registration is
     // begun by a browser that holds no account yet, and one already signed in is refused
-    // on its context before anything else (REG-SESS-002). The gate itself is left out,
-    // since it is the gate.
+    // on its context before anything else (REG-SESS-002). The provider probes are asked
+    // by the host running the conformance suite and read no record of a person
+    // (LIB-TEST-001, D-172). The gate itself is left out, since it is the gate.
     private static readonly string[] Ungated =
     [
         nameof(IDerivationMaterialiser) + "." + nameof(IDerivationMaterialiser.RefreshAsync),
+        nameof(IProviderProbes) + "." + nameof(IProviderProbes.RunAsync),
         nameof(IReadVolume) + "." + nameof(IReadVolume.ReturnedAsync),
         nameof(IRecovery) + "." + nameof(IRecovery.CancelLossAsync),
         nameof(IRegistration) + "." + nameof(IRegistration.BeginAsync),

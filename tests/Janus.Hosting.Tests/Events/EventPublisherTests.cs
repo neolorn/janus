@@ -175,7 +175,6 @@ public sealed class EventPublisherTests : IAsyncDisposable
                 "Host=nowhere.invalid;Database=identity",
                 new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
                 new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-                Encoding.UTF8.GetBytes("the secret this application presents"),
                 Encoding.UTF8.GetBytes("Host=nowhere.invalid;Database=identity"),
                 HostFixture.Declaration(),
                 ApplicationKind.Public);

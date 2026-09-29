@@ -2,6 +2,7 @@ using System;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication;
@@ -22,7 +23,7 @@ namespace Janus.Storage.Tests.Authentication;
 /// tokens the protocol server writes through the library's own stores, the signing key
 /// whose private half is wrapped, and the sweep that takes what can no longer be
 /// presented (AUTH-OIDC-001, AUTH-OIDC-002, AUTH-OIDC-003, AUTH-KEY-001, AUTH-KEY-002,
-/// AUTH-KEY-003, OPS-SEC-002).
+/// AUTH-KEY-003, OPS-SEC-001, OPS-SEC-002).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class OidcStoreTests(DatabaseFixture database)
@@ -38,12 +39,13 @@ public sealed class OidcStoreTests(DatabaseFixture database)
     private readonly Deployment _deployment = new(database);
 
     /// <summary>
-    /// AUTH-OIDC-001 AC2: the registry holds what the secret hashes to, the column
-    /// holds nothing the secret could be read out of, and what the protocol server is
-    /// handed to compare against is that same fingerprint.
+    /// OPS-SEC-001, AUTH-OIDC-001 AC2: the registry holds a client's secret wrapped under
+    /// the deployment's data key, neither in the clear nor as anything a search over
+    /// the table could reach, and what the protocol server is handed is that same
+    /// wrapped value, which authenticates nothing.
     /// </summary>
     [Fact]
-    public async Task AUTH_OIDC_001_AC2_TheRegistryHoldsWhatTheSecretHashesToAsync()
+    public async Task OPS_SEC_001_NoClientSecretIsHeldInTheClearAsync()
     {
         await RegisteredAsync(ClientId, OidcClientKind.Protocol);
 
@@ -53,9 +55,14 @@ public sealed class OidcStoreTests(DatabaseFixture database)
             "SELECT secret FROM identity.oidc_clients WHERE client_id = @clientId",
             new { clientId = ClientId });
 
-        Assert.Equal(OpaqueToken.Of(Secret).Fingerprint(), stored);
-
         await using StoreContext reading = database.Context();
+
+        byte[] deploymentKey = await _deployment.DataKey(reading).UnwrappedAsync(TestContext.Current.CancellationToken);
+
+        Assert.NotEqual(Encoding.UTF8.GetBytes(Secret), stored);
+        Assert.NotEqual(SHA256.HashData(Encoding.UTF8.GetBytes(Secret)), stored);
+        Assert.False(stored.AsSpan().IndexOf(Encoding.UTF8.GetBytes(Secret)) >= 0);
+        Assert.Equal(Encoding.UTF8.GetBytes(Secret), PersonalFieldCipher.Unwrap(stored, deploymentKey));
 
         var applications = new OidcApplicationStore(reading);
         OidcClientRecord? held = await applications.FindByClientIdAsync(
@@ -64,7 +71,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
 
         Assert.NotNull(held);
         Assert.Equal(
-            Convert.ToBase64String(OpaqueToken.Of(Secret).Fingerprint()),
+            Convert.ToBase64String(stored),
             await applications.GetClientSecretAsync(held, TestContext.Current.CancellationToken));
         Assert.Equal(
             ImmutableArray.Create(Destination),
@@ -97,35 +104,49 @@ public sealed class OidcStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
-    /// OPS-SEC-002 AC2: a registration with a new secret keeps what the one it replaced
-    /// hashes to until the overlap ends, a change that keeps the secret leaves that
-    /// alone, and the table holds no replaced secret without the instant it ends.
+    /// OPS-SEC-002 AC2, X3: a replacement stands only where the secret is still the one
+    /// read, keeps the one it replaced wrapped until the overlap ends, and a change to
+    /// the client leaves both alone; the table holds no replaced secret without the
+    /// instant it ends.
     /// </summary>
     [Fact]
-    public async Task OPS_SEC_002_AC2_AReplacedSecretIsKeptUntilTheOverlapEndsAsync()
+    public async Task OPS_SEC_002_AReplacementStandsOnlyWhereTheSecretIsTheOneReadAsync()
     {
         const string rotated = "rotated-client";
-        const string replacement = "the-secret-that-replaced-it";
 
+        byte[] replacement = Encoding.UTF8.GetBytes("the-secret-that-replaced-it");
         DateTimeOffset until = Noon + TimeSpan.FromMinutes(15);
 
-        await RecordedAsync(rotated, Secret, DateTimeOffset.MinValue);
-        await RecordedAsync(rotated, replacement, until);
-        await RecordedAsync(rotated, replacement, until + TimeSpan.FromDays(1));
+        await RegisteredAsync(rotated, OidcClientKind.Protocol);
+
+        bool replaced;
+        bool stale;
+
+        await using (StoreContext writing = database.Context())
+        {
+            var clients = new OidcClientStore(writing, _deployment.DataKey(writing));
+
+            replaced = await clients.ReplaceSecretAsync(
+                rotated, Noon, replacement, Noon + TimeSpan.FromDays(90), until, TestContext.Current.CancellationToken);
+            stale = await clients.ReplaceSecretAsync(
+                rotated, Noon, Encoding.UTF8.GetBytes("a-later-secret"), Noon + TimeSpan.FromDays(91), until, TestContext.Current.CancellationToken);
+        }
+
+        await RegisteredAsync(rotated, OidcClientKind.BrowserApplication);
+
+        await using StoreContext reading = database.Context();
+
+        RegisteredSecret held = (await new OidcClientStore(reading, _deployment.DataKey(reading))
+            .SecretAsync(rotated, TestContext.Current.CancellationToken))!;
+
+        Assert.True(replaced);
+        Assert.False(stale);
+        Assert.Equal(replacement, held.Current);
+        Assert.Equal(Noon + TimeSpan.FromDays(90), held.IssuedAt);
+        Assert.Equal(Encoding.UTF8.GetBytes(Secret), held.Previous);
+        Assert.Equal(until, held.PreviousUntil);
 
         await using NpgsqlConnection connection = await database.OpenAsync();
-
-        (byte[] Current, byte[] Previous, DateTimeOffset Until) held = await connection
-            .QuerySingleAsync<(byte[], byte[], DateTimeOffset)>(
-                """
-                SELECT secret, previous_secret, previous_secret_until
-                FROM identity.oidc_clients WHERE client_id = @clientId
-                """,
-                new { clientId = rotated });
-
-        Assert.Equal(OpaqueToken.Of(replacement).Fingerprint(), held.Current);
-        Assert.Equal(OpaqueToken.Of(Secret).Fingerprint(), held.Previous);
-        Assert.Equal(until, held.Until);
 
         PostgresException refused = await Assert.ThrowsAsync<PostgresException>(async () =>
             await connection.ExecuteAsync(
@@ -445,14 +466,9 @@ public sealed class OidcStoreTests(DatabaseFixture database)
         return token.Id;
     }
 
-    private Task RegisteredAsync(string clientId, OidcClientKind kind) =>
-        RecordedAsync(clientId, Secret, DateTimeOffset.MinValue, kind);
-
-    private async Task RecordedAsync(
-        string clientId,
-        string secret,
-        DateTimeOffset replacedUntil,
-        OidcClientKind kind = OidcClientKind.Protocol)
+    // Registers the client with the secret drawn at noon, or carries the change to the
+    // one the registry holds, as the client registry does.
+    private async Task RegisteredAsync(string clientId, OidcClientKind kind)
     {
         var client = new OidcClient(
             clientId,
@@ -463,11 +479,17 @@ public sealed class OidcStoreTests(DatabaseFixture database)
 
         await using StoreContext writing = database.Context();
 
-        await new OidcClientStore(writing).RecordAsync(
-            client,
-            OpaqueToken.Of(secret).Fingerprint(),
-            replacedUntil,
-            TestContext.Current.CancellationToken);
+        var clients = new OidcClientStore(writing, _deployment.DataKey(writing));
+
+        if (await clients.FindAsync(clientId, TestContext.Current.CancellationToken) is null)
+        {
+            await clients.AddAsync(client, Encoding.UTF8.GetBytes(Secret), Noon, TestContext.Current.CancellationToken);
+        }
+        else
+        {
+            await clients.RecordAsync(client, TestContext.Current.CancellationToken);
+        }
+
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 

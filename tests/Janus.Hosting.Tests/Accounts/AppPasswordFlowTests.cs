@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication;
@@ -154,15 +155,15 @@ public sealed class AppPasswordFlowTests : IAsyncDisposable
             .GetString() ?? string.Empty;
 
     private async Task RegisteredAsync() =>
-        await _deployment.Clients.RecordAsync(
+        await _deployment.Clients.AddAsync(
             new OidcClient(
                 MailClient,
                 MailClient,
                 OidcClientKind.Protocol,
                 "https://mail.example.test/callback",
                 ["openid", "email", "offline_access"]),
-            OpaqueToken.Of("the-mail-servers-secret").Fingerprint(),
-            DateTimeOffset.MinValue,
+            Encoding.UTF8.GetBytes("the-mail-servers-secret"),
+            _deployment.Clock.GetUtcNow(),
             TestContext.Current.CancellationToken);
 
     // INT-MAIL-006: the browser's account holds the mailbox its membership of the

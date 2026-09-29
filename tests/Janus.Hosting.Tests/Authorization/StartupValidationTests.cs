@@ -776,7 +776,6 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
             connection ?? host.ConnectionString,
             new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
             new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-            Encoding.UTF8.GetBytes("the secret this application presents"),
             Encoding.UTF8.GetBytes(host.MaintenanceConnectionString),
             HostFixture.Declaration(),
             ApplicationKind.Public);

@@ -214,7 +214,6 @@ public sealed class DefaultMessageTemplatesTests
                 Connection,
                 new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
                 new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-                new byte[16],
                 Encoding.UTF8.GetBytes(Connection),
                 HostFixture.Declaration(),
                 ApplicationKind.Public)

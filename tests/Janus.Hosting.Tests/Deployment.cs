@@ -795,12 +795,15 @@ internal sealed class Deployment : IAsyncDisposable
 
         // BFF-SESS-006: the client half of the sign-on is the library's, and the
         // connection it trades a code on reaches this same deployment's machine
-        // profile, which is what a second application's back channel reaches.
-        _ = services.AddSingleton(new SignOnSecret(
-            Encoding.UTF8.GetBytes("a-secret-the-deployment-set")));
+        // profile, which is what a second application's back channel reaches; what
+        // it presents is the secret the registry holds for it (OPS-SEC-002).
         _ = services.AddScoped<SignOn>();
         _ = services.AddHttpClient(SignOn.Channel)
             .ConfigurePrimaryHttpMessageHandler(() => Provider);
+
+        // LIB-TEST-001, D-172: the same half makes the conformance suite's provider
+        // probes.
+        _ = services.AddScoped<IProviderProbes, ProviderProbes>();
 
         _ = services.AddScoped<SmsBalance>();
         _ = services.AddSingleton<ICallbackLedger, CallbackLedgerInMemory>();
@@ -976,6 +979,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<Janus.Authentication.Invitations.InvitationOpening>();
         _ = services.AddScoped<IInvitations, Janus.Authentication.Invitations.InvitationService>();
         _ = services.AddScoped<SigningKeys>();
+        _ = services.AddScoped<RegisteredSecrets>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
         _ = services.AddOidc(Wrapping);

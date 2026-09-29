@@ -248,7 +248,6 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
             host.ConnectionString,
             new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
             new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-            new byte[16],
             Encoding.UTF8.GetBytes(host.MaintenanceConnectionString),
             HostFixture.Declaration(materialised: true),
             ApplicationKind.Public);

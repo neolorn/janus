@@ -3,6 +3,7 @@ using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Invitations;
@@ -1010,14 +1011,14 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     [Fact]
     public async Task API_REDIR_002_AC2_AnUnrecognisedIdentifierIsStoredAsTheNamedDefaultAsync()
     {
-        await _clients.RecordAsync(
+        await _clients.AddAsync(
             new OidcClient(
                 "fallback",
                 "fallback",
                 OidcClientKind.BrowserApplication,
                 "https://fallback.example.test/welcome",
                 ["openid"]),
-            [7, 8, 9],
+            Encoding.UTF8.GetBytes("a-secret-the-deployment-set"),
             DateTimeOffset.MinValue,
             TestContext.Current.CancellationToken);
 
@@ -1038,14 +1039,14 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     public async Task API_REDIR_002_AC4_TheReturnIsTheStoredClientsAndNoOthersAsync()
     {
         await RegisteredAsync();
-        await _clients.RecordAsync(
+        await _clients.AddAsync(
             new OidcClient(
                 "another",
                 "another",
                 OidcClientKind.BrowserApplication,
                 "https://elsewhere.example.test/welcome",
                 ["openid"]),
-            [4, 5, 6],
+            Encoding.UTF8.GetBytes("a-secret-the-deployment-set"),
             DateTimeOffset.MinValue,
             TestContext.Current.CancellationToken);
 
@@ -1754,9 +1755,9 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     // The steps a test is not about, run the way a browser runs them, so that each
     // test says only what it is checking.
     private Task RegisteredAsync() => _clients
-        .RecordAsync(
+        .AddAsync(
             new OidcClient(Client, Client, OidcClientKind.BrowserApplication, Registered, ["openid"]),
-            [1, 2, 3],
+            Encoding.UTF8.GetBytes("a-secret-the-deployment-set"),
             DateTimeOffset.MinValue,
             TestContext.Current.CancellationToken)
         .AsTask();

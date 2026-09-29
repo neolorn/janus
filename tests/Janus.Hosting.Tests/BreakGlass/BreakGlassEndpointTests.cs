@@ -3,6 +3,7 @@ using System.Collections.Frozen;
 using System.Linq;
 using System.Net;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -1042,15 +1043,15 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
     // The application another session is opened in, registered with the provider.
     private Task ApplicationRegisteredAsync() =>
-        _deployment.Clients.RecordAsync(
+        _deployment.Clients.AddAsync(
             new OidcClient(
                 "this-application",
                 "this-application",
                 OidcClientKind.BrowserApplication,
                 "https://identity.example.test/auth/signon/return",
                 ["openid"]),
-            OpaqueToken.Of("a-secret-the-deployment-set").Fingerprint(),
-            DateTimeOffset.MinValue,
+            Encoding.UTF8.GetBytes("a-secret-the-deployment-set"),
+            _deployment.Clock.GetUtcNow(),
             TestContext.Current.CancellationToken).AsTask();
 
     private AlertRaised Raised(AlertCondition condition) =>

@@ -255,7 +255,9 @@ internal static class StorageRegistration
             provider.GetRequiredService<StoreContext>(),
             keyEncryptionKeys,
             provider.GetRequiredService<RandomNumberGenerator>()));
-        services.AddScoped<IOidcClientStore, OidcClientStore>();
+        services.AddScoped<IOidcClientStore>(provider => new OidcClientStore(
+            provider.GetRequiredService<StoreContext>(),
+            provider.GetRequiredService<DeploymentDataKeyStore>()));
         services.AddScoped<IOpenIddictApplicationStore<OidcClientRecord>, OidcApplicationStore>();
         services.AddScoped<IOpenIddictAuthorizationStore<OidcAuthorizationRecord>, OidcAuthorizationStore>();
         services.AddScoped<IOpenIddictScopeStore<OidcScopeRecord>, OidcScopeStore>();

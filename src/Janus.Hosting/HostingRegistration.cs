@@ -102,11 +102,6 @@ public static class HostingRegistration
     /// The versions the searchable fingerprints are computed under, read from the same
     /// place and held outside the database (PRIV-RIGHT-005c).
     /// </param>
-    /// <param name="signOnSecret">
-    /// What this application presents at the provider's token endpoint when it
-    /// establishes its own session, read from the same place and never from
-    /// configuration (BFF-SESS-006, OPS-SEC-001).
-    /// </param>
     /// <param name="maintenanceCredential">
     /// The database connection the scheduled maintenance runs under, which holds the
     /// maintenance role's rights and nothing else, read from the same place and never
@@ -128,7 +123,6 @@ public static class HostingRegistration
         string connectionString,
         KeyEncryptionKeys keyEncryptionKeys,
         FingerprintKeys fingerprintKeys,
-        ReadOnlyMemory<byte> signOnSecret,
         ReadOnlyMemory<byte> maintenanceCredential,
         AuthorizationDeclaration declaration,
         ApplicationKind application)
@@ -139,7 +133,7 @@ public static class HostingRegistration
         // the library holds no fallback for either, so a deployment that reached
         // neither stops here with the code that names why, not at the first request
         // that would have read a person's field.
-        Present(keyEncryptionKeys, fingerprintKeys, signOnSecret, maintenanceCredential);
+        Present(keyEncryptionKeys, fingerprintKeys, maintenanceCredential);
 
         // CONV-DESIGN-007: time is injected, and a host that has its own clock keeps it.
         services.TryAddSingleton(TimeProvider.System);
@@ -194,10 +188,14 @@ public static class HostingRegistration
 
         // BFF-SESS-006: the client half of the sign-on is the library's, so what it
         // presents, where it presents it and the connection it presents it on are
-        // registered here and a host supplies none of them.
-        services.AddSingleton(new SignOnSecret(signOnSecret));
+        // registered here and a host supplies none of them; what it presents is the
+        // secret the registry holds for it (OPS-SEC-002).
         services.AddScoped<SignOn>();
         _ = services.AddHttpClient(SignOn.Channel);
+
+        // LIB-TEST-001, D-172: the same half makes the conformance suite's provider
+        // probes, as the same client and on the same connection.
+        services.AddScoped<IProviderProbes, ProviderProbes>();
 
         // LIB-HOST-001: what the host declares about its own messaging is the host's.
         // A deployment that declares none of it starts, and the checks that would have
@@ -428,6 +426,7 @@ public static class HostingRegistration
         services.AddScoped<CredentialService>();
         services.AddScoped<ICredentials>(provider => provider.GetRequiredService<CredentialService>());
         services.AddScoped<SigningKeys>();
+        services.AddScoped<RegisteredSecrets>();
         services.AddOidc(keyEncryptionKeys);
         services.AddScoped<OidcService>();
         services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
@@ -691,7 +690,6 @@ public static class HostingRegistration
     private static void Present(
         KeyEncryptionKeys keyEncryptionKeys,
         FingerprintKeys fingerprintKeys,
-        ReadOnlyMemory<byte> signOnSecret,
         ReadOnlyMemory<byte> maintenanceCredential)
     {
         if (keyEncryptionKeys is null)
@@ -707,16 +705,6 @@ public static class HostingRegistration
             throw new StartupException(
                 "The fingerprint key was not supplied, or a version of it is shorter than the hash it computes.",
                 Error.From(ErrorCodes.StartupSecretUnavailable, "key", JsonSerializer.SerializeToElement("fingerprintKeys")));
-        }
-
-        // BFF-SESS-006: an application that cannot authenticate itself at the token
-        // endpoint cannot establish a session at all, so it stops here rather than at
-        // the first person who arrives holding nothing.
-        if (signOnSecret.Length is 0)
-        {
-            throw new StartupException(
-                "The sign-on client secret was not supplied; the library reads it from the secrets manager and holds no fallback.",
-                Error.From(ErrorCodes.StartupSecretUnavailable, "key", JsonSerializer.SerializeToElement("signOnSecret")));
         }
 
         // PRIV-RET-002: without the maintenance credential no month is created ahead and

@@ -520,6 +520,7 @@ public sealed class ModelTests
             "oidc_clients.redirect",
             "oidc_clients.scopes",
             "oidc_clients.secret",
+            "oidc_clients.secret_issued_at",
             "oidc_scopes.description",
             "oidc_scopes.descriptions",
             "oidc_scopes.display_name",

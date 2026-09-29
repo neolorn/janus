@@ -153,7 +153,6 @@ public sealed class HostFixture : IAsyncLifetime
             new FingerprintKeys(
                 1,
                 new Dictionary<int, ReadOnlyMemory<byte>> { [1] = Encoding.UTF8.GetBytes("the fingerprint key of this deployment") }),
-            Encoding.UTF8.GetBytes("the secret this application presents"),
             Encoding.UTF8.GetBytes(MaintenanceConnectionString),
             Declaration(),
             ApplicationKind.Public);

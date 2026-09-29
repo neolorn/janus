@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.Linq;
-using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -154,12 +153,11 @@ public static class ConformanceSuite
     }
 
     /// <summary>
-    /// Asks the deployment's provider each refusal AUTH-OIDC-006 names, as a registered
-    /// client would ask it.
+    /// Asks the deployment's provider each refusal AUTH-OIDC-006 names, as the
+    /// application's own sign-on client asks it.
     /// </summary>
-    /// <param name="client">What reaches the deployment.</param>
-    /// <param name="issuer">The provider's issuer, which its discovery document sits under.</param>
-    /// <param name="registered">A client the deployment's registry holds.</param>
+    /// <param name="services">The host's deployment, as it registered the library.</param>
+    /// <param name="context">Who is asking.</param>
     /// <param name="cancellationToken">Abandons the run.</param>
     /// <returns>
     /// A finding, <c>auth.oidc.nonconformant</c> naming the probe, what was sent, the
@@ -167,30 +165,41 @@ public static class ConformanceSuite
     /// its document advertised.
     /// </returns>
     /// <exception cref="ArgumentNullException">An argument is absent.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The probes could not be made, since the client or its secret could not be read;
+    /// the message is the refusal's code.
+    /// </exception>
     /// <remarks>
-    /// Implements AUTH-OIDC-006 AC1 and LIB-TEST-001. The implicit and hybrid forms,
-    /// every grant beside the code and the refresh, the plain proof key and no proof
-    /// key, and a client that does not authenticate are each asked for and must be
-    /// refused. The exact-match rule and the code exchange need a person signed in, so
-    /// they are the library's own tests and not the host's.
+    /// Implements AUTH-OIDC-006 AC1 and LIB-TEST-001 AC4 and AC5 (D-172). The implicit
+    /// and hybrid forms, every grant beside the code and the refresh, the plain proof
+    /// key and no proof key, and a client that does not authenticate are each asked for
+    /// and must be refused. The probes are made by the library's own client half as the
+    /// client the host declares for this application, so the suite holds no secret and
+    /// no client is registered for it. The exact-match rule and the code exchange need
+    /// a person signed in, so they are the library's own tests and not the host's.
     /// </remarks>
     public static async ValueTask<ConformanceReport> ProviderAsync(
-        HttpClient client,
-        Uri issuer,
-        ConformanceClient registered,
+        IServiceProvider services,
+        AccessContext context,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(client);
-        ArgumentNullException.ThrowIfNull(issuer);
-        ArgumentNullException.ThrowIfNull(registered);
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(context);
 
-        // The suite runs outside the deployment's container, so the probe's randomness
-        // is made here, where the probe is composed.
-        using var randomness = RandomNumberGenerator.Create();
+        AsyncServiceScope scope = services.CreateAsyncScope();
 
-        return await new ProviderProbe(client, issuer, registered, randomness)
-            .RunAsync(cancellationToken)
-            .ConfigureAwait(false);
+        await using (scope.ConfigureAwait(false))
+        {
+            return (await scope.ServiceProvider.GetRequiredService<IProviderProbes>()
+                    .RunAsync(context, cancellationToken)
+                    .ConfigureAwait(false))
+                .Match(
+                    findings => new ConformanceReport(
+                    [
+                        .. findings.Select(finding => new ConformanceFinding(ConformanceCheck.Provider, finding)),
+                    ]),
+                    error => throw new InvalidOperationException(error.Code.ToString()));
+        }
     }
 
     private static Result Validated(AuthorizationDeclaration declaration)
@@ -199,11 +208,9 @@ public static class ConformanceSuite
 
         byte[] encryption = new byte[32];
         byte[] fingerprint = new byte[FingerprintKeys.MinimumLength];
-        byte[] signOn = new byte[32];
 
         randomness.GetBytes(encryption);
         randomness.GetBytes(fingerprint);
-        randomness.GetBytes(signOn);
 
         try
         {
@@ -211,7 +218,6 @@ public static class ConformanceSuite
                 Unreached,
                 new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = encryption }),
                 new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = fingerprint }),
-                signOn,
                 Encoding.UTF8.GetBytes(Unreached),
                 declaration,
                 ApplicationKind.Public);
@@ -226,7 +232,6 @@ public static class ConformanceSuite
         {
             CryptographicOperations.ZeroMemory(encryption);
             CryptographicOperations.ZeroMemory(fingerprint);
-            CryptographicOperations.ZeroMemory(signOn);
         }
     }
 }

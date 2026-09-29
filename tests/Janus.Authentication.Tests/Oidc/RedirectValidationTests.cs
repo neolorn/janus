@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication.Oidc;
 using Janus.Core;
@@ -130,9 +131,9 @@ public sealed class RedirectValidationTests
         string redirect,
         OidcClientKind kind = OidcClientKind.BrowserApplication) =>
         _clients
-            .RecordAsync(
+            .AddAsync(
                 new OidcClient(clientId, clientId, kind, redirect, ["openid"]),
-                [1, 2, 3],
+                Encoding.UTF8.GetBytes("a-secret-the-deployment-set"),
                 DateTimeOffset.MinValue,
                 TestContext.Current.CancellationToken)
             .AsTask();

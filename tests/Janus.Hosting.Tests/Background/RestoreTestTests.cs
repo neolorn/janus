@@ -394,7 +394,6 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
                 host.ConnectionString,
                 keys,
                 fingerprints,
-                Encoding.UTF8.GetBytes("the secret this application presents"),
                 Encoding.UTF8.GetBytes(host.MaintenanceConnectionString),
                 HostFixture.Declaration(),
                 ApplicationKind.Public);

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
@@ -82,9 +83,16 @@ internal sealed class ProviderInMemory(Deployment deployment) : HttpMessageHandl
 
         await deployment.SendAsync(context);
 
+        var answered = new StringContent(body.Taken());
+
+        // What the answer is, as the server wrote it.
+        answered.Headers.ContentType = context.Response.ContentType is string type
+            ? MediaTypeHeaderValue.Parse(type)
+            : null;
+
         return new HttpResponseMessage((HttpStatusCode)context.Response.StatusCode)
         {
-            Content = new StringContent(body.Taken()),
+            Content = answered,
         };
     }
 }

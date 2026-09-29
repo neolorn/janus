@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -81,6 +81,7 @@ public sealed class ConformanceSuiteTests(SampleHost host) : IClassFixture<Sampl
 
     // The purpose every declaration below rests its types on, which holds together.
     private const string Keeping = "keeping records";
+
 
     /// <summary>
     /// LIB-TEST-001 AC1: every entity the sample host maps is a declared type, the rows
@@ -241,42 +242,39 @@ public sealed class ConformanceSuiteTests(SampleHost host) : IClassFixture<Sampl
     }
 
     /// <summary>
-    /// AUTH-OIDC-006 AC1: the sample host's provider refuses every form the two
-    /// specifications retire, asked over its own endpoints under the host's prefix.
+    /// AUTH-OIDC-006 AC1, LIB-TEST-001 AC4: the sample host's provider refuses every form
+    /// the two specifications retire, asked over its own endpoints under the host's prefix
+    /// by the application's own sign-on client, with no client registered for the suite.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task AUTH_OIDC_006_AC1_TheSampleHostsProviderRefusesEveryRetiredFormAsync()
     {
-        using HttpClient client = host.Client();
-
         ConformanceReport report = await ConformanceSuite.ProviderAsync(
-            client,
-            SampleHost.Issuer,
-            host.Registered,
+            host.Services,
+            Asking(),
             TestContext.Current.CancellationToken);
 
         Assert.Empty(report.Findings);
     }
 
     /// <summary>
-    /// AUTH-OIDC-006 AC1: a provider that admits and advertises what it should refuse
-    /// is reported once for each form, naming what was sent and what came back.
+    /// AUTH-OIDC-006 AC1, LIB-TEST-001 AC4: a provider that admits and advertises what it
+    /// should refuse is reported once for each form, naming what was sent and what came
+    /// back, and the probe of a client that does not authenticate reports that nothing
+    /// was sent for its secret.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task AUTH_OIDC_006_AC1_AProviderAdmittingWhatItShouldRefuseIsReportedAsync()
     {
-        using var provider = new AdmittingProvider();
-        using var client = new HttpClient(provider, disposeHandler: false);
-
-        ConformanceReport report = await ConformanceSuite.ProviderAsync(
-            client,
+        ConformanceReport report = await host.BesideAsync(
             AdmittingProvider.Issuer,
-            host.Registered,
-            TestContext.Current.CancellationToken);
+            () => new AdmittingProvider(),
+            services => ConformanceSuite.ProviderAsync(services, Asking(), TestContext.Current.CancellationToken));
 
         Assert.Equal(20, report.Findings.Count);
+        Assert.All(report.Findings, found => Assert.Equal(ConformanceCheck.Provider, found.Check));
         Assert.All(report.Findings, found => Assert.Equal(ErrorCodes.ProviderNonconformant, found.Failure.Code));
         Assert.Contains(
             ("push", "response_type", "token", "unsupported_response_type", 200),
@@ -286,6 +284,12 @@ public sealed class ConformanceSuiteTests(SampleHost host) : IClassFixture<Sampl
                 found.Failure.Details["sent"].GetString(),
                 found.Failure.Details["expected"].GetString(),
                 found.Failure.Details["status"].GetInt32())));
+        Assert.Equal(
+            JsonValueKind.Null,
+            Assert.Single(
+                report.Findings,
+                found => found.Failure.Details.TryGetValue("field", out JsonElement field)
+                    && field.GetString() == "client_secret").Failure.Details["sent"].ValueKind);
         Assert.Equal(
             [
                 "response_types_supported",
@@ -345,5 +349,14 @@ public sealed class ConformanceSuiteTests(SampleHost host) : IClassFixture<Sampl
             rows(context),
             cases,
             TestContext.Current.CancellationToken);
+    }
+
+    // Who asks for the provider's refusals: the person running the suite, whom the
+    // probes meet no gate for and read nothing of.
+    private static AccessContext Asking()
+    {
+        using var randomness = RandomNumberGenerator.Create();
+
+        return AccessContext.Of(SubjectId.New(randomness));
     }
 }

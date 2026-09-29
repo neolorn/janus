@@ -27,7 +27,7 @@ namespace Janus.Hosting.Bff;
 /// and keeps nothing else.
 /// </summary>
 /// <param name="client">Which client of the provider this application is.</param>
-/// <param name="secret">What it authenticates itself with at the token endpoint.</param>
+/// <param name="secrets">What it authenticates itself with at the provider, read from the registry.</param>
 /// <param name="addresses">Where the provider answers.</param>
 /// <param name="clients">Where the one destination a code returns to is registered.</param>
 /// <param name="contacts">Where the sign-on in flight is bound to the browser.</param>
@@ -50,7 +50,7 @@ namespace Janus.Hosting.Bff;
 /// </remarks>
 internal sealed class SignOn(
     SignOnClient client,
-    SignOnSecret secret,
+    RegisteredSecrets secrets,
     AuthenticationAddresses addresses,
     IOidcClientStore clients,
     PreAuthenticationService contacts,
@@ -258,11 +258,16 @@ internal sealed class SignOn(
         bool silent,
         CancellationToken cancellationToken)
     {
+        if (await SecretAsync(registered, cancellationToken).ConfigureAwait(false) is not string secret)
+        {
+            return null;
+        }
+
         var parameters = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["response_type"] = "code",
             ["client_id"] = registered.ClientId,
-            ["client_secret"] = secret.Value(),
+            ["client_secret"] = secret,
             ["redirect_uri"] = Destination(registered),
             ["scope"] = "openid",
             ["state"] = state.Value,
@@ -356,6 +361,11 @@ internal sealed class SignOn(
         [NeverLogged] string code,
         CancellationToken cancellationToken)
     {
+        if (await SecretAsync(registered, cancellationToken).ConfigureAwait(false) is not string secret)
+        {
+            return null;
+        }
+
         using HttpClient requests = channel.CreateClient(Channel);
         using var form = new FormUrlEncodedContent(
             new Dictionary<string, string>(StringComparer.Ordinal)
@@ -364,7 +374,7 @@ internal sealed class SignOn(
                 ["code"] = code,
                 ["redirect_uri"] = Destination(registered),
                 ["client_id"] = registered.ClientId,
-                ["client_secret"] = secret.Value(),
+                ["client_secret"] = secret,
                 ["code_verifier"] = attempt.Verifier,
             });
 
@@ -383,6 +393,27 @@ internal sealed class SignOn(
         return body.RootElement.TryGetProperty("id_token", out JsonElement token)
             ? token.GetString()
             : null;
+    }
+
+    // OPS-SEC-002: the secret is read from the registry at each request and held
+    // nowhere, so one rotated since the last request is the one presented.
+    private async ValueTask<string?> SecretAsync(OidcClient registered, CancellationToken cancellationToken)
+    {
+        Result<byte[]> read = await secrets.CurrentAsync(registered.ClientId, cancellationToken).ConfigureAwait(false);
+
+        return read.Match<string?>(
+            current =>
+            {
+                try
+                {
+                    return Encoding.UTF8.GetString(current);
+                }
+                finally
+                {
+                    CryptographicOperations.ZeroMemory(current);
+                }
+            },
+            _ => null);
     }
 
     // AUTH-KEY-001 AC2: the identity token is judged against the set the deployment

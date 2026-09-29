@@ -74,7 +74,6 @@ public sealed class KeyMaterialTests
                 Connection,
                 Usable,
                 Fingerprints(new byte[32]),
-                Encoding.UTF8.GetBytes("the secret this application presents"),
                 ReadOnlyMemory<byte>.Empty,
                 HostFixture.Declaration(),
                 ApplicationKind.Public))
@@ -103,7 +102,6 @@ public sealed class KeyMaterialTests
                 Connection,
                 Usable,
                 Fingerprints(new byte[32]),
-                Encoding.UTF8.GetBytes("the secret this application presents"),
                 Encoding.UTF8.GetBytes(Connection),
                 HostFixture.Declaration(),
                 ApplicationKind.Public);
@@ -124,7 +122,6 @@ public sealed class KeyMaterialTests
                 Connection,
                 keys!,
                 fingerprintKeys!,
-                Encoding.UTF8.GetBytes("the secret this application presents"),
                 Encoding.UTF8.GetBytes(Connection),
                 HostFixture.Declaration(),
                 ApplicationKind.Public))

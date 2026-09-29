@@ -280,15 +280,15 @@ public sealed class OidcFlowTests
 
         Browser browser = await RelyingParty.PreparedAsync(deployment);
 
-        await deployment.Clients.RecordAsync(
+        await deployment.Clients.AddAsync(
             new OidcClient(
                 Second,
                 Second,
                 OidcClientKind.BrowserApplication,
                 RelyingParty.Destination,
                 ["openid", "email"]),
-            OpaqueToken.Of(RelyingParty.Secret).Fingerprint(),
-            DateTimeOffset.MinValue,
+            Encoding.UTF8.GetBytes(RelyingParty.Secret),
+            deployment.Clock.GetUtcNow(),
             TestContext.Current.CancellationToken);
 
         var machine = new Machine(deployment);
@@ -500,15 +500,15 @@ public sealed class OidcFlowTests
 
         Browser browser = await RelyingParty.PreparedAsync(deployment);
 
-        await deployment.Clients.RecordAsync(
+        await deployment.Clients.AddAsync(
             new OidcClient(
                 Second,
                 Second,
                 OidcClientKind.BrowserApplication,
                 RelyingParty.Destination,
                 ["openid", "email"]),
-            OpaqueToken.Of(RelyingParty.Secret).Fingerprint(),
-            DateTimeOffset.MinValue,
+            Encoding.UTF8.GetBytes(RelyingParty.Secret),
+            deployment.Clock.GetUtcNow(),
             TestContext.Current.CancellationToken);
 
         var machine = new Machine(deployment);
@@ -565,56 +565,6 @@ public sealed class OidcFlowTests
 
         Assert.Equal(StatusCodes.Status200OK, taken.Status);
         Assert.NotEmpty(taken.Text("access_token"));
-    }
-
-    /// <summary>
-    /// OPS-SEC-002 AC2: a client whose secret was replaced still authenticates with the
-    /// one it replaced until the overlap ends, and from then on only with the new one.
-    /// </summary>
-    /// <returns>The work of the test.</returns>
-    [Fact]
-    public async Task OPS_SEC_002_AC2_AReplacedSecretAuthenticatesTheClientThroughTheOverlapAsync()
-    {
-        const string replacement = "the-secret-that-replaced-the-first";
-
-        await using var deployment = new Deployment();
-
-        Browser browser = await RelyingParty.PreparedAsync(deployment);
-
-        await deployment.Clients.RecordAsync(
-            new OidcClient(
-                RelyingParty.Protocol,
-                RelyingParty.Protocol,
-                OidcClientKind.Protocol,
-                RelyingParty.Destination,
-                ["openid", "email", "offline_access"]),
-            OpaqueToken.Of(replacement).Fingerprint(),
-            deployment.Clock.GetUtcNow() + TimeSpan.FromMinutes(15),
-            TestContext.Current.CancellationToken);
-
-        var machine = new Machine(deployment);
-        string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Protocol);
-
-        Answer overlapping = await machine.PostAsync(
-            "/oidc/token",
-            RelyingParty.Code(code, RelyingParty.Protocol));
-
-        deployment.Clock.Advance(TimeSpan.FromMinutes(15));
-
-        (string Name, string? Value)[] request = RelyingParty.Request(
-            RelyingParty.Protocol,
-            silent: true,
-            RelyingParty.Destination,
-            "openid email offline_access");
-
-        Answer lapsed = await RelyingParty.PushAsync(deployment, request);
-        Answer current = await RelyingParty.PushAsync(
-            deployment,
-            RelyingParty.With(request, "client_secret", replacement));
-
-        Assert.Equal(StatusCodes.Status200OK, overlapping.Status);
-        Assert.Equal(StatusCodes.Status401Unauthorized, lapsed.Status);
-        Assert.Equal(StatusCodes.Status201Created, current.Status);
     }
 
     /// <summary>

@@ -642,6 +642,7 @@ table oidc_clients
   column scopes text[] not null
   column previous_secret bytea
   column previous_secret_until timestamp with time zone
+  column secret_issued_at timestamp with time zone not null
   constraint ck_oidc_clients_kind CHECK ((kind = ANY (ARRAY['browser-application'::text, 'protocol'::text])))
   constraint ck_oidc_clients_previous CHECK (((previous_secret IS NULL) = (previous_secret_until IS NULL)))
   constraint pk_oidc_clients PRIMARY KEY (client_id)

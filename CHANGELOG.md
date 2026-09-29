@@ -22,7 +22,11 @@ against the public contract of LIB-API-001.
   database, so it runs against a deployment kept for it.
   `ConformanceSuite.ProviderAsync` asks the provider each form AUTH-OIDC-006 retires and
   reports, under `auth.oidc.nonconformant`, each one it admits or its discovery document
-  lists.
+  lists. The requests are made by the library's own half of the sign-on, as the client
+  the host declares for the application, so the suite takes the deployment and who asks
+  and nothing else: no client is registered for it and it holds no secret.
+  `IProviderProbes` in `Janus.Core` is the operation it asks through, called in process
+  only.
 - `IResources` in `Janus.Core`: a host registers each record it creates, many at once
   for an import, and moves one, inside its own unit of work, and the ancestry the
   permission filter reads is written in the same transaction. A record is placed only in
@@ -68,11 +72,17 @@ against the public contract of LIB-API-001.
   next one is recorded. A log that records none has the operation due at once.
 - `janus register-client` registers a client in the provider's registry, or changes a
   registered one, from the server: `--client`, `--name`, `--kind`, `--redirect` and
-  `--scopes`, with the secret piped in the key document as `clientSecret`. The registry
-  keeps what the secret hashes to. Registering a client again with a new secret keeps
-  the one it replaced accepted for the access-token lifetime and five minutes, which is
-  how a client secret is rotated. Each registration is recorded as
-  `auth.oidc.clientregistered`.
+  `--scopes`, and no secret. The library draws a client's secret at its first
+  registration and holds it wrapped under the deployment's data key; registering a
+  client again changes it and leaves its secret. Each registration is recorded as
+  `auth.oidc.clientregistered`, with nothing of the secret.
+- A registered client's secret is replaced at `token.signing.rotation` by the first read
+  that finds it due, while the deployment runs; of two instances that find it due
+  together one replaces it and the other presents what the first wrote. The provider
+  takes the secret it replaced for the access-token lifetime and five minutes, compared
+  in fixed time. No person chooses, carries or rotates a client secret. The migration
+  that moves the registry to held secrets refuses to run where a client is registered,
+  since what a secret hashed to cannot become the secret.
 - The audit trail's monthly partitions are kept by a daily job, `audit-partitions`,
   under the maintenance credential: the current month and the two after it are created
   where missing, and partitions past `retention.audit.security` or
@@ -961,9 +971,9 @@ against the public contract of LIB-API-001.
   its code, so the browser carries nothing of the request, and the back-channel request
   is made with the client `identity-signon`, which a host configures as it configures
   any other client. A host declares the client identifier this application is registered
-  under and hands the library the matching secret from its secrets manager, both of
-  which startup requires; the address of the authentication application is declared
-  beside its sign-in screen.
+  under, which startup requires; the secret it presents is the one the library drew for
+  that client, read from the registry at each request and kept nowhere. The address of
+  the authentication application is declared beside its sign-in screen.
 - The OpenID Connect provider keeps its registered clients and its signing keys in
   tables of the library's schema, and the protocol library keeps its own records in
   three more: `oidc_authorizations`, `oidc_tokens` and `oidc_scopes`. Codes and refresh
@@ -1304,7 +1314,7 @@ against the public contract of LIB-API-001.
   own tables and the library reads nothing of the host's.
 - `AddJanus` on `HostingRegistration` in `Janus.Hosting`: the one method a host calls to
   register the library. It takes the database connection, the key-encryption keys, the
-  fingerprint keys, the sign-on secret, the maintenance credential, the host's
+  fingerprint keys, the maintenance credential, the host's
   declaration and the `ApplicationKind` the pipeline is mounted in. The maintenance
   credential is the database connection of a login holding the maintenance role's
   rights, read from the secrets manager; a deployment that supplies none does not start,

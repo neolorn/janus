@@ -195,6 +195,50 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
     }
 
     /// <summary>
+    /// OPS-SEC-003 AC1, OPS-SEC-002: a client's secrets, the current one and the one it
+    /// replaced, are held under the deployment's data key, so the rotation re-wraps that
+    /// key, leaves the secrets as they were, and both read after the retirement as they
+    /// did before (D-166, 340).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_003_AC1_AKeyRotationReWrapsTheClientSecretsAsync()
+    {
+        await using NpgsqlConnection connection = await ResetAsync();
+        _ = await SeedAsync(connection, 1);
+        byte[] deploymentKey = await DeploymentKeyAsync(connection);
+        byte[] current = RandomNumberGenerator.GetBytes(43);
+        byte[] replaced = RandomNumberGenerator.GetBytes(43);
+
+        await connection.ExecuteAsync(
+            """
+            DELETE FROM identity.oidc_clients WHERE client_id = 'rotated-client';
+            INSERT INTO identity.oidc_clients
+                (client_id, name, kind, redirect, scopes, secret, secret_issued_at, previous_secret, previous_secret_until)
+            VALUES ('rotated-client', 'Rotated client', 'protocol', 'https://mail.example.test/callback',
+                ARRAY['openid'], @current, now(), @replaced, now() + interval '15 minutes');
+            """,
+            new { current = Wrapped(current, deploymentKey), replaced = Wrapped(replaced, deploymentKey) });
+
+        (byte[] Secret, byte[] Previous) before = await SecretsAsync(connection);
+
+        Assert.Equal(0, (await Invocation.PipedAsync([Command], Rotating())).ExitCode);
+        Assert.Equal(0, (await Invocation.PipedAsync([Command, Sealed], Rotating())).ExitCode);
+
+        (byte[] Secret, byte[] Previous) after = await SecretsAsync(connection);
+        byte[] rewrapped = await connection.QuerySingleAsync<byte[]>(
+            "SELECT wrapped_key FROM identity.subject_keys WHERE subject = @reserved AND key_version = 2",
+            new { reserved = Guid.AllBitsSet });
+        byte[] unwrapped = Unwrapped(rewrapped, Next);
+
+        Assert.Equal(before.Secret, after.Secret);
+        Assert.Equal(before.Previous, after.Previous);
+        Assert.Equal(deploymentKey, unwrapped);
+        Assert.Equal(current, Unwrapped(after.Secret, unwrapped));
+        Assert.Equal(replaced, Unwrapped(after.Previous, unwrapped));
+    }
+
+    /// <summary>
     /// OPS-SEC-003 AC3 and IDN-LIFE-012: the proof key a round trip to a social provider
     /// holds while the browser is away is under the deployment's data key, so the
     /// rotation leaves it where it is and it reads after the retirement as it did
@@ -607,6 +651,10 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
 
         return deploymentKey;
     }
+
+    private static async Task<(byte[] Secret, byte[] Previous)> SecretsAsync(NpgsqlConnection connection) =>
+        await connection.QuerySingleAsync<(byte[], byte[])>(
+            "SELECT secret, previous_secret FROM identity.oidc_clients WHERE client_id = 'rotated-client'");
 
     private static byte[] Wrapped(byte[] value, byte[] wrappingKey)
     {

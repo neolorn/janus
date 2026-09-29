@@ -13,114 +13,92 @@ namespace Janus.Cli.Tests;
 
 /// <summary>
 /// What the <c>register-client</c> command does to a bootstrapped deployment: a client
-/// enters the registry from the server, its secret piped with the keys and held as what
-/// it hashes to, and a new secret leaves the one it replaced for the overlap
-/// (AUTH-OIDC-001, OPS-SEC-002, entry 340).
+/// enters the registry from the server, the library draws its secret and holds it
+/// wrapped under the deployment's data key, and registering a client the registry holds
+/// changes it and leaves its secret alone (AUTH-OIDC-001, OPS-SEC-002, D-166 340).
 /// </summary>
 [Trait("kind", "integration")]
 public sealed class RegisterClientTests(BootstrappedDeployment deployment) : IClassFixture<BootstrappedDeployment>
 {
     private const string Redirect = "https://mail.example.test/callback";
 
-    private const string Secret = "the-secret-the-mail-server-presents";
-
     /// <summary>
     /// AUTH-OIDC-001 AC4: the mail-server client is registered as the deployment is
-    /// stood up, the registry holding what its secret hashes to, and the registration
-    /// written down under the command's principal.
+    /// stood up with no secret supplied: the library draws one, holds it wrapped, and
+    /// writes the registration down under the command's principal with nothing of it.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_OIDC_001_AC4_TheMailServerClientIsRegisteredAsTheDeploymentIsStoodUpAsync()
+    public async Task AUTH_OIDC_001_AC4_TheMailServerClientIsRegisteredWithNoSecretSuppliedAsync()
     {
-        Invocation run = await RegisteredAsync("mail", "protocol", Secret);
+        DateTimeOffset before = DateTimeOffset.UtcNow;
+        Invocation run = await RegisteredAsync(Arguments("mail", "protocol", Redirect));
+        DateTimeOffset after = DateTimeOffset.UtcNow;
 
         await using NpgsqlConnection connection = await deployment.OpenAsync();
 
-        (string Kind, string Redirect, string[] Scopes, byte[] Secret, byte[]? Previous) held = await connection
-            .QuerySingleAsync<(string, string, string[], byte[], byte[]?)>(
+        (string Kind, string Redirect, string[] Scopes, byte[] Secret, DateTimeOffset IssuedAt, byte[]? Previous) held =
+            await connection.QuerySingleAsync<(string, string, string[], byte[], DateTimeOffset, byte[]?)>(
                 """
-                SELECT kind, redirect, scopes, secret, previous_secret
+                SELECT kind, redirect, scopes, secret, secret_issued_at, previous_secret
                 FROM identity.oidc_clients WHERE client_id = 'mail'
                 """);
-        (string? Kind, string? Changed, string Reason) recorded = await connection
-            .QuerySingleAsync<(string?, string?, string)>(
+        (string? Kind, string? Changed, string Reason, bool Secret) recorded = await connection
+            .QuerySingleAsync<(string?, string?, string, bool)>(
                 """
-                SELECT details->>'kind', details->>'changed', principal_reason
+                SELECT details->>'kind', details->>'changed', principal_reason, details::text ILIKE '%secret%'
                 FROM identity.audit_records
                 WHERE action = 'auth.oidc.clientregistered' AND principal = 'register-client'
                   AND details->>'client' = 'mail'
                 """);
+        byte[] secret = Unwrapped(held.Secret, await DeploymentKeyAsync(connection));
 
         Assert.Equal(0, run.ExitCode);
         Assert.Equal("""{"registered":"mail"}""", run.Output.Trim());
         Assert.Equal(("protocol", Redirect), (held.Kind, held.Redirect));
         Assert.Equal(["openid", "email", "offline_access"], held.Scopes);
-        Assert.Equal(SHA256.HashData(Encoding.UTF8.GetBytes(Secret)), held.Secret);
+        Assert.Matches("^[A-Za-z0-9_-]{43}$", Encoding.ASCII.GetString(secret));
+        Assert.NotEqual(secret, held.Secret);
+        Assert.InRange(held.IssuedAt, before.AddSeconds(-1), after);
         Assert.Null(held.Previous);
-        Assert.Equal(("protocol", "false", "AUTH-OIDC-001"), recorded);
+        Assert.Equal(("protocol", "false", "AUTH-OIDC-001", false), recorded);
     }
 
     /// <summary>
-    /// OPS-SEC-002 AC2: registering the client again with a new secret is how a secret
-    /// is rotated, and the one it replaced stays accepted for the access-token lifetime
-    /// and five minutes.
+    /// OPS-SEC-002: registering a client the registry holds changes its kind and
+    /// destination and leaves its secret, and when the secret was drawn, as they were.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_SEC_002_AC2_RegisteringANewSecretKeepsTheReplacedOneThroughTheOverlapAsync()
+    public async Task OPS_SEC_002_ARegistrationThatChangesAClientKeepsItsSecretAsync()
     {
-        const string replacement = "the-secret-that-replaced-the-first-one";
+        const string moved = "https://mail.example.test/moved";
 
-        await RegisteredAsync("rotated", "browser-application", Secret);
-
-        DateTimeOffset before = DateTimeOffset.UtcNow;
-        Invocation run = await RegisteredAsync("rotated", "browser-application", replacement);
-        DateTimeOffset after = DateTimeOffset.UtcNow;
+        Assert.Equal(0, (await RegisteredAsync(Arguments("changed", "browser-application", Redirect))).ExitCode);
 
         await using NpgsqlConnection connection = await deployment.OpenAsync();
 
-        (byte[] Secret, byte[] Previous, DateTimeOffset Until) held = await connection
-            .QuerySingleAsync<(byte[], byte[], DateTimeOffset)>(
-                """
-                SELECT secret, previous_secret, previous_secret_until
-                FROM identity.oidc_clients WHERE client_id = 'rotated'
-                """);
-        IEnumerable<string> changed = await connection.QueryAsync<string>(
+        (byte[] Secret, DateTimeOffset IssuedAt) first = await HeldAsync(connection);
+
+        Invocation run = await RegisteredAsync(Arguments("changed", "protocol", moved));
+
+        (byte[] Secret, DateTimeOffset IssuedAt) second = await HeldAsync(connection);
+        (string Kind, string Redirect, byte[]? Previous) changed = await connection
+            .QuerySingleAsync<(string, string, byte[]?)>(
+                "SELECT kind, redirect, previous_secret FROM identity.oidc_clients WHERE client_id = 'changed'");
+        IEnumerable<string> recorded = await connection.QueryAsync<string>(
             """
             SELECT details->>'changed' FROM identity.audit_records
-            WHERE action = 'auth.oidc.clientregistered' AND details->>'client' = 'rotated'
+            WHERE action = 'auth.oidc.clientregistered' AND details->>'client' = 'changed'
             ORDER BY id
             """);
 
         Assert.Equal(0, run.ExitCode);
-        Assert.Equal(SHA256.HashData(Encoding.UTF8.GetBytes(replacement)), held.Secret);
-        Assert.Equal(SHA256.HashData(Encoding.UTF8.GetBytes(Secret)), held.Previous);
-        Assert.InRange(held.Until, before + TimeSpan.FromMinutes(15), after + TimeSpan.FromMinutes(15));
-        Assert.Equal(["false", "true"], changed);
-    }
-
-    /// <summary>
-    /// AUTH-OIDC-001 and OPS-SEC-001: the secret comes with the keys and never as an
-    /// argument, so a document that carries none, or one the registry would not hold, is
-    /// refused naming it and nothing is registered.
-    /// </summary>
-    /// <returns>The work of the test.</returns>
-    [Fact]
-    public async Task AUTH_OIDC_001_ARegistrationWithoutAUsableSecretIsRefusedAsync()
-    {
-        Invocation absent = await Invocation.PipedAsync(
-            Arguments("unsecured", "protocol"),
-            Invocation.Keys(deployment.ConnectionString));
-        Invocation shortSecret = await RegisteredAsync("unsecured", "protocol", "short");
-
-        await using NpgsqlConnection connection = await deployment.OpenAsync();
-
-        Assert.Equal(1, absent.ExitCode);
-        Assert.Equal(("api.request.malformed", "clientSecret"), Refusal(absent));
-        Assert.Equal(("api.request.malformed", "clientSecret"), Refusal(shortSecret));
-        Assert.Equal(0, await connection.ExecuteScalarAsync<long>(
-            "SELECT count(*) FROM identity.oidc_clients WHERE client_id = 'unsecured'"));
+        Assert.Equal(first.Secret, second.Secret);
+        Assert.Equal(first.IssuedAt, second.IssuedAt);
+        Assert.Equal(("protocol", moved), (changed.Kind, changed.Redirect));
+        Assert.Null(changed.Previous);
+        Assert.Equal(["false", "true"], recorded);
     }
 
     /// <summary>
@@ -132,26 +110,24 @@ public sealed class RegisterClientTests(BootstrappedDeployment deployment) : ICl
     [Fact]
     public async Task AUTH_OIDC_001_AnArgumentTheCommandCannotTakeIsRefusedAsync()
     {
-        Invocation kind = await RegisteredAsync("refused", "public", Secret);
-        Invocation unknown = await Invocation.PipedAsync(
-            [.. Arguments("refused", "protocol"), "--secret", Secret],
-            Keys(Secret));
-        Invocation missing = await Invocation.PipedAsync(
-            ["register-client", "--client", "refused", "--name", "Refused", "--kind", "protocol", "--redirect", Redirect],
-            Keys(Secret));
+        Invocation kind = await RegisteredAsync(Arguments("refused", "public", Redirect));
+        Invocation unknown = await RegisteredAsync(
+            [.. Arguments("refused", "protocol", Redirect), "--secret", "a-secret-of-the-operator"]);
+        Invocation missing = await RegisteredAsync(
+            ["register-client", "--client", "refused", "--name", "Refused", "--kind", "protocol", "--redirect", Redirect]);
 
         Assert.Equal(("api.request.malformed", "kind"), Refusal(kind));
         Assert.Equal(("api.request.malformed", "--secret"), Refusal(unknown));
         Assert.Equal(("api.request.malformed", "scopes"), Refusal(missing));
     }
 
-    private static IReadOnlyList<string> Arguments(string client, string kind) =>
+    private static IReadOnlyList<string> Arguments(string client, string kind, string redirect) =>
     [
         "register-client",
         "--client", client,
         "--name", "The " + client,
         "--kind", kind,
-        "--redirect", Redirect,
+        "--redirect", redirect,
         "--scopes", "openid email offline_access",
     ];
 
@@ -164,15 +140,28 @@ public sealed class RegisterClientTests(BootstrappedDeployment deployment) : ICl
             refusal.RootElement.GetProperty("details").GetProperty("member").GetString());
     }
 
-    private JsonObject Keys(string secret)
+    // D-172: the deployment's data key, the row of the subject-key table under the max
+    // UUID, wrapped under the key-encryption key the deployment was stood up with.
+    private static async Task<byte[]> DeploymentKeyAsync(NpgsqlConnection connection) =>
+        Unwrapped(
+            await connection.QuerySingleAsync<byte[]>(
+                "SELECT wrapped_key FROM identity.subject_keys WHERE subject = @reserved",
+                new { reserved = Guid.AllBitsSet }),
+            Convert.FromBase64String(Invocation.KeyEncryptionKey));
+
+    private static byte[] Unwrapped(byte[] wrapped, byte[] wrappingKey)
     {
-        JsonObject keys = Invocation.Keys(deployment.ConnectionString);
+        using var aes = Aes.Create();
+        aes.Key = wrappingKey;
 
-        keys["clientSecret"] = Convert.ToBase64String(Encoding.UTF8.GetBytes(secret));
-
-        return keys;
+        return aes.DecryptKeyWrapPadded(wrapped);
     }
 
-    private Task<Invocation> RegisteredAsync(string client, string kind, string secret) =>
-        Invocation.PipedAsync(Arguments(client, kind), Keys(secret));
+    private static async Task<(byte[] Secret, DateTimeOffset IssuedAt)> HeldAsync(NpgsqlConnection connection) =>
+        await connection.QuerySingleAsync<(byte[], DateTimeOffset)>(
+            "SELECT secret, secret_issued_at FROM identity.oidc_clients WHERE client_id = 'changed'");
+
+    // The command run with the keys piped as the operator pipes them, and nothing else.
+    private Task<Invocation> RegisteredAsync(IReadOnlyList<string> arguments) =>
+        Invocation.PipedAsync(arguments, Invocation.Keys(deployment.ConnectionString));
 }

@@ -13977,6 +13977,8 @@ OPS-SEC-003's values could name the command beside `rotate-kek`. OPS-SEC-002 nee
 owner's answer on AC1 for client secrets. Chapter 10 needs the audit-action row, and
 section 4.9 could say that a replaced client secret keeps the signing keys' overlap.
 
+**Superseded by D-166.**
+
 ---
 
 ## 341. How the key-encryption key's cryptoperiod is kept

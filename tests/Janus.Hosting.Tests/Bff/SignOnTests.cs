@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Sessions;
@@ -282,10 +283,13 @@ public sealed class SignOnTests
     {
         await using var deployment = new Deployment();
 
-        await deployment.Clients.RecordAsync(
-            new OidcClient(Client, Client, OidcClientKind.BrowserApplication, Return, ["openid"]),
-            OpaqueToken.Of("a-secret-the-deployment-did-not-set").Fingerprint(),
-            DateTimeOffset.MinValue,
+        // The registry holds a destination no authorization request may name, one
+        // carrying a fragment (RFC 6749 section 3.1.2), which registration refuses and
+        // only a registry changed by hand holds.
+        await deployment.Clients.AddAsync(
+            new OidcClient(Client, Client, OidcClientKind.BrowserApplication, Return + "#fragment", ["openid"]),
+            Encoding.UTF8.GetBytes(Secret),
+            deployment.Clock.GetUtcNow(),
             TestContext.Current.CancellationToken);
 
         Answer refused = await new Browser(deployment).SendAsync("GET", Start);
@@ -373,15 +377,15 @@ public sealed class SignOnTests
     }
 
     private static async Task RegisteredAsync(Deployment deployment) =>
-        await deployment.Clients.RecordAsync(
+        await deployment.Clients.AddAsync(
             new OidcClient(
                 Client,
                 Client,
                 OidcClientKind.BrowserApplication,
                 Return,
                 ["openid"]),
-            OpaqueToken.Of(Secret).Fingerprint(),
-            DateTimeOffset.MinValue,
+            Encoding.UTF8.GetBytes(Secret),
+            deployment.Clock.GetUtcNow(),
             TestContext.Current.CancellationToken);
 
     // The three legs one browser makes across two applications: this application
