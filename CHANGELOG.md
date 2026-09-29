@@ -221,8 +221,12 @@ against the public contract of LIB-API-001.
   the named values, the three administrative roles, the administrative organization and
   its policy, the administrator, the reserved `emergency` account holding the role and
   no way in, and the restore test's canary, raises the alert that no emergency
-  credential exists, and prints the administrator's `/enrol` address. It refuses to run
-  where a system administrator exists or ever existed. A refusal is one JSON line on
+  credential exists, and prints the administrator's enrolment address,
+  `<first webauthn.origins entry>/link#enrolment.<token>`. The named origins settle the
+  relying party as the start settles it, before the database is reached, so origins no
+  identifier sits over are refused with `model.startup.rpid` or
+  `model.startup.labellimit`. It refuses to run where a system administrator exists or
+  ever existed. A refusal is one JSON line on
   standard error, with exit code 1. What it defines and sets is audited under its own
   principal, for which `SystemOperation` carries `Bootstrap`.
 - A runtime change is decided on the value in force under its row's lock: the change

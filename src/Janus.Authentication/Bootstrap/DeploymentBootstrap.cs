@@ -192,11 +192,6 @@ internal sealed class DeploymentBootstrap(
             return Result.Failure<BootstrapEnrolment>(Error.From(ErrorCodes.ProfileUnderage));
         }
 
-        if (origins.Count is 0 || !Uri.TryCreate(origins[0], UriKind.Absolute, out Uri? origin))
-        {
-            return Result.Failure<BootstrapEnrolment>(Malformed(Settings.WebAuthnOrigins.Key.ToString()));
-        }
-
         await seed.DefineRolesAsync(Roles, Principal, now, cancellationToken).ConfigureAwait(false);
 
         var organization = OrganizationId.New(time);
@@ -328,7 +323,7 @@ internal sealed class DeploymentBootstrap(
 
         await work.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        return Result.Success(new BootstrapEnrolment(Enrolment(origin, token), now + lifetime));
+        return Result.Success(new BootstrapEnrolment(Enrolment(origins[0], token), now + lifetime));
     }
 
     private static string? Stated(string text) =>
@@ -398,11 +393,12 @@ internal sealed class DeploymentBootstrap(
             SelfServiceRecovery: false,
             EmailDomains: null);
 
-    // API-LAND-001: the link lands on the authentication application's own route. The
-    // token travels in the fragment, which no request carries, so neither a server log
-    // nor a referrer ever holds it.
-    private static Uri Enrolment(Uri origin, OpaqueToken token) =>
-        new(origin.GetLeftPart(UriPartial.Authority) + "/enrol#token=" + token.Value);
+    // API-LAND-001 and R2 of D-166: the link lands on the authentication application's
+    // own route at the first configured origin, which the command settled as the start
+    // does. The token travels in the fragment, which no request carries, so neither a
+    // server log nor a referrer ever holds it.
+    private static Uri Enrolment(string origin, OpaqueToken token) =>
+        new(origin + "/link#enrolment." + token.Value);
 
     // Bootstrap names no document, since none is published yet, and the subject holds no
     // other membership, so the limit on memberships has nothing to count.

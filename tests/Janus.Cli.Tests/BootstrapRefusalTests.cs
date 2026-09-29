@@ -104,6 +104,41 @@ public sealed class BootstrapRefusalTests
     }
 
     /// <summary>
+    /// AUTH-FACT-010 AC1 and OPS-BOOT-001: the relying party is settled from the named
+    /// origins by the rule the start applies, before the database is reached, so origins
+    /// that share no registrable domain, and an origin that is not an absolute origin,
+    /// are each refused with the start's <c>model.startup.rpid</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_010_AC1_BootstrapRefusesAnIdentifierNoOriginSharesAsync()
+    {
+        string key = Settings.WebAuthnOrigins.Key.ToString();
+
+        Invocation apart = await Invocation.PipedAsync(
+            [
+                .. Invocation.Bootstrap(Settings.WebAuthnOrigins.Key),
+                "--" + key,
+                Settings.WebAuthnOrigins.Write(["https://accounts.example.test", "https://accounts.example.org"]),
+            ],
+            Invocation.Keys(Nowhere));
+        Invocation relative = await Invocation.PipedAsync(
+            [
+                .. Invocation.Bootstrap(Settings.WebAuthnOrigins.Key),
+                "--" + key,
+                Settings.WebAuthnOrigins.Write(["accounts.example.test"]),
+            ],
+            Invocation.Keys(Nowhere));
+
+        foreach (Invocation run in (Invocation[])[apart, relative])
+        {
+            Assert.Equal(1, run.ExitCode);
+            Assert.Empty(run.Output);
+            Assert.Equal(ErrorCodes.StartupRelyingPartyId.ToString(), Code(run));
+        }
+    }
+
+    /// <summary>
     /// OPS-BOOT-001: bootstrap takes the values that name the deployment and nothing
     /// else; every other key keeps its safe default until the application changes it.
     /// </summary>

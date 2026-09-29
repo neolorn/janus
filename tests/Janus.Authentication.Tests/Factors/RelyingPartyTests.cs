@@ -57,6 +57,16 @@ public sealed class RelyingPartyTests
             Refusal("example.com", ["example.com"]));
 
     /// <summary>
+    /// AUTH-FACT-010 AC1: with no identifier set, origins that share no label leave no
+    /// identifier to derive, which is refused with the same code and never a fault.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_010_AC1_OriginsThatShareNoDomainAreRefused() =>
+        Assert.Equal(
+            ErrorCodes.StartupRelyingPartyId,
+            Refusal(string.Empty, ["https://app.example.com", "https://id.example.org"]));
+
+    /// <summary>
     /// AUTH-FACT-010 AC2: with origins across subdomains and no explicit setting, the
     /// derived value is the common parent and not the first origin.
     /// </summary>

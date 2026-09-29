@@ -23,7 +23,7 @@ namespace Janus.Cli.Tests;
 [Trait("kind", "integration")]
 public sealed class BootstrapTests(BootstrappedDeployment deployment) : IClassFixture<BootstrappedDeployment>
 {
-    private const string Link = Invocation.Origin + "/enrol#token=";
+    private const string Link = Invocation.Origin + "/link#enrolment.";
 
     /// <summary>
     /// OPS-BOOT-001: a fresh deployment is stood up by the command, which answers with

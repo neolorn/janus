@@ -96,6 +96,17 @@ internal sealed class RelyingParty
         string[] hosts = [.. origins.Select(Host)];
         string resolved = identifier.Length == 0 ? Common(hosts) : identifier;
 
+        // Origins that share no label have no domain in common to derive an identifier
+        // from, so no identifier sits over all of them.
+        if (resolved.Length == 0)
+        {
+            throw Refused(
+                ErrorCodes.StartupRelyingPartyId,
+                "origins",
+                string.Join(", ", hosts),
+                "they share no domain for an identifier to sit over");
+        }
+
         if (PublicSuffixList.Shipped.IsSuffix(resolved))
         {
             throw Refused(
