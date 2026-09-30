@@ -84,13 +84,6 @@ internal sealed class AuthenticationService(
     TimeProvider time,
     RandomNumberGenerator randomness) : IAuthentication
 {
-    /// <inheritdoc/>
-    public ValueTask<Result<SignInChallenge>> BeginAsync(
-        string identifier,
-        string source,
-        CancellationToken cancellationToken) =>
-        BeginAsync(identifier, source, remembered: null, trusted: null, cancellationToken);
-
     /// <summary>
     /// Opens a sign-in for an identifier, with the tokens only the browser boundary
     /// can read.
@@ -859,14 +852,14 @@ internal sealed class AuthenticationService(
 
     // AUTH-ABUSE-001 AC5: a browser is recognised by a token that resolves, stands for
     // the account being signed into and has not lapsed; asking changes nothing about the
-    // token, so a stolen one is not refreshed by being tried.
-    private async ValueTask<bool> RecognisedAsync(
+    // token, so a stolen one is not refreshed by being tried. The tokens are looked up
+    // whether or not the identifier resolved (AUTH-ABUSE-003).
+    private ValueTask<bool> RecognisedAsync(
         SubjectId? subject,
         [NeverLogged] string? remembered,
         [NeverLogged] string? trusted,
         CancellationToken cancellationToken) =>
-        subject is SubjectId account
-            && await devices.RecognisesAsync(account, remembered, trusted, cancellationToken).ConfigureAwait(false);
+        devices.RecognisesAsync(subject, remembered, trusted, cancellationToken);
 
     private async ValueTask<Error?> DelayedAsync(ThrottleAttempt attempt, CancellationToken cancellationToken)
     {

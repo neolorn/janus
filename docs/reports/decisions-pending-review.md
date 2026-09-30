@@ -17549,6 +17549,8 @@ first read.
 - It could say the exemption covers the identifier component as well as the account
   component, and never the source.
 
+**Superseded by D-166.**
+
 ---
 
 ## 422. A provider's return asks the source delay before the code is traded

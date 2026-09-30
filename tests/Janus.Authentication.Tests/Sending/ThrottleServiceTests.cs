@@ -260,6 +260,36 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-001 AC5 and AC10: a recognised browser's failures are counted against
+    /// every component, so they hold other browsers and raise the account's alert, while
+    /// the browser itself is held by its source alone.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AC5_ARecognisedBrowsersFailuresCountAgainstTheAccountAsync()
+    {
+        _configuration.Set(Settings.AlertingAuthFailuresThreshold, 5);
+
+        var account = SubjectId.New(_randomness);
+        byte[] identifier = Typed("someone@example.test");
+
+        await FailedAsync(
+            new ThrottleAttempt("198.51.100.7", identifier) { Account = account, Recognised = true },
+            times: 5);
+
+        TimeSpan elsewhere = await DelayAsync(
+            new ThrottleAttempt("203.0.113.9", identifier) { Account = account });
+        TimeSpan returning = await DelayAsync(
+            new ThrottleAttempt("203.0.113.10", identifier) { Account = account, Recognised = true });
+        TimeSpan sameSource = await DelayAsync(
+            new ThrottleAttempt("198.51.100.7", identifier) { Account = account, Recognised = true });
+
+        Assert.Equal(TimeSpan.FromSeconds(4), elsewhere);
+        Assert.Equal(TimeSpan.Zero, returning);
+        Assert.Equal(TimeSpan.FromSeconds(4), sameSource);
+        Assert.Single(_events.Of<AlertRaised>());
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-001 AC6: the identifier component answers to the account
     /// component's cap and has no key of its own.
     /// </summary>

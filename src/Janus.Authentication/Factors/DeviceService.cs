@@ -173,7 +173,7 @@ internal sealed class DeviceService(
     /// either kind that resolves, stands for this account and has not lapsed or been
     /// revoked. Nothing about either token changes.
     /// </summary>
-    /// <param name="subject">Whose sign-in.</param>
+    /// <param name="subject">Whose sign-in, absent where the identifier resolved to no account.</param>
     /// <param name="remembered">
     /// The token saying the browser passed the new-device check, absent where it carried none.
     /// </param>
@@ -183,18 +183,26 @@ internal sealed class DeviceService(
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Whether the browser is recognised.</returns>
     /// <remarks>
-    /// Implements AUTH-ABUSE-001 AC5. A forged token resolves to nothing and another
-    /// account's token stands for another account, so neither recognises anything.
+    /// Implements AUTH-ABUSE-001 AC5 and AUTH-ABUSE-003. A forged token resolves to
+    /// nothing and another account's token stands for another account, so neither
+    /// recognises anything. Every token carried is looked up, whether or not an account
+    /// was resolved and whatever the other token answered, and judged in memory, so the
+    /// work done says nothing about whether the identifier is held.
     /// </remarks>
     public async ValueTask<bool> RecognisesAsync(
-        SubjectId subject,
+        SubjectId? subject,
         [NeverLogged] string? remembered,
         [NeverLogged] string? trusted,
-        CancellationToken cancellationToken) =>
-        await OfAsync(subject, remembered, DeviceKind.Remembered, cancellationToken).ConfigureAwait(false)
-            is not null
-        || await OfAsync(subject, trusted, DeviceKind.Trusted, cancellationToken).ConfigureAwait(false)
-            is not null;
+        CancellationToken cancellationToken)
+    {
+        Device? rememberedDevice = await ResolvedAsync(remembered, cancellationToken).ConfigureAwait(false);
+        Device? trustedDevice = await ResolvedAsync(trusted, cancellationToken).ConfigureAwait(false);
+        DateTimeOffset now = time.GetUtcNow();
+
+        return subject is SubjectId account
+            && (Stands(rememberedDevice, account, DeviceKind.Remembered, now)
+                | Stands(trustedDevice, account, DeviceKind.Trusted, now));
+    }
 
     /// <summary>
     /// Whether this sign-in is held until a code sent to the account's primary email
@@ -495,26 +503,29 @@ internal sealed class DeviceService(
         return true;
     }
 
+    private static bool Stands(Device? device, SubjectId subject, DeviceKind kind, DateTimeOffset now) =>
+        device is not null
+        && device.Subject == subject
+        && device.Kind == kind
+        && device.Stands(now);
+
+    private async ValueTask<Device?> ResolvedAsync(
+        [NeverLogged] string? presented,
+        CancellationToken cancellationToken) =>
+        string.IsNullOrWhiteSpace(presented)
+            ? null
+            : await devices
+                .FindByFingerprintAsync(OpaqueToken.Of(presented).Fingerprint(), cancellationToken)
+                .ConfigureAwait(false);
+
     private async ValueTask<Device?> OfAsync(
         SubjectId subject,
         [NeverLogged] string? presented,
         DeviceKind kind,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(presented))
-        {
-            return null;
-        }
+        Device? device = await ResolvedAsync(presented, cancellationToken).ConfigureAwait(false);
 
-        Device? device = await devices
-            .FindByFingerprintAsync(OpaqueToken.Of(presented).Fingerprint(), cancellationToken)
-            .ConfigureAwait(false);
-
-        return device is not null
-            && device.Subject == subject
-            && device.Kind == kind
-            && device.Stands(time.GetUtcNow())
-            ? device
-            : null;
+        return Stands(device, subject, kind, time.GetUtcNow()) ? device : null;
     }
 }

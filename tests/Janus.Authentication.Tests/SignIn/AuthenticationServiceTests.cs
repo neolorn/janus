@@ -380,11 +380,21 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         _work.RefusesBegin = Error.From(ErrorCodes.SystemFault);
 
-        Result<SignInChallenge> unopened = await Service.BeginAsync(Address, Fresh, TestContext.Current.CancellationToken);
+        Result<SignInChallenge> unopened = await Service.BeginAsync(
+            Address,
+            Fresh,
+            remembered: null,
+            trusted: null,
+            TestContext.Current.CancellationToken);
 
         _work.RefusesCommit = Error.From(ErrorCodes.SystemFault);
 
-        Result<SignInChallenge> uncommitted = await Service.BeginAsync(Address, Fresh, TestContext.Current.CancellationToken);
+        Result<SignInChallenge> uncommitted = await Service.BeginAsync(
+            Address,
+            Fresh,
+            remembered: null,
+            trusted: null,
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(ErrorCodes.SystemFault, unopened.Match(_ => (ErrorCode?)null, error => error.Code));
         Assert.Equal(ErrorCodes.SystemFault, uncommitted.Match(_ => (ErrorCode?)null, error => error.Code));
@@ -404,16 +414,54 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         await FailedAsync(Elsewhere, "198.51.100.21", times: 3);
         await FailedAsync(Address, "198.51.100.22", times: 3);
 
-        Result<SignInChallenge> nobodys = await Service.BeginAsync(Elsewhere, Fresh, TestContext.Current.CancellationToken);
-        Result<SignInChallenge> held = await Service.BeginAsync(Address, Fresh, TestContext.Current.CancellationToken);
+        Result<SignInChallenge> nobodys = await Service.BeginAsync(
+            Elsewhere,
+            Fresh,
+            remembered: null,
+            trusted: null,
+            TestContext.Current.CancellationToken);
+        Result<SignInChallenge> held = await Service.BeginAsync(
+            Address,
+            Fresh,
+            remembered: null,
+            trusted: null,
+            TestContext.Current.CancellationToken);
         Result<SignInChallenge> other = await Service.BeginAsync(
             "somebody@example.test",
             Fresh,
+            remembered: null,
+            trusted: null,
             TestContext.Current.CancellationToken);
 
         Assert.Equal(ErrorCodes.Throttled, Delayed(nobodys)?.Code);
         Assert.Equal(Shape(Delayed(held)), Shape(Delayed(nobodys)));
         Assert.Null(Delayed(other));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-003 AC2: the tokens a browser carries are looked up alike whether the
+    /// identifier resolves to an account or to none, both of them whatever the first
+    /// answered, so the work a sign-in opens with says nothing about the identifier.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_003_AC2_ACarriedTokenIsLookedUpAlikeForAHeldAndAnUnheldIdentifierAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        string remembered = await KnownAsync(subject, trusted: false);
+        string trusted = await KnownAsync(subject, trusted: true);
+
+        int before = _devices.LookedUp;
+
+        _ = await Service.BeginAsync(Address, Fresh, remembered, trusted, TestContext.Current.CancellationToken);
+
+        int held = _devices.LookedUp - before;
+
+        _ = await Service.BeginAsync(Elsewhere, Fresh, remembered, trusted, TestContext.Current.CancellationToken);
+
+        int unheld = _devices.LookedUp - before - held;
+
+        Assert.Equal(2, held);
+        Assert.Equal(held, unheld);
     }
 
     /// <summary>
@@ -1317,7 +1365,12 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     private async ValueTask<SignInChallenge> BeganAsync(string identifier) =>
-        (await Service.BeginAsync(identifier, Source, TestContext.Current.CancellationToken))
+        (await Service.BeginAsync(
+            identifier,
+            Source,
+            remembered: null,
+            trusted: null,
+            TestContext.Current.CancellationToken))
         .Match(
             challenge => challenge,
             error => throw new InvalidOperationException(error.Code.ToString()));
@@ -1419,7 +1472,12 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     {
         for (int attempt = 0; attempt < times; attempt++)
         {
-            SignInChallenge began = (await Service.BeginAsync(identifier, source, TestContext.Current.CancellationToken))
+            SignInChallenge began = (await Service.BeginAsync(
+                identifier,
+                source,
+                remembered: null,
+                trusted: null,
+                TestContext.Current.CancellationToken))
                 .Match(challenge => challenge, error => throw new InvalidOperationException(error.Code.ToString()));
 
             Assert.Equal(

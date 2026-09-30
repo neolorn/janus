@@ -1211,7 +1211,11 @@ against the public contract of LIB-API-001.
   account holds it, so a held and an unheld address are delayed alike from any source;
   a success clears only the account's count. Only a remembered or trusted browser token
   that resolves to the account exempts a browser, through `IAuthentication.BeginAsync`,
-  and never from the source's delay. A throttled source reaches no sign-in provider.
+  and never from the source's delay; the exemption spares it from being held, not from
+  being counted, so its failures still hold other browsers and raise the account's
+  alert. Every token a browser carries is looked up whether or not the identifier
+  resolves. `IAuthentication.BeginAsync` has one form, which takes both tokens; an
+  in-process caller passes neither. A throttled source reaches no sign-in provider.
 - A sign-in link, email code or recovery ask that sends nothing is judged and counted
   against the sending restrictions as its message would be, so it is answered as a sent
   one is, whether or not an account holds the address.
