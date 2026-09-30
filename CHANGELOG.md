@@ -1746,6 +1746,11 @@ against the public contract of LIB-API-001.
 - An acknowledgement held at enrolment names the unmet requirement as
   `policyRequirement` `{ field, value }`, with no deadline, in place of a flat `field`
   and `value`.
+- An invitation whose inviter no longer manages the organization's memberships, or may
+  no longer grant a role it names, is answered as expired at acknowledgement and grants
+  nothing.
+- A role the invitation grants is written beside an expiring grant of the same role,
+  and is skipped only where the account holds it permanently.
 - An audit trail. Every record names who acted, whose identity the action was taken
   under, the instant it occurred and the organization where one applies; an event about
   a principal holding no membership carries none, and the absence is the recorded fact.

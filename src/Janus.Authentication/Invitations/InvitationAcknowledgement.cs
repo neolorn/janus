@@ -22,6 +22,9 @@ namespace Janus.Authentication.Invitations;
 /// granted, and where the organization's mail is integrated the corporate address
 /// becomes the primary email and its mailbox the person's.
 /// </summary>
+/// <param name="gate">What judges whether the inviter may still grant what the invitation carries.</param>
+/// <param name="scope">What judges the inviter's permissions in the administrative organization.</param>
+/// <param name="roles">Where the roles the invitation names are read.</param>
 /// <param name="invitations">Where the invitation is read and its acknowledgement recorded.</param>
 /// <param name="directory">Where the organization's standing is read.</param>
 /// <param name="identifiers">Where the account's identifiers are read and the corporate address taken on.</param>
@@ -46,6 +49,9 @@ namespace Janus.Authentication.Invitations;
 /// the invitation forgets what it bound in it.
 /// </remarks>
 internal sealed class InvitationAcknowledgement(
+    IAccessGate gate,
+    AdministrativeScope scope,
+    IRoleCatalogue roles,
     IInvitationStore invitations,
     IOrganizationDirectory directory,
     IIdentifierDirectory identifiers,
@@ -105,6 +111,11 @@ internal sealed class InvitationAcknowledgement(
             || invitation.Identifiers is not InvitedIdentifiers bound
             || await directory.FindAsync(invitation.Organization, cancellationToken).ConfigureAwait(false)
                 is not { DeletionRequestedAt: null, ErasedAt: null })
+        {
+            return Result.Failure(Error.From(ErrorCodes.InvitationExpired));
+        }
+
+        if (await InviterLapsedAsync(invitation, cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure(Error.From(ErrorCodes.InvitationExpired));
         }
@@ -340,6 +351,55 @@ internal sealed class InvitationAcknowledgement(
                     .ConfigureAwait(false)
                 is not null;
     }
+
+    // REG-INV-001: what the invitation attaches is granted by its inviter, so it is
+    // judged against what the inviter holds now, as issuing it was: an inviter who no
+    // longer manages the organization's memberships, or no longer may grant a role it
+    // names, leaves an invitation that grants nothing.
+    private async ValueTask<bool> InviterLapsedAsync(Invitation invitation, CancellationToken cancellationToken)
+    {
+        var inviter = AccessContext.Of(invitation.Inviter);
+
+        if (await RefusedAsync(inviter, Permissions.MembershipManage, invitation.Organization, cancellationToken)
+                .ConfigureAwait(false))
+        {
+            return true;
+        }
+
+        if (invitation.Roles.Count is 0)
+        {
+            return false;
+        }
+
+        if (await RefusedAsync(inviter, Permissions.GrantManage, invitation.Organization, cancellationToken)
+                .ConfigureAwait(false))
+        {
+            return true;
+        }
+
+        bool administering = false;
+
+        foreach (RoleName role in invitation.Roles)
+        {
+            administering |= (await roles.FindAsync(role, cancellationToken).ConfigureAwait(false))
+                ?.Permissions.Contains(Permissions.SystemAdminister) is true;
+        }
+
+        return administering
+            && await scope.RefusedAsync(inviter, Permissions.SystemAdminister, cancellationToken)
+                    .ConfigureAwait(false)
+                is not null;
+    }
+
+    private async ValueTask<bool> RefusedAsync(
+        AccessContext inviter,
+        Permission permission,
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        (await gate
+            .RequireAsync(inviter, permission, organization, cancellationToken)
+            .ConfigureAwait(false))
+            .Match(() => false, _ => true);
 
     // REG-DOM-001: the lock is judged as it now stands on the address the member will
     // sign in with: the corporate address where one is taken on, else the bound email,

@@ -407,6 +407,52 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-INV-001: an invitation grants what its inviter may grant when it is
+    /// acknowledged, so an inviter who lost <c>membership:manage</c>, <c>grant:manage</c>
+    /// for a role named, or the permission to administer the deployment for a role
+    /// carrying it, leaves an invitation that is expired and grants nothing; once the
+    /// inviter holds them again it attaches.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_001_AnInviterWhoLostTheRightToGrantGrantsNothingAsync()
+    {
+        RoleName root = _roles.Define("root", Permissions.SystemAdminister);
+
+        _gate.Grant(_inviter, Customer, Permissions.GrantManage);
+        _gate.Grant(_inviter, Staff, Permissions.SystemAdminister);
+
+        string token = Accepted(await IssueAsync(Customer, Request(phone: Number, roles: [root]))).Token!;
+        SubjectId holder = Holder();
+        InvitationId invitation = _invitations.Held[0].Id;
+
+        _ = _identifiers.Verified(holder, IdentifierKind.Phone, Number);
+        _authenticators.Hold(Passkey(holder));
+        Accepted(await OpenAsync(holder, token));
+
+        (Permission Permission, OrganizationId Organization)[] rights =
+        [
+            (Permissions.MembershipManage, Customer),
+            (Permissions.GrantManage, Customer),
+            (Permissions.SystemAdminister, Staff),
+        ];
+
+        foreach ((Permission permission, OrganizationId organization) in rights)
+        {
+            _gate.Revoke(_inviter, organization, permission);
+            _work.Reset();
+
+            Assert.Equal(ErrorCodes.InvitationExpired, Failure(await AcknowledgeAsync(holder, invitation)).Code);
+            Assert.Empty(_attachments.Attached);
+            Assert.Equal(0, _work.Opened);
+
+            _gate.Grant(_inviter, organization, permission);
+        }
+
+        Accepted(await AcknowledgeAsync(holder, invitation));
+        Assert.Equal([root], Assert.Single(_attachments.Attached).Roles);
+    }
+
+    /// <summary>
     /// REG-DOM-001: at acknowledgement the lock is judged as it then stands on the
     /// address the member will sign in with: the corporate address where one is taken
     /// on, else the bound email, else a verified email the account holds, of which one
@@ -1567,6 +1613,9 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             _accounts,
             _identifiers,
             new InvitationAcknowledgement(
+                _gate,
+                new AdministrativeScope(_gate, _administrative),
+                _roles,
                 _invitations,
                 _organizations,
                 _identifiers,
