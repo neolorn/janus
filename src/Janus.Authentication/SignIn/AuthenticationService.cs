@@ -1121,7 +1121,7 @@ internal sealed class AuthenticationService(
         Error? refusal = null;
 
         Authenticator answered = (await webAuthn
-                .AssertAsync(presented.Assertion, open.WebAuthn, cancellationToken)
+                .AssertAsync(presented.Assertion, open.WebAuthn, identified: true, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<Authenticator>(error, ref refusal));
 
