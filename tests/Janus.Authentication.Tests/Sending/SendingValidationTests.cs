@@ -224,21 +224,43 @@ public sealed class SendingValidationTests
     }
 
     /// <summary>
-    /// INT-SMS-003 AC1: a place the library does not fill is left as it stands, here
-    /// as at a send, so a template naming one is measured as it is written.
+    /// INT-SMS-003: the places are a closed set, so a text-message template naming one
+    /// the library does not fill has no width to be measured at and stops startup,
+    /// naming the message and the place.
     /// </summary>
     [Fact]
-    public async Task INT_SMS_003_AC1_APlaceTheLibraryDoesNotFillIsMeasuredAsWrittenAsync()
+    public async Task INT_SMS_003_ATemplateNamingAPlaceWithNoWidthStopsStartupAsync()
     {
-        string written = new string('a', 148) + "{whatever}";
+        Assert.DoesNotContain("offsetSeconds", _places.Widths.Keys, StringComparer.Ordinal);
 
-        Assert.DoesNotContain("whatever", _places.Widths.Keys, StringComparer.Ordinal);
-        Assert.False(MessageBudget.Exceeds(written));
-        Assert.Equal(written, _places.Widest(written));
+        _templates.Set(
+            MessageKind.SecondStepCode,
+            SendKind.Sms,
+            "en",
+            new MessageTemplate(null, "{code}, valid for {offsetSeconds} seconds"));
 
-        _templates.Set(MessageKind.VerificationCode, SendKind.Sms, "en", new MessageTemplate(null, written));
+        Error refusal = await RefusedAsync();
 
-        await PassedAsync();
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refusal.Code);
+        Assert.Equal("secondstep-code", refusal.Details["declaration"].GetString());
+        Assert.Equal("offsetSeconds", refusal.Details["field"].GetString());
+    }
+
+    /// <summary>
+    /// INT-SMS-003: the retired <c>token</c> place is one with no width, so a
+    /// text-message template still naming it stops startup rather than sending a bare
+    /// token.
+    /// </summary>
+    [Fact]
+    public async Task INT_SMS_003_ATemplateNamingTheRetiredTokenPlaceStopsStartupAsync()
+    {
+        _templates.Set(MessageKind.SignInLink, SendKind.Sms, "ar", new MessageTemplate(null, "{token}"));
+
+        Error refusal = await RefusedAsync();
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refusal.Code);
+        Assert.Equal("signin-link", refusal.Details["declaration"].GetString());
+        Assert.Equal("token", refusal.Details["field"].GetString());
     }
 
     /// <summary>

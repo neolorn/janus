@@ -717,6 +717,9 @@ against the public contract of LIB-API-001.
   that is not an `https` origin a registered browser client returns to, or an
   authentication origin that is not the sign-in address's, is refused with
   `model.startup.declarationinvalid` under the same key.
+- A text-message template naming a place the library does not fill, `{token}` among
+  them, stops startup with `model.startup.declarationinvalid` (`details.declaration` the
+  message kind, `details.field` the place), where it was sent with the brace in it.
 - A privacy-deadline alert names the request's `type` and `status` as chapter 10 spells
   them (`rectification`, `deemed-refused-by-lapse`), and a text message naming either
   place is measured at those spellings.

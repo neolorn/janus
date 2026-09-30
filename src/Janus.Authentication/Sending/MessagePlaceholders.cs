@@ -124,8 +124,42 @@ internal sealed class MessagePlaceholders
     }
 
     /// <summary>
-    /// One template with every place it names at its widest. A place the library does
-    /// not fill is left as it stands, which is what a send does with it too.
+    /// The first place a template names that the library does not fill, which has no
+    /// width to be measured at. A place is a name of letters and digits in braces.
+    /// </summary>
+    /// <param name="text">The template.</param>
+    /// <returns>The place, or nothing where every place it names is filled.</returns>
+    /// <exception cref="ArgumentNullException">The template is absent.</exception>
+    public string? Unlisted(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+
+        int opened = text.IndexOf('{', StringComparison.Ordinal);
+
+        while (opened >= 0)
+        {
+            int closed = text.IndexOf('}', opened + 1);
+
+            if (closed < 0)
+            {
+                return null;
+            }
+
+            string named = text[(opened + 1)..closed];
+
+            if (named.Length > 0 && named.All(char.IsAsciiLetterOrDigit) && !_widths.ContainsKey(named))
+            {
+                return named;
+            }
+
+            opened = text.IndexOf('{', opened + 1);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// One template with every place it names at its widest.
     /// </summary>
     /// <param name="text">The template.</param>
     /// <returns>The widest the template renders to.</returns>

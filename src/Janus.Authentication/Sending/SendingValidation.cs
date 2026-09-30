@@ -220,6 +220,19 @@ internal sealed class SendingValidation(
                         continue;
                     }
 
+                    // INT-SMS-003: the places are a closed set, and one with no width
+                    // cannot be measured, so the template is refused as written.
+                    if (measured.Unlisted(template.Text) is string unlisted)
+                    {
+                        return new Error(
+                            ErrorCodes.StartupDeclarationInvalid,
+                            new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+                            {
+                                ["declaration"] = JsonSerializer.SerializeToElement(WrittenName.Of(message)),
+                                ["field"] = JsonSerializer.SerializeToElement(unlisted),
+                            });
+                    }
+
                     // One character past the budget costs another message, which for
                     // a non-Latin language is seventy characters in (AUTH-ABUSE-005).
                     // The template is measured with every place it names at its widest,
