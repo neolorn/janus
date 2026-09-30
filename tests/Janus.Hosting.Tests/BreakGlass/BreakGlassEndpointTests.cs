@@ -1045,6 +1045,36 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
     private string Drawn() => BreakGlassCode.Draw(_randomness);
 
+    /// <summary>
+    /// REG-MAIL-002 AC3 and OPS-BOOT-002 (D-179): listing and revoking app passwords are
+    /// not among the actions withheld from the break-glass session, so from it, and from
+    /// a session another application opened from it, they answer as for any account
+    /// without a mailbox.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_MAIL_002_AC3_TheBreakGlassSessionListsNoAppPasswordsAsync()
+    {
+        await ApplicationRegisteredAsync();
+
+        string credential = await GeneratedAsync();
+        var owner = new Browser(_deployment);
+
+        _ = await PresentedAsync(owner, credential);
+
+        Browser opened = await SignedOnAsync(owner);
+
+        foreach (Browser session in (Browser[])[owner, opened])
+        {
+            Answer listed = await session.SendAsync("GET", "/account/mail/apppasswords/");
+            Answer revoked = await session.SendAsync("DELETE", "/account/mail/apppasswords/app-password-1");
+
+            Assert.Equal(
+                [(StatusCodes.Status404NotFound, ErrorCodes.MailboxNotFound.ToString())],
+                new[] { listed, revoked }.Select(answer => (answer.Status, answer.Text("code"))).Distinct());
+        }
+    }
+
     // The three legs of BFF-SESS-006: this application forwards a browser that holds
     // nothing here, the authentication application issues a code against the record the
     // holder's browser carries, and this application trades it on its own connection.

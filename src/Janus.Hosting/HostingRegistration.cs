@@ -586,6 +586,7 @@ public static class HostingRegistration
             provider.GetRequiredService<IMailServerTokens>(),
             provider.GetRequiredService<IMailboxStore>(),
             provider.GetRequiredService<IAccountDirectory>(),
+            provider.GetRequiredService<ISettingsRestriction>(),
             provider.GetRequiredService<StepUpGuard>(),
             provider.GetRequiredService<IIdentifierDirectory>(),
             provider.GetRequiredService<INotificationHandler>(),

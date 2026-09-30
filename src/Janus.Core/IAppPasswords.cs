@@ -14,9 +14,14 @@ namespace Janus.Core;
 /// token for the person from the session named and makes one call to the server with
 /// it. Creation and revocation are the <c>mailcredential:create</c> and
 /// <c>mailcredential:revoke</c> step-up actions, each notified to the security-notice
-/// set and audited; listing is neither. Every operation answers <c>authz.denied</c>
-/// where the account holds no enabled mailbox, which includes a deployment that hosts
-/// none.
+/// set and audited; listing is neither. Every operation answers
+/// <c>identity.mailbox.notfound</c> where the account holds no mailbox the mail server
+/// is told to enable, which includes an account neither active nor restricted and a
+/// deployment that registers no mail server, and <c>authz.denied</c> where the context
+/// names no account. A restricted account lists and revokes its app passwords and is
+/// refused creation with <c>authz.restricted</c> (IDN-ACCT-007). A creation from the
+/// break-glass session, or a session another application opened from it, is refused
+/// with <c>authz.denied</c> before anything is read (OPS-BOOT-002).
 /// </remarks>
 public interface IAppPasswords
 {
@@ -43,8 +48,11 @@ public interface IAppPasswords
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The generated secret with its identifier, returned once; or the refusal:
-    /// <c>auth.stepup.required</c>, <c>auth.credential.labelinvalid</c> where the
-    /// label is empty or too long; or the server's failure.
+    /// <c>authz.denied</c> from the break-glass session or one opened from it,
+    /// <c>identity.mailbox.notfound</c>, <c>authz.restricted</c> for a restricted
+    /// account, <c>auth.stepup.required</c>,
+    /// <c>auth.credential.labelinvalid</c> where the label is empty or too long; or the
+    /// server's failure.
     /// </returns>
     ValueTask<Result<IssuedAppPassword>> CreateAsync(
         AccessContext context,

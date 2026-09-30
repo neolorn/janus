@@ -584,6 +584,11 @@ against the public contract of LIB-API-001.
   anything is read, so the refusal is the same whatever the reserved account holds or
   lacks: the upgrade of a credential it does not hold, a factor its policy does not
   admit, recovery codes and an app password included.
+- The app-password operations answer `404` `identity.mailbox.notfound` where the account
+  holds no mailbox the mail server is told to enable, is neither `active` nor
+  `restricted`, or the deployment registers no mail server; a context naming no account
+  is still `authz.denied`. A restricted account lists and revokes its app passwords and
+  is refused creation with `authz.restricted`.
 - Where Continue with Apple is among the system policy's `loginFactors` and
   `notification.email.sendingdomain` is not in `notification.email.relayregistered`, the
   deployment raises `relay-domain-unregistered` with the domain as it starts and

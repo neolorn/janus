@@ -50,6 +50,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
     private readonly NotificationHandlerInMemory _notifications = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly CredentialAuditInMemory _audit = new();
+    private readonly SettingsRestrictionInMemory _restriction = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
@@ -182,9 +183,11 @@ public sealed class AppPasswordsTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// INT-MAIL-006: the operations are present only where the account holds a mailbox
-    /// the server enables, so an account without one, one whose mailbox was retired, an
-    /// account that is not active and a deployment with no mail server are all refused.
+    /// INT-MAIL-006 and REG-MAIL-002 AC3 and AC4: the operations are present only where
+    /// the account holds a mailbox the server enables, so an account without one, one
+    /// whose mailbox was retired, an account neither active nor restricted and a
+    /// deployment with no mail server are each answered that there is no mailbox; a
+    /// restricted account keeps its mailbox and is refused creation.
     /// </summary>
     [Fact]
     public async Task INT_MAIL_006_WithoutAnEnabledMailboxThereAreNoAppPasswordsAsync()
@@ -193,24 +196,58 @@ public sealed class AppPasswordsTests : IAsyncDisposable
 
         _accounts.Stands(bare, AccountState.Active);
 
-        Assert.Equal(ErrorCodes.Denied, Refused(await Built(_server).ListAsync(
+        Assert.Equal(ErrorCodes.MailboxNotFound, Refused(await Built(_server).ListAsync(
             AccessContext.Of(bare),
             Opened(bare, Noon),
             TestContext.Current.CancellationToken)));
-        Assert.Equal(ErrorCodes.Denied, Refused(await Built(server: null).ListAsync(
+        Assert.Equal(ErrorCodes.MailboxNotFound, Refused(await Built(server: null).ListAsync(
             Asking,
             _session,
             TestContext.Current.CancellationToken)));
 
         _accounts.Stands(_person, AccountState.Restricted);
+        _restriction.Restrict(_person);
 
-        Assert.Equal(ErrorCodes.Denied, Refused(await CreateAsync("Phone", _session)));
+        Assert.Equal(ErrorCodes.Restricted, Refused(await CreateAsync("Phone", _session)));
+
+        _accounts.Stands(_person, AccountState.Suspended);
+
+        Assert.Equal(ErrorCodes.MailboxNotFound, Refused(await ListAsync(_session)));
 
         _accounts.Stands(_person, AccountState.Active);
         Assert.Single(_mailboxes.Held).Retire(Noon);
 
-        Assert.Equal(ErrorCodes.Denied, Refused(await RevokeAsync("app-password-1", _session)));
+        Assert.Equal(ErrorCodes.MailboxNotFound, Refused(await RevokeAsync("app-password-1", _session)));
+        Assert.Equal(ErrorCodes.MailboxNotFound, Refused(await CreateAsync("Phone", _session)));
         Assert.Empty(_server.Tokens);
+    }
+
+    /// <summary>
+    /// REG-MAIL-002 AC4 and IDN-ACCT-007: a restricted account's mailbox stays owed
+    /// enabled and its app passwords keep working; it lists and revokes them, and its
+    /// creation is refused before anything reaches the server.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_002_AC4_ARestrictedAccountListsAndRevokesAndCreatesNoneAsync()
+    {
+        IssuedAppPassword kept = Issued(await CreateAsync("Phone", _session));
+        IssuedAppPassword revoked = Issued(await CreateAsync("Laptop", _session));
+        int tokens = _server.Tokens.Count;
+
+        _accounts.Stands(_person, AccountState.Restricted);
+        _restriction.Restrict(_person);
+
+        Assert.Equal(MailboxState.Enabled, Assert.Single(_mailboxes.Held).Owed(stands: true));
+        Assert.Equal(ErrorCodes.Restricted, Refused(await CreateAsync("Tablet", _session)));
+        Assert.Equal(tokens, _server.Tokens.Count);
+        Assert.Equal(["Phone", "Laptop"], Listed(await ListAsync(_session)).Select(password => password.Label));
+
+        Accepted(await RevokeAsync(revoked.Id, _session));
+
+        Assert.Equal(kept.Id, Assert.Single(_server.AppPasswordsOf(_person)).Id);
+        Assert.Equal(
+            (AuditActions.MailCredentialRevoked, _person, revoked.Id),
+            _audit.MailCredentials[^1]);
     }
 
     /// <summary>
@@ -268,6 +305,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
             _tokens,
             _mailboxes,
             _accounts,
+            _restriction,
             new StepUpGuard(
                 _sessions,
                 _authenticators,

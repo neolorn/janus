@@ -141,7 +141,8 @@ public sealed class AppPasswordFlowTests : IAsyncDisposable
         Answer refused = await browser.SendAsync("GET", Path);
         Answer unlabelled = await browser.SendAsync("POST", Path, ("expiresAt", "2027-01-01T00:00:00Z"));
 
-        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(StatusCodes.Status404NotFound, refused.Status);
+        Assert.Equal(ErrorCodes.MailboxNotFound.ToString(), refused.Text("code"));
         Assert.Equal(StatusCodes.Status400BadRequest, unlabelled.Status);
         Assert.Equal("label", unlabelled.Json().GetProperty("details").GetProperty("member").GetString());
         Assert.Empty(_deployment.MailServer.Tokens);

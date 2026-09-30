@@ -9759,6 +9759,8 @@ actions).
 other answers and say what "present only" answers; chapter 10 could hold the audit
 rows below.
 
+**Superseded by D-166.**
+
 ---
 
 ## 264. What an erasure's identifier is, what the erasure endpoints read, and what the manual completion records
