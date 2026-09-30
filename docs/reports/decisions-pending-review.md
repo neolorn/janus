@@ -14044,6 +14044,8 @@ the last annual operation and say it is warned of from the maintenance log.
 OPS-MAINT-001 could list the annual operation beside the licences and permits it warns
 of, under `expiry-approaching` with the scope `envelope-rotation`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 342. A restriction names no channel

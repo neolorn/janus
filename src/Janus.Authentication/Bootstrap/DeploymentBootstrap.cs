@@ -74,10 +74,16 @@ internal sealed class DeploymentBootstrap(
     // grants name the identity no account holds rather than their holders.
     private static readonly SubjectId Ungranted = new(Guid.Empty);
 
+    /// <summary>
+    /// The name of the principal bootstrap records what it does under, which chapter 10
+    /// section 5 gives its <c>identity.organization.created</c> record.
+    /// </summary>
+    internal const string PrincipalName = "bootstrap";
+
     // IDN-PRIN-001: nobody is signed in while bootstrap runs, so what it defines and
     // sets is recorded under a principal of its own that may do nothing else.
     private static readonly SystemPrincipal Principal =
-        SystemPrincipal.ForDeployment("bootstrap", Reason, SystemOperation.Bootstrap);
+        SystemPrincipal.ForDeployment(PrincipalName, Reason, SystemOperation.Bootstrap);
 
     // Chapter 10 section 3: the three administrative roles seeded so the system is
     // usable at once.

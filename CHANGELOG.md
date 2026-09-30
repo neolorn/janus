@@ -80,6 +80,12 @@ against the public contract of LIB-API-001.
   `maintenance.expiry.warninglead` before a year has passed since the last
   `envelope-rotation` entry of the maintenance log, and goes on raising it until the
   next one is recorded. A log that records none has the operation due at once.
+- The same daily job warns of the key-encryption key's cryptoperiod from the key's own
+  record: from `maintenance.expiry.warninglead` before a year has passed since the
+  latest completed `rotate-kek` rotation, or since bootstrap where there has been none,
+  it raises `expiry-approaching` under `kek-cryptoperiod` with the version, when it was
+  rotated in and when it is due, until a rotation completes. No maintenance log entry
+  and no rotation of the fingerprint key ends it.
 - `janus register-client` registers a client in the provider's registry, or changes a
   registered one, from the server: `--client`, `--name`, `--kind`, `--redirect` and
   `--scopes`, and no secret. The library draws a client's secret at its first
