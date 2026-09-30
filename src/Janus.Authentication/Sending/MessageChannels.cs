@@ -75,12 +75,15 @@ internal static class MessageChannels
     /// whether each carries a link. Which entry one amounts to follows from that and
     /// the channel it goes out on (AUTH-FACT-016); no property tells a message that
     /// authenticates from one that verifies, so the one place that is written is here.
+    /// A recovery link is among them: by text it reaches a number as a sign-in link
+    /// does, so the carrier's signal is asked about it the same way (AUTH-FACT-002b).
     /// </summary>
     public static FrozenDictionary<MessageKind, bool> Factors { get; } = FrozenDictionary
         .ToFrozenDictionary<MessageKind, bool>(
         [
             new KeyValuePair<MessageKind, bool>(MessageKind.SignInLink, true),
             new KeyValuePair<MessageKind, bool>(MessageKind.SecondStepCode, false),
+            new KeyValuePair<MessageKind, bool>(MessageKind.RecoveryLink, true),
         ]);
 
     /// <summary>

@@ -131,6 +131,10 @@ internal sealed class Deployment : IAsyncDisposable
     /// <param name="logging">
     /// The least level the host logs at; every level, unless it says otherwise.
     /// </param>
+    /// <param name="signals">
+    /// What the carrier reports about a number, where the host declared something to
+    /// ask (AUTH-FACT-002b); nothing, unless it says otherwise.
+    /// </param>
     public Deployment(
         ApplicationKind application = ApplicationKind.Public,
         PasskeyAddresses? addresses = null,
@@ -139,7 +143,8 @@ internal sealed class Deployment : IAsyncDisposable
         AuthenticationAddresses? signIn = null,
         SignOnClient? client = null,
         IReadOnlyList<SocialProvider>? providers = null,
-        LogLevel logging = LogLevel.Trace)
+        LogLevel logging = LogLevel.Trace,
+        PhoneSignalProvider? signals = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
@@ -175,6 +180,11 @@ internal sealed class Deployment : IAsyncDisposable
             signIn ?? Screen,
             client ?? Registered,
             providers ?? [SocialProviders.Google, SocialProviders.Apple]);
+
+        if (signals is not null)
+        {
+            _ = builder.Services.AddSingleton(signals);
+        }
 
         _application = builder.Build();
 

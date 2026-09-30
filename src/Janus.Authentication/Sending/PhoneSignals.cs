@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Identifiers;
 using Janus.Core;
 
 namespace Janus.Authentication.Sending;
@@ -69,6 +70,29 @@ internal sealed class PhoneSignals(
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         return false;
+    }
+
+    /// <summary>
+    /// Considers the number the account would be texted at, and answers whether the
+    /// factor may still be used with it; an account holding no number is refused
+    /// nothing here, since nothing can be texted to it.
+    /// </summary>
+    /// <param name="factor">The entry the number would carry.</param>
+    /// <param name="held">The account's identifiers.</param>
+    /// <param name="subject">Whose account it is.</param>
+    /// <param name="cancellationToken">Abandons the consideration.</param>
+    /// <returns>Whether the factor may be used.</returns>
+    /// <exception cref="ArgumentNullException">The identifiers are absent.</exception>
+    public async ValueTask<bool> AllowsAsync(
+        Factor factor,
+        HeldIdentifiers held,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(held);
+
+        return held.Texted() is not HeldIdentifier texted
+            || await AllowsAsync(factor, texted.Canonical, subject, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

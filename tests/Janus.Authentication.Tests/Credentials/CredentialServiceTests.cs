@@ -748,7 +748,8 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     private RecoveryCodeService Codes =>
         new(_sets, new Argon2idHasher(_randomness), _configuration, _work, _clock, _randomness);
 
-    private StepUpGuard Guard => new(_live, _authenticators, _passwords, Policies, _clock);
+    private StepUpGuard Guard =>
+        new(_live, _authenticators, _passwords, Policies, _identifiers, new PhoneSignals(null, new PhoneSignalAuditInMemory(), _work, _clock), _clock);
 
     private PolicyResolution Policies => new(_memberships, _configuration, _raises);
 
@@ -811,6 +812,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
                 _work,
                 _events,
                 _clock),
+            new PhoneSignals(null, new PhoneSignalAuditInMemory(), _work, _clock),
             Throttle,
             _events,
             _configuration,

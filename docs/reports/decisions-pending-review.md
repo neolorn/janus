@@ -5139,6 +5139,8 @@ question is asked of the number and that the answer to an ask is the same whethe
 an account holds it, so AUTH-ABUSE-003 AC1 still holds. `09` section 3 should add
 `auth.factor.rejected` to what `POST /auth/link` can answer.
 
+**Superseded by D-166.**
+
 ---
 
 ## 147. A purpose names the document that governs its consent

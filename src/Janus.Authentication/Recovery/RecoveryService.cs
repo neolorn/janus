@@ -35,6 +35,7 @@ namespace Janus.Authentication.Recovery;
 /// <param name="scope">Whether the approver may approve at all.</param>
 /// <param name="sending">Where a message goes out.</param>
 /// <param name="nonExistence">What answers an ask no link of its own answers.</param>
+/// <param name="signals">What is known about a number before a link is texted to it.</param>
 /// <param name="throttle">The progressive delay.</param>
 /// <param name="alerts">Where the anomaly alerts go.</param>
 /// <param name="configuration">Where the lifetimes and the limits come from.</param>
@@ -65,6 +66,7 @@ internal sealed class RecoveryService(
     AdministrativeScope scope,
     INotificationHandler sending,
     NonExistenceNotice nonExistence,
+    PhoneSignals signals,
     ThrottleService throttle,
     IAlertChannels alerts,
     IConfigurationStore configuration,
@@ -78,6 +80,11 @@ internal sealed class RecoveryService(
     // Both rate limits of AUTH-RECOV-002 are stated per day, which is the one window
     // they are counted over (chapter 10 section 4.4).
     private static readonly TimeSpan Day = TimeSpan.FromDays(1);
+
+    // A recovery link by text amounts to the entry a sign-in link by text is, which is
+    // what the carrier's signal is asked about (AUTH-FACT-002b).
+    private static readonly Factor TextedLink =
+        FactorCatalogue.Sent[(IdentifierKind.Phone, MessageChannels.Factors[MessageKind.RecoveryLink])];
 
     /// <inheritdoc/>
     public async ValueTask<Result> BeginAsync(
@@ -129,6 +136,18 @@ internal sealed class RecoveryService(
         if (channel is null)
         {
             return Result.Success();
+        }
+
+        // AUTH-FACT-002b AC6: no recovery link goes to a number the carrier reports a
+        // recent change of SIM or of network for, and the ask is answered as every ask
+        // is. The question is asked of the number whether or not an account holds it,
+        // so nothing about existence is told either way (AUTH-ABUSE-003 AC1).
+        if (channel.Kind is IdentifierKind.Phone
+            && !await signals.AllowsAsync(TextedLink, channel.Canonical, owner, cancellationToken)
+                .ConfigureAwait(false))
+        {
+            return await WithheldAsync(channel, language, source, unheld: false, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         return owner is SubjectId subject

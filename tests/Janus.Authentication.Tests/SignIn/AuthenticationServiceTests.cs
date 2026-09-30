@@ -1349,6 +1349,133 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-002 AC4 and AC6: the text code asked for at the second step goes to the
+    /// account's number as <c>secondstep-code</c> under the purpose <c>secondfactor</c>,
+    /// and a password beside it, presented, completes the sign-in at AAL2 and not
+    /// phishing-resistant.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC4_APasswordAndASentTextCodeCompleteAtAal2Async()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        Assert.Equal([Factor.PhoneCode], Reached(await PresentAsync(began.Challenge, Factor.Password, Secret)).Required);
+        Assert.True((await AskedAsync(began.Challenge, stepping: null)).Match(() => true, _ => false));
+
+        SendRequest texted = Assert.Single(_notifications.Texts);
+        SignInProgress reached = Reached(await PresentAsync(began.Challenge, Factor.PhoneCode, texted.Values["code"]));
+
+        Assert.Equal(MessageKind.SecondStepCode, texted.Message);
+        Assert.Equal(RestrictionPurpose.SecondFactor, texted.Purpose);
+        Assert.Equal(Number, texted.Destination.Canonical);
+        Assert.Equal(SignInStatus.Complete, reached.Status);
+        Assert.Equal(AssuranceLevel.Aal2, reached.AssuranceLevel);
+        Assert.False(reached.PhishingResistant);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC4: a text code accepted as a second step is one issued for that
+    /// sign-in; the code issued for another is refused as no code of this one.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC4_ATextCodeIssuedForAnotherSignInIsRefusedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        Remembered(subject);
+
+        SignInChallenge first = await BeganAsync(Address);
+        SignInChallenge second = await BeganAsync(Address);
+
+        _ = await PresentAsync(first.Challenge, Factor.Password, Secret);
+        _ = await PresentAsync(second.Challenge, Factor.Password, Secret);
+        _ = await AskedAsync(first.Challenge, stepping: null);
+
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            Refused(await PresentAsync(second.Challenge, Factor.PhoneCode, _notifications.Texts[^1].Values["code"])));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC6: a text code goes out only for a sign-in a first factor has been
+    /// accepted for; an ask on a sign-in only opened, or on a handle that opens nothing,
+    /// is answered as every ask is and sends nothing.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC6_AnAskBeforeAFirstFactorSendsNothingAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Holds(subject, Factor.PhoneCode);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        Assert.True((await AskedAsync(began.Challenge, stepping: null)).Match(() => true, _ => false));
+        Assert.True((await AskedAsync("a-handle-nothing-opened", stepping: null)).Match(() => true, _ => false));
+        Assert.Empty(_notifications.Texts);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6: where the carrier reports a recent change of SIM or of
+    /// network when the text code is asked for, no code is issued and nothing goes to
+    /// the number; the ask is answered as every ask is, nothing is counted, and the
+    /// consideration is recorded.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_AReportedChangeAtTheAskSendsNoTextCodeAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await PresentAsync(began.Challenge, Factor.Password, Secret);
+
+        Answers(PhoneSignal.Risk);
+
+        Assert.True((await AskedAsync(began.Challenge, stepping: null)).Match(() => true, _ => false));
+        Assert.Empty(_notifications.Texts);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Equal([(Factor.PhoneCode, (PhoneSignal?)PhoneSignal.Risk, (SubjectId?)subject)], _considered.Records);
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6: at a step-up the text code is withheld where the carrier
+    /// reports a recent change for the number: the ask is answered as every ask is, and
+    /// no code is issued or sent.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_AReportedChangeWithholdsTheTextCodeFromAStepUpAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        Answers(PhoneSignal.Risk);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        Assert.True((await AskedAsync(began.Challenge, subject)).Match(() => true, _ => false));
+        Assert.Empty(_notifications.Texts);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Equal([(Factor.PhoneCode, (PhoneSignal?)PhoneSignal.Risk, (SubjectId?)subject)], _considered.Records);
+    }
+
+    /// <summary>
     /// AUTH-FACT-002b AC6: a carrier reporting a recent change of SIM or of network
     /// withholds the text code from that sign-in, and the account's other second
     /// steps are offered in its place.
@@ -1431,11 +1558,12 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
     /// <summary>
     /// AUTH-FACT-002b AC6, AUTH-FACT-003: a sign-in link by text is the whole of the
-    /// sign-in, so there is nothing to offer beside it and the ask is refused; no
-    /// link goes to the number.
+    /// sign-in, so no link goes to a number the carrier reports a change for; the ask
+    /// is answered as every ask is, counted against the restrictions as the link would
+    /// have been, and the consideration is recorded.
     /// </summary>
     [Fact]
-    public async Task AUTH_FACT_002b_AC6_AReportedChangeRefusesASignInLinkByTextAsync()
+    public async Task AUTH_FACT_002b_AC6_AReportedChangeSendsNoSignInLinkByTextAsync()
     {
         SubjectId subject = await AccountAsync();
 
@@ -1449,18 +1577,19 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             browser: null,
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(ErrorCodes.FactorRejected, asked.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.True(asked.Match(() => true, _ => false));
         Assert.Empty(_notifications.Texts);
-        Assert.NotEqual(default, subject);
+        Assert.Equal(MessageKind.SignInLink, Assert.Single(_restrictions.Drawn).Message);
+        Assert.Equal([(Factor.PhoneLink, (PhoneSignal?)PhoneSignal.Risk, (SubjectId?)subject)], _considered.Records);
     }
 
     /// <summary>
     /// AUTH-ABUSE-003 AC1: the question is asked of the number and never of the
-    /// account, so a number no account holds is refused in the same bytes and nothing
+    /// account, so a number no account holds is answered in the same bytes and nothing
     /// about existence is told either way.
     /// </summary>
     [Fact]
-    public async Task AUTH_ABUSE_003_AC1_ANumberNoAccountHoldsIsRefusedInTheSameBytesAsync()
+    public async Task AUTH_ABUSE_003_AC1_ANumberNoAccountHoldsIsAnsweredInTheSameBytesAsync()
     {
         SubjectId subject = await AccountAsync();
 
@@ -1487,6 +1616,10 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Assert.Empty(_notifications.Texts);
         Assert.NotEqual(default, subject);
     }
+
+    // AUTH-FACT-002 AC6: the text code asked for, in the language of the ask.
+    private ValueTask<Result> AskedAsync(string challenge, SubjectId? stepping) =>
+        Service.AskAsync(challenge, Factor.PhoneCode, stepping, Source, Language, TestContext.Current.CancellationToken);
 
     // AUTH-FACT-002b: the deployment's own provider, standing for the carrier.
     private void Answers(PhoneSignal signal) =>

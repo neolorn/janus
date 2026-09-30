@@ -223,6 +223,73 @@ internal sealed class AuthenticationService(
             .ConfigureAwait(false))
         .Match(outcome => Result.Success(outcome.Progress), Result.Failure<SignInProgress>);
 
+    /// <summary>
+    /// Whether an entry is a code the library texts when it is asked for, as a second
+    /// step, rather than one the person already holds.
+    /// </summary>
+    /// <param name="factor">The entry.</param>
+    /// <returns>Whether it is asked for.</returns>
+    public static bool Asks(Factor factor) =>
+        FactorCatalogue.Delivered.Contains(factor) && FactorCatalogue.Of(factor).CanBeSecondFactor;
+
+    /// <summary>
+    /// Asks for the code of a second step the library texts, for a sign-in a first
+    /// factor has been accepted for or for a step-up of the asking account's own.
+    /// </summary>
+    /// <param name="challenge">The handle the sign-in or step-up opened with.</param>
+    /// <param name="factor">The second step asked for.</param>
+    /// <param name="stepping">The account stepping up, or nothing at a sign-in.</param>
+    /// <param name="source">The address the ask came from.</param>
+    /// <param name="language">The language the ask was made in.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Nothing, or the refusal of the send.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    /// <remarks>
+    /// Implements AUTH-FACT-002 AC6. An ask is answered alike whatever it finds, so a
+    /// handle that opens nothing, a sign-in no first factor has been accepted for, an
+    /// account holding no such credential and a policy that does not permit it are sent
+    /// nothing and answered as the rest.
+    /// </remarks>
+    public async ValueTask<Result> AskAsync(
+        string challenge,
+        Factor factor,
+        SubjectId? stepping,
+        string source,
+        string language,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(language);
+
+        Challenge? open = await OpenAsync(challenge, cancellationToken).ConfigureAwait(false);
+
+        if (!Asks(factor)
+            || open?.Subject is not SubjectId subject
+            || (stepping is SubjectId asking ? asking != subject : open.Presented.Count is 0)
+            || await accounts.StateAsync(subject, cancellationToken).ConfigureAwait(false) is not AccountState.Active
+            || !(await authenticators.OfAsync(subject, cancellationToken).ConfigureAwait(false))
+                .Any(credential => credential.IsUsable && credential.Factor == factor))
+        {
+            return Result.Success();
+        }
+
+        Error? failure = null;
+
+        Policy policy = (await policies.ForAsync(subject, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Policy>(error, ref failure));
+
+        // IDN-LIFE-009b: a second step the policy in force does not permit would be
+        // refused when presented, so nothing is sent for it.
+        if (failure is not null || !policy.LoginFactors.Contains(factor))
+        {
+            return failure is null ? Result.Success() : Result.Failure(failure);
+        }
+
+        return await links
+            .SendSecondStepAsync(open.Fingerprint, subject, factor, source, language, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     /// <inheritdoc/>
     public ValueTask<Result> SendLinkAsync(
         string identifier,
@@ -1085,7 +1152,9 @@ internal sealed class AuthenticationService(
             .FindAsync(subject, presented.Factor, cancellationToken)
             .ConfigureAwait(false);
 
-        if (held is null)
+        // AUTH-FACT-002 AC4: a code issued for another sign-in or step-up is no code of
+        // this one.
+        if (held is null || !held.Answers(open.Fingerprint))
         {
             return Result.Failure<bool>(Error.From(ErrorCodes.CodeExpired));
         }
@@ -1282,19 +1351,14 @@ internal sealed class AuthenticationService(
     private async ValueTask<bool> TextableAsync(
         SubjectId subject,
         Factor carried,
-        CancellationToken cancellationToken)
-    {
-        HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
+        CancellationToken cancellationToken) =>
+        await signals
+            .AllowsAsync(
+                carried,
+                await identifiers.HeldAsync(subject, cancellationToken).ConfigureAwait(false),
+                subject,
+                cancellationToken)
             .ConfigureAwait(false);
-        IReadOnlyList<HeldIdentifier> numbers = held.OfKind(IdentifierKind.Phone);
-        HeldIdentifier? texted = numbers.FirstOrDefault(number => number.IsPrimary)
-            ?? (numbers.Count is 0 ? null : numbers[0]);
-
-        return texted is null
-            || await signals
-                .AllowsAsync(carried, texted.Canonical, subject, cancellationToken)
-                .ConfigureAwait(false);
-    }
 
     private async ValueTask<bool> HasPasswordAsync(
         SubjectId subject,

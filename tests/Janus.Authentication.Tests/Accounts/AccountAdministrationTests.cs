@@ -6,11 +6,14 @@ using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests.BreakGlass;
 using Janus.Authentication.Tests.Factors;
+using Janus.Authentication.Tests.Identifiers;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
+using Janus.Authentication.Tests.Sending;
 using Janus.Authentication.Tests.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -79,6 +82,8 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
                 _authenticators,
                 _passwords,
                 new PolicyResolution(_memberships, _configuration, _raises),
+                new IdentifierDirectoryInMemory(),
+                new PhoneSignals(null, new PhoneSignalAuditInMemory(), _work, _clock),
                 _clock),
             _directory,
             _emergency,

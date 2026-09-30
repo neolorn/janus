@@ -15,6 +15,8 @@ namespace Janus.Authentication.SignIn;
 /// the browser that requested it and only on a press; the code is what the person types
 /// where the sign-in began when they opened it somewhere else. The address it went to is
 /// kept, so that a domain lock that changed while it was out is judged when it is used.
+/// A code the library texts as a second step is issued for one sign-in or step-up and
+/// answers that one alone (AUTH-FACT-002 AC4).
 /// </remarks>
 internal sealed class PendingSignIn
 {
@@ -25,6 +27,7 @@ internal sealed class PendingSignIn
         IdentifierId? email,
         [NeverLogged] byte[] code,
         byte[]? browser,
+        byte[]? challenge,
         DateTimeOffset issuedAt,
         DateTimeOffset expiresAt)
     {
@@ -34,6 +37,7 @@ internal sealed class PendingSignIn
         Email = email;
         Code = code;
         Browser = browser;
+        Challenge = challenge;
         IssuedAt = issuedAt;
         ExpiresAt = expiresAt;
     }
@@ -61,6 +65,13 @@ internal sealed class PendingSignIn
     [NeverLogged]
     public byte[]? Browser { get; }
 
+    /// <summary>
+    /// What the handle of the sign-in or step-up it was issued for hashes to, or
+    /// nothing where it was issued for none.
+    /// </summary>
+    [NeverLogged]
+    public byte[]? Challenge { get; }
+
     /// <summary>When it went out.</summary>
     public DateTimeOffset IssuedAt { get; }
 
@@ -79,6 +90,9 @@ internal sealed class PendingSignIn
     /// <param name="email">The email address it goes to, where it goes to one.</param>
     /// <param name="code">The code the same message carries.</param>
     /// <param name="browser">What the requesting browser carried, or nothing.</param>
+    /// <param name="challenge">
+    /// What the handle of the sign-in or step-up it is issued for hashes to, or nothing.
+    /// </param>
     /// <param name="at">Now.</param>
     /// <param name="lifetime">How long it works for.</param>
     /// <returns>The pending sign-in.</returns>
@@ -89,9 +103,10 @@ internal sealed class PendingSignIn
         IdentifierId? email,
         [NeverLogged] string code,
         byte[]? browser,
+        byte[]? challenge,
         DateTimeOffset at,
         TimeSpan lifetime) =>
-        new(token.Fingerprint(), subject, factor, email, Held(code), browser, at, at + lifetime);
+        new(token.Fingerprint(), subject, factor, email, Held(code), browser, challenge, at, at + lifetime);
 
     /// <summary>
     /// The pending sign-in as the store holds it.
@@ -102,6 +117,9 @@ internal sealed class PendingSignIn
     /// <param name="email">The email address it went to, where it went to one.</param>
     /// <param name="code">The code it carries.</param>
     /// <param name="browser">What the requesting browser carried, or nothing.</param>
+    /// <param name="challenge">
+    /// What the handle of the sign-in or step-up it was issued for hashes to, or nothing.
+    /// </param>
     /// <param name="issuedAt">When it went out.</param>
     /// <param name="expiresAt">When it stops working.</param>
     /// <param name="wrongAttempts">Wrong codes typed against it.</param>
@@ -114,6 +132,7 @@ internal sealed class PendingSignIn
         IdentifierId? email,
         [NeverLogged] byte[] code,
         byte[]? browser,
+        byte[]? challenge,
         DateTimeOffset issuedAt,
         DateTimeOffset expiresAt,
         int wrongAttempts)
@@ -121,7 +140,7 @@ internal sealed class PendingSignIn
         ArgumentNullException.ThrowIfNull(fingerprint);
         ArgumentNullException.ThrowIfNull(code);
 
-        return new PendingSignIn(fingerprint, subject, factor, email, code, browser, issuedAt, expiresAt)
+        return new PendingSignIn(fingerprint, subject, factor, email, code, browser, challenge, issuedAt, expiresAt)
         {
             WrongAttempts = wrongAttempts,
         };
@@ -143,6 +162,20 @@ internal sealed class PendingSignIn
         Browser is not null
         && presented is not null
         && CryptographicOperations.FixedTimeEquals(Browser, presented);
+
+    /// <summary>
+    /// Whether it answers the sign-in or step-up it is presented to: one issued for a
+    /// sign-in or step-up answers that one alone (AUTH-FACT-002 AC4).
+    /// </summary>
+    /// <param name="challenge">What the presented handle hashes to.</param>
+    /// <returns>Whether it answers it.</returns>
+    /// <exception cref="ArgumentNullException">The handle is absent.</exception>
+    public bool Answers([NeverLogged] byte[] challenge)
+    {
+        ArgumentNullException.ThrowIfNull(challenge);
+
+        return Challenge is null || CryptographicOperations.FixedTimeEquals(Challenge, challenge);
+    }
 
     /// <summary>
     /// Whether this is the code the message carried.

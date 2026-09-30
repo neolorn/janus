@@ -122,6 +122,8 @@ public sealed class AccountServiceTests : IAsyncDisposable
         _authenticators,
         _passwords,
         new PolicyResolution(_memberships, _configuration, _raises),
+        _identifiers,
+        new PhoneSignals(null, new PhoneSignalAuditInMemory(), _work, _clock),
         _clock);
 
     private AccessContext Acting => AccessContext.Of(_person);

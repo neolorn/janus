@@ -1050,7 +1050,9 @@ table signin_links
   column expires_at timestamp with time zone not null
   column wrong_attempts integer not null
   column email uuid
+  column challenge bytea
   constraint ck_signin_links_browser CHECK (((browser IS NULL) OR (octet_length(browser) = 32)))
+  constraint ck_signin_links_challenge CHECK (((challenge IS NULL) OR (octet_length(challenge) = 32)))
   constraint ck_signin_links_factor CHECK ((factor = ANY (ARRAY['apple'::text, 'breakGlass'::text, 'emailCode'::text, 'emailLink'::text, 'google'::text, 'passkey'::text, 'password'::text, 'phoneCode'::text, 'phoneLink'::text, 'recoveryCodes'::text, 'securityKey'::text, 'totp'::text])))
   constraint ck_signin_links_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_signin_links_token CHECK ((octet_length(token) = 32))

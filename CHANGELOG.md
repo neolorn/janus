@@ -1281,6 +1281,14 @@ against the public contract of LIB-API-001.
   sign-in opened with such an address, no longer signs in: the factor is refused
   `auth.factor.rejected`, recorded and counted. A held address that does not parse is
   judged by a domain lock as a domain that does not read, so every lock refuses it.
+- The `phoneCode` second step is sent: `POST /auth/factor` or `/auth/step-up` naming
+  `phoneCode` with no `value` answers 202 and texts a code as `secondstep-code` under the
+  purpose `secondfactor`, living `code.signin.lifetime` and capped by
+  `code.signin.attempts`, which answers only the sign-in or step-up it was asked for.
+  The carrier's SIM-change or porting signal is now asked before that code, before a
+  recovery link by text and for the combinations a step-up offers: on `risk` nothing is
+  texted, the step-up withholds the text factors, and `POST /auth/link` and
+  `/recovery/begin` answer 202 as for any number instead of refusing.
 - A value the library reads from text under a rule, left unset (such as its `default`),
   throws `InvalidOperationException` where its text is read, so no such value reaches a
   row.

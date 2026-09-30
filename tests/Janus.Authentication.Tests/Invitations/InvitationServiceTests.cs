@@ -11,6 +11,7 @@ using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Organizations;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Factors;
@@ -1371,7 +1372,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         return new(
             _gate,
             new AdministrativeScope(_gate, _administrative),
-            new StepUpGuard(_sessions, _authenticators, _passwords, policies, _clock),
+            new StepUpGuard(_sessions, _authenticators, _passwords, policies, _identifiers, new PhoneSignals(null, new PhoneSignalAuditInMemory(), _work, _clock), _clock),
             _organizations,
             _roles,
             _documents,

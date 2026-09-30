@@ -128,6 +128,7 @@ internal sealed class PendingSignInStore(
                     Email = pending.Email,
                     Code = await HeldAsync(pending, cancellationToken).ConfigureAwait(false),
                     Browser = pending.Browser,
+                    Challenge = pending.Challenge,
                     IssuedAt = pending.IssuedAt,
                     ExpiresAt = pending.ExpiresAt,
                     WrongAttempts = pending.WrongAttempts,
@@ -222,6 +223,7 @@ internal sealed class PendingSignInStore(
             record.Email,
             code,
             record.Browser,
+            record.Challenge,
             record.IssuedAt,
             record.ExpiresAt,
             record.WrongAttempts);

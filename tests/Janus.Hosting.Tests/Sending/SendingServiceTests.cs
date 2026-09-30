@@ -220,6 +220,27 @@ public sealed class SendingServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-002b AC6: a recovery link texted to a number is considered as a sign-in
+    /// link by text is, and the outcome is written down against the entry it amounts to.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_ARecoveryLinkByTextIsConsideredBeforeItGoesAsync()
+    {
+        var subject = new SubjectId(Guid.NewGuid());
+
+        _provider = new PhoneSignalProvider((_, _) => ValueTask.FromResult(PhoneSignal.Clear));
+
+        _ = await SentAsync(Link(subject) with
+        {
+            Message = MessageKind.RecoveryLink,
+            Purpose = RestrictionPurpose.Notification,
+        });
+
+        Assert.Equal([(Factor.PhoneLink, (PhoneSignal?)PhoneSignal.Clear, (SubjectId?)subject)], _signals.Records);
+    }
+
+    /// <summary>
     /// AUTH-FACT-002b AC6: where the deployment registered nothing to answer, the
     /// absence is what the record says and the send goes on.
     /// </summary>
