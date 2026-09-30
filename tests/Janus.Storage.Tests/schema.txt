@@ -965,6 +965,12 @@ table send_grants
   column fingerprint_version integer not null
   constraint ck_send_grants_credit CHECK ((credit > 0))
   constraint pk_send_grants PRIMARY KEY (key)
+table send_key_counters
+  column key bytea not null
+  column fingerprint_version integer not null
+  column sent_at timestamp with time zone[] not null
+  constraint pk_send_key_counters PRIMARY KEY (key)
+  index ix_send_key_counters_last_sent_at using btree ((sent_at[((cardinality(sent_at) - 1) + 1)]))
 table send_outbox
   column id uuid not null
   column recorded_at timestamp with time zone not null
