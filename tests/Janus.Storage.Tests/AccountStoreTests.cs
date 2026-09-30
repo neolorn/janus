@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Core;
 using Janus.Identity.Accounts;
 using Janus.Storage.Identity.Accounts;
@@ -127,6 +128,63 @@ public sealed class AccountStoreTests(DatabaseFixture database) : IClassFixture<
             await new AccountStore(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
 
         Assert.Equal((AccountState.Restricted, false), (restored.State, restored.RestrictionHeld));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003, chapter 10 section 5.12b: the suspension and the deletion a
+    /// takedown holds round-trip through the row, the sweep's read finds a held deletion
+    /// by the instant it began, and the columns refuse an origin they do not hold.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_003_TheRowCarriesWhatATakedownHoldsAsync()
+    {
+        var deactivated = Account.Create(Subjects.New(), Noon);
+        var deleting = Account.Create(Subjects.New(), Noon);
+
+        deactivated.Deactivate();
+        deactivated.Takedown(Noon.AddHours(1));
+        deleting.RequestDeletion(DeletionOrigin.OutOfBandRequest, Noon);
+        deleting.Takedown(Noon.AddHours(1));
+
+        await using (StoreContext writing = database.Context())
+        {
+            await AddAsync(writing, deactivated);
+            await AddAsync(writing, deleting);
+        }
+
+        await using (StoreContext reading = database.Context())
+        {
+            var store = new AccountStore(reading);
+            Account suspension = Assert.IsType<Account>(
+                await store.FindBySubjectAsync(deactivated.Subject, TestContext.Current.CancellationToken));
+            Account deletion = Assert.IsType<Account>(
+                await store.FindBySubjectAsync(deleting.Subject, TestContext.Current.CancellationToken));
+            IReadOnlyList<Account> elapsed = await store.DeletingSinceAsync(
+                Noon.AddMinutes(30),
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(SuspensionOrigin.Self, suspension.SuspensionHeld);
+            Assert.Null(suspension.DeletionHeld);
+            Assert.Equal(
+                (DeletionOrigin.OutOfBandRequest, Noon),
+                (deletion.DeletionHeld, deletion.DeletionHeldSince));
+            Assert.Contains(elapsed, account => account.Subject == deleting.Subject);
+            Assert.DoesNotContain(elapsed, account => account.Subject == deactivated.Subject);
+        }
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        foreach ((string sql, string constraint) in new[]
+        {
+            ("UPDATE identity.accounts SET suspension_held = 'owner' WHERE subject = @Subject", "ck_accounts_suspension_held"),
+            ("UPDATE identity.accounts SET deletion_held = 'takedown' WHERE subject = @Subject", "ck_accounts_deletion_held"),
+        })
+        {
+            PostgresException refusal = await Assert.ThrowsAsync<PostgresException>(async () =>
+                await connection.ExecuteAsync(sql, new { Subject = deleting.Subject.Value }));
+
+            Assert.Equal(constraint, refusal.ConstraintName);
+        }
     }
 
     /// <summary>

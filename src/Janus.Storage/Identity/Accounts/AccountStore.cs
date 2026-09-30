@@ -32,9 +32,12 @@ internal sealed class AccountStore(StoreContext context) : IAccountStore
             record.CreatedAt,
             record.State,
             record.SuspendedBy,
+            record.SuspensionHeld,
             record.RestrictionHeld,
             record.DeletingBy,
             record.DeletingSince,
+            record.DeletionHeld,
+            record.DeletionHeldSince,
             Registered(record),
             record.IsEmergency);
     }
@@ -52,9 +55,12 @@ internal sealed class AccountStore(StoreContext context) : IAccountStore
                     CreatedAt = account.CreatedAt,
                     State = account.State,
                     SuspendedBy = account.SuspendedBy,
+                    SuspensionHeld = account.SuspensionHeld,
                     RestrictionHeld = account.RestrictionHeld,
                     DeletingBy = account.DeletingBy,
                     DeletingSince = account.DeletingSince,
+                    DeletionHeld = account.DeletionHeld,
+                    DeletionHeldSince = account.DeletionHeldSince,
                     AdultAffirmed = account.Registration?.AdultAffirmed,
                     AgeGroup = account.Registration?.Group,
                     AnsweredAgeAt = account.Registration?.AnsweredAgeAt,
@@ -76,9 +82,12 @@ internal sealed class AccountStore(StoreContext context) : IAccountStore
 
         record.State = account.State;
         record.SuspendedBy = account.SuspendedBy;
+        record.SuspensionHeld = account.SuspensionHeld;
         record.RestrictionHeld = account.RestrictionHeld;
         record.DeletingBy = account.DeletingBy;
         record.DeletingSince = account.DeletingSince;
+        record.DeletionHeld = account.DeletionHeld;
+        record.DeletionHeldSince = account.DeletionHeldSince;
     }
 
     /// <inheritdoc/>
@@ -88,7 +97,8 @@ internal sealed class AccountStore(StoreContext context) : IAccountStore
     {
         List<AccountRecord> records = await context.Accounts
             .Where(record =>
-                record.State == AccountState.Deleting && record.DeletingSince <= before)
+                record.State == AccountState.Deleting
+                && (record.DeletingSince <= before || record.DeletionHeldSince <= before))
             .OrderBy(record => record.DeletingSince)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -100,9 +110,12 @@ internal sealed class AccountStore(StoreContext context) : IAccountStore
                 record.CreatedAt,
                 record.State,
                 record.SuspendedBy,
+                record.SuspensionHeld,
                 record.RestrictionHeld,
                 record.DeletingBy,
                 record.DeletingSince,
+                record.DeletionHeld,
+                record.DeletionHeldSince,
                 Registered(record),
                 record.IsEmergency)),
         ];

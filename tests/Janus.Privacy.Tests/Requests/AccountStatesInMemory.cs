@@ -16,6 +16,7 @@ internal sealed class AccountStatesInMemory : IAccountStates
 {
     private readonly Dictionary<SubjectId, AccountState> _states = [];
     private readonly Dictionary<SubjectId, PendingDeletion> _deletions = [];
+    private readonly Dictionary<SubjectId, (AccountState State, PendingDeletion? Deletion)> _found = [];
     private readonly Dictionary<SubjectId, DateTimeOffset> _sessionsEnded = [];
     private readonly HashSet<SubjectId> _held = [];
 
@@ -59,7 +60,7 @@ internal sealed class AccountStatesInMemory : IAccountStates
         if (moved)
         {
             Deleting = origin;
-            _deletions[subject] = new PendingDeletion(subject, origin, at);
+            _deletions[subject] = new PendingDeletion(subject, origin, at, HeldSince: null);
         }
 
         return ValueTask.FromResult(moved);
@@ -72,7 +73,7 @@ internal sealed class AccountStatesInMemory : IAccountStates
         ValueTask.FromResult<IReadOnlyList<PendingDeletion>>(
         [
             .. _deletions.Values
-                .Where(deletion => deletion.Since <= before
+                .Where(deletion => (deletion.Since <= before || deletion.HeldSince <= before)
                     && Of(deletion.Subject) is AccountState.Deleting)
                 .OrderBy(deletion => deletion.Since),
         ]);
@@ -87,7 +88,7 @@ internal sealed class AccountStatesInMemory : IAccountStates
     public void Deletes(SubjectId subject, DeletionOrigin origin, DateTimeOffset since)
     {
         _states[subject] = AccountState.Deleting;
-        _deletions[subject] = new PendingDeletion(subject, origin, since);
+        _deletions[subject] = new PendingDeletion(subject, origin, since, HeldSince: null);
     }
 
     /// <summary>
@@ -127,7 +128,7 @@ internal sealed class AccountStatesInMemory : IAccountStates
         PendingDeletion? deletion = _deletions.GetValueOrDefault(subject);
 
         return ValueTask.FromResult<AccountStanding?>(
-            new AccountStanding(state, deletion?.By, deletion?.Since));
+            new AccountStanding(state, deletion?.By, deletion?.Since, deletion?.HeldSince));
     }
 
     /// <inheritdoc/>
@@ -136,12 +137,22 @@ internal sealed class AccountStatesInMemory : IAccountStates
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        if (Of(subject) is not (AccountState.Active or AccountState.Restricted or AccountState.Suspended))
+        PendingDeletion? running = _deletions.GetValueOrDefault(subject);
+
+        if (Of(subject) is not AccountState found
+            || found is AccountState.Deleted
+            || (found is AccountState.Deleting && running?.By is DeletionOrigin.Takedown))
         {
             return ValueTask.FromResult(false);
         }
 
-        Deletes(subject, DeletionOrigin.Takedown, at);
+        // IDN-LIFE-003: the takedown holds what it found, a running deletion with its
+        // clock, and the reversal restores it.
+        PendingDeletion? held = found is AccountState.Deleting ? running : null;
+
+        _found[subject] = (found, held);
+        _states[subject] = AccountState.Deleting;
+        _deletions[subject] = new PendingDeletion(subject, DeletionOrigin.Takedown, at, held?.Since);
         Deleting = DeletionOrigin.Takedown;
         _sessionsEnded[subject] = at;
 
@@ -157,7 +168,19 @@ internal sealed class AccountStatesInMemory : IAccountStates
             return ValueTask.FromResult(false);
         }
 
-        Cancels(subject);
+        (AccountState found, PendingDeletion? held) = _found[subject];
+
+        _ = _found.Remove(subject);
+        _states[subject] = found;
+
+        if (held is null)
+        {
+            _ = _deletions.Remove(subject);
+        }
+        else
+        {
+            _deletions[subject] = held;
+        }
 
         return ValueTask.FromResult(true);
     }

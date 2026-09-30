@@ -170,33 +170,91 @@ public sealed class AccountStatesTests(DatabaseFixture database)
     }
 
     /// <summary>
-    /// IDN-LIFE-003: an account already in its own deletion window is not taken down,
-    /// and the refusal writes nothing.
+    /// IDN-LIFE-003 (D-166): an account already in its own deletion window is taken
+    /// down, holding that deletion with the instant it began, a second takedown finds
+    /// nothing to take, and the reversal returns the account to its own window.
     /// </summary>
     [Fact]
-    public async Task IDN_LIFE_003_AnAccountInItsOwnWindowIsNotTakenDownAsync()
+    public async Task IDN_LIFE_003_ARunningDeletionIsTakenDownAsync()
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
+        DateTimeOffset began = Noon - TimeSpan.FromDays(2);
 
         await using (StoreContext deleting = database.Context())
         {
             Assert.True(await States(deleting).BeginDeletionAsync(
                 subject,
                 DeletionOrigin.Self,
-                Noon,
+                began,
                 TestContext.Current.CancellationToken));
             await deleting.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using (StoreContext taking = database.Context())
+        await TakenDownAsync(subject);
+
+        AccountStanding taken = await StandingAsync(subject);
+
+        Assert.Equal((AccountState.Deleting, DeletionOrigin.Takedown), (taken.State, taken.DeletingBy));
+        Assert.Equal((Noon, began), (taken.DeletingSince, taken.DeletionHeldSince));
+
+        await using (StoreContext again = database.Context())
         {
-            Assert.False(await States(taking).TakeDownAsync(
+            Assert.False(await States(again).TakeDownAsync(
                 subject,
                 Noon,
                 TestContext.Current.CancellationToken));
+            Assert.True(await States(again).ReverseTakedownAsync(
+                subject,
+                TestContext.Current.CancellationToken));
+            await again.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        Assert.Equal(DeletionOrigin.Self, (await StandingAsync(subject)).DeletingBy);
+        AccountStanding reversed = await StandingAsync(subject);
+
+        Assert.Equal(
+            (AccountState.Deleting, DeletionOrigin.Self, began, null),
+            (reversed.State, reversed.DeletingBy, reversed.DeletingSince, reversed.DeletionHeldSince));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-013: a takedown reversed on an account an administrator suspended
+    /// leaves it suspended by the administrator, so reactivating it still needs
+    /// <c>account:manage</c> and no reversal stands in for that.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_013_AReversedTakedownLeavesTheAccountToAnAdministratorAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+
+        await using (StoreContext suspending = database.Context())
+        {
+            var store = new AccountStore(suspending);
+            Account account = Assert.IsType<Account>(
+                await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+            account.Suspend();
+            await store.RecordTransitionAsync(account, TestContext.Current.CancellationToken);
+            await suspending.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await TakenDownAsync(subject);
+
+        await using (StoreContext reversing = database.Context())
+        {
+            Assert.True(await States(reversing).ReverseTakedownAsync(
+                subject,
+                TestContext.Current.CancellationToken));
+            await reversing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        Account read = Assert.IsType<Account>(
+            await new AccountStore(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+        Assert.Equal((AccountState.Suspended, SuspensionOrigin.Administrator), (read.State, read.SuspendedBy));
+        Assert.Null(read.SuspensionHeld);
+        Assert.Null(read.DeletingBy);
     }
 
     /// <summary>

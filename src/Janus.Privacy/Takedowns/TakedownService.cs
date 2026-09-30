@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Privacy.Erasures;
 using Janus.Privacy.Outbox;
 using Janus.Privacy.Policies;
 using Janus.Privacy.Requests;
@@ -24,7 +25,7 @@ namespace Janus.Privacy.Takedowns;
 /// <param name="subscribers">Who the host registered to do its half.</param>
 /// <param name="audit">Where the trigger and the reversal are written down.</param>
 /// <param name="events">Where the suspension and the reversal are announced.</param>
-/// <param name="configuration">Where the grace window is read.</param>
+/// <param name="configuration">Where the grace windows are read.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -83,22 +84,30 @@ internal sealed class TakedownService(
             .StandingAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        if (standing is { State: AccountState.Deleting, DeletingBy: DeletionOrigin.Takedown })
+        // IDN-LIFE-003: a takedown finds an account in any state but its own and an
+        // erasure; a running deletion is held and its clock kept.
+        switch (standing)
         {
-            return Result.Failure<ExecutedTakedown>(Error.From(ErrorCodes.TakedownActive));
-        }
-
-        // An account already in a deletion window of another origin, or already
-        // erased, has nothing left that a takedown stops.
-        if (standing is not { State: AccountState.Active or AccountState.Restricted or AccountState.Suspended })
-        {
-            return Result.Failure<ExecutedTakedown>(Error.From(ErrorCodes.Denied));
+            case null:
+                return Result.Failure<ExecutedTakedown>(Error.From(ErrorCodes.AccountNotFound));
+            case { State: AccountState.Deleting, DeletingBy: DeletionOrigin.Takedown }:
+                return Result.Failure<ExecutedTakedown>(Error.From(ErrorCodes.TakedownActive));
+            case { State: AccountState.Deleted }:
+                return Result.Failure<ExecutedTakedown>(StateConflict(standing.State));
+            default:
+                break;
         }
 
         DateTimeOffset now = time.GetUtcNow();
-        TimeSpan grace = await GraceAsync(cancellationToken).ConfigureAwait(false);
+        DeletionWindows windows = await DeletionWindows.ReadAsync(configuration, cancellationToken)
+            .ConfigureAwait(false);
         var delivery = Delivery.Of(subject, SubjectEventKind.TakedownExecuted, now);
-        var takedown = new ExecutedTakedown(new TakedownId(delivery.Id.Value), now + grace);
+        var takedown = new ExecutedTakedown(
+            new TakedownId(delivery.Id.Value),
+            windows.ErasureDue(
+                DeletionOrigin.Takedown,
+                now,
+                standing.State is AccountState.Deleting ? standing.DeletingSince : null));
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
@@ -166,6 +175,12 @@ internal sealed class TakedownService(
             return Result.Failure<TakedownProgress>(denied);
         }
 
+        if (await accounts.StandingAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not AccountStanding standing)
+        {
+            return Result.Failure<TakedownProgress>(Error.From(ErrorCodes.AccountNotFound));
+        }
+
         if (await outbox
                 .LatestAsync(subject, SubjectEventKind.TakedownExecuted, cancellationToken)
                 .ConfigureAwait(false)
@@ -174,14 +189,25 @@ internal sealed class TakedownService(
             return Result.Failure<TakedownProgress>(Error.From(ErrorCodes.TakedownNotFound));
         }
 
-        TimeSpan grace = await GraceAsync(cancellationToken).ConfigureAwait(false);
         Delivery delivery = progress.Delivery;
+        DateTimeOffset? due = null;
+
+        // IDN-LIFE-003 AC2: the takedown stands while the account is in the window it
+        // began, or erased from it; otherwise it was reversed and no erasure is due.
+        if (Standing(standing, delivery.RaisedAt) is DateTimeOffset since)
+        {
+            DeletionWindows windows = await DeletionWindows.ReadAsync(configuration, cancellationToken)
+                .ConfigureAwait(false);
+
+            due = windows.ErasureDue(DeletionOrigin.Takedown, since, standing.DeletionHeldSince);
+        }
 
         return Result.Success(new TakedownProgress(
             new TakedownId(delivery.Id.Value),
             subject,
             delivery.RaisedAt,
-            delivery.RaisedAt + grace,
+            due,
+            due is null,
             delivery.Status,
             delivery.Attempts,
             [
@@ -221,19 +247,29 @@ internal sealed class TakedownService(
             .StandingAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        if (standing is not { DeletingBy: DeletionOrigin.Takedown })
+        if (standing is null)
         {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
+            return Result.Failure(Error.From(ErrorCodes.AccountNotFound));
+        }
+
+        if (standing is not
+            {
+                State: AccountState.Deleting or AccountState.Deleted,
+                DeletingBy: DeletionOrigin.Takedown,
+                DeletingSince: DateTimeOffset since,
+            })
+        {
+            return Result.Failure(Error.From(ErrorCodes.TakedownNotFound));
         }
 
         DateTimeOffset now = time.GetUtcNow();
-        TimeSpan grace = await GraceAsync(cancellationToken).ConfigureAwait(false);
+        DeletionWindows windows = await DeletionWindows.ReadAsync(configuration, cancellationToken)
+            .ConfigureAwait(false);
 
         // The window is closed at its end whether or not the sweep has reached the
         // account yet: the erasure is due, and a reversal would race it.
         if (standing.State is AccountState.Deleted
-            || standing.DeletingSince is not DateTimeOffset since
-            || now >= since + grace)
+            || now >= windows.ErasureDue(DeletionOrigin.Takedown, since, standing.DeletionHeldSince))
         {
             return Result.Failure(Error.From(ErrorCodes.TakedownWindowElapsed));
         }
@@ -246,7 +282,7 @@ internal sealed class TakedownService(
 
         if (!await accounts.ReverseTakedownAsync(subject, cancellationToken).ConfigureAwait(false))
         {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
+            return Result.Failure(Error.From(ErrorCodes.TakedownNotFound));
         }
 
         await audit
@@ -304,6 +340,22 @@ internal sealed class TakedownService(
             ["reason"] = JsonSerializer.SerializeToElement(reason),
         };
 
+    // IDN-LIFE-003 AC2: the instant the takedown's window began, where the account is
+    // still in it or was erased from it; nothing where it was reversed.
+    private static DateTimeOffset? Standing(AccountStanding standing, DateTimeOffset triggeredAt) =>
+        standing is
+        {
+            State: AccountState.Deleting or AccountState.Deleted,
+            DeletingBy: DeletionOrigin.Takedown,
+            DeletingSince: DateTimeOffset since,
+        }
+        && since >= triggeredAt
+            ? since
+            : null;
+
+    private static Error StateConflict(AccountState state) =>
+        Error.From(ErrorCodes.AccountStateConflict, "state", JsonSerializer.SerializeToElement(state, Spelled));
+
     // The gate before anything is read, then the session's proof: a caller without the
     // permission learns nothing of the account, and one with it proves it is them.
     private async ValueTask<Error?> RefusedAsync(
@@ -324,8 +376,4 @@ internal sealed class TakedownService(
             : (await stepUp.RequireAsync(acting, session, action, cancellationToken).ConfigureAwait(false))
                 .Match(() => (Error?)null, error => error);
     }
-
-    private async ValueTask<TimeSpan> GraceAsync(CancellationToken cancellationToken) =>
-        (await configuration.ReadAsync(Settings.TakedownGrace, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 }

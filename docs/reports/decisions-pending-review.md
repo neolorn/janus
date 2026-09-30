@@ -6248,6 +6248,8 @@ account holds no takedown.
 `GET /admin/accounts/{subject}/takedown`; 10 section 1.1 gains
 `identity.takedown.notfound` (404), listed below under the rows for chapter 10.
 
+**Superseded by D-166.**
+
 ---
 
 ## 170. A takedown starts from active, restricted or suspended, and from nothing else
@@ -6289,6 +6291,8 @@ chapter grants a trigger. A second trigger writes nothing and answers **409**
 *Chapter text that should change.* IDN-LIFE-003 could name the states a takedown
 starts from, and `10` section 1.1 could widen `identity.takedown.active` to a second
 trigger.
+
+**Superseded by D-166.**
 
 ---
 
@@ -9355,6 +9359,8 @@ actions).
 their answers, and chapter 10 could hold the audit rows below, with the category of
 `identity.account.reactivated` depending on who acted.
 
+**Superseded by D-166.**
+
 ---
 
 ## 255. An administrator's suspension of an account its owner deactivated
@@ -9398,6 +9404,8 @@ choice is theirs, by the link or by recovery.
 *Chapter text that should change.* IDN-LIFE-013 could say that an administrator's
 suspension of a self-deactivated account makes it the administrator's to reverse, and
 that an administrator does not reactivate an account its owner deactivated.
+
+**Superseded by D-166.**
 
 ---
 
@@ -9483,6 +9491,8 @@ deleting account still refused by `Restrict`, which is the active path).
 while the account is suspended or deleting is held and in force when it returns, and
 chapter 09 section 8a could say that the takedown reversal restores `restricted` where
 the account was restricted.
+
+**Superseded by D-166.**
 
 ---
 

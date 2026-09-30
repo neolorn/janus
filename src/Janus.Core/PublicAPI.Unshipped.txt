@@ -2774,19 +2774,21 @@ Janus.Core.TakedownProgress
 Janus.Core.TakedownProgress.<Clone>$() -> Janus.Core.TakedownProgress!
 Janus.Core.TakedownProgress.Attempts.get -> int
 Janus.Core.TakedownProgress.Attempts.init -> void
-Janus.Core.TakedownProgress.Deconstruct(out Janus.Core.TakedownId Id, out Janus.Core.SubjectId Subject, out System.DateTimeOffset TriggeredAt, out System.DateTimeOffset ErasureDue, out Janus.Core.ErasureStatus Status, out int Attempts, out System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>! Subscribers) -> void
+Janus.Core.TakedownProgress.Deconstruct(out Janus.Core.TakedownId Id, out Janus.Core.SubjectId Subject, out System.DateTimeOffset TriggeredAt, out System.DateTimeOffset? ErasureDue, out bool Reversed, out Janus.Core.ErasureStatus Status, out int Attempts, out System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>! Subscribers) -> void
 Janus.Core.TakedownProgress.Equals(Janus.Core.TakedownProgress? other) -> bool
-Janus.Core.TakedownProgress.ErasureDue.get -> System.DateTimeOffset
+Janus.Core.TakedownProgress.ErasureDue.get -> System.DateTimeOffset?
 Janus.Core.TakedownProgress.ErasureDue.init -> void
 Janus.Core.TakedownProgress.Id.get -> Janus.Core.TakedownId
 Janus.Core.TakedownProgress.Id.init -> void
+Janus.Core.TakedownProgress.Reversed.get -> bool
+Janus.Core.TakedownProgress.Reversed.init -> void
 Janus.Core.TakedownProgress.Status.get -> Janus.Core.ErasureStatus
 Janus.Core.TakedownProgress.Status.init -> void
 Janus.Core.TakedownProgress.Subject.get -> Janus.Core.SubjectId
 Janus.Core.TakedownProgress.Subject.init -> void
 Janus.Core.TakedownProgress.Subscribers.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>!
 Janus.Core.TakedownProgress.Subscribers.init -> void
-Janus.Core.TakedownProgress.TakedownProgress(Janus.Core.TakedownId Id, Janus.Core.SubjectId Subject, System.DateTimeOffset TriggeredAt, System.DateTimeOffset ErasureDue, Janus.Core.ErasureStatus Status, int Attempts, System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>! Subscribers) -> void
+Janus.Core.TakedownProgress.TakedownProgress(Janus.Core.TakedownId Id, Janus.Core.SubjectId Subject, System.DateTimeOffset TriggeredAt, System.DateTimeOffset? ErasureDue, bool Reversed, Janus.Core.ErasureStatus Status, int Attempts, System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>! Subscribers) -> void
 Janus.Core.TakedownProgress.TriggeredAt.get -> System.DateTimeOffset
 Janus.Core.TakedownProgress.TriggeredAt.init -> void
 Janus.Core.TakedownReversed
@@ -3796,6 +3798,8 @@ static Janus.Core.ErrorCode.Parse(string! value) -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCode.operator !=(Janus.Core.ErrorCode left, Janus.Core.ErrorCode right) -> bool
 static Janus.Core.ErrorCode.operator ==(Janus.Core.ErrorCode left, Janus.Core.ErrorCode right) -> bool
 static Janus.Core.ErrorCodes.AccountAdministrativelySuspended.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.AccountNotFound.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.AccountStateConflict.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.AffirmationRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.BreakGlassConsumed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.BreakGlassInvalid.get -> Janus.Core.ErrorCode

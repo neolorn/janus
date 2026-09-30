@@ -44,7 +44,8 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
     /// <summary>
     /// AUTH-SESS-010 and IDN-LIFE-013 AC1: the suspension ends the account's session in
     /// the operation that suspends it, and the reactivation stands the account back up;
-    /// without <c>account:manage</c> neither is done.
+    /// without <c>account:manage</c> neither is done, a second reactivation is a conflict
+    /// with the state, and a subject no account bears is not found.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -59,6 +60,7 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
         Answer suspended = await browser.SendAsync("POST", PathOf(member.Subject, "suspend"));
         AccountState? held = await StateAsync(member.Subject);
         Answer reactivated = await browser.SendAsync("POST", PathOf(member.Subject, "reactivate"));
+        Answer again = await browser.SendAsync("POST", PathOf(member.Subject, "reactivate"));
         Answer unknown = await browser.SendAsync("POST", PathOf(SubjectId.New(_randomness), "reactivate"));
 
         Assert.Equal(StatusCodes.Status403Forbidden, withheld.Status);
@@ -67,13 +69,16 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
         Assert.NotNull(member.EndedAt);
         Assert.Equal(StatusCodes.Status204NoContent, reactivated.Status);
         Assert.Equal(AccountState.Active, await StateAsync(member.Subject));
-        Assert.Equal(StatusCodes.Status400BadRequest, unknown.Status);
-        Assert.Equal("subject", unknown.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal(StatusCodes.Status409Conflict, again.Status);
+        Assert.Equal("identity.account.stateconflict", again.Text("code"));
+        Assert.Equal("active", again.Json().GetProperty("details").GetProperty("state").GetString());
+        Assert.Equal(StatusCodes.Status404NotFound, unknown.Status);
+        Assert.Equal("identity.account.notfound", unknown.Text("code"));
     }
 
     /// <summary>
     /// PRIV-RIGHT-004 AC2: the lift makes a restricted account active, and a second
-    /// finds no restriction to lift.
+    /// finds no restriction to lift, which is a conflict with the state.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -90,7 +95,8 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, lifted.Status);
         Assert.Equal(AccountState.Active, await StateAsync(member.Subject));
-        Assert.Equal(StatusCodes.Status403Forbidden, again.Status);
+        Assert.Equal(StatusCodes.Status409Conflict, again.Status);
+        Assert.Equal("identity.account.stateconflict", again.Text("code"));
     }
 
     /// <summary>

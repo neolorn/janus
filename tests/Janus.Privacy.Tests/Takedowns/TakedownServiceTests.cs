@@ -1,11 +1,13 @@
 using System;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.Outbox;
 using Janus.Privacy.Policies;
+using Janus.Privacy.Requests;
 using Janus.Privacy.Takedowns;
 using Janus.Privacy.Tests.Exports;
 using Janus.Privacy.Tests.Outbox;
@@ -247,23 +249,117 @@ public sealed class TakedownServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-003: an account already in a deletion window of another origin, or
-    /// already erased, is not taken down.
+    /// IDN-LIFE-003 (D-166): an account already in its own deletion, begun by itself or
+    /// by an out-of-band request, is taken down, holding that deletion; the erasure falls
+    /// due at the earlier of its own window's end and the takedown's, and the reversal
+    /// returns the account to its deletion and its clock.
+    /// </summary>
+    /// <param name="origin">What began the deletion the takedown found.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(DeletionOrigin.Self)]
+    [InlineData(DeletionOrigin.OutOfBandRequest)]
+    public async Task IDN_LIFE_003_ARunningDeletionIsTakenDownAsync(DeletionOrigin origin)
+    {
+        DateTimeOffset began = Noon - Settings.AccountDeletionGrace.Default + TimeSpan.FromDays(1);
+
+        _accounts.Deletes(Ahmed, origin, began);
+
+        ExecutedTakedown takedown = Held(await ExecutedAsync());
+
+        Assert.Equal(began + Settings.AccountDeletionGrace.Default, takedown.ErasureDue);
+        Assert.Equal(AccountState.Deleting, _accounts.Of(Ahmed));
+        Assert.Equal(DeletionOrigin.Takedown, _accounts.Deleting);
+        Assert.Equal(Noon, _accounts.SessionsEndedAt(Ahmed));
+        Assert.Single(_events.Of<AccountSuspended>());
+        Assert.Equal(takedown.ErasureDue, Held(await ReadAsync(Mona)).ErasureDue);
+
+        Held(await ReversedAsync());
+
+        AccountStanding standing = Assert.IsType<AccountStanding>(
+            await _accounts.StandingAsync(Ahmed, TestContext.Current.CancellationToken));
+
+        Assert.Equal((AccountState.Deleting, origin, began), (standing.State, standing.DeletingBy, standing.DeletingSince));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003: an account already erased has nothing a takedown stops, which is a
+    /// conflict with its state, and the refusal writes nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_LIFE_003_AnAccountAlreadyLeavingIsNotTakenDownAsync()
+    public async Task IDN_LIFE_003_AnErasedAccountIsNotTakenDownAsync()
     {
-        _accounts.Deletes(Ahmed, DeletionOrigin.Self, Noon - TimeSpan.FromDays(1));
-
-        Assert.Equal(ErrorCodes.Denied, Refused(await ExecutedAsync()).Code);
-
+        _accounts.Deletes(Ahmed, DeletionOrigin.Self, Noon - Settings.AccountDeletionGrace.Default);
         _accounts.Erases(Ahmed);
 
-        Assert.Equal(ErrorCodes.Denied, Refused(await ExecutedAsync()).Code);
+        Error refused = Refused(await ExecutedAsync());
+
+        Assert.Equal(ErrorCodes.AccountStateConflict, refused.Code);
+        Assert.Equal("deleted", refused.Details["state"].GetString());
         Assert.Empty(_outbox.Deliveries);
         Assert.Empty(_audit.Entries);
+        Assert.Empty(_events.Of<AccountSuspended>());
         Assert.Null(_accounts.SessionsEndedAt(Ahmed));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003, 09 section 8a: the trigger, the reading and the reversal each
+    /// answer a subject no account bears as not found, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_ASubjectWithNoAccountIsNotFoundAsync()
+    {
+        var nobody = new SubjectId(Guid.Parse("33333333-3333-4333-8333-333333333333"));
+        CancellationToken cancellation = TestContext.Current.CancellationToken;
+
+        Assert.Equal(
+            ErrorCodes.AccountNotFound,
+            Refused(await Takedowns.ExecuteAsync(
+                AccessContext.Of(Mona),
+                Browser,
+                nobody,
+                TakedownTrigger.CustomerReport,
+                "a parent wrote in",
+                cancellation)).Code);
+        Assert.Equal(
+            ErrorCodes.AccountNotFound,
+            Refused(await Takedowns.ReadAsync(AccessContext.Of(Mona), nobody, cancellation)).Code);
+        Assert.Equal(
+            ErrorCodes.AccountNotFound,
+            Refused(await Takedowns.ReverseAsync(
+                AccessContext.Of(Mona),
+                Browser,
+                nobody,
+                "an adult, misjudged",
+                cancellation)).Code);
+        Assert.Empty(_outbox.Deliveries);
+        Assert.Empty(_audit.Entries);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003 AC2: a takedown that was reversed reads as reversed, with no erasure
+    /// due, and not as one still running.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_AC2_AReversedTakedownReadsAsReversedAsync()
+    {
+        ExecutedTakedown takedown = Held(await ExecutedAsync());
+
+        TakedownProgress standing = Held(await ReadAsync(Mona));
+
+        Held(await ReversedAsync());
+
+        TakedownProgress reversed = Held(await ReadAsync(Mona));
+
+        Assert.False(standing.Reversed);
+        Assert.Equal(takedown.ErasureDue, standing.ErasureDue);
+        Assert.True(reversed.Reversed);
+        Assert.Null(reversed.ErasureDue);
+        Assert.Equal(takedown.Id, reversed.Id);
+        Assert.Equal(Noon, reversed.TriggeredAt);
     }
 
     /// <summary>
@@ -376,17 +472,17 @@ public sealed class TakedownServiceTests : IAsyncDisposable
 
     /// <summary>
     /// IDN-LIFE-003: only a takedown is reversed, so an account in its own deletion
-    /// window, or not leaving at all, is refused.
+    /// window, or not leaving at all, holds no takedown to reverse.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task IDN_LIFE_003_OnlyATakedownIsReversedAsync()
     {
-        Assert.Equal(ErrorCodes.Denied, Refused(await ReversedAsync()).Code);
+        Assert.Equal(ErrorCodes.TakedownNotFound, Refused(await ReversedAsync()).Code);
 
         _accounts.Deletes(Ahmed, DeletionOrigin.Self, Noon);
 
-        Assert.Equal(ErrorCodes.Denied, Refused(await ReversedAsync()).Code);
+        Assert.Equal(ErrorCodes.TakedownNotFound, Refused(await ReversedAsync()).Code);
         Assert.Equal(AccountState.Deleting, _accounts.Of(Ahmed));
     }
 

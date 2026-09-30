@@ -86,6 +86,8 @@ public sealed class ErrorCodesTests
         "config.value.lastdestination",
         "config.value.notallowed",
         "identity.account.adminsuspended",
+        "identity.account.notfound",
+        "identity.account.stateconflict",
         "identity.affirmation.required",
         "identity.change.pending",
         "identity.change.windowelapsed",

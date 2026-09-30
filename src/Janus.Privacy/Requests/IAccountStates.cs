@@ -74,7 +74,7 @@ internal interface IAccountStates
     /// <param name="at">When the takedown was triggered.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Whether the state changed: an account already deleting or deleted cannot be
+    /// Whether the state changed: an account already taken down or deleted cannot be
     /// taken down.
     /// </returns>
     ValueTask<bool> TakeDownAsync(
@@ -83,7 +83,7 @@ internal interface IAccountStates
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Reverses a takedown and restores the account to active.
+    /// Reverses a takedown and restores the state the account held at the trigger.
     /// </summary>
     /// <param name="subject">Whose.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>

@@ -91,7 +91,8 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
                 .Select(account => new PendingDeletion(
                     account.Subject,
                     account.DeletingBy!.Value,
-                    account.DeletingSince!.Value)),
+                    account.DeletingSince!.Value,
+                    account.DeletionHeldSince)),
         ];
     }
 
@@ -101,7 +102,11 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
         CancellationToken cancellationToken) =>
         await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
             is Account account
-            ? new AccountStanding(account.State, account.DeletingBy, account.DeletingSince)
+            ? new AccountStanding(
+                account.State,
+                account.DeletingBy,
+                account.DeletingSince,
+                account.DeletionHeldSince)
             : null;
 
     /// <inheritdoc/>
@@ -110,12 +115,12 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
+        // IDN-LIFE-003: a takedown finds an account in any state but a takedown of its
+        // own and an erasure, and holds the one it found.
         if (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
-            is not
-            {
-                State: AccountState.Active or AccountState.Restricted or AccountState.Suspended,
-                IsEmergency: false,
-            } account)
+            is not { IsEmergency: false } account
+            || account is { State: AccountState.Deleted }
+            or { State: AccountState.Deleting, DeletingBy: DeletionOrigin.Takedown })
         {
             return false;
         }

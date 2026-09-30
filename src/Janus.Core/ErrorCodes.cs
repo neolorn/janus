@@ -312,6 +312,26 @@ public static class ErrorCodes
     public static ErrorCode AccountAdministrativelySuspended { get; } = ErrorCode.Parse("identity.account.adminsuspended");
 
     /// <summary>
+    /// The subject an administrative operation names is borne by no account. Name the
+    /// subject of an account the deployment holds.
+    /// </summary>
+    /// <remarks>
+    /// Implements IDN-LIFE-013, IDN-LIFE-003, PRIV-RIGHT-004, IDN-ATTR-003, chapter 10
+    /// section 1.1.
+    /// </remarks>
+    public static ErrorCode AccountNotFound { get; } = ErrorCode.Parse("identity.account.notfound");
+
+    /// <summary>
+    /// The operation does not apply to the state the account is in. The details name
+    /// the state and, where it is suspended, who suspended it.
+    /// </summary>
+    /// <remarks>
+    /// Implements IDN-ACCT-007, IDN-LIFE-013, IDN-LIFE-003, PRIV-RIGHT-004, chapter 10
+    /// section 1.1.
+    /// </remarks>
+    public static ErrorCode AccountStateConflict { get; } = ErrorCode.Parse("identity.account.stateconflict");
+
+    /// <summary>
     /// The identifier is the primary of its kind, which is not removable. Set another
     /// primary first, then remove it.
     /// </summary>

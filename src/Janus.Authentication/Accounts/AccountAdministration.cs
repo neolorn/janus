@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Text.Json;
 using System.Threading;
@@ -82,9 +83,9 @@ internal sealed class AccountAdministration(
         switch (state)
         {
             case null:
-                return Result.Failure(Malformed("subject"));
+                return Result.Failure(Error.From(ErrorCodes.AccountNotFound));
             case AccountState.Deleting or AccountState.Deleted:
-                return Result.Failure(Error.From(ErrorCodes.Denied));
+                return Result.Failure(StateConflict(state.Value, suspendedBy: null));
             case AccountState.Suspended
                 when await directory.SuspendedByAsync(subject, cancellationToken).ConfigureAwait(false)
                     is SuspensionOrigin.Administrator:
@@ -168,17 +169,21 @@ internal sealed class AccountAdministration(
             return Result.Failure(refused);
         }
 
-        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false) is null)
+        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not AccountState state)
         {
-            return Result.Failure(Malformed("subject"));
+            return Result.Failure(Error.From(ErrorCodes.AccountNotFound));
         }
 
         // IDN-LIFE-013: the two suspensions are reversed differently, and what its owner
         // deactivated is theirs to stand back up.
-        if (await directory.SuspendedByAsync(subject, cancellationToken).ConfigureAwait(false)
-            is not SuspensionOrigin.Administrator)
+        SuspensionOrigin? suspendedBy = state is AccountState.Suspended
+            ? await directory.SuspendedByAsync(subject, cancellationToken).ConfigureAwait(false)
+            : null;
+
+        if (suspendedBy is not SuspensionOrigin.Administrator)
         {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
+            return Result.Failure(StateConflict(state, suspendedBy));
         }
 
         if (await stepUp
@@ -249,12 +254,16 @@ internal sealed class AccountAdministration(
         switch (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false))
         {
             case null:
-                return Result.Failure(Malformed("subject"));
+                return Result.Failure(Error.From(ErrorCodes.AccountNotFound));
 
             // PRIV-RIGHT-004: a restriction held while the account is suspended or
             // deleting stays until the account is back in the restricted state.
-            case not AccountState.Restricted:
-                return Result.Failure(Error.From(ErrorCodes.Denied));
+            case AccountState.Suspended:
+                return Result.Failure(StateConflict(
+                    AccountState.Suspended,
+                    await directory.SuspendedByAsync(subject, cancellationToken).ConfigureAwait(false)));
+            case not AccountState.Restricted and AccountState other:
+                return Result.Failure(StateConflict(other, suspendedBy: null));
             default:
                 break;
         }
@@ -300,15 +309,20 @@ internal sealed class AccountAdministration(
             return Result.Failure(refused);
         }
 
-        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false) is null)
+        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not AccountState state)
         {
-            return Result.Failure(Malformed("subject"));
+            return Result.Failure(Error.From(ErrorCodes.AccountNotFound));
         }
 
         if (await directory.DeletingAsync(subject, cancellationToken).ConfigureAwait(false)
             is not HeldDeletion deleting)
         {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
+            return Result.Failure(StateConflict(
+                state,
+                state is AccountState.Suspended
+                    ? await directory.SuspendedByAsync(subject, cancellationToken).ConfigureAwait(false)
+                    : null));
         }
 
         // IDN-LIFE-003: a takedown is reversed through its own operation, never cancelled.
@@ -385,13 +399,27 @@ internal sealed class AccountAdministration(
         }
 
         return await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false) is null
-            ? Result.Failure<ReadOnlyMemory<byte>>(Malformed("subject"))
+            ? Result.Failure<ReadOnlyMemory<byte>>(Error.From(ErrorCodes.AccountNotFound))
             : await photos.ReadOfAsync(subject, cancellationToken).ConfigureAwait(false);
     }
 
     private static string Key(SubjectId subject, DateTimeOffset at) =>
         string.Create(CultureInfo.InvariantCulture, $"{subject.Value}@{at.UtcTicks}");
 
-    private static Error Malformed(string member) =>
-        Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
+    // Chapter 10 section 1.1: the state is named as section 5.1 spells it and, where it
+    // is suspended, who suspended it as section 5.12b does.
+    private static Error StateConflict(AccountState state, SuspensionOrigin? suspendedBy)
+    {
+        var details = new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+        {
+            ["state"] = JsonSerializer.SerializeToElement(WrittenName.Of(state)),
+        };
+
+        if (suspendedBy is SuspensionOrigin by)
+        {
+            details["suspendedBy"] = JsonSerializer.SerializeToElement(WrittenName.Of(by));
+        }
+
+        return new Error(ErrorCodes.AccountStateConflict, details);
+    }
 }

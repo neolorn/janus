@@ -179,6 +179,30 @@ public sealed class DeletionSweepTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-003 (D-166): a takedown of an account already in its own deletion is
+    /// erased at the earlier of that window's end and the takedown's, so it never erases
+    /// later than the subject's own request would have, and it erases as a takedown.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_ATakenDownDeletionIsErasedAtItsSettledInstantAsync()
+    {
+        DateTimeOffset began = Noon - Settings.AccountDeletionGrace.Default + TimeSpan.FromDays(1);
+
+        _accounts.Deletes(Ahmed, DeletionOrigin.Self, began);
+        Assert.True(await _accounts.TakeDownAsync(Ahmed, Noon, TestContext.Current.CancellationToken));
+
+        _clock.Advance(TimeSpan.FromDays(1) - TimeSpan.FromMinutes(1));
+
+        Assert.Equal(0, await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
+
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        Assert.Equal(1, await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
+        Assert.Equal((Ahmed, ErasureReason.MinorTakedown), (_eraser.Erased[0].Subject, _eraser.Erased[0].Reason));
+    }
+
+    /// <summary>
     /// IDN-LIFE-003a AC1: the erasure the takedown's window ends in writes the identity
     /// change with its erasures row and its outbox record, all in one transaction.
     /// </summary>

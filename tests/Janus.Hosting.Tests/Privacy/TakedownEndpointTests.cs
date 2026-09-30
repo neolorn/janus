@@ -134,6 +134,44 @@ public sealed class TakedownEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-003 AC2, 09 section 8a: the progress of a reversed takedown reads
+    /// <c>reversed</c> true with a null <c>erasureDue</c>, and an account never taken
+    /// down and a subject no account bears are each not found under their own code.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_AC2_AReversedTakedownReadsAsReversedAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+
+        Answer never = await browser.SendAsync("GET", Takedown);
+
+        _ = await browser.SendAsync(
+            "POST",
+            Takedown,
+            ("trigger", "customer-report"),
+            ("reason", "a parent wrote in"));
+
+        JsonElement standing = (await browser.SendAsync("GET", Takedown)).Json();
+
+        _ = await browser.SendAsync("POST", $"{Takedown}/reverse", ("reason", "an adult, misjudged"));
+
+        JsonElement reversed = (await browser.SendAsync("GET", Takedown)).Json();
+        Answer nobody = await browser.SendAsync(
+            "GET",
+            $"/admin/accounts/{Guid.Parse("44444444-4444-4444-8444-444444444444")}/takedown");
+
+        Assert.Equal(StatusCodes.Status404NotFound, never.Status);
+        Assert.Equal(ErrorCodes.TakedownNotFound.ToString(), never.Text("code"));
+        Assert.False(standing.GetProperty("reversed").GetBoolean());
+        Assert.Equal(JsonValueKind.String, standing.GetProperty("erasureDue").ValueKind);
+        Assert.True(reversed.GetProperty("reversed").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, reversed.GetProperty("erasureDue").ValueKind);
+        Assert.Equal(StatusCodes.Status404NotFound, nobody.Status);
+        Assert.Equal(ErrorCodes.AccountNotFound.ToString(), nobody.Text("code"));
+    }
+
+    /// <summary>
     /// AUTHZ-CONCEAL-005: a customer holding nothing but their own session is refused
     /// every one of the three.
     /// </summary>

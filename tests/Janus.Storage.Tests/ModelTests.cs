@@ -93,19 +93,23 @@ public sealed class ModelTests
             // Standing: the state and the two windows `01` section 4 gives it, with
             // what the terms step wrote down of the age answer, the affirmation
             // derived from it and the versions accepted (REG-PROF-002, REG-SESS-007),
-            // and the mark of the one reserved account (OPS-BOOT-002).
+            // what a deletion or a suspension holds of the state it left (IDN-LIFE-003,
+            // PRIV-RIGHT-004), and the mark of the one reserved account (OPS-BOOT-002).
             "accounts.adult_affirmed",
             "accounts.age_group",
             "accounts.answered_age_at",
             "accounts.created_at",
             "accounts.deleting_by",
             "accounts.deleting_since",
+            "accounts.deletion_held",
+            "accounts.deletion_held_since",
             "accounts.emergency",
             "accounts.notice_version",
             "accounts.restriction_held",
             "accounts.state",
             "accounts.subject",
             "accounts.suspended_by",
+            "accounts.suspension_held",
             "accounts.terms_version",
 
             // Not an account field: the alert ledger of OPS-ALERT-002, holding one row

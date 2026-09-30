@@ -109,9 +109,12 @@ internal sealed class SubjectEraser(
             record.CreatedAt,
             record.State,
             record.SuspendedBy,
+            record.SuspensionHeld,
             record.RestrictionHeld,
             record.DeletingBy,
             record.DeletingSince,
+            record.DeletionHeld,
+            record.DeletionHeldSince,
             registration: null,
             record.IsEmergency);
 
@@ -120,7 +123,10 @@ internal sealed class SubjectEraser(
         record.State = account.State;
         record.DeletingBy = account.DeletingBy;
         record.DeletingSince = account.DeletingSince;
+        record.SuspensionHeld = account.SuspensionHeld;
         record.RestrictionHeld = account.RestrictionHeld;
+        record.DeletionHeld = account.DeletionHeld;
+        record.DeletionHeldSince = account.DeletionHeldSince;
     }
 
     private async ValueTask DestroyKeyAsync(SubjectId subject, CancellationToken cancellationToken)
