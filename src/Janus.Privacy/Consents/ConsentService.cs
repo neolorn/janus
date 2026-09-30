@@ -157,12 +157,10 @@ internal sealed class ConsentService(
             .ConsentsAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        if (Of(held, purpose) is not ConsentRecord consent)
-        {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
-        }
-
-        if (consent.WithdrawnAt is not null)
+        // PRIV-CONS-008 AC5: a consent the subject does not hold is withdrawn already,
+        // so the answer is the withdrawal's and nothing is written, announced or
+        // recorded.
+        if (Of(held, purpose) is not ConsentRecord consent || consent.WithdrawnAt is not null)
         {
             return Result.Success();
         }
@@ -237,10 +235,12 @@ internal sealed class ConsentService(
                 JsonSerializer.SerializeToElement(purpose)));
         }
 
+        // PRIV-RIGHT-001a AC6: an objection is recorded against the privacy notice, so
+        // before any version of it is published there is nothing for it to stand against.
         if (await VersionAsync(document: null, cancellationToken).ConfigureAwait(false)
             is not string version)
         {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
+            return Result.Failure(Error.From(ErrorCodes.NoticeUnpublished));
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -289,16 +289,21 @@ internal sealed class ConsentService(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
+        if (processing.Find(purpose) is not { Basis.IsObjectable: true })
+        {
+            return Result.Failure(Error.From(
+                ErrorCodes.PurposeNotObjectable,
+                "purpose",
+                JsonSerializer.SerializeToElement(purpose)));
+        }
+
         IReadOnlyList<ObjectionRecord> held = await consents
             .ObjectionsAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        if (Of(held, purpose) is not ObjectionRecord objection)
-        {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
-        }
-
-        if (objection.WithdrawnAt is not null)
+        // PRIV-RIGHT-001a AC6: an objection the subject has not made is withdrawn
+        // already, so the answer is the withdrawal's and nothing is written.
+        if (Of(held, purpose) is not ObjectionRecord objection || objection.WithdrawnAt is not null)
         {
             return Result.Success();
         }

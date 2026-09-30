@@ -358,9 +358,6 @@ internal sealed class PrivacyRequestService(
             ["status"] = JsonSerializer.SerializeToElement(request.Status.ToString()),
         };
 
-    // PRIV-RIGHT-001 AC3, AUTHZ-CONCEAL-005: a request the caller may not work, one
-    // that does not exist, and one already decided are one answer, because telling
-    // them apart would answer a question the caller has no permission to ask.
     // AUTHZ-CONCEAL-005 governs what a caller with no business here is told; a member
     // of staff working the queue under `privacyrequest:manage` has that business, so
     // what they are told apart is the permission, the identifier and the decision that

@@ -406,6 +406,75 @@ public sealed class ConsentTests : IAsyncDisposable
         Assert.Empty(await HeldAsync());
     }
 
+    /// <summary>
+    /// PRIV-CONS-008 AC5: withdrawing a consent the subject never gave is answered as
+    /// the withdrawal, and nothing is recorded, announced or audited.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_008_AC1_WithdrawingAConsentNeverGivenAnswersAsTheWithdrawalAsync()
+    {
+        Assert.True(await WithdrawAsync(Recommendations));
+
+        Assert.Empty(await HeldAsync());
+        Assert.Empty(_events.Of<ConsentChanged>());
+        Assert.Empty(_audit.Entries);
+        Assert.Equal(0, _work.Committed);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001a AC6: an objection is recorded against the privacy notice, so one
+    /// made before any version of it is published is refused with the code that names
+    /// that, and nothing is recorded.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001a_AnObjectionBeforeAnyNoticeIsNamedAsSuchAsync()
+    {
+        var unpublished = new ConsentService(
+            _consents,
+            new LegalDocumentStoreInMemory(),
+            Declaration.Processing,
+            _events,
+            _audit,
+            _work,
+            _clock);
+
+        Result refused = await unpublished.ObjectAsync(
+            Acting,
+            Security,
+            ConsentMechanism.Dashboard,
+            CancellationToken.None);
+
+        Assert.Equal(
+            ErrorCodes.NoticeUnpublished,
+            refused.Match(() => default(ErrorCode?), error => error.Code));
+        Assert.Empty(await ObjectionsAsync());
+        Assert.Empty(_events.Of<ObjectionChanged>());
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001a AC6: withdrawing an objection the subject never made is answered
+    /// as the withdrawal, and nothing is recorded, announced or audited; a purpose whose
+    /// basis is not objectable is still refused as such (AC5).
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001a_WithdrawingAnObjectionNeverMadeAnswersAsTheWithdrawalAsync()
+    {
+        Result withdrawn = await Consents.WithdrawObjectionAsync(Acting, Security, CancellationToken.None);
+        Result notObjectable = await Consents.WithdrawObjectionAsync(Acting, Recommendations, CancellationToken.None);
+
+        Assert.Null(withdrawn.Match(() => (Error?)null, error => error));
+        Assert.Equal(
+            ErrorCodes.PurposeNotObjectable,
+            notObjectable.Match(() => default(ErrorCode?), error => error.Code));
+        Assert.Empty(await ObjectionsAsync());
+        Assert.Empty(_events.Of<ObjectionChanged>());
+        Assert.Empty(_audit.Entries);
+        Assert.Equal(0, _work.Committed);
+    }
+
     private async Task<ErrorCode?> RefusedGrantAsync(string purpose) =>
         (await Consents.GrantAsync(Acting, purpose, ConsentMechanism.Dashboard, CancellationToken.None))
         .Match(() => default(ErrorCode?), error => error.Code);

@@ -12,8 +12,9 @@ namespace Janus.Authentication.Tests;
 /// see what the terms step wrote and what it left alone.
 /// </summary>
 /// <remarks>
-/// Only the purposes named here are taken: a grant for anything else is refused, as
-/// the privacy area refuses a purpose the deployment does not take consent for.
+/// Only the purposes named here are taken: a grant for anything else is refused with
+/// <c>privacy.purpose.noconsent</c>, as the privacy area refuses a purpose the
+/// deployment does not take consent for.
 /// </remarks>
 internal sealed class ConsentsInMemory : IConsents
 {
@@ -67,9 +68,14 @@ internal sealed class ConsentsInMemory : IConsents
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (context.Effective is not SubjectId subject || !_taken.Contains(purpose))
+        if (context.Effective is not SubjectId subject)
         {
             return ValueTask.FromResult(Result.Failure(Error.From(ErrorCodes.Denied)));
+        }
+
+        if (!_taken.Contains(purpose))
+        {
+            return ValueTask.FromResult(Result.Failure(Error.From(ErrorCodes.PurposeNoConsent)));
         }
 
         _held[(subject, purpose)] = new ConsentRecord(

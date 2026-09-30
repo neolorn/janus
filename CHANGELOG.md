@@ -943,6 +943,12 @@ against the public contract of LIB-API-001.
   judged on and asks it after every other refusal, and a session that has not proved it
   is answered 403 `auth.stepup.required` with nothing changed. Refusing a request is not
   gated.
+- Withdrawing a consent the subject never gave, or an objection the subject never made,
+  is answered as the withdrawal (204) and records, announces and audits nothing, where it
+  was 403 `authz.denied`; withdrawing an objection for a purpose on a basis that takes
+  none is 422 `privacy.purpose.notobjectable`. An objection made before any version of
+  the privacy notice is published is 409 `privacy.notice.unpublished`, where it was 403
+  `authz.denied`.
 - A host can bind one of its actions to the purpose it is done for, and where that
   purpose rests on consent the gate refuses the action until the data subject of the
   record being acted on has consented to it: missing, withdrawn, superseded or of the

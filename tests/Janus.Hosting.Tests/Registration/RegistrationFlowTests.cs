@@ -232,6 +232,29 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-CONS-001 AC1, REG-SESS-007, 09 section 3: a ticked control whose purpose
+    /// takes no consent is refused 422 <c>privacy.purpose.noconsent</c> by the privacy
+    /// area's own consent operation, and the browser is signed in to nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AC1_AControlForAPurposeTakingNoConsentIsRefusedAsync()
+    {
+        Browser browser = await Flow.SecuredAsync(_deployment);
+
+        Answer refused = await browser.SendAsync(
+            "POST",
+            "/register/terms",
+            ("termsVersion", "terms-3"),
+            ("noticeVersion", "notice-2"),
+            ("consents", new Dictionary<string, bool>(StringComparer.Ordinal) { ["performance"] = true }));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.PurposeNoConsent.ToString(), refused.Text("code"));
+        Assert.False(browser.Cookies.ContainsKey("__Host-identity-session"));
+    }
+
+    /// <summary>
     /// A browser that already holds a session is refused, nothing is staged for it, and
     /// no account document crosses a registration route (REG-SESS-002).
     /// </summary>

@@ -802,7 +802,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             Browser,
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(ErrorCodes.Denied, Refused(refused));
+        Assert.Equal(ErrorCodes.PurposeNoConsent, Refused(refused));
         Assert.Equal(0, _consents.Recorded);
     }
 

@@ -4430,6 +4430,8 @@ carries.
 **Rows for chapter 10**. `09` section 7 should carry the three statuses on the consent
 and document endpoints.
 
+**Superseded by D-166.**
+
 ---
 
 ## 131. The administrative routes conceal nothing from the staff who work them
