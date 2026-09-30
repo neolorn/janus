@@ -667,13 +667,13 @@ against the public contract of LIB-API-001.
   that holds no member, belongs to no group and was never given a grant (409
   `authz.group.inuse` otherwise), and `POST|DELETE /admin/groups/{id}/members` adds or
   takes out an account or a group of the same organization (409 `authz.group.cycle`
-  where the group would contain itself, 422 `api.request.invalid` naming `subjectId`
-  for a member group that does not exist or belongs to another organization). All ask `group:manage` in the group's
-  organization and a reason, and are recorded in the audit trail; a change of members
-  also needs step-up, and `system:administer` where the group reaches a role carrying
-  it. `IGroups` is the same set of operations in process. A group the deployment holds
-  no row for belongs to no organization, so every caller is refused it with 403
-  `authz.denied`, as a caller without `group:manage` is.
+  where the group would contain itself, 422 `api.request.invalid` naming `subjectId` for
+  a member group that does not exist or belongs to another organization). All ask
+  `group:manage` in the group's organization and a reason, and are recorded in the audit
+  trail; a change of members also needs step-up, and `system:administer` where the group
+  reaches a role carrying it. `IGroups` is the same set of operations in process. A
+  group the deployment holds no row for belongs to no organization, so every caller is
+  refused it with 403 `authz.denied`, as a caller without `group:manage` is.
 - `GET /admin/roles` reads every role with its permissions, `POST /admin/roles` creates
   a role or gives an existing one the permissions stated, and
   `DELETE /admin/roles/{name}` removes one no grant, derivation or standing invitation
@@ -1442,12 +1442,15 @@ against the public contract of LIB-API-001.
   matched. An explanation can be asked with the host's own rows, and on a type a
   derivation reaches it names the grant the fact produced: no identifier, the derived
   kind, the role the derivation confers, and the container it was inherited from, the
-  nearest where several admit the record. The identifier an explained grant carries is optional for that reason: a derived grant is
-  a fact being true and no row holds it. A page of capabilities costs one query over the
-  host's own rows however many permissions it asks for: every derivation reaching the
-  type is evaluated in that one query, and what the role each confers allows is read
-  from the model, so a page that offers three actions costs what a page offering one
-  costs.
+  nearest where several admit the record. The identifier an explained grant carries is
+  optional for that reason: a derived grant is a fact being true and no row holds it. A
+  page of capabilities with the host's rows costs one query over those rows however many
+  permissions it asks for: the stored grants and every derivation reaching the type are
+  evaluated in that one query, a deny defeating a derived grant there, and what the role
+  each derivation confers allows is read from the model, so a page that offers three
+  actions costs what a page offering one costs. A single check with the host's rows is
+  one query over them as well, and neither reads a grant through the library's own
+  connection.
 - A refusal on one record answers as a record that does not exist unless the type says
   otherwise, and a type says so in one place for every record of it. A type that
   conceals has no self-service explanation, because saying that no grant matched says

@@ -3498,6 +3498,8 @@ sent,
 `GateBehaviourTests.AUTHZ_GATE_005_AC1_APageOfFiftyIsAnsweredWithoutAQueryPerRecordAsync`,
 `GateBehaviourTests.AUTHZ_GATE_005_AC2_ADerivedGrantReachesTheCapabilityPageAsync`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 111. An explanation takes the host's rows and names the grant a fact produced

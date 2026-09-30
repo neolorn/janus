@@ -139,45 +139,8 @@ internal sealed class PermissionRule
         ArgumentNullException.ThrowIfNull(sources);
 
         IQueryable<AncestryEntry> ancestry = sources.Ancestry;
-        IQueryable<EffectiveGrant> grants = sources.Grants;
-        string[] permissions = _permissions;
-        string type = Type.ToString();
-        Guid organization = _organization.Value;
-        Guid[] accounts = _subjects.Accounts;
-        Guid[] groups = _subjects.Groups;
-        DateTimeOffset at = _at;
-
-        Expression<Func<string, bool>> allowed = identifier =>
-            grants.Any(grant =>
-                !grant.Deny
-                && permissions.Contains(grant.Permission)
-                && grant.Organization == organization
-                && grant.RevokedAt == null
-                && (grant.ExpiresAt == null || grant.ExpiresAt > at)
-                && ((grant.SubjectType == "user" && accounts.Contains(grant.SubjectId))
-                    || (grant.SubjectType == "group" && groups.Contains(grant.SubjectId)))
-                && (grant.ResourceType == null
-                    || ancestry.Any(entry =>
-                        entry.ResourceType == type
-                        && entry.ResourceId == identifier
-                        && entry.AncestorType == grant.ResourceType
-                        && entry.AncestorId == grant.ResourceId)));
-
-        Expression<Func<string, bool>> denied = identifier =>
-            grants.Any(grant =>
-                grant.Deny
-                && permissions.Contains(grant.Permission)
-                && grant.Organization == organization
-                && grant.RevokedAt == null
-                && (grant.ExpiresAt == null || grant.ExpiresAt > at)
-                && ((grant.SubjectType == "user" && accounts.Contains(grant.SubjectId))
-                    || (grant.SubjectType == "group" && groups.Contains(grant.SubjectId)))
-                && (grant.ResourceType == null
-                    || ancestry.Any(entry =>
-                        entry.ResourceType == type
-                        && entry.ResourceId == identifier
-                        && entry.AncestorType == grant.ResourceType
-                        && entry.AncestorId == grant.ResourceId)));
+        Expression<Func<string, bool>> allowed = Stored(sources, _permissions, deny: false);
+        Expression<Func<string, bool>> denied = Stored(sources, _permissions, deny: true);
 
         ParameterExpression named = allowed.Parameters[0];
         Expression reaches = allowed.Body;
@@ -200,48 +163,150 @@ internal sealed class PermissionRule
     }
 
     /// <summary>
-    /// The records of a page that a derivation admits, as a query over the host's own
-    /// relations for the host's context to run.
+    /// The terms the rule decides a page from, for each record of the page: the stored
+    /// allow term and the stored deny term of each permission, and one term for each
+    /// derivation, as one query over the host's rows for the host's context to run.
     /// </summary>
     /// <typeparam name="TResource">The host's row.</typeparam>
     /// <param name="sources">The contract tables and the rows of each relationship.</param>
-    /// <param name="resources">The records being asked about.</param>
-    /// <returns>
-    /// The query, or nothing where the rule follows from no derivation and the stored
-    /// grants are the whole of the answer.
-    /// </returns>
+    /// <param name="resources">The records of the page.</param>
+    /// <returns>The query, or nothing where the page or the permissions are empty.</returns>
     /// <exception cref="ArgumentNullException">The sources or the records are absent.</exception>
     /// <remarks>
-    /// AUTHZ-PRIN-001, D-161: this is the one rule's derived clause read the other way
-    /// round, from the record to the relationship rather than from the row, so that a
-    /// check and a page decide what the filter decides.
+    /// AUTHZ-GATE-002 AC1, AUTHZ-GATE-005 AC1, AUTHZ-DERIVE-001 (D-166): each term is the
+    /// one <see cref="ToExpression{TResource}"/> composes, asked of the record rather
+    /// than of the host's row, so the page decides what the filter decides and reads no
+    /// grant through the library's own connection. A record the library holds no row
+    /// for has no row of its own in the ancestry and answers no term.
     /// </remarks>
-    public IQueryable<string>? ToAdmitted<TResource>(
+    public IQueryable<PageTerm>? ToPageTerms<TResource>(
         FilterSources<TResource> sources,
         IReadOnlyList<ResourceId> resources)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(resources);
 
-        if (_derivations.Count == 0 || resources.Count == 0)
+        if (resources.Count == 0 || _permissions.Length == 0)
         {
             return null;
         }
 
         string[] page = [.. resources.Select(resource => resource.ToString())];
-        IQueryable<AncestryEntry> ancestry = sources.Ancestry;
         string type = Type.ToString();
-        IQueryable<string>? admitted = null;
+        IQueryable<AncestryEntry> ancestry = sources.Ancestry;
+
+        // A registered record is its own ancestor at depth zero, so each record of the
+        // page the library holds is one row here.
+        IQueryable<AncestryEntry> held = ancestry.Where(entry =>
+            entry.ResourceType == type
+            && page.Contains(entry.ResourceId)
+            && entry.Depth == 0);
+
+        IQueryable<PageTerm>? terms = null;
+
+        foreach (string permission in _permissions)
+        {
+            terms = Joined(terms, Termed(held, Stored(sources, [permission], deny: false), PageTerm.Allowing, permission));
+            terms = Joined(terms, Termed(held, Stored(sources, [permission], deny: true), PageTerm.Denying, permission));
+        }
 
         foreach (RelationshipDeclaration relationship in _derivations)
         {
-            IQueryable<string> one = Admits(sources, ancestry, type, page, relationship)
-                .Select(entry => entry.ResourceId);
+            ParameterExpression named = Expression.Parameter(typeof(string), "identifier");
 
-            admitted = admitted is null ? one : admitted.Union(one);
+            terms = Joined(
+                terms,
+                Termed(
+                    held,
+                    Expression.Lambda<Func<string, bool>>(Derived(relationship, sources, ancestry, named), named),
+                    PageTerm.Deriving,
+                    relationship.Name));
         }
 
-        return admitted?.Distinct();
+        return terms;
+    }
+
+    /// <summary>
+    /// The rows that reach one record, as one query over the host's rows for the host's
+    /// context to run: each stored grant the rule matches on the record, and each
+    /// derivation that admits it, the deciding one first.
+    /// </summary>
+    /// <typeparam name="TResource">The host's row.</typeparam>
+    /// <param name="sources">The contract tables and the rows of each relationship.</param>
+    /// <param name="resource">The record.</param>
+    /// <returns>The query.</returns>
+    /// <exception cref="ArgumentNullException">The sources are absent.</exception>
+    /// <remarks>
+    /// AUTHZ-DERIVE-001, AUTHZ-GATE-004 (D-166): the stored rows are matched by the
+    /// predicate the filter's stored terms are built from and ordered as
+    /// <see cref="ToCandidates"/> orders them, so a single check with the host's rows
+    /// decides what the filter decides, names the grant that decided, and reads no grant
+    /// through the library's own connection.
+    /// </remarks>
+    public IQueryable<CandidateRow> ToCandidateRows<TResource>(
+        FilterSources<TResource> sources,
+        ResourceId resource)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+
+        string record = resource.ToString();
+        string type = Type.ToString();
+        IQueryable<AncestryEntry> ancestry = sources.Ancestry;
+        Expression<Func<EffectiveGrant, string, bool>> matching = Matching(ancestry, _permissions);
+        Expression<Func<string>> named = () => record;
+
+        var reaches = Expression.Lambda<Func<EffectiveGrant, bool>>(
+            new Substitution(matching.Parameters[1], named.Body).Visit(matching.Body),
+            matching.Parameters[0]);
+
+        IQueryable<CandidateRow> rows = sources.Grants
+            .Where(reaches)
+            .Select(grant => new CandidateRow
+            {
+                Grant = grant.GrantId,
+                Kind = grant.Kind,
+                SubjectType = grant.SubjectType,
+                SubjectId = grant.SubjectId,
+                Role = grant.Role,
+                Deny = grant.Deny,
+                AncestorType = grant.ResourceType,
+                AncestorId = grant.ResourceId,
+                Depth = ancestry
+                    .Where(entry =>
+                        entry.ResourceType == type
+                        && entry.ResourceId == record
+                        && entry.AncestorType == grant.ResourceType
+                        && entry.AncestorId == grant.ResourceId)
+                    .Select(entry => (int?)entry.Depth)
+                    .FirstOrDefault(),
+                Relationship = null,
+            });
+
+        foreach (RelationshipDeclaration relationship in _derivations)
+        {
+            string on = relationship.On.ToString();
+            string relation = relationship.Name;
+
+            rows = rows.Concat(Admits(sources, ancestry, type, [record], relationship)
+                .Select(entry => new CandidateRow
+                {
+                    Grant = null,
+                    Kind = null,
+                    SubjectType = null,
+                    SubjectId = null,
+                    Role = null,
+                    Deny = false,
+                    AncestorType = on,
+                    AncestorId = entry.AncestorId,
+                    Depth = entry.Depth,
+                    Relationship = relation,
+                }));
+        }
+
+        return rows
+            .OrderByDescending(row => row.Deny)
+            .ThenBy(row => row.Depth ?? int.MaxValue)
+            .ThenBy(row => row.Grant);
     }
 
     /// <summary>
@@ -391,6 +456,85 @@ internal sealed class PermissionRule
             GROUP BY {PageAlias}.{PageColumn}, {Prefix}grant.permission;
             """),
         Parameters());
+
+    // AUTHZ-GATE-002 AC1: the one predicate every rendering over the host's rows is
+    // built from: a live grant for one of the permissions, held by one of the
+    // principal's subjects, in this organization, on the record named or on something
+    // above it.
+    private Expression<Func<EffectiveGrant, string, bool>> Matching(
+        IQueryable<AncestryEntry> ancestry,
+        string[] permissions)
+    {
+        string type = Type.ToString();
+        Guid organization = _organization.Value;
+        Guid[] accounts = _subjects.Accounts;
+        Guid[] groups = _subjects.Groups;
+        DateTimeOffset at = _at;
+
+        return (grant, identifier) =>
+            permissions.Contains(grant.Permission)
+            && grant.Organization == organization
+            && grant.RevokedAt == null
+            && (grant.ExpiresAt == null || grant.ExpiresAt > at)
+            && ((grant.SubjectType == "user" && accounts.Contains(grant.SubjectId))
+                || (grant.SubjectType == "group" && groups.Contains(grant.SubjectId)))
+            && (grant.ResourceType == null
+                || ancestry.Any(entry =>
+                    entry.ResourceType == type
+                    && entry.ResourceId == identifier
+                    && entry.AncestorType == grant.ResourceType
+                    && entry.AncestorId == grant.ResourceId));
+    }
+
+    // The stored allow term or the stored deny term, asked of one record by its
+    // identifier: whether a grant of that kind matches it.
+    private Expression<Func<string, bool>> Stored<TResource>(
+        FilterSources<TResource> sources,
+        string[] permissions,
+        bool deny)
+    {
+        Expression<Func<EffectiveGrant, string, bool>> matching = Matching(sources.Ancestry, permissions);
+        ParameterExpression grant = matching.Parameters[0];
+        ParameterExpression identifier = matching.Parameters[1];
+        Expression denies = Expression.Property(grant, nameof(EffectiveGrant.Deny));
+
+        var matched = Expression.Lambda<Func<EffectiveGrant, bool>>(
+            Expression.AndAlso(deny ? denies : Expression.Not(denies), matching.Body),
+            grant);
+
+        return Expression.Lambda<Func<string, bool>>(
+            Expression.Call(
+                typeof(Queryable),
+                nameof(Queryable.Any),
+                [typeof(EffectiveGrant)],
+                sources.Grants.Expression,
+                Expression.Quote(matched)),
+            identifier);
+    }
+
+    // One term asked of each record of the page, as one row per record.
+    private static IQueryable<PageTerm> Termed(
+        IQueryable<AncestryEntry> held,
+        Expression<Func<string, bool>> term,
+        string kind,
+        string name)
+    {
+        Expression<Func<AncestryEntry, bool, PageTerm>> row =
+            (entry, holds) => new PageTerm { Resource = entry.ResourceId, Kind = kind, Name = name, Holds = holds };
+        ParameterExpression entry = row.Parameters[0];
+
+        Expression holds = new Substitution(
+                term.Parameters[0],
+                Expression.Property(entry, nameof(AncestryEntry.ResourceId)))
+            .Visit(term.Body);
+
+        return held.Select(Expression.Lambda<Func<AncestryEntry, PageTerm>>(
+            new Substitution(row.Parameters[1], holds).Visit(row.Body),
+            entry));
+    }
+
+    private static IQueryable<PageTerm> Joined(IQueryable<PageTerm>? terms, IQueryable<PageTerm> term) =>
+        terms is null ? term : terms.Concat(term);
 
     // AUTHZ-DERIVE-001 (D-160): the rows are the host's, and what the predicate over
     // one of them asks is that its holder is one of the principal's subjects and that

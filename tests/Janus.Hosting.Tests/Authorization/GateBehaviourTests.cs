@@ -334,10 +334,11 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
-    /// AUTHZ-GATE-005 AC1 (D-162): a page asked for three permissions costs one
-    /// statement over the host's rows, not one for each of them. What the derivation's
-    /// role confers is model data, mapped where the model is, so the answer names the
-    /// one permission the reviewer's role allows and the cost does not follow the
+    /// AUTHZ-GATE-005 AC1 (D-162, D-166): a page asked for three permissions costs one
+    /// statement over the host's rows, not one for each of them, and the library's own
+    /// connection reads no grant and no ancestry beside it. What the derivation's role
+    /// confers is model data, mapped where the model is, so the answer names the one
+    /// permission the reviewer's role allows and the cost does not follow the
     /// permissions asked for.
     /// </summary>
     /// <returns>The work of running it.</returns>
@@ -354,6 +355,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
 
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
         await using HostContext reading = host.Context(counted);
+        using var traced = new TracedStatements();
 
         IReadOnlyList<Capability> page = Rendered(
             await scope.ServiceProvider.GetRequiredService<IAccessGate>()
@@ -367,6 +369,111 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
 
         Assert.Equal([HostPermissions.Read], Assert.Single(page).Can);
         Assert.Equal(1, counted.Statements);
+        Assert.Equal(1, GrantReads(traced));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-005 AC1, AUTHZ-DERIVE-002 AC1 (D-166): on a page of fifty records a
+    /// derivation admits, a stored deny on one of them is decided in the same one
+    /// statement over the host's rows: the permission is absent from that record and
+    /// present on the others, as the single check with the host's rows answers each.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_005_AC1_AStoredDenyAndADerivationAreDecidedInOneStatementAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        await nested.Deployment.NamedRoleAsync(Reviewer, [HostPermissions.Read], cancellationToken);
+        await nested.Deployment.ReviewAsync(nested.Bottom, nested.Account, cancellationToken);
+
+        List<ResourceId> page = [];
+
+        for (int record = 0; record < 50; record++)
+        {
+            ResourceReference reference = Reference(Document);
+            await nested.Deployment.RegisterAsync(reference, nested.Bottom, cancellationToken);
+            page.Add(reference.Id);
+        }
+
+        ResourceId denied = page[17];
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            new ResourceReference(Document, denied),
+            true,
+            null,
+            null,
+            cancellationToken);
+
+        var counted = new CountedCommands();
+        IReadOnlyList<Capability> capabilities;
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        await using (HostContext reading = host.Context(counted))
+        {
+            capabilities = Rendered(
+                await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                    .CapabilitiesAsync(
+                        AccessContext.Of(nested.Account),
+                        Document,
+                        page,
+                        [HostPermissions.Read],
+                        Sources(reading),
+                        cancellationToken));
+        }
+
+        Assert.Equal(1, counted.Statements);
+        Assert.Equal(page, capabilities.Select(capability => capability.Resource));
+
+        foreach (Capability capability in capabilities)
+        {
+            bool held = capability.Can.Contains(HostPermissions.Read);
+
+            Assert.Equal(capability.Resource != denied, held);
+            Assert.Equal(held, await ChecksAsync(nested.Account, new ResourceReference(Document, capability.Resource)));
+        }
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-001 (D-166): a single check with the host's rows is decided by one
+    /// statement in the host's context, stored grants and derivation together, and the
+    /// library's own connection reads no grant and no ancestry.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_001_ACheckWithTheHostsRowsReadsNoGrantThroughTheLibraryAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+
+        await nested.Deployment.NamedRoleAsync(Reviewer, [HostPermissions.Read], cancellationToken);
+        await nested.Deployment.ReviewAsync(nested.Bottom, nested.Account, cancellationToken);
+
+        var counted = new CountedCommands();
+        Result outcome;
+        int grantReads;
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        await using (HostContext reading = host.Context(counted))
+        {
+            using var traced = new TracedStatements();
+
+            outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .RequireAsync(
+                    AccessContext.Of(nested.Account),
+                    HostPermissions.Read,
+                    nested.Record,
+                    Sources(reading),
+                    cancellationToken);
+            grantReads = GrantReads(traced);
+        }
+
+        Assert.True(outcome.Match(() => true, _ => false));
+        Assert.Equal(1, counted.Statements);
+        Assert.Equal(1, grantReads);
     }
 
     /// <summary>
@@ -1702,6 +1809,13 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             """,
             new { key = Alerts.Key(AlertCondition.DenialSpike, scope: null, account?.ToString()) + "@%" });
     }
+
+    // The statements of every connection that read the grants or the ancestry, which
+    // with the host's rows are the host's own and none of the library's.
+    private static int GrantReads(TracedStatements traced) =>
+        traced.Texts.Count(text =>
+            text.Contains("effective_grants", StringComparison.Ordinal)
+            || text.Contains("ancestry", StringComparison.Ordinal));
 
     // An organization-wide check, as an administrative operation makes it.
     private async Task<bool> HeldAsync(SubjectId account, OrganizationId organization)
