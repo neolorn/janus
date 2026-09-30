@@ -608,6 +608,20 @@ against the public contract of LIB-API-001.
   credential stops the start with `model.startup.secretunavailable` naming
   `keyEncryptionKeys`, `fingerprintKeys` or `maintenanceCredential`. A `Janus.Cli`
   command reads its key document into a key ring of its own and clears it when it ends.
+- The signing keys rotate with no timer and no job: the first read of the keys, a token
+  signed, a request for the key set or a validation, that finds a change due makes it.
+  The next key is made and published at `token.signing.rotation` less five minutes and
+  signs once the cadence has passed and it has been published five minutes; the first
+  key of an empty database is made at the start, before the provider is built. A
+  replaced key stays published for the longest `oidc.accesstoken.lifetime` it signed
+  under plus five minutes, stored at its replacement; the first read after that retires
+  it, disposing its private key and removing it from the database, and its public key is
+  kept, unpublished, for 365 days so the refresh tokens it signed are still accepted. An
+  access token validates only under a published key. Each change commits in a
+  transaction of its own, and of two instances finding one due, one makes it.
+  `token.signing.algorithm` admits `ES256` alone; `configure` refuses any other value
+  with `config.value.notallowed`. The migration takes existing keys as having signed
+  from when they were made, under the ceiling of `oidc.accesstoken.lifetime`.
 - Where Continue with Apple is among the system policy's `loginFactors` and
   `notification.email.sendingdomain` is not in `notification.email.relayregistered`, the
   deployment raises `relay-domain-unregistered` with the domain as it starts and
@@ -1022,8 +1036,8 @@ against the public contract of LIB-API-001.
   current version, or with any version shorter than 32 bytes, as it refuses an absent
   one.
 - What has expired is removable without anyone's attention: a session past its absolute
-  expiry, an authorization code past its lifetime, a refresh token past the expiry its
-  session gave it and a signing key past its overlap each go in one call.
+  expiry, an authorization code past its lifetime and a refresh token past the expiry
+  its session gave it each go in one call.
 - The deployment is an OpenID Connect provider for the clients it registers itself: it
   advertises what it answers, publishes the keys a relying party validates against,
   hands a browser that already holds a session a code without asking anyone anything,

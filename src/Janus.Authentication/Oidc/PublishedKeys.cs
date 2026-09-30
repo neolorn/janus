@@ -3,15 +3,15 @@ using System.Security.Cryptography;
 using Janus.Core;
 using Microsoft.IdentityModel.Tokens;
 
-namespace Janus.Hosting.Oidc;
+namespace Janus.Authentication.Oidc;
 
 /// <summary>
-/// One published key as a validator reads it.
+/// One public signing key as a validator reads it.
 /// </summary>
 /// <remarks>
 /// Implements AUTH-KEY-001 and AUTH-KEY-002. The set the deployment publishes and the
-/// set a token is validated against are the same keys, so they are built here once and
-/// carry no private material either way.
+/// set a token is validated against are made from the same public keys, here, and carry
+/// no private material either way.
 /// </remarks>
 internal static class PublishedKeys
 {
@@ -20,13 +20,33 @@ internal static class PublishedKeys
     /// </summary>
     /// <param name="key">What the deployment published.</param>
     /// <returns>The key, public part only.</returns>
+    /// <exception cref="ArgumentNullException">The key is absent.</exception>
     public static JsonWebKey Of(PublishedSigningKey key)
     {
         ArgumentNullException.ThrowIfNull(key);
 
+        return Of(key.KeyId, key.Algorithm, key.PublicKey.Span);
+    }
+
+    /// <summary>
+    /// Reads one stored key's public key into the shape the validator takes, held apart
+    /// from any private key object made for the same key.
+    /// </summary>
+    /// <param name="key">The stored key.</param>
+    /// <returns>The key, public part only.</returns>
+    /// <exception cref="ArgumentNullException">The key is absent.</exception>
+    public static JsonWebKey Of(SigningKey key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+
+        return Of(key.KeyId, key.Algorithm, key.PublicKey);
+    }
+
+    private static JsonWebKey Of(string keyId, string algorithm, ReadOnlySpan<byte> publicKey)
+    {
         using var ecdsa = ECDsa.Create();
 
-        ecdsa.ImportSubjectPublicKeyInfo(key.PublicKey.Span, out _);
+        ecdsa.ImportSubjectPublicKeyInfo(publicKey, out _);
 
         ECParameters parameters = ecdsa.ExportParameters(includePrivateParameters: false);
 
@@ -36,12 +56,12 @@ internal static class PublishedKeys
         return new JsonWebKey
         {
             Kty = JsonWebAlgorithmsKeyTypes.EllipticCurve,
-            Crv = Curve(key.Algorithm),
+            Crv = Curve(algorithm),
             X = Base64UrlEncoder.Encode(parameters.Q.X),
             Y = Base64UrlEncoder.Encode(parameters.Q.Y),
-            KeyId = key.KeyId,
+            KeyId = keyId,
             Use = JsonWebKeyUseNames.Sig,
-            Alg = key.Algorithm,
+            Alg = algorithm,
         };
     }
 

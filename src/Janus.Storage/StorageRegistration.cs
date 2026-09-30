@@ -258,6 +258,7 @@ internal static class StorageRegistration
         services.AddScoped<IOpenIddictTokenStore<OidcTokenRecord>, OidcTokenStore>();
         services.AddScoped<ISigningKeyStore>(provider => new SigningKeyStore(
             provider.GetRequiredService<StoreContext>(),
+            provider.GetRequiredService<DataConnections>(),
             provider.GetRequiredService<DeploymentDataKeyStore>()));
         services.AddScoped<IOidcAudit, OidcAudit>();
         services.AddScoped<IRecoveryAudit, RecoveryAudit>();

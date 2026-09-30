@@ -30,8 +30,8 @@ public interface IOidc
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// The keys a relying party validates against: the one signing now and, through
-    /// the overlap, the one before it.
+    /// The keys a relying party validates against: the next key, the one signing now
+    /// and each one it replaced, through its overlap.
     /// </summary>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>

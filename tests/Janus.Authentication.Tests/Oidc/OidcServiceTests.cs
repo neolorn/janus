@@ -45,9 +45,19 @@ public sealed class OidcServiceTests : IAsyncDisposable
     private readonly ConfigurationInMemory _configuration = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
+    private readonly SigningProcess _signing;
+
+    /// <summary>
+    /// Starts the credential source the service reads the key set from.
+    /// </summary>
+    public OidcServiceTests() => _signing = new SigningProcess(_keys, _configuration, _clock);
 
     /// <inheritdoc/>
-    public async ValueTask DisposeAsync() => await _work.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        await _signing.DisposeAsync();
+        await _work.DisposeAsync();
+    }
 
     /// <summary>
     /// AUTH-SESS-012 AC2, BFF-SESS-006 AC1: a record that answers mints for the
@@ -221,10 +231,8 @@ public sealed class OidcServiceTests : IAsyncDisposable
         where TValue : class =>
         result.Match<TValue?>(value => value, _ => null);
 
-    private SigningKeys Keys => new(_keys, _configuration, _work, _clock);
-
     private OidcService Service => new(
-        Keys,
+        _signing.Source,
         _sessions,
         _identifiers,
         _accounts,

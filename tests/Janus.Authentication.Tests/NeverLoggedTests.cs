@@ -42,7 +42,8 @@ public sealed class NeverLoggedTests
             typeof(VerificationCode),
             typeof(RecoveryCodeEntry),
             typeof(PreparedRecoveryCodes),
-            typeof(SigningMaterial),
+            typeof(HeldSigningKey),
+            typeof(SigningKeySet),
         ]));
 
     /// <summary>

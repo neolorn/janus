@@ -190,12 +190,11 @@ public sealed class OidcStoreTests(DatabaseFixture database)
         using var created = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
         byte[] privateKey = created.ExportPkcs8PrivateKey();
-        var key = SigningKey.Create("the-key", "ES256", created.ExportSubjectPublicKeyInfo(), Noon);
+        var key = SigningKey.First("the-key", "ES256", created.ExportSubjectPublicKeyInfo(), Noon);
 
         await using (StoreContext writing = database.Context())
         {
-            await Keys(writing).AddAsync(key, privateKey, TestContext.Current.CancellationToken);
-            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+            Assert.True(await Keys(writing).AddAsync(key, privateKey, TestContext.Current.CancellationToken));
         }
 
         await using NpgsqlConnection connection = await database.OpenAsync();
@@ -403,7 +402,8 @@ public sealed class OidcStoreTests(DatabaseFixture database)
     private static async Task<OidcTokenRecord?> FoundAsync(OidcTokenStore tokens, Guid id) =>
         await tokens.FindByIdAsync(id.ToString(), TestContext.Current.CancellationToken);
 
-    private SigningKeyStore Keys(StoreContext context) => new(context, _deployment.DataKey(context));
+    private SigningKeyStore Keys(StoreContext context) =>
+        new(context, new DataConnections(context), _deployment.DataKey(context));
 
     private async Task<Guid> GrantedAsync(SubjectId subject)
     {

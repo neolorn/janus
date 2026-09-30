@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
@@ -15,7 +16,7 @@ namespace Janus.Authentication.Oidc;
 /// from, the end of everything derived from a record whose token came back twice, the
 /// claims a token covers, and the keys it is validated against.
 /// </summary>
-/// <param name="keys">What signs tokens and publishes the set they validate against.</param>
+/// <param name="source">The signing keys the set a token validates against is read from.</param>
 /// <param name="sessions">Where the session record a token stands on is read and ended.</param>
 /// <param name="identifiers">Where the primary address and the language are read.</param>
 /// <param name="accounts">Where the display name is read.</param>
@@ -30,7 +31,7 @@ namespace Janus.Authentication.Oidc;
 /// never outlives it, and ending the record ends both.
 /// </remarks>
 internal sealed class OidcService(
-    SigningKeys keys,
+    SigningCredentialSource source,
     ISessionStore sessions,
     IIdentifierDirectory identifiers,
     IAccountDirectory accounts,
@@ -164,9 +165,28 @@ internal sealed class OidcService(
     }
 
     /// <inheritdoc/>
-    public ValueTask<Result<IReadOnlyList<PublishedSigningKey>>> KeysAsync(
-        CancellationToken cancellationToken) =>
-        keys.PublishedAsync(cancellationToken);
+    public async ValueTask<Result<IReadOnlyList<PublishedSigningKey>>> KeysAsync(
+        CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        // AUTH-KEY-001: a request for the key set is a read of the signing keys, so a
+        // change its times make due is made before the set is answered.
+        SigningKeySet set = (await source.ReadAsync(configuration, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, error => Withheld<SigningKeySet>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<IReadOnlyList<PublishedSigningKey>>(failure);
+        }
+
+        return Result.Success<IReadOnlyList<PublishedSigningKey>>(
+            [.. set.Published(time.GetUtcNow()).Select(held => new PublishedSigningKey(
+                held.Key.KeyId,
+                held.Key.Algorithm,
+                held.Key.PublicKey,
+                held.Key.OverlapEndsAt))]);
+    }
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)
     {

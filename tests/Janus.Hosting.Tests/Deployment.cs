@@ -207,20 +207,16 @@ internal sealed class Deployment : IAsyncDisposable
         _ring.StartingAsync(CancellationToken.None).GetAwaiter().GetResult();
         _ring.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
 
-        // AUTH-KEY-001: the server is put together with the key the store holds at
-        // startup, which is what the hosted service of the same name does in a
-        // deployment that a web server starts.
-        using (IServiceScope scope = _application.Services.CreateScope())
-        {
-            _ = _application.Services
-                .GetRequiredService<SigningCredentialSource>()
-                .CurrentAsync(
-                    scope.ServiceProvider.GetRequiredService<SigningKeys>(),
-                    CancellationToken.None)
-                .AsTask()
-                .GetAwaiter()
-                .GetResult();
-        }
+        // AUTH-KEY-001 AC7: the signing keys are read once the ring is filled, and the
+        // provider's options built after, which is what the provider's hosted service
+        // does in a deployment that a web server starts.
+        _application.Services
+            .GetServices<IHostedService>()
+            .OfType<ProviderStartService>()
+            .Single()
+            .StartAsync(CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
     }
 
     /// <summary>
@@ -831,6 +827,9 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<JmapMailServer>();
         _ = services.AddHttpClient(JmapMailServer.Channel);
         services.Add(KeyRingRegistration.HostedService());
+
+        // AUTH-KEY-001 AC7: the provider's start, after the ring's.
+        _ = services.AddSingleton<IHostedService, ProviderStartService>();
 
         // IDN-LIFE-012a: what the host declared of each provider, whose documents are
         // read from the fake that signs its events.

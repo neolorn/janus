@@ -606,7 +606,11 @@ public static class HostingRegistration
         services.Insert(6, ServiceDescriptor.Singleton<IHostedService, ConfigurationValidationService>());
         services.Insert(7, ServiceDescriptor.Singleton<IHostedService, DeclarationValidationService>());
         services.Insert(8, ServiceDescriptor.Singleton<IHostedService, RedirectValidationService>());
-        services.Insert(9, ServiceDescriptor.Singleton<IHostedService, SigningKeyValidationService>());
+
+        // AUTH-KEY-001, CONV-DESIGN-007, D-181: the provider's start reads the signing
+        // keys once the ring is filled, making one current where none is held, and then
+        // builds the provider's options.
+        services.Insert(9, ServiceDescriptor.Singleton<IHostedService, ProviderStartService>());
         services.Insert(10, ServiceDescriptor.Singleton<IHostedService, RelayValidationService>());
         services.AddKeyRing();
 

@@ -848,10 +848,15 @@ public sealed class ModelTests
             // AUTH-KEY-002).
             "signing_keys.algorithm",
             "signing_keys.created_at",
+            "signing_keys.is_current",
+            "signing_keys.is_next",
+            "signing_keys.kept_until",
             "signing_keys.key_id",
+            "signing_keys.longest_lifetime",
             "signing_keys.private_key",
             "signing_keys.public_key",
             "signing_keys.retires_at",
+            "signing_keys.signing_from",
             "signing_keys.superseded_at",
 
             // Not an account field: what the gateway last said its prepaid account stood

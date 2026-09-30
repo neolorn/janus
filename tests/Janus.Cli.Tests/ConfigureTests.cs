@@ -165,6 +165,26 @@ public sealed class ConfigureTests(BootstrappedDeployment deployment) : IClassFi
     }
 
     /// <summary>
+    /// AUTH-KEY-001 AC4: <c>token.signing.algorithm</c> admits ES256 alone, so
+    /// <c>configure</c> refuses another signing algorithm with
+    /// <c>config.value.notallowed</c> and writes nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_KEY_001_AC4_ConfigureRefusesASigningAlgorithmOtherThanES256Async()
+    {
+        string key = Settings.TokenSigningAlgorithm.Key.ToString();
+
+        Invocation run = await ConfiguredAsync("--" + key, "ES384", "--reason", Reason);
+
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        Assert.Equal(1, run.ExitCode);
+        Assert.Equal("config.value.notallowed", Refusal(run));
+        Assert.Null(await ValueAsync(connection, key));
+    }
+
+    /// <summary>
     /// OPS-CFG-004 and LIB-HOST-001: a change that would leave the deployment unable to
     /// start is refused by the rule the host's start applies, and nothing of it stays.
     /// </summary>

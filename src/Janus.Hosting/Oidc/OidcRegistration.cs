@@ -1,4 +1,5 @@
 using System;
+using Janus.Authentication.Oidc;
 using Janus.Core;
 using Janus.Storage.Authentication.Oidc;
 using Microsoft.Extensions.DependencyInjection;
@@ -57,7 +58,11 @@ internal static class OidcRegistration
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddSingleton<SigningCredentialSource>();
+        // AUTH-KEY-001, CONV-DESIGN-007: the signing keys are one set for the life of
+        // the process, which writes each change in a scope of its own.
+        services.AddSingleton(provider => new SigningCredentialSource(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            provider.GetRequiredService<TimeProvider>()));
 
         _ = services.AddOpenIddict()
             .AddCore(options =>
@@ -135,10 +140,26 @@ internal static class OidcRegistration
                     handler => handler.UseScopedHandler<TokenIssue>());
                 _ = options.AddEventHandler<OpenIddictServerEvents.HandleUserInfoRequestContext>(
                     handler => handler.UseScopedHandler<ClaimsAnswer>());
-                _ = options.AddEventHandler<OpenIddictServerEvents.HandleJsonWebKeySetRequestContext>(
-                    handler => handler.UseScopedHandler<KeySetAnswer>());
+                // AUTH-KEY-001, CONV-CODE-007, D-181: the server's own steps that take a
+                // signing credential or a signing key from its options are removed, and
+                // steps that read the credential source stand in their places, so the key
+                // the options hold from the start signs, is published and validates only
+                // while the set says so.
+                _ = options.RemoveEventHandler(OpenIddictServerHandlers.Protection.AttachSecurityCredentials.Descriptor);
+                _ = options.RemoveEventHandler(OpenIddictServerHandlers.Discovery.AttachSigningKeys.Descriptor);
+                _ = options.RemoveEventHandler(OpenIddictServerHandlers.Discovery.AttachSigningAlgorithms.Descriptor);
+                _ = options.RemoveEventHandler(OpenIddictServerHandlers.AttachTokenDigests.Descriptor);
                 _ = options.AddEventHandler<OpenIddictServerEvents.GenerateTokenContext>(
                     handler => handler.UseScopedHandler<TokenSigning>().SetOrder(TokenSigning.Order));
+                _ = options.AddEventHandler<OpenIddictServerEvents.HandleJsonWebKeySetRequestContext>(
+                    handler => handler.UseScopedHandler<KeySetAnswer>().SetOrder(KeySetAnswer.Order));
+                _ = options.AddEventHandler<OpenIddictServerEvents.HandleConfigurationRequestContext>(
+                    handler => handler.UseScopedHandler<SigningAlgorithms>().SetOrder(SigningAlgorithms.Order));
+                _ = options.AddEventHandler<OpenIddictServerEvents.ProcessSignInContext>(
+                    handler => handler
+                        .AddFilter<OpenIddictServerHandlerFilters.RequireIdentityTokenGenerated>()
+                        .UseScopedHandler<TokenDigests>()
+                        .SetOrder(TokenDigests.Order));
                 _ = options.AddEventHandler<OpenIddictServerEvents.ValidateTokenContext>(
                     handler => handler
                         .UseScopedHandler<TokenValidationKeys>()
@@ -149,19 +170,21 @@ internal static class OidcRegistration
                 _ = options.UseAspNetCore();
             });
 
-        // AUTH-KEY-001: the server is put together with the key the store held at
-        // startup, and every token afterwards is signed with the key the store holds
-        // when the request arrives, so a rotation needs no restart.
+        // AUTH-KEY-001, CONV-CODE-007, CONV-DESIGN-007: the server requires one
+        // asymmetric signing credential to start, and holds the current key's as the
+        // start read it, the same object the source holds. The options are built once,
+        // by the start, after that read, and are never rebuilt; no step of the server
+        // reads the credential from them.
         _ = services.AddOptions<OpenIddictServerOptions>()
             .Configure<SigningCredentialSource>(
-                (options, source) => options.SigningCredentials.Add(source.Current));
+                (options, source) => options.SigningCredentials.Add(source.Started));
 
         // AUTH-KEY-002, CONV-CODE-007: the codes and the refresh tokens are encrypted
         // under a key derived from the deployment's own key-encryption key, so every
         // instance reads what any other wrote and a restart loses nothing. The server's
-        // options are read at its first request, after the start has filled the ring,
-        // and the credential is made then, with the key wrapping the content key as the
-        // server does for a symmetric key.
+        // options are built by the start, after it has filled the ring, and the
+        // credential is made then, with the key wrapping the content key as the server
+        // does for a symmetric key.
         _ = services.AddOptions<OpenIddictServerOptions>()
             .Configure<IKeyRing>((options, ring) =>
             {

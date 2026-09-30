@@ -1063,13 +1063,21 @@ table signing_keys
   column key_id text not null
   column algorithm text not null
   column public_key bytea not null
-  column private_key bytea not null
+  column private_key bytea
   column created_at timestamp with time zone not null
   column superseded_at timestamp with time zone
   column retires_at timestamp with time zone
-  constraint ck_signing_keys_retirement CHECK ((((superseded_at IS NULL) AND (retires_at IS NULL)) OR ((superseded_at IS NOT NULL) AND (retires_at > superseded_at))))
+  column kept_until timestamp with time zone
+  column longest_lifetime interval not null default '00:00:00'::interval
+  column signing_from timestamp with time zone
+  column is_current boolean not null generated always as (((signing_from IS NOT NULL) AND (superseded_at IS NULL))) stored
+  column is_next boolean not null generated always as ((signing_from IS NULL)) stored
+  constraint ck_signing_keys_private_key CHECK (((private_key IS NOT NULL) OR (retires_at IS NOT NULL)))
+  constraint ck_signing_keys_stage CHECK ((((signing_from IS NULL) AND (longest_lifetime = '00:00:00'::interval) AND (superseded_at IS NULL) AND (retires_at IS NULL) AND (kept_until IS NULL)) OR ((signing_from >= created_at) AND (superseded_at IS NULL) AND (retires_at IS NULL) AND (kept_until IS NULL)) OR ((signing_from >= created_at) AND (superseded_at >= signing_from) AND (retires_at > superseded_at) AND (kept_until >= retires_at))))
   constraint pk_signing_keys PRIMARY KEY (key_id)
   index ix_signing_keys_retires_at using btree (retires_at)
+  index ux_signing_keys_current unique using btree (is_current) WHERE is_current
+  index ux_signing_keys_next unique using btree (is_next) WHERE is_next
 table sms_balance_readings
   column read_at timestamp with time zone not null
   column balance numeric(18,4) not null

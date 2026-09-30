@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,19 +10,20 @@ using Janus.Core.Configuration;
 namespace Janus.Authentication.Oidc;
 
 /// <summary>
-/// The keys tokens are signed with and validated against, and the rotation that keeps
-/// them fresh.
+/// The stored signing keys and the changes their times make due: the next key made,
+/// the next key made current, a replaced key retired, a kept key removed.
 /// </summary>
 /// <param name="keys">Where the keys are held.</param>
-/// <param name="configuration">Where the algorithm, the cadence and the lifetime come from.</param>
-/// <param name="work">The one transaction a rotation runs in.</param>
+/// <param name="configuration">Where the algorithm and the cadence come from.</param>
+/// <param name="work">The one transaction a change runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements AUTH-KEY-001 and AUTH-KEY-002. Rotation needs no human step and no
-/// restart: the first caller to reach a key that is older than the cadence rotates it,
-/// the previous key stays published for the access-token lifetime plus five minutes so
-/// that every token it signed validates until the last of them expires, and it leaves
-/// the set afterwards.
+/// Implements AUTH-KEY-001 and AUTH-KEY-002. No timer and no job runs a change: the
+/// credential source asks for one at the first read that finds it due, in a scope of its
+/// own, so the transaction here is never joined to a unit of work its caller holds open.
+/// The change reads the stored keys and writes only where they still stand as read, so
+/// of two processes finding the same change due one makes it and the other writes
+/// nothing (D-166 X3).
 /// </remarks>
 internal sealed class SigningKeys(
     ISigningKeyStore keys,
@@ -29,80 +31,32 @@ internal sealed class SigningKeys(
     IUnitOfWork work,
     TimeProvider time)
 {
-    // AUTH-KEY-001: the margin over the access-token lifetime, for clock skew and for
-    // a relying party's cached copy of the key set.
-    private static readonly TimeSpan Margin = TimeSpan.FromMinutes(5);
+    // AUTH-KEY-001 AC6: a retired key's public key is kept for the longest a session can
+    // last, the ceiling of session.default.absolute, counted from its replacement.
+    private static readonly TimeSpan Keeping =
+        Settings.SessionDefaultAbsolute.Ceiling ?? Settings.SessionDefaultAbsolute.Default;
 
     /// <summary>
-    /// The key signing now, with the material to sign with, rotating first where the
-    /// key in use has reached the cadence.
+    /// Whether a change is due to a set of keys: a first key where none signs, the next
+    /// key where the current one nears the cadence, the next key made current, a
+    /// replaced key retired, or a kept key removed.
     /// </summary>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The material, or the refusal where a setting could not be read.</returns>
-    public async ValueTask<Result<SigningMaterial>> SigningAsync(CancellationToken cancellationToken)
+    /// <param name="held">The keys as the set carries them.</param>
+    /// <param name="now">Now.</param>
+    /// <param name="cadence">How often a key is replaced.</param>
+    /// <returns>Whether the stored keys are to be changed.</returns>
+    /// <exception cref="ArgumentNullException">The keys are absent.</exception>
+    public static bool IsChangeDue(IReadOnlyList<SigningKey> held, DateTimeOffset now, TimeSpan cadence)
     {
-        Error? failure = null;
+        ArgumentNullException.ThrowIfNull(held);
 
-        SigningKey signing = (await CurrentAsync(cancellationToken).ConfigureAwait(false))
-            .Match(key => key, error => Withheld<SigningKey>(error, ref failure));
+        SigningKey? current = held.SingleOrDefault(key => key.IsCurrent);
+        SigningKey? next = held.SingleOrDefault(key => key.IsNext);
 
-        if (failure is not null)
-        {
-            return Result.Failure<SigningMaterial>(failure);
-        }
-
-        return await keys.PrivateKeyAsync(signing.KeyId, cancellationToken).ConfigureAwait(false)
-            is byte[] material
-            ? Result.Success(new SigningMaterial(signing.KeyId, signing.Algorithm, material))
-            : Result.Failure<SigningMaterial>(Error.From(ErrorCodes.SystemFault));
-    }
-
-    /// <summary>
-    /// The keys a relying party validates against: the one signing now and, through
-    /// the overlap, the one before it.
-    /// </summary>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The published set, or the refusal where a setting could not be read.</returns>
-    public async ValueTask<Result<IReadOnlyList<PublishedSigningKey>>> PublishedAsync(
-        CancellationToken cancellationToken)
-    {
-        Error? failure = null;
-
-        _ = (await CurrentAsync(cancellationToken).ConfigureAwait(false))
-            .Match(key => key, error => Withheld<SigningKey>(error, ref failure));
-
-        if (failure is not null)
-        {
-            return Result.Failure<IReadOnlyList<PublishedSigningKey>>(failure);
-        }
-
-        IReadOnlyList<SigningKey> published = await keys
-            .PublishedAsync(time.GetUtcNow(), cancellationToken)
-            .ConfigureAwait(false);
-
-        var set = new List<PublishedSigningKey>(published.Count);
-
-        foreach (SigningKey key in published)
-        {
-            set.Add(new PublishedSigningKey(key.KeyId, key.Algorithm, key.PublicKey, key.RetiresAt));
-        }
-
-        return Result.Success<IReadOnlyList<PublishedSigningKey>>(set);
-    }
-
-    /// <summary>
-    /// Removes the keys that have left the published set (AUTH-KEY-003).
-    /// </summary>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>How many went.</returns>
-    public ValueTask<int> SweepAsync(CancellationToken cancellationToken) =>
-        keys.SweepAsync(time.GetUtcNow(), cancellationToken);
-
-    private static TValue Withheld<TValue>(Error error, ref Error? failure)
-    {
-        failure = error;
-
-        return default!;
+        return current is null
+            || (next is null && current.IsNextDue(now, cadence))
+            || (next is not null && next.TakesOver(current, now, cadence))
+            || held.Any(key => key.IsRetirementDue(now) || key.IsRemovalDue(now));
     }
 
     /// <summary>
@@ -112,65 +66,155 @@ internal sealed class SigningKeys(
     /// <param name="algorithm">The algorithm <c>token.signing.algorithm</c> holds.</param>
     /// <returns>Whether a key can be made for it.</returns>
     /// <remarks>
-    /// Implements AUTH-KEY-001, for the key made at rotation and for a change of the
-    /// key from the server (D-166, 319).
+    /// Implements AUTH-KEY-001, for a key made at a change and for a change of the key
+    /// from the server (D-166, 319; D-181).
     /// </remarks>
     internal static bool Signs(string algorithm) =>
         string.Equals(algorithm, "ES256", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Every key the database holds.
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The stored keys.</returns>
+    public ValueTask<IReadOnlyList<SigningKey>> HeldAsync(CancellationToken cancellationToken) =>
+        keys.HeldAsync(cancellationToken);
+
+    /// <summary>
+    /// The private material of one key, to be cleared by the caller once its credential
+    /// is made.
+    /// </summary>
+    /// <param name="keyId">Which key.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The material, or nothing where the key or its private key is gone.</returns>
+    public ValueTask<byte[]?> PrivateKeyAsync(string keyId, CancellationToken cancellationToken) =>
+        keys.PrivateKeyAsync(keyId, cancellationToken);
+
+    /// <summary>
+    /// Makes the changes due to the stored keys, in one transaction of its own that
+    /// commits only where the keys it made or made current stood as read.
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success whether or not another process had already made the change, or the
+    /// refusal where a setting could not be read or the transaction not opened or
+    /// committed.
+    /// </returns>
+    public async ValueTask<Result> ChangeAsync(CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+        DateTimeOffset now = time.GetUtcNow();
+
+        TimeSpan cadence = (await configuration
+                .ReadAsync(Settings.TokenSigningRotation, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, error => Withheld<TimeSpan>(error, ref failure));
+
+        string algorithm = (await configuration
+                .ReadAsync(Settings.TokenSigningAlgorithm, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, error => Withheld<string>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        IReadOnlyList<SigningKey> stored = await keys.HeldAsync(cancellationToken).ConfigureAwait(false);
+        SigningKey? current = stored.SingleOrDefault(key => key.IsCurrent);
+        SigningKey? next = stored.SingleOrDefault(key => key.IsNext);
+        bool made = true;
+
+        if (current is null)
+        {
+            made = await MadeAsync(algorithm, now, first: true, cancellationToken).ConfigureAwait(false);
+        }
+        else if (next is null && current.IsNextDue(now, cadence))
+        {
+            made = await MadeAsync(algorithm, now, first: false, cancellationToken).ConfigureAwait(false);
+        }
+        else if (next is not null && next.TakesOver(current, now, cadence))
+        {
+            made = await keys
+                .PromoteAsync(next, current, now, current.OverlapEnd(now), now + Keeping, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        // AUTH-KEY-001 AC5, AC6: a retirement or a removal another process already made
+        // leaves nothing to write, and the same end either way.
+        foreach (SigningKey key in stored.Where(key => key.IsRetirementDue(now)))
+        {
+            await keys.RetireAsync(key, now, cancellationToken).ConfigureAwait(false);
+        }
+
+        foreach (SigningKey key in stored.Where(key => key.IsRemovalDue(now)))
+        {
+            await keys.RemoveAsync(key, now, cancellationToken).ConfigureAwait(false);
+        }
+
+        // X3: where another process made the key or the change first, nothing of this
+        // transaction is committed: the scope it runs in rolls it back as it ends, and
+        // the caller reads the stored keys that process left.
+        if (!made)
+        {
+            return Result.Success();
+        }
+
+        return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Stores a longer access-token lifetime with the current key before it signs an
+    /// access token under it, in one transaction of its own, which changes nothing where
+    /// the key is no longer current or already carries as long a lifetime.
+    /// </summary>
+    /// <param name="current">The key the caller read as current.</param>
+    /// <param name="lifetime">The lifetime the access token is signed under.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Success, or the refusal where the transaction could not be opened or committed.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The key is absent.</exception>
+    public async ValueTask<Result> LengthenAsync(
+        SigningKey current,
+        TimeSpan lifetime,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(current);
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        _ = await keys.LengthenAsync(current, lifetime, cancellationToken).ConfigureAwait(false);
+
+        return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static TValue Withheld<TValue>(Error error, ref Error? failure)
+    {
+        failure = error;
+
+        return default!;
+    }
 
     private static ECCurve Curve(string algorithm) =>
         Signs(algorithm)
             ? ECCurve.NamedCurves.nistP256
             : throw new InvalidOperationException("The signing algorithm names no curve this version holds.");
 
-    // The key signing now: the one the store holds, or a new one where none is held or
-    // the one held has reached the cadence.
-    private async ValueTask<Result<SigningKey>> CurrentAsync(CancellationToken cancellationToken)
-    {
-        Error? failure = null;
-        DateTimeOffset now = time.GetUtcNow();
-
-        string algorithm = (await configuration
-                .ReadAsync(Settings.TokenSigningAlgorithm, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, error => Withheld<string>(error, ref failure));
-
-        TimeSpan cadence = (await configuration
-                .ReadAsync(Settings.TokenSigningRotation, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, error => Withheld<TimeSpan>(error, ref failure));
-
-        TimeSpan lifetime = (await configuration
-                .ReadAsync(Settings.OidcAccessTokenLifetime, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, error => Withheld<TimeSpan>(error, ref failure));
-
-        if (failure is not null)
-        {
-            return Result.Failure<SigningKey>(failure);
-        }
-
-        SigningKey? signing = null;
-
-        foreach (SigningKey key in await keys.PublishedAsync(now, cancellationToken).ConfigureAwait(false))
-        {
-            if (key.IsSigning && string.Equals(key.Algorithm, algorithm, StringComparison.Ordinal))
-            {
-                signing = key;
-            }
-        }
-
-        return signing is not null && !signing.IsDue(now, cadence)
-            ? Result.Success(signing)
-            : Result.Success(
-                await RotateAsync(signing, algorithm, lifetime + Margin, now, cancellationToken)
-                    .ConfigureAwait(false));
-    }
-
-    // AUTH-KEY-001: the new key begins signing, the previous stays published for the
-    // overlap, and nothing about either step waits for a person.
-    private async ValueTask<SigningKey> RotateAsync(
-        SigningKey? signing,
+    // AUTH-KEY-001: a key pair nobody made by hand, its private material cleared once
+    // the store has wrapped it.
+    private async ValueTask<bool> MadeAsync(
         string algorithm,
-        TimeSpan overlap,
         DateTimeOffset now,
+        bool first,
         CancellationToken cancellationToken)
     {
         using var created = ECDsa.Create(Curve(algorithm));
@@ -179,27 +223,16 @@ internal sealed class SigningKeys(
 
         try
         {
-            var key = SigningKey.Create(
-                Convert.ToHexString(SHA256.HashData(publicKey))[..32],
-                algorithm,
-                publicKey,
-                now);
+            string keyId = Convert.ToHexString(SHA256.HashData(publicKey))[..32];
 
-            (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
-
-            if (signing is not null)
-            {
-                signing.Supersede(now, overlap);
-
-                await keys.RecordAsync(signing, cancellationToken).ConfigureAwait(false);
-            }
-
-            await keys.AddAsync(key, privateKey, cancellationToken).ConfigureAwait(false);
-            (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
-
-            return key;
+            return await keys
+                .AddAsync(
+                    first
+                        ? SigningKey.First(keyId, algorithm, publicKey, now)
+                        : SigningKey.Next(keyId, algorithm, publicKey, now),
+                    privateKey,
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
         finally
         {
