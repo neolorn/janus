@@ -245,6 +245,7 @@ internal sealed class AuthenticationService(
         string challenge,
         string? browser,
         [NeverLogged] string linkToken,
+        Factor factor,
         bool press,
         DeviceDescription device,
         string source,
@@ -253,6 +254,7 @@ internal sealed class AuthenticationService(
                 challenge,
                 browser,
                 linkToken,
+                factor,
                 press,
                 new SessionOrigin(source, device),
                 remembered: null,
@@ -516,13 +518,13 @@ internal sealed class AuthenticationService(
             return Result.Failure<SignInOutcome>(held);
         }
 
-        // CONV-LOG-005: the code went to the primary email and is refused as an email
-        // code is, recorded and counted against the delay, a handle that opens nothing
-        // included.
+        // CONV-LOG-005: a refused code of the new-device check is recorded as the
+        // verification it is, naming no factor, and counted against the delay, a
+        // handle that opens nothing included.
         if (open?.Subject is not SubjectId subject)
         {
             return Result.Failure<SignInOutcome>(
-                await CountedAsync(attempt, Factor.EmailCode, null, null, cancellationToken).ConfigureAwait(false)
+                await CountedAsync(attempt, presented: null, null, null, cancellationToken).ConfigureAwait(false)
                 ?? Error.From(ErrorCodes.CodeExpired));
         }
 
@@ -539,7 +541,7 @@ internal sealed class AuthenticationService(
         if (refused is not null)
         {
             return Result.Failure<SignInOutcome>(
-                await CountedAsync(attempt, Factor.EmailCode, subject, null, cancellationToken).ConfigureAwait(false)
+                await CountedAsync(attempt, presented: null, subject, null, cancellationToken).ConfigureAwait(false)
                 ?? refused);
         }
 
@@ -693,6 +695,7 @@ internal sealed class AuthenticationService(
     /// <param name="challenge">The handle the sign-in began with.</param>
     /// <param name="browser">What the asking browser carries, or nothing.</param>
     /// <param name="linkToken">The token the message carried.</param>
+    /// <param name="factor">The link factor the request named.</param>
     /// <param name="press">Whether the person pressed the control.</param>
     /// <param name="origin">Where the request came from.</param>
     /// <param name="remembered">
@@ -705,6 +708,7 @@ internal sealed class AuthenticationService(
         string challenge,
         string? browser,
         [NeverLogged] string linkToken,
+        Factor factor,
         bool press,
         SessionOrigin origin,
         string? remembered,
@@ -718,7 +722,11 @@ internal sealed class AuthenticationService(
 
         if (held is null)
         {
-            return Result.Failure<LandedSignIn>(Error.From(ErrorCodes.CodeExpired));
+            return Result.Failure<LandedSignIn>(
+                press
+                    ? await GoneAsync(new ThrottleAttempt(origin.Address, null), factor, cancellationToken)
+                        .ConfigureAwait(false)
+                    : Error.From(ErrorCodes.CodeExpired));
         }
 
         bool sameBrowser = held.SameBrowser(SignInLinks.Fingerprint(browser));
@@ -1590,9 +1598,11 @@ internal sealed class AuthenticationService(
     // identifier that resolved to nothing reaches this point as one that resolved to
     // an account does, so the record costs the one what it costs the other
     // (AUTH-ABUSE-003).
+    // The refused value is a factor, or, where none is named, the new-device check's
+    // code, which is recorded as that verification (CONV-LOG-005).
     private async ValueTask<Error?> CountedAsync(
         ThrottleAttempt attempt,
-        Factor presented,
+        Factor? presented,
         SubjectId? subject,
         string? trusted,
         CancellationToken cancellationToken)
@@ -1603,7 +1613,15 @@ internal sealed class AuthenticationService(
             return notBegun;
         }
 
-        await audit.FailedAsync(attempt.Account, presented, time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        if (presented is Factor factor)
+        {
+            await audit.FailedAsync(attempt.Account, factor, time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            await audit.DeviceVerificationFailedAsync(attempt.Account, time.GetUtcNow(), cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -1628,6 +1646,18 @@ internal sealed class AuthenticationService(
 
         return failure ?? revoked;
     }
+
+    // CONV-LOG-005, AUTH-ABUSE-001: a pressed link token that opens nothing, unknown or
+    // expired, is held to the delay its source has earned; outside it the press is a
+    // refused factor against no account, recorded under the factor the request named and
+    // counted against the source.
+    private async ValueTask<Error> GoneAsync(
+        ThrottleAttempt attempt,
+        Factor factor,
+        CancellationToken cancellationToken) =>
+        await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false)
+            ?? await CountedAsync(attempt, factor, null, null, cancellationToken).ConfigureAwait(false)
+            ?? Error.From(ErrorCodes.CodeExpired);
 
     // CONV-LOG-005: a factor refused at a step-up is written to the trail against the
     // session it was presented on, whatever the log level, and is then counted against

@@ -86,6 +86,37 @@ public sealed class SessionAuditTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// CONV-LOG-005 AC1: a refused code of the new-device check is an authentication
+    /// failure against the account whose sign-in it would complete, no actor, and
+    /// details of exactly the verification, naming no factor.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_LOG_005_AC1_ARefusedDeviceCodeIsRecordedAsItsVerificationAsync()
+    {
+        SubjectId account = await _deployment.AccountAsync(DateTimeOffset.UtcNow);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Audit(writing).DeviceVerificationFailedAsync(
+                account,
+                DateTimeOffset.UtcNow,
+                TestContext.Current.CancellationToken);
+        }
+
+        AuditRecord read = Assert.Single(await OfAsync(account));
+        KeyValuePair<string, JsonElement> field = Assert.Single(read.Details);
+
+        Assert.Equal(AuditActions.AuthenticationFailed, read.Action);
+        Assert.Equal(AuditCategory.Security, read.Category);
+        Assert.Equal(default, read.ActingSubject);
+        Assert.Equal(account, read.EffectiveSubject);
+        Assert.Equal("verification", field.Key);
+        Assert.Equal("device", field.Value.GetString());
+        Assert.Empty(read.PersonalDetails);
+    }
+
+    /// <summary>
     /// A factor refused at a step-up is a security record of the account against the
     /// session it was presented on.
     /// </summary>

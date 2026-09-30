@@ -1270,6 +1270,13 @@ against the public contract of LIB-API-001.
 - A registration is held to the progressive delay as a sign-in is: a refused code is
   counted against the session's source and the identifier, and while the delay stands a
   code or a further ask for a code is refused `auth.throttled` with `retryAt`.
+- A refused code of the new-device check is recorded as `auth.authentication.failed`
+  with details `{"verification":"device"}` and no factor; a pressed link token that
+  opens nothing is recorded against no account under the link factor the request
+  named and counted against its source, so `IAuthentication.LandAsync` takes that
+  factor and `/auth/factor` refuses a `linkToken` under any other factor
+  `api.request.malformed` naming `factor`. A throttled provider return carries
+  `retryAt` beside `error`.
 - A value the library reads from text under a rule, left unset (such as its `default`),
   throws `InvalidOperationException` where its text is read, so no such value reaches a
   row.

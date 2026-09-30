@@ -166,6 +166,11 @@ public interface IAuthentication
     /// What the requesting browser carries, or nothing where it carries none.
     /// </param>
     /// <param name="linkToken">The token the message carried.</param>
+    /// <param name="factor">
+    /// The link factor the request named, <see cref="Factor.EmailLink"/> or
+    /// <see cref="Factor.PhoneLink"/>, which a pressed token that opens nothing is
+    /// recorded under.
+    /// </param>
     /// <param name="press">Whether the person pressed the control.</param>
     /// <param name="device">What the browser says it is.</param>
     /// <param name="source">The address the attempt came from.</param>
@@ -175,6 +180,7 @@ public interface IAuthentication
         string challenge,
         string? browser,
         [NeverLogged] string linkToken,
+        Factor factor,
         bool press,
         DeviceDescription device,
         string source,

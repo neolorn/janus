@@ -289,9 +289,9 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// CONV-LOG-005 AC1: a wrong device-verification code is a refused email code
-    /// against the account whose sign-in it would complete, and a handle that opens
-    /// nothing there is one against no account.
+    /// CONV-LOG-005 AC1: a wrong code of the new-device check is recorded as that
+    /// verification against the account whose sign-in it would complete, naming no
+    /// factor.
     /// </summary>
     [Fact]
     public async Task CONV_LOG_005_AC1_AWrongDeviceCodeIsRecordedAgainstTheAccountAsync()
@@ -308,18 +308,28 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Source,
             TestContext.Current.CancellationToken);
 
+        Assert.Equal(ErrorCodes.CodeInvalid, Refused(wrong));
+        Assert.Equal([subject], _audit.DeviceVerificationsFailed);
+        Assert.Empty(_audit.Failed);
+    }
+
+    /// <summary>
+    /// CONV-LOG-005 AC1: a new-device code presented for a handle that opens nothing is
+    /// recorded as that verification against no account.
+    /// </summary>
+    [Fact]
+    public async Task CONV_LOG_005_AC1_ADeviceCodeForAHandleThatOpensNothingIsRecordedAsync()
+    {
         Result<SignInProgress> nowhere = await Service.VerifyDeviceAsync(
             "a-handle-nothing-opened",
-            Code(),
+            "123456",
             Browser,
             Source,
             TestContext.Current.CancellationToken);
 
-        Assert.NotNull(Refused(wrong));
         Assert.Equal(ErrorCodes.CodeExpired, Refused(nowhere));
-        Assert.Equal<(SubjectId?, Factor)>(
-            [(subject, Factor.EmailCode), (null, Factor.EmailCode)],
-            _audit.Failed);
+        Assert.Equal([(SubjectId?)null], _audit.DeviceVerificationsFailed);
+        Assert.Empty(_audit.Failed);
     }
 
     /// <summary>
@@ -366,7 +376,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.Throttled, Refused(delayed));
         Assert.Equal(SignInStatus.Complete, Reached(completed).Status);
-        Assert.Equal(3, _audit.Failed.Count);
+        Assert.Equal(3, _audit.DeviceVerificationsFailed.Count);
     }
 
     /// <summary>
@@ -572,9 +582,10 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
     /// <summary>
     /// CONV-LOG-005 AC1: a link pressed in the browser that asked for it and landing
-    /// on no sign-in of its account is a refused link against that account; an open
-    /// that is not a press, a press in another browser, and a token that resolves to
-    /// nothing are no attempt and are not recorded.
+    /// on no sign-in of its account is a refused link against that account, and a
+    /// pressed token that resolves to nothing is one against no account; an open that
+    /// is not a press and a press in another browser are no attempt and are not
+    /// recorded.
     /// </summary>
     [Fact]
     public async Task CONV_LOG_005_AC1_ALinkThatDoesNotLandIsRecordedAgainstItsAccountAsync()
@@ -589,21 +600,23 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         _ = await LandedAsync(challenge, browser, token, press: false);
         _ = await LandedAsync(challenge, browser: null, token, press: true);
 
+        Assert.Empty(_audit.Failed);
+
         Result<SignInLanding> unknown = await Service.LandAsync(
             challenge,
             browser,
             "a-token-nothing-issued",
+            Factor.EmailLink,
             press: true,
             Browser,
             Source,
             TestContext.Current.CancellationToken);
 
-        Assert.Empty(_audit.Failed);
-
         Result<SignInLanding> astray = await Service.LandAsync(
             "a-handle-nothing-opened",
             browser,
             token,
+            Factor.EmailLink,
             press: true,
             Browser,
             Source,
@@ -611,7 +624,66 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.CodeExpired, unknown.Match(_ => (ErrorCode?)null, error => error.Code));
         Assert.Equal(ErrorCodes.FactorRejected, astray.Match(_ => (ErrorCode?)null, error => error.Code));
-        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.EmailLink)], _audit.Failed);
+        Assert.Equal<(SubjectId?, Factor)>([(null, Factor.EmailLink), (subject, Factor.EmailLink)], _audit.Failed);
+    }
+
+    /// <summary>
+    /// CONV-LOG-005 AC1 and AUTH-ABUSE-001: a pressed link token that opens nothing is a
+    /// refused factor against no account under the factor the request named, counted
+    /// against its source; once the source has earned a delay the press is refused
+    /// throttled and nothing more is recorded.
+    /// </summary>
+    [Fact]
+    public async Task CONV_LOG_005_AC1_APressedLinkThatIsGoneIsRecordedBehindTheSourceDelayAsync()
+    {
+        var answers = new List<ErrorCode?>();
+
+        for (int attempt = 0; attempt < Settings.AbuseThrottleThreshold.Default + 1; attempt++)
+        {
+            answers.Add(Code(await Service.LandAsync(
+                "a-handle-nothing-opened",
+                browser: null,
+                "a-token-nothing-issued",
+                Factor.PhoneLink,
+                press: true,
+                Browser,
+                Source,
+                TestContext.Current.CancellationToken)));
+        }
+
+        Assert.Equal(
+            [ErrorCodes.CodeExpired, ErrorCodes.CodeExpired, ErrorCodes.CodeExpired, ErrorCodes.Throttled],
+            answers);
+        Assert.Equal<(SubjectId?, Factor)>(
+            [(null, Factor.PhoneLink), (null, Factor.PhoneLink), (null, Factor.PhoneLink)],
+            _audit.Failed);
+    }
+
+    /// <summary>
+    /// CONV-LOG-005 AC1: a link token that opens nothing and is not pressed is no
+    /// attempt: it is answered as a gone link, recorded nowhere and counted against
+    /// nothing, however often it is opened.
+    /// </summary>
+    [Fact]
+    public async Task CONV_LOG_005_AC1_AnUnpressedLinkThatIsGoneWritesNothingAsync()
+    {
+        for (int attempt = 0; attempt < Settings.AbuseThrottleThreshold.Default + 1; attempt++)
+        {
+            Assert.Equal(
+                ErrorCodes.CodeExpired,
+                Code(await Service.LandAsync(
+                    "a-handle-nothing-opened",
+                    browser: null,
+                    "a-token-nothing-issued",
+                    Factor.EmailLink,
+                    press: false,
+                    Browser,
+                    Source,
+                    TestContext.Current.CancellationToken)));
+        }
+
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
     }
 
     /// <summary>
@@ -1506,6 +1578,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
                 challenge,
                 browser,
                 token,
+                Factor.EmailLink,
                 press,
                 Browser,
                 Source,
@@ -1528,6 +1601,9 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             error => throw new InvalidOperationException(error.Code.ToString()));
 
     private static ErrorCode? Refused(Result<SignInProgress> outcome) =>
+        outcome.Match(_ => (ErrorCode?)null, error => error.Code);
+
+    private static ErrorCode? Code(Result<SignInLanding> outcome) =>
         outcome.Match(_ => (ErrorCode?)null, error => error.Code);
 
     private static Error? Delayed(Result<SignInChallenge> began) =>

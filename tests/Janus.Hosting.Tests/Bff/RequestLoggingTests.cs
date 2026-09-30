@@ -260,10 +260,10 @@ public sealed class RequestLoggingTests : IAsyncDisposable
 
     /// <summary>
     /// CONV-LOG-005 AC1: with the host logging nothing at all, a handle that opens no
-    /// sign-in, a wrong device-verification code, a pressed sign-in link that lands on
-    /// no sign-in, an identity token that does not hold up and an identity linked to no
-    /// account are each recorded as a failed authentication, none of it through the
-    /// log.
+    /// sign-in, a wrong device-verification code (as that verification, naming no
+    /// factor), a pressed sign-in link that lands on no sign-in, an identity token that
+    /// does not hold up and an identity linked to no account are each recorded as a
+    /// failed authentication, none of it through the log.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -350,12 +350,12 @@ public sealed class RequestLoggingTests : IAsyncDisposable
         Assert.Equal<(SubjectId?, Factor)>(
             [
                 (null, Factor.Password),
-                (subject, Factor.EmailCode),
                 (subject, Factor.EmailLink),
                 (null, Factor.Google),
                 (null, Factor.Google),
             ],
             quiet.SessionAudit.Failed);
+        Assert.Equal([subject], quiet.SessionAudit.DeviceVerificationsFailed);
         Assert.Empty(quiet.Logs.Lines);
     }
 

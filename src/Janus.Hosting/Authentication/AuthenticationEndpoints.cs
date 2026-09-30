@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
+using Janus.Authentication.Factors;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.SignIn;
 using Janus.Core;
@@ -119,12 +120,20 @@ internal static class AuthenticationEndpoints
 
         if (request.LinkToken is { Length: > 0 } token)
         {
+            // A link token is answered only under a link factor, which is what a press
+            // that opens nothing is recorded under (CONV-LOG-005).
+            if (!FactorCatalogue.Sent.Any(sent => sent.Key.CarriesLink && sent.Value == request.Factor))
+            {
+                return Answers.Malformed("factor");
+            }
+
             return await LandedAsync(
                     await authentication
                         .LandAsync(
                             challenge,
                             Carried(context.Request, BrowserCookies.PreAuthentication),
                             token,
+                            request.Factor,
                             request.Press,
                             origin,
                             Carried(context.Request, BrowserCookies.Browser),

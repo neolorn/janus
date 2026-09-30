@@ -204,6 +204,33 @@ public sealed class SignInFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-LOG-005 AC1: a link token presented under a factor that is not a link is
+    /// refused naming the factor before the service is reached, so a refused press is
+    /// only ever recorded under the link factor the request named.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_LOG_005_AC1_ALinkTokenUnderAnotherFactorIsRefusedAsMalformedAsync()
+    {
+        await RegisteredAsync();
+
+        var browser = new Browser(_deployment);
+        string challenge = await BegunAsync(browser);
+
+        Answer landed = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "password"),
+            ("linkToken", "nothing-answers-to-this"),
+            ("press", true));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, landed.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), landed.Text("code"));
+        Assert.Equal("factor", landed.Json().GetProperty("details").GetProperty("member").GetString());
+    }
+
+    /// <summary>
     /// A browser that holds no session is told so by the session endpoint, which is
     /// the one place a frontend asks what it is holding (chapter 09 section 3).
     /// </summary>

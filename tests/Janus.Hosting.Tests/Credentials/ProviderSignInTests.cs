@@ -13,6 +13,7 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
@@ -290,7 +291,7 @@ public sealed class ProviderSignInTests : IAsyncDisposable
                 Page + "?error=" + ErrorCodes.FactorRejected,
                 Page + "?error=" + ErrorCodes.FactorRejected,
                 Page + "?error=" + ErrorCodes.FactorRejected,
-                Page + "?error=" + ErrorCodes.Throttled,
+                Throttled(_deployment.Clock.GetUtcNow() + Settings.AbuseThrottleDelayInitial.Default),
             ],
             landed);
         Assert.Equal<(SubjectId?, Factor)>(
@@ -299,13 +300,14 @@ public sealed class ProviderSignInTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-001: a return from an address that has earned a delay is sent back
-    /// throttled before its code is traded, so the deployment makes no request of any
-    /// provider on that address's behalf, a genuine identity's included.
+    /// BFF-ABUSE-001 AC2 and AUTH-ABUSE-001: a return from an address that has earned a
+    /// delay is sent back throttled, with the instant the delay lifts, before its code
+    /// is traded, so the deployment makes no request of any provider on that address's
+    /// behalf, a genuine identity's included.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_ABUSE_001_AThrottledSourceReachesNoProviderAsync()
+    public async Task BFF_ABUSE_001_AC2_AThrottledProviderReturnCarriesItsIntervalAsync()
     {
         var browser = new Browser(_deployment);
         var forged = new ProviderPerson(GoogleSubject) { Forged = true };
@@ -323,10 +325,61 @@ public sealed class ProviderSignInTests : IAsyncDisposable
 
         Answer landed = await ReturnedAsync(browser, "google", authorization, new ProviderPerson(GoogleSubject));
 
-        Assert.Equal(Page + "?error=" + ErrorCodes.Throttled, landed.Location);
+        Assert.Equal(
+            Throttled(_deployment.Clock.GetUtcNow() + Settings.AbuseThrottleDelayInitial.Default),
+            landed.Location);
         Assert.Equal(3, exchanged);
         Assert.Equal(exchanged, _deployment.SocialProviders.Exchanges.Count);
         Assert.Equal(called, _deployment.SocialProviders.Calls);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-002 AC2: every throttled return names the instant its delay lifts: the
+    /// delay the returning address earned, and the delay the account a linked identity
+    /// signs into earned from elsewhere.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_002_AC2_AThrottledReturnCarriesItsIntervalAsync()
+    {
+        SubjectId subject = await RegisteredAsync();
+
+        await LinkedAsync(subject, Factor.Google, GoogleSubject);
+
+        await using (AsyncServiceScope scope = _deployment.Scope())
+        {
+            ThrottleService throttle = scope.ServiceProvider.GetRequiredService<ThrottleService>();
+
+            for (int attempt = 0; attempt < Settings.AbuseThrottleThreshold.Default; attempt++)
+            {
+                _ = await throttle.FailedAsync(
+                    new ThrottleAttempt("203.0.113.9", null) { Account = subject },
+                    TestContext.Current.CancellationToken);
+            }
+        }
+
+        var linked = new Browser(_deployment);
+        string authorization = Where(await linked.SendAsync("GET", Start("google", "signin")));
+
+        Answer held = await ReturnedAsync(linked, "google", authorization, new ProviderPerson(GoogleSubject));
+
+        var forging = new Browser(_deployment);
+        var forged = new ProviderPerson(GoogleSubject) { Forged = true };
+        var returns = new List<string?>();
+
+        for (int attempt = 0; attempt <= Settings.AbuseThrottleThreshold.Default; attempt++)
+        {
+            string refused = Where(await forging.SendAsync("GET", Start("google", "signin")));
+
+            returns.Add((await ReturnedAsync(forging, "google", refused, forged)).Location);
+        }
+
+        Assert.Equal(
+            Throttled(_deployment.Clock.GetUtcNow() + Settings.AbuseThrottleDelayInitial.Default),
+            held.Location);
+        Assert.Equal(
+            Throttled(_deployment.Clock.GetUtcNow() + Settings.AbuseThrottleDelayInitial.Default),
+            returns[^1]);
     }
 
     /// <summary>
@@ -852,6 +905,12 @@ public sealed class ProviderSignInTests : IAsyncDisposable
 
         return await ReturnedAsync(browser, "google", authorization, new ProviderPerson(providerSubject));
     }
+
+    // AUTH-ABUSE-002 AC2: a throttled return names the instant the delay lifts, written
+    // as the wire writes every instant.
+    private static string Throttled(DateTimeOffset retryAt) =>
+        Page + "?error=" + ErrorCodes.Throttled + "&retryAt="
+        + Uri.EscapeDataString(JsonSerializer.SerializeToElement(retryAt.ToUniversalTime()).GetString() ?? string.Empty);
 
     // An account a registration created and carried across, which a provider's identity
     // can then be linked to.

@@ -16666,6 +16666,8 @@ could name these as failed authentication.
 
 **Revised by entry 422.**
 
+**Superseded by D-166.**
+
 ---
 
 ## 403. The rows REF-001 counts are chapter 10's live rows and the ledger's owed rows, and the boundary's codes are the literals parsed
@@ -17589,6 +17591,8 @@ first read.
 
 - AUTH-ABUSE-001 could say that a provider's return asks the source's delay before the
   code is traded.
+
+**Superseded by D-166.**
 
 ---
 

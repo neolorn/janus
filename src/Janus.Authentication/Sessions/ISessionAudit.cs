@@ -58,6 +58,22 @@ internal interface ISessionAudit
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Records that the new-device check's code was refused. No actor was established,
+    /// and the refused value was no factor, so the record names none.
+    /// </summary>
+    /// <param name="subject">
+    /// The account whose sign-in the code would have completed, or nothing where the
+    /// handle opened none.
+    /// </param>
+    /// <param name="at">When.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of recording it.</returns>
+    ValueTask DeviceVerificationFailedAsync(
+        SubjectId? subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Records that a factor presented to step a live session up was refused.
     /// </summary>
     /// <param name="session">Which session.</param>
