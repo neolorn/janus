@@ -339,26 +339,40 @@ system and must be named rather than glossed.
 **INT-MAIL-006** — **Human administrative-organization members** SHALL have a mailbox
 pre-created in the mail server before mail can arrive for them. Where the member is
 invited (REG-MAIL-001), the mailbox SHALL be provisioned **disabled** when the
-invitation is sent and **enabled** when the membership attaches at acknowledgement;
-an expired invitation SHALL leave it **reserved and disabled** until the administrator
-re-invites or deletes it. The invitation SHALL name a personal email as well, and the
-account that owns the mailbox SHALL NOT exist until that address is verified by the
-press on the invitation link (REG-MAIL-001, D-148); the mailbox is reserved for the
+invitation is sent and **enabled** when the membership attaches at acknowledgement; an
+expired invitation SHALL leave it **reserved and disabled** until the administrator
+re-invites it or revokes the invitation, which releases a mailbox nobody has held and
+owes it `removed` (REG-MAIL-001). The invitation SHALL name a personal email as well,
+and the account that owns the mailbox SHALL NOT exist until that address is verified by
+the press on the invitation link (REG-MAIL-001, D-148); the mailbox is reserved for the
 invitation, not for an account, until then.
 
 A deployment integrates a mail server where one is registered, the shipped adapter or
 the host's own (INT-MAIL-001), and only for the administrative organization. A mailbox
 SHALL be owed `enabled` only while its holder's account is `active` or `restricted` and
-holds a current membership of the administrative organization, and `disabled`
-otherwise; a membership of any other organization does not count. A restriction the
-person asked for does not cut them off from their mail or end their app passwords
-(INT-MAIL-010). An invitation whose corporate address has a mailbox held before, by
-anyone, the invitee included, SHALL be refused unless the administrator names what
-becomes of it (`formerMailbox`: `transfer` gives the invitee the mailbox and its mail,
-`replace` removes it and reserves a new one; REG-MAIL-003); no mailbox passes to a
-holder without that choice, and the issue checks nothing about who the invitee is.
+holds a current membership of the administrative organization, and `disabled` otherwise,
+save that a mailbox replaced or released is owed `removed` (below) and a mailbox whose
+holder was erased is owed nothing further (INT-MAIL-007); a membership of any other
+organization does not count. A mailbox replaced under `replace` (REG-MAIL-003), or a
+mailbox nobody has ever held, released when its invitation is revoked (REG-MAIL-001),
+SHALL be owed `removed` from that moment, whatever its holder's state short of erasure
+(a released mailbox has no holder): its row records the instant, no longer stands for
+its address (the uniqueness of an address and the lookup by address skip it) and keeps
+its fingerprint until its last holder is erased (PRIV-RIGHT-005) or, for a released
+mailbox, until the server confirms its removal (PRIV-RIGHT-005a), so a push at that
+address can wait for its removal (INT-MAIL-007). A mailbox someone has held is never
+released, so revoking an invitation over it marks nothing. A restriction the person
+asked for does not cut them off from their mail or end their app passwords
+(INT-MAIL-010). An invitation whose corporate address has a mailbox that stands for it
+and was held before, by anyone, the invitee included (the address of a mailbox whose
+last holder was erased is not recognised, REG-MAIL-003), SHALL be refused unless the
+administrator names what becomes of it (`formerMailbox`: `transfer` gives the invitee
+the mailbox and its mail, `replace` removes it and reserves a new one; REG-MAIL-003); no
+mailbox passes to a holder without that choice, and the issue checks nothing about who
+the invitee is. An invitation that names `formerMailbox` where no such mailbox stands
+SHALL be refused with `api.request.invalid`, `details.member` `formerMailbox`.
 
-*Source: D-148, D-166; D-006, D-074, D-144, D-146, D-177*
+*Source: D-148, D-166; D-006, D-074, D-144, D-146, D-177, D-178*
 
 **A mailbox is for a person.** The reserved `emergency` account (OPS-BOOT-002) is a
 member of the administrative organization but is not a person (it is a role a human
@@ -374,9 +388,10 @@ is effective at once. Where the deployment integrates the mail server, bootstrap
 given the administrator's corporate address (`--mailbox`) and reserves the mailbox at
 it. The mailbox row is its own retried outbox: the state each mailbox is owed is read on
 every publisher run (`outbox.poll.interval`) from its holder's account state and
-memberships, and a state that differs from the one the server last confirmed is pushed
-under `outbox.retry.*`, so the mailbox is created once the mail server is reachable, at
-the next attempt of the run in progress or, where the push was marked failed, in the run
+memberships, or as `removed` where its row records that it was replaced or released, and
+a state that differs from the one the server last confirmed is pushed under
+`outbox.retry.*`, so the mailbox is created once the mail server is reachable, at the
+next attempt of the run in progress or, where the push was marked failed, in the run
 begun for it a day later (INT-MAIL-007). Until then the administrator is reached at the
 personal address given at bootstrap; the enrolment link itself is printed by the command
 and sent nowhere (OPS-BOOT-001).
@@ -407,10 +422,22 @@ pre-creation for those who receive mail *at* the company.
 5. A holder whose account is neither `active` nor `restricted`, or whose membership of
    the administrative organization has ended, is owed a `disabled` mailbox; a
    `restricted` holder with a current membership is owed `enabled`; a membership of any
-   other organization enables no mailbox.
-6. An invitation of an address whose mailbox was held before, by the invitee or by
-   anyone else, without `formerMailbox` is refused with
-   `identity.invitation.mailboxheld` and changes no mailbox.
+   other organization enables no mailbox; a mailbox replaced or released is owed
+   `removed` whatever its holder's state short of erasure, and a mailbox whose holder
+   was erased is owed nothing further (INT-MAIL-007).
+6. An invitation of an address whose standing mailbox was held before, by the invitee or
+   by anyone else, and whose last holder was not erased, without `formerMailbox` is
+   refused with `identity.invitation.mailboxheld` and changes no mailbox. An invitation
+   of an address whose last holder was erased is issued without `formerMailbox`, and one
+   that names `formerMailbox` where no held mailbox stands for the address, the address
+   of an erased holder included, is refused with `api.request.invalid`, `details.member`
+   `formerMailbox`, and changes no mailbox.
+7. A mailbox replaced under `replace`, or a mailbox nobody has held released when its
+   invitation is revoked, is owed `removed` from the instant its row records, is skipped
+   by the uniqueness of its address and by the lookup by address, and keeps its
+   fingerprint until its last holder is erased or, for a released mailbox, until its
+   removal is confirmed; revoking an invitation over a mailbox someone has held marks
+   nothing.
 
 ---
 
@@ -462,10 +489,10 @@ there, the push reaches the server at the next attempt of its run or, once marke
 failed, in the run begun for it a day later, with no action in the library. A push of
 `disabled` or `enabled` for a mailbox SHALL wait, neither attempted nor counted, while
 another mailbox at the same canonical address is owed `removed` and the server has not
-confirmed that removal (the old mailbox of a `replace`, REG-MAIL-003); a push of
-`removed` never waits. A push of `removed` for a mailbox no push of which was ever
-attempted SHALL be confirmed without being sent, since the server holds nothing of that
-mailbox.
+confirmed that removal (the old mailbox of a `replace`, REG-MAIL-003, or a mailbox
+released when its invitation was revoked, REG-MAIL-001); a push of `removed` never
+waits. A push of `removed` for a mailbox no push of which was ever attempted SHALL be
+confirmed without being sent, since the server holds nothing of that mailbox.
 
 Reconciliation SHALL compare every mailbox the library holds, one with a push
 outstanding included, with the account the server lists under that mailbox's identifier
@@ -474,17 +501,21 @@ included), listed disabled; owed `removed`, no account listed under it. An accou
 listed under a mailbox's identifier at another address than the mailbox's is a
 difference too. It SHALL count every account the server lists that carries no identifier
 of a mailbox the library holds. A mailbox whose holder was erased (PRIV-RIGHT-005) is
-not compared, and the account it left at the server is counted with them, since that
-account is outside the library (D-101) and only the operator can erase it there.
-Addresses SHALL be compared in their canonical form (IDN-ACCT-004), the server's listed
-addresses canonicalised before the comparison, and a listed address that does not read
-matches no mailbox. Comparing by identifier, not by address, keeps the two mailboxes a
-`replace` leaves at one address apart (REG-MAIL-003). A difference SHALL raise
-`degradation`, scope `mailbox.reconciliation`, details `{ mailboxes, unknown }` (mailbox
-identifiers and a count, never an address); a listing that cannot be had SHALL raise it
-with `{ listed: false }`. Nothing SHALL be changed on either side.
+not compared and is owed nothing further: a push outstanding for it, `removed` after a
+`replace` included, is ended without being sent, since its address can no longer be
+read, and a push that waited for it waits no longer. The account it left at the server
+is counted with the accounts that carry no identifier of a mailbox the library holds,
+since that account is outside the library (D-101) and only the operator can erase it
+there. Addresses SHALL be compared in their canonical form (IDN-ACCT-004), the server's
+listed addresses canonicalised before the comparison, and a listed address that does not
+read matches no mailbox. Comparing by identifier, not by address, keeps apart the two
+mailboxes that a `replace`, or a release followed by a new invitation, leaves at one
+address (REG-MAIL-003, REG-MAIL-001). A difference SHALL raise `degradation`, scope
+`mailbox.reconciliation`, details `{ mailboxes, unknown }` (mailbox identifiers and a
+count, never an address); a listing that cannot be had SHALL raise it with
+`{ listed: false }`. Nothing SHALL be changed on either side.
 
-*Source: D-006, D-041, D-166, D-177*
+*Source: D-006, D-041, D-166, D-177, D-178*
 
 A failed suspension leaves a person reading mail after offboarding. Silent
 auto-correction conceals a broken pipeline.
@@ -509,6 +540,10 @@ auto-correction conceals a broken pipeline.
    the account carrying its own identifier, and reports no difference once the old
    account is gone and the new one is in its state owed; a `removed` push for a mailbox
    no push of which was attempted is confirmed without a call to the server.
+8. Where the last holder of the mailbox a `replace` left is erased while its removal is
+   unconfirmed, that push ends without a send; the push of the new mailbox is then sent
+   and, while the old account stands at the server, is answered
+   `integration.mailserver.conflict`.
 
 ---
 

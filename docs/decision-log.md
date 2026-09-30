@@ -8964,6 +8964,8 @@ section 7 · `19` · `20` · `docs/guide/janus-explained.md`,
 
 > **Amended.** 215 points 4 and 5, and entry 219 as INT-MAIL-007 states it, that a failed push waits for a change of the state owed: a push carries the mailbox's identifier; a refusal to adopt is answered `integration.mailserver.conflict` and raised under `mailbox.conflict:<mailbox id>`; a push marked failed is begun again each day while its state is owed; a push of `disabled` or `enabled` waits while another mailbox at its address is owed an unconfirmed removal; the listing reads `description` and reconciliation compares each mailbox with the account carrying its identifier. 209, 211, 212 and 220 item 4: a listed address that does not read counts as unknown only where its account carries no identifier of a mailbox the library holds (D-177).
 
+> **Amended.** 221: an erased holder's address is not recognised at issue, since erasure leaves nothing that may match it, and the adapter's refusal to adopt an account that does not carry the new mailbox's identifier is what keeps that person's mail from the next holder; under `replace` the old row records the instant it was replaced, is owed `removed` and keeps its fingerprint until its last holder is erased; "held before" is read from the mailbox that stands for the address (D-178).
+
 **Date:** 2026-09-25 · **Status:** accepted · **Amends:** D-161 (item 4, the working mode; item 2, where the drift check's rows come from), D-162 (item 22, where the governed send path lives; item 23, when the first attempt is made; item 26, the budget of a text message carrying a link; item 31, where destination records are kept and when they are swept; item 66, where a client secret comes from; C.55, where photo availability is held and what bootstrap writes; C.68 at `POST /auth/link`; C.103, the condition of the mail server row; E, the status of `identity.identifier.invalid`), D-153 (owner decision 2, the source a flood limit counts; owner decision 7, the word lists; the `backup.restoretest.interval` default; the address the bootstrap command prints), D-147 (the retirement of a key-encryption-key version; the name of the startup code for an unavailable secret), D-146 (item 17: a restriction's channel, the notices to a holder, a reason on every edit), D-143 (the policy object gains `photos`), D-129 (the break-glass page takes a reason), D-127 (a takedown reversal restores the state the takedown found), D-079a (a recognised device is exempt from the hold, not from the count), D-071 (three protected switches retired), D-060 (photos are off for the administrative organization until a codec is declared), D-057 (an authorization request's `redirect_uri` is refused at the push, not replaced), D-164 (item 3: the mail server verifies `aud` itself), D-165 (the developer recipient row is a declared example; the provider callback row and INT-GEN-003's sentence restored) · **Extends:** D-162, D-164, D-165
 
 **TL;DR.** The ledger entries 110 to 423 were audited entry by entry against the
@@ -12180,6 +12182,8 @@ CONV-LAYOUT-001 and CONV-LAYOUT-002; `10` the
 
 ## D-177 — Corrections-4 question 14: what a mailbox push carries, how a refusal to adopt is answered, and the order under `replace`
 
+> **Amended.** (b): a push also meets, and is refused by, the account an erased holder's mailbox left, which the library did create, for another mailbox; the conflict alert then means the operator erases that account at the mail server (D-178).
+
 **Date:** 2026-09-30 · **Status:** accepted · **Amends:** D-166 (215 points 4 and 5; entry 219, which it kept, as INT-MAIL-007 states it: a failed push waits for a change of the state owed; 209, 211, 212 and 220 item 4: a listed address that does not read counts as unknown only where its account carries no identifier of a mailbox the library holds) · **Extends:** D-166 (221, the order under `replace`)
 
 **TL;DR.** A push carries the mailbox's identifier, so the adapter can write it on a
@@ -12284,6 +12288,103 @@ the deduplication key, so one mailbox's alert never hides another's, and criteri
 `mailbox.push` and `mailbox.conflict` scope rows and its closing paragraph), section
 5.44, the `AlertRaised` row, section 6 and REF-001 criterion 3; `11` section 7.1; `13`
 R-M16 and R-M27; `20` REG-MAIL-003.
+
+---
+
+## D-178 — Corrections-4 questions 15 and 16: an erased holder's address, and how a replaced mailbox stands beside its successor
+
+**Date:** 2026-09-30 · **Status:** accepted · **Amends:** D-166 (221, "by anyone", which the chapters carried as "an erased holder included"), D-177 ((b), the cause of a conflict) · **Extends:** D-177 (c)
+
+**TL;DR.** Erasure leaves nothing that can recognise an erased holder's mailbox address,
+and must not, so an invitation of that address is treated as one of an address never
+held. The erased person's mail is still protected: the account they left at the mail
+server carries their old mailbox's identifier, so it is never adopted, and the new
+mailbox is created only once the operator has erased that account there. Under
+`replace`, the old mailbox's row records the instant it was replaced; from then it is
+owed `removed`, no longer stands for the address, and keeps its fingerprint so the new
+mailbox's push can wait for its removal. A mailbox nobody held, released with its
+revoked invitation, is marked the same way and forgets its address once its removal is
+confirmed.
+
+**Question 15 (Tier 3).** REG-MAIL-003, the `10` row of `identity.invitation.mailboxheld`,
+section 5.44 and R-M27 refuse an invitation of an address whose mailbox was held before,
+"an erased holder included", unless it names `formerMailbox`. PRIV-RIGHT-005 criterion 8
+neutralises the fingerprint of every mailbox an erased subject holds or last held, and
+the address itself is under the key erasure destroys, so nothing left can match the
+address. Entry 222 (kept by D-166) and INT-MAIL-007 side with erasure.
+
+**Decision: erasure stands.** Keeping anything that still matches an erased person's
+address (a fingerprint under the deployment's fingerprint key, or the address in the
+clear) would leave data the controller can link back to that person, which is
+pseudonymisation, not the anonymisation PRIV-RIGHT-005 requires. The refusal at issue was
+never the only guard. The adapter adopts an existing account only where it carries the
+new mailbox's own identifier (D-166 215 point 4 and 221), and the account an erased
+holder's mailbox left carries that old mailbox's identifier, so it is never adopted; that
+is what keeps an erased holder's mail from the next holder. So an invitation of an address
+whose last holder was erased is treated as one of an address never held and names no
+`formerMailbox`. The new mailbox's push is answered `integration.mailserver.conflict`
+while the old account stands (D-177), and reconciliation has counted that account as
+unknown since the erasure (INT-MAIL-007). The operator erases it at the mail server
+(D-101), since it is outside the library and only the operator can erase it there, and
+the daily attempt that follows creates the new mailbox. The erased person's mail passes to
+no one. As entry 222 says of any push outstanding at erasure, a push owed to the erased
+holder's mailbox, `removed` after a `replace` included, is ended without being sent,
+since its address can no longer be read, and a push that waited for it waits no longer.
+An invitation naming `formerMailbox` where no held mailbox stands for the address is
+refused with `api.request.invalid`, `details.member` `formerMailbox`, so an administrator
+who expected a former mailbox learns at once that none is recognised. *Rejected:* keeping
+a matchable trace of the address past erasure (undoes the erasure); pushing `removed` for
+an erased holder's mailbox at erasure (destroys company mail without an administrator's
+act, which D-166 221 kept behind `replace`).
+
+**Question 16 (Tier 2).** Under `replace` two mailboxes stand at one address, but the
+unique fingerprint index and the lookup by address allow one mailbox per address, and a
+mailbox someone has held has no way to be owed `removed`.
+
+**Decision: reading 1.** The old mailbox's row records the instant it was replaced. From
+then it is owed `removed` whatever its holder's state short of erasure, it no longer
+stands for its address (the uniqueness of an address and the lookup by address skip it),
+and it keeps its fingerprint, which the wait of D-177 (c) needs to find it. It keeps it
+until its last holder is erased, which neutralises it as it does every mailbox that
+person last held (PRIV-RIGHT-005 criterion 8); if that comes before the server has
+confirmed the removal, the owed push is ended as above, the wait ends, and the new
+mailbox's push is answered `integration.mailserver.conflict` while the old account
+stands, as under question 15. A mailbox counts as held before, for REG-MAIL-003's
+refusal, only where it stands for the address; a mailbox replaced or released no longer
+does. A mailbox nobody has ever held, released when its invitation is revoked
+(REG-MAIL-001), is marked and owed `removed` the same way; a mailbox someone has held is
+never released, so revoking an invitation over it (a `transfer`'s, say) marks nothing.
+Once the server confirms a released mailbox's removal, the wrapped key its address is
+under is overwritten and its fingerprint neutralised in the same transaction, and the
+row remains, so nothing about a person outlives an invitation that led nowhere (D-166
+234). The mark changes no row identifier and re-encrypts no value: an unheld mailbox's
+address stays bound to its own row's identifier, as D-173 (item 1) asks. *Rejected:*
+neutralising the old row's fingerprint at the `replace` (it would give erasure's mark a
+second meaning, lose the match the wait needs, and still leave the mailbox with no way
+to be owed `removed`).
+
+- Tests carrying REG-MAIL-003 criterion 7 prove that under `replace` the old row records
+  the instant, is owed `removed` and keeps its fingerprint, that the address then finds
+  the new row, that erasing the old mailbox's last holder before the removal is confirmed
+  neutralises that fingerprint and leaves the new mailbox's push answered
+  `integration.mailserver.conflict`, and that a `formerMailbox` where no held mailbox
+  stands is refused with `api.request.invalid`; tests carrying criterion 8 prove that an
+  invitation of an erased holder's address is issued without `formerMailbox`, that the new
+  mailbox's push adopts nothing and is answered `integration.mailserver.conflict` while
+  the old account stands, and that the next attempt after it is gone creates the new
+  mailbox. Tests carrying INT-MAIL-006 criteria 5 to 7, INT-MAIL-007 criterion 8 and
+  PRIV-RIGHT-005a criterion 19 prove the owed `removed` of a replaced or released mailbox,
+  that revoking an invitation over a held mailbox marks nothing, that a push owed to an
+  erased holder's mailbox is ended unsent, and that a released mailbox holds no readable
+  address and no live fingerprint once its removal is confirmed.
+
+**Propagated to:** `20` REG-MAIL-001 and REG-MAIL-003 (its text and criteria 6 to 8); `05`
+INT-MAIL-006 (its text and criteria 5 to 7) and INT-MAIL-007 (the wait, the erased
+holder's mailbox, reconciliation, criterion 8); `04` PRIV-RIGHT-005 (the mailbox address
+paragraph) and PRIV-RIGHT-005a (the released mailbox, criterion 19); `01` IDN-LIFE-015;
+`09` the `POST` and `DELETE` invitation rows; `10` the `api.request.invalid` and
+`identity.invitation.mailboxheld` rows and sections 5.23, 5.44 and 5.45; `11` section 7.1;
+`13` R-M16 and R-M27; `16` step 3.
 
 ---
 
@@ -12474,6 +12575,7 @@ R-M16 and R-M27; `20` REG-MAIL-003.
 | Corrections-4 question 12: how a malformed social provider declaration is named | D-175 |
 | Corrections-4 question 13: when the mail server in use is decided; what an `enabled` push does under `Replace` | D-176 |
 | Corrections-4 question 14: what a mailbox push carries, how a refusal to adopt is answered, and the order under `replace` | D-177 |
+| Corrections-4 questions 15 and 16: an erased holder's address, and how a replaced mailbox stands beside its successor | D-178 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

@@ -938,22 +938,23 @@ organization's domain lock (REG-DOM-001) prevents sign-in with it. While the mem
 lasts, removing the personal email, making it primary or replacing it SHALL be refused
 (`identity.identifier.locked`), and the account view SHALL show it locked. The corporate
 address SHALL be **asserted by the administrator and created by the system**: it SHALL
-be skipped at verification, and what proves the person SHALL be the personal channels
-of the invitation (the link to the personal email; the bound phone by SMS). The mailbox
+be skipped at verification, and what proves the person SHALL be the personal channels of
+the invitation (the link to the personal email; the bound phone by SMS). The mailbox
 SHALL be provisioned **disabled** when the invitation is sent and **enabled** when the
 membership attaches (INT-MAIL-006). When the membership attaches, taking the corporate
 address on SHALL be notified once to the security-notice set as it stood before
 (REG-IDENT-004); the corporate address SHALL NOT be sent that notice. An expired
 invitation SHALL leave the mailbox reserved and disabled until the administrator
 re-invites the address or revokes the invitation, which releases a mailbox nobody has
-held. At most one invitation SHALL stand over a mailbox. An invitation for an address a
-member holds, or one a standing invitation that has not expired reserves, SHALL be
-refused (`identity.mailbox.taken`); re-inviting an address whose invitation expired
-SHALL revoke that invitation in the same transaction and keep the mailbox. In every
-other case no corporate address is asserted, and every email of the member SHALL be
-verified by the person like any other.
+held: the released mailbox is marked and owed `removed` (INT-MAIL-006), and a mailbox
+someone has held is not released. At most one invitation SHALL stand over a mailbox. An
+invitation for an address a member holds, or one a standing invitation that has not
+expired reserves, SHALL be refused (`identity.mailbox.taken`); re-inviting an address
+whose invitation expired SHALL revoke that invitation in the same transaction and keep
+the mailbox. In every other case no corporate address is asserted, and every email of
+the member SHALL be verified by the person like any other.
 
-*Source: D-148; D-146, D-166, amends D-144 (provisioning moves from acceptance to invitation)*
+*Source: D-148; D-146, D-166, D-178, amends D-144 (provisioning moves from acceptance to invitation)*
 
 A temporary mailbox password for reading a code is rejected: staff reach mail through
 the library's OIDC provider and app passwords created after sign-in (INT-MAIL-005), the
@@ -1014,9 +1015,9 @@ the wizard.
 
 ---
 
-**REG-MAIL-003** — When a membership ends, the corporate address SHALL stop being a valid
-identifier of the account and the mailbox SHALL be disabled (INT-MAIL-006a), which ends
-every app password. The verified personal email the account has held since the
+**REG-MAIL-003** — When a membership ends, the corporate address SHALL stop being a
+valid identifier of the account and the mailbox SHALL be disabled (INT-MAIL-006a), which
+ends every app password. The verified personal email the account has held since the
 invitation (REG-MAIL-001) SHALL become the primary email **automatically, in the same
 operation**, and the account SHALL continue as an ordinary account without a pause and
 without support; where a verified personal phone exists it remains, or becomes, the
@@ -1024,28 +1025,47 @@ primary phone. The organization's domain lock (REG-DOM-001) SHALL no longer appl
 account once the membership has ended. Membership end SHALL NOT by itself change the
 account's state; suspension is a separate administrator action (IDN-LIFE-013,
 `suspendedBy = administrator`). A retired corporate address SHALL be available to a
-later invitation that names `formerMailbox` (below). Only the end of the membership
-that gave the account its corporate address, a membership of the administrative
-organization (INT-MAIL-006), retires the address. The change SHALL be notified once to
-the security-notice set as it stands after the change, and the retired address SHALL
-be sent nothing.
+later invitation that names `formerMailbox` (below), or, where its last holder was
+erased, to one that names none. Only the end of the membership that gave the account its
+corporate address, a membership of the administrative organization (INT-MAIL-006),
+retires the address. The change SHALL be notified once to the security-notice set as it
+stands after the change, and the retired address SHALL be sent nothing.
 
 A mailbox anyone has held SHALL never pass silently. An invitation for a corporate
-address whose mailbox has been held before, by anyone, the same person and an erased
-holder included, SHALL be refused with `identity.invitation.mailboxheld` unless it names
+address whose standing mailbox has been held before, by anyone, the same person
+included, SHALL be refused with `identity.invitation.mailboxheld` unless it names
 `formerMailbox`: `transfer`, under which the invitee receives the mailbox and the mail
 in it, or `replace`, under which the old mailbox is removed and a new one reserved.
-Either SHALL pass the invitation's step-up, carry a reason and be recorded. No check of
-who the invitee is SHALL be made at issue, since issuing an invitation tells nothing
-about accounts. The library SHALL remove a mailbox anyone has held only under `replace`,
-and SHALL NOT adopt for a new reservation a mail-server account it did not create; the
-mail server answers that refusal `integration.mailserver.conflict`, and the push that
-met the account is marked failed at once and raises `degradation` scoped
+Either SHALL pass the invitation's step-up, carry a reason and be recorded. An address
+whose last holder was erased is treated as never held (below). An invitation naming
+`formerMailbox` where no held mailbox stands for the address SHALL be refused with
+`api.request.invalid`, `details.member` `formerMailbox`. No check of who the invitee is
+SHALL be made at issue, since issuing an invitation tells nothing about accounts. The
+library SHALL remove a mailbox anyone has held only under `replace`, and SHALL NOT adopt
+for a new reservation a mail-server account that does not carry the new mailbox's
+identifier; the mail server answers that refusal `integration.mailserver.conflict`, and
+the push that met the account is marked failed at once and raises `degradation` scoped
 `mailbox.conflict:<mailbox id>`, naming the mailbox by its identifier (INT-MAIL-001,
-INT-MAIL-007). Under `replace` the push for the new mailbox waits, and spends no
-attempt, until the server has confirmed the removal of the old one (INT-MAIL-007).
+INT-MAIL-007). Under `replace` the old mailbox's row SHALL record the instant it was
+replaced: from then it is owed `removed` and it no longer stands for its address, so the
+new mailbox's row is the one at the address. It keeps its fingerprint until its last
+holder is erased (PRIV-RIGHT-005), so that the new mailbox's push can find it; that push
+waits, spending no attempt, until the server has confirmed the old one's removal
+(INT-MAIL-006, INT-MAIL-007). A mailbox is held before, for this rule, only where it
+stands for the address: a mailbox replaced or released no longer does.
 
-*Source: D-148; D-146, D-166, D-177, `16-offboarding-procedure`*
+An erasure leaves nothing that recognises a mailbox's address: the address is under the
+erased key and its fingerprint is neutralised (PRIV-RIGHT-005). A later invitation of
+the address whose last holder was erased SHALL therefore be treated as one of an address
+never held, and SHALL name no `formerMailbox`; keeping anything that would still match
+the address would undo the erasure. The erased person's mail still never passes: the
+mail-server account they left is never adopted, so the new mailbox's push is answered
+`integration.mailserver.conflict` while that account stands, and the new mailbox is
+created by the daily attempt that follows the operator's erasure of that account at the
+mail server (D-101, INT-MAIL-007); reconciliation has counted the account as unknown
+since the person was erased.
+
+*Source: D-148; D-146, D-166, D-177, D-178, `16-offboarding-procedure`*
 
 Every account into an integrated-mail organization is created with a verified personal
 email (REG-MAIL-001), so the account never holds zero verified emails (REG-IDENT-001) and
@@ -1064,11 +1084,22 @@ address behaves as unknown at every path, including recovery.
    primary email and the mailbox as they were.
 5. Membership end sends one notice to each member of the security-notice set as it
    stands after the change and none to the retired address.
-6. An invitation of a corporate address whose mailbox has been held before, naming no
-   `formerMailbox`, is refused with `identity.invitation.mailboxheld` and changes
-   nothing, whoever it invites, its last holder included; under `transfer` the
-   invitee's mailbox is the old one with its mail; under `replace` the old mailbox is
-   removed and a new one reserved.
+6. An invitation of a corporate address whose standing mailbox has been held before and
+   whose last holder was not erased, naming no `formerMailbox`, is refused with
+   `identity.invitation.mailboxheld` and changes nothing, whoever it invites, its last
+   holder included; under `transfer` the invitee's mailbox is the old one with its mail;
+   under `replace` the old mailbox is removed and a new one reserved.
+7. Under `replace` the old mailbox's row records the instant it was replaced, is owed
+   `removed` and keeps its fingerprint, and the new mailbox's row is the one the address
+   finds; erasing the old mailbox's last holder before its removal is confirmed
+   neutralises that fingerprint and leaves the new mailbox's push answered
+   `integration.mailserver.conflict` while the old account stands; an invitation naming
+   `formerMailbox` where no held mailbox stands for the address is refused with
+   `api.request.invalid`, `details.member` `formerMailbox`.
+8. An invitation of an address whose last holder was erased is issued without
+   `formerMailbox`; while the erased holder's account stands at the mail server the new
+   mailbox's push is answered `integration.mailserver.conflict` and adopts nothing, and
+   once that account is gone the next attempt creates the new mailbox.
 
 ---
 

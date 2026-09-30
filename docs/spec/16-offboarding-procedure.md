@@ -76,7 +76,10 @@ Their mailbox and its mail are never handed on silently. Any later invitation of
 address, one to the same person included, is refused unless the administrator chooses,
 with a reason, whether the invitee receives the mailbox and its mail (`formerMailbox`
 `transfer`) or the old mailbox is removed and a new one reserved (`replace`)
-(REG-MAIL-003, D-166).
+(REG-MAIL-003, D-166). If the person is later erased, a later invitation of the address
+is no longer refused, since nothing left in the library recognises the address; erase
+the mail-server account they left as well (D-101), because a new mailbox at the address
+is created only once that account is gone (REG-MAIL-003, D-178).
 
 **4 — Revoke or transfer their grants.**
 

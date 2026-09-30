@@ -333,9 +333,11 @@ hand. It is begun again each day until the mail server takes it, so after an out
 mail server catches up with no action in the library; until it does, reconciliation
 lists that mailbox as a difference. A `mailbox.push` alert means a push spent its
 attempts, and it is raised again each time the push fails again. A `mailbox.conflict`
-alert means the mail server holds an account at that mailbox's name that the library did
-not create. Find out whose it is, resolve it at the mail server, and the daily retry
-that follows goes through (INT-MAIL-007).
+alert means the mail server holds an account at that mailbox's name that does not carry
+that mailbox's identifier, so the library will not adopt it. Find out whose it is,
+resolve it at the mail server, and the daily retry that follows goes through
+(INT-MAIL-007). Right after an invitation of an address whose last holder was erased, it
+is the account that person left: erase it at the mail server (D-101, REG-MAIL-003).
 
 ### 7.2 SMS gateway
 

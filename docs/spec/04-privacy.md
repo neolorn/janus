@@ -830,7 +830,7 @@ totals for a condition that is meant to be reversible.
 remains, and every personal field is rendered unrecoverable by **destroying the
 subject's key** (PRIV-RIGHT-005a). It SHALL NOT merely pseudonymise.
 
-*Source: D-148; D-026.1, D-037, D-068, D-117, D-147, D-166, D-177*
+*Source: D-148; D-026.1, D-037, D-068, D-117, D-147, D-166, D-177, D-178*
 
 **The distinction is decisive.** Pseudonymised data is still personal data, and
 controls preventing further processing combined with pseudonymisation are not
@@ -844,14 +844,19 @@ and the declared profile values (legal name, date of birth, REG-PROF-001) are pe
 fields under the subject key and become unreadable with the rest. A username freed by
 erasure is **held** for `retention.consent` and released afterwards (REG-IDENT-009): it
 is public by nature and is not personal data under the key, and the hold stops an erased
-person being impersonated at once under their former name. The address of a corporate
+person being impersonated at once under their former name.
+
+**A corporate mailbox's address goes with the key too.** The address of a corporate
 mailbox (INT-MAIL-006) is a personal field of the account that holds or last held it,
-under that account's key, and under a key of the mailbox's own (PRIV-RIGHT-005a) while
-nobody holds it. Erasure neutralises the fingerprint of every mailbox the subject holds
-or last held and leaves the row; the mail server's own account is outside the library
-(D-101), reconciliation counts it with the accounts the library holds no mailbox for
-(INT-MAIL-007), and no invitation gives the mailbox out again, to anyone, without an
-administrator's choice (`formerMailbox`, REG-MAIL-003).
+under that account's key. Only the address of a mailbox nobody has ever held, one
+reserved for an invitation, is under a key of the mailbox's own (PRIV-RIGHT-005a).
+Erasure neutralises the fingerprint of every mailbox the subject holds or last held and
+leaves the row; the mail server's own account is outside the library (D-101), and
+reconciliation counts it with the accounts the library holds no mailbox for
+(INT-MAIL-007). Nothing left recognises the address, so a later invitation of it is
+treated as one of an address never held; the account at the mail server is never adopted
+(INT-MAIL-001), the new mailbox is created only once the operator has erased that
+account there, and the erased person's mail never passes to anyone (REG-MAIL-003).
 
 **The host's business records are outside the erasure right.** A record the host keeps
 under a declared lawful basis (a financial record, say: what was transacted, when and
@@ -895,7 +900,7 @@ with AES key wrap with padding (RFC 5649). The format marker is one byte, `0x01`
 this scheme. An erased wrapped key is 32 zero bytes under marker `0x00`; every decrypt
 refuses it, and the DR-016 ledger and a restore recognise it as erased.
 
-*Source: D-097, D-099, D-100, D-147, D-166, D-171, D-172, D-173, D-174*
+*Source: D-097, D-099, D-100, D-147, D-166, D-171, D-172, D-173, D-174, D-178*
 
 **Per column, not per row.** Name and phone on a host record are encrypted; its
 non-personal columns (dates, amounts, quantities, references) are not. Aggregates and
@@ -967,23 +972,24 @@ foreign key does that today.
   held for a person who is not yet a subject) SHALL be encrypted, or its own data key
   wrapped, under the **deployment's data key**: a row of the subject-key table under a
   reserved identifier that no subject is issued: the max UUID of RFC 9562 (all 128 bits
-  set), never the nil subject, which means no subject. Erasure refuses that identifier and
-  never touches its row. `SubjectId` refuses it at construction, and every column of a
-  library-owned table that can hold a subject identifier in any row carries a check
-  constraint that refuses it, whatever that table's key and whether or not the column has
-  a foreign key. The subject-key table's key and the key rotation's cursor into it are not
-  subject identifiers: they name a row of that table, a subject's or the deployment's, and
-  are typed as such, never as `SubjectId` (D-174). The row is wrapped under the key-encryption key like
-  any subject key, so a rotation of the key-encryption key re-wraps rows of that table and
-  nothing else (OPS-SEC-003). A value the field cipher encrypts for a row that belongs to
-  no subject (an invitation's identifiers, an unheld mailbox's address, a queued message
-  that names no subject, a registration session's staged values), whether under the
-  deployment's data key or under a data key of the row's own that the deployment's data
-  key wraps, is bound by its additional authenticated data, in the place a subject
-  identifier takes, to its own row's identifier, never to the reserved identifier every
-  such value shares. A key or secret wrapped under it with RFC 5649 (a signing key,
-  a verifier, a client secret) takes no additional data, as the data keys wrapped under
-  the key-encryption key take none (D-172, D-173)
+  set), never the nil subject, which means no subject. Erasure refuses that identifier
+  and never touches its row. `SubjectId` refuses it at construction, and every column of
+  a library-owned table that can hold a subject identifier in any row carries a check
+  constraint that refuses it, whatever that table's key and whether or not the column
+  has a foreign key. The subject-key table's key and the key rotation's cursor into it
+  are not subject identifiers: they name a row of that table, a subject's or the
+  deployment's, and are typed as such, never as `SubjectId` (D-174). The row is wrapped
+  under the key-encryption key like any subject key, so a rotation of the key-encryption
+  key re-wraps rows of that table and nothing else (OPS-SEC-003). A value the field
+  cipher encrypts for a row that belongs to no subject (an invitation's identifiers, the
+  address of a mailbox nobody has ever held, a queued message that names no subject, a
+  registration session's staged values), whether under the deployment's data key or
+  under a data key of the row's own that the deployment's data key wraps, is bound by
+  its additional authenticated data, in the place a subject identifier takes, to its own
+  row's identifier, never to the reserved identifier every such value shares. A key or
+  secret wrapped under it with RFC 5649 (a signing key, a verifier, a client secret)
+  takes no additional data, as the data keys wrapped under the key-encryption key take
+  none (D-172, D-173)
 - **Each stored value SHALL carry a format marker and its initialisation vector**:
 
   ```
@@ -1022,15 +1028,20 @@ key as it then was. Anyone holding both that backup and the KEK can recover the
 subject's fields. Erasure of pre-erasure backups therefore completes when those backups
 expire — bounded by retention, and stated rather than implied.
 
-**Before any account exists.** The identifiers an invitation binds (REG-INV-001) SHALL be
-encrypted as one value under a data key of the invitation's own, which the deployment's
-data key wraps. The value SHALL be bound by the additional authenticated data to the
-invitation's identifier, in the place a subject identifier takes; the wrapped key takes
-none (D-173). The value and its wrapped key SHALL
-be overwritten when the invitation is revoked, acknowledged or found expired by the
-sweep, and an erasure SHALL overwrite them, in the erasure transaction, for every
-invitation attached to the subject. The invitation link's token SHALL be stored only as a one-way
-hash, and an invitation's audit records SHALL name the invitation and nothing it binds.
+**Before any account exists.** The identifiers an invitation binds (REG-INV-001) SHALL
+be encrypted as one value under a data key of the invitation's own, which the
+deployment's data key wraps. The value SHALL be bound by the additional authenticated
+data to the invitation's identifier, in the place a subject identifier takes; the
+wrapped key takes none (D-173). The value and its wrapped key SHALL be overwritten when
+the invitation is revoked, acknowledged or found expired by the sweep, and an erasure
+SHALL overwrite them, in the erasure transaction, for every invitation attached to the
+subject. The invitation link's token SHALL be stored only as a one-way hash, and an
+invitation's audit records SHALL name the invitation and nothing it binds. The address
+of a mailbox nobody has held, released when its invitation is revoked (REG-MAIL-001), is
+under a data key of the mailbox's own; when the mail server confirms the removal owed to
+it (INT-MAIL-007), that wrapped key SHALL be overwritten and the fingerprint of the
+address neutralised, in the transaction that records the confirmation, and the row
+remains, so nothing about a person outlives an invitation that led nowhere.
 
 **The send outbox.** A send may name no subject, or a subject that holds no key yet, so
 an outbox row holds the whole message (destination, source address and values) in one
@@ -1082,6 +1093,9 @@ carried.
     member included, and proves each carries a check constraint refusing the max UUID, so
     a column added later fails the build until it has one; a value the field cipher encrypted for a row
     that belongs to no subject does not decrypt once moved to another row.
+19. A mailbox nobody has held, released when its invitation is revoked, holds no readable
+    address and no live fingerprint once the server has confirmed its removal, and its row
+    remains.
 
 ---
 

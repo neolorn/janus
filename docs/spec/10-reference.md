@@ -64,7 +64,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `identity.invitation.expired` | An invitation token that opens no invitation (never issued, revoked, already used, or past its lifetime); at the acknowledgement, an invitation revoked, already acknowledged, past its lifetime, whose organization's deletion was requested or which was erased, or whose inviter no longer holds what issuing it required; at revocation, one already acknowledged; 422 | IDN-LIFE-009a, REG-INV-001, D-106, D-147, D-166 |
 | `identity.invitation.notfound` | No standing invitation answers: `GET /account/invitation` or the acknowledgement names none attached to the signed-in account (one attached to another account is answered alike), or a revocation names one the organization did not issue; 404 | REG-INV-002, IDN-LIFE-009a, D-166 |
 | `identity.invitation.addressrequired` | An invitation into an organization whose mail is integrated names no personal `email`, no `corporateEmail`, or the corporate address as the personal one; `details.member` names `email` or `corporateEmail`; 422 | REG-INV-001, REG-MAIL-001, D-166 |
-| `identity.invitation.mailboxheld` | An invitation names a corporate address whose mailbox has been held before, by anyone (the invitee and an erased holder included), and its body carries no `formerMailbox` (section 5.44); the issue checks nothing about who the invitee is, and no mailbox changes; 409 | REG-MAIL-001, REG-MAIL-003, INT-MAIL-006, D-166 |
+| `identity.invitation.mailboxheld` | An invitation names a corporate address whose mailbox has been held before, by anyone (the invitee included; the address of an erased holder is not recognised, REG-MAIL-003), and its body carries no `formerMailbox` (section 5.44); the issue checks nothing about who the invitee is, and no mailbox changes; 409 | REG-MAIL-001, REG-MAIL-003, INT-MAIL-006, D-166, D-178 |
 | `identity.mailbox.taken` | The corporate address an invitation asserts is held by a member, or reserved by a standing invitation that has not expired; `details.member` is `corporateEmail`; 409 | REG-MAIL-001, INT-MAIL-006, D-166 |
 | `identity.mailbox.notfound` | The account holds no mailbox the mail server is told to enable, or the deployment registers no mail server; the app-password endpoints are not present for it; 404 | INT-MAIL-006, REG-MAIL-002, D-166 |
 | `identity.registration.signedin` | `POST /register` from a browser holding a live session: nothing is staged, no account document is answered, and the frontend sends the person to the account application; where the request carries an invitation token, the invitation is first attached to the signed-in account (REG-INV-002); 409 | REG-SESS-002, D-162, D-166 |
@@ -179,7 +179,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `config.value.lastdestination` | A change would leave an `alerting.*.destinations` list empty; 422 | OPS-ALERT-004a, D-153 |
 | `config.policy.belowsystem` **(new)** | An organization policy field the replacement states is looser than the system default; `details.field` names the first such field in the order of section 4.1a; a field the replacement leaves out is not judged; 422 | AUTH-STEP-002a, D-143, D-166 |
 | `api.request.malformed` | The request could not be read: its body is not the shape the endpoint takes; a member it requires is absent or empty; a free-text member is outside 1 to 1024 characters after trimming (API-CONV-002; a blank reason whose absence has a code of its own answers that code); or a member or path segment holds a word outside the closed vocabulary this chapter or the declared model fixes for it (a takedown trigger outside section 5.12d, a configuration key the route does not serve, an undeclared permission). `details.member` names the member the reader stopped at, or the one the endpoint required, and carries nothing of its value; where the body failed before any member, the refusal carries the code alone. Also: an authorization request the provider refused and cannot return to a client, `details.error` then carrying the protocol's code and nothing else (LIB-API-003); a registration through `IResources` whose member is absent or unreadable, a sensitive type naming no `subject` included (AUTHZ-INHERIT-002, IDN-LIFE-002a); and, for a `Janus.Cli` command, a command, argument or input it cannot read, answered as one JSON line (OPS-BOOT-001, OPS-SEC-001, DR-016); 400 | API-CONV-002, API-CONV-003, D-162, D-166 |
-| `api.request.invalid` | A well-formed request refused on its meaning where no more specific code of section 1 exists: a body naming something that does not exist or cannot be acted on (an invitation's `documents` naming a document not published, `details.member` `documents`; a group member that does not exist or belongs to another organization; a preferred second step naming a method the account has not enrolled, `details.member` `method`); a compliance record dated after now, or two licences under one identifier; a registration or move through `IResources` that the declaration or the library's records refuse. `details.member` names the member; 422 | API-CONV-003, REG-INV-001, AUTHZ-GROUP-001, IDN-ATTR-008, AUTHZ-INHERIT-002, IDN-LIFE-002a, OPS-MAINT-001, D-166 |
+| `api.request.invalid` | A well-formed request refused on its meaning where no more specific code of section 1 exists: a body naming something that does not exist or cannot be acted on (an invitation's `documents` naming a document not published, `details.member` `documents`; an invitation's `formerMailbox` where no held mailbox stands for its corporate address, `details.member` `formerMailbox`; a group member that does not exist or belongs to another organization; a preferred second step naming a method the account has not enrolled, `details.member` `method`); a compliance record dated after now, or two licences under one identifier; a registration or move through `IResources` that the declaration or the library's records refuse. `details.member` names the member; 422 | API-CONV-003, REG-INV-001, REG-MAIL-003, AUTHZ-GROUP-001, IDN-ATTR-008, AUTHZ-INHERIT-002, IDN-LIFE-002a, OPS-MAINT-001, D-166, D-178 |
 | `model.containment.cycle` **(new)** | Containment declaration forms a cycle | AUTHZ-MODEL-004 |
 | `model.derivation.unindexed` **(new)** | Derivation names an unindexed column | AUTHZ-DERIVE-004 |
 | `model.purpose.missingassessment` **(new)** | Legitimate interest declared without an assessment | PRIV-BASIS-002 |
@@ -929,13 +929,13 @@ thing. The scopes the chapters name:
 
 A lost registration channel raises `degradation` with `details.component`
 `registration-channel` (OPS-OBS-002, REG-SESS-003). A push the adapter will not apply to
-a mail-server account it did not create is answered `integration.mailserver.conflict`
-and raises `degradation` at once under `mailbox.conflict:<mailbox id>`, naming the
-mailbox by its identifier (INT-MAIL-001, INT-MAIL-007, REG-MAIL-003); a drift the drift
-check finds raises it naming the derivation (AUTHZ-DERIVE-005); a stale or absent
-location file raises it (INT-GEN-006).
+a mail-server account that does not carry the mailbox's identifier is answered
+`integration.mailserver.conflict` and raises `degradation` at once under
+`mailbox.conflict:<mailbox id>`, naming the mailbox by its identifier (INT-MAIL-001,
+INT-MAIL-007, REG-MAIL-003); a drift the drift check finds raises it naming the
+derivation (AUTHZ-DERIVE-005); a stale or absent location file raises it (INT-GEN-006).
 
-*Source: OPS-ALERT-001, OPS-ALERT-002, OPS-OBS-002, D-153, D-166, D-177*
+*Source: OPS-ALERT-001, OPS-ALERT-002, OPS-OBS-002, D-153, D-166, D-177, D-178*
 
 ### 5.24 Audit actions
 
@@ -1316,18 +1316,23 @@ under `loss-report`.
 mailbox is removed and a new one reserved)
 
 The `formerMailbox` member of `POST /admin/organizations/{id}/invitations`, required
-where the corporate address's mailbox has been held before, by anyone, the invitee and
-an erased holder included (`identity.invitation.mailboxheld`); the issue checks nothing
-about who the invitee is. Either value is stepped up with the issue, carries the reason
-and is recorded. No mailbox anyone has held passes to a holder without it, and the
-library removes such a mailbox only under `replace`. The mail-server adapter adopts an
-existing server account only where its description carries the library's mailbox
-identifier; a refusal to adopt is answered `integration.mailserver.conflict`, and the
-push that met the account is marked failed at once and raises `degradation` scoped
-`mailbox.conflict:<mailbox id>` (section 5.23). Under `replace` the push for the new
-mailbox waits until the server has confirmed the removal of the old one (INT-MAIL-007).
+where the corporate address's mailbox has been held before, by anyone, the invitee
+included (`identity.invitation.mailboxheld`), and refused with `api.request.invalid`
+where no held mailbox stands for the address; a mailbox replaced or released no longer
+stands for it, and the address of an erased holder is not recognised (REG-MAIL-003). The
+issue checks nothing about who the invitee is. Either value is stepped up with the
+issue, carries the reason and is recorded. No mailbox anyone has held passes to a holder
+without it, and the library removes such a mailbox only under `replace`. The mail-server
+adapter adopts an existing server account only where its description carries the
+identifier of the mailbox being pushed; a refusal to adopt is answered
+`integration.mailserver.conflict`, and the push that met the account is marked failed at
+once and raises `degradation` scoped `mailbox.conflict:<mailbox id>` (section 5.23).
+Under `replace` the old mailbox's row records the instant it was replaced, is owed
+`removed` and keeps its fingerprint until its last holder is erased, the new mailbox's
+row stands for the address, and the new mailbox's push waits until the server has
+confirmed the old one's removal (INT-MAIL-006, INT-MAIL-007).
 
-*Source: REG-MAIL-001, REG-MAIL-003, INT-MAIL-001, INT-MAIL-006, INT-MAIL-007, D-166, D-177*
+*Source: REG-MAIL-001, REG-MAIL-003, INT-MAIL-001, INT-MAIL-006, INT-MAIL-007, D-166, D-177, D-178*
 
 ### 5.45 Mailbox states
 
@@ -1337,11 +1342,14 @@ The state the library owes a mailbox and pushes to the mail server (`IMailServer
 LIB-HOST-001; INT-MAIL-001, INT-MAIL-007). `disabled` is a server account whose holder
 cannot authenticate, so no app password works, and which still receives mail; `enabled`
 is one whose holder can; `removed` is the server account destroyed. A mailbox is owed
-`enabled` only while its holder's account is `active` or `restricted` and holds a current
-membership of the administrative organization, and `disabled` otherwise, a reservation
-for an invitation included (INT-MAIL-006).
+`enabled` only while its holder's account is `active` or `restricted` and holds a
+current membership of the administrative organization, and `disabled` otherwise, a
+reservation for an invitation included, save that a mailbox replaced (REG-MAIL-003) or a
+mailbox nobody has held released with its revoked invitation (REG-MAIL-001) is owed
+`removed` whatever its holder's state short of erasure (INT-MAIL-006), and a mailbox
+whose holder was erased is owed nothing further (INT-MAIL-007).
 
-*Source: INT-MAIL-001, INT-MAIL-006, INT-MAIL-007, LIB-HOST-001, D-166*
+*Source: INT-MAIL-001, INT-MAIL-006, INT-MAIL-007, LIB-HOST-001, D-166, D-178*
 
 ### 5.46 Export formats and sections
 

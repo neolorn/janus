@@ -1055,9 +1055,10 @@ recorded against one already running, as IDN-LIFE-003 states.
 **IDN-LIFE-015** — Account state SHALL propagate to Stalwart with a stable idempotency
 key, and reconciliation SHALL run daily, flagging drift without auto-correcting. Mail
 provisioning follows the state each mailbox is owed, read from its holder's account
-state and memberships, and consumes no event (INT-MAIL-006, INT-MAIL-007).
+state and memberships, or as `removed` where the mailbox was replaced or released, and
+consumes no event (INT-MAIL-006, INT-MAIL-007).
 
-*Source: D-006, D-041, D-166*
+*Source: D-006, D-041, D-166, D-178*
 
 A failed suspension leaves a person reading mail after offboarding. Silent
 auto-correction conceals a broken pipeline.
