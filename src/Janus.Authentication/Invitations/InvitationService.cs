@@ -694,11 +694,12 @@ internal sealed class InvitationService(
     /// <inheritdoc/>
     public ValueTask<Result> EndMembershipAsync(
         AccessContext context,
+        SessionId session,
         OrganizationId organization,
         SubjectId member,
         string source,
         CancellationToken cancellationToken) =>
-        end.EndAsync(context, organization, member, source, cancellationToken);
+        end.EndAsync(context, session, organization, member, source, cancellationToken);
 
     /// <inheritdoc/>
     public ValueTask<Result> AcknowledgeAsync(

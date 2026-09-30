@@ -206,6 +206,13 @@ public static class ErrorCodes
     public static ErrorCode MembershipLimitReached { get; } = ErrorCode.Parse("identity.membership.limitreached");
 
     /// <summary>
+    /// The account holds no current membership of the organization: it never held one,
+    /// or it has ended.
+    /// </summary>
+    /// <remarks>Implements IDN-MEM-001 and API-CONV-003, chapter 10 section 1.1.</remarks>
+    public static ErrorCode MembershipNotFound { get; } = ErrorCode.Parse("identity.membership.notfound");
+
+    /// <summary>
     /// The organization named is the administrative one, which is not deletable.
     /// Delete another organization, or none.
     /// </summary>

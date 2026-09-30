@@ -34,6 +34,7 @@ public sealed class VocabularyContractTests
         "provider:unlink",
         "recovery:approve",
         "invitation:issue",
+        "membership:end",
         "grant:manage",
         "account:suspend",
         "account:reactivate",

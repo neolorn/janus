@@ -423,6 +423,7 @@ internal static class OrganizationEndpoints
             await invitations
                 .EndMembershipAsync(
                     browser.Asking,
+                    browser.Required.Id,
                     new OrganizationId(id),
                     new SubjectId(subject),
                     RequestOrigin.Source(context.Request),

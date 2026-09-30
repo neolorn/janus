@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Organizations;
@@ -20,6 +20,7 @@ namespace Janus.Authentication.Invitations;
 /// personal email becomes the primary.
 /// </summary>
 /// <param name="gate">The one place a permission is evaluated.</param>
+/// <param name="stepUp">What judges the session against the <c>membership:end</c> gate.</param>
 /// <param name="directory">Where the organization's standing is read.</param>
 /// <param name="memberships">Where the membership is ended.</param>
 /// <param name="identifiers">Where the account's identifiers are read and the corporate address retired.</param>
@@ -38,6 +39,7 @@ namespace Janus.Authentication.Invitations;
 /// </remarks>
 internal sealed class MembershipEnd(
     IAccessGate gate,
+    StepUpGuard stepUp,
     IOrganizationDirectory directory,
     IMembershipEnding memberships,
     IIdentifierDirectory identifiers,
@@ -58,6 +60,7 @@ internal sealed class MembershipEnd(
     /// Ends an account's membership of an organization.
     /// </summary>
     /// <param name="context">Who is ending it.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
     /// <param name="organization">Of which organization.</param>
     /// <param name="member">Whose membership.</param>
     /// <param name="source">The address the request came from, which a notice counts against.</param>
@@ -66,6 +69,7 @@ internal sealed class MembershipEnd(
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public async ValueTask<Result> EndAsync(
         AccessContext context,
+        SessionId session,
         OrganizationId organization,
         SubjectId member,
         string source,
@@ -96,6 +100,23 @@ internal sealed class MembershipEnd(
             return Result.Failure(refused);
         }
 
+        // IDN-MEM-001, X9 of D-166: a membership the account does not hold is told before
+        // any transaction begins, and before a step-up is asked for what cannot happen.
+        if (await memberships.FindAsync(member, organization, cancellationToken).ConfigureAwait(false) is null)
+        {
+            return Result.Failure(Error.From(ErrorCodes.MembershipNotFound));
+        }
+
+        // REG-MAIL-003: ending a membership changes another person's account, so it is
+        // the membership:end step-up action.
+        if (await stepUp
+                .PassedAsync(acting, session, StepUpAction.MembershipEnd, cancellationToken)
+                .ConfigureAwait(false)
+            is Error challenged)
+        {
+            return Result.Failure(challenged);
+        }
+
         DateTimeOffset now = time.GetUtcNow();
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -104,13 +125,18 @@ internal sealed class MembershipEnd(
             return Result.Failure(notBegun);
         }
 
+        // A second end that read the membership before this one committed finds none
+        // here, and is answered as the find would answer it, leaving the unit clean.
         if (await memberships.EndAsync(member, organization, now, cancellationToken).ConfigureAwait(false)
             is not MembershipId ended)
         {
-            return Result.Failure(Error.From(
-                ErrorCodes.RequestMalformed,
-                "member",
-                JsonSerializer.SerializeToElement("subject")));
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+            {
+                return Result.Failure(notCommittedAgain);
+            }
+
+            return Result.Failure(Error.From(ErrorCodes.MembershipNotFound));
         }
 
         List<DomainEvent> announced =

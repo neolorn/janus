@@ -219,4 +219,11 @@ public enum StepUpAction
     /// <remarks>Named <c>organization:delete</c>.</remarks>
     [JsonStringEnumMemberName("organization:delete")]
     OrganizationDelete = 29,
+
+    /// <summary>
+    /// End a membership, which retires the corporate address and the mailbox it gave.
+    /// </summary>
+    /// <remarks>Named <c>membership:end</c>.</remarks>
+    [JsonStringEnumMemberName("membership:end")]
+    MembershipEnd = 30,
 }

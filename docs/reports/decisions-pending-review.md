@@ -9213,6 +9213,8 @@ actions).
 *Chapter text that should change.* Chapter 09 section 8a could give the endpoint its
 answers, and chapter 10 could hold the audit action row below.
 
+**Superseded by D-166.**
+
 ---
 
 ## 251. What the end of a membership does to the corporate address

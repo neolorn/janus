@@ -342,8 +342,9 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
 
     /// <summary>
     /// 09 section 8a and IDN-MEM-001: ending a membership answers <c>204</c> and writes
-    /// it down; an account holding no current membership of the organization is a
-    /// <c>400</c> naming it, and one without <c>membership:manage</c> is refused.
+    /// it down; an account holding no current membership of the organization, a second
+    /// end included, is <c>404</c> <c>identity.membership.notfound</c>, and one without
+    /// <c>membership:manage</c> is refused.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -363,7 +364,8 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status403Forbidden, withheld.Status);
         Assert.Equal(StatusCodes.Status204NoContent, ended.Status);
-        Assert.Equal("subject", Member(again));
+        Assert.Equal(StatusCodes.Status404NotFound, again.Status);
+        Assert.Equal(ErrorCodes.MembershipNotFound.ToString(), again.Text("code"));
         Assert.Equal((member, Branch), (Assert.Single(_deployment.Endings.Ended).Subject, _deployment.Endings.Ended[0].Organization));
         Assert.Equal(AuditActions.MembershipEnded, Assert.Single(_deployment.OrganizationChanges.Changes).Action);
     }
