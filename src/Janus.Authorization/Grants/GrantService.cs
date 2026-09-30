@@ -92,7 +92,7 @@ internal sealed class GrantService(
 
         if (role is null)
         {
-            return Result.Failure<GrantId>(Malformed("role"));
+            return Result.Failure<GrantId>(Unresolved("role"));
         }
 
         if (await AdministeringRefusedAsync(context, role, cancellationToken).ConfigureAwait(false)
@@ -103,7 +103,7 @@ internal sealed class GrantService(
 
         if (!await HolderAsync(request.Subject, organization, cancellationToken).ConfigureAwait(false))
         {
-            return Result.Failure<GrantId>(Malformed("subjectId"));
+            return Result.Failure<GrantId>(Unresolved("subjectId"));
         }
 
         // OPS-BOOT-002: the break-glass session's account holds what bootstrap gave it
@@ -277,6 +277,12 @@ internal sealed class GrantService(
 
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
+
+    // AUTHZ-GRANT-001, D-166: a role or a group the body names that the deployment
+    // does not hold where the grant is made is a request read and understood, whose
+    // meaning cannot be carried out.
+    private static Error Unresolved(string member) =>
+        Error.From(ErrorCodes.GrantUnresolved, "member", JsonSerializer.SerializeToElement(member));
 
     // AUTHZ-GRANT-001 AC2: the whole organization is named by its identifier; a record
     // is scoped to the organization it was registered in.

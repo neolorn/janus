@@ -249,6 +249,29 @@ public sealed class AuthorizationModelTests
     }
 
     /// <summary>
+    /// AUTHZ-MODEL-004, D-166: the library names the whole organization
+    /// <c>organization</c>, so a host type by that name stops the deployment, naming
+    /// the type; the same declaration under another name builds.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_MODEL_004_ATypeNamedOrganizationFailsStartup()
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Naming("organization")));
+
+        Assert.Equal(ErrorCodes.StartupTypeReserved, refused.Failure?.Code);
+        Assert.Equal("organization", refused.Failure!.Details["key"].GetString());
+        Assert.NotNull(AuthorizationModel.Of(Naming("draft")));
+
+        static AuthorizationDeclaration Naming(string type) =>
+            HostDomain.Declared()
+                .Resource<HostDomain.Draft>(type, draft => draft
+                    .ContainedIn("folder")
+                    .Purpose("collaboration", "contract", data: ["identity"]))
+                .Build();
+    }
+
+    /// <summary>
     /// AUTHZ-MODEL-004 AC3: an entity the host queries and never declared has no
     /// policy, which a test enumerating the host's entities reads as a red build.
     /// </summary>

@@ -6808,6 +6808,8 @@ hold.
 organization, that `grant:manage` is asked in the grant's organization, and add the 400
 for a role, record or group the deployment does not hold.
 
+**Superseded by D-166.**
+
 ---
 
 ## 185. Which grants of system administration need system administration

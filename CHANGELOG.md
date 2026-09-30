@@ -684,7 +684,10 @@ against the public contract of LIB-API-001.
   `IGrants` is the same pair of operations in process. A revocation naming no grant, and
   a grant on a record the deployment holds no registration for, are refused with 403
   `authz.denied` in the same way; a revoked or derived grant answers 404
-  `authz.grant.notfound` only to a caller holding `grant:manage` where it is scoped.
+  `authz.grant.notfound` only to a caller holding `grant:manage` where it is scoped. A
+  grant naming a role the deployment does not hold, or a group that does not exist or
+  belongs to another organization, answers 422 `authz.grant.unresolved` naming `role`
+  or `subjectId`.
 - `GET /admin/grants?organization=...&subjectType=user|group&subjectId=...` and
   `IGrants.HeldAsync` read the live grants one account or group holds in its own name in
   an organization, oldest first, each with its identifier, kind, role, what it is on,
@@ -1513,9 +1516,10 @@ against the public contract of LIB-API-001.
   reference to one of the host's fields is an expression the compiler checks.
 - The authorization model is built and checked once, at startup: a containment cycle, a
   reference to a type that was never declared, a type that reaches no organization, a
-  type with no purpose, a purpose whose basis needs an assessment and names none, and a
-  derivation from a relationship that was never declared each stop the deployment with
-  their own code.
+  type with no purpose, a purpose whose basis needs an assessment and names none, a
+  derivation from a relationship that was never declared, and a type named
+  `organization`, which the library reserves for the whole organization
+  (`model.type.reserved`), each stop the deployment with their own code.
 - The two checks the declaration alone cannot decide run as the deployment starts and
   before it serves a request: a role someone wrote allowing a permission the model does
   not declare, and a derivation naming a column no index reaches, each stop the process

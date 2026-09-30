@@ -40,6 +40,10 @@ internal sealed class AuthorizationModel
     private static readonly string[] Hosting =
         ["hosting", "transfer", "hosting-transfer", "cross-border-transfer"];
 
+    // AUTHZ-MODEL-004, D-166: the name the library gives the whole organization, which
+    // no host type may take.
+    private static readonly ResourceType OrganizationWide = ResourceType.Parse("organization");
+
     private readonly Dictionary<string, LawfulBasisDeclaration> _bases;
     private readonly Dictionary<Type, ResourceTypeDeclaration> _entities;
     private readonly HashSet<Permission> _permissions;
@@ -452,6 +456,17 @@ internal sealed class AuthorizationModel
 
         foreach (ResourceTypeDeclaration type in declaration.ResourceTypes)
         {
+            // A host record under this name would be granted and refused as the
+            // organization itself.
+            if (type.Name == OrganizationWide)
+            {
+                throw Refused(
+                    ErrorCodes.StartupTypeReserved,
+                    "key",
+                    type.Name.ToString(),
+                    "the library reserves the name for the whole organization");
+            }
+
             if (!types.TryAdd(type.Name, type))
             {
                 throw Malformed("the resource type " + type.Name + " is declared twice");

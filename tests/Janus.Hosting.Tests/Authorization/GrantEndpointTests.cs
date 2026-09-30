@@ -458,9 +458,10 @@ public sealed class GrantEndpointTests : IAsyncLifetime
 
     /// <summary>
     /// AUTHZ-GRANT-001: a grant names a role, an organization, and a group of the
-    /// grant's own organization; anything else is a malformed request naming the
-    /// member. A record the deployment holds no registration for is refused rather
-    /// than malformed (CONV-DESIGN-002 AC3).
+    /// grant's own organization. A body that cannot be read is malformed; a role the
+    /// deployment does not hold, or a group that does not exist or belongs to another
+    /// organization, is unresolved, naming the member (D-166). A record the deployment
+    /// holds no registration for is refused rather than malformed (CONV-DESIGN-002 AC3).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -476,6 +477,8 @@ public sealed class GrantEndpointTests : IAsyncLifetime
         Answer unnamed = await GrantedAsync(administrator, "organization", "not-an-organization");
         Answer unknownRole = await GrantedAsync(administrator, "document", "d-1", role: RoleName.Parse("auditor"));
         Answer foreignGroup = await GrantedAsync(administrator, "document", "d-1", group: foreign.Id);
+        Answer missingGroup = await GrantedAsync(
+            administrator, "document", "d-1", group: new GroupId(Guid.NewGuid()));
         Answer localGroup = await GrantedAsync(administrator, "document", "d-1", group: local.Id);
         Answer untyped = await administrator.SendAsync(
             "POST",
@@ -488,8 +491,9 @@ public sealed class GrantEndpointTests : IAsyncLifetime
             ("reason", "Needs it."));
 
         Assert.Equal("resourceId", Member(unnamed));
-        Assert.Equal("role", Member(unknownRole));
-        Assert.Equal("subjectId", Member(foreignGroup));
+        Assert.Equal("role", Unresolved(unknownRole));
+        Assert.Equal("subjectId", Unresolved(foreignGroup));
+        Assert.Equal("subjectId", Unresolved(missingGroup));
         Assert.Equal("resourceType", Member(untyped));
         Assert.Equal(StatusCodes.Status201Created, localGroup.Status);
         Assert.Equal(
@@ -666,6 +670,14 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     private static string Member(Answer answer)
     {
         Assert.Equal(StatusCodes.Status400BadRequest, answer.Status);
+
+        return answer.Json().GetProperty("details").GetProperty("member").GetString()!;
+    }
+
+    private static string Unresolved(Answer answer)
+    {
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, answer.Status);
+        Assert.Equal(ErrorCodes.GrantUnresolved.ToString(), answer.Text("code"));
 
         return answer.Json().GetProperty("details").GetProperty("member").GetString()!;
     }
