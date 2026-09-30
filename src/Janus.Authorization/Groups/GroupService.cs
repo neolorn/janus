@@ -209,9 +209,14 @@ internal sealed class GroupService(
             return Result.Failure(Malformed("id"));
         }
 
+        // X5, D-166: a member group that does not exist or belongs to another
+        // organization is a body read and understood that names nothing it can hold.
         if (!await JoinableAsync(member, held.Organization, cancellationToken).ConfigureAwait(false))
         {
-            return Result.Failure(Malformed("subjectId"));
+            return Result.Failure(Error.From(
+                ErrorCodes.RequestInvalid,
+                "member",
+                JsonSerializer.SerializeToElement("subjectId")));
         }
 
         // OPS-BOOT-002: a group's grants would be something further granted to the
@@ -249,15 +254,15 @@ internal sealed class GroupService(
             return Result.Failure(notBegun);
         }
 
-        if ((await groups.MembersAsync(group, cancellationToken).ConfigureAwait(false)).Contains(member))
+        // X9: a member already held changes nothing and records nothing, and the unit
+        // of work still ends before the operation returns.
+        if (!(await groups.MembersAsync(group, cancellationToken).ConfigureAwait(false)).Contains(member))
         {
-            return Result.Success();
+            await groups.AddMemberAsync(group, member, cancellationToken).ConfigureAwait(false);
+            await audit
+                .MemberAddedAsync(held, member, stated, acting, context.BreakGlassReason, time.GetUtcNow(), cancellationToken)
+                .ConfigureAwait(false);
         }
-
-        await groups.AddMemberAsync(group, member, cancellationToken).ConfigureAwait(false);
-        await audit
-            .MemberAddedAsync(held, member, stated, acting, context.BreakGlassReason, time.GetUtcNow(), cancellationToken)
-            .ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
