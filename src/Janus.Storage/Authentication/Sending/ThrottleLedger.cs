@@ -12,13 +12,13 @@ namespace Janus.Storage.Authentication.Sending;
 /// Where failed attempts are counted, under the hash of what they were made against.
 /// </summary>
 /// <param name="context">The context the operation runs on.</param>
-/// <param name="fingerprintKeys">The versions the scope keys are hashed under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <remarks>
 /// Implements AUTH-ABUSE-001, OPS-SEC-003 and CONV-DESIGN-003. A counter kept under a
 /// previous version of the fingerprint key is read until the rotation retires the
 /// version, and the next failure is counted under the current one from where it stood.
 /// </remarks>
-internal sealed class ThrottleLedger(StoreContext context, FingerprintKeys fingerprintKeys)
+internal sealed class ThrottleLedger(StoreContext context, IKeyRing ring)
     : IThrottleLedger
 {
     /// <inheritdoc/>
@@ -62,7 +62,7 @@ internal sealed class ThrottleLedger(StoreContext context, FingerprintKeys finge
             {
                 Scope = scope,
                 Key = hashed,
-                FingerprintVersion = fingerprintKeys.CurrentVersion,
+                FingerprintVersion = Fingerprint.CurrentVersion(ring),
                 Failures = standing + 1,
                 At = at,
             });
@@ -102,8 +102,8 @@ internal sealed class ThrottleLedger(StoreContext context, FingerprintKeys finge
     }
 
     private byte[] Hashed(string key) =>
-        Fingerprint.Compute(Encoding.UTF8.GetBytes(key), fingerprintKeys);
+        Fingerprint.Compute(Encoding.UTF8.GetBytes(key), ring);
 
     private IReadOnlyList<byte[]> Candidates(string key) =>
-        Fingerprint.Candidates(Encoding.UTF8.GetBytes(key), fingerprintKeys);
+        Fingerprint.Candidates(Encoding.UTF8.GetBytes(key), ring);
 }

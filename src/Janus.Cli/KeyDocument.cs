@@ -20,8 +20,9 @@ namespace Janus.Cli;
 /// file left on disk or a variable in the environment. Standard input that is a terminal is
 /// refused before anything is read, so no key is typed or pasted where a screen or a
 /// history keeps it. The document is read as bytes and every key is decoded straight
-/// from them into arrays the command's <see cref="HeldKeys"/> clears when it ends, so
-/// nothing but the connection passes through a string.
+/// from them into arrays cleared once the command's key ring holds its own copies, so
+/// nothing but the connection passes through a string; the ring is filled once, at the
+/// command's start, and cleared when the command ends (CONV-CODE-007).
 /// </remarks>
 [NeverLogged]
 internal sealed class KeyDocument
@@ -29,14 +30,10 @@ internal sealed class KeyDocument
     // A connection and a handful of keys; anything longer is not the document.
     private const int Longest = 64 * 1024;
 
-    private KeyDocument(
-        string connection,
-        KeyEncryptionKeys keyEncryptionKeys,
-        FingerprintKeys fingerprintKeys)
+    private KeyDocument(string connection, IKeyRing ring)
     {
         Connection = connection;
-        KeyEncryptionKeys = keyEncryptionKeys;
-        FingerprintKeys = fingerprintKeys;
+        Ring = ring;
     }
 
     /// <summary>
@@ -45,21 +42,16 @@ internal sealed class KeyDocument
     public string Connection { get; }
 
     /// <summary>
-    /// The key-encryption key and the versions retained beside it.
+    /// The key ring the document's keys were read into: the key-encryption key and the
+    /// fingerprint key, each with the versions retained beside it.
     /// </summary>
-    public KeyEncryptionKeys KeyEncryptionKeys { get; }
-
-    /// <summary>
-    /// The key the searchable fingerprints are computed under and the versions retained
-    /// beside it.
-    /// </summary>
-    public FingerprintKeys FingerprintKeys { get; }
+    public IKeyRing Ring { get; }
 
     /// <summary>
     /// Reads the document from standard input.
     /// </summary>
     /// <param name="terminal">Where it is read from.</param>
-    /// <param name="held">What clears every key read when the command ends.</param>
+    /// <param name="held">The key ring the keys are read into, and what clears every key read.</param>
     /// <param name="cancellationToken">Abandons the read.</param>
     /// <returns>
     /// The document, or the failure naming what was missing: <c>input</c> where standard
@@ -117,6 +109,7 @@ internal sealed class KeyDocument
         finally
         {
             CryptographicOperations.ZeroMemory(read);
+            held.Release();
         }
     }
 
@@ -161,10 +154,11 @@ internal sealed class KeyDocument
                 return Result.Failure<KeyDocument>(Unavailable("fingerprintKeys"));
             }
 
-            return Result.Success(new KeyDocument(
-                connection.GetString()!,
-                new KeyEncryptionKeys(keyVersion, keyMaterial),
-                new FingerprintKeys(fingerprintVersion, fingerprintMaterial)));
+            held.Ring.HoldKeyEncryptionKeys(new KeyEncryptionKeys(keyVersion, keyMaterial));
+            held.Ring.HoldFingerprintKeys(new FingerprintKeys(fingerprintVersion, fingerprintMaterial));
+            held.Ring.Fill();
+
+            return Result.Success(new KeyDocument(connection.GetString()!, held.Ring));
         }
     }
 

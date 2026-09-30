@@ -567,5 +567,5 @@ public sealed class SessionStoreTests(DatabaseFixture database)
     }
 
     private SessionStore Store(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness);
+        new(context, _deployment.Ring, _deployment.Randomness);
 }

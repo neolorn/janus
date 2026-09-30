@@ -171,13 +171,7 @@ public sealed class EventPublisherTests : IAsyncDisposable
 
         IServiceCollection services = new ServiceCollection()
             .AddSingleton<IEvents>(bypassing)
-            .AddJanus(
-                "Host=nowhere.invalid;Database=identity",
-                new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-                new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-                Encoding.UTF8.GetBytes("Host=nowhere.invalid;Database=identity"),
-                HostFixture.Declaration(),
-                ApplicationKind.Public);
+            .AddJanus("Host=nowhere.invalid;Database=identity", HostFixture.Declaration(), ApplicationKind.Public);
 
         // The events table and the transaction, over the area's fakes, so the row the
         // library writes is read here without a database.

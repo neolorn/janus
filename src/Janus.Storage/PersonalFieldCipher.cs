@@ -60,12 +60,47 @@ internal static class PersonalFieldCipher
     }
 
     /// <summary>
+    /// Wraps a data key, or a value that belongs to no subject's key, under the current
+    /// version of the key-encryption key the ring lends.
+    /// </summary>
+    /// <param name="dataKey">The data key.</param>
+    /// <param name="ring">The key ring the key-encryption key is borrowed from.</param>
+    /// <returns>The version it is wrapped under and the wrapped key, as they are stored.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    /// <exception cref="InvalidOperationException">The ring holds no key-encryption key.</exception>
+    public static (int Version, byte[] Wrapped) WrapUnderCurrent(byte[] dataKey, IKeyRing ring)
+    {
+        ArgumentNullException.ThrowIfNull(dataKey);
+        ArgumentNullException.ThrowIfNull(ring);
+
+        return ring
+            .BorrowKeyEncryptionKeys(keys => (keys.CurrentVersion, Wrap(dataKey, keys.Current.Span)))
+            .Match(wrapped => wrapped, error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    /// <summary>
+    /// The version of the key-encryption key new keys are wrapped under.
+    /// </summary>
+    /// <param name="ring">The key ring the version is read from.</param>
+    /// <returns>The current version.</returns>
+    /// <exception cref="ArgumentNullException">The ring is absent.</exception>
+    /// <exception cref="InvalidOperationException">The ring holds no key-encryption key.</exception>
+    public static int CurrentVersion(IKeyRing ring)
+    {
+        ArgumentNullException.ThrowIfNull(ring);
+
+        return ring
+            .BorrowKeyEncryptionKeys(keys => keys.CurrentVersion)
+            .Match(version => version, error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    /// <summary>
     /// Unwraps a subject's data key.
     /// </summary>
     /// <param name="formatMarker">The scheme the stored key is written under.</param>
     /// <param name="keyVersion">The key-encryption key version it is wrapped under.</param>
     /// <param name="wrappedKey">The wrapped key as it is stored.</param>
-    /// <param name="keyEncryptionKeys">The versions the deployment holds.</param>
+    /// <param name="ring">The key ring the version is borrowed from.</param>
     /// <returns>The plaintext data key, to be cleared after use.</returns>
     /// <exception cref="CryptographicException">
     /// The key has been erased, it names a scheme this version does not read, or it is
@@ -74,10 +109,10 @@ internal static class PersonalFieldCipher
     public static byte[] Unwrap(
         byte formatMarker,
         int keyVersion,
-        ReadOnlySpan<byte> wrappedKey,
-        KeyEncryptionKeys keyEncryptionKeys)
+        ReadOnlyMemory<byte> wrappedKey,
+        IKeyRing ring)
     {
-        ArgumentNullException.ThrowIfNull(keyEncryptionKeys);
+        ArgumentNullException.ThrowIfNull(ring);
 
         if (formatMarker == PersonalDataFormat.ErasedMarker)
         {
@@ -89,23 +124,11 @@ internal static class PersonalFieldCipher
             throw new CryptographicException("The subject's key names a scheme this version does not read.");
         }
 
-        if (!keyEncryptionKeys.Versions.TryGetValue(keyVersion, out ReadOnlyMemory<byte> material))
-        {
-            throw new CryptographicException("The subject's key is wrapped under a retired version.");
-        }
-
-        using var aes = Aes.Create();
-        byte[] keyEncryptionKey = material.ToArray();
-
-        try
-        {
-            aes.Key = keyEncryptionKey;
-            return aes.DecryptKeyWrapPadded(wrappedKey);
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(keyEncryptionKey);
-        }
+        return ring
+            .BorrowKeyEncryptionKey(keyVersion, key => Unwrap(wrappedKey.Span, key.Span))
+            .Match(
+                dataKey => dataKey,
+                _ => throw new CryptographicException("The subject's key is wrapped under a retired version."));
     }
 
     /// <summary>

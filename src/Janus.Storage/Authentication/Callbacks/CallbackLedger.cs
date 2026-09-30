@@ -14,13 +14,13 @@ namespace Janus.Storage.Authentication.Callbacks;
 /// Where inbound callbacks are counted per source.
 /// </summary>
 /// <param name="context">The context the operation runs on.</param>
-/// <param name="fingerprintKeys">The versions the sources are hashed under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <remarks>
 /// Implements INT-GEN-003, BFF-MACH-003, OPS-SEC-003 and CONV-DESIGN-003. A callback
 /// recorded under a previous version of the fingerprint key still counts until the
 /// rotation retires it.
 /// </remarks>
-internal sealed class CallbackLedger(StoreContext context, FingerprintKeys fingerprintKeys)
+internal sealed class CallbackLedger(StoreContext context, IKeyRing ring)
     : ICallbackLedger
 {
     private static readonly TimeSpan Kept = TimeSpan.FromHours(1);
@@ -50,7 +50,7 @@ internal sealed class CallbackLedger(StoreContext context, FingerprintKeys finge
         {
             Id = Guid.CreateVersion7(at),
             Source = candidates[0],
-            FingerprintVersion = fingerprintKeys.CurrentVersion,
+            FingerprintVersion = Fingerprint.CurrentVersion(ring),
             At = at,
             Rejected = false,
         });
@@ -84,7 +84,7 @@ internal sealed class CallbackLedger(StoreContext context, FingerprintKeys finge
         {
             Id = Guid.CreateVersion7(at),
             Source = candidates[0],
-            FingerprintVersion = fingerprintKeys.CurrentVersion,
+            FingerprintVersion = Fingerprint.CurrentVersion(ring),
             At = at,
             Rejected = true,
         });
@@ -105,5 +105,5 @@ internal sealed class CallbackLedger(StoreContext context, FingerprintKeys finge
 
     // The current version first, which is the one a callback is recorded under.
     private IReadOnlyList<byte[]> Candidates(string source) =>
-        Fingerprint.Candidates(Encoding.UTF8.GetBytes(source), fingerprintKeys);
+        Fingerprint.Candidates(Encoding.UTF8.GetBytes(source), ring);
 }

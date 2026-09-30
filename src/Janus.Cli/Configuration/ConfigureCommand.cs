@@ -110,7 +110,8 @@ internal static class ConfigureCommand
         var services = new ServiceCollection();
 
         services.AddSingleton(TimeProvider.System);
-        services.AddStorageArea(keys.Connection, keys.KeyEncryptionKeys, keys.FingerprintKeys);
+        services.AddSingleton(keys.Ring);
+        services.AddStorageArea(keys.Connection);
         services.AddScoped<SchemaValidation>();
         services.AddScoped<RedirectValidation>();
         services.AddScoped<IEvents, EventOutbox>();

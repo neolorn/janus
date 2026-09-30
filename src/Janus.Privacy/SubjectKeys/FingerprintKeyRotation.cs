@@ -20,7 +20,7 @@ namespace Janus.Privacy.SubjectKeys;
 /// <param name="work">The transaction each batch commits in.</param>
 /// <param name="audit">Where each step is recorded.</param>
 /// <param name="time">The clock the deployment runs on.</param>
-/// <param name="fingerprintKeys">The versions the command was handed, the new one current.</param>
+/// <param name="ring">The key ring the command filled with the versions it was handed, the new one current.</param>
 /// <remarks>
 /// Implements OPS-SEC-003 AC6, PRIV-RIGHT-005c and IDN-PRIN-001, in the shape of the
 /// key-encryption key's rotation, as entry 318 of the decisions pending review settles
@@ -36,7 +36,7 @@ internal sealed class FingerprintKeyRotation(
     IUnitOfWork work,
     IPrivacyAudit audit,
     TimeProvider time,
-    FingerprintKeys fingerprintKeys)
+    IKeyRing ring)
 {
     private const KeyRotationKind Kind = KeyRotationKind.FingerprintKey;
 
@@ -77,14 +77,19 @@ internal sealed class FingerprintKeyRotation(
         KeyRotationProgress? latest = await rotations.LatestAsync(Kind, cancellationToken).ConfigureAwait(false);
         IReadOnlySet<int> computing = await store.FingerprintVersionsAsync(now, cancellationToken).ConfigureAwait(false);
 
+        if (Held() is not { } held)
+        {
+            return Result.Failure<KeyRotationProgress>(KeysUnavailable());
+        }
+
         // As the key-encryption key's: a rotation is to a version later than any rotated
         // to before, one that stopped is finished before another starts, and every
         // fingerprint still read must be under a version the command holds and none
         // under one later than the current.
-        bool resumed = latest is { RetiredAt: null } && latest.Version == fingerprintKeys.CurrentVersion;
+        bool resumed = latest is { RetiredAt: null } && latest.Version == held.Current;
 
-        if ((!resumed && latest is not null && (latest.RetiredAt is null || latest.Version >= fingerprintKeys.CurrentVersion))
-            || computing.Any(version => version > fingerprintKeys.CurrentVersion || !fingerprintKeys.Versions.ContainsKey(version)))
+        if ((!resumed && latest is not null && (latest.RetiredAt is null || latest.Version >= held.Current))
+            || computing.Any(version => version > held.Current || !held.Versions.Contains(version)))
         {
             return Result.Failure<KeyRotationProgress>(KeysUnavailable());
         }
@@ -97,7 +102,7 @@ internal sealed class FingerprintKeyRotation(
         }
         else
         {
-            progress = KeyRotationProgress.Started(Kind, fingerprintKeys.CurrentVersion, now);
+            progress = KeyRotationProgress.Started(Kind, held.Current, now);
             await rotations.AddAsync(progress, cancellationToken).ConfigureAwait(false);
         }
 
@@ -181,7 +186,7 @@ internal sealed class FingerprintKeyRotation(
             return Result.Failure<KeyRetirement>(notCommitted);
         }
 
-        if (latest is not null && latest.Version != fingerprintKeys.CurrentVersion)
+        if (Held() is not { } held || (latest is not null && latest.Version != held.Current))
         {
             return Result.Failure<KeyRetirement>(KeysUnavailable());
         }
@@ -224,7 +229,7 @@ internal sealed class FingerprintKeyRotation(
 
         latest.Retire(now);
 
-        int[] retired = [.. fingerprintKeys.Versions.Keys.Where(version => version != latest.Version).Order()];
+        int[] retired = [.. held.Versions.Where(version => version != latest.Version).Order()];
 
         await rotations.RecordAsync(latest, cancellationToken).ConfigureAwait(false);
         await RecordedAsync(AuditActions.KeyRotationRetired, latest, now, retired, cancellationToken).ConfigureAwait(false);
@@ -337,4 +342,11 @@ internal sealed class FingerprintKeyRotation(
 
         await audit.RecordedAsync(action, Principal, subject: null, at, details, cancellationToken).ConfigureAwait(false);
     }
+
+    // The versions the ring holds, as numbers only; a ring without the key answers none.
+    private (int Current, IReadOnlySet<int> Versions)? Held() =>
+        ring
+            .BorrowFingerprintKeys<(int Current, IReadOnlySet<int> Versions)?>(
+                keys => (keys.CurrentVersion, keys.Versions.Keys.ToHashSet()))
+            .Match(held => held, _ => null);
 }

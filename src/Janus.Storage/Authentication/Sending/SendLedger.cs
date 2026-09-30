@@ -16,14 +16,14 @@ namespace Janus.Storage.Authentication.Sending;
 /// can still take back.
 /// </summary>
 /// <param name="context">The context the operation runs on.</param>
-/// <param name="fingerprintKeys">The versions the restriction keys are hashed under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <remarks>
 /// Implements AUTH-ABUSE-004, INT-SMS-005, OPS-SEC-003 and CONV-DESIGN-003. The plain key
 /// value crosses into this class and no further. What was counted or granted under a
 /// previous version of the fingerprint key still stands until the rotation retires the
 /// version; what is counted or granted now is under the current one.
 /// </remarks>
-internal sealed class SendLedger(StoreContext context, FingerprintKeys fingerprintKeys)
+internal sealed class SendLedger(StoreContext context, IKeyRing ring)
     : ISendLedger
 {
     private const string Separator = "\u0000";
@@ -113,7 +113,7 @@ internal sealed class SendLedger(StoreContext context, FingerprintKeys fingerpri
                 context.SendCounters.Add(new SendCounterRecord
                 {
                     Key = hashed,
-                    FingerprintVersion = fingerprintKeys.CurrentVersion,
+                    FingerprintVersion = Fingerprint.CurrentVersion(ring),
                     SentAt = kept,
                 });
             }
@@ -161,7 +161,7 @@ internal sealed class SendLedger(StoreContext context, FingerprintKeys fingerpri
         {
             Reference = reference,
             Counted = [.. counted.Select(count => Hashed(count.Key))],
-            FingerprintVersion = fingerprintKeys.CurrentVersion,
+            FingerprintVersion = Fingerprint.CurrentVersion(ring),
             SentAt = at,
             SettlesAt = at + settles,
         });
@@ -238,7 +238,7 @@ internal sealed class SendLedger(StoreContext context, FingerprintKeys fingerpri
             context.SendGrants.Add(new SendGrantRecord
             {
                 Key = hashed,
-                FingerprintVersion = fingerprintKeys.CurrentVersion,
+                FingerprintVersion = Fingerprint.CurrentVersion(ring),
                 Credit = credit,
             });
 
@@ -271,8 +271,8 @@ internal sealed class SendLedger(StoreContext context, FingerprintKeys fingerpri
     private static byte[] Named(RestrictionKey key) =>
         Encoding.UTF8.GetBytes(key.Restriction + Separator + key.Value);
 
-    private byte[] Hashed(RestrictionKey key) => Fingerprint.Compute(Named(key), fingerprintKeys);
+    private byte[] Hashed(RestrictionKey key) => Fingerprint.Compute(Named(key), ring);
 
     private IReadOnlyList<byte[]> Candidates(RestrictionKey key) =>
-        Fingerprint.Candidates(Named(key), fingerprintKeys);
+        Fingerprint.Candidates(Named(key), ring);
 }

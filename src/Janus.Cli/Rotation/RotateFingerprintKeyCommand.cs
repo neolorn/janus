@@ -93,7 +93,7 @@ internal static class RotateFingerprintKeyCommand
 
         // DR-009, OPS-SEC-003 AC4: the escrow copy of the version every fingerprint is
         // now under, for the envelope, before the report the seal is confirmed against.
-        await EscrowCopy.WriteAsync(terminal.Output, keys.FingerprintKeys, cancellationToken).ConfigureAwait(false);
+        await EscrowCopy.WriteFingerprintKeyAsync(terminal.Output, keys.Ring, cancellationToken).ConfigureAwait(false);
 
         return outcome.Match(progress => Result.Success(Report(progress, retired: null)), Result.Failure<string>);
     }
@@ -130,23 +130,23 @@ internal static class RotateFingerprintKeyCommand
         var services = new ServiceCollection();
 
         services.AddSingleton(TimeProvider.System);
-        services.AddStorageArea(keys.Connection, keys.KeyEncryptionKeys, keys.FingerprintKeys);
+        services.AddSingleton(keys.Ring);
+        services.AddStorageArea(keys.Connection);
         services.AddScoped<IKeyRotationStore>(provider => new KeyRotationStore(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<DataConnections>(),
-            keys.KeyEncryptionKeys));
+            keys.Ring));
         services.AddScoped<IFingerprintRotationStore>(provider => new FingerprintRotationStore(
             provider.GetRequiredService<DataConnections>(),
             provider.GetRequiredService<DeploymentDataKeyStore>(),
-            keys.KeyEncryptionKeys,
-            keys.FingerprintKeys));
+            keys.Ring));
         services.AddScoped(provider => new FingerprintKeyRotation(
             provider.GetRequiredService<IKeyRotationStore>(),
             provider.GetRequiredService<IFingerprintRotationStore>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<IPrivacyAudit>(),
             provider.GetRequiredService<TimeProvider>(),
-            keys.FingerprintKeys));
+            keys.Ring));
 
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
     }

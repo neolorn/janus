@@ -596,6 +596,18 @@ against the public contract of LIB-API-001.
 - A deployment that registers no `ISecretSource` does not start: the refusal is
   `model.startup.declarationmissing`, `details.key` `secretSource`, made as the start
   begins and before any secret is read, whether or not a social provider is declared.
+- `AddJanus` no longer takes the key-encryption keys, the fingerprint keys or the
+  maintenance credential: it takes the connection, the declaration and the
+  `ApplicationKind`. The three are read through `ISecretSource` as the application
+  starts, into the key ring, and are lent through the new `IKeyRing` members
+  `BorrowKeyEncryptionKeys`, `BorrowKeyEncryptionKey`, `BorrowFingerprintKeys` and
+  `BorrowMaintenanceCredential`; a version the ring does not hold is answered
+  `model.startup.secretunavailable` with `details.key` and `details.version`. The
+  `ISecretSource` members that read them return a `Result`, and one the source cannot
+  answer, a fingerprint key version shorter than 32 bytes or an empty maintenance
+  credential stops the start with `model.startup.secretunavailable` naming
+  `keyEncryptionKeys`, `fingerprintKeys` or `maintenanceCredential`. A `Janus.Cli`
+  command reads its key document into a key ring of its own and clears it when it ends.
 - Where Continue with Apple is among the system policy's `loginFactors` and
   `notification.email.sendingdomain` is not in `notification.email.relayregistered`, the
   deployment raises `relay-domain-unregistered` with the domain as it starts and

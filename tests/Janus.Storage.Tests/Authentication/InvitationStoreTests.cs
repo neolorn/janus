@@ -307,7 +307,7 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     private MailboxStore Mailboxes(StoreContext context) =>
-        new(context, _deployment.DataKey(context), _deployment.Keys, Deployment.FingerprintKeys, _deployment.Randomness);
+        new(context, _deployment.DataKey(context), _deployment.Ring, _deployment.Randomness);
 
     private async Task<Invitation> IssuedAsync(string email, string? corporate = null)
     {

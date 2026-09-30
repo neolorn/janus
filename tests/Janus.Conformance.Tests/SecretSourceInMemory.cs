@@ -20,16 +20,16 @@ internal sealed class SecretSourceInMemory(
     ReadOnlyMemory<byte> maintenanceCredential) : ISecretSource
 {
     /// <inheritdoc/>
-    public ValueTask<KeyEncryptionKeys> ReadKeyEncryptionKeysAsync(CancellationToken cancellationToken) =>
-        ValueTask.FromResult(keyEncryptionKeys);
+    public ValueTask<Result<KeyEncryptionKeys>> ReadKeyEncryptionKeysAsync(CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Result.Success(keyEncryptionKeys));
 
     /// <inheritdoc/>
-    public ValueTask<FingerprintKeys> ReadFingerprintKeysAsync(CancellationToken cancellationToken) =>
-        ValueTask.FromResult(fingerprintKeys);
+    public ValueTask<Result<FingerprintKeys>> ReadFingerprintKeysAsync(CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Result.Success(fingerprintKeys));
 
     /// <inheritdoc/>
-    public ValueTask<ReadOnlyMemory<byte>> ReadMaintenanceCredentialAsync(CancellationToken cancellationToken) =>
-        ValueTask.FromResult(maintenanceCredential);
+    public ValueTask<Result<ReadOnlyMemory<byte>>> ReadMaintenanceCredentialAsync(CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Result.Success(maintenanceCredential));
 
     /// <inheritdoc/>
     public ValueTask<Result<ProviderCredential>> ReadProviderCredentialAsync(

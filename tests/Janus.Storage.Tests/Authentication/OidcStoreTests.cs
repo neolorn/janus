@@ -508,7 +508,7 @@ public sealed class OidcStoreTests(DatabaseFixture database)
 
         await using StoreContext writing = database.Context();
 
-        await new SessionStore(writing, _deployment.Keys, _deployment.Randomness).AddAsync(
+        await new SessionStore(writing, _deployment.Ring, _deployment.Randomness).AddAsync(
             record,
             OpaqueToken.Draw(_deployment.Randomness).Fingerprint(),
             OpaqueToken.Draw(_deployment.Randomness).Fingerprint(),

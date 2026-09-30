@@ -95,19 +95,6 @@ public static class HostingRegistration
     /// The application's own credential, which holds row-level access and no schema
     /// right (OPS-MIG-003).
     /// </param>
-    /// <param name="keyEncryptionKeys">
-    /// The versions a subject key may be wrapped under, read from the secrets manager
-    /// at startup and never from the database (OPS-SEC-001).
-    /// </param>
-    /// <param name="fingerprintKeys">
-    /// The versions the searchable fingerprints are computed under, read from the same
-    /// place and held outside the database (PRIV-RIGHT-005c).
-    /// </param>
-    /// <param name="maintenanceCredential">
-    /// The database connection the scheduled maintenance runs under, which holds the
-    /// maintenance role's rights and nothing else, read from the same place and never
-    /// from configuration (OPS-MIG-003a, INF-HOST-003).
-    /// </param>
     /// <param name="declaration">What the host declared about its own domain.</param>
     /// <param name="application">
     /// Which of the deployment's applications this process serves, which decides the
@@ -115,31 +102,24 @@ public static class HostingRegistration
     /// </param>
     /// <returns>The collection, for chaining.</returns>
     /// <exception cref="ArgumentNullException">The collection is absent.</exception>
-    /// <exception cref="StartupException">
-    /// The key material is not there to be had, or the declaration does not hold
-    /// together.
-    /// </exception>
+    /// <exception cref="StartupException">The declaration does not hold together.</exception>
+    /// <remarks>
+    /// No secret is an argument here: every one the deployment needs is read through the
+    /// host's secret source into the key ring when the application starts, before the
+    /// server serves a request (CONV-DESIGN-007, CONV-CODE-007, OPS-SEC-001).
+    /// </remarks>
     public static IServiceCollection AddJanus(
         this IServiceCollection services,
         string connectionString,
-        KeyEncryptionKeys keyEncryptionKeys,
-        FingerprintKeys fingerprintKeys,
-        ReadOnlyMemory<byte> maintenanceCredential,
         AuthorizationDeclaration declaration,
         ApplicationKind application)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // AUTH-KEY-002 and OPS-SEC-001: both values come from the secrets manager and
-        // the library holds no fallback for either, so a deployment that reached
-        // neither stops here with the code that names why, not at the first request
-        // that would have read a person's field.
-        Present(keyEncryptionKeys, fingerprintKeys, maintenanceCredential);
-
         // CONV-DESIGN-007: time is injected, and a host that has its own clock keeps it.
         services.TryAddSingleton(TimeProvider.System);
 
-        services.AddStorageArea(connectionString, keyEncryptionKeys, fingerprintKeys);
+        services.AddStorageArea(connectionString);
         services.AddSingleton(AuthorizationModel.Of(declaration));
 
         // AUTHZ-GROUP-002: one set per operation, which is what makes ten checks in one
@@ -287,8 +267,7 @@ public static class HostingRegistration
         // process holds, which is what the test proves the backup readable with.
         services.AddScoped(provider => new RestoreTest(
             provider.GetService<IRestoreTestInstance>(),
-            keyEncryptionKeys,
-            fingerprintKeys,
+            provider.GetRequiredService<IKeyRing>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IPrivacyAudit>(),
             provider.GetRequiredService<IAlertChannels>(),
@@ -298,11 +277,8 @@ public static class HostingRegistration
 
         // PRIV-RET-002, OPS-MIG-003a: the partitions are reached over the maintenance
         // credential only, in an area of their own built with the keys this process holds.
-        services.AddSingleton(new MaintenanceCredential(maintenanceCredential));
         services.AddScoped(provider => new AuditRetention(
-            provider.GetRequiredService<MaintenanceCredential>(),
-            keyEncryptionKeys,
-            fingerprintKeys,
+            provider.GetRequiredService<IKeyRing>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IPrivacyAudit>(),
             provider.GetRequiredService<IUnitOfWork>(),
@@ -410,7 +386,7 @@ public static class HostingRegistration
         services.AddScoped<ICredentials>(provider => provider.GetRequiredService<CredentialService>());
         services.AddScoped<SigningKeys>();
         services.AddScoped<RegisteredSecrets>();
-        services.AddOidc(keyEncryptionKeys);
+        services.AddOidc();
         services.AddScoped<OidcService>();
         services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
 
@@ -683,38 +659,4 @@ public static class HostingRegistration
         options.SerializerOptions.TypeInfoResolverChain.Add(AuthorizationJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(OrganizationJson.Default);
     }
-
-    // The fingerprint key computes an HMAC-SHA256, so a version shorter than that hash
-    // is a key that weakens the code it is used by and is not a key the library runs on.
-    private static void Present(
-        KeyEncryptionKeys keyEncryptionKeys,
-        FingerprintKeys fingerprintKeys,
-        ReadOnlyMemory<byte> maintenanceCredential)
-    {
-        if (keyEncryptionKeys is null)
-        {
-            throw new StartupException(
-                "The key-encryption key was not supplied; the library reads it from the secrets manager and holds no fallback.",
-                Error.From(ErrorCodes.StartupSecretUnavailable, "key", JsonSerializer.SerializeToElement("keyEncryptionKeys")));
-        }
-
-        if (fingerprintKeys is null
-            || fingerprintKeys.Versions.Values.Any(version => version.Length < FingerprintKeys.MinimumLength))
-        {
-            throw new StartupException(
-                "The fingerprint key was not supplied, or a version of it is shorter than the hash it computes.",
-                Error.From(ErrorCodes.StartupSecretUnavailable, "key", JsonSerializer.SerializeToElement("fingerprintKeys")));
-        }
-
-        // PRIV-RET-002: without the maintenance credential no month is created ahead and
-        // no expired one is dropped, so the trail stops taking rows once the months the
-        // migration created have passed; the deployment stops here instead.
-        if (maintenanceCredential.Length is 0)
-        {
-            throw new StartupException(
-                "The maintenance credential was not supplied; the library reads it from the secrets manager and holds no fallback.",
-                Error.From(ErrorCodes.StartupSecretUnavailable, "key", JsonSerializer.SerializeToElement("maintenanceCredential")));
-        }
-    }
-
 }

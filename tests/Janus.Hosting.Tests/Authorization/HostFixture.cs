@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
@@ -11,6 +13,7 @@ using Janus.Hosting.Bff;
 using Janus.Storage.Tests;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Npgsql;
 using Xunit;
 
@@ -147,21 +150,24 @@ public sealed class HostFixture : IAsyncLifetime
         // The cases state when they are evaluated, so the clock does not move under them.
         services.AddSingleton<TimeProvider>(new FixedTime(Deployment.Noon));
 
-        services.AddJanus(
-            ConnectionString,
-            new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = material }),
-            new FingerprintKeys(
+        // LIB-HOST-001, OPS-SEC-001: the keys and the maintenance credential come
+        // through the host's secret source.
+        services.AddSingleton<ISecretSource>(new SecretSourceInMemory(new Dictionary<string, ProviderCredential>(StringComparer.Ordinal))
+        {
+            KeyEncryptionKeys = new(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = material }),
+            FingerprintKeys = new(
                 1,
                 new Dictionary<int, ReadOnlyMemory<byte>> { [1] = Encoding.UTF8.GetBytes("the fingerprint key of this deployment") }),
-            Encoding.UTF8.GetBytes(MaintenanceConnectionString),
-            Declaration(),
-            ApplicationKind.Public);
+            MaintenanceCredential = Encoding.UTF8.GetBytes(MaintenanceConnectionString),
+        });
+
+        services.AddJanus(ConnectionString, Declaration(), ApplicationKind.Public);
 
         // PRIV-RIGHT-005b: the deployment declares its documents sensitive, so it
         // registers what does the host-side work for them.
         services.AddSingleton<ISubjectEventSubscriber>(new HostSubjectEvents());
 
-        _services = services.BuildServiceProvider();
+        _services = Started(services.BuildServiceProvider());
     }
 
     /// <inheritdoc/>
@@ -176,6 +182,34 @@ public sealed class HostFixture : IAsyncLifetime
 
         GC.SuppressFinalize(this);
     }
+
+    /// <summary>
+    /// A deployment's container with its key ring filled and the mail server in use
+    /// chosen, which is what the ring's hosted service does at the start of a deployment
+    /// that a web server starts (CONV-DESIGN-007).
+    /// </summary>
+    /// <param name="deployed">The container.</param>
+    /// <returns>The same container, started.</returns>
+    internal static ServiceProvider Started(ServiceProvider deployed)
+    {
+        KeyRingService ring = deployed.GetServices<IHostedService>().OfType<KeyRingService>().Single();
+        ring.StartingAsync(CancellationToken.None).GetAwaiter().GetResult();
+        ring.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        return deployed;
+    }
+
+    /// <summary>
+    /// The secret source a deployment over this fixture reads its secrets from: the
+    /// keys the source fake holds, and the maintenance credential given.
+    /// </summary>
+    /// <param name="maintenance">The maintenance credential it answers.</param>
+    /// <returns>The source.</returns>
+    internal static SecretSourceInMemory Secrets(string maintenance) =>
+        new(new Dictionary<string, ProviderCredential>(StringComparer.Ordinal))
+        {
+            MaintenanceCredential = Encoding.UTF8.GetBytes(maintenance),
+        };
 
     /// <summary>
     /// What this deployment declares about its own domain, which a test registering a

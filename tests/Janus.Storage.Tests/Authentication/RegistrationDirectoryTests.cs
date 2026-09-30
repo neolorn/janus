@@ -70,8 +70,8 @@ public sealed class RegistrationDirectoryTests(DatabaseFixture database) : IClas
         new(
             context,
             new AccountStore(context),
-            new IdentifierStore(context, _deployment.Keys, Deployment.FingerprintKeys, _deployment.Randomness),
-            new ProfileStore(context, _deployment.Keys, _deployment.Randomness),
-            new SubjectKeyStore(context, _deployment.Keys, _deployment.Randomness),
-            new PreferenceStore(context, _deployment.Keys, _deployment.Randomness));
+            new IdentifierStore(context, _deployment.Ring, _deployment.Randomness),
+            new ProfileStore(context, _deployment.Ring, _deployment.Randomness),
+            new SubjectKeyStore(context, _deployment.Ring, _deployment.Randomness),
+            new PreferenceStore(context, _deployment.Ring, _deployment.Randomness));
 }

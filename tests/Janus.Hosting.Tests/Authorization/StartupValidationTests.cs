@@ -488,6 +488,68 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// OPS-SEC-001 AC2, AUTH-KEY-002 AC2, D-166: the key-encryption key, the fingerprint
+    /// key and the maintenance credential are read through the secret source as the
+    /// deployment starts, and one the source cannot answer stops it, naming the secret,
+    /// before the web server starts.
+    /// </summary>
+    /// <param name="key">The secret the source cannot answer.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("keyEncryptionKeys")]
+    [InlineData("fingerprintKeys")]
+    [InlineData("maintenanceCredential")]
+    public async Task OPS_SEC_001_ASecretTheSourceCannotAnswerStopsTheStartNamingItAsync(string key)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        SecretSourceInMemory answering = HostFixture.Secrets(host.MaintenanceConnectionString);
+        var served = new ServerStandIn();
+        var secrets = new SecretSourceInMemory(new Dictionary<string, ProviderCredential>(StringComparer.Ordinal))
+        {
+            KeyEncryptionKeys = key is "keyEncryptionKeys" ? null : answering.KeyEncryptionKeys,
+            FingerprintKeys = key is "fingerprintKeys" ? null : answering.FingerprintKeys,
+            MaintenanceCredential = key is "maintenanceCredential" ? null : answering.MaintenanceCredential,
+        };
+
+        using IHost deployment = new HostBuilder()
+            .ConfigureServices(services => Declared(services.AddSingleton<IHostedService>(served), secrets: secrets))
+            .Build();
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupSecretUnavailable, refused.Failure?.Code);
+        Assert.Equal(key, refused.Failure?.Details["key"].GetString());
+        Assert.False(served.Started);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-007, OPS-SEC-001, D-166: every secret is read into the key ring as the
+    /// start begins, ahead of every hosted service, so the web server finds the
+    /// key-encryption key the source answered already lent when it starts.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_007_TheSecretsAreReadBeforeTheServerStartsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using IHost deployment = new HostBuilder()
+            .ConfigureServices(services => Declared(
+                services
+                    .AddSingleton(provider => new KeyReadingServer(provider.GetRequiredService<IKeyRing>()))
+                    .AddSingleton<IHostedService>(provider => provider.GetRequiredService<KeyReadingServer>()),
+                secrets: HostFixture.Secrets(host.MaintenanceConnectionString)))
+            .Build();
+
+        await deployment.StartAsync(cancellationToken);
+
+        Assert.Equal(1, deployment.Services.GetRequiredService<KeyReadingServer>().CurrentVersion);
+
+        await deployment.StopAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// IDN-LIFE-012a, IDN-LIFE-012, D-166: a declared provider's credential is read
     /// through the secret source as the deployment starts, and one the source cannot
     /// answer, answers empty, or answers as a signing credential with a blank issuer,
@@ -1032,16 +1094,10 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
         if (secretSource)
         {
-            services.AddSingleton(secrets ?? new SecretSourceInMemory(new Dictionary<string, ProviderCredential>(StringComparer.Ordinal)));
+            services.AddSingleton<ISecretSource>(secrets ?? HostFixture.Secrets(host.MaintenanceConnectionString));
         }
 
-        return services.AddJanus(
-            connection ?? host.ConnectionString,
-            new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-            new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-            Encoding.UTF8.GetBytes(host.MaintenanceConnectionString),
-            HostFixture.Declaration(),
-            ApplicationKind.Public);
+        return services.AddJanus(connection ?? host.ConnectionString, HostFixture.Declaration(), ApplicationKind.Public);
     }
 
     // IDN-ATTR-002: an organization shows photos by its key, which is a settings row
@@ -1114,6 +1170,21 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
     // A hosted service of the host's own, registered before the library is, standing
     // for the web server the deployment starts.
+    // A web server that, as it starts, reads the key-encryption key the ring lends.
+    private sealed class KeyReadingServer(IKeyRing ring) : IHostedService
+    {
+        public int? CurrentVersion { get; private set; }
+
+        public Task StartAsync(CancellationToken cancellationToken)
+        {
+            CurrentVersion = ring.BorrowKeyEncryptionKeys(keys => keys.CurrentVersion).Match(version => (int?)version, _ => null);
+
+            return Task.CompletedTask;
+        }
+
+        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
     private sealed class ServerStandIn : IHostedService
     {
         public bool Started { get; private set; }

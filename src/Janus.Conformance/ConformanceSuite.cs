@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Data.Common;
 using System.Linq;
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -93,9 +92,8 @@ public static class ConformanceSuite
     /// <exception cref="StartupException">The declaration is refused for a reason no code names.</exception>
     /// <remarks>
     /// Implements LIB-TEST-001 AC3 and AUTHZ-MODEL-004. The declaration is judged by
-    /// the registration a host makes, over key material drawn for the check alone and
-    /// cleared after it, so the checks are the library's and not a second copy of
-    /// them. Like startup, the judgement stops at the first failure, so a declaration
+    /// the registration a host makes, which takes no key material, so the checks are
+    /// the library's and not a second copy of them. Like startup, the judgement stops at the first failure, so a declaration
     /// that fails two ways reports the second once the first is corrected.
     /// </remarks>
     public static ConformanceReport Declaration(AuthorizationDeclaration declaration)
@@ -204,34 +202,15 @@ public static class ConformanceSuite
 
     private static Result Validated(AuthorizationDeclaration declaration)
     {
-        using var randomness = RandomNumberGenerator.Create();
-
-        byte[] encryption = new byte[32];
-        byte[] fingerprint = new byte[FingerprintKeys.MinimumLength];
-
-        randomness.GetBytes(encryption);
-        randomness.GetBytes(fingerprint);
-
         try
         {
-            _ = new ServiceCollection().AddJanus(
-                Unreached,
-                new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = encryption }),
-                new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = fingerprint }),
-                Encoding.UTF8.GetBytes(Unreached),
-                declaration,
-                ApplicationKind.Public);
+            _ = new ServiceCollection().AddJanus(Unreached, declaration, ApplicationKind.Public);
 
             return Result.Success();
         }
         catch (StartupException refused) when (refused.Failure is not null)
         {
             return Result.Failure(refused.Failure);
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(encryption);
-            CryptographicOperations.ZeroMemory(fingerprint);
         }
     }
 }

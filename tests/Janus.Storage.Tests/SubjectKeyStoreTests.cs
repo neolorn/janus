@@ -236,7 +236,11 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     private static byte[] Unwrapped(SubjectKey key, KeyEncryptionKeys keys) =>
-        PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey.Span, keys);
+        PersonalFieldCipher.Unwrap(
+            key.FormatMarker,
+            key.KeyVersion,
+            key.WrappedKey,
+            new KeyRingInMemory(keys, Deployment.FingerprintKeys));
 
     private static byte[] Decrypted(
         SubjectKey key,
@@ -278,5 +282,5 @@ public sealed class SubjectKeyStoreTests(DatabaseFixture database) : IClassFixtu
     // they mean to test, so the versions and the randomness it would draw with are
     // whatever a store needs to be constructed.
     private static SubjectKeyStore Store(StoreContext context) =>
-        new(context, OneVersion(1), Randomness);
+        new(context, new KeyRingInMemory(OneVersion(1), Deployment.FingerprintKeys), Randomness);
 }

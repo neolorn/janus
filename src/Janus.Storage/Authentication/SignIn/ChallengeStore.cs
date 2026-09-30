@@ -12,7 +12,7 @@ namespace Janus.Storage.Authentication.SignIn;
 /// The sign-ins in progress, over the <c>signin_challenges</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <param name="fingerprintKeys">The version the identifier's hash is computed under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <remarks>
 /// Implements AUTH-FACT-016, OPS-SEC-003 and CONV-DESIGN-003. The catalogue entries
 /// accepted so far are held under the spellings of chapter 10, so the column and the
@@ -20,7 +20,7 @@ namespace Janus.Storage.Authentication.SignIn;
 /// the current version of the fingerprint key, which is the version written beside it,
 /// so the rotation forgets it with the version.
 /// </remarks>
-internal sealed class ChallengeStore(StoreContext context, FingerprintKeys fingerprintKeys) : IChallengeStore
+internal sealed class ChallengeStore(StoreContext context, IKeyRing ring) : IChallengeStore
 {
     /// <inheritdoc/>
     public async ValueTask<Challenge?> FindAsync(
@@ -59,7 +59,7 @@ internal sealed class ChallengeStore(StoreContext context, FingerprintKeys finge
                     Subject = challenge.Subject,
                     Email = challenge.Email,
                     Identifier = challenge.Identifier,
-                    FingerprintVersion = challenge.Identifier is null ? null : fingerprintKeys.CurrentVersion,
+                    FingerprintVersion = challenge.Identifier is null ? null : Fingerprint.CurrentVersion(ring),
                     WebAuthn = challenge.WebAuthn,
                     CreatedAt = challenge.CreatedAt,
                     ExpiresAt = challenge.ExpiresAt,

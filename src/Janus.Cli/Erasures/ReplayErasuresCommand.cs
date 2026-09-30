@@ -167,7 +167,8 @@ internal static class ReplayErasuresCommand
         var services = new ServiceCollection();
 
         services.AddSingleton(TimeProvider.System);
-        services.AddStorageArea(keys.Connection, keys.KeyEncryptionKeys, keys.FingerprintKeys);
+        services.AddSingleton(keys.Ring);
+        services.AddStorageArea(keys.Connection);
         services.AddScoped<ErasureReplay>();
 
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });

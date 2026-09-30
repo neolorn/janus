@@ -205,7 +205,7 @@ public sealed class OrganizationDirectoryTests(DatabaseFixture database)
         new(context, new OrganizationStore(context));
 
     private OrganizationAudit Audit(StoreContext context) =>
-        new(new AuditStore(context, new DataConnections(context), _deployment.Keys, _deployment.Randomness), TimeProvider.System);
+        new(new AuditStore(context, new DataConnections(context), _deployment.Ring, _deployment.Randomness), TimeProvider.System);
 
     private async Task<OrganizationStanding?> FoundAsync(OrganizationId organization)
     {
@@ -218,7 +218,7 @@ public sealed class OrganizationDirectoryTests(DatabaseFixture database)
     {
         await using StoreContext reading = database.Context();
 
-        return await new AuditStore(reading, new DataConnections(reading), _deployment.Keys, _deployment.Randomness)
+        return await new AuditStore(reading, new DataConnections(reading), _deployment.Ring, _deployment.Randomness)
             .FindBySubjectAsync(actor, TestContext.Current.CancellationToken);
     }
 

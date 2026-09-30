@@ -38,6 +38,12 @@ internal sealed class Deployment(DatabaseFixture database) : IDisposable
     public static readonly FingerprintKeys FingerprintKeys =
         new(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = FingerprintKey });
 
+    /// <summary>
+    /// A key ring holding the fingerprint key alone, for a store that computes
+    /// fingerprints and wraps nothing.
+    /// </summary>
+    public static readonly IKeyRing Fingerprints = new KeyRingInMemory(keyEncryptionKeys: null, FingerprintKeys);
+
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly Dictionary<int, ReadOnlyMemory<byte>> _versions = [];
 
@@ -66,6 +72,12 @@ internal sealed class Deployment(DatabaseFixture database) : IDisposable
     /// The key-encryption key of the deployment, at its one version.
     /// </summary>
     public KeyEncryptionKeys Keys => new(1, Versions);
+
+    /// <summary>
+    /// The key ring the deployment's stores borrow from: the key-encryption key and the
+    /// fingerprint key above.
+    /// </summary>
+    public IKeyRing Ring => new KeyRingInMemory(Keys, FingerprintKeys);
 
     /// <summary>
     /// Writes an account and the wrapped data key its personal fields are held under.
@@ -135,7 +147,7 @@ internal sealed class Deployment(DatabaseFixture database) : IDisposable
     /// <param name="context">The context the operation runs in.</param>
     /// <returns>The key.</returns>
     public DeploymentDataKeyStore DataKey(StoreContext context) =>
-        new(new DataConnections(context), Keys, _randomness);
+        new(new DataConnections(context), Ring, _randomness);
 
     /// <summary>
     /// Destroys a subject's data key, as the erasure transaction does.

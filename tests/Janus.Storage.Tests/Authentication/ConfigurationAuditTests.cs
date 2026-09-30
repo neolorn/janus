@@ -152,7 +152,7 @@ public sealed class ConfigurationAuditTests(DatabaseFixture database)
             Principal: null);
 
     private ConfigurationAudit Audit(StoreContext context) =>
-        new(context, new AuditStore(context, new DataConnections(context), _deployment.Keys, _deployment.Randomness), TimeProvider.System);
+        new(context, new AuditStore(context, new DataConnections(context), _deployment.Ring, _deployment.Randomness), TimeProvider.System);
 
     private async Task RecordedAsync(ConfigurationChange change)
     {

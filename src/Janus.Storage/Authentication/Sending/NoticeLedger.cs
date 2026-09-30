@@ -14,12 +14,12 @@ namespace Janus.Storage.Authentication.Sending;
 /// Where the addresses already told there is no account are remembered.
 /// </summary>
 /// <param name="context">The context the operation runs on.</param>
-/// <param name="fingerprintKeys">The versions the addresses are hashed under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <remarks>
 /// Implements AUTH-ABUSE-003, OPS-SEC-003 and CONV-DESIGN-003. A notice recorded under
 /// a previous version of the fingerprint key still counts until the rotation retires it.
 /// </remarks>
-internal sealed class NoticeLedger(StoreContext context, FingerprintKeys fingerprintKeys)
+internal sealed class NoticeLedger(StoreContext context, IKeyRing ring)
     : INoticeLedger
 {
     private static readonly TimeSpan Hour = TimeSpan.FromHours(1);
@@ -57,8 +57,8 @@ internal sealed class NoticeLedger(StoreContext context, FingerprintKeys fingerp
         context.NonexistenceNotices.Add(new NoticeRecord
         {
             Id = Guid.CreateVersion7(at),
-            Destination = Fingerprint.Compute(Encoding.UTF8.GetBytes(destination), fingerprintKeys),
-            FingerprintVersion = fingerprintKeys.CurrentVersion,
+            Destination = Fingerprint.Compute(Encoding.UTF8.GetBytes(destination), ring),
+            FingerprintVersion = Fingerprint.CurrentVersion(ring),
             At = at,
         });
 
@@ -72,5 +72,5 @@ internal sealed class NoticeLedger(StoreContext context, FingerprintKeys fingerp
             .ConfigureAwait(false);
 
     private IReadOnlyList<byte[]> Candidates(string destination) =>
-        Fingerprint.Candidates(Encoding.UTF8.GetBytes(destination), fingerprintKeys);
+        Fingerprint.Candidates(Encoding.UTF8.GetBytes(destination), ring);
 }

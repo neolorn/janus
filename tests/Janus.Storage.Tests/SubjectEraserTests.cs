@@ -52,7 +52,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
     private SubjectEraser Eraser(StoreContext context) => new(
         context,
-        new SessionStore(context, _deployment.Keys, _deployment.Randomness),
+        new SessionStore(context, _deployment.Ring, _deployment.Randomness),
         new ConfigurationStore(context, new DataConnections(context)));
 
     /// <summary>
@@ -204,7 +204,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             profile.SetLegalName(legal);
             profile.RecordDateOfBirth(new DateOnly(1990, 4, 17));
 
-            await new ProfileStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new ProfileStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(profile, TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
@@ -214,7 +214,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using StoreContext reading = database.Context();
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
-            await new ProfileStore(reading, _deployment.Keys, _deployment.Randomness)
+            await new ProfileStore(reading, _deployment.Ring, _deployment.Randomness)
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
     }
 
@@ -235,7 +235,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             var profile = Profile.Empty(subject);
             profile.SetLegalName(legal);
 
-            await new ProfileStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new ProfileStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(profile, TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
@@ -271,7 +271,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await using (StoreContext writing = database.Context())
         {
-            await new ProfilePhotoStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new ProfilePhotoStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(ProfilePhoto.Of(subject, image, Noon), TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
@@ -284,7 +284,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             .AnyAsync(photo => photo.Subject == subject, TestContext.Current.CancellationToken));
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
-            await new ProfilePhotoStore(reading, _deployment.Keys, _deployment.Randomness)
+            await new ProfilePhotoStore(reading, _deployment.Ring, _deployment.Randomness)
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
     }
 
@@ -302,7 +302,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await using (StoreContext writing = database.Context())
         {
-            await new ProfilePhotoStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new ProfilePhotoStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(ProfilePhoto.Of(subject, image, Noon), TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
@@ -315,7 +315,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         Assert.Equal(before, await StoredImageAsync(subject));
         await Assert.ThrowsAsync<CryptographicException>(async () =>
-            await new ProfilePhotoStore(reading, _deployment.Keys, _deployment.Randomness)
+            await new ProfilePhotoStore(reading, _deployment.Ring, _deployment.Randomness)
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
     }
 
@@ -478,10 +478,10 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             profile.SetLegalName(legal);
             profile.RecordDateOfBirth(new DateOnly(1990, 4, 17));
 
-            await new ProfileStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new ProfileStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(profile, TestContext.Current.CancellationToken);
 
-            await new ProfilePhotoStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new ProfilePhotoStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(ProfilePhoto.Of(subject, image, Noon), TestContext.Current.CancellationToken);
 
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -492,11 +492,11 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using StoreContext reading = database.Context();
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
-            await new ProfileStore(reading, _deployment.Keys, _deployment.Randomness)
+            await new ProfileStore(reading, _deployment.Ring, _deployment.Randomness)
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
-            await new ProfilePhotoStore(reading, _deployment.Keys, _deployment.Randomness)
+            await new ProfilePhotoStore(reading, _deployment.Ring, _deployment.Randomness)
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
     }
 
@@ -601,7 +601,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await using (StoreContext writing = database.Context())
         {
-            await new AuditStore(writing, new DataConnections(writing), _deployment.Keys, _deployment.Randomness).AppendAsync(
+            await new AuditStore(writing, new DataConnections(writing), _deployment.Ring, _deployment.Randomness).AppendAsync(
                 AuditRecord.Of(
                     new AuditRecordId(Guid.CreateVersion7()),
                     AuditCategory.Security,
@@ -707,7 +707,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await using (StoreContext writing = database.Context())
         {
-            await new AuditStore(writing, new DataConnections(writing), _deployment.Keys, _deployment.Randomness).AppendAsync(
+            await new AuditStore(writing, new DataConnections(writing), _deployment.Ring, _deployment.Randomness).AppendAsync(
                 AuditRecord.Of(
                     new AuditRecordId(Guid.CreateVersion7()),
                     AuditCategory.Security,
@@ -738,7 +738,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using StoreContext reading = database.Context();
 
         AuditRecord read = Assert.Single(
-            await new AuditStore(reading, new DataConnections(reading), _deployment.Keys, _deployment.Randomness)
+            await new AuditStore(reading, new DataConnections(reading), _deployment.Ring, _deployment.Randomness)
                 .FindBySubjectAsync(member, TestContext.Current.CancellationToken));
 
         Assert.Equal(organization, read.Organization);
@@ -764,7 +764,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             var profile = Profile.Empty(subject);
             profile.SetLegalName(legal);
 
-            await new ProfileStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new ProfileStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(profile, TestContext.Current.CancellationToken);
 
             IdentifierStore identifiers = Identifiers(writing);
@@ -787,7 +787,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             preferences.SetLanguage("ar-EG");
             preferences.SetTimeZone("Africa/Cairo");
 
-            await new PreferenceStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new PreferenceStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(preferences, TestContext.Current.CancellationToken);
 
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -798,7 +798,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using StoreContext reading = database.Context();
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
-            await new ProfileStore(reading, _deployment.Keys, _deployment.Randomness)
+            await new ProfileStore(reading, _deployment.Ring, _deployment.Randomness)
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
@@ -806,7 +806,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
                 subject,
                 TestContext.Current.CancellationToken));
 
-        PreferenceSet kept = await new PreferenceStore(reading, _deployment.Keys, _deployment.Randomness)
+        PreferenceSet kept = await new PreferenceStore(reading, _deployment.Ring, _deployment.Randomness)
             .FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
 
         Assert.Equal("ar-EG", kept.Language);
@@ -833,10 +833,10 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             var profile = Profile.Empty(subject);
             profile.SetLegalName(legal);
 
-            await new ProfileStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new ProfileStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(profile, TestContext.Current.CancellationToken);
 
-            await new ProfilePhotoStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new ProfilePhotoStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(ProfilePhoto.Of(subject, image, Noon), TestContext.Current.CancellationToken);
 
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -847,11 +847,11 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using StoreContext reading = database.Context();
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
-            await new ProfilePhotoStore(reading, _deployment.Keys, _deployment.Randomness)
+            await new ProfilePhotoStore(reading, _deployment.Ring, _deployment.Randomness)
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
 
         await Assert.ThrowsAsync<CryptographicException>(async () =>
-            await new ProfileStore(reading, _deployment.Keys, _deployment.Randomness)
+            await new ProfileStore(reading, _deployment.Ring, _deployment.Randomness)
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
     }
 
@@ -986,7 +986,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await using (StoreContext writing = database.Context())
         {
-            await new ProfilePhotoStore(writing, _deployment.Keys, _deployment.Randomness)
+            await new ProfilePhotoStore(writing, _deployment.Ring, _deployment.Randomness)
                 .RecordAsync(ProfilePhoto.Of(subject, image, Noon), TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
@@ -1012,20 +1012,20 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     private AccountDirectory Directory(StoreContext context) => new(
         context,
         new AccountStore(context),
-        new ProfileStore(context, _deployment.Keys, _deployment.Randomness),
-        new ProfilePhotoStore(context, _deployment.Keys, _deployment.Randomness),
-        new SubjectKeyStore(context, _deployment.Keys, _deployment.Randomness),
-        new PreferenceStore(context, _deployment.Keys, _deployment.Randomness),
+        new ProfileStore(context, _deployment.Ring, _deployment.Randomness),
+        new ProfilePhotoStore(context, _deployment.Ring, _deployment.Randomness),
+        new SubjectKeyStore(context, _deployment.Ring, _deployment.Randomness),
+        new PreferenceStore(context, _deployment.Ring, _deployment.Randomness),
         PreferenceDeclarations.None,
         new OutboxStore(context, new FixedTime(Noon)));
 
     private static ErasureStore Store(StoreContext context) => new(context);
 
     private AuthenticatorStore Authenticators(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness, Deployment.FingerprintKeys);
+        new(context, _deployment.Ring, _deployment.Randomness);
 
     private IdentifierStore Identifiers(StoreContext context) =>
-        new(context, _deployment.Keys, Deployment.FingerprintKeys, _deployment.Randomness);
+        new(context, _deployment.Ring, _deployment.Randomness);
 
     private static Invitation Invited(OrganizationId organization, SubjectId inviter) =>
         Invitation.Issued(
@@ -1044,7 +1044,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         new(context, _deployment.DataKey(context), _deployment.Randomness);
 
     private MailboxStore Mailboxes(StoreContext context) =>
-        new(context, _deployment.DataKey(context), _deployment.Keys, Deployment.FingerprintKeys, _deployment.Randomness);
+        new(context, _deployment.DataKey(context), _deployment.Ring, _deployment.Randomness);
 
     // The deployment's own records, which the library neither maps nor writes: a
     // record names its subject and outlives the subject's erasure (PRIV-RIGHT-005).
@@ -1074,7 +1074,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await using (StoreContext writing = database.Context())
         {
-            await new SessionStore(writing, _deployment.Keys, _deployment.Randomness).AddAsync(
+            await new SessionStore(writing, _deployment.Ring, _deployment.Randomness).AddAsync(
                 Session.Begin(
                     SessionId.New(TimeProvider.System),
                     subject,
@@ -1257,7 +1257,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await using (StoreContext writing = database.Context())
         {
-            await new AuditStore(writing, new DataConnections(writing), _deployment.Keys, _deployment.Randomness).AppendAsync(
+            await new AuditStore(writing, new DataConnections(writing), _deployment.Ring, _deployment.Randomness).AppendAsync(
                 AuditRecord.Of(
                     new AuditRecordId(Guid.CreateVersion7()),
                     AuditCategory.Security,

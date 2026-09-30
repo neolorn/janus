@@ -48,13 +48,13 @@ public sealed class ChallengeStoreTests(DatabaseFixture database)
 
         await using (StoreContext writing = database.Context())
         {
-            await new ChallengeStore(writing, Deployment.FingerprintKeys).AddAsync(opened, cancellationToken);
+            await new ChallengeStore(writing, Deployment.Fingerprints).AddAsync(opened, cancellationToken);
             _ = await writing.SaveChangesAsync(cancellationToken);
         }
 
         await using StoreContext reading = database.Context();
         Challenge found = Assert.IsType<Challenge>(
-            await new ChallengeStore(reading, Deployment.FingerprintKeys).FindAsync(opened.Fingerprint, cancellationToken));
+            await new ChallengeStore(reading, Deployment.Fingerprints).FindAsync(opened.Fingerprint, cancellationToken));
 
         Assert.Equal(identifier, found.Identifier);
         Assert.Null(found.Subject);

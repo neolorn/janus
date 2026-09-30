@@ -25,8 +25,7 @@ namespace Janus.Hosting.Background;
 /// down, with anything short of a pass raised.
 /// </summary>
 /// <param name="instance">What restores into a throwaway instance, where the deployment registered it.</param>
-/// <param name="keyEncryptionKeys">The keys this process runs on, which the restored fields are opened with.</param>
-/// <param name="fingerprintKeys">The keys this process runs on, which the restored identifiers are found with.</param>
+/// <param name="ring">The key ring this process runs on, whose keys open the restored fields and find the restored identifiers.</param>
 /// <param name="configuration">Where the objective and the canary are read.</param>
 /// <param name="audit">Where each run is recorded.</param>
 /// <param name="alerts">Where a failed run goes.</param>
@@ -44,8 +43,7 @@ namespace Janus.Hosting.Background;
 /// </remarks>
 internal sealed class RestoreTest(
     IRestoreTestInstance? instance,
-    KeyEncryptionKeys keyEncryptionKeys,
-    FingerprintKeys fingerprintKeys,
+    IKeyRing ring,
     IConfigurationStore configuration,
     IPrivacyAudit audit,
     IAlertChannels alerts,
@@ -270,7 +268,8 @@ internal sealed class RestoreTest(
         var services = new ServiceCollection();
 
         services.AddSingleton(time);
-        services.AddStorageArea(unpooled.ConnectionString, keyEncryptionKeys, fingerprintKeys);
+        services.AddSingleton(ring);
+        services.AddStorageArea(unpooled.ConnectionString);
 
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
     }

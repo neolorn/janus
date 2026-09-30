@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
@@ -152,6 +153,124 @@ public sealed class KeyRingTests
         Assert.Equal("mailServerSecret", refused?.Details["key"].GetString());
         Assert.Throws<InvalidOperationException>(ring.Completed);
     }
+
+    /// <summary>
+    /// CONV-CODE-007 AC3, D-176: the key-encryption key, the fingerprint key and the
+    /// maintenance credential are read in the first step, so a read of any before the
+    /// ring is filled is a fault; once it is filled each is lent from the ring's own copy
+    /// of every version, whatever became of what the source answered, and the clearing
+    /// leaves every array zero, after which a read is a fault again.
+    /// </summary>
+    [Fact]
+    public void CONV_CODE_007_AC3_TheKeysAreLentFromTheRingsOwnCopyUntilItIsCleared()
+    {
+        byte[] previous = Material(1);
+        byte[] current = Material(2);
+        byte[] fingerprint = Material(3);
+        byte[] maintenance = "Host=maintenance.example.test"u8.ToArray();
+        var ring = new KeyRing();
+
+        ring.HoldKeyEncryptionKeys(new KeyEncryptionKeys(2, new Dictionary<int, ReadOnlyMemory<byte>>
+        {
+            [1] = previous,
+            [2] = current,
+        }));
+        ring.HoldFingerprintKeys(new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = fingerprint }));
+        ring.HoldMaintenanceCredential(maintenance);
+
+        Assert.Throws<InvalidOperationException>(() => ring.BorrowKeyEncryptionKeys(keys => keys.CurrentVersion));
+        Assert.Throws<InvalidOperationException>(() => ring.BorrowKeyEncryptionKey(2, key => key.Length));
+        Assert.Throws<InvalidOperationException>(() => ring.BorrowFingerprintKeys(keys => keys.CurrentVersion));
+        Assert.Throws<InvalidOperationException>(() => ring.BorrowMaintenanceCredential(credential => credential.Length));
+
+        ring.Fill();
+
+        byte[][] answered = [[.. previous], [.. current], [.. fingerprint], [.. maintenance]];
+
+        Array.Clear(previous);
+        Array.Clear(current);
+        Array.Clear(fingerprint);
+        Array.Clear(maintenance);
+
+        Assert.Equal(2, ring.BorrowKeyEncryptionKeys(keys => keys.CurrentVersion).Match(read => read, _ => 0));
+        Assert.Equal(answered[1], ring.BorrowKeyEncryptionKeys(keys => keys.Current.ToArray()).Match(read => read, _ => []));
+        Assert.Equal(answered[0], ring.BorrowKeyEncryptionKey(1, key => key.ToArray()).Match(read => read, _ => []));
+        Assert.Equal(answered[2], ring.BorrowFingerprintKeys(keys => keys.Current.ToArray()).Match(read => read, _ => []));
+        Assert.Equal(answered[3], ring.BorrowMaintenanceCredential(credential => credential.ToArray()).Match(read => read, _ => []));
+
+        ring.Clear();
+
+        Assert.Equal(4, ring.Arrays.Count());
+        Assert.All(ring.Arrays, array => Assert.All(array, value => Assert.Equal(0, value)));
+        Assert.Throws<InvalidOperationException>(() => ring.BorrowKeyEncryptionKeys(keys => keys.CurrentVersion));
+        Assert.Throws<InvalidOperationException>(() => ring.BorrowKeyEncryptionKey(1, key => key.Length));
+        Assert.Throws<InvalidOperationException>(() => ring.BorrowFingerprintKeys(keys => keys.CurrentVersion));
+        Assert.Throws<InvalidOperationException>(() => ring.BorrowMaintenanceCredential(credential => credential.Length));
+    }
+
+    /// <summary>
+    /// CONV-CODE-007: asked for a version of the key-encryption key it does not hold, the
+    /// ring answers that the secret is unavailable, naming the key and the version.
+    /// </summary>
+    [Fact]
+    public void CONV_CODE_007_AVersionTheRingDoesNotHoldIsNamedWithItsVersion()
+    {
+        var ring = new KeyRing();
+
+        ring.HoldKeyEncryptionKeys(new KeyEncryptionKeys(2, new Dictionary<int, ReadOnlyMemory<byte>> { [2] = Material(2) }));
+        ring.Fill();
+
+        Error? refused = ring.BorrowKeyEncryptionKey(1, key => key.Length).Match(_ => (Error?)null, error => error);
+
+        Assert.Equal(ErrorCodes.StartupSecretUnavailable, refused?.Code);
+        Assert.Equal("keyEncryptionKeys", refused?.Details["key"].GetString());
+        Assert.Equal(1, refused?.Details["version"].GetInt32());
+    }
+
+    /// <summary>
+    /// CONV-CODE-007: asked for a key or the credential it was not filled with, the ring
+    /// answers that the secret is unavailable and names it.
+    /// </summary>
+    [Fact]
+    public void CONV_CODE_007_AKeyTheRingDoesNotHoldIsNamedUnavailable()
+    {
+        KeyRing ring = Filled();
+
+        Assert.Equal("keyEncryptionKeys", Refused(ring.BorrowKeyEncryptionKeys(keys => keys.CurrentVersion)));
+        Assert.Equal("fingerprintKeys", Refused(ring.BorrowFingerprintKeys(keys => keys.CurrentVersion)));
+        Assert.Equal("maintenanceCredential", Refused(ring.BorrowMaintenanceCredential(credential => credential.Length)));
+    }
+
+    /// <summary>
+    /// D-171: each key is held once, and only while the ring is being filled.
+    /// </summary>
+    [Fact]
+    public void CONV_CODE_007_EachKeyIsHeldOnce()
+    {
+        var keys = new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = Material(1) });
+        var fingerprints = new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = Material(3) });
+        var ring = new KeyRing();
+
+        ring.HoldKeyEncryptionKeys(keys);
+        ring.HoldFingerprintKeys(fingerprints);
+        ring.HoldMaintenanceCredential(Secret);
+
+        Assert.Throws<InvalidOperationException>(() => ring.HoldKeyEncryptionKeys(keys));
+        Assert.Throws<InvalidOperationException>(() => ring.HoldFingerprintKeys(fingerprints));
+        Assert.Throws<InvalidOperationException>(() => ring.HoldMaintenanceCredential(Secret));
+
+        KeyRing filled = Filled();
+
+        Assert.Throws<InvalidOperationException>(() => filled.HoldKeyEncryptionKeys(keys));
+        Assert.Throws<InvalidOperationException>(() => filled.HoldFingerprintKeys(fingerprints));
+        Assert.Throws<InvalidOperationException>(() => filled.HoldMaintenanceCredential(Secret));
+    }
+
+    // A key of 32 bytes, each the given value.
+    private static byte[] Material(byte value) => [.. Enumerable.Repeat(value, 32)];
+
+    private static string? Refused<TValue>(Result<TValue> borrowed) =>
+        borrowed.Match(_ => (Error?)null, error => error)?.Details["key"].GetString();
 
     private static KeyRing Filled()
     {

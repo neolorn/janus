@@ -442,14 +442,14 @@ public sealed class ExportSourceTests(DatabaseFixture database)
             new AccountDirectory(
                 reading,
                 new AccountStore(reading),
-                new ProfileStore(reading, _deployment.Keys, _deployment.Randomness),
-                new ProfilePhotoStore(reading, _deployment.Keys, _deployment.Randomness),
-                new SubjectKeyStore(reading, _deployment.Keys, _deployment.Randomness),
+                new ProfileStore(reading, _deployment.Ring, _deployment.Randomness),
+                new ProfilePhotoStore(reading, _deployment.Ring, _deployment.Randomness),
+                new SubjectKeyStore(reading, _deployment.Ring, _deployment.Randomness),
                 Preferences(reading),
                 Declared,
                 new OutboxStore(reading, new FixedTime(Noon))),
             new IdentifierDirectory(Identifiers(reading), Preferences(reading)),
-            new AuthenticatorStore(reading, _deployment.Keys, _deployment.Randomness, Deployment.FingerprintKeys),
+            new AuthenticatorStore(reading, _deployment.Ring, _deployment.Randomness),
             new PasswordStore(reading),
             new RecoveryCodeStore(reading),
             new DeviceStore(reading),
@@ -563,7 +563,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
 
         await using StoreContext writing = database.Context();
 
-        await new AuthenticatorStore(writing, _deployment.Keys, _deployment.Randomness, Deployment.FingerprintKeys)
+        await new AuthenticatorStore(writing, _deployment.Ring, _deployment.Randomness)
             .AddAsync(credential, TestContext.Current.CancellationToken);
 
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -711,11 +711,11 @@ public sealed class ExportSourceTests(DatabaseFixture database)
     }
 
     private IdentifierStore Identifiers(StoreContext context) =>
-        new(context, _deployment.Keys, Deployment.FingerprintKeys, _deployment.Randomness);
+        new(context, _deployment.Ring, _deployment.Randomness);
 
     private PreferenceStore Preferences(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness);
+        new(context, _deployment.Ring, _deployment.Randomness);
 
     private SessionStore Sessions(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness);
+        new(context, _deployment.Ring, _deployment.Randomness);
 }

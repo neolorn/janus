@@ -251,7 +251,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
         new(new AccountStore(context), Sessions(context));
 
     private SessionStore Sessions(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness);
+        new(context, _deployment.Ring, _deployment.Randomness);
 
     private async Task TakenDownAsync(SubjectId subject)
     {

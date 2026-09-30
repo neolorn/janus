@@ -23,16 +23,6 @@ public sealed class ResultContractTests
         "ToString",
     ];
 
-    // CONV-DESIGN-005 AC1 is about the service contracts of LIB-API-005, the operations
-    // the library performs. Being a port buys no exemption: what this one has is no
-    // expected failure to carry. The secret source is the extension point of
-    // LIB-EXT-001, whose absence CONV-ERR-001 makes a startup fault. An interface added
-    // outside this list is an operation contract and is held to the rule.
-    private static readonly Type[] NotOperationContracts =
-    [
-        typeof(ISecretSource),
-    ];
-
     /// <summary>
     /// CONV-DESIGN-005 AC1: every method on a public contract returns an outcome, so
     /// no operation can report success by returning a bare value.
@@ -40,7 +30,7 @@ public sealed class ResultContractTests
     [Fact]
     public void CONV_DESIGN_005_AC1_EveryContractMethodReturnsAnOutcome()
     {
-        foreach (MethodInfo method in OperationContractMethods())
+        foreach (MethodInfo method in ContractMethods())
         {
             Assert.True(
                 IsOutcome(method.ReturnType),
@@ -110,12 +100,6 @@ public sealed class ResultContractTests
 
     private static IEnumerable<MethodInfo> ContractMethods() =>
         PublicInterfaces()
-            .SelectMany(type => type.GetMethods())
-            .Where(method => !method.IsSpecialName);
-
-    private static IEnumerable<MethodInfo> OperationContractMethods() =>
-        PublicInterfaces()
-            .Where(type => !NotOperationContracts.Contains(type))
             .SelectMany(type => type.GetMethods())
             .Where(method => !method.IsSpecialName);
 

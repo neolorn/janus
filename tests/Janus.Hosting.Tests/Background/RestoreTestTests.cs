@@ -390,20 +390,20 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
                 "https://accounts.example.test/signin",
                 "https://accounts.example.test"))
             .AddSingleton(new SignOnClient("this-application"))
-            .AddJanus(
-                host.ConnectionString,
-                keys,
-                fingerprints,
-                Encoding.UTF8.GetBytes(host.MaintenanceConnectionString),
-                HostFixture.Declaration(),
-                ApplicationKind.Public);
+            .AddSingleton<ISecretSource>(new SecretSourceInMemory(new Dictionary<string, ProviderCredential>(StringComparer.Ordinal))
+            {
+                KeyEncryptionKeys = keys,
+                FingerprintKeys = fingerprints,
+                MaintenanceCredential = Encoding.UTF8.GetBytes(host.MaintenanceConnectionString),
+            })
+            .AddJanus(host.ConnectionString, HostFixture.Declaration(), ApplicationKind.Public);
 
         if (instance is not null)
         {
             services.AddSingleton(instance);
         }
 
-        return services.BuildServiceProvider();
+        return HostFixture.Started(services.BuildServiceProvider());
     }
 
     // What the run's record carries.

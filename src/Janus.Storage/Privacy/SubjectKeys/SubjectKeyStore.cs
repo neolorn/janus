@@ -11,12 +11,12 @@ namespace Janus.Storage.Privacy.SubjectKeys;
 /// Subject keys, over the <c>subject_keys</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <param name="keyEncryptionKeys">The versions a subject key may be wrapped under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <param name="randomness">The randomness a data key is drawn from.</param>
 /// <remarks>Implements PRIV-RIGHT-005a, OPS-SEC-003 and CONV-DESIGN-003.</remarks>
 internal sealed class SubjectKeyStore(
     StoreContext context,
-    KeyEncryptionKeys keyEncryptionKeys,
+    IKeyRing ring,
     RandomNumberGenerator randomness) : ISubjectKeyStore
 {
     /// <inheritdoc/>
@@ -58,12 +58,9 @@ internal sealed class SubjectKeyStore(
 
         try
         {
-            await AddAsync(
-                    SubjectKey.Wrapped(
-                        SubjectKeyId.Of(subject),
-                        keyEncryptionKeys.CurrentVersion,
-                        PersonalFieldCipher.Wrap(dataKey, keyEncryptionKeys.Current.Span)),
-                    cancellationToken)
+            (int version, byte[] wrapped) = PersonalFieldCipher.WrapUnderCurrent(dataKey, ring);
+
+            await AddAsync(SubjectKey.Wrapped(SubjectKeyId.Of(subject), version, wrapped), cancellationToken)
                 .ConfigureAwait(false);
         }
         finally

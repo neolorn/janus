@@ -17,9 +17,8 @@ namespace Janus.Storage.Authentication.Factors;
 /// Enrolled credentials, over the <c>authenticators</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <param name="keyEncryptionKeys">The versions a subject key may be wrapped under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <param name="randomness">The randomness the initialisation vector is drawn from.</param>
-/// <param name="fingerprintKeys">The versions a provider's subject is fingerprinted under.</param>
 /// <remarks>
 /// Implements AUTH-FACT-001, AUTH-FACT-006, IDN-LIFE-012a, PRIV-RIGHT-005c, OPS-SEC-003
 /// and CONV-DESIGN-003. The shared secret of a code generator is written under the
@@ -30,9 +29,8 @@ namespace Janus.Storage.Authentication.Factors;
 /// </remarks>
 internal sealed class AuthenticatorStore(
     StoreContext context,
-    KeyEncryptionKeys keyEncryptionKeys,
-    RandomNumberGenerator randomness,
-    FingerprintKeys fingerprintKeys) : IAuthenticatorStore
+    IKeyRing ring,
+    RandomNumberGenerator randomness) : IAuthenticatorStore
 {
     /// <inheritdoc/>
     public async ValueTask<Authenticator?> FindAsync(
@@ -253,8 +251,8 @@ internal sealed class AuthenticatorStore(
                 {
                     byte[] linked = Encoding.UTF8.GetBytes(providerSubject);
 
-                    record.ProviderSubject = Fingerprint.Compute(linked, fingerprintKeys);
-                    record.FingerprintVersion = fingerprintKeys.CurrentVersion;
+                    record.ProviderSubject = Fingerprint.Compute(linked, ring);
+                    record.FingerprintVersion = Fingerprint.CurrentVersion(ring);
                     record.EncryptedProviderSubject = PersonalFieldCipher.Encrypt(
                         dataKey,
                         Linked(authenticator.Subject),
@@ -272,7 +270,7 @@ internal sealed class AuthenticatorStore(
     }
 
     private IReadOnlyList<byte[]> Candidates(string providerSubject) =>
-        Fingerprint.Candidates(Encoding.UTF8.GetBytes(providerSubject), fingerprintKeys);
+        Fingerprint.Candidates(Encoding.UTF8.GetBytes(providerSubject), ring);
 
     private async ValueTask<Authenticator> ReadAsync(
         AuthenticatorRecord record,
@@ -302,6 +300,6 @@ internal sealed class AuthenticatorStore(
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The subject has no key to read its credentials under.");
 
-        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, keyEncryptionKeys);
+        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, ring);
     }
 }

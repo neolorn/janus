@@ -118,7 +118,7 @@ public sealed class SessionAuditTests(DatabaseFixture database)
     }
 
     private AuditStore Store(StoreContext context) =>
-        new(context, new DataConnections(context), _deployment.Keys, _deployment.Randomness);
+        new(context, new DataConnections(context), _deployment.Ring, _deployment.Randomness);
 
     private SessionAudit Audit(StoreContext context) => new(Store(context), TimeProvider.System);
 

@@ -15,7 +15,7 @@ namespace Janus.Storage.Identity.Preferences;
 /// An account's preferences, over the <c>account_preferences</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <param name="keyEncryptionKeys">The versions a subject key may be wrapped under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <param name="randomness">The randomness the initialisation vector is drawn from.</param>
 /// <remarks>
 /// Implements IDN-ATTR-001, REG-PREF-001, PRIV-RIGHT-005a and CONV-DESIGN-003. The
@@ -24,7 +24,7 @@ namespace Janus.Storage.Identity.Preferences;
 /// </remarks>
 internal sealed class PreferenceStore(
     StoreContext context,
-    KeyEncryptionKeys keyEncryptionKeys,
+    IKeyRing ring,
     RandomNumberGenerator randomness) : IPreferenceStore
 {
     /// <inheritdoc/>
@@ -133,6 +133,6 @@ internal sealed class PreferenceStore(
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The subject has no key to read its preferences under.");
 
-        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, keyEncryptionKeys);
+        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, ring);
     }
 }

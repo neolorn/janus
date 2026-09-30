@@ -17,7 +17,7 @@ namespace Janus.Storage.Privacy.SubjectKeys;
 /// </summary>
 /// <param name="context">The context the progress is tracked on.</param>
 /// <param name="connections">Where the re-wraps take their connection from.</param>
-/// <param name="keyEncryptionKeys">The versions the command was handed, the new one current.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <remarks>
 /// Implements OPS-SEC-003, OPS-MIG-003a and PRIV-RIGHT-005a. Each key is written back
 /// only where it still stands as it was read, version and wrapped value both, so an
@@ -29,7 +29,7 @@ namespace Janus.Storage.Privacy.SubjectKeys;
 internal sealed class KeyRotationStore(
     StoreContext context,
     DataConnections connections,
-    KeyEncryptionKeys keyEncryptionKeys) : IKeyRotationStore
+    IKeyRing ring) : IKeyRotationStore
 {
     // OPS-MIG-003a: the rights of the maintenance role, and no path to the application's,
     // which a superuser holds as it holds every role's.
@@ -183,11 +183,12 @@ internal sealed class KeyRotationStore(
         }
 
         int reWrapped = 0;
+        int current = PersonalFieldCipher.CurrentVersion(ring);
 
         foreach (SubjectKey key in keys)
         {
             if (!key.IsErased
-                && key.KeyVersion != keyEncryptionKeys.CurrentVersion
+                && key.KeyVersion != current
                 && await ReWrappedAsync(key, cancellationToken).ConfigureAwait(false))
             {
                 reWrapped++;
@@ -202,7 +203,7 @@ internal sealed class KeyRotationStore(
     {
         IReadOnlyList<SubjectKey> keys = await SubjectKeysAsync(
                 Remaining,
-                new { marker = (short)PersonalDataFormat.Marker, current = keyEncryptionKeys.CurrentVersion, count },
+                new { marker = (short)PersonalDataFormat.Marker, current = PersonalFieldCipher.CurrentVersion(ring), count },
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -247,11 +248,13 @@ internal sealed class KeyRotationStore(
     {
         int previous = key.KeyVersion;
         byte[] read = key.WrappedKey.ToArray();
-        byte[] dataKey = PersonalFieldCipher.Unwrap(key.FormatMarker, previous, key.WrappedKey.Span, keyEncryptionKeys);
+        byte[] dataKey = PersonalFieldCipher.Unwrap(key.FormatMarker, previous, key.WrappedKey, ring);
 
         try
         {
-            key.ReWrap(keyEncryptionKeys.CurrentVersion, PersonalFieldCipher.Wrap(dataKey, keyEncryptionKeys.Current.Span));
+            (int version, byte[] wrapped) = PersonalFieldCipher.WrapUnderCurrent(dataKey, ring);
+
+            key.ReWrap(version, wrapped);
         }
         finally
         {

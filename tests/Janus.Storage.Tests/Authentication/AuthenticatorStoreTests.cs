@@ -331,7 +331,7 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
     }
 
     private AuthenticatorStore Store(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness, Deployment.FingerprintKeys);
+        new(context, _deployment.Ring, _deployment.Randomness);
 
     private async Task LinkedAsync(Authenticator credential, string providerSubject)
     {

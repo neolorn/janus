@@ -101,7 +101,7 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
 
         await using (StoreContext counting = database.Context())
         {
-            await new ThrottleLedger(counting, Deployment.FingerprintKeys)
+            await new ThrottleLedger(counting, Deployment.Fingerprints)
                 .FailedAsync(ThrottleScope.Source, "192.0.2.1", standing: 2, Noon, cancellationToken);
             await counting.SaveChangesAsync(cancellationToken);
         }
@@ -119,7 +119,7 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
         Assert.NotNull(await Mailboxes(reading, Rotating).FindAsync(seeded.Held, cancellationToken));
         Assert.Equal(
             new ThrottleCounter(3, Noon),
-            await new ThrottleLedger(reading, Rotating).FindAsync(ThrottleScope.Source, "192.0.2.1", cancellationToken));
+            await new ThrottleLedger(reading, Ring(Rotating)).FindAsync(ThrottleScope.Source, "192.0.2.1", cancellationToken));
     }
 
     /// <summary>
@@ -276,9 +276,9 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
 
         await using (StoreContext counting = database.Context())
         {
-            await new ThrottleLedger(counting, Deployment.FingerprintKeys)
+            await new ThrottleLedger(counting, Deployment.Fingerprints)
                 .FailedAsync(ThrottleScope.Source, "192.0.2.1", standing: 0, Noon, cancellationToken);
-            await new ThrottleLedger(counting, Rotating)
+            await new ThrottleLedger(counting, Ring(Rotating))
                 .FailedAsync(ThrottleScope.Source, "192.0.2.2", standing: 0, Noon, cancellationToken);
             await counting.SaveChangesAsync(cancellationToken);
         }
@@ -328,9 +328,9 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
 
         await using (StoreContext opening = database.Context())
         {
-            await new ChallengeStore(opening, Deployment.FingerprintKeys).AddAsync(previous, cancellationToken);
-            await new ChallengeStore(opening, Rotating).AddAsync(current, cancellationToken);
-            await new ChallengeStore(opening, Rotating).AddAsync(unhashed, cancellationToken);
+            await new ChallengeStore(opening, Deployment.Fingerprints).AddAsync(previous, cancellationToken);
+            await new ChallengeStore(opening, Ring(Rotating)).AddAsync(current, cancellationToken);
+            await new ChallengeStore(opening, Ring(Rotating)).AddAsync(unhashed, cancellationToken);
             _ = await opening.SaveChangesAsync(cancellationToken);
         }
 
@@ -465,14 +465,17 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
         }
     }
 
+    // The deployment's key ring, holding the given versions of the fingerprint key.
+    private KeyRingInMemory Ring(FingerprintKeys fingerprintKeys) => new(_deployment.Keys, fingerprintKeys);
+
     private IdentifierStore Identifiers(StoreContext context, FingerprintKeys fingerprintKeys) =>
-        new(context, _deployment.Keys, fingerprintKeys, _deployment.Randomness);
+        new(context, Ring(fingerprintKeys), _deployment.Randomness);
 
     private AuthenticatorStore Authenticators(StoreContext context, FingerprintKeys fingerprintKeys) =>
-        new(context, _deployment.Keys, _deployment.Randomness, fingerprintKeys);
+        new(context, Ring(fingerprintKeys), _deployment.Randomness);
 
     private MailboxStore Mailboxes(StoreContext context, FingerprintKeys fingerprintKeys) =>
-        new(context, _deployment.DataKey(context), _deployment.Keys, fingerprintKeys, _deployment.Randomness);
+        new(context, _deployment.DataKey(context), Ring(fingerprintKeys), _deployment.Randomness);
 
     // A value of every column the rotation computes again, written under the previous
     // version as an application holding only that version writes it: an identifier kept
@@ -595,23 +598,23 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
         var services = new ServiceCollection();
 
         services.AddSingleton(time);
-        services.AddStorageArea(connection.ConnectionString, _deployment.Keys, Rotating);
+        services.AddSingleton<IKeyRing>(Ring(Rotating));
+        services.AddStorageArea(connection.ConnectionString);
         services.AddScoped<IKeyRotationStore>(provider => new KeyRotationStore(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<DataConnections>(),
-            _deployment.Keys));
+            provider.GetRequiredService<IKeyRing>()));
         services.AddScoped<IFingerprintRotationStore>(provider => new FingerprintRotationStore(
             provider.GetRequiredService<DataConnections>(),
             provider.GetRequiredService<DeploymentDataKeyStore>(),
-            _deployment.Keys,
-            Rotating));
+            provider.GetRequiredService<IKeyRing>()));
         services.AddScoped(provider => new FingerprintKeyRotation(
             provider.GetRequiredService<IKeyRotationStore>(),
             provider.GetRequiredService<IFingerprintRotationStore>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<IPrivacyAudit>(),
             provider.GetRequiredService<TimeProvider>(),
-            Rotating));
+            provider.GetRequiredService<IKeyRing>()));
 
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
     }

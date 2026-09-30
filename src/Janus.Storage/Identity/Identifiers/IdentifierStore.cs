@@ -18,8 +18,7 @@ namespace Janus.Storage.Identity.Identifiers;
 /// <c>identifier_backup_settings</c> tables.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <param name="keyEncryptionKeys">The versions a subject key may be wrapped under.</param>
-/// <param name="fingerprintKeys">The versions the searchable fingerprints are computed under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <param name="randomness">The randomness each initialisation vector is drawn from.</param>
 /// <remarks>
 /// Implements IDN-ACCT-004, REG-IDENT-002, PRIV-RIGHT-005a, PRIV-RIGHT-005c and
@@ -31,8 +30,7 @@ namespace Janus.Storage.Identity.Identifiers;
 /// </remarks>
 internal sealed class IdentifierStore(
     StoreContext context,
-    KeyEncryptionKeys keyEncryptionKeys,
-    FingerprintKeys fingerprintKeys,
+    IKeyRing ring,
     RandomNumberGenerator randomness) : IIdentifierStore
 {
     /// <inheritdoc/>
@@ -221,7 +219,7 @@ internal sealed class IdentifierStore(
                         Subject = removal.Subject,
                         Kind = removal.Kind,
                         Fingerprint = Fingerprinted(removal.Canonical),
-                        FingerprintVersion = fingerprintKeys.CurrentVersion,
+                        FingerprintVersion = Fingerprint.CurrentVersion(ring),
                         Entered = Given(
                             removal.Subject,
                             IdentifierRemovalConfiguration.EnteredColumn,
@@ -335,10 +333,10 @@ internal sealed class IdentifierStore(
             stored));
 
     private byte[] Fingerprinted(string canonical) =>
-        Fingerprint.Compute(Encoding.UTF8.GetBytes(canonical), fingerprintKeys);
+        Fingerprint.Compute(Encoding.UTF8.GetBytes(canonical), ring);
 
     private IReadOnlyList<byte[]> Candidates(string canonical) =>
-        Fingerprint.Candidates(Encoding.UTF8.GetBytes(canonical), fingerprintKeys);
+        Fingerprint.Candidates(Encoding.UTF8.GetBytes(canonical), ring);
 
     private byte[] Written(SubjectId subject, string column, string value, ReadOnlySpan<byte> dataKey) =>
         PersonalFieldCipher.Encrypt(
@@ -361,7 +359,7 @@ internal sealed class IdentifierStore(
             Subject = identifier.Subject,
             Kind = identifier.Kind,
             Fingerprint = Fingerprinted(identifier.Canonical),
-            FingerprintVersion = fingerprintKeys.CurrentVersion,
+            FingerprintVersion = Fingerprint.CurrentVersion(ring),
             CanonicalisationVersion = CanonicalForm.UnicodeVersion,
             Entered = Written(
                 identifier.Subject,
@@ -416,7 +414,7 @@ internal sealed class IdentifierStore(
                 identifier.Canonical,
                 dataKey);
             row.Fingerprint = Fingerprinted(identifier.Canonical);
-            row.FingerprintVersion = fingerprintKeys.CurrentVersion;
+            row.FingerprintVersion = Fingerprint.CurrentVersion(ring);
             row.CanonicalisationVersion = CanonicalForm.UnicodeVersion;
         }
     }
@@ -496,7 +494,7 @@ internal sealed class IdentifierStore(
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The subject has no key to read its identifiers under.");
 
-        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, keyEncryptionKeys);
+        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, ring);
     }
 
     private async Task RecordBackupsAsync(IdentifierSet set, CancellationToken cancellationToken)

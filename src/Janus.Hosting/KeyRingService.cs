@@ -60,6 +60,33 @@ internal sealed class KeyRingService(
     {
         ISecretSource declared = Declared();
 
+        // AUTH-KEY-002, OPS-SEC-001: the source is the only place each of these comes
+        // from and the library holds no fallback for any, so a deployment that cannot
+        // read one stops here with the code that names it, not at the first request that
+        // would have read a person's field. The fingerprint key computes an HMAC-SHA256,
+        // so a version shorter than that hash is a key that weakens the code it is used
+        // by; without the maintenance credential no month is created ahead and the trail
+        // stops taking rows once the months the migration created have passed
+        // (PRIV-RET-002).
+        ring.HoldKeyEncryptionKeys((await declared
+                .ReadKeyEncryptionKeysAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .Match(keys => keys, _ => Missing<KeyEncryptionKeys>(KeyRing.KeyEncryptionKeysName)));
+        ring.HoldFingerprintKeys((await declared
+                .ReadFingerprintKeysAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .Match(
+                keys => keys.Versions.Values.Any(version => version.Length < FingerprintKeys.MinimumLength)
+                    ? Missing<FingerprintKeys>(KeyRing.FingerprintKeysName)
+                    : keys,
+                _ => Missing<FingerprintKeys>(KeyRing.FingerprintKeysName)));
+        ring.HoldMaintenanceCredential((await declared
+                .ReadMaintenanceCredentialAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .Match(
+                credential => credential.IsEmpty ? Missing<ReadOnlyMemory<byte>>(KeyRing.MaintenanceCredentialName) : credential,
+                _ => Missing<ReadOnlyMemory<byte>>(KeyRing.MaintenanceCredentialName)));
+
         // LIB-HOST-001: a declaration that is not a social provider, or one declared
         // twice, is refused by name after this; the credential read is the one of each
         // social provider declared.
@@ -165,6 +192,11 @@ internal sealed class KeyRingService(
 
         return Task.CompletedTask;
     }
+
+    private static TValue Missing<TValue>(string key) =>
+        throw new StartupException(
+            "A secret the deployment runs on cannot be read from the secret source, or is not one the library can use.",
+            KeyRing.Unavailable(key));
 
     private static ReadOnlyMemory<byte> Unread(Error failure) =>
         throw new StartupException("The mail server's key cannot be read from the secret source.", failure);

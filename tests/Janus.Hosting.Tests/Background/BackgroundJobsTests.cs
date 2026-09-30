@@ -349,14 +349,8 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
                 "https://accounts.example.test/signin",
                 "https://accounts.example.test"))
             .AddSingleton(new SignOnClient("this-application"))
-            .AddSingleton<ISecretSource>(new SecretSourceInMemory(new Dictionary<string, ProviderCredential>(StringComparer.Ordinal)))
-            .AddJanus(
-                host.ConnectionString,
-                new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-                new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-                Encoding.UTF8.GetBytes(host.MaintenanceConnectionString),
-                HostFixture.Declaration(),
-                ApplicationKind.Public)
+            .AddSingleton<ISecretSource>(HostFixture.Secrets(host.MaintenanceConnectionString))
+            .AddJanus(host.ConnectionString, HostFixture.Declaration(), ApplicationKind.Public)
             .BuildServiceProvider();
 
         // CONV-DESIGN-007: the key ring is filled and the mail server in use chosen

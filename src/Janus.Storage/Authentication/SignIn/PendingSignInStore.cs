@@ -16,7 +16,7 @@ namespace Janus.Storage.Authentication.SignIn;
 /// table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <param name="keyEncryptionKeys">The versions a subject key may be wrapped under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <param name="randomness">The randomness each initialisation vector is drawn from.</param>
 /// <remarks>
 /// Implements AUTH-FACT-003, PRIV-RIGHT-005a and CONV-DESIGN-003. Asking again
@@ -27,7 +27,7 @@ namespace Janus.Storage.Authentication.SignIn;
 /// </remarks>
 internal sealed class PendingSignInStore(
     StoreContext context,
-    KeyEncryptionKeys keyEncryptionKeys,
+    IKeyRing ring,
     RandomNumberGenerator randomness) : IPendingSignInStore
 {
     /// <inheritdoc/>
@@ -191,6 +191,6 @@ internal sealed class PendingSignInStore(
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The subject has no key to hold a code under.");
 
-        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, keyEncryptionKeys);
+        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, ring);
     }
 }

@@ -327,7 +327,7 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
             await work.BeginAsync(TestContext.Current.CancellationToken);
             await new SubjectEraser(
                     erasing,
-                    new SessionStore(erasing, _deployment.Keys, _deployment.Randomness),
+                    new SessionStore(erasing, _deployment.Ring, _deployment.Randomness),
                     new ConfigurationStore(erasing, new DataConnections(erasing)))
                 .EraseAsync(replaced.Holder!.Value, ErasureReason.ErasureRequest, Noon.AddDays(3), TestContext.Current.CancellationToken);
             await erasing.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -476,7 +476,7 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
     }
 
     private MailboxStore Store(StoreContext context) =>
-        new(context, _deployment.DataKey(context), _deployment.Keys, Deployment.FingerprintKeys, _deployment.Randomness);
+        new(context, _deployment.DataKey(context), _deployment.Ring, _deployment.Randomness);
 
     private async Task<Mailbox?> HeldByAsync(SubjectId holder)
     {

@@ -16,7 +16,7 @@ namespace Janus.Storage.Privacy.SubjectKeys;
 /// under it.
 /// </summary>
 /// <param name="connections">The connection and transaction the operation holds.</param>
-/// <param name="keyEncryptionKeys">The versions the key is wrapped under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <param name="randomness">The randomness the key is drawn from, the first time it is needed.</param>
 /// <remarks>
 /// Implements PRIV-RIGHT-005a, AUTH-KEY-002 and OPS-SEC-003 (D-166, 316; D-172). The
@@ -27,7 +27,7 @@ namespace Janus.Storage.Privacy.SubjectKeys;
 /// </remarks>
 internal sealed class DeploymentDataKeyStore(
     DataConnections connections,
-    KeyEncryptionKeys keyEncryptionKeys,
+    IKeyRing ring,
     RandomNumberGenerator randomness)
 {
     private const string Held =
@@ -62,6 +62,8 @@ internal sealed class DeploymentDataKeyStore(
 
             try
             {
+                (int Version, byte[] Wrapped) written = PersonalFieldCipher.WrapUnderCurrent(dataKey, ring);
+
                 _ = await ambient.Connection
                     .ExecuteAsync(new CommandDefinition(
                         Written,
@@ -69,8 +71,8 @@ internal sealed class DeploymentDataKeyStore(
                         {
                             subject = SubjectKeyId.Deployment.Value,
                             marker = (short)PersonalDataFormat.Marker,
-                            version = keyEncryptionKeys.CurrentVersion,
-                            wrapped = PersonalFieldCipher.Wrap(dataKey, keyEncryptionKeys.Current.Span),
+                            version = written.Version,
+                            wrapped = written.Wrapped,
                         },
                         ambient.Transaction,
                         cancellationToken: cancellationToken))
@@ -88,7 +90,7 @@ internal sealed class DeploymentDataKeyStore(
             ? held[0]
             : throw new InvalidOperationException("The deployment's data key was written and is not there to read.");
 
-        return PersonalFieldCipher.Unwrap((byte)marker, version, wrapped, keyEncryptionKeys);
+        return PersonalFieldCipher.Unwrap((byte)marker, version, wrapped, ring);
     }
 
     private static async ValueTask<IReadOnlyList<(short Marker, int Version, byte[] Wrapped)>> HeldAsync(

@@ -16,6 +16,64 @@ namespace Janus.Core;
 public interface IKeyRing
 {
     /// <summary>
+    /// Lends the key-encryption key, every version the deployment holds, for the length
+    /// of one use.
+    /// </summary>
+    /// <typeparam name="TValue">What the use answers.</typeparam>
+    /// <param name="use">
+    /// What is done with the versions, which keeps nothing of them once it returns.
+    /// </param>
+    /// <returns>
+    /// What the use answered, or <c>model.startup.secretunavailable</c> naming
+    /// <c>keyEncryptionKeys</c> where the ring holds none.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">The ring is not filled, or is cleared.</exception>
+    Result<TValue> BorrowKeyEncryptionKeys<TValue>(Func<KeyEncryptionKeys, TValue> use);
+
+    /// <summary>
+    /// Lends one version of the key-encryption key for the length of one use.
+    /// </summary>
+    /// <typeparam name="TValue">What the use answers.</typeparam>
+    /// <param name="version">The version asked for.</param>
+    /// <param name="use">What is done with the key, which keeps nothing of it once it returns.</param>
+    /// <returns>
+    /// What the use answered, or <c>model.startup.secretunavailable</c> naming
+    /// <c>keyEncryptionKeys</c> and the version where the ring does not hold it.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">The ring is not filled, or is cleared.</exception>
+    Result<TValue> BorrowKeyEncryptionKey<TValue>(int version, Func<ReadOnlyMemory<byte>, TValue> use);
+
+    /// <summary>
+    /// Lends the fingerprint key, every version the deployment holds, for the length of
+    /// one use.
+    /// </summary>
+    /// <typeparam name="TValue">What the use answers.</typeparam>
+    /// <param name="use">
+    /// What is done with the versions, which keeps nothing of them once it returns.
+    /// </param>
+    /// <returns>
+    /// What the use answered, or <c>model.startup.secretunavailable</c> naming
+    /// <c>fingerprintKeys</c> where the ring holds none.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">The ring is not filled, or is cleared.</exception>
+    Result<TValue> BorrowFingerprintKeys<TValue>(Func<FingerprintKeys, TValue> use);
+
+    /// <summary>
+    /// Lends the maintenance credential for the length of one use.
+    /// </summary>
+    /// <typeparam name="TValue">What the use answers.</typeparam>
+    /// <param name="use">
+    /// What is done with the credential, as its UTF-8 bytes, which keeps nothing of it
+    /// once it returns.
+    /// </param>
+    /// <returns>
+    /// What the use answered, or <c>model.startup.secretunavailable</c> naming
+    /// <c>maintenanceCredential</c> where the ring holds none, as a command's does.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">The ring is not filled, or is cleared.</exception>
+    Result<TValue> BorrowMaintenanceCredential<TValue>(Func<ReadOnlyMemory<byte>, TValue> use);
+
+    /// <summary>
     /// Lends a declared social provider's credential for the length of one use.
     /// </summary>
     /// <typeparam name="TValue">What the use answers.</typeparam>

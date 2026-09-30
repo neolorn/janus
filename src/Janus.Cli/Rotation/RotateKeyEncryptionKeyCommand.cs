@@ -98,7 +98,7 @@ internal static class RotateKeyEncryptionKeyCommand
 
         // DR-009, OPS-SEC-003 AC4: the escrow copy of the version every value is now
         // under, for the envelope, before the report the seal is confirmed against.
-        await EscrowCopy.WriteAsync(terminal.Output, keys.KeyEncryptionKeys, cancellationToken).ConfigureAwait(false);
+        await EscrowCopy.WriteKeyEncryptionKeyAsync(terminal.Output, keys.Ring, cancellationToken).ConfigureAwait(false);
 
         return outcome.Match(progress => Result.Success(Report(progress, retired: null)), Result.Failure<string>);
     }
@@ -135,17 +135,18 @@ internal static class RotateKeyEncryptionKeyCommand
         var services = new ServiceCollection();
 
         services.AddSingleton(TimeProvider.System);
-        services.AddStorageArea(keys.Connection, keys.KeyEncryptionKeys, keys.FingerprintKeys);
+        services.AddSingleton(keys.Ring);
+        services.AddStorageArea(keys.Connection);
         services.AddScoped<IKeyRotationStore>(provider => new KeyRotationStore(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<DataConnections>(),
-            keys.KeyEncryptionKeys));
+            keys.Ring));
         services.AddScoped(provider => new KeyRotation(
             provider.GetRequiredService<IKeyRotationStore>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<IPrivacyAudit>(),
             provider.GetRequiredService<TimeProvider>(),
-            keys.KeyEncryptionKeys));
+            keys.Ring));
 
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
     }

@@ -20,7 +20,7 @@ namespace Janus.Storage.Identity.Audit;
 /// </summary>
 /// <param name="context">The context the subject keys are read through.</param>
 /// <param name="connections">Where the append takes its connection from.</param>
-/// <param name="keyEncryptionKeys">The versions a subject key may be wrapped under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <param name="randomness">The randomness the initialisation vector is drawn from.</param>
 /// <remarks>
 /// Implements IDN-AUD-001, IDN-PRIN-001, PRIV-RET-002, PRIV-RET-003 and CONV-DESIGN-003.
@@ -32,7 +32,7 @@ namespace Janus.Storage.Identity.Audit;
 internal sealed class AuditStore(
     StoreContext context,
     DataConnections connections,
-    KeyEncryptionKeys keyEncryptionKeys,
+    IKeyRing ring,
     RandomNumberGenerator randomness) : IAuditStore
 {
     private const string Append =
@@ -199,7 +199,7 @@ internal sealed class AuditStore(
 
         return key is null || key.FormatMarker == PersonalDataFormat.ErasedMarker
             ? null
-            : PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, keyEncryptionKeys);
+            : PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, ring);
     }
 
     private async ValueTask<byte[]> DataKeyAsync(SubjectId subject, CancellationToken cancellationToken)
@@ -209,6 +209,6 @@ internal sealed class AuditStore(
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The subject has no key to hold the attribute under.");
 
-        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, keyEncryptionKeys);
+        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, ring);
     }
 }

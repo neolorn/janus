@@ -1275,7 +1275,11 @@ Janus.Core.IInvitations.EndMembershipAsync(Janus.Core.AccessContext! context, Ja
 Janus.Core.IInvitations.IssueAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.InvitationRequest! request, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.IssuedInvitation!>>
 Janus.Core.IInvitations.RevokeAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, Janus.Core.InvitationId invitation, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IKeyRing
+Janus.Core.IKeyRing.BorrowFingerprintKeys<TValue>(System.Func<Janus.Core.FingerprintKeys!, TValue>! use) -> Janus.Core.Result<TValue>
+Janus.Core.IKeyRing.BorrowKeyEncryptionKey<TValue>(int version, System.Func<System.ReadOnlyMemory<byte>, TValue>! use) -> Janus.Core.Result<TValue>
+Janus.Core.IKeyRing.BorrowKeyEncryptionKeys<TValue>(System.Func<Janus.Core.KeyEncryptionKeys!, TValue>! use) -> Janus.Core.Result<TValue>
 Janus.Core.IKeyRing.BorrowMailServerSecret<TValue>(System.Func<System.ReadOnlyMemory<byte>, TValue>! use) -> Janus.Core.Result<TValue>
+Janus.Core.IKeyRing.BorrowMaintenanceCredential<TValue>(System.Func<System.ReadOnlyMemory<byte>, TValue>! use) -> Janus.Core.Result<TValue>
 Janus.Core.IKeyRing.BorrowProviderCredential<TValue>(string! provider, System.Func<Janus.Core.ProviderCredential!, TValue>! use) -> Janus.Core.Result<TValue>
 Janus.Core.ILegalDocuments
 Janus.Core.ILegalDocuments.PublishAsync(Janus.Core.AccessContext! context, Janus.Core.DocumentPublication! publication, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.DocumentVersion!>>
@@ -1371,10 +1375,10 @@ Janus.Core.IRoles.AllAsync(Janus.Core.AccessContext! context, System.Threading.C
 Janus.Core.IRoles.DefineAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.DefinedRole! role, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<bool>>
 Janus.Core.IRoles.RemoveAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.RoleName role, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.ISecretSource
-Janus.Core.ISecretSource.ReadFingerprintKeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.FingerprintKeys!>
-Janus.Core.ISecretSource.ReadKeyEncryptionKeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.KeyEncryptionKeys!>
+Janus.Core.ISecretSource.ReadFingerprintKeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.FingerprintKeys!>>
+Janus.Core.ISecretSource.ReadKeyEncryptionKeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.KeyEncryptionKeys!>>
 Janus.Core.ISecretSource.ReadMailServerSecretAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.ReadOnlyMemory<byte>>>
-Janus.Core.ISecretSource.ReadMaintenanceCredentialAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>>
+Janus.Core.ISecretSource.ReadMaintenanceCredentialAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.ReadOnlyMemory<byte>>>
 Janus.Core.ISecretSource.ReadProviderCredentialAsync(string! provider, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.ProviderCredential!>>
 Janus.Core.ISessions
 Janus.Core.ISessions.EndAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>

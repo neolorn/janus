@@ -227,7 +227,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
 
     private static byte[] Reference(byte one) => [.. Enumerable.Repeat(one, Fingerprint.Length)];
 
-    private static SendLedger Ledger(StoreContext context) => new(context, Deployment.FingerprintKeys);
+    private static SendLedger Ledger(StoreContext context) => new(context, Deployment.Fingerprints);
 
     private async Task RecordedAsync(
         byte[] reference,

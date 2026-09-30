@@ -849,7 +849,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
     }
 
     private AuditStore Store(StoreContext context) =>
-        new(context, new DataConnections(context), _deployment.Keys, _deployment.Randomness);
+        new(context, new DataConnections(context), _deployment.Ring, _deployment.Randomness);
 
     private async ValueTask<IReadOnlyList<AuditEntry>> TrailAsync(SubjectId subject)
     {

@@ -51,15 +51,9 @@ internal static class OidcRegistration
     /// handlers.
     /// </summary>
     /// <param name="services">The host's services.</param>
-    /// <param name="keyEncryptionKeys">
-    /// The versions the deployment holds, which the codes and the refresh tokens are
-    /// encrypted under.
-    /// </param>
     /// <returns>The collection, for chaining.</returns>
     /// <exception cref="ArgumentNullException">The collection is absent.</exception>
-    public static IServiceCollection AddOidc(
-        this IServiceCollection services,
-        KeyEncryptionKeys keyEncryptionKeys)
+    public static IServiceCollection AddOidc(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -121,14 +115,6 @@ internal static class OidcRegistration
                 // against the published key set, which it cannot do if it is encrypted.
                 _ = options.DisableAccessTokenEncryption();
 
-                // AUTH-KEY-002: the codes and the refresh tokens are encrypted under a
-                // key derived from the deployment's own key-encryption key, so every
-                // instance reads what any other wrote and a restart loses nothing.
-                foreach (SymmetricSecurityKey key in TokenProtection.Keys(keyEncryptionKeys))
-                {
-                    _ = options.AddEncryptionKey(key);
-                }
-
                 _ = options.AddEventHandler<OpenIddictServerEvents.ValidatePushedAuthorizationRequestContext>(
                     handler => handler
                         .UseScopedHandler<RegisteredDestination>()
@@ -169,6 +155,24 @@ internal static class OidcRegistration
         _ = services.AddOptions<OpenIddictServerOptions>()
             .Configure<SigningCredentialSource>(
                 (options, source) => options.SigningCredentials.Add(source.Current));
+
+        // AUTH-KEY-002, CONV-CODE-007: the codes and the refresh tokens are encrypted
+        // under a key derived from the deployment's own key-encryption key, so every
+        // instance reads what any other wrote and a restart loses nothing. The server's
+        // options are read at its first request, after the start has filled the ring,
+        // and the credential is made then, with the key wrapping the content key as the
+        // server does for a symmetric key.
+        _ = services.AddOptions<OpenIddictServerOptions>()
+            .Configure<IKeyRing>((options, ring) =>
+            {
+                foreach (SymmetricSecurityKey key in TokenProtection.Keys(ring))
+                {
+                    options.EncryptionCredentials.Add(new EncryptingCredentials(
+                        key,
+                        SecurityAlgorithms.Aes256KW,
+                        SecurityAlgorithms.Aes256CbcHmacSha512));
+                }
+            });
 
         return services;
     }

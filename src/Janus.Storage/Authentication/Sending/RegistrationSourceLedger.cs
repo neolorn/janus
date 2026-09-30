@@ -14,14 +14,14 @@ namespace Janus.Storage.Authentication.Sending;
 /// Where registration sessions are counted against the source that started them.
 /// </summary>
 /// <param name="context">The context the operation runs on.</param>
-/// <param name="fingerprintKeys">The versions the sources are hashed under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <remarks>
 /// Implements AUTH-ABUSE-008, OPS-SEC-003 and CONV-DESIGN-003. A start recorded under a
 /// previous version of the fingerprint key still counts until the rotation retires it.
 /// </remarks>
 internal sealed class RegistrationSourceLedger(
     StoreContext context,
-    FingerprintKeys fingerprintKeys) : IRegistrationSources
+    IKeyRing ring) : IRegistrationSources
 {
     private static readonly TimeSpan Kept = TimeSpan.FromHours(1);
 
@@ -43,8 +43,8 @@ internal sealed class RegistrationSourceLedger(
         context.RegistrationSources.Add(new RegistrationSourceRecord
         {
             Id = Guid.CreateVersion7(at),
-            Source = Fingerprint.Compute(Encoding.UTF8.GetBytes(source), fingerprintKeys),
-            FingerprintVersion = fingerprintKeys.CurrentVersion,
+            Source = Fingerprint.Compute(Encoding.UTF8.GetBytes(source), ring),
+            FingerprintVersion = Fingerprint.CurrentVersion(ring),
             At = at,
         });
     }
@@ -72,5 +72,5 @@ internal sealed class RegistrationSourceLedger(
     }
 
     private IReadOnlyList<byte[]> Candidates(string source) =>
-        Fingerprint.Candidates(Encoding.UTF8.GetBytes(source), fingerprintKeys);
+        Fingerprint.Candidates(Encoding.UTF8.GetBytes(source), ring);
 }

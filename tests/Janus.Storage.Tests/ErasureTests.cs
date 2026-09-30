@@ -87,7 +87,7 @@ public sealed class ErasureTests(DatabaseFixture database) : IClassFixture<Datab
 
         Assert.Equal(Erased, erased.FormatMarker);
         Assert.Throws<CryptographicException>(() =>
-            PersonalFieldCipher.Unwrap(erased.FormatMarker, 1, erased.WrappedKey, keys));
+            PersonalFieldCipher.Unwrap(erased.FormatMarker, 1, erased.WrappedKey, new KeyRingInMemory(keys, Deployment.FingerprintKeys)));
 
         List<IdentifierRecord> rows = await reading.Identifiers
             .Where(row => row.Subject == subject)

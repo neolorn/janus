@@ -68,5 +68,5 @@ public sealed class RecoveryApprovalStoreTests(DatabaseFixture database)
     public void Dispose() => _deployment.Dispose();
 
     private RecoveryApprovalStore Store(StoreContext context) =>
-        new(context, _deployment.Keys, _deployment.Randomness);
+        new(context, _deployment.Ring, _deployment.Randomness);
 }

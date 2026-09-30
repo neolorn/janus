@@ -3982,6 +3982,8 @@ should carry `IEvents.PublishAsync` with its new return. An item of `02` should 
 that an operation publishes inside its transaction and commits nothing it could not
 publish.
 
+**Superseded by D-166.**
+
 ---
 
 ## 122. A send counter is kept for what the restrictions now declare, not for what a send was written under
@@ -13701,6 +13703,8 @@ ahead as well as dropping, since the sweep it names cannot execute the function,
 what its record holds. INF-HOST-003 and chapter 07 could say the maintenance credential is
 a whole database connection handed to `AddJanus` at startup, and that a deployment
 without it does not start. Chapter 10 could list `ops.auditpartitions.maintained`.
+
+**Superseded by D-166.**
 
 ---
 

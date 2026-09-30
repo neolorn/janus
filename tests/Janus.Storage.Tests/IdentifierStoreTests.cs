@@ -145,8 +145,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
         await using StoreContext reading = database.Context();
         var elsewhere = new IdentifierStore(
             reading,
-            _deployment.Keys,
-            Elsewhere,
+            new KeyRingInMemory(_deployment.Keys, Elsewhere),
             _deployment.Randomness);
 
         Assert.Null(await elsewhere.FindOwnerAsync(
@@ -236,8 +235,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
         await using StoreContext reading = database.Context();
         var store = new IdentifierStore(
             reading,
-            new KeyEncryptionKeys(1, counting),
-            Deployment.FingerprintKeys,
+            new KeyRingInMemory(new KeyEncryptionKeys(1, counting), Deployment.FingerprintKeys),
             _deployment.Randomness);
 
         IdentifierSet set = await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
@@ -676,7 +674,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     public void Dispose() => _deployment.Dispose();
 
     private IdentifierStore Store(StoreContext context) =>
-        new(context, _deployment.Keys, Deployment.FingerprintKeys, _deployment.Randomness);
+        new(context, _deployment.Ring, _deployment.Randomness);
 
     // A verified primary personal email displaced by a corporate address, as an
     // acknowledgement into an organization whose mail is integrated leaves it.
@@ -709,7 +707,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     private IdentifierDirectory Directory(StoreContext context) =>
-        new(Store(context), new PreferenceStore(context, _deployment.Keys, _deployment.Randomness));
+        new(Store(context), new PreferenceStore(context, _deployment.Ring, _deployment.Randomness));
 
     private static string Fresh(string person) =>
         person + "." + Guid.NewGuid().ToString("N") + "@Example.COM";

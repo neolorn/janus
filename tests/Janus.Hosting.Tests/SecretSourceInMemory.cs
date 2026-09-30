@@ -8,9 +8,10 @@ using Janus.Core;
 namespace Janus.Hosting.Tests;
 
 /// <summary>
-/// The host's secret source as a test deployment supplies it: the credentials it holds
-/// by provider name and the mail server's key where it holds one, answering nothing for
-/// what it holds none of, and counting what it was asked.
+/// The host's secret source as a test deployment supplies it: the keys and the
+/// maintenance credential it holds, the credentials it holds by provider name and the
+/// mail server's key where it holds one, answering nothing for what it holds none of,
+/// and counting what it was asked.
 /// </summary>
 /// <param name="credentials">What it answers, by the provider's name.</param>
 internal sealed class SecretSourceInMemory(IReadOnlyDictionary<string, ProviderCredential> credentials) : ISecretSource
@@ -24,21 +25,44 @@ internal sealed class SecretSourceInMemory(IReadOnlyDictionary<string, ProviderC
     public IReadOnlyList<string> Asked => _asked;
 
     /// <summary>
+    /// The key-encryption key it answers, or nothing where it holds none.
+    /// </summary>
+    public KeyEncryptionKeys? KeyEncryptionKeys { get; init; } =
+        new(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] });
+
+    /// <summary>
+    /// The fingerprint key it answers, or nothing where it holds none.
+    /// </summary>
+    public FingerprintKeys? FingerprintKeys { get; init; } =
+        new(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] });
+
+    /// <summary>
+    /// The maintenance credential it answers, or nothing where it holds none.
+    /// </summary>
+    public byte[]? MaintenanceCredential { get; init; } = "Host=maintenance.example.test"u8.ToArray();
+
+    /// <summary>
     /// The mail server's key it answers, or nothing where it holds none.
     /// </summary>
     public byte[]? MailServerSecret { get; init; }
 
     /// <inheritdoc/>
-    public ValueTask<KeyEncryptionKeys> ReadKeyEncryptionKeysAsync(CancellationToken cancellationToken) =>
-        ValueTask.FromResult(new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }));
+    public ValueTask<Result<KeyEncryptionKeys>> ReadKeyEncryptionKeysAsync(CancellationToken cancellationToken) =>
+        ValueTask.FromResult(KeyEncryptionKeys is KeyEncryptionKeys keys
+            ? Result.Success(keys)
+            : Result.Failure<KeyEncryptionKeys>(Unavailable("keyEncryptionKeys")));
 
     /// <inheritdoc/>
-    public ValueTask<FingerprintKeys> ReadFingerprintKeysAsync(CancellationToken cancellationToken) =>
-        ValueTask.FromResult(new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }));
+    public ValueTask<Result<FingerprintKeys>> ReadFingerprintKeysAsync(CancellationToken cancellationToken) =>
+        ValueTask.FromResult(FingerprintKeys is FingerprintKeys keys
+            ? Result.Success(keys)
+            : Result.Failure<FingerprintKeys>(Unavailable("fingerprintKeys")));
 
     /// <inheritdoc/>
-    public ValueTask<ReadOnlyMemory<byte>> ReadMaintenanceCredentialAsync(CancellationToken cancellationToken) =>
-        ValueTask.FromResult<ReadOnlyMemory<byte>>("Host=maintenance.example.test"u8.ToArray());
+    public ValueTask<Result<ReadOnlyMemory<byte>>> ReadMaintenanceCredentialAsync(CancellationToken cancellationToken) =>
+        ValueTask.FromResult(MaintenanceCredential is byte[] credential
+            ? Result.Success<ReadOnlyMemory<byte>>(credential)
+            : Result.Failure<ReadOnlyMemory<byte>>(Unavailable("maintenanceCredential")));
 
     /// <inheritdoc/>
     public ValueTask<Result<ProviderCredential>> ReadProviderCredentialAsync(
@@ -49,10 +73,7 @@ internal sealed class SecretSourceInMemory(IReadOnlyDictionary<string, ProviderC
 
         return ValueTask.FromResult(credentials.TryGetValue(provider, out ProviderCredential? credential)
             ? Result.Success(credential)
-            : Result.Failure<ProviderCredential>(Error.From(
-                ErrorCodes.StartupSecretUnavailable,
-                "key",
-                JsonSerializer.SerializeToElement("socialProvider." + provider))));
+            : Result.Failure<ProviderCredential>(Unavailable("socialProvider." + provider)));
     }
 
     /// <inheritdoc/>
@@ -62,9 +83,9 @@ internal sealed class SecretSourceInMemory(IReadOnlyDictionary<string, ProviderC
 
         return ValueTask.FromResult(MailServerSecret is byte[] secret
             ? Result.Success<ReadOnlyMemory<byte>>(secret)
-            : Result.Failure<ReadOnlyMemory<byte>>(Error.From(
-                ErrorCodes.StartupSecretUnavailable,
-                "key",
-                JsonSerializer.SerializeToElement("mailServerSecret"))));
+            : Result.Failure<ReadOnlyMemory<byte>>(Unavailable("mailServerSecret")));
     }
+
+    private static Error Unavailable(string key) =>
+        Error.From(ErrorCodes.StartupSecretUnavailable, "key", JsonSerializer.SerializeToElement(key));
 }

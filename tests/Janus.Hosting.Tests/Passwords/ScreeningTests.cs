@@ -97,13 +97,7 @@ public sealed class ScreeningTests : IDisposable
                 "https://accounts.example.test/signin",
                 "https://accounts.example.test"))
             .AddSingleton(new SignOnClient("this-application"))
-            .AddJanus(
-                Connection,
-                new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-                new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-                Encoding.UTF8.GetBytes(Connection),
-                HostFixture.Declaration(),
-                ApplicationKind.Public)
+            .AddJanus(Connection, HostFixture.Declaration(), ApplicationKind.Public)
             .Configure<HttpClientFactoryOptions>(
                 nameof(ILeakedPasswordCorpus),
                 options => options.HttpMessageHandlerBuilderActions.Add(

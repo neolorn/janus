@@ -19,8 +19,7 @@ namespace Janus.Storage.Privacy.SubjectKeys;
 /// </summary>
 /// <param name="connections">Where the statements take their connection from.</param>
 /// <param name="deployment">The deployment's data key, which a reserved mailbox's own key is wrapped under.</param>
-/// <param name="keyEncryptionKeys">The versions the values' keys are wrapped under.</param>
-/// <param name="fingerprintKeys">The versions the command was handed, the new one current.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <remarks>
 /// Implements OPS-SEC-003, PRIV-RIGHT-005c and OPS-MIG-003a, as entry 318 of the
 /// decisions pending review settles them. A fingerprint is computed again from the value
@@ -33,8 +32,7 @@ namespace Janus.Storage.Privacy.SubjectKeys;
 internal sealed class FingerprintRotationStore(
     DataConnections connections,
     DeploymentDataKeyStore deployment,
-    KeyEncryptionKeys keyEncryptionKeys,
-    FingerprintKeys fingerprintKeys) : IFingerprintRotationStore
+    IKeyRing ring) : IFingerprintRotationStore
 {
     private const string First =
         """
@@ -154,7 +152,7 @@ internal sealed class FingerprintRotationStore(
         {
             IReadOnlyList<Stale> stale = await StaleAsync(
                     column.OfSubjects,
-                    new { subjects = live, current = fingerprintKeys.CurrentVersion, neutral = Neutral, now },
+                    new { subjects = live, current = Fingerprint.CurrentVersion(ring), neutral = Neutral, now },
                     cancellationToken)
                 .ConfigureAwait(false);
 
@@ -183,7 +181,7 @@ internal sealed class FingerprintRotationStore(
                     column.Remaining,
                     new
                     {
-                        current = fingerprintKeys.CurrentVersion,
+                        current = Fingerprint.CurrentVersion(ring),
                         neutral = Neutral,
                         marker = (short)PersonalDataFormat.Marker,
                         now,
@@ -217,7 +215,7 @@ internal sealed class FingerprintRotationStore(
             + ")::int;";
 
         AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
-        var parameters = new { current = fingerprintKeys.CurrentVersion, neutral = Neutral, now };
+        var parameters = new { current = Fingerprint.CurrentVersion(ring), neutral = Neutral, now };
 
         int stale = await ambient.Connection
             .ExecuteScalarAsync<int>(new CommandDefinition(standing, parameters, ambient.Transaction, cancellationToken: cancellationToken))
@@ -232,7 +230,7 @@ internal sealed class FingerprintRotationStore(
     public async ValueTask ForgetAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
         AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
-        var parameters = new { current = fingerprintKeys.CurrentVersion, now };
+        var parameters = new { current = Fingerprint.CurrentVersion(ring), now };
 
         foreach (string ledger in Ledgers)
         {
@@ -307,7 +305,7 @@ internal sealed class FingerprintRotationStore(
         {
             var subject = new SubjectId(ofSubject.Key);
             SubjectKey key = keys.Single(held => held.Id == SubjectKeyId.Of(subject));
-            byte[] dataKey = PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey.Span, keyEncryptionKeys);
+            byte[] dataKey = PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, ring);
 
             try
             {
@@ -346,7 +344,7 @@ internal sealed class FingerprintRotationStore(
             .. await ambient.Connection
                 .QueryAsync<(Guid, Guid?, int, byte[], byte[], byte[]?)>(new CommandDefinition(
                     Mailboxes,
-                    new { current = fingerprintKeys.CurrentVersion, neutral = Neutral, count },
+                    new { current = Fingerprint.CurrentVersion(ring), neutral = Neutral, count },
                     ambient.Transaction,
                     cancellationToken: cancellationToken))
                 .ConfigureAwait(false),
@@ -413,7 +411,7 @@ internal sealed class FingerprintRotationStore(
         SubjectKey key = keys.SingleOrDefault()
             ?? throw new InvalidOperationException("The holder has no key to read the mailbox under.");
 
-        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey.Span, keyEncryptionKeys);
+        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, ring);
     }
 
     // One fingerprint computed again from its value, written back only where it and its
@@ -425,22 +423,23 @@ internal sealed class FingerprintRotationStore(
         PersonalFieldLocation location,
         CancellationToken cancellationToken)
     {
-        if (!fingerprintKeys.Versions.TryGetValue(row.Version, out ReadOnlyMemory<byte> previous))
-        {
-            throw new InvalidOperationException("A fingerprint is under a version the command was not handed.");
-        }
-
         byte[] value = PersonalFieldCipher.Decrypt(dataKey, location, row.Value);
         byte[] fingerprint;
 
         try
         {
-            if (!CryptographicOperations.FixedTimeEquals(Fingerprint.Compute(value, previous.Span), row.Fingerprint))
+            bool computes = ring
+                .BorrowFingerprintKeys(keys => keys.Versions.TryGetValue(row.Version, out ReadOnlyMemory<byte> previous)
+                    ? CryptographicOperations.FixedTimeEquals(Fingerprint.Compute(value, previous.Span), row.Fingerprint)
+                    : throw new InvalidOperationException("A fingerprint is under a version the command was not handed."))
+                .Match(matched => matched, error => throw new InvalidOperationException(error.Code.ToString()));
+
+            if (!computes)
             {
                 throw new InvalidOperationException("A stored fingerprint is not the one its value computes.");
             }
 
-            fingerprint = Fingerprint.Compute(value, fingerprintKeys);
+            fingerprint = Fingerprint.Compute(value, ring);
         }
         finally
         {
@@ -457,7 +456,7 @@ internal sealed class FingerprintRotationStore(
                     key = row.Key,
                     previous = row.Version,
                     stale = row.Fingerprint,
-                    current = fingerprintKeys.CurrentVersion,
+                    current = Fingerprint.CurrentVersion(ring),
                     fingerprint,
                 },
                 ambient.Transaction,

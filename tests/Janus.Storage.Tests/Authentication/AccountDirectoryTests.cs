@@ -141,7 +141,7 @@ public sealed class AccountDirectoryTests(DatabaseFixture database)
 
         await using (StoreContext writing = database.Context())
         {
-            await new AccountAudit(new AuditStore(writing, new DataConnections(writing), _deployment.Keys, _deployment.Randomness), TimeProvider.System)
+            await new AccountAudit(new AuditStore(writing, new DataConnections(writing), _deployment.Ring, _deployment.Randomness), TimeProvider.System)
                 .CancelledOnBehalfAsync(
                     administrator,
                     breakGlassReason: null,
@@ -155,7 +155,7 @@ public sealed class AccountDirectoryTests(DatabaseFixture database)
         await using StoreContext reading = database.Context();
 
         AuditRecord read = Assert.Single(
-            await new AuditStore(reading, new DataConnections(reading), _deployment.Keys, _deployment.Randomness)
+            await new AuditStore(reading, new DataConnections(reading), _deployment.Ring, _deployment.Randomness)
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
 
         Assert.Equal(
@@ -182,10 +182,10 @@ public sealed class AccountDirectoryTests(DatabaseFixture database)
     private AccountDirectory Directory(StoreContext context) => new(
         context,
         new AccountStore(context),
-        new ProfileStore(context, _deployment.Keys, _deployment.Randomness),
-        new ProfilePhotoStore(context, _deployment.Keys, _deployment.Randomness),
-        new SubjectKeyStore(context, _deployment.Keys, _deployment.Randomness),
-        new PreferenceStore(context, _deployment.Keys, _deployment.Randomness),
+        new ProfileStore(context, _deployment.Ring, _deployment.Randomness),
+        new ProfilePhotoStore(context, _deployment.Ring, _deployment.Randomness),
+        new SubjectKeyStore(context, _deployment.Ring, _deployment.Randomness),
+        new PreferenceStore(context, _deployment.Ring, _deployment.Randomness),
         PreferenceDeclarations.None,
         new OutboxStore(context, new FixedTime(Noon)));
 }

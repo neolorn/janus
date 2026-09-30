@@ -18,8 +18,7 @@ namespace Janus.Storage.Authentication.Mailboxes;
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <param name="deployment">The deployment's data key, which a reserved row's own key is wrapped under.</param>
-/// <param name="keyEncryptionKeys">The versions a holder's subject key may be wrapped under.</param>
-/// <param name="fingerprintKeys">The versions the address's fingerprint is computed under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <param name="randomness">The randomness the keys and the vectors are drawn from.</param>
 /// <remarks>
 /// Implements INT-MAIL-006, INT-MAIL-006a, INT-MAIL-007, PRIV-RIGHT-005a and
@@ -40,8 +39,7 @@ namespace Janus.Storage.Authentication.Mailboxes;
 internal sealed class MailboxStore(
     StoreContext context,
     DeploymentDataKeyStore deployment,
-    KeyEncryptionKeys keyEncryptionKeys,
-    FingerprintKeys fingerprintKeys,
+    IKeyRing ring,
     RandomNumberGenerator randomness) : IMailboxStore
 {
     /// <summary>
@@ -136,7 +134,7 @@ internal sealed class MailboxStore(
         {
             Id = mailbox.Id.Value,
             Fingerprint = Fingerprinted(mailbox.Address),
-            FingerprintVersion = fingerprintKeys.CurrentVersion,
+            FingerprintVersion = Fingerprint.CurrentVersion(ring),
             CanonicalisationVersion = CanonicalForm.UnicodeVersion,
             ReservedAt = mailbox.ReservedAt,
         };
@@ -285,7 +283,7 @@ internal sealed class MailboxStore(
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The holder has no key to read the mailbox under.");
 
-        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, keyEncryptionKeys);
+        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, ring);
     }
 
     // A row whose holder was erased has nothing left that reads its address, and one
@@ -307,8 +305,8 @@ internal sealed class MailboxStore(
             : throw new InvalidOperationException("The mailbox's address is not an address.");
 
     private byte[] Fingerprinted(EmailAddress address) =>
-        Janus.Storage.Fingerprint.Compute(Encoding.UTF8.GetBytes(address.Value), fingerprintKeys);
+        Janus.Storage.Fingerprint.Compute(Encoding.UTF8.GetBytes(address.Value), ring);
 
     private IReadOnlyList<byte[]> Candidates(EmailAddress address) =>
-        Janus.Storage.Fingerprint.Candidates(Encoding.UTF8.GetBytes(address.Value), fingerprintKeys);
+        Janus.Storage.Fingerprint.Candidates(Encoding.UTF8.GetBytes(address.Value), ring);
 }

@@ -18,7 +18,7 @@ namespace Janus.Storage.Authentication.Sessions;
 /// Sessions, over the <c>sessions</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <param name="keyEncryptionKeys">The versions a subject key may be wrapped under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <param name="randomness">The randomness the initialisation vector is drawn from.</param>
 /// <remarks>
 /// Implements AUTH-SESS-001, AUTH-SESS-003, AUTH-SESS-013 and CONV-DESIGN-003. Where a
@@ -27,7 +27,7 @@ namespace Janus.Storage.Authentication.Sessions;
 /// </remarks>
 internal sealed class SessionStore(
     StoreContext context,
-    KeyEncryptionKeys keyEncryptionKeys,
+    IKeyRing ring,
     RandomNumberGenerator randomness) : ISessionStore
 {
     /// <inheritdoc/>
@@ -347,6 +347,6 @@ internal sealed class SessionStore(
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The subject has no key to read its sessions under.");
 
-        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, keyEncryptionKeys);
+        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, ring);
     }
 }

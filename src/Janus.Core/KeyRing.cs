@@ -15,9 +15,12 @@ namespace Janus.Core;
 /// so clearing it removes the only copy the library holds. The ring is filled once, at
 /// startup or at the start of a command, and cleared once, when the application stops
 /// or the command ends; it is never filled again. It is filled in steps (D-176): every
-/// secret but the mail server's, after which those are lent; then, once the start has
-/// chosen the mail server in use, the mail server's where the adapter is chosen, after
-/// which the ring is complete and that one is lent too.
+/// secret but the mail server's (the key-encryption key and the fingerprint key, every
+/// version of each, the maintenance credential and the social providers' credentials),
+/// after which those are lent; then, once the start has chosen the mail server in use,
+/// the mail server's where the adapter is chosen, after which the ring is complete and
+/// that one is lent too. A set of versions is lent over the ring's own arrays, so what
+/// a use is handed is never a copy it could keep.
 /// </remarks>
 internal sealed class KeyRing : IKeyRing
 {
@@ -25,6 +28,21 @@ internal sealed class KeyRing : IKeyRing
     /// The name the mail server's key is refused under.
     /// </summary>
     internal const string MailServerSecret = "mailServerSecret";
+
+    /// <summary>
+    /// The name the key-encryption key is refused under.
+    /// </summary>
+    internal const string KeyEncryptionKeysName = "keyEncryptionKeys";
+
+    /// <summary>
+    /// The name the fingerprint key is refused under.
+    /// </summary>
+    internal const string FingerprintKeysName = "fingerprintKeys";
+
+    /// <summary>
+    /// The name the maintenance credential is refused under.
+    /// </summary>
+    internal const string MaintenanceCredentialName = "maintenanceCredential";
 
     private const int Filling = 0;
 
@@ -35,6 +53,14 @@ internal sealed class KeyRing : IKeyRing
     private const int Cleared = 3;
 
     private readonly Dictionary<string, HeldCredential> _credentials = new(StringComparer.Ordinal);
+
+    private readonly List<byte[]> _versions = [];
+
+    private KeyEncryptionKeys? _keyEncryptionKeys;
+
+    private FingerprintKeys? _fingerprintKeys;
+
+    private byte[]? _maintenanceCredential;
 
     private byte[]? _mailServerSecret;
 
@@ -47,6 +73,16 @@ internal sealed class KeyRing : IKeyRing
     {
         get
         {
+            foreach (byte[] version in _versions)
+            {
+                yield return version;
+            }
+
+            if (_maintenanceCredential is byte[] maintenance)
+            {
+                yield return maintenance;
+            }
+
             foreach (HeldCredential held in _credentials.Values)
             {
                 yield return held.Material;
@@ -57,6 +93,61 @@ internal sealed class KeyRing : IKeyRing
                 yield return secret;
             }
         }
+    }
+
+    /// <inheritdoc/>
+    public Result<TValue> BorrowKeyEncryptionKeys<TValue>(Func<KeyEncryptionKeys, TValue> use)
+    {
+        ArgumentNullException.ThrowIfNull(use);
+
+        Readable();
+
+        return _keyEncryptionKeys is KeyEncryptionKeys held
+            ? Result.Success(use(held))
+            : Result.Failure<TValue>(Unavailable(KeyEncryptionKeysName));
+    }
+
+    /// <inheritdoc/>
+    public Result<TValue> BorrowKeyEncryptionKey<TValue>(int version, Func<ReadOnlyMemory<byte>, TValue> use)
+    {
+        ArgumentNullException.ThrowIfNull(use);
+
+        Readable();
+
+        return _keyEncryptionKeys is KeyEncryptionKeys held
+            && held.Versions.TryGetValue(version, out ReadOnlyMemory<byte> key)
+            ? Result.Success(use(key))
+            : Result.Failure<TValue>(new Error(
+                ErrorCodes.StartupSecretUnavailable,
+                new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+                {
+                    ["key"] = JsonSerializer.SerializeToElement(KeyEncryptionKeysName),
+                    ["version"] = JsonSerializer.SerializeToElement(version),
+                }));
+    }
+
+    /// <inheritdoc/>
+    public Result<TValue> BorrowFingerprintKeys<TValue>(Func<FingerprintKeys, TValue> use)
+    {
+        ArgumentNullException.ThrowIfNull(use);
+
+        Readable();
+
+        return _fingerprintKeys is FingerprintKeys held
+            ? Result.Success(use(held))
+            : Result.Failure<TValue>(Unavailable(FingerprintKeysName));
+    }
+
+    /// <inheritdoc/>
+    public Result<TValue> BorrowMaintenanceCredential<TValue>(Func<ReadOnlyMemory<byte>, TValue> use)
+    {
+        ArgumentNullException.ThrowIfNull(use);
+
+        Readable();
+
+        return _maintenanceCredential is byte[] held
+            ? Result.Success(use(held))
+            : Result.Failure<TValue>(Unavailable(MaintenanceCredentialName));
     }
 
     /// <inheritdoc/>
@@ -112,6 +203,56 @@ internal sealed class KeyRing : IKeyRing
     /// <returns>The failure.</returns>
     internal static Error Unavailable(string key) =>
         Error.From(ErrorCodes.StartupSecretUnavailable, "key", JsonSerializer.SerializeToElement(key));
+
+    /// <summary>
+    /// Holds the key-encryption key, every version copied into an array of the ring's own.
+    /// </summary>
+    /// <param name="keys">What the source answered.</param>
+    /// <exception cref="InvalidOperationException">
+    /// The ring is no longer being filled, or holds the key already.
+    /// </exception>
+    internal void HoldKeyEncryptionKeys(KeyEncryptionKeys keys)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+
+        Holding(_keyEncryptionKeys);
+
+        _keyEncryptionKeys = new KeyEncryptionKeys(keys.CurrentVersion, Pinned(keys.Versions));
+    }
+
+    /// <summary>
+    /// Holds the fingerprint key, every version copied into an array of the ring's own.
+    /// </summary>
+    /// <param name="keys">What the source answered.</param>
+    /// <exception cref="InvalidOperationException">
+    /// The ring is no longer being filled, or holds the key already.
+    /// </exception>
+    internal void HoldFingerprintKeys(FingerprintKeys keys)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+
+        Holding(_fingerprintKeys);
+
+        _fingerprintKeys = new FingerprintKeys(keys.CurrentVersion, Pinned(keys.Versions));
+    }
+
+    /// <summary>
+    /// Holds the maintenance credential, copied into an array of the ring's own.
+    /// </summary>
+    /// <param name="credential">What the source answered.</param>
+    /// <exception cref="InvalidOperationException">
+    /// The ring is no longer being filled, or holds the credential already.
+    /// </exception>
+    internal void HoldMaintenanceCredential(ReadOnlyMemory<byte> credential)
+    {
+        Holding(_maintenanceCredential);
+
+        byte[] material = GC.AllocateArray<byte>(credential.Length, pinned: true);
+
+        credential.Span.CopyTo(material);
+
+        _maintenanceCredential = material;
+    }
 
     /// <summary>
     /// Holds a social provider's credential, copied into an array of the ring's own.
@@ -193,6 +334,32 @@ internal sealed class KeyRing : IKeyRing
         {
             CryptographicOperations.ZeroMemory(held);
         }
+    }
+
+    // A set is held once, and only while the ring is being filled.
+    private void Holding(object? held)
+    {
+        if (Volatile.Read(ref _state) is not Filling || held is not null)
+        {
+            throw new InvalidOperationException("The key ring is filled once.");
+        }
+    }
+
+    // Every version copied into a pinned array of the ring's own, lent over that array.
+    private Dictionary<int, ReadOnlyMemory<byte>> Pinned(IReadOnlyDictionary<int, ReadOnlyMemory<byte>> versions)
+    {
+        var pinned = new Dictionary<int, ReadOnlyMemory<byte>>(versions.Count);
+
+        foreach (KeyValuePair<int, ReadOnlyMemory<byte>> version in versions)
+        {
+            byte[] material = GC.AllocateArray<byte>(version.Value.Length, pinned: true);
+
+            version.Value.Span.CopyTo(material);
+            _versions.Add(material);
+            pinned[version.Key] = material;
+        }
+
+        return pinned;
     }
 
     private void Readable()

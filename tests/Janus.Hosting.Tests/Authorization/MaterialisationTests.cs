@@ -244,15 +244,10 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
         var services = new ServiceCollection();
 
         services.AddSingleton<TimeProvider>(new FixedTime(Deployment.Noon));
-        services.AddJanus(
-            host.ConnectionString,
-            new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-            new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-            Encoding.UTF8.GetBytes(host.MaintenanceConnectionString),
-            HostFixture.Declaration(materialised: true),
-            ApplicationKind.Public);
+        services.AddSingleton<ISecretSource>(HostFixture.Secrets(host.MaintenanceConnectionString));
+        services.AddJanus(host.ConnectionString, HostFixture.Declaration(materialised: true), ApplicationKind.Public);
 
-        return services.BuildServiceProvider();
+        return HostFixture.Started(services.BuildServiceProvider());
     }
 
     // The host's own call, from the operation that changed the relationship, inside the

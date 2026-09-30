@@ -1,4 +1,8 @@
+using System;
+using System.IO;
+using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Xunit;
@@ -51,5 +55,40 @@ public sealed class CommandTests
         Assert.Empty(run.Output);
         Assert.Equal(ErrorCodes.RequestMalformed.ToString(), refusal.RootElement.GetProperty("code").GetString());
         Assert.Empty(refusal.RootElement.GetProperty("details").EnumerateObject());
+    }
+
+    /// <summary>
+    /// CONV-CODE-007 AC3, OPS-SEC-001: a command reads the document's keys into its key
+    /// ring at its start, which lends them from then on, and the ring is cleared when the
+    /// command ends, after which a read of it throws.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_007_AC3_AReadOfTheRingAfterTheCommandEndsThrowsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        IKeyRing ring;
+
+        using (var held = new HeldKeys())
+        {
+            await using var piped = new MemoryStream(
+                Encoding.UTF8.GetBytes(Invocation.Keys("Host=nowhere.invalid").ToJsonString()));
+
+            ring = (await KeyDocument.ReadAsync(
+                    new Terminal(piped, IsInputRedirected: true, TextWriter.Null, TextWriter.Null),
+                    held,
+                    cancellationToken))
+                .Match(document => document.Ring, error => throw new InvalidOperationException(error.Code.ToString()));
+
+            Assert.Equal(
+                Convert.FromBase64String(Invocation.KeyEncryptionKey),
+                ring.BorrowKeyEncryptionKeys(keys => keys.Current.ToArray()).Match(key => key, _ => []));
+            Assert.Equal(
+                Convert.FromBase64String(Invocation.FingerprintKey),
+                ring.BorrowFingerprintKeys(keys => keys.Current.ToArray()).Match(key => key, _ => []));
+        }
+
+        Assert.Throws<InvalidOperationException>(() => ring.BorrowKeyEncryptionKeys(keys => keys.CurrentVersion));
+        Assert.Throws<InvalidOperationException>(() => ring.BorrowFingerprintKeys(keys => keys.CurrentVersion));
     }
 }

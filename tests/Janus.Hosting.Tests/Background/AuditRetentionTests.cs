@@ -134,7 +134,7 @@ public sealed class AuditRetentionTests(HostFixture host) : IClassFixture<HostFi
     // A deployment over the fixture's database at the case's own instant, handed the
     // maintenance credential the case names.
     private ServiceProvider Deployed(DateTimeOffset at, string maintenance) =>
-        new ServiceCollection()
+        HostFixture.Started(new ServiceCollection()
             .AddSingleton<TimeProvider>(new FixedTime(at))
             .AddSingleton<IMailTransport>(new MailTransportInMemory())
             .AddSingleton<ISmsTransport>(new SmsTransportInMemory())
@@ -142,12 +142,7 @@ public sealed class AuditRetentionTests(HostFixture host) : IClassFixture<HostFi
                 "https://accounts.example.test/signin",
                 "https://accounts.example.test"))
             .AddSingleton(new SignOnClient("this-application"))
-            .AddJanus(
-                host.ConnectionString,
-                new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-                new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-                Encoding.UTF8.GetBytes(maintenance),
-                HostFixture.Declaration(),
-                ApplicationKind.Public)
-            .BuildServiceProvider();
+            .AddSingleton<ISecretSource>(HostFixture.Secrets(maintenance))
+            .AddJanus(host.ConnectionString, HostFixture.Declaration(), ApplicationKind.Public)
+            .BuildServiceProvider());
 }

@@ -378,13 +378,7 @@ public sealed class PublicSurfaceTests
     // CONV-DESIGN-007 AC6: what the entry point registers for a deployment that declares
     // what the host fixture declares.
     private static IServiceCollection Registered() =>
-        new ServiceCollection().AddJanus(
-            "Host=nowhere;Database=identity",
-            new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-            new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-            new byte[32],
-            HostFixture.Declaration(),
-            ApplicationKind.Public);
+        new ServiceCollection().AddJanus("Host=nowhere;Database=identity", HostFixture.Declaration(), ApplicationKind.Public);
 
     // The type a registration makes: the one it names, the instance it holds, or what its
     // factory is declared to answer.

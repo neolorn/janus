@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data.Common;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,9 +19,10 @@ namespace Janus.Hosting.Background;
 /// and the partitions whose category's retention has passed dropped, under the
 /// maintenance credential and with the run recorded as the job's own action.
 /// </summary>
-/// <param name="credential">The connection the partitions are reached over.</param>
-/// <param name="keyEncryptionKeys">The keys this process runs on, which the maintenance area is built with.</param>
-/// <param name="fingerprintKeys">The keys this process runs on, which the maintenance area is built with.</param>
+/// <param name="ring">
+/// The key ring this process runs on, which lends the maintenance credential the
+/// partitions are reached over and the keys the maintenance area is built with.
+/// </param>
 /// <param name="configuration">Where the two retentions are read.</param>
 /// <param name="audit">Where each run is recorded.</param>
 /// <param name="work">The transaction the record is written in.</param>
@@ -34,9 +36,7 @@ namespace Janus.Hosting.Background;
 /// before either function is asked, and an unreadable retention drops nothing.
 /// </remarks>
 internal sealed class AuditRetention(
-    MaintenanceCredential credential,
-    KeyEncryptionKeys keyEncryptionKeys,
-    FingerprintKeys fingerprintKeys,
+    IKeyRing ring,
     IConfigurationStore configuration,
     IPrivacyAudit audit,
     IUnitOfWork work,
@@ -149,13 +149,19 @@ internal sealed class AuditRetention(
     // pooled, so none stays open under it once the run has ended.
     private ServiceProvider Opened()
     {
-        var unpooled = new DbConnectionStringBuilder { ConnectionString = credential.Connection() };
+        var unpooled = new DbConnectionStringBuilder
+        {
+            ConnectionString = ring
+                .BorrowMaintenanceCredential(credential => Encoding.UTF8.GetString(credential.Span))
+                .Match(connection => connection, error => throw new InvalidOperationException(error.Code.ToString())),
+        };
         unpooled["Pooling"] = "false";
 
         var services = new ServiceCollection();
 
         services.AddSingleton(time);
-        services.AddStorageArea(unpooled.ConnectionString, keyEncryptionKeys, fingerprintKeys);
+        services.AddSingleton(ring);
+        services.AddStorageArea(unpooled.ConnectionString);
 
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
     }

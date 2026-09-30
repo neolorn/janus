@@ -19,7 +19,7 @@ namespace Janus.Storage.Authentication.Identifiers;
 /// <c>identifier_verifications</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <param name="keyEncryptionKeys">The versions a subject key may be wrapped under.</param>
+/// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <param name="randomness">The randomness each initialisation vector is drawn from.</param>
 /// <remarks>
 /// Implements REG-IDENT-004, REG-IDENT-007, PRIV-RIGHT-005a and CONV-DESIGN-003. The
@@ -28,7 +28,7 @@ namespace Janus.Storage.Authentication.Identifiers;
 /// </remarks>
 internal sealed class PendingVerificationStore(
     StoreContext context,
-    KeyEncryptionKeys keyEncryptionKeys,
+    IKeyRing ring,
     RandomNumberGenerator randomness) : IPendingVerificationStore
 {
     /// <inheritdoc/>
@@ -209,6 +209,6 @@ internal sealed class PendingVerificationStore(
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The subject has no key to hold a verification under.");
 
-        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, keyEncryptionKeys);
+        return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, ring);
     }
 }

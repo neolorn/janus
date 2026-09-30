@@ -88,12 +88,6 @@ internal sealed class Deployment : IAsyncDisposable
 {
     private static readonly DateTimeOffset Noon = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
-    // AUTH-KEY-002, OPS-SEC-001: what the codes and the refresh tokens the provider
-    // writes are encrypted under, which a deployment is handed and never generates.
-    private static readonly KeyEncryptionKeys Wrapping = new(
-        1,
-        new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] });
-
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly WebApplication _application;
     private readonly RequestDelegate _pipeline;
@@ -1009,7 +1003,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<RegisteredSecrets>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
-        _ = services.AddOidc(Wrapping);
+        _ = services.AddOidc();
         _ = services.AddScoped<Janus.Authentication.Mailboxes.IMailServerTokens, Janus.Hosting.Oidc.MailServerTokens>();
         _ = services.AddScoped<IAppPasswords, Janus.Authentication.Mailboxes.AppPasswords>();
 

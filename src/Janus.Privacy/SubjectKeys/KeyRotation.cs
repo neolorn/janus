@@ -19,7 +19,7 @@ namespace Janus.Privacy.SubjectKeys;
 /// <param name="work">The transaction each batch commits in.</param>
 /// <param name="audit">Where each step is recorded.</param>
 /// <param name="time">The clock the deployment runs on.</param>
-/// <param name="keyEncryptionKeys">The versions the command was handed, the new one current.</param>
+/// <param name="ring">The key ring the command filled with the versions it was handed, the new one current.</param>
 /// <remarks>
 /// Implements OPS-SEC-003, DR-009a, IDN-PRIN-001 and PRIV-RIGHT-005a, as entries 316 and
 /// 317 of the decisions pending review settle them. The run needs nothing of the
@@ -33,7 +33,7 @@ internal sealed class KeyRotation(
     IUnitOfWork work,
     IPrivacyAudit audit,
     TimeProvider time,
-    KeyEncryptionKeys keyEncryptionKeys)
+    IKeyRing ring)
 {
     /// <summary>
     /// How many subject keys one transaction takes (OPS-SEC-003, D-153).
@@ -80,13 +80,18 @@ internal sealed class KeyRotation(
         KeyRotationProgress? latest = await store.LatestAsync(Kind, cancellationToken).ConfigureAwait(false);
         IReadOnlySet<int> wrapping = await store.WrappingVersionsAsync(cancellationToken).ConfigureAwait(false);
 
+        if (Held() is not { } held)
+        {
+            return Result.Failure<KeyRotationProgress>(KeysUnavailable());
+        }
+
         // A rotation is to a version later than any rotated to before, and one that
         // stopped is finished before another starts; every value must unwrap under a
         // version the command holds, and none may be under one later than the current.
-        bool resumed = latest is { RetiredAt: null } && latest.Version == keyEncryptionKeys.CurrentVersion;
+        bool resumed = latest is { RetiredAt: null } && latest.Version == held.Current;
 
-        if ((!resumed && latest is not null && (latest.RetiredAt is null || latest.Version >= keyEncryptionKeys.CurrentVersion))
-            || wrapping.Any(version => version > keyEncryptionKeys.CurrentVersion || !keyEncryptionKeys.Versions.ContainsKey(version)))
+        if ((!resumed && latest is not null && (latest.RetiredAt is null || latest.Version >= held.Current))
+            || wrapping.Any(version => version > held.Current || !held.Versions.Contains(version)))
         {
             return Result.Failure<KeyRotationProgress>(KeysUnavailable());
         }
@@ -100,7 +105,7 @@ internal sealed class KeyRotation(
         }
         else
         {
-            progress = KeyRotationProgress.Started(Kind, keyEncryptionKeys.CurrentVersion, now);
+            progress = KeyRotationProgress.Started(Kind, held.Current, now);
             await store.AddAsync(progress, cancellationToken).ConfigureAwait(false);
         }
 
@@ -183,7 +188,7 @@ internal sealed class KeyRotation(
             return Result.Failure<KeyRetirement>(notCommitted);
         }
 
-        if (latest is not null && latest.Version != keyEncryptionKeys.CurrentVersion)
+        if (Held() is not { } held || (latest is not null && latest.Version != held.Current))
         {
             return Result.Failure<KeyRetirement>(KeysUnavailable());
         }
@@ -214,7 +219,7 @@ internal sealed class KeyRotation(
         DateTimeOffset now = time.GetUtcNow();
         latest.Retire(now);
 
-        int[] retired = [.. keyEncryptionKeys.Versions.Keys.Where(version => version != latest.Version).Order()];
+        int[] retired = [.. held.Versions.Where(version => version != latest.Version).Order()];
 
         await store.RecordAsync(latest, cancellationToken).ConfigureAwait(false);
         await RecordedAsync(AuditActions.KeyRotationRetired, latest, now, retired, cancellationToken).ConfigureAwait(false);
@@ -324,4 +329,11 @@ internal sealed class KeyRotation(
 
         await audit.RecordedAsync(action, Principal, subject: null, at, details, cancellationToken).ConfigureAwait(false);
     }
+
+    // The versions the ring holds, as numbers only; a ring without the key answers none.
+    private (int Current, IReadOnlySet<int> Versions)? Held() =>
+        ring
+            .BorrowKeyEncryptionKeys<(int Current, IReadOnlySet<int> Versions)?>(
+                keys => (keys.CurrentVersion, keys.Versions.Keys.ToHashSet()))
+            .Match(held => held, _ => null);
 }

@@ -52,7 +52,7 @@ public sealed class PersonalFieldCipherTests
         byte[] wrapped = PersonalFieldCipher.Wrap(dataKey, keys.Current.Span);
 
         Assert.NotEqual(dataKey, wrapped);
-        Assert.Equal(dataKey, PersonalFieldCipher.Unwrap(Scheme, 1, wrapped, keys));
+        Assert.Equal(dataKey, PersonalFieldCipher.Unwrap(Scheme, 1, wrapped, Ring(keys)));
     }
 
     /// <summary>
@@ -158,7 +158,7 @@ public sealed class PersonalFieldCipherTests
         byte[] erased = new byte[32];
 
         Assert.ThrowsAny<CryptographicException>(() =>
-            PersonalFieldCipher.Unwrap(Erased, 1, erased, keys));
+            PersonalFieldCipher.Unwrap(Erased, 1, erased, Ring(keys)));
     }
 
     /// <summary>
@@ -213,13 +213,13 @@ public sealed class PersonalFieldCipherTests
 
         KeyEncryptionKeys rotated = TwoVersions(first.Current, randomness);
         byte[] reWrapped = PersonalFieldCipher.Wrap(
-            PersonalFieldCipher.Unwrap(Scheme, 1, wrapped, rotated),
+            PersonalFieldCipher.Unwrap(Scheme, 1, wrapped, Ring(rotated)),
             rotated.Current.Span);
 
         Assert.Equal(
             Plaintext,
             PersonalFieldCipher.Decrypt(
-                PersonalFieldCipher.Unwrap(Scheme, 2, reWrapped, rotated),
+                PersonalFieldCipher.Unwrap(Scheme, 2, reWrapped, Ring(rotated)),
                 field,
                 stored));
     }
@@ -238,7 +238,7 @@ public sealed class PersonalFieldCipherTests
         byte[] wrapped = PersonalFieldCipher.Wrap(dataKey, keys.Current.Span);
 
         CryptographicException refused = Assert.ThrowsAny<CryptographicException>(
-            () => PersonalFieldCipher.Unwrap(Scheme, 1, wrapped, keys));
+            () => PersonalFieldCipher.Unwrap(Scheme, 1, wrapped, Ring(keys)));
 
         Assert.Equal("The subject's key is wrapped under a retired version.", refused.Message);
     }
@@ -257,6 +257,9 @@ public sealed class PersonalFieldCipherTests
         Assert.ThrowsAny<CryptographicException>(() =>
             PersonalFieldCipher.Decrypt(dataKey, field, new byte[8]));
     }
+
+    // The ring a store borrows the versions from, holding these alone.
+    private static KeyRingInMemory Ring(KeyEncryptionKeys keys) => new(keys, Deployment.FingerprintKeys);
 
     private static KeyEncryptionKeys OneVersion(int version)
     {

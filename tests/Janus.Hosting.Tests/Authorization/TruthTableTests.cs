@@ -867,15 +867,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         var services = new ServiceCollection();
 
         services.AddSingleton<TimeProvider>(new FixedTime(Deployment.Noon));
-        services.AddJanus(
-            host.ConnectionString,
-            new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-            new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
-            Encoding.UTF8.GetBytes(host.MaintenanceConnectionString),
-            HostFixture.Declaration(materialised: true),
-            ApplicationKind.Public);
+        services.AddSingleton<ISecretSource>(HostFixture.Secrets(host.MaintenanceConnectionString));
+        services.AddJanus(host.ConnectionString, HostFixture.Declaration(materialised: true), ApplicationKind.Public);
 
-        return services.BuildServiceProvider();
+        return HostFixture.Started(services.BuildServiceProvider());
     }
 
     // AUTHZ-DERIVE-005: the host refreshes the derivation from the operation that

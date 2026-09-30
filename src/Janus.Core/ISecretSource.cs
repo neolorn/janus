@@ -18,16 +18,22 @@ public interface ISecretSource
     /// Reads the key-encryption key and the versions retained beside it.
     /// </summary>
     /// <param name="cancellationToken">Abandons the read.</param>
-    /// <returns>The versions a subject key may be wrapped or unwrapped under.</returns>
-    ValueTask<KeyEncryptionKeys> ReadKeyEncryptionKeysAsync(CancellationToken cancellationToken);
+    /// <returns>
+    /// The versions a subject key may be wrapped or unwrapped under, or the failure the
+    /// source met reading them.
+    /// </returns>
+    ValueTask<Result<KeyEncryptionKeys>> ReadKeyEncryptionKeysAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Reads the key the searchable fingerprints are computed under and the versions
     /// retained beside it.
     /// </summary>
     /// <param name="cancellationToken">Abandons the read.</param>
-    /// <returns>The versions a stored fingerprint may be under, the one written current.</returns>
-    ValueTask<FingerprintKeys> ReadFingerprintKeysAsync(CancellationToken cancellationToken);
+    /// <returns>
+    /// The versions a stored fingerprint may be under, the one written current, or the
+    /// failure the source met reading them.
+    /// </returns>
+    ValueTask<Result<FingerprintKeys>> ReadFingerprintKeysAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Reads the database connection the scheduled maintenance runs under, whose login
@@ -35,8 +41,8 @@ public interface ISecretSource
     /// own configuration never carries.
     /// </summary>
     /// <param name="cancellationToken">Abandons the read.</param>
-    /// <returns>The connection, as its UTF-8 bytes.</returns>
-    ValueTask<ReadOnlyMemory<byte>> ReadMaintenanceCredentialAsync(CancellationToken cancellationToken);
+    /// <returns>The connection, as its UTF-8 bytes, or the failure the source met reading it.</returns>
+    ValueTask<Result<ReadOnlyMemory<byte>>> ReadMaintenanceCredentialAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Reads what this application presents at a declared social provider's token
