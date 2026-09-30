@@ -83,6 +83,11 @@ internal sealed class AccountLifecycle(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
+        if (StepUpGuard.RefusedInBreakGlass(context, StepUpAction.AccountDeactivate) is Error withheld)
+        {
+            return Result.Failure(withheld);
+        }
+
         if (await stepUp
                 .PassedAsync(subject, session, StepUpAction.AccountDeactivate, cancellationToken)
                 .ConfigureAwait(false)
@@ -244,6 +249,11 @@ internal sealed class AccountLifecycle(
         if (context.Effective is not SubjectId subject)
         {
             return Result.Failure<DateTimeOffset>(Error.From(ErrorCodes.Denied));
+        }
+
+        if (StepUpGuard.RefusedInBreakGlass(context, StepUpAction.AccountDelete) is Error withheld)
+        {
+            return Result.Failure<DateTimeOffset>(withheld);
         }
 
         if (await stepUp

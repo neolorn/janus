@@ -577,6 +577,13 @@ against the public contract of LIB-API-001.
   where no held mailbox stands for the address answers `422` `api.request.invalid`
   naming `formerMailbox`. `InvitationRequest` gains `FormerMailbox` and `Reason`, and
   `ErrorCodes` gains `InvitationMailboxHeld` and `RequestInvalid`.
+- From the break-glass session, or a session another application opened from it, each
+  of `password:set`, `identifier:add`, `username:change`, `factor:enrol`,
+  `provider:link`, `recoverycodes:generate`, `mailcredential:create`,
+  `account:deactivate` and `account:delete` is refused `403` `authz.denied` before
+  anything is read, so the refusal is the same whatever the reserved account holds or
+  lacks: the upgrade of a credential it does not hold, a factor its policy does not
+  admit, recovery codes and an app password included.
 - Where Continue with Apple is among the system policy's `loginFactors` and
   `notification.email.sendingdomain` is not in `notification.email.relayregistered`, the
   deployment raises `relay-domain-unregistered` with the domain as it starts and

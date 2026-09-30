@@ -951,43 +951,65 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// OPS-BOOT-002: nothing that would give the reserved account a sign-in method or a
-    /// mailbox, or end it, is done from the session that passes every other gate: each
-    /// member of the list is refused with <c>authz.denied</c>, a provider link among
-    /// them though the account's policy names the provider.
+    /// OPS-BOOT-002 AC9, AUTH-STEP-004 and CONV-DESIGN-002 AC3 (D-179): nothing that would
+    /// give the reserved account a sign-in method or a mailbox credential, or end it, is
+    /// done from the break-glass session or from a session another application opened
+    /// from it. Each route of the nine actions is refused with <c>authz.denied</c> at its
+    /// gate step, and never with the refusal a missing password, credential, enrolment or
+    /// mailbox would give: a provider link though the policy names the provider, the
+    /// upgrade of a credential the account does not hold, a generator the policy does not
+    /// admit, recovery codes without a second step, and an app password without a
+    /// mailbox.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task OPS_BOOT_002_NoSignInMethodIsGivenToTheReservedAccountAsync()
     {
         _deployment.Configuration.Set(Settings.IdentifiersUsernameEnabled, true);
+        await ApplicationRegisteredAsync();
 
         string credential = await GeneratedAsync();
         var owner = new Browser(_deployment);
 
         _ = await PresentedAsync(owner, credential);
 
-        (string Method, string Path, (string, object?)[] Body)[] withheld =
+        Browser opened = await SignedOnAsync(owner);
+        string absent = Guid.NewGuid().ToString();
+
+        (string Method, string Path, string Body)[] withheld =
         [
-            ("POST", "/account/password", [("password", Flow.Password)]),
-            ("POST", "/account/identifiers", [("kind", "email"), ("value", "reserved@example.test")]),
-            ("PUT", "/account/profile", [("username", "reserved")]),
-            ("POST", "/auth/webauthn/register/begin", [("kind", "passkey")]),
-            ("POST", "/account/recoverycodes", []),
-            ("POST", "/account/mail/apppasswords/", [("label", "Phone")]),
-            ("POST", "/account/deactivate", []),
-            ("POST", "/account/delete", []),
-            ("POST", "/account/link/google", []),
+            ("POST", "/account/password", """{"password":"a long enough passphrase"}"""),
+            ("POST", "/account/identifiers", """{"kind":"email","value":"reserved@example.test"}"""),
+            ("PUT", "/account/identifiers/" + absent + "/replace", """{"value":"reserved@example.test"}"""),
+            ("PUT", "/account/profile", """{"username":"reserved"}"""),
+            ("POST", "/auth/webauthn/register/begin", """{"kind":"passkey"}"""),
+            ("POST", "/auth/webauthn/register/begin", """{"kind":"securityKey"}"""),
+            (
+                "POST",
+                "/auth/webauthn/register/complete",
+                """{"credential":{"credentialId":"a","clientDataJson":"a","authenticatorData":"a","publicKey":"a","algorithm":-7},"label":"Key"}"""
+            ),
+            ("POST", "/account/credentials/" + absent + "/upgrade", "{}"),
+            ("POST", "/account/factors/totp/begin", """{"label":"Phone"}"""),
+            ("POST", "/account/factors/totp/confirm", $$"""{"credentialId":"{{absent}}","code":"123456"}"""),
+            ("POST", "/account/recoverycodes", "{}"),
+            ("POST", "/account/mail/apppasswords/", """{"label":"Phone"}"""),
+            ("POST", "/account/deactivate", "{}"),
+            ("POST", "/account/delete", "{}"),
+            ("POST", "/account/link/google", "{}"),
         ];
 
-        foreach ((string method, string path, (string, object?)[] body) in withheld)
+        foreach (Browser session in (Browser[])[owner, opened])
         {
-            Answer refused = await owner.SendAsync(method, path, body);
+            foreach ((string method, string path, string body) in withheld)
+            {
+                Answer refused = await session.SendAsync(method, path, body);
 
-            Assert.True(
-                refused.Status == StatusCodes.Status403Forbidden
-                    && string.Equals(ErrorCodes.Denied.ToString(), refused.Text("code"), StringComparison.Ordinal),
-                $"{method} {path} answered {refused.Status} {refused.Body}.");
+                Assert.True(
+                    refused.Status == StatusCodes.Status403Forbidden
+                        && string.Equals(ErrorCodes.Denied.ToString(), refused.Text("code"), StringComparison.Ordinal),
+                    $"{method} {path} answered {refused.Status} {refused.Body}.");
+            }
         }
     }
 

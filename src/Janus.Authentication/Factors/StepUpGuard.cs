@@ -21,7 +21,8 @@ namespace Janus.Authentication.Factors;
 /// <param name="policies">What resolves the policy the gates come from.</param>
 /// <param name="time">The clock the recency is judged against.</param>
 /// <remarks>
-/// Implements AUTH-STEP-001, AUTH-STEP-002, BFF-STEP-001 and chapter 10 section 5a.
+/// Implements AUTH-STEP-001, AUTH-STEP-002, AUTH-STEP-004, BFF-STEP-001, OPS-BOOT-002
+/// and chapter 10 section 5a.
 /// The answer is yes or the one refusal, which carries what chapter 9 says every
 /// <c>auth.stepup.required</c> carries: the gate's three values, the outcome and the
 /// combinations that would meet it, so the person steps up at the step-up endpoint
@@ -48,6 +49,28 @@ internal sealed class StepUpGuard(
         StepUpAction.AccountDeactivate,
         StepUpAction.AccountDelete,
     }.ToFrozenSet();
+
+    /// <summary>
+    /// The refusal an action OPS-BOOT-002 withholds from the reserved account meets in
+    /// the break-glass session, or in a session another application opened from it,
+    /// which carries the same reason (BFF-SESS-006).
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="action">Which action the operation is.</param>
+    /// <returns><c>authz.denied</c> where the action is withheld; otherwise nothing.</returns>
+    /// <remarks>
+    /// D-179: the refusal is the context's, so an operation makes it at its gate step,
+    /// before anything is loaded, and answers the same whatever the reserved account
+    /// holds or lacks. It is not the step-up judgement, which the session satisfies.
+    /// </remarks>
+    public static Error? RefusedInBreakGlass(AccessContext context, StepUpAction action)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        return context.BreakGlassReason is not null && Unavailable.Contains(action)
+            ? Error.From(ErrorCodes.Denied)
+            : null;
+    }
 
     /// <summary>
     /// Whether a session has proved what an action costs.
@@ -155,11 +178,6 @@ internal sealed class StepUpGuard(
         if (live is null || live.Subject != subject)
         {
             return Result.Failure<StepUpChallenge>(Error.From(ErrorCodes.StepUpRequired));
-        }
-
-        if (live.SatisfiesEveryGate && action is StepUpAction withheld && Unavailable.Contains(withheld))
-        {
-            return Result.Failure<StepUpChallenge>(Error.From(ErrorCodes.Denied));
         }
 
         Error? failure = null;

@@ -75,6 +75,11 @@ internal sealed class IdentifierService(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
+        if (StepUpGuard.RefusedInBreakGlass(context, StepUpAction.IdentifierAdd) is Error withheld)
+        {
+            return Result.Failure(withheld);
+        }
+
         // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
         if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
             is Error restricted)
@@ -769,6 +774,11 @@ internal sealed class IdentifierService(
         if (context.Effective is not SubjectId subject)
         {
             return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        if (StepUpGuard.RefusedInBreakGlass(context, StepUpAction.IdentifierAdd) is Error withheld)
+        {
+            return Result.Failure(withheld);
         }
 
         // IDN-ACCT-007 AC2: a restricted account changes none of its settings.

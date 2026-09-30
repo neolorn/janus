@@ -86,6 +86,13 @@ internal sealed class AppPasswords(
         ArgumentNullException.ThrowIfNull(label);
         ArgumentNullException.ThrowIfNull(source);
 
+        // OPS-BOOT-002, D-179: the break-glass session creates no mail credential, and
+        // is told so before anything is read, whatever the reserved account lacks.
+        if (StepUpGuard.RefusedInBreakGlass(context, StepUpAction.MailCredentialCreate) is Error withheld)
+        {
+            return Result.Failure<IssuedAppPassword>(withheld);
+        }
+
         if (await HolderAsync(context, cancellationToken).ConfigureAwait(false)
             is not (SubjectId subject, IMailServer hosting))
         {

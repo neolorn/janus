@@ -136,6 +136,13 @@ internal sealed class AccountService(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
+        // OPS-BOOT-002: an edit that names a username gives the account one.
+        if (edit.Username is not null
+            && StepUpGuard.RefusedInBreakGlass(context, StepUpAction.UsernameChange) is Error withheld)
+        {
+            return Result.Failure(withheld);
+        }
+
         // IDN-ACCT-007 AC2: a restricted account changes none of its settings.
         if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
             is Error restricted)

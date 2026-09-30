@@ -98,7 +98,7 @@ internal sealed class CredentialService(
 
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await ActingAsync(authority, StepUpAction.PasswordSet, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
@@ -144,7 +144,7 @@ internal sealed class CredentialService(
     {
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await ActingAsync(authority, StepUpAction.FactorEnrol, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
@@ -177,7 +177,7 @@ internal sealed class CredentialService(
     {
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await ActingAsync(authority, StepUpAction.FactorEnrol, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
@@ -227,7 +227,7 @@ internal sealed class CredentialService(
 
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await ActingAsync(authority, StepUpAction.FactorEnrol, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
@@ -300,7 +300,7 @@ internal sealed class CredentialService(
 
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await ActingAsync(authority, StepUpAction.FactorEnrol, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
@@ -371,7 +371,7 @@ internal sealed class CredentialService(
 
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await ActingAsync(authority, StepUpAction.FactorEnrol, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
@@ -405,7 +405,7 @@ internal sealed class CredentialService(
     {
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await ActingAsync(authority, StepUpAction.RecoveryCodesGenerate, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
@@ -448,7 +448,7 @@ internal sealed class CredentialService(
 
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await ActingAsync(authority, StepUpAction.FactorRemove, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
@@ -635,7 +635,7 @@ internal sealed class CredentialService(
 
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await ActingAsync(authority, StepUpAction.ProviderUnlink, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
@@ -725,7 +725,7 @@ internal sealed class CredentialService(
     {
         Error? failure = null;
 
-        Acting acting = (await ActingAsync(authority, cancellationToken).ConfigureAwait(false))
+        Acting acting = (await ActingAsync(authority, StepUpAction.ProviderLink, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<Acting>(error, ref failure));
 
         if (failure is not null)
@@ -789,9 +789,11 @@ internal sealed class CredentialService(
 
     // Who is acting, and under what: a session the gates apply to, or the enrolment
     // session an approved recovery opened, which is read afresh so that one that has
-    // run out reaches nothing (D-147).
+    // run out reaches nothing (D-147). The action is the operation's, whose refusal to
+    // the break-glass session is part of this gate step (OPS-BOOT-002, D-179).
     private async ValueTask<Result<Acting>> ActingAsync(
         CredentialAuthority authority,
+        StepUpAction action,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(authority);
@@ -812,6 +814,11 @@ internal sealed class CredentialService(
         }
         else if (authority.Context is { Effective: SubjectId subject } held && authority.Session is SessionId live)
         {
+            if (StepUpGuard.RefusedInBreakGlass(held, action) is Error withheld)
+            {
+                return Result.Failure<Acting>(withheld);
+            }
+
             acting = new Acting(subject, live, Enrolment: null);
             asking = held;
         }
