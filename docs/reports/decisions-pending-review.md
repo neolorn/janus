@@ -10287,6 +10287,8 @@ declarations carry the marker (types, members and parameters), that session
 identifiers include the fingerprints they are found by, and that locals cannot carry
 it.
 
+**Superseded by D-166.**
+
 ---
 
 ## 273. Where the required keys are checked, and when the register counts as generated

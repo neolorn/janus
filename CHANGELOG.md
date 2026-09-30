@@ -1560,8 +1560,9 @@ against the public contract of LIB-API-001.
   key or the text of a notice is marked with it: `SessionId`, `GeneratedRecoveryCodes`,
   `KeyEncryptionKeys`, the code of `LinkLanding` and `SignInLanding`, the token of
   `IssuedInvitation`, the secret and address of `GeneratorEnrolment`, the text of
-  `DocumentVersion` and `DocumentTranslation`, and the secret parameters of the service
-  contracts. The marker states the rule for the host as it does for the library's own
+  `DocumentVersion` and `DocumentTranslation`, a send's correlation reference
+  (`SendReference`, and the reference of `SmsDeliveryReport`), and the secret parameters
+  of the service contracts. The marker states the rule for the host as it does for the library's own
   build.
 - `Settings` in `Janus.Core.Configuration`: every configuration key of chapter 10
   section 4 with its type, its default, the floors, ceilings and value sets it admits,
