@@ -499,28 +499,32 @@ public sealed class AccountServiceTests : IAsyncDisposable
     /// <summary>
     /// IDN-ATTR-008 AC2: the preference names a second step the account holds, so a
     /// credential of another account, and one that is no second step, are refused
-    /// alike.
+    /// alike as a body referring to what cannot be acted on, naming <c>method</c>, and
+    /// the preference stands as it was.
     /// </summary>
     [Fact]
     public async Task IDN_ATTR_008_AC2_AMethodTheAccountDoesNotHoldIsRefusedAsync()
     {
+        Authenticator marked = SecondStepKey("The marked one", Noon);
         Authenticator passkey = Passkey();
 
+        _authenticators.Hold(marked);
         _authenticators.Hold(passkey);
 
-        Assert.Equal(
-            ErrorCodes.CredentialNotFound,
-            Refused(await Service.PreferSecondStepAsync(
-                Acting,
-                AuthenticatorId.New(_clock),
-                TestContext.Current.CancellationToken)));
+        Error unheld = Failure(await Service.PreferSecondStepAsync(
+            Acting,
+            AuthenticatorId.New(_clock),
+            TestContext.Current.CancellationToken));
+        Error notASecondStep = Failure(await Service.PreferSecondStepAsync(
+            Acting,
+            passkey.Id,
+            TestContext.Current.CancellationToken));
 
-        Assert.Equal(
-            ErrorCodes.CredentialNotFound,
-            Refused(await Service.PreferSecondStepAsync(
-                Acting,
-                passkey.Id,
-                TestContext.Current.CancellationToken)));
+        Assert.Equal(ErrorCodes.RequestInvalid, unheld.Code);
+        Assert.Equal("method", unheld.Details["member"].GetString());
+        Assert.Equal(ErrorCodes.RequestInvalid, notASecondStep.Code);
+        Assert.Equal("method", notASecondStep.Details["member"].GetString());
+        Assert.Equal(marked.Id, await PreferredAsync());
     }
 
     /// <summary>

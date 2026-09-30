@@ -139,7 +139,10 @@ public interface IAccount
     /// <param name="context">Who is asking.</param>
     /// <param name="credential">Which credential.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Success, or the refusal where the account holds no such second step.</returns>
+    /// <returns>
+    /// Success, or <c>api.request.invalid</c> naming <c>method</c> where the account holds
+    /// no such active second step.
+    /// </returns>
     ValueTask<Result> PreferSecondStepAsync(
         AccessContext context,
         AuthenticatorId credential,

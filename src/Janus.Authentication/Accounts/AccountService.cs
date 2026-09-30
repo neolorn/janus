@@ -470,10 +470,14 @@ internal sealed class AccountService(
         }
 
         // IDN-ATTR-008 AC2: the preference names something the account holds, and a
-        // credential that is not a second step is not one of them.
+        // credential that is not a second step is not one of them. The body refers to
+        // what cannot be acted on, so the refusal names the member (API-CONV-003).
         if (chosen is null || chosen.State is not AuthenticatorState.Active)
         {
-            return Result.Failure(Error.From(ErrorCodes.CredentialNotFound));
+            return Result.Failure(Error.From(
+                ErrorCodes.RequestInvalid,
+                "member",
+                JsonSerializer.SerializeToElement("method")));
         }
 
         DateTimeOffset now = time.GetUtcNow();

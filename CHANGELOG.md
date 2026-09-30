@@ -1784,6 +1784,10 @@ against the public contract of LIB-API-001.
   identifier or completes the verification of one is given a new secret, the one before
   it answering nothing. The session list marks the one asking and says no more about
   where each was used than the city.
+- `PUT /account/secondstep/preferred` takes the member `method`, the identifier of a
+  second factor enrolled on the account; a method the account has not enrolled, or one
+  that is no active second step, is 422 `api.request.invalid` naming `method` and leaves
+  the preference as it was.
 - A profile field the deployment has switched off is neither accepted from a request nor
   carried in an answer, and the date of birth is never the person's to change. A
   preference key the host never declared is refused and never returned. A username, once
