@@ -67,8 +67,14 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        if (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
-            is not { State: AccountState.Active or AccountState.Restricted } account)
+        // IDN-LIFE-003: a suspended account begins its deletion only on a request that
+        // arrived out of band, holding the suspension.
+        Account? account = await accounts.FindBySubjectAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (account is null
+            || !(account.State is AccountState.Active or AccountState.Restricted
+                || (account.State is AccountState.Suspended && origin is DeletionOrigin.OutOfBandRequest)))
         {
             return false;
         }

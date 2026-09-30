@@ -277,7 +277,9 @@ internal sealed class Account
 
     /// <summary>
     /// Starts the deletion grace window. A restricted account may start it too, because
-    /// exercising a data subject right is what restriction leaves available.
+    /// exercising a data subject right is what restriction leaves available; a suspended
+    /// one starts it only on a request that arrived out of band, holding the suspension
+    /// with its origin as a takedown holds it.
     /// </summary>
     /// <param name="by">Whether the subject asked or a request arrived out of band.</param>
     /// <param name="at">The instant the window began.</param>
@@ -285,8 +287,12 @@ internal sealed class Account
     /// The origin is the takedown's, which enters the window through its own operation.
     /// </exception>
     /// <exception cref="InvalidOperationException">
-    /// The account is neither active nor restricted.
+    /// The account is neither active nor restricted, nor suspended for a request that
+    /// arrived out of band.
     /// </exception>
+    /// <remarks>
+    /// Implements IDN-LIFE-003: a cancellation returns a held suspension as it stood.
+    /// </remarks>
     public void RequestDeletion(DeletionOrigin by, DateTimeOffset at)
     {
         if (by is DeletionOrigin.Takedown)
@@ -297,9 +303,17 @@ internal sealed class Account
                 "A takedown enters the window through its own operation.");
         }
 
-        Require(AccountState.Active, AccountState.Restricted);
+        if (by is DeletionOrigin.OutOfBandRequest && State is AccountState.Suspended)
+        {
+            SuspensionHeld = SuspendedBy;
+        }
+        else
+        {
+            Require(AccountState.Active, AccountState.Restricted);
 
-        RestrictionHeld = State is AccountState.Restricted;
+            RestrictionHeld = State is AccountState.Restricted;
+        }
+
         EnterDeletion(by, at);
     }
 

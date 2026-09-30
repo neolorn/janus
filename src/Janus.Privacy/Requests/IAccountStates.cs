@@ -36,7 +36,8 @@ internal interface IAccountStates
 
     /// <summary>
     /// Starts the deletion grace window on an account, for an erasure request a human
-    /// confirmed and fulfilled.
+    /// confirmed and fulfilled: an active or restricted account enters it, and a
+    /// suspended one enters it holding the suspension, which a cancellation returns.
     /// </summary>
     /// <param name="subject">Whose.</param>
     /// <param name="origin">What started it.</param>

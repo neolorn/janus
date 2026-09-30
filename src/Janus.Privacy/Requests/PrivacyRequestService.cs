@@ -199,15 +199,20 @@ internal sealed class PrivacyRequestService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        held.Fulfil(now);
-
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
 
-        await DoneAsync(held, now, cancellationToken).ConfigureAwait(false);
+        // IDN-LIFE-003: what the fulfilment could not do leaves the request open.
+        if (await DoneAsync(held, now, cancellationToken).ConfigureAwait(false) is Error notDone)
+        {
+            return Result.Failure(notDone);
+        }
+
+        held.Fulfil(now);
+
         await requests.RecordAsync(held, cancellationToken).ConfigureAwait(false);
         await audit
             .RecordedAsync(
@@ -328,7 +333,7 @@ internal sealed class PrivacyRequestService(
             : Result.Failure<QueuedRequest>(Error.From(ErrorCodes.RequestDecided));
     }
 
-    private async ValueTask DoneAsync(
+    private async ValueTask<Error?> DoneAsync(
         QueuedRequest request,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -340,28 +345,45 @@ internal sealed class PrivacyRequestService(
                     .ApplyAsync(request.Subject, now, cancellationToken)
                     .ConfigureAwait(false);
 
-                break;
+                return null;
 
-            // 09 section 8a: a fulfilled erasure enters the grace window the same way
-            // self-service deletion does, because the reversal period is the subject's
-            // whichever door the request came through.
+            // 09 section 8a, IDN-LIFE-003: a fulfilled erasure follows the state it
+            // finds. An account already in its window, by any origin, keeps the window
+            // running, and one already erased needs nothing; any other enters the window
+            // the same way self-service deletion does, because the reversal period is the
+            // subject's whichever door the request came through, and a refusal of that
+            // fails the fulfilment.
             case PrivacyRequestType.Erasure:
-                _ = await accounts
-                    .BeginDeletionAsync(
-                        request.Subject,
-                        DeletionOrigin.OutOfBandRequest,
-                        now,
-                        cancellationToken)
+                AccountStanding? standing = await accounts
+                    .StandingAsync(request.Subject, cancellationToken)
                     .ConfigureAwait(false);
 
-                break;
+                if (standing is null)
+                {
+                    return Error.From(ErrorCodes.AccountNotFound);
+                }
+
+                if (standing.State is AccountState.Deleting or AccountState.Deleted)
+                {
+                    return null;
+                }
+
+                return await accounts
+                        .BeginDeletionAsync(
+                            request.Subject,
+                            DeletionOrigin.OutOfBandRequest,
+                            now,
+                            cancellationToken)
+                        .ConfigureAwait(false)
+                    ? null
+                    : Error.From(ErrorCodes.AccountStateConflict);
 
             // Rectification of data the subject cannot edit is the correction itself,
             // which is the deployment's own record and not the library's: what the
             // library owes is the decision and the deadline it was made inside.
             case PrivacyRequestType.Rectification:
             default:
-                break;
+                return null;
         }
     }
 

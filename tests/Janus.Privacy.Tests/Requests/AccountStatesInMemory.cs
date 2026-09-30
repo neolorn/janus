@@ -28,6 +28,12 @@ internal sealed class AccountStatesInMemory : IAccountStates
     public void Hold(SubjectId subject, AccountState state) => _states[subject] = state;
 
     /// <summary>
+    /// Holds no account for the subject, as where none was ever created.
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    public void Forget(SubjectId subject) => _ = _states.Remove(subject);
+
+    /// <summary>
     /// What state the account is in.
     /// </summary>
     /// <param name="subject">Whose.</param>
@@ -77,8 +83,18 @@ internal sealed class AccountStatesInMemory : IAccountStates
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        bool moved = Moved(subject, AccountState.Active, AccountState.Deleting)
+        // IDN-LIFE-003: a suspended account enters the window only on a request that
+        // arrived out of band, holding the suspension for a cancellation to return.
+        bool suspended = origin is DeletionOrigin.OutOfBandRequest
+            && Moved(subject, AccountState.Suspended, AccountState.Deleting);
+        bool moved = suspended
+            || Moved(subject, AccountState.Active, AccountState.Deleting)
             || Moved(subject, AccountState.Restricted, AccountState.Deleting);
+
+        if (suspended)
+        {
+            _found[subject] = (AccountState.Suspended, null);
+        }
 
         if (moved)
         {
@@ -115,12 +131,15 @@ internal sealed class AccountStatesInMemory : IAccountStates
     }
 
     /// <summary>
-    /// Takes an account out of the deletion window, as the subject's cancellation does.
+    /// Takes an account out of the deletion window, as the subject's cancellation does:
+    /// a suspension the window holds comes back, and otherwise the account is active.
     /// </summary>
     /// <param name="subject">Whose.</param>
     public void Cancels(SubjectId subject)
     {
-        _states[subject] = AccountState.Active;
+        _states[subject] = _found.Remove(subject, out (AccountState State, PendingDeletion? Deletion) held)
+            ? held.State
+            : AccountState.Active;
         _ = _deletions.Remove(subject);
     }
 

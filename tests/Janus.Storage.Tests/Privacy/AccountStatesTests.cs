@@ -260,6 +260,71 @@ public sealed class AccountStatesTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// IDN-LIFE-003, PRIV-RIGHT-001 (D-166): a suspended account begins its deletion on
+    /// a request that arrived out of band and on no other, the row holds the suspension
+    /// with its origin, and a cancellation returns it suspended by the administrator.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_003_ASuspendedAccountBeginsItsDeletionOutOfBandAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+
+        await using (StoreContext suspending = database.Context())
+        {
+            var store = new AccountStore(suspending);
+            Account account = Assert.IsType<Account>(
+                await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+            account.Suspend();
+            await store.RecordTransitionAsync(account, TestContext.Current.CancellationToken);
+            await suspending.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (StoreContext deleting = database.Context())
+        {
+            Assert.False(await States(deleting).BeginDeletionAsync(
+                subject,
+                DeletionOrigin.Self,
+                Noon,
+                TestContext.Current.CancellationToken));
+            Assert.True(await States(deleting).BeginDeletionAsync(
+                subject,
+                DeletionOrigin.OutOfBandRequest,
+                Noon,
+                TestContext.Current.CancellationToken));
+            await deleting.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        AccountStanding begun = await StandingAsync(subject);
+
+        Assert.Equal(
+            (AccountState.Deleting, DeletionOrigin.OutOfBandRequest, Noon),
+            (begun.State, begun.DeletingBy, begun.DeletingSince));
+
+        await using (StoreContext cancelling = database.Context())
+        {
+            var store = new AccountStore(cancelling);
+            Account account = Assert.IsType<Account>(
+                await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+            Assert.Equal(SuspensionOrigin.Administrator, account.SuspensionHeld);
+
+            account.CancelDeletion();
+            await store.RecordTransitionAsync(account, TestContext.Current.CancellationToken);
+            await cancelling.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        Account read = Assert.IsType<Account>(
+            await new AccountStore(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+        Assert.Equal((AccountState.Suspended, SuspensionOrigin.Administrator), (read.State, read.SuspendedBy));
+        Assert.Null(read.SuspensionHeld);
+        Assert.Null(read.DeletingBy);
+    }
+
+    /// <summary>
     /// IDN-LIFE-013: a takedown reversed on an account an administrator suspended
     /// leaves it suspended by the administrator, so reactivating it still needs
     /// <c>account:manage</c> and no reversal stands in for that.

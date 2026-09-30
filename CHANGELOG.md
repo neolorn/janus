@@ -941,9 +941,9 @@ against the public contract of LIB-API-001.
 - A data subject request enters a queue with a statutory clock on it. A subject submits
   a restriction or a rectification for themselves at `POST /privacy/requests` and is
   answered with the request identifier, the receipt timestamp and the date the decision
-  is due by; an authorised human enters a request that arrived out of band at
-  `POST /admin/privacy/requests`, recording how it arrived, what confirmed the requester
-  is the subject, and the date it reached the company. The deadline is six working days
+  is due by; an authorised human enters a request that arrived out of band at `POST
+  /admin/privacy/requests`, recording how it arrived, what confirmed the requester is
+  the subject, and the date it reached the company. The deadline is six working days
   counted on the deployment's own week (`privacy.workingdays`), its holidays as
   currently listed (`privacy.holidays`) and its zone (`privacy.calendar.timezone`),
   never on a Monday to Friday assumption. Undecided requests raise a Normal alert
@@ -952,10 +952,14 @@ against the public contract of LIB-API-001.
   is granted and the account is restricted, and a request the system cannot grant by
   itself is recorded as deemed refused by lapse, with the subject told honestly and the
   record kept. Fulfilling a restriction restricts the account and tells the registered
-  subscribers; fulfilling an out-of-band erasure starts the deletion grace window.
-  Deciding a request tells its three refusals apart for the member of staff working the
-  queue: 403 `authz.denied` without the permission, 404 `privacy.request.notfound` for
-  an identifier naming no request, and 409 `privacy.request.decided` where a decision
+  subscribers; fulfilling an out-of-band erasure follows the account's state: an active
+  or restricted account starts the deletion grace window, a suspended one starts it
+  holding the suspension, which a cancellation returns, an account already in its window
+  keeps the window running with its start, an erased one changes nothing, and a window
+  that cannot start fails the fulfilment and leaves the request open. Deciding a request
+  tells its three refusals apart for the member of staff working the queue: 403
+  `authz.denied` without the permission, 404 `privacy.request.notfound` for an
+  identifier naming no request, and 409 `privacy.request.decided` where a decision
   already stands.
 - A host can bind one of its actions to the purpose it is done for, and where that
   purpose rests on consent the gate refuses the action until the data subject of the

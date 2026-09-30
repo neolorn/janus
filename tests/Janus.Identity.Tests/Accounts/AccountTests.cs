@@ -413,6 +413,45 @@ public sealed class AccountTests
     }
 
     /// <summary>
+    /// IDN-LIFE-003, PRIV-RIGHT-001 (D-166): a suspended account enters the window on a
+    /// request that arrived out of band, holding the suspension with its origin, and a
+    /// cancellation returns it suspended by that origin; the subject's own request does
+    /// not start a suspended account's window.
+    /// </summary>
+    /// <param name="origin">Who suspended the account.</param>
+    [Theory]
+    [InlineData(SuspensionOrigin.Administrator)]
+    [InlineData(SuspensionOrigin.Self)]
+    public void IDN_LIFE_003_ASuspendedAccountEntersTheWindowOutOfBandAndComesBackSuspended(
+        SuspensionOrigin origin)
+    {
+        var account = Account.Create(Ahmed, Noon);
+
+        if (origin is SuspensionOrigin.Self)
+        {
+            account.Deactivate();
+        }
+        else
+        {
+            account.Suspend();
+        }
+
+        Assert.Throws<InvalidOperationException>(() => account.RequestDeletion(DeletionOrigin.Self, Noon));
+
+        account.RequestDeletion(DeletionOrigin.OutOfBandRequest, Noon);
+
+        Assert.Equal(
+            (AccountState.Deleting, DeletionOrigin.OutOfBandRequest, Noon, origin),
+            (account.State, account.DeletingBy, account.DeletingSince, account.SuspensionHeld));
+
+        account.CancelDeletion();
+
+        Assert.Equal((AccountState.Suspended, origin), (account.State, account.SuspendedBy));
+        Assert.Null(account.SuspensionHeld);
+        Assert.Null(account.DeletingBy);
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-002 AC3: a restriction request undecided at its deadline moves the
     /// account to restricted, and the restriction is lifted the same way.
     /// </summary>
