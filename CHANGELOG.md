@@ -1707,6 +1707,11 @@ against the public contract of LIB-API-001.
   deployment holds answers `404` `identity.organization.notfound` and writes nothing,
   whichever organization its permission is asked in; issuing an invitation into an
   organization whose deletion was requested answers `authz.denied`.
+- A change of an organization's policy or of its domains whose reason is absent or
+  blank is refused `422` `config.change.reasonrequired` naming the key
+  `policy.<organization>`, at the endpoint before any permission is asked and in the
+  service alike; a policy replacement naming `emailDomains` is refused `400` naming it
+  before any permission is asked.
 - An audit trail. Every record names who acted, whose identity the action was taken
   under, the instant it occurred and the organization where one applies; an event about
   a principal holding no membership carries none, and the absence is the recorded fact.

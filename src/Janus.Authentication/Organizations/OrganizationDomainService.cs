@@ -367,10 +367,6 @@ internal sealed class OrganizationDomainService(
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
 
-    // API-CONV-002: a free-text field is 1 to 1024 characters after trimming.
-    private static string? Stated(string text) =>
-        text?.Trim() is { Length: > 0 and <= 1024 } stated ? stated : null;
-
     private static TValue Held<TValue>(Error error, ref Error? failure)
     {
         failure = error;
@@ -409,10 +405,16 @@ internal sealed class OrganizationDomainService(
             return Change.Refused(acting, Malformed("domain"));
         }
 
-        if (Stated(reason) is not string stated)
+        // 09 section 8a: every change to the list is a configuration change of the
+        // organization's policy key, so a blank reason is refused as a change without
+        // one is.
+        if (ConfigurationAdministration.Unexplained(Settings.OrganizationPolicy.For(organization.ToString()), reason)
+            is Error unexplained)
         {
-            return Change.Refused(acting, Malformed("reason"));
+            return Change.Refused(acting, unexplained);
         }
+
+        string stated = reason.Trim();
 
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false) is null)
         {

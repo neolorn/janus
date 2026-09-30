@@ -112,8 +112,9 @@ public interface IOrganizations
     /// than the system policy, <c>config.value.belowfloor</c> where the administrative
     /// organization would fall below its assurance floor,
     /// <c>identity.organization.notfound</c> where the deployment holds no such
-    /// organization, and <c>api.request.malformed</c> naming <c>reason</c> or
-    /// <c>emailDomains</c>.
+    /// organization, <c>config.change.reasonrequired</c> naming the organization's policy
+    /// key where the reason is blank, and <c>api.request.malformed</c> naming
+    /// <c>reason</c> where it is longer than 1024 characters, or <c>emailDomains</c>.
     /// </returns>
     ValueTask<Result> ReplacePolicyAsync(
         AccessContext context,

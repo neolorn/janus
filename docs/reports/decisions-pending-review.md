@@ -7442,6 +7442,8 @@ The configuration route already takes a reason on every change (D-147).
 *Chapter text that should change.* 09 section 8a could say whether a tightening is
 stepped up, in the same words as 10 section 5a.
 
+**Superseded by D-166.**
+
 ---
 
 ## 201. A loosening of an organization's policy also needs `system:administer`

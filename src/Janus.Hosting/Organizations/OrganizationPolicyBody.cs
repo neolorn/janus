@@ -28,7 +28,6 @@ internal static class OrganizationPolicyBody
         "gates",
         "credentialRedundancy",
         "selfServiceRecovery",
-        "emailDomains",
     }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
@@ -37,8 +36,9 @@ internal static class OrganizationPolicyBody
     /// <param name="body">The request body.</param>
     /// <param name="organization">The organization whose policy it replaces.</param>
     /// <returns>
-    /// The override and the reason, or the refusal: <c>api.request.malformed</c> for a
-    /// body that is no object or a member it does not know, naming the member, and
+    /// The override and the reason, empty where the body carries none, or the refusal:
+    /// <c>api.request.malformed</c> for a body that is no object or a member it does not
+    /// know, <c>emailDomains</c> included, naming the member, and
     /// <c>config.value.notallowed</c> for a field whose value the policy object does not
     /// take.
     /// </returns>

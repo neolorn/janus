@@ -8,6 +8,7 @@ using Janus.Authentication.Organizations;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Organizations;
@@ -450,10 +451,12 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// API-CONV-002 and IDN-ORG-006: a domain is read in its canonical ASCII form, so
-    /// the Unicode and the ASCII forms of one domain are one; what is not a domain of
-    /// two labels, a missing reason and an unlisted domain are refused naming the
-    /// member; listing a domain twice changes nothing.
+    /// API-CONV-002, IDN-ORG-006 and 09 section 8a: a domain is read in its canonical
+    /// ASCII form, so the Unicode and the ASCII forms of one domain are one; what is not
+    /// a domain of two labels and an unlisted domain are refused naming the member, a
+    /// missing or blank reason as a configuration change without one is, naming the
+    /// organization's policy key, with nothing written; listing a domain twice changes
+    /// nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -472,6 +475,14 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
         Answer single = await administrator.SendAsync("POST", PathOf(Branch), """{"domain":"localhost","reason":"Why not."}""");
         Answer spaced = await administrator.SendAsync("POST", PathOf(Branch), """{"domain":"not a domain.test","reason":"Why not."}""");
         Answer unreasoned = await administrator.SendAsync("POST", PathOf(Branch), """{"domain":"example.test"}""");
+        Answer blank = await administrator.SendAsync("POST", PathOf(Branch), """{"domain":"example.test","reason":" "}""");
+        Answer overlong = await administrator.SendAsync(
+            "POST",
+            PathOf(Branch),
+            ("domain", "example.test"),
+            ("reason", new string('r', 1025)));
+        Answer unverified = await administrator.SendAsync("POST", PathOf(Branch) + "/" + Domain + "/verify", "{}");
+        Answer unremoved = await administrator.SendAsync("DELETE", PathOf(Branch) + "/" + Domain, """{"reason":""}""");
         Answer unlisted = await administrator.SendAsync("POST", PathOf(Branch) + "/other.test/verify", Reasoned);
         Answer absent = await administrator.SendAsync("DELETE", PathOf(Branch) + "/other.test", Reasoned);
 
@@ -481,9 +492,45 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
         Assert.Single(_deployment.Domains.Held);
         Assert.Equal("domain", Member(single));
         Assert.Equal("domain", Member(spaced));
-        Assert.Equal("reason", Member(unreasoned));
+        Assert.Equal(PolicyKey(Branch), Unreasoned(unreasoned));
+        Assert.Equal(PolicyKey(Branch), Unreasoned(blank));
+        Assert.Equal("reason", Member(overlong));
+        Assert.Equal(PolicyKey(Branch), Unreasoned(unverified));
+        Assert.Equal(PolicyKey(Branch), Unreasoned(unremoved));
+        Assert.Single(_deployment.OrganizationChanges.Changes);
         Assert.Equal("domain", Member(unlisted));
         Assert.Equal(StatusCodes.Status204NoContent, absent.Status);
+    }
+
+    /// <summary>
+    /// 09 section 8a: a change of the list asked in process without a reason is refused
+    /// as a configuration change without one is, naming the organization's policy key,
+    /// and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_DOM_001_AChangeInProcessWithoutAReasonIsRefusedAsync()
+    {
+        (_, SubjectId subject) = await AuthorisedAsync();
+
+        await using AsyncServiceScope scope = _deployment.Scope();
+        IOrganizationDomains domains = scope.ServiceProvider.GetRequiredService<IOrganizationDomains>();
+        var session = SessionId.New(_deployment.Clock);
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        Error[] refusals =
+        [
+            Refusal(await domains.AddDomainAsync(AccessContext.Of(subject), session, Branch, Domain, "", cancellationToken)),
+            Refusal(await domains.VerifyDomainAsync(AccessContext.Of(subject), session, Branch, Domain, " ", cancellationToken)),
+            (await domains.RemoveDomainAsync(AccessContext.Of(subject), session, Branch, Domain, "\t", cancellationToken))
+                .Match(() => throw new Xunit.Sdk.XunitException("removed"), error => error),
+        ];
+
+        Assert.All(refusals, refused => Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired, refused.Code));
+        Assert.All(refusals, refused => Assert.Equal(PolicyKey(Branch), refused.Details["key"].GetString()));
+        Assert.Empty(_deployment.Domains.Held);
+        Assert.Empty(_deployment.OrganizationChanges.Changes);
+        Assert.Empty(_deployment.Changes.Written);
     }
 
     /// <summary>
@@ -539,9 +586,9 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
 
     /// <summary>
     /// CONV-CODE-006 AC2: a body missing a member adding, verifying or removing a domain
-    /// requires is refused naming the member before the service is reached, so a caller
-    /// the service would refuse for want of the permission is answered for the body,
-    /// and the lock holds nothing.
+    /// requires is refused before the service is reached, a missing reason by its own
+    /// code naming the organization's policy key, so a caller the service would refuse
+    /// for want of the permission is answered for the body, and the lock holds nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -556,15 +603,29 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.RequestMalformed.ToString(), unnamed.Text("code"));
         Assert.Equal("domain", Member(unnamed));
-        Assert.Equal("reason", Member(unreasoned));
-        Assert.Equal("reason", Member(unverified));
-        Assert.Equal("reason", Member(unremoved));
+        Assert.Equal(PolicyKey(Branch), Unreasoned(unreasoned));
+        Assert.Equal(PolicyKey(Branch), Unreasoned(unverified));
+        Assert.Equal(PolicyKey(Branch), Unreasoned(unremoved));
         Assert.Empty(_deployment.Domains.Held);
     }
 
     private static string PathOf(OrganizationId organization) => "/admin/organizations/" + organization + "/domains";
 
     private static string PolicyOf(OrganizationId organization) => "/admin/organizations/" + organization + "/policy";
+
+    private static string PolicyKey(OrganizationId organization) =>
+        Settings.OrganizationPolicy.For(organization.ToString()).ToString();
+
+    private static Error Refusal(Result<OrganizationDomain> outcome) =>
+        outcome.Match(_ => throw new Xunit.Sdk.XunitException("changed"), error => error);
+
+    private static string Unreasoned(Answer answer)
+    {
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, answer.Status);
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired.ToString(), answer.Text("code"));
+
+        return answer.Json().GetProperty("details").GetProperty("key").GetString()!;
+    }
 
     private static string Member(Answer answer)
     {

@@ -49,8 +49,9 @@ public interface IOrganizationDomains
     /// <returns>
     /// The domain and the record to publish, or the refusal:
     /// <c>identity.organization.notfound</c> where the deployment holds no such
-    /// organization, <c>api.request.malformed</c> naming <c>domain</c> or
-    /// <c>reason</c>.
+    /// organization, <c>config.change.reasonrequired</c> naming the organization's policy
+    /// key where the reason is blank, <c>api.request.malformed</c> naming <c>domain</c>,
+    /// or <c>reason</c> where it is longer than 1024 characters.
     /// </returns>
     ValueTask<Result<OrganizationDomain>> AddDomainAsync(
         AccessContext context,
@@ -75,8 +76,9 @@ public interface IOrganizationDomains
     /// The domain as it now stands, or the refusal: <c>identity.domain.unverified</c>
     /// where no record carries the token or none could be read,
     /// <c>identity.organization.notfound</c> where the deployment holds no such
-    /// organization, <c>api.request.malformed</c> naming <c>domain</c> or
-    /// <c>reason</c>.
+    /// organization, <c>config.change.reasonrequired</c> naming the organization's policy
+    /// key where the reason is blank, <c>api.request.malformed</c> naming <c>domain</c>,
+    /// or <c>reason</c> where it is longer than 1024 characters.
     /// </returns>
     ValueTask<Result<OrganizationDomain>> VerifyDomainAsync(
         AccessContext context,
@@ -99,8 +101,10 @@ public interface IOrganizationDomains
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Success, or the refusal: <c>identity.organization.notfound</c> where the
-    /// deployment holds no such organization, <c>api.request.malformed</c> naming
-    /// <c>domain</c> or <c>reason</c>.
+    /// deployment holds no such organization, <c>config.change.reasonrequired</c> naming
+    /// the organization's policy key where the reason is blank,
+    /// <c>api.request.malformed</c> naming <c>domain</c>, or <c>reason</c> where it is
+    /// longer than 1024 characters.
     /// </returns>
     ValueTask<Result> RemoveDomainAsync(
         AccessContext context,
