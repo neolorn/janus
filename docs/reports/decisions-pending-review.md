@@ -13397,6 +13397,8 @@ never vouches for it, and could show its illustration to the second with one spa
 IDN-LIFE-003a could say that subscriber names are distinct and that `erasure-ledger` is
 the library's. `10` section 1.5 could add `model.startup.subscribername`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 333. What the replay of the erasure ledger does to a restored database

@@ -98,6 +98,33 @@ public sealed class ErasureReplayTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
+    /// DR-016, chapter 10 section 5.12a: the replay's audit record carries the line's
+    /// reason by its written name, as the line spells it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task DR_016_TheAuditCarriesTheReasonInItsWrittenSpellingAsync()
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        Guid takenDown = await AccountAsync(connection, "suspended");
+
+        await WrittenAsync($"2026-09-19T16:04:00Z {takenDown:D} minor-takedown");
+
+        Invocation replayed = await Invocation.PipedAsync([Command, _ledger], Invocation.Keys(Application()));
+
+        Assert.Equal((0, string.Empty), (replayed.ExitCode, replayed.Error));
+        Assert.Equal(
+            "minor-takedown",
+            await connection.ExecuteScalarAsync<string>(
+                """
+                SELECT details->>'reason' FROM identity.audit_records
+                WHERE action = 'privacy.erasure.executed' AND effective_subject = @takenDown
+                """,
+                new { takenDown }));
+    }
+
+    /// <summary>
     /// DR-006a AC1: a backup taken before an erasure, restored into a new instance, brings
     /// the account back live with the key the erasure destroyed; the replay of the ledger
     /// against the restored database erases it again and destroys that key there too.

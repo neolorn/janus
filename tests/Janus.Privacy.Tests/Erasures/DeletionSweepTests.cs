@@ -246,6 +246,28 @@ public sealed class DeletionSweepTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// DR-016, chapter 10 section 5.12a: the erasure's audit record carries its reason
+    /// by the written name the ledger and the erasures table use, for a takedown's
+    /// erasure and for a request's alike.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task DR_016_TheAuditCarriesTheReasonInItsWrittenSpellingAsync()
+    {
+        _accounts.Deletes(Ahmed, DeletionOrigin.Takedown, Noon);
+        _accounts.Deletes(Noura, DeletionOrigin.OutOfBandRequest, Noon);
+
+        _clock.Advance(Settings.AccountDeletionGrace.Default);
+
+        _ = await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ["minor-takedown", "erasure-request"],
+            new[] { Ahmed, Noura }.Select(subject =>
+                Assert.Single(_audit.Entries, entry => entry.Subject == subject).Details["reason"].GetString()));
+    }
+
+    /// <summary>
     /// IDN-LIFE-014: the window is the one the deployment configured, so shortening
     /// it brings an account the earlier pass left standing into reach.
     /// </summary>

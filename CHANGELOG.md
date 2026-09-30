@@ -125,6 +125,9 @@ against the public contract of LIB-API-001.
   erasure completed before it was, a manual completion included, without changing the
   erasure's status, attempts or erasures row; a line the ledger refuses is tried again
   on the next pass.
+- The `privacy.erasure.executed` audit record, whether the deletion sweep or
+  `replay-erasures` writes it, carries `details.reason` by its written name
+  (`erasure-request`, `minor-takedown`), as the ledger line and the erasures table do.
 - `no-emergency-credential` is raised by the hourly `emergency-credential` job for as
   long as no break-glass credential stands, including after one is spent, and stops only
   when one is generated.
