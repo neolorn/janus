@@ -94,6 +94,28 @@ internal sealed class ConsentService(
         }
 
         DateTimeOffset now = time.GetUtcNow();
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // PRIV-CONS-001, PRIV-CONS-007: a grant from the subject's own pages over a
+        // consent a material revision ended, and the subject never took back, is the
+        // answer to being asked again. It is judged here, on the record as the grant's
+        // transaction reads it, so a host calling the contract is answered as the
+        // endpoint is.
+        IReadOnlyList<ConsentRecord> held = await consents
+            .ConsentsAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (mechanism is ConsentMechanism.Dashboard
+            && Of(held, purpose) is { SupersededAt: not null, WithdrawnAt: null })
+        {
+            mechanism = ConsentMechanism.Reconsent;
+        }
+
         var granted = new ConsentRecord(
             purpose,
             version,
@@ -102,12 +124,6 @@ internal sealed class ConsentService(
             now,
             WithdrawnAt: null,
             SupersededAt: null);
-
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
-        {
-            return Result.Failure(notBegun);
-        }
 
         await consents.RecordAsync(subject, granted, cancellationToken).ConfigureAwait(false);
         await AnnouncedAsync(subject, purpose, ConsentChange.Granted, now, cancellationToken)

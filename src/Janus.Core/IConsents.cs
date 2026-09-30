@@ -32,7 +32,11 @@ public interface IConsents
     /// </summary>
     /// <param name="context">Whose consent.</param>
     /// <param name="purpose">Which purpose, and only one.</param>
-    /// <param name="mechanism">Where it was given.</param>
+    /// <param name="mechanism">
+    /// Where it was given. A grant named <see cref="ConsentMechanism.Dashboard"/> over
+    /// a consent the subject holds superseded and not withdrawn is recorded as
+    /// <see cref="ConsentMechanism.Reconsent"/>; every other is recorded as named.
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Success, or the refusal: a purpose the declaration does not carry, or one

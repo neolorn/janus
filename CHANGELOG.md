@@ -985,7 +985,9 @@ against the public contract of LIB-API-001.
   the document that was shown, where the decision was made and when. A grant made on the
   subject's own pages records `dashboard`, and one answering the prompt a material
   revision raised, over a consent the revision ended and the subject never took back,
-  records `reconsent`; a host granting through the contract names its own mechanism.
+  records `reconsent`. `IConsents.GrantAsync` applies the same rule, judged inside the
+  grant's transaction, to a grant named `dashboard`, so a host granting through the
+  contract is answered as the endpoint is; any other mechanism is recorded as named.
   Withdrawal takes the one request granting took and nothing stands in its way. A
   purpose that rests on a basis other than consent takes no consent record, and one
   whose basis carries no right to object refuses the objection by name. A purpose

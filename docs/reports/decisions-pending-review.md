@@ -5250,6 +5250,8 @@ records `reconsent` where the subject holds a superseded, unwithdrawn consent fo
 purpose and `dashboard` otherwise, and that a host calling the contract names its own
 mechanism. `10` section 5.21's `reconsent` row should say the library writes it.
 
+**Superseded by D-166.**
+
 ---
 
 ## 149. Reactivation's body is `linkToken`, as it was built

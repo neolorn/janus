@@ -475,6 +475,60 @@ public sealed class ConsentTests : IAsyncDisposable
         Assert.Equal(0, _work.Committed);
     }
 
+    /// <summary>
+    /// PRIV-CONS-001 AC1, PRIV-CONS-007: a grant named <c>dashboard</c> over a consent
+    /// a material revision superseded, and the subject never withdrew, is the answer to
+    /// being asked again and is recorded as <c>reconsent</c> by the service itself; over
+    /// one the subject withdrew it is recorded as named.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AC1_ADashboardGrantOverASupersededConsentIsRecordedAsReconsentAsync()
+    {
+        await SupersededAsync(Recommendations, withdrawn: false);
+        await SupersededAsync(Marketing, withdrawn: true);
+
+        Assert.True(await GrantAsync(Recommendations));
+        Assert.True(await GrantAsync(Marketing));
+
+        IReadOnlyList<ConsentRecord> held = await HeldAsync();
+
+        Assert.Equal(
+            ConsentMechanism.Reconsent,
+            Assert.Single(held, record => record.Purpose == Recommendations).Mechanism);
+        Assert.Equal(
+            ConsentMechanism.Dashboard,
+            Assert.Single(held, record => record.Purpose == Marketing).Mechanism);
+    }
+
+    /// <summary>
+    /// PRIV-CONS-001 AC1: a grant named by any mechanism other than <c>dashboard</c>
+    /// over a superseded consent is recorded as named.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AC1_AnAdministratorGrantOverASupersededConsentIsRecordedAsNamedAsync()
+    {
+        await SupersededAsync(Recommendations, withdrawn: false);
+
+        Assert.True(await GrantAsync(Recommendations, ConsentMechanism.Administrator));
+
+        Assert.Equal(ConsentMechanism.Administrator, Assert.Single(await HeldAsync()).Mechanism);
+    }
+
+    // A consent the subject gave and a material revision then ended, taken back or not.
+    private async Task SupersededAsync(string purpose, bool withdrawn)
+    {
+        Assert.True(await GrantAsync(purpose));
+
+        ConsentRecord given = Assert.Single(await HeldAsync(), record => record.Purpose == purpose);
+
+        await _consents.RecordAsync(
+            Ahmed,
+            given with { SupersededAt = Noon, WithdrawnAt = withdrawn ? Noon : null },
+            CancellationToken.None);
+    }
+
     private async Task<ErrorCode?> RefusedGrantAsync(string purpose) =>
         (await Consents.GrantAsync(Acting, purpose, ConsentMechanism.Dashboard, CancellationToken.None))
         .Match(() => default(ErrorCode?), error => error.Code);

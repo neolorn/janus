@@ -89,34 +89,15 @@ internal static class PrivacyEndpoints
     {
         ArgumentNullException.ThrowIfNull(consents);
 
-        AccessContext holder = Asking(browser);
-
         // PRIV-CONS-001, PRIV-CONS-007: this one endpoint serves both the grant a
-        // subject makes on their own pages and the prompt a material revision raised,
-        // and what tells them apart is the record the subject already holds: one the
-        // revision ended and the subject never took back.
-        ConsentMechanism mechanism = Reasked(
-            await consents.ReadAsync(holder, cancellationToken).ConfigureAwait(false),
-            purpose);
-
+        // subject makes on their own pages and the prompt a material revision raised;
+        // the service tells them apart.
         return Answers.Of(
             await consents
-                .GrantAsync(holder, purpose, mechanism, cancellationToken)
+                .GrantAsync(Asking(browser), purpose, ConsentMechanism.Dashboard, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }
-
-    private static ConsentMechanism Reasked(
-        Result<IReadOnlyList<ConsentRecord>> held,
-        string purpose) =>
-        held.Match(
-            records => records.Any(record =>
-                string.Equals(record.Purpose, purpose, StringComparison.Ordinal)
-                && record.SupersededAt is not null
-                && record.WithdrawnAt is null)
-                ? ConsentMechanism.Reconsent
-                : ConsentMechanism.Dashboard,
-            _ => ConsentMechanism.Dashboard);
 
     private static async Task<IResult> WithdrawAsync(
         IConsents consents,
