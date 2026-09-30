@@ -306,8 +306,8 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
     /// <summary>
     /// OPS-SEC-003 AC6, AUTH-ABUSE-001: a sign-in in progress carries the hash of the
     /// identifier it was opened with, so the retirement forgets one opened under the
-    /// previous version as it forgets a ledger line, keeps one opened under the new one,
-    /// and leaves one that carries no hash to lapse.
+    /// previous version as it forgets a ledger line and keeps one opened under the new
+    /// one.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -316,21 +316,11 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         Challenge previous = Opened();
         Challenge current = Opened();
-        var unhashed = Challenge.Existing(
-            RandomNumberGenerator.GetBytes(32),
-            subject: null,
-            email: null,
-            identifier: null,
-            "a-value-an-assertion-signs",
-            Noon,
-            Noon.AddMinutes(10),
-            []);
 
         await using (StoreContext opening = database.Context())
         {
             await new ChallengeStore(opening, Deployment.Fingerprints).AddAsync(previous, cancellationToken);
             await new ChallengeStore(opening, Ring(Rotating)).AddAsync(current, cancellationToken);
-            await new ChallengeStore(opening, Ring(Rotating)).AddAsync(unhashed, cancellationToken);
             _ = await opening.SaveChangesAsync(cancellationToken);
         }
 
@@ -341,12 +331,9 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         Assert.Equal(
-            new[] { current.Fingerprint, unhashed.Fingerprint }
-                .Select(Convert.ToHexString)
-                .Order(StringComparer.Ordinal),
-            (await connection.QueryAsync<byte[]>("SELECT handle FROM identity.signin_challenges"))
-                .Select(Convert.ToHexString)
-                .Order(StringComparer.Ordinal));
+            Convert.ToHexString(current.Fingerprint),
+            Convert.ToHexString(
+                Assert.Single(await connection.QueryAsync<byte[]>("SELECT handle FROM identity.signin_challenges"))));
     }
 
     /// <summary>

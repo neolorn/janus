@@ -2136,11 +2136,12 @@ partial class MoveValuesUnderTheDeploymentKey
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("expires_at");
 
-                b.Property<int?>("FingerprintVersion")
+                b.Property<int>("FingerprintVersion")
                     .HasColumnType("integer")
                     .HasColumnName("fingerprint_version");
 
                 b.Property<byte[]>("Identifier")
+                    .IsRequired()
                     .HasMaxLength(32)
                     .HasColumnType("bytea")
                     .HasColumnName("identifier");
@@ -2172,7 +2173,7 @@ partial class MoveValuesUnderTheDeploymentKey
                     {
                         t.HasCheckConstraint("ck_signin_challenges_handle", "octet_length(handle) = 32");
 
-                        t.HasCheckConstraint("ck_signin_challenges_identifier", "(identifier IS NULL) = (fingerprint_version IS NULL) AND (identifier IS NULL OR octet_length(identifier) = 32)");
+                        t.HasCheckConstraint("ck_signin_challenges_identifier", "octet_length(identifier) = 32");
                     });
             });
 
