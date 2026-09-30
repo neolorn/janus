@@ -107,6 +107,15 @@ public sealed class IntegrationBoundaryTests
 
     private static readonly string[] Mapping = ["SendingService.cs"];
 
+    private static readonly string[] CoreProjects =
+    [
+        "Janus.Core",
+        "Janus.Identity",
+        "Janus.Authentication",
+        "Janus.Authorization",
+        "Janus.Privacy",
+    ];
+
     /// <summary>
     /// INT-SMS-006 AC1: no provider name appears anywhere in the library, so the
     /// gateway is the deployment's choice and replacing it is a registration.
@@ -122,8 +131,8 @@ public sealed class IntegrationBoundaryTests
     }
 
     /// <summary>
-    /// LIB-EXT-001 AC3: no product of any extension point is named in the core
-    /// contract: no gateway or mail transport, no mail server, no cache and no secrets
+    /// LIB-EXT-001 AC3: no product of any extension point is named in a core
+    /// namespace, <c>Janus.Core</c> or an area project: no gateway or mail transport, no mail server, no cache and no secrets
     /// manager. Google and Apple are not searched for, since they are factors of the
     /// catalogue chapter 02 fixes rather than a product behind an extension point, and
     /// neither is PostgreSQL, which LIB-API-004 has the contract name.
@@ -132,12 +141,7 @@ public sealed class IntegrationBoundaryTests
     public void LIB_EXT_001_AC3_NoProviderNameAppearsInTheCoreNamespace()
     {
         string[] products = [.. Gateways, .. MailServers, .. Caches, .. SecretSources];
-        string[] core =
-        [
-            .. Sources().Where(file => file.Contains(
-                Path.DirectorySeparatorChar + "Janus.Core" + Path.DirectorySeparatorChar,
-                StringComparison.Ordinal)),
-        ];
+        string[] core = [.. CoreNamespaces()];
 
         IEnumerable<string> naming = core
             .Where(file => products.Any(product =>
@@ -165,19 +169,15 @@ public sealed class IntegrationBoundaryTests
     }
 
     /// <summary>
-    /// INT-MAIL-008 AC1: no mail server is named in the core namespace, so the one
-    /// hosting the staff mailboxes is a deployment's registration. The shipped adapter
-    /// in <c>Janus.Hosting</c> speaks the capability INT-MAIL-001 names, and is outside it.
+    /// INT-MAIL-008 AC1: no mail server is named in a core namespace, <c>Janus.Core</c>
+    /// or an area project, so the one hosting the staff mailboxes is a deployment's
+    /// registration. The shipped adapter in <c>Janus.Hosting</c> speaks the capability
+    /// INT-MAIL-001 names, and is outside them.
     /// </summary>
     [Fact]
     public void INT_MAIL_008_AC1_NoMailServerIsNamedInTheCoreNamespace()
     {
-        string[] core =
-        [
-            .. Sources().Where(file => file.Contains(
-                Path.DirectorySeparatorChar + "Janus.Core" + Path.DirectorySeparatorChar,
-                StringComparison.Ordinal)),
-        ];
+        string[] core = [.. CoreNamespaces()];
 
         IEnumerable<string> naming = core
             .Where(file => MailServers.Any(server =>
@@ -247,6 +247,12 @@ public sealed class IntegrationBoundaryTests
             .Select(name => name!)
             .Order(StringComparer.Ordinal),
     ];
+
+    // Chapter 07: a core namespace is Janus.Core's or an area project's.
+    private static IEnumerable<string> CoreNamespaces() =>
+        Sources().Where(file => CoreProjects.Any(project => file.Contains(
+            Path.DirectorySeparatorChar + project + Path.DirectorySeparatorChar,
+            StringComparison.Ordinal)));
 
     private static IEnumerable<string> Sources() =>
         Directory
