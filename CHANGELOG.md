@@ -498,12 +498,15 @@ against the public contract of LIB-API-001.
 - `GET /admin/erasures` lists every erasure whose host-side work is outstanding, oldest
   first, and `GET /admin/erasures/{id}` reads one, each with its subject, reason,
   status, attempts and every registered subscriber with when it confirmed.
-  `POST /admin/erasures/{id}/complete` closes an erasure whose retries were spent, asks
-  the `erasure:complete` step-up, and is audited as `privacy.erasure.completed` with the
-  required subscribers that had not confirmed; one not yet failed is 409
+  `POST /admin/erasures/{id}/complete` closes an erasure, a takedown (by its
+  `takedownId`) or a restriction delivery whose retries were spent, an erasure's ledger
+  line and erasures row with it, asks the `erasure:complete` step-up after every other
+  refusal, and is audited as `privacy.erasure.completed` with the delivery's `kind` and
+  the required subscribers that had not confirmed; one not yet failed is 409
   `privacy.erasure.notfailed`. An erasure's `id` is the identifier of its delivery; an
-  identifier naming no erasure is 404 `privacy.erasure.notfound`. All three need
-  `privacyrequest:manage`. `IErasures` is the same operations in process.
+  identifier naming no delivery of the three kinds is 404 `privacy.erasure.notfound`,
+  and the two reads stay erasures only. All three need `privacyrequest:manage`.
+  `IErasures` is the same operations in process.
 - `GET /admin/access?resourceType=...&resourceId=...` answers who can access a record:
   every live grant on it, on what contains it and on the whole organization, nearest
   first, each with its kind, holder, role, whether it denies and the container it sits

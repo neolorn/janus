@@ -9846,6 +9846,8 @@ the same widening for the listing). Under this:
 refusals; IDN-LIFE-003a could say whether a takedown's or a restriction's failed
 delivery has a manual path; chapter 10 could hold the rows below.
 
+**Superseded by D-166.**
+
 ---
 
 ## 265. What the "who can access this?" view reads, whom it answers, and what it answers over HTTP

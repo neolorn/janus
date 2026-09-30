@@ -7,6 +7,7 @@ using Janus.Privacy.Erasures;
 using Janus.Privacy.Outbox;
 using Janus.Privacy.Policies;
 using Janus.Privacy.Takedowns;
+using Janus.Privacy.Tests.Erasures;
 using Janus.Privacy.Tests.Exports;
 using Janus.Privacy.Tests.Outbox;
 using Janus.Privacy.Tests.Requests;
@@ -190,6 +191,40 @@ public sealed class TakedownServiceTests : IAsyncDisposable
             Noon + TimeSpan.FromMinutes(5),
             Assert.Single(after.Subscribers, subscriber => subscriber.Name == "records").ConfirmedAt);
         Assert.Null(Assert.Single(after.Subscribers, subscriber => subscriber.Name == "newsletter").ConfirmedAt);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003 AC2, IDN-LIFE-003a: a takedown whose retries were spent and which an
+    /// operator completed by hand, under <c>privacyrequest:manage</c>, reads
+    /// <c>complete</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_AC2_ATakedownCompletedByHandReadsCompleteAsync()
+    {
+        ExecutedTakedown takedown = Held(await ExecutedAsync());
+
+        Assert.Single(_outbox.Deliveries).Fail();
+        _gate.Grant(Mona, Company, Permissions.PrivacyRequestManage);
+
+        var erasures = new ErasureService(
+            new AdministrativeScope(_gate, _administrative),
+            _stepUp,
+            _outbox,
+            new ErasureStoreInMemory(),
+            [_records, _newsletter],
+            ledger: null,
+            _audit,
+            _work,
+            _clock);
+
+        Held(await erasures.CompleteAsync(
+            AccessContext.Of(Mona),
+            Browser,
+            new ErasureId(takedown.Id.Value),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErasureStatus.Complete, Held(await ReadAsync(Mona)).Status);
     }
 
     /// <summary>
