@@ -74,6 +74,20 @@ internal interface IOutboxStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// One page of the erasures that are complete and hold no confirmation from the
+    /// off-host ledger, oldest first: those completed before a ledger was registered,
+    /// by hand included.
+    /// </summary>
+    /// <param name="skip">How many of the oldest such erasures to pass over.</param>
+    /// <param name="take">How many to read at most.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The deliveries, oldest first.</returns>
+    ValueTask<IReadOnlyList<Delivery>> UnledgeredAsync(
+        int skip,
+        int take,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// The latest delivery of one kind about one subject, with when each subscriber
     /// confirmed it.
     /// </summary>

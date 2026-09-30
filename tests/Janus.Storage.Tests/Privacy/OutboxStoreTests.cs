@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Privacy.Outbox;
@@ -176,6 +177,59 @@ public sealed class OutboxStoreTests(DatabaseFixture database)
         Assert.Null(await store.ProgressAsync(
             DeliveryId.Of(Noon),
             TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// DR-016 AC5: the erasures complete without a confirmation from the off-host
+    /// ledger are read oldest first, a page at a time; one the ledger confirmed, one
+    /// still outstanding and a delivery of another kind are not.
+    /// </summary>
+    [Fact]
+    public async Task DR_016_AC5_TheCompletedErasuresWithoutALineAreReadAPageAtATimeAsync()
+    {
+        DateTimeOffset early = new(2025, 1, 6, 9, 0, 0, TimeSpan.Zero);
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        var oldest = Delivery.Of(subject, SubjectEventKind.ErasureRequested, early);
+        var older = Delivery.Of(subject, SubjectEventKind.ErasureRequested, early.AddMinutes(1));
+        var written = Delivery.Of(subject, SubjectEventKind.ErasureRequested, early.AddMinutes(2));
+        var awaiting = Delivery.Of(subject, SubjectEventKind.ErasureRequested, early.AddMinutes(3));
+        var takedown = Delivery.Of(subject, SubjectEventKind.TakedownExecuted, early.AddMinutes(4));
+
+        oldest.Complete();
+        older.Complete();
+        written.Confirm("erasure-ledger");
+        written.Complete();
+        takedown.Complete();
+
+        await using (StoreContext writing = database.Context())
+        {
+            OutboxStore outbox = Store(writing, Noon);
+
+            foreach (Delivery delivery in new[] { oldest, older, written, awaiting, takedown })
+            {
+                await outbox.AddAsync(delivery, TestContext.Current.CancellationToken);
+            }
+
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (StoreContext confirming = database.Context())
+        {
+            await Store(confirming, Noon).RecordAsync(written, TestContext.Current.CancellationToken);
+            await confirming.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        OutboxStore store = Store(reading, Noon);
+        DeliveryId[] ours = [oldest.Id, older.Id, written.Id, awaiting.Id, takedown.Id];
+
+        IReadOnlyList<Delivery> every = await store.UnledgeredAsync(0, 1000, TestContext.Current.CancellationToken);
+        IReadOnlyList<Delivery> first = await store.UnledgeredAsync(0, 1, TestContext.Current.CancellationToken);
+        IReadOnlyList<Delivery> second = await store.UnledgeredAsync(1, 1, TestContext.Current.CancellationToken);
+
+        Assert.Equal([oldest.Id, older.Id], every.Where(held => ours.Contains(held.Id)).Select(held => held.Id));
+        Assert.Equal([oldest.Id], first.Select(held => held.Id));
+        Assert.Equal([older.Id], second.Select(held => held.Id));
     }
 
     private static OutboxStore Store(StoreContext context, DateTimeOffset now) =>

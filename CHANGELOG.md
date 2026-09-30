@@ -120,7 +120,11 @@ against the public contract of LIB-API-001.
   a required confirmation named `erasure-ledger`, retried and raised as any required
   subscriber is and listed first at `GET /admin/erasures/{id}`, and the manual
   completion appends it itself and answers `system.fault` while the ledger refuses it. A
-  deployment that registers no ledger completes its erasures without one.
+  deployment that registers no ledger completes its erasures without one. Once a ledger
+  is registered, the outbox worker appends, once and oldest first, the line of every
+  erasure completed before it was, a manual completion included, without changing the
+  erasure's status, attempts or erasures row; a line the ledger refuses is tried again
+  on the next pass.
 - `no-emergency-credential` is raised by the hourly `emergency-credential` job for as
   long as no break-glass credential stands, including after one is spent, and stops only
   when one is generated.

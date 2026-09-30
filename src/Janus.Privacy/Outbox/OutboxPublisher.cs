@@ -30,7 +30,8 @@ namespace Janus.Privacy.Outbox;
 /// subscriber that confirmed is not offered the event again, and one that did not is,
 /// until the budget is spent. A subscriber that throws is a subscriber that did not
 /// confirm, and the delivery outlives the process either way. An erasure also waits
-/// for its ledger line, which is offered as the first required subscriber.
+/// for its ledger line, which is offered as the first required subscriber, and one
+/// completed before the ledger was registered is written down by the pass once.
 /// </remarks>
 internal sealed class OutboxPublisher(
     IOutboxStore outbox,
@@ -43,12 +44,69 @@ internal sealed class OutboxPublisher(
     TimeProvider time,
     RandomNumberGenerator randomness)
 {
+    // A pass never holds more than this many completed erasures in memory at once.
+    private const int Page = 100;
+
     /// <summary>
     /// Runs one pass.
     /// </summary>
     /// <param name="cancellationToken">Abandons the pass.</param>
     /// <returns>How many deliveries the pass closed, completed or failed.</returns>
     public async ValueTask<int> PublishAsync(CancellationToken cancellationToken)
+    {
+        int closed = await DueAsync(cancellationToken).ConfigureAwait(false);
+
+        if (ledger is not null)
+        {
+            await LedgeredAsync(ledger, cancellationToken).ConfigureAwait(false);
+        }
+
+        return closed;
+    }
+
+    // DR-016 AC5: an erasure completed before the ledger was registered, by hand
+    // included, is written down once. Its status, its attempts and its erasures row
+    // stand as they are; only the confirmation is recorded. A refused append leaves
+    // the erasure for the next pass, and as the refused ones stay the oldest still
+    // unwritten, the next page passes over exactly them.
+    private async ValueTask LedgeredAsync(IErasureLedger registered, CancellationToken cancellationToken)
+    {
+        var line = new ErasureLedgerSubscriber(registered);
+        int refused = 0;
+
+        while (true)
+        {
+            IReadOnlyList<Delivery> page = await outbox
+                .UnledgeredAsync(refused, Page, cancellationToken)
+                .ConfigureAwait(false);
+
+            foreach (Delivery delivery in page)
+            {
+                if (!(await HandledAsync(line, delivery.Raised(), cancellationToken).ConfigureAwait(false))
+                    .Match(() => true, _ => false))
+                {
+                    refused++;
+
+                    continue;
+                }
+
+                delivery.Confirm(ErasureLedgerSubscriber.Called);
+
+                (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                    .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+                await outbox.RecordAsync(delivery, cancellationToken).ConfigureAwait(false);
+                (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                    .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            }
+
+            if (page.Count < Page)
+            {
+                return;
+            }
+        }
+    }
+
+    private async ValueTask<int> DueAsync(CancellationToken cancellationToken)
     {
         DateTimeOffset now = time.GetUtcNow();
 

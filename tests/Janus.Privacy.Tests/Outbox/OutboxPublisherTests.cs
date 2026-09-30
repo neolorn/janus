@@ -26,6 +26,9 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
     private static readonly SubjectId Ahmed =
         new(Guid.Parse("11111111-1111-4111-8111-111111111111"));
 
+    private static readonly SubjectId Mona =
+        new(Guid.Parse("22222222-2222-4222-8222-222222222222"));
+
     private readonly OutboxStoreInMemory _outbox = new();
     private readonly ErasureStoreInMemory _erasures = new();
     private readonly List<ISubjectEventSubscriber> _subscribers = [];
@@ -383,6 +386,59 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
         Assert.Equal(1, await Publisher(_none).PublishAsync(CancellationToken.None));
         Assert.Equal(ErasureStatus.Complete, delivery.Status);
         Assert.Equal(["host"], delivery.Confirmed);
+    }
+
+    /// <summary>
+    /// DR-016 AC5: an erasure completed before the ledger was registered, whether its
+    /// subscribers confirmed it or an operator closed it by hand, is written down once
+    /// the ledger is, oldest first; its status, its attempts and its erasures row stand
+    /// as they were, a refused append leaves it for the next pass, and a later pass
+    /// writes nothing again.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task DR_016_AnErasureCompletedBeforeTheLedgerWasRegisteredIsAppendedOnceAsync()
+    {
+        _subscribers.Add(new SubscriberInMemory("host", required: true));
+
+        var confirmed = Delivery.Of(Ahmed, SubjectEventKind.ErasureRequested, Noon.AddDays(-2), reason: ErasureReason.ErasureRequest);
+        var closed = Delivery.Of(Mona, SubjectEventKind.ErasureRequested, Noon.AddDays(-3), reason: ErasureReason.MinorTakedown);
+        var row = Erasure.Begun(Ahmed, Noon.AddDays(-2), ErasureReason.ErasureRequest);
+
+        await _outbox.AddAsync(confirmed, CancellationToken.None);
+        _erasures.Add(row);
+
+        Assert.Equal(1, await Publisher(_none).PublishAsync(CancellationToken.None));
+
+        closed.Fail();
+        closed.CompleteManually();
+        await _outbox.AddAsync(closed, CancellationToken.None);
+
+        int attempts = confirmed.Attempts;
+
+        _ledger = new ErasureLedgerInMemory { Durable = false };
+
+        Assert.Equal(0, await Publisher(_none).PublishAsync(CancellationToken.None));
+        Assert.Empty(_ledger.Lines);
+        Assert.DoesNotContain("erasure-ledger", confirmed.Confirmed);
+
+        _ledger.Durable = true;
+
+        Assert.Equal(0, await Publisher(_none).PublishAsync(CancellationToken.None));
+        Assert.Equal(0, await Publisher(_none).PublishAsync(CancellationToken.None));
+
+        Assert.Equal(
+            [
+                "2026-09-17T12:00:00Z 22222222-2222-4222-8222-222222222222 minor-takedown",
+                "2026-09-18T12:00:00Z 11111111-1111-4111-8111-111111111111 erasure-request",
+            ],
+            _ledger.Lines);
+        Assert.Contains("erasure-ledger", confirmed.Confirmed);
+        Assert.Contains("erasure-ledger", closed.Confirmed);
+        Assert.Equal((ErasureStatus.Complete, attempts), (confirmed.Status, confirmed.Attempts));
+        Assert.Equal(ErasureStatus.Complete, closed.Status);
+        Assert.Equal(ErasureStatus.Complete, row.Status);
+        Assert.Equal(attempts, row.Attempts);
     }
 
     private async ValueTask<Delivery> RaisedAsync(SubjectEventKind kind)
