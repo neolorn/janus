@@ -242,11 +242,11 @@ internal sealed class SignInLinks(
         HeldIdentifiers standing = await identifiers.HeldAsync(held.Subject, cancellationToken)
             .ConfigureAwait(false);
 
-        // An address the account has given up since is judged on nothing.
+        // REG-IDENT-006 AC6: what went to an address the account has given up since
+        // signs nothing in.
         return standing.Find(email) is HeldIdentifier sent
-            && EmailAddress.TryParse(sent.Canonical, out EmailAddress address)
-                ? await domainLock.RefusedAsync(held.Subject, address, cancellationToken).ConfigureAwait(false)
-                : null;
+            ? await domainLock.RefusedAsync(held.Subject, sent.Canonical, cancellationToken).ConfigureAwait(false)
+            : Error.From(ErrorCodes.FactorRejected);
     }
 
     /// <summary>
@@ -453,8 +453,7 @@ internal sealed class SignInLinks(
         // An address a domain lock refuses is sent nothing, as a factor the policy has
         // not enabled is (REG-DOM-001, AUTH-ABUSE-003).
         if (email is not null
-            && EmailAddress.TryParse(channel.Canonical, out EmailAddress address)
-            && await domainLock.RefusedAsync(subject, address, cancellationToken).ConfigureAwait(false)
+            && await domainLock.RefusedAsync(subject, channel.Canonical, cancellationToken).ConfigureAwait(false)
                 is Error locked)
         {
             return locked.Code == ErrorCodes.IdentifierDomainNotAllowed

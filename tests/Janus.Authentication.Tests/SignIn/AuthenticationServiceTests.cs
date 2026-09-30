@@ -40,6 +40,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     private const string Fresh = "203.0.113.9";
     private const string Address = "person@example.test";
     private const string Elsewhere = "nobody@example.test";
+    private const string Second = "second@example.test";
     private const string Number = "+441632960011";
     private const string Secret = "orangemarmaladeandtoast";
 
@@ -1077,6 +1078,90 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-006 AC6 and CONV-LOG-005 AC1: a sign-in link sent to an address the
+    /// account has removed since does not sign in; the press is refused
+    /// <c>auth.factor.rejected</c>, recorded against the account and counted.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_006_ALinkSentBeforeTheAddressWasRemovedDoesNotSignInAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        IdentifierId second = _identifiers.Verified(subject, IdentifierKind.Email, Second);
+
+        Enables(Factor.EmailLink);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+        var browser = OpaqueToken.Draw(_randomness);
+
+        _ = await Service.SendLinkAsync(Second, Language, Source, browser.Value, TestContext.Current.CancellationToken);
+
+        string token = Token();
+
+        await RemovedAsync(subject, second);
+
+        Result<SignInLanding> pressed = await Service.LandAsync(
+            began.Challenge,
+            browser.Value,
+            token,
+            Factor.EmailLink,
+            press: true,
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.FactorRejected, Code(pressed));
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.EmailLink)], _audit.Failed);
+        Assert.NotEmpty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 AC6 and CONV-LOG-005 AC1: an email code sent to an address the
+    /// account has removed since does not sign in, and is refused and recorded as a
+    /// wrong factor is.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_006_AC6_ACodeSentBeforeTheAddressWasRemovedDoesNotSignInAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        IdentifierId second = _identifiers.Verified(subject, IdentifierKind.Email, Second);
+
+        Enables(Factor.EmailCode);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await Service.SendCodeAsync(Second, Language, Source, TestContext.Current.CancellationToken);
+
+        await RemovedAsync(subject, second);
+
+        Assert.Equal(ErrorCodes.FactorRejected, Refused(await PresentAsync(began.Challenge, Factor.EmailCode, Code())));
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.EmailCode)], _audit.Failed);
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 AC6 and CONV-LOG-005 AC1: a sign-in opened with an address the
+    /// account has removed since does not sign in, whatever factor is then presented;
+    /// the factor is refused <c>auth.factor.rejected</c>, recorded and counted.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_006_AC6_ASignInOpenedWithAnAddressSinceRemovedDoesNotSignInAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        IdentifierId second = _identifiers.Verified(subject, IdentifierKind.Email, Second);
+
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Second);
+
+        await RemovedAsync(subject, second);
+
+        Assert.Equal(ErrorCodes.FactorRejected, Refused(await PresentAsync(began.Challenge, Factor.Password, Secret)));
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.Password)], _audit.Failed);
+        Assert.NotEmpty(_throttle.Counted);
+    }
+
+    /// <summary>
     /// AUTH-FACT-004 AC6: an email sign-in code is an authentication code, sent as
     /// <c>sign-in-code</c>, living <c>code.signin.lifetime</c> and spent after
     /// <c>code.signin.attempts</c> wrong tries, whatever the verification code's keys hold.
@@ -1447,6 +1532,16 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
     // The account has been seen on this browser, so the new-device check is not what
     // the sign-in under test is answering (AUTH-FACT-016).
+    // REG-IDENT-006: the account gives the address up, as a removal does.
+    private ValueTask RemovedAsync(SubjectId subject, IdentifierId identifier) =>
+        _identifiers.GiveUpAsync(
+            subject,
+            identifier,
+            _clock.GetUtcNow(),
+            _clock.GetUtcNow() + TimeSpan.FromDays(1),
+            [1],
+            TestContext.Current.CancellationToken);
+
     private void Remembered(SubjectId subject) =>
         _configuration.Set(Settings.DeviceVerificationEnabled, false);
 

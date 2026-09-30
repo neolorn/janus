@@ -1277,6 +1277,10 @@ against the public contract of LIB-API-001.
   factor and `/auth/factor` refuses a `linkToken` under any other factor
   `api.request.malformed` naming `factor`. A throttled provider return carries
   `retryAt` beside `error`.
+- A sign-in link or email code sent to an address the account has removed since, and a
+  sign-in opened with such an address, no longer signs in: the factor is refused
+  `auth.factor.rejected`, recorded and counted. A held address that does not parse is
+  judged by a domain lock as a domain that does not read, so every lock refuses it.
 - A value the library reads from text under a rule, left unset (such as its `default`),
   throws `InvalidOperationException` where its text is read, so no such value reaches a
   row.

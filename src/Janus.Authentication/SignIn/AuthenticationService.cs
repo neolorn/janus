@@ -450,11 +450,13 @@ internal sealed class AuthenticationService(
                 ?? Error.From(ErrorCodes.FactorRejected));
         }
 
-        Error? refusal = null;
+        Error? refusal = await GivenUpAsync(open, subject, cancellationToken).ConfigureAwait(false)
+            ? Error.From(ErrorCodes.FactorRejected)
+            : null;
 
-        bool changeRequired = (await AcceptsAsync(open, subject, presented, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, error => Withheld<bool>(error, ref refusal));
+        bool changeRequired = refusal is null
+            && (await AcceptsAsync(open, subject, presented, cancellationToken).ConfigureAwait(false))
+                .Match(value => value, error => Withheld<bool>(error, ref refusal));
 
         if (refusal is not null)
         {
@@ -756,18 +758,28 @@ internal sealed class AuthenticationService(
             return Result.Failure<LandedSignIn>(delayed);
         }
 
-        // CONV-LOG-005: a pressed link that lands on no sign-in of its account is a
-        // refused factor, recorded and counted as one.
-        if (open is null || open.Subject != held.Subject)
+        // CONV-LOG-005: a pressed link that lands on no sign-in of its account, or on
+        // one opened with an address the account has given up since, is a refused
+        // factor, recorded and counted as one (REG-IDENT-006 AC6).
+        if (open is null
+            || open.Subject != held.Subject
+            || await GivenUpAsync(open, held.Subject, cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure<LandedSignIn>(
                 await CountedAsync(attempt, held.Factor, held.Subject, null, cancellationToken).ConfigureAwait(false)
                 ?? Error.From(ErrorCodes.FactorRejected));
         }
 
+        // A link sent to an address given up since is refused and counted as one that
+        // lands on no sign-in; a lock's refusal is only told (REG-IDENT-006 AC6).
         if (await links.LockedAsync(held, cancellationToken).ConfigureAwait(false) is Error locked)
         {
-            return Result.Failure<LandedSignIn>(locked);
+            return Result.Failure<LandedSignIn>(
+                locked.Code == ErrorCodes.FactorRejected
+                    ? await CountedAsync(attempt, held.Factor, held.Subject, null, cancellationToken)
+                        .ConfigureAwait(false)
+                        ?? locked
+                    : locked);
         }
 
         open.Accepted(held.Factor);
@@ -1252,16 +1264,18 @@ internal sealed class AuthenticationService(
         HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        // An address the account gave up while the sign-in was open is no longer one
-        // a lock can be judged on.
-        if (held.Find(email) is not HeldIdentifier opened
-            || !EmailAddress.TryParse(opened.Canonical, out EmailAddress address))
-        {
-            return null;
-        }
-
-        return await domainLock.RefusedAsync(subject, address, cancellationToken).ConfigureAwait(false);
+        // REG-IDENT-006 AC6: an address the account gave up while the sign-in was open
+        // signs nothing in.
+        return held.Find(email) is HeldIdentifier opened
+            ? await domainLock.RefusedAsync(subject, opened.Canonical, cancellationToken).ConfigureAwait(false)
+            : Error.From(ErrorCodes.FactorRejected);
     }
+
+    // REG-IDENT-006 AC6: whether the sign-in was opened with an address the account
+    // has given up since, which no factor presented to it signs in with.
+    private async ValueTask<bool> GivenUpAsync(Challenge open, SubjectId subject, CancellationToken cancellationToken) =>
+        open.Email is IdentifierId email
+        && (await identifiers.HeldAsync(subject, cancellationToken).ConfigureAwait(false)).Find(email) is null;
 
     // AUTH-FACT-002b: the entry rides the number the account would be texted at, so
     // it is that number the signal is asked about.
