@@ -113,7 +113,7 @@ public sealed class MaintenanceRecordsTests : IAsyncDisposable
         Licence once = Licence(Noon.AddYears(3));
 
         Assert.Equal(
-            ErrorCodes.RequestMalformed,
+            ErrorCodes.RequestInvalid,
             Refusal(await Records.ReplaceLicencesAsync(
                 AccessContext.Of(_compliance),
                 [once, once with { Name = "Restated" }],
@@ -156,7 +156,7 @@ public sealed class MaintenanceRecordsTests : IAsyncDisposable
     public async Task OPS_MAINT_001_AC3_ATaskDatedAfterNowIsRefusedAsync()
     {
         Assert.Equal(
-            ErrorCodes.RequestMalformed,
+            ErrorCodes.RequestInvalid,
             Refusal(await Records.RecordAsync(
                 AccessContext.Of(_compliance),
                 MaintenanceTask.RiskTriggerReview,

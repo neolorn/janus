@@ -64,10 +64,10 @@ internal sealed class MaintenanceRecords(
         }
 
         // Two entries under one identifier are one record stated twice, and which of
-        // them stands is not the library's to choose.
+        // them stands is not the library's to choose (D-166, 323).
         if (licences.DistinctBy(licence => licence.Id).Count() != licences.Count)
         {
-            return Result.Failure(Malformed("licences"));
+            return Result.Failure(Invalid("licences"));
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -133,10 +133,10 @@ internal sealed class MaintenanceRecords(
         DateTimeOffset now = time.GetUtcNow();
 
         // A task is recorded once it has been performed; a date ahead of the clock
-        // would show a review as made that has not been.
+        // would show a review as made that has not been (D-166, 323).
         if (performedAt > now)
         {
-            return Result.Failure<MaintenanceEntry>(Malformed("performedAt"));
+            return Result.Failure<MaintenanceEntry>(Invalid("performedAt"));
         }
 
         var entry = new MaintenanceEntry(MaintenanceEntryId.Of(now), task, performedAt, actor, note);
@@ -158,6 +158,7 @@ internal sealed class MaintenanceRecords(
         return Result.Success(entry);
     }
 
-    private static Error Malformed(string member) =>
-        Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
+    // A well-formed request refused on what it means is invalid at its member (X5).
+    private static Error Invalid(string member) =>
+        Error.From(ErrorCodes.RequestInvalid, "member", JsonSerializer.SerializeToElement(member));
 }

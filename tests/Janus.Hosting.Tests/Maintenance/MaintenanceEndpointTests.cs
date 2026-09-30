@@ -143,6 +143,48 @@ public sealed class MaintenanceEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-MAINT-001 (D-166, 323): two licences under one identifier and a task dated
+    /// after now are well formed and refused on what they mean, each invalid at its
+    /// member, and nothing is stored.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_MAINT_001_ARequestRefusedOnItsMeaningIsInvalidAtItsMemberAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+        DateTimeOffset now = _deployment.Clock.GetUtcNow();
+
+        Answer restated = await browser.SendAsync(
+            "PUT",
+            "/admin/compliance/licences",
+            (
+                "licences",
+                new object[]
+                {
+                    new { id = Operating, kind = "licence", name = "Operating licence", expiresAt = now.AddYears(2) },
+                    new { id = Operating, kind = "licence", name = "Restated", expiresAt = now.AddYears(3) },
+                }));
+
+        Answer ahead = await browser.SendAsync(
+            "POST",
+            "/admin/compliance/maintenance",
+            ("task", "approver-review"),
+            ("performedAt", now.AddDays(1)));
+
+        foreach ((Answer answer, string member) in new[] { (restated, "licences"), (ahead, "performedAt") })
+        {
+            JsonElement body = answer.Json();
+
+            Assert.Equal(StatusCodes.Status422UnprocessableEntity, answer.Status);
+            Assert.Equal("api.request.invalid", body.GetProperty("code").GetString());
+            Assert.Equal(member, body.GetProperty("details").GetProperty("member").GetString());
+        }
+
+        Assert.Empty(await _deployment.Maintenance.LicencesAsync(TestContext.Current.CancellationToken));
+        Assert.Empty(_deployment.Maintenance.Log);
+    }
+
+    /// <summary>
     /// OPS-MAINT-001 and 10 section 2.1: every route answers to
     /// <c>compliance:manage</c>, so a signed-in account without it is refused each.
     /// </summary>
