@@ -87,6 +87,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     private readonly ConfigurationInMemory _configuration = new();
     private readonly NotificationHandlerInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
+    private readonly ThrottleLedgerInMemory _throttle = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
@@ -143,6 +144,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 _clock,
                 _randomness),
             new DeviceService(_devices, _configuration, _work, _events, _clock, _randomness),
+            new ThrottleService(_configuration, _throttle, _work, _events, _clock),
             _consents,
             _configuration,
             _work,
@@ -483,6 +485,8 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
 
         for (int attempt = 0; attempt < Settings.CodeVerificationAttempts.Default + 1; attempt++)
         {
+            Waited();
+
             Assert.Equal(
                 ErrorCodes.CodeInvalid,
                 Refused(await Service.VerifyAsync(
@@ -491,6 +495,8 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                     "000000",
                     TestContext.Current.CancellationToken)));
         }
+
+        Waited();
 
         Assert.Equal(
             ErrorCodes.CodeInvalid,
@@ -513,6 +519,43 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             staged,
             Code(session, IdentifierKind.Email),
             TestContext.Current.CancellationToken));
+
+        Assert.True(Identity(session, IdentifierKind.Email).IsVerified);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001 and REG-SESS-003 AC6: wrong registration codes are counted by the
+    /// throttle against the source and the identifier, so while the delay stands the
+    /// right code and a further ask are refused with the instant it lifts, and once it
+    /// lifts the same code verifies.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_WrongRegistrationCodesAreHeldByTheDelayAsync()
+    {
+        RegistrationSessionId session = await AwaitingAsync();
+        IdentifierId staged = Identity(session, IdentifierKind.Email).Id;
+        string right = Code(session, IdentifierKind.Email);
+        string wrong = string.Equals(right, "000000", StringComparison.Ordinal) ? "111111" : "000000";
+
+        for (int attempt = 0; attempt < Settings.AbuseThrottleThreshold.Default; attempt++)
+        {
+            Assert.Equal(
+                ErrorCodes.CodeInvalid,
+                Refused(await Service.VerifyAsync(session, staged, wrong, TestContext.Current.CancellationToken)));
+        }
+
+        Error held = Failed(await Service.VerifyAsync(session, staged, right, TestContext.Current.CancellationToken));
+        Error asked = Failed(await Service.ChangeAsync(session, staged, Address, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.Throttled, held.Code);
+        Assert.Equal(ErrorCodes.Throttled, asked.Code);
+        Assert.Equal(
+            Noon + Settings.AbuseThrottleDelayInitial.Default,
+            held.Details["retryAt"].GetDateTimeOffset());
+
+        _clock.Advance(Settings.AbuseThrottleDelayInitial.Default);
+
+        _ = Ok(await Service.VerifyAsync(session, staged, right, TestContext.Current.CancellationToken));
 
         Assert.True(Identity(session, IdentifierKind.Email).IsVerified);
     }
@@ -1931,6 +1974,13 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     // that registers twice waits as a person would (AUTH-ABUSE-004).
     private void Later() => _clock.Advance(TimeSpan.FromMinutes(2));
 
+    // Long enough for any delay the wrong tries so far have earned to lapse and short of
+    // the code's lifetime, so what a test reaches is the code's own cap (AUTH-ABUSE-001).
+    private void Waited() => _clock.Advance(TimeSpan.FromSeconds(30));
+
+    private static Error Failed<TValue>(Result<TValue> outcome) =>
+        outcome.Match(_ => throw new Xunit.Sdk.XunitException("The step was admitted."), error => error);
+
     private static TValue Ok<TValue>(Result<TValue> outcome) =>
         outcome.Match(value => value, Throw<TValue>);
 
@@ -2022,6 +2072,8 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
 
         for (int attempt = 0; attempt < 6; attempt++)
         {
+            Waited();
+
             Assert.Equal(
                 ErrorCodes.CodeInvalid,
                 Refused(await Service.VerifyAsync(
@@ -2032,6 +2084,8 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         }
 
         Assert.True(Identity(session, IdentifierKind.Email).CodeSpent);
+
+        Waited();
 
         Assert.Equal(
             ErrorCodes.CodeInvalid,

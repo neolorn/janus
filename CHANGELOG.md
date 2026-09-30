@@ -1267,6 +1267,9 @@ against the public contract of LIB-API-001.
   ceiling 10), the first living the new key `code.signin.lifetime` (10 minutes, ceiling
   30) and sent by mail alone as the new message kind `sign-in-code`, the second living
   as long as its link.
+- A registration is held to the progressive delay as a sign-in is: a refused code is
+  counted against the session's source and the identifier, and while the delay stands a
+  code or a further ask for a code is refused `auth.throttled` with `retryAt`.
 - A value the library reads from text under a rule, left unset (such as its `default`),
   throws `InvalidOperationException` where its text is read, so no such value reaches a
   row.
