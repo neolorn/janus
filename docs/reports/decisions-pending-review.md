@@ -16770,6 +16770,8 @@ could name these as failed authentication.
 
 *Chapter text that should change.* INT-HOST-002 AC1 could say that startup refuses a consent-based purpose named for the hosting or its transfer. Chapter 10's AUTHZ-MODEL-003 startup refusals could carry the row proposed above.
 
+**Superseded by D-166.**
+
 ---
 
 ## 407. Every change to a runtime setting carries a reason, and the rule is the operation's

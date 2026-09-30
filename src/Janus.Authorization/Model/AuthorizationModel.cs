@@ -36,9 +36,11 @@ internal sealed class AuthorizationModel
 
     // INT-HOST-002, PRIV-CONS-010: the hosting and its transfer outside the country
     // rest on the regulator's permit, since a withdrawal would leave data that cannot
-    // lawfully be hosted, so no purpose by these names may rest on consent.
+    // lawfully be hosted, so no purpose by these names may rest on consent. A name is
+    // compared lowered and with every character that is not a letter or a digit taken
+    // out, so no spacing, case or punctuation carries one of them past the refusal.
     private static readonly string[] Hosting =
-        ["hosting", "transfer", "hosting-transfer", "cross-border-transfer"];
+        ["hosting", "transfer", "hostingtransfer", "crossbordertransfer"];
 
     private readonly Dictionary<string, LawfulBasisDeclaration> _bases;
     private readonly Dictionary<Type, ResourceTypeDeclaration> _entities;
@@ -675,10 +677,10 @@ internal sealed class AuthorizationModel
                     + ", which the model does not declare as a lawful basis");
             }
 
-            if (basis.IsConsent && Hosting.Contains(purpose.Name, StringComparer.OrdinalIgnoreCase))
+            if (basis.IsConsent && Hosting.Contains(Compared(purpose.Name), StringComparer.Ordinal))
             {
                 throw Refused(
-                    ErrorCodes.StartupDeclarationMissing,
+                    ErrorCodes.StartupHostingConsent,
                     "key",
                     type.Name + "." + purpose.Name,
                     "the hosting and its transfer rest on the regulator's permit and never "
@@ -734,6 +736,9 @@ internal sealed class AuthorizationModel
             }
         }
     }
+
+    private static string Compared(string name) =>
+        string.Concat(name.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant));
 
     // PRIV-RIGHT-005a: one record has one data subject, so the encrypted fields of a
     // type name one column between them; a type naming two names no data subject the

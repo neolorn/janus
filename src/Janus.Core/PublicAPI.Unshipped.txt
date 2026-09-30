@@ -3905,6 +3905,7 @@ static Janus.Core.ErrorCodes.StartupDeclarationInvalid.get -> Janus.Core.ErrorCo
 static Janus.Core.ErrorCodes.StartupDeclarationMissing.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupGoverningLanguage.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupLabelLimit.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.StartupHostingConsent.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupMissingAssessment.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupNoOrganizationPath.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupPreferenceDeclaration.get -> Janus.Core.ErrorCode

@@ -1229,8 +1229,11 @@ against the public contract of LIB-API-001.
   against the sending restrictions as its message would be, so it is answered as a sent
   one is, whether or not an account holds the address.
 - Startup refuses a purpose named for the hosting or its cross-border transfer
-  (`hosting`, `transfer`, `hosting-transfer`, `cross-border-transfer`) that rests on a
-  consent basis, with `model.startup.declarationmissing`.
+  (`hosting`, `transfer`, `hosting-transfer`, `cross-border-transfer`, compared ignoring
+  case and every character other than a letter or a digit, so `Cross Border Transfer`
+  and `hosting_transfer` are among them) that rests on a consent basis, with the new
+  code `model.purpose.hostingconsent` (`ErrorCodes.StartupHostingConsent`),
+  `details.key` naming `<type>.<purpose>`.
 - A runtime setting changed in process is refused without a reason,
   `config.change.reasonrequired` naming the key, whichever way it moves, as over HTTP;
   an edit of the named restriction set, a tightening included, is refused the same way,

@@ -49,7 +49,7 @@ public sealed class PrivacyContractTests
     [Fact]
     public void PRIV_CONS_010_AC1_NoLibrarySourceNamesATransferPurpose()
     {
-        string[] transfers = ["cross-border-transfer", "hosting", "hosting-transfer", "transfer"];
+        string[] transfers = ["crossbordertransfer", "hosting", "hostingtransfer", "transfer"];
 
         Assert.Equal(["AuthorizationModel.cs"], Naming(transfers));
     }
