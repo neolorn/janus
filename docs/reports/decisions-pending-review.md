@@ -13704,8 +13704,6 @@ what its record holds. INF-HOST-003 and chapter 07 could say the maintenance cre
 a whole database connection handed to `AddJanus` at startup, and that a deployment
 without it does not start. Chapter 10 could list `ops.auditpartitions.maintained`.
 
-**Superseded by D-166.**
-
 ---
 
 ## 337. How a blocklist fallback is raised
