@@ -8,6 +8,7 @@ using Janus.Identity.Audit;
 using Janus.Storage.Authorization.Gate;
 using Janus.Storage.Identity.Audit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Janus.Storage.Tests.Authorization;
@@ -82,9 +83,15 @@ public sealed class ExportStoreTests(DatabaseFixture database)
         var documents = ResourceType.Parse("document");
         var nightly = SystemPrincipal.ForOrganization("nightly-report", "the nightly report", organization);
 
-        await using (StoreContext writing = database.Context())
+        var services = new ServiceCollection();
+
+        services.AddStorageArea(database.ConnectionString);
+
+        await using (ServiceProvider provider = services.BuildServiceProvider(
+            new ServiceProviderOptions { ValidateScopes = true }))
+        await using (AsyncServiceScope scope = provider.CreateAsyncScope())
         {
-            var audit = new AccessAudit(new DataConnections(writing));
+            IAccessAudit audit = scope.ServiceProvider.GetRequiredService<IAccessAudit>();
 
             await audit.RecordAsync(
                 new ExportedAccess(

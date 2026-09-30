@@ -10,6 +10,7 @@ using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sessions;
+using Janus.Authorization.Gate;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
@@ -447,6 +448,44 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         for (int each = 0; each < Settings.AlertingDenialsThreshold.Default; each++)
         {
             Assert.False(await ChecksAsync(nested.Account, nested.Record));
+        }
+
+        Assert.Equal(0, await SpikesAsync(nested.Account));
+
+        Assert.False(await ChecksAsync(nested.Account, nested.Record));
+
+        Assert.Equal(1, await SpikesAsync(nested.Account));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-004, AUTHZ-CONCEAL-004 AC4, D-166: a refusal made inside a transaction
+    /// the caller rolls back is still recorded, resolves by its identifier, and counts
+    /// toward <c>alerting.denials.threshold</c>.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_004_AC4_ADenialInsideATransactionThatRollsBackIsStillRecordedAndCountedAsync()
+    {
+        Nested nested = await NestAsync();
+        var refused = new List<AuditRecordId>();
+
+        for (int each = 0; each < Settings.AlertingDenialsThreshold.Default; each++)
+        {
+            refused.Add(await RefusedInRolledBackWorkAsync(nested));
+        }
+
+        Assert.Equal(refused.Count, await DenialsRecordedAsync(nested.Account));
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            IAccessAudit audit = scope.ServiceProvider.GetRequiredService<IAccessAudit>();
+
+            foreach (AuditRecordId correlation in refused)
+            {
+                DeniedAccess? found = await audit.FindAsync(correlation, TestContext.Current.CancellationToken);
+
+                Assert.Equal(nested.Account, found?.Acting);
+            }
         }
 
         Assert.Equal(0, await SpikesAsync(nested.Account));
@@ -1630,6 +1669,31 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             WHERE condition = 'denial-spike' AND idempotency_key LIKE @key
             """,
             new { key = Alerts.Key(AlertCondition.DenialSpike, scope: null, account?.ToString()) + "@%" });
+    }
+
+    // A refusal inside a unit of work the caller then abandons, which rolls it back.
+    private async Task<AuditRecordId> RefusedInRolledBackWorkAsync(Nested nested)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().BeginAsync(cancellationToken);
+
+        Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+            .RequireAsync(
+                AccessContext.Of(nested.Account),
+                HostPermissions.Read,
+                nested.Record,
+                Sources(reading),
+                cancellationToken);
+
+        Error refusal = outcome.Match(
+            () => throw new Xunit.Sdk.XunitException("The check was not refused."),
+            error => error);
+
+        return new AuditRecordId(refusal.Details["correlation"].GetGuid());
     }
 
     private async Task<bool> ChecksAsync(

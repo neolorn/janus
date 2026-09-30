@@ -9,6 +9,7 @@ using Dapper;
 using Janus.Authorization.Gate;
 using Janus.Core;
 using Janus.Storage.Identity.Audit;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Janus.Storage.Authorization.Gate;
 
@@ -16,13 +17,15 @@ namespace Janus.Storage.Authorization.Gate;
 /// The refusals and the exports the gate records, over the <c>audit_records</c> table.
 /// </summary>
 /// <param name="connections">Where the statements take their connection from.</param>
+/// <param name="scopes">Where the scope a refusal is recorded in comes from.</param>
 /// <remarks>
 /// Implements AUTHZ-CONCEAL-004, AUTHZ-GATE-004, OPS-ALERT-006, CONV-LOG-005, CONV-LOG-006
-/// and CONV-DESIGN-003. The record is written through the operation's own connection, so a
-/// refusal on a path that opened no transaction stands on its own and one inside a
-/// transaction is part of it. Nothing here changes or removes a row.
+/// and CONV-DESIGN-003. A refusal is written in a scope of its own, outside any
+/// transaction the caller holds open, and committed as it is written, so a rollback of
+/// the caller's work leaves it standing (D-166); an export is the action's own record
+/// and stays in its transaction. Nothing here changes or removes a row.
 /// </remarks>
-internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
+internal sealed class AccessAudit(DataConnections connections, IServiceScopeFactory scopes) : IAccessAudit
 {
     private const string Permission = "permission";
     private const string ResourceType = "resourceType";
@@ -93,26 +96,36 @@ internal sealed class AccessAudit(DataConnections connections) : IAccessAudit
     {
         ArgumentNullException.ThrowIfNull(denial);
 
-        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+        // AUTHZ-CONCEAL-004 AC4, D-166: the scope's connection holds no transaction, so
+        // the row is committed by the statement that writes it.
+        AsyncServiceScope recording = scopes.CreateAsyncScope();
 
-        await ambient.Connection
-            .ExecuteAsync(new CommandDefinition(
-                Append,
-                new
-                {
-                    id = denial.Correlation.Value,
-                    category = VocabularyConverter<AuditCategory>.Write(AuditCategory.Security),
-                    at = denial.At.ToUniversalTime(),
-                    action = Denied.ToString(),
-                    acting = denial.Acting?.Value,
-                    effective = denial.Effective?.Value,
-                    breakGlassReason = denial.BreakGlassReason,
-                    organization = denial.Organization?.Value,
-                    details = Written(denial),
-                },
-                ambient.Transaction,
-                cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+        await using (recording.ConfigureAwait(false))
+        {
+            AmbientConnection outside = await recording.ServiceProvider
+                .GetRequiredService<DataConnections>()
+                .UseAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            await outside.Connection
+                .ExecuteAsync(new CommandDefinition(
+                    Append,
+                    new
+                    {
+                        id = denial.Correlation.Value,
+                        category = VocabularyConverter<AuditCategory>.Write(AuditCategory.Security),
+                        at = denial.At.ToUniversalTime(),
+                        action = Denied.ToString(),
+                        acting = denial.Acting?.Value,
+                        effective = denial.Effective?.Value,
+                        breakGlassReason = denial.BreakGlassReason,
+                        organization = denial.Organization?.Value,
+                        details = Written(denial),
+                    },
+                    outside.Transaction,
+                    cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc/>

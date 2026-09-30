@@ -1470,6 +1470,9 @@ against the public contract of LIB-API-001.
 - A refusal is recorded with the grant that decided it, where one did, so its correlation
   identifier resolves to what the gate explained at the time: a deny grant is named with
   the container it sat on, rather than the refusal reading as one no grant matched.
+- A refusal is recorded outside any transaction the caller holds open and committed at
+  once, so a rollback of the caller's work leaves it standing: it still resolves by its
+  correlation identifier and counts toward `alerting.denials.threshold`.
 - A refusal the library answers is logged under the correlation identifier the answer
   carries, by its code. A fault is logged at error with the code and the structured
   context the answer withholds, so a `system.fault` is traced to its cause by that
