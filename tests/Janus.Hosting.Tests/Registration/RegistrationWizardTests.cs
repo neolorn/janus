@@ -203,6 +203,26 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-SESS-003, REG-SESS-002 AC1: a confirmation while the staged address is not
+    /// yet verified is a step whose predecessor is incomplete, answered 409 over the
+    /// wire, and the session stays at the step it was at.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_SESS_003_AConfirmationBeforeTheAddressIsVerifiedIsAConflictAsync()
+    {
+        Browser browser = await Flow.AwaitingAsync(_deployment);
+
+        Answer before = await browser.SendAsync("GET", "/register");
+
+        Answer early = await browser.SendAsync("POST", "/register/confirm");
+
+        Assert.Equal(StatusCodes.Status409Conflict, early.Status);
+        Assert.Equal(ErrorCodes.RegistrationIncomplete.ToString(), early.Text("code"));
+        Assert.Equal(before.Body, (await browser.SendAsync("GET", "/register")).Body);
+    }
+
+    /// <summary>
     /// FE-REG-005 AC2: an unlocked identifier is changed and loses its verification
     /// with the value; a locked one is not changed at all.
     /// </summary>

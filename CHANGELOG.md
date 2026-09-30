@@ -1753,10 +1753,11 @@ against the public contract of LIB-API-001.
   pre-authentication session, and the registration it starts is bound to that session
   and reachable from no other browser: the age screen, the email and phone steps, the
   confirm screen, the security step and the terms step, each refusing to run before the
-  one before it has finished. An address or a number that already belongs to somebody
-  else is answered exactly as a fresh one is, and its holder is told once that somebody
-  tried. A registration that is abandoned leaves nothing behind. A browser that already
-  holds a session and asks to register is refused with 409
+  one before it has finished with 409 `identity.registration.incomplete`, a confirmation
+  while a staged identifier is unverified included. An address or a number that already
+  belongs to somebody else is answered exactly as a fresh one is, and its holder is told
+  once that somebody tried. A registration that is abandoned leaves nothing behind. A
+  browser that already holds a session and asks to register is refused with 409
   `identity.registration.signedin`; nothing is staged for it, and the frontend navigates
   to the account application.
 - An identifier is verified by the code in the message or by pressing the link. The

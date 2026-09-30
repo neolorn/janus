@@ -412,9 +412,10 @@ public static class ErrorCodes
     /// <summary>
     /// The step the request is for is not the step the registration has reached: its
     /// predecessor is incomplete, or it is complete already. Read the session's state
-    /// and answer the step it names.
+    /// and answer the step it names. A confirmation while a staged identifier is
+    /// unverified is such a step.
     /// </summary>
-    /// <remarks>Implements REG-SESS-002, REG-SESS-004, chapter 10 section 1.1.</remarks>
+    /// <remarks>Implements REG-SESS-002, REG-SESS-003, REG-SESS-004, chapter 10 section 1.1.</remarks>
     public static ErrorCode RegistrationIncomplete { get; } = ErrorCode.Parse("identity.registration.incomplete");
 
     /// <summary>

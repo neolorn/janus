@@ -102,6 +102,7 @@ internal static class ApiStatus
         [ErrorCodes.TakedownActive] = StatusCodes.Status409Conflict,
         [ErrorCodes.AccountAdministrativelySuspended] = StatusCodes.Status409Conflict,
         [ErrorCodes.RegistrationSignedIn] = StatusCodes.Status409Conflict,
+        [ErrorCodes.RegistrationIncomplete] = StatusCodes.Status409Conflict,
         [ErrorCodes.NoticeUnpublished] = StatusCodes.Status409Conflict,
         [ErrorCodes.InvitationMailboxHeld] = StatusCodes.Status409Conflict,
 
@@ -120,7 +121,6 @@ internal static class ApiStatus
         [ErrorCodes.ProfileUnderage] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PhotoInvalid] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PhotoTooLarge] = StatusCodes.Status422UnprocessableEntity,
-        [ErrorCodes.RegistrationIncomplete] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.UsernameInvalid] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PreferenceUndeclared] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PreferenceWrongType] = StatusCodes.Status422UnprocessableEntity,
