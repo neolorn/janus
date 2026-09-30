@@ -218,8 +218,9 @@ against the public contract of LIB-API-001.
   current, keep the previous one, restart the application on it, and pipe the document
   to the command. It computes every stored fingerprint again from the value beside it,
   resumes where it stopped, and prints the new version's escrow copy. Once the copy is
-  sealed, `rotate-fingerprint-key --sealed` retires the previous versions; it refuses
-  while a username held after an erasure, or an address an erased account gave up, is
+  sealed, `rotate-fingerprint-key --sealed` retires the previous versions and prints
+  `keepUntil` as `rotate-kek` does; it refuses with `model.rotation.notready` while a
+  username held after an erasure, or an address an erased account gave up, is
   still reserved under one of them. Retirement forgets the throttle and sending counts
   kept under a previous version, so any of those not touched since the new version
   became current start again from nothing. A social sign-in link also holds the
@@ -246,8 +247,12 @@ against the public contract of LIB-API-001.
   data key among them, writing a key back only where it still holds what was read,
   and touches no other table; it resumes where it stopped when run again, and prints
   the new version's escrow copy. Once the copy is sealed,
-  `rotate-kek --sealed` retires the previous versions and names them for removal from
-  the secrets manager; it refuses while anything is still wrapped under them. Each step
+  `rotate-kek --sealed` retires the previous versions: they leave the application's key
+  document at once, and the envelope and the secrets manager after `keepUntil`, the date
+  it prints, which is the rotation's completion and `backup.retention` (the default, or a
+  longer one named with `--retention`). It refuses with `model.rotation.notready` while no
+  rotation awaits a seal or anything is still wrapped under them (`details.pending`
+  counts it). Each step
   is audited under the `rotate-kek` principal. Refresh tokens issued before the rotation
   stop reading once the previous version is removed.
 - A command-line application stands a fresh deployment up with `bootstrap`. It takes the

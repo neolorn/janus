@@ -236,22 +236,12 @@ internal sealed class KeyRotation(
     private static Error KeysUnavailable() =>
         Error.From(ErrorCodes.StartupSecretUnavailable, "key", JsonSerializer.SerializeToElement("keyEncryptionKeys"));
 
-    // The seal named where the rotation cannot take it, with the count of values found
+    // OPS-SEC-003 AC4: the seal refused as not ready, with the count of values found
     // under a previous version where that is why.
-    private static Error SealRefused(int? pending)
-    {
-        var details = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
-        {
-            ["member"] = JsonSerializer.SerializeToElement("sealed"),
-        };
-
-        if (pending is int count)
-        {
-            details["pending"] = JsonSerializer.SerializeToElement(count);
-        }
-
-        return new Error(ErrorCodes.RequestMalformed, details);
-    }
+    private static Error SealRefused(int? pending) =>
+        pending is int count
+            ? Error.From(ErrorCodes.RotationNotReady, "pending", JsonSerializer.SerializeToElement(count))
+            : Error.From(ErrorCodes.RotationNotReady);
 
     // The ordered pass: the subject-key rows in order after the last one reached, a batch to a
     // transaction, each committing with the point it reached.

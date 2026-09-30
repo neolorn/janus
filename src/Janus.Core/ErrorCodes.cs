@@ -190,6 +190,15 @@ public static class ErrorCodes
     public static ErrorCode StartupSchemaMismatch { get; } = ErrorCode.Parse("model.startup.schemamismatch");
 
     /// <summary>
+    /// A key rotation's seal was confirmed where no rotation of that kind awaits one,
+    /// where the latest has retired, or while values stand under a previous version;
+    /// the details count them under <c>pending</c>. Finish the rotation, or wait until
+    /// what stands under the previous version has lapsed, and confirm again.
+    /// </summary>
+    /// <remarks>Implements OPS-SEC-003, chapter 10 section 1.5.</remarks>
+    public static ErrorCode RotationNotReady { get; } = ErrorCode.Parse("model.rotation.notready");
+
+    /// <summary>
     /// The social provider's credential is the account's only remaining way to sign in,
     /// so it is not unlinked. Enrol a password or a passkey first, then unlink.
     /// </summary>

@@ -287,8 +287,7 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
 
         Error refused = Refusal(await RetiredAsync(new FixedTime(Noon), cancellationToken));
 
-        Assert.Equal(ErrorCodes.RequestMalformed, refused.Code);
-        Assert.Equal("sealed", refused.Details["member"].GetString());
+        Assert.Equal(ErrorCodes.RotationNotReady, refused.Code);
         Assert.Equal(1, refused.Details["pending"].GetInt32());
 
         KeyRetirement retirement = Retirement(await RetiredAsync(new FixedTime(releases), cancellationToken));
@@ -377,6 +376,7 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
 
         Error refused = Refusal(await RetiredAsync(new FixedTime(Noon), cancellationToken));
 
+        Assert.Equal(ErrorCodes.RotationNotReady, refused.Code);
         Assert.Equal(1, refused.Details["pending"].GetInt32());
         Assert.Equal(
             1,
