@@ -1785,7 +1785,8 @@ against the public contract of LIB-API-001.
   its provider, its sign-in link and the mail server's sign-on, and recovers its
   password; the enrolment an approved recovery opens is not refused. The restriction
   ends every session of the account in the transaction that makes it, and a restricted
-  account's sign-in is offered no trusted browser and records none.
+  account's sign-in is offered no trusted browser and records none. Its mailbox stays
+  owed enabled and its app passwords keep working.
 - Registration is served end to end. A browser that reaches the library is given a
   pre-authentication session, and the registration it starts is bound to that session
   and reachable from no other browser: the age screen, the email and phone steps, the

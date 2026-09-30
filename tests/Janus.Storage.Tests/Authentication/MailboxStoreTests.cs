@@ -56,8 +56,8 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
-    /// INT-MAIL-006a: a holder stands while the account is active and a membership of
-    /// the administrative organization is current, and not otherwise.
+    /// INT-MAIL-006a: a holder stands while the account is active or restricted and a
+    /// membership of the administrative organization is current, and not otherwise.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -93,6 +93,31 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
                 TestContext.Current.CancellationToken));
 
         Assert.False(await StandsAsync(mailbox.Id));
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 AC2, INT-MAIL-006a (D-166): a restriction the person asked for does
+    /// not cut them off from their mail, so a restricted holder stands and its mailbox
+    /// stays owed enabled.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedHolderStandsAsync()
+    {
+        OrganizationId administrative = await AdministrativeAsync();
+        SubjectId holder = await _deployment.AccountAsync(Noon);
+        _ = await MemberAsync(holder, administrative);
+        var mailbox = Mailbox.Reserved(Parsed("restricted@example.test"), Noon);
+
+        mailbox.Hold(holder);
+        await WrittenAsync(store => store.AddAsync(mailbox, TestContext.Current.CancellationToken));
+        await ChangedAsync(context => context.Accounts
+            .Where(account => account.Subject == holder)
+            .ExecuteUpdateAsync(
+                account => account.SetProperty(row => row.State, AccountState.Restricted),
+                TestContext.Current.CancellationToken));
+
+        Assert.True(await StandsAsync(mailbox.Id));
     }
 
     /// <summary>
