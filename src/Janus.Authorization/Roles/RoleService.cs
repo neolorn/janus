@@ -176,27 +176,29 @@ internal sealed class RoleService(
             return Result.Failure(notBegun);
         }
 
+        // X5, D-166: a path naming a role the deployment does not hold names no record,
+        // and under /admin nothing is concealed.
         if (await roles.FindAsync(role, cancellationToken).ConfigureAwait(false) is not Role held)
         {
-            return Result.Failure(Malformed("name"));
+            return await EndedAsync(Error.From(ErrorCodes.RoleNotFound), cancellationToken).ConfigureAwait(false);
         }
 
         if (await AdministeringRefusedAsync(context, [held], cancellationToken).ConfigureAwait(false)
             is Error administering)
         {
-            return Result.Failure(administering);
+            return await EndedAsync(administering, cancellationToken).ConfigureAwait(false);
         }
 
         // AUTHZ-GRANT-003 AC3: a grant's history names its role, revoked or not, and a
         // derivation confers it from the host's data; neither is left naming nothing.
         if (Derived(role) || await grants.NamesAsync(role, cancellationToken).ConfigureAwait(false))
         {
-            return Result.Failure(Error.From(ErrorCodes.RoleInUse));
+            return await EndedAsync(Error.From(ErrorCodes.RoleInUse), cancellationToken).ConfigureAwait(false);
         }
 
         if (await SteppedUpAsync(acting, session, cancellationToken).ConfigureAwait(false) is Error challenged)
         {
-            return Result.Failure(challenged);
+            return await EndedAsync(challenged, cancellationToken).ConfigureAwait(false);
         }
 
         await roles.RemoveAsync(role, cancellationToken).ConfigureAwait(false);
@@ -229,6 +231,20 @@ internal sealed class RoleService(
 
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
+
+    // X9: a refusal made inside the unit of work writes nothing of the operation, so
+    // the unit of work is ended before the refusal returns, which leaves the scope
+    // clean for the next operation.
+    private async ValueTask<Result> EndedAsync(Error refusal, CancellationToken cancellationToken)
+    {
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
+
+        return Result.Failure(refusal);
+    }
 
     private bool Derived(RoleName role) =>
         model.ResourceTypes.Any(type => type.Derivations.Any(derivation => derivation.Role == role));

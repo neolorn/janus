@@ -764,6 +764,13 @@ public static class ErrorCodes
     public static ErrorCode RestrictionExceeded { get; } = ErrorCode.Parse("auth.restriction.exceeded");
 
     /// <summary>
+    /// The restriction named in the path is not in the set. Name a restriction the set
+    /// holds.
+    /// </summary>
+    /// <remarks>Implements AUTH-ABUSE-004, D-166, chapter 10 section 1.2.</remarks>
+    public static ErrorCode RestrictionNotFound { get; } = ErrorCode.Parse("auth.restriction.notfound");
+
+    /// <summary>
     /// A conformance finding: the provider admitted a request it refuses, or its
     /// discovery document names a form it retires. The details name the probe, what was
     /// sent, the refusal expected and what came back; restore the provider to the
@@ -870,6 +877,13 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements AUTHZ-GRANT-004 and AUTHZ-GRANT-003 AC3.</remarks>
     public static ErrorCode RoleInUse { get; } = ErrorCode.Parse("authz.role.inuse");
+
+    /// <summary>
+    /// The role named in the path is not one the deployment holds. Name a role that
+    /// exists.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-004, D-166, chapter 10 section 1.3.</remarks>
+    public static ErrorCode RoleNotFound { get; } = ErrorCode.Parse("authz.role.notfound");
 
     /// <summary>
     /// A conformance finding: a case of the host's truth table decided otherwise than

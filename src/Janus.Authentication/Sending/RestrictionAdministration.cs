@@ -115,13 +115,15 @@ internal sealed class RestrictionAdministration(
 
         // OPS-CFG-008: an edit of the set is a change to a runtime setting, and every
         // such change carries its reason whichever way it moves.
-        if (string.IsNullOrWhiteSpace(reason))
-        {
-            return Result.Failure(Error.From(
+        if (Unexplained(reason, Error.From(
                 ErrorCodes.ConfigurationChangeReasonRequired,
                 "key",
-                JsonSerializer.SerializeToElement(Settings.Restrictions.Key.ToString())));
+                JsonSerializer.SerializeToElement(Settings.Restrictions.Key.ToString()))) is Error unexplained)
+        {
+            return Result.Failure(unexplained);
         }
+
+        string stated = reason!.Trim();
 
         List<Restriction> written =
             [.. declared.Where(one => !string.Equals(one.Name, name, StringComparison.Ordinal))];
@@ -145,7 +147,7 @@ internal sealed class RestrictionAdministration(
             .ChangeAsync(
                 Settings.Restrictions,
                 written,
-                reason,
+                stated,
                 challenge,
                 context,
                 cancellationToken)
@@ -164,7 +166,7 @@ internal sealed class RestrictionAdministration(
                 before,
                 replacement,
                 loosening,
-                reason,
+                stated,
                 actor,
                 context.BreakGlassReason,
                 now,
@@ -245,10 +247,12 @@ internal sealed class RestrictionAdministration(
             return Result.Failure(StepUpRefusal.Of(challenge));
         }
 
-        if (string.IsNullOrWhiteSpace(reason))
+        if (Unexplained(reason, Error.From(ErrorCodes.ConfigurationChangeReasonRequired)) is Error unexplained)
         {
-            return Result.Failure(Error.From(ErrorCodes.ConfigurationChangeReasonRequired));
+            return Result.Failure(unexplained);
         }
+
+        string stated = reason!.Trim();
 
         Error? failure = null;
 
@@ -262,8 +266,13 @@ internal sealed class RestrictionAdministration(
             return Result.Failure(failure);
         }
 
-        if (credit <= 0
-            || !declared.Any(one => string.Equals(one.Name, name, StringComparison.Ordinal)))
+        // X5, D-166: a path naming a restriction the set does not hold names no record.
+        if (!declared.Any(one => string.Equals(one.Name, name, StringComparison.Ordinal)))
+        {
+            return Result.Failure(Error.From(ErrorCodes.RestrictionNotFound));
+        }
+
+        if (credit <= 0)
         {
             return Result.Failure(
                 new Error(
@@ -271,8 +280,7 @@ internal sealed class RestrictionAdministration(
                     new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
                     {
                         ["key"] = JsonSerializer.SerializeToElement(Settings.Restrictions.Key.ToString()),
-                        ["allowed"] = JsonSerializer.SerializeToElement(
-                            "a declared restriction and a credit above zero"),
+                        ["allowed"] = JsonSerializer.SerializeToElement("a credit above zero"),
                     }));
         }
 
@@ -289,7 +297,7 @@ internal sealed class RestrictionAdministration(
         DateTimeOffset now = time.GetUtcNow();
 
         await audit
-            .GrantedAsync(name, credit, reason, actor, context.BreakGlassReason, now, cancellationToken)
+            .GrantedAsync(name, credit, stated, actor, context.BreakGlassReason, now, cancellationToken)
             .ConfigureAwait(false);
 
         // The plain key value never leaves this method: the event carries the
@@ -301,7 +309,7 @@ internal sealed class RestrictionAdministration(
                     Grant + ":" + name + ":" + now.Ticks,
                     name,
                     credit,
-                    reason)
+                    stated)
                 {
                     Actor = actor,
                 },
@@ -339,6 +347,17 @@ internal sealed class RestrictionAdministration(
 
         return default!;
     }
+
+    // API-CONV-002, X4: a reason is 1 to 1024 characters after trimming. A blank one is
+    // the refusal 10 names for a change without one; one past the limit is a request
+    // the boundary does not read.
+    private static Error? Unexplained(string? reason, Error blank) =>
+        (reason?.Trim().Length ?? 0) switch
+        {
+            0 => blank,
+            > 1024 => Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement("reason")),
+            _ => null,
+        };
 
     private static Dictionary<string, JsonElement> Named(string restriction) =>
         new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)

@@ -237,6 +237,49 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// API-CONV-002, D-166: a reason past 1024 characters after trimming is refused to
+    /// an in-process caller as at the boundary, naming it, and nothing is written.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AReasonPastItsLengthIsRefusedAsync()
+    {
+        string overlong = new('r', 1025);
+
+        Error edited = Refused(await Administration.EditAsync(
+            "sms.destination",
+            Loosened(),
+            overlong,
+            Satisfied,
+            AccessContext.Of(SubjectId.New(_randomness)),
+            TestContext.Current.CancellationToken));
+        Error granted = Refused(await Administration.GrantAsync(
+            "sms.destination",
+            Phone.Value,
+            2,
+            overlong,
+            Satisfied,
+            AccessContext.Of(SubjectId.New(_randomness)),
+            TestContext.Current.CancellationToken));
+
+        Assert.All(
+            new[] { edited, granted },
+            refusal =>
+            {
+                Assert.Equal(ErrorCodes.RequestMalformed, refusal.Code);
+                Assert.Equal("reason", refusal.Details["member"].GetString());
+            });
+        Assert.Empty(_audit.Edits);
+        Assert.Empty(_audit.Grants);
+        Assert.Empty(_changes.Written);
+        Assert.Empty(_events.Published);
+
+        static Error Refused(Result result) =>
+            result.Match(
+                () => throw new Xunit.Sdk.XunitException("The change was not refused."),
+                error => error);
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-004 AC4: a grant adds credit to the named key, is written down and
     /// is announced, and neither the record nor the event carries the key itself.
     /// </summary>
@@ -271,14 +314,15 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-004 AC4: a grant naming a restriction the deployment does not
-    /// declare, or no credit at all, is refused.
+    /// AUTH-ABUSE-004 AC4, D-166: a grant naming a restriction the deployment does not
+    /// declare is a record not found, and one of no credit at all is a value the set
+    /// does not admit.
     /// </summary>
     [Fact]
     public async Task AUTH_ABUSE_004_AC4_AGrantOnNothingIsRefusedAsync()
     {
         Assert.Equal(
-            ErrorCodes.ConfigurationValueNotAllowed,
+            ErrorCodes.RestrictionNotFound,
             Refusal(await Administration.GrantAsync(
                 "no.such.restriction",
                 Phone.Value,

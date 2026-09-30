@@ -672,7 +672,8 @@ against the public contract of LIB-API-001.
 - `GET /admin/roles` reads every role with its permissions, `POST /admin/roles` creates
   a role or gives an existing one the permissions stated, and
   `DELETE /admin/roles/{name}` removes one no grant or derivation names (409
-  `authz.role.inuse` otherwise). All ask `role:manage` in the administrative
+  `authz.role.inuse` otherwise, 404 `authz.role.notfound` for a role the deployment
+  does not hold). All ask `role:manage` in the administrative
   organization; changes need step-up and a reason, are recorded in the audit trail with
   the permissions before and after, and need `system:administer` where the role carries
   it before or after. `IRoles` is the same set of operations in process.
@@ -702,8 +703,10 @@ against the public contract of LIB-API-001.
   host supplier the deployment did not register is refused there with
   `config.value.notallowed` naming the `supplier`; and
   `POST /admin/restrictions/{name}/grant` adds credit to one key under
-  `restriction:grant`, behind step-up and with a reason. `IRestrictionSet` is the same
-  set of operations in process.
+  `restriction:grant`, behind step-up and with a reason. A name the set does not hold
+  answers 404 `auth.restriction.notfound` to a read, a deletion and a grant, and a
+  reason past 1024 characters is refused with `api.request.malformed` naming `reason`.
+  `IRestrictionSet` is the same set of operations in process.
 - `GET /admin/config/{key}` reads one runtime key under `config:read`: its value in
   force and its default in the key's own JSON type, whether it is protected, and which
   way it loosens (`increase`, `decrease` or `any-change`). `PUT /admin/config/{key}`

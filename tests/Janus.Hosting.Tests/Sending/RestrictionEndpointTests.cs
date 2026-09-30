@@ -75,8 +75,7 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-004: one restriction reads by its name, and a name no restriction has
-    /// is a malformed request naming <c>name</c>.
+    /// AUTH-ABUSE-004: one restriction reads by its name.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -85,12 +84,9 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
         Browser administrator = await AuthorisedAsync(Permissions.RestrictionEdit);
 
         Answer read = await administrator.SendAsync("GET", "/admin/restrictions/notification.destination");
-        Answer unknown = await administrator.SendAsync("GET", "/admin/restrictions/no.such.restriction");
 
         Assert.Equal(StatusCodes.Status200OK, read.Status);
         Assert.Equal("notification", read.Text("purpose"));
-        Assert.Equal(StatusCodes.Status400BadRequest, unknown.Status);
-        Assert.Equal("name", unknown.Json().GetProperty("details").GetProperty("member").GetString());
     }
 
     /// <summary>
@@ -284,23 +280,87 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-004: deleting a name no restriction has changes nothing and is a
-    /// malformed request naming <c>name</c>.
+    /// AUTH-ABUSE-004, D-166: a path naming a restriction the set does not hold is a
+    /// record not found, whether it is read, deleted or granted under, and nothing
+    /// changes; a credit at or below zero under a restriction the set holds stays a
+    /// value the set does not admit.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_ABUSE_004_DeletingAnUnknownNameIsMalformedAsync()
+    public async Task AUTH_ABUSE_004_AnUnknownNameIsNotFoundAsync()
     {
-        Browser administrator = await AuthorisedAsync(Permissions.RestrictionEdit, Permissions.SystemAdminister);
+        Browser administrator = await AuthorisedAsync(
+            Permissions.RestrictionEdit,
+            Permissions.RestrictionGrant,
+            Permissions.SystemAdminister);
 
+        Answer read = await administrator.SendAsync("GET", "/admin/restrictions/no.such.restriction");
         Answer deleted = await administrator.SendAsync(
             "DELETE",
             "/admin/restrictions/no.such.restriction",
             ("reason", "a tidy set"));
+        Answer granted = await administrator.SendAsync(
+            "POST",
+            "/admin/restrictions/no.such.restriction/grant",
+            ("keyValue", "+201001234567"),
+            ("credit", 3),
+            ("reason", "their carrier dropped both codes"));
+        Answer spent = await administrator.SendAsync(
+            "POST",
+            "/admin/restrictions/sms.destination/grant",
+            ("keyValue", "+201001234567"),
+            ("credit", 0),
+            ("reason", "their carrier dropped both codes"));
 
-        Assert.Equal(StatusCodes.Status400BadRequest, deleted.Status);
-        Assert.Equal("name", deleted.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.All(
+            new[] { read, deleted, granted },
+            answer =>
+            {
+                Assert.Equal(StatusCodes.Status404NotFound, answer.Status);
+                Assert.Equal(ErrorCodes.RestrictionNotFound.ToString(), answer.Text("code"));
+            });
+        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed.ToString(), spent.Text("code"));
         Assert.Empty(_deployment.Events.Of<SendingRestrictionChanged>());
+        Assert.Empty(_deployment.Events.Of<SendingRestrictionGranted>());
+    }
+
+    /// <summary>
+    /// API-CONV-002, CONV-CODE-006 AC2, D-166: a reason past 1024 characters after
+    /// trimming is a request the boundary does not read, refused naming it at the edit,
+    /// the deletion and the grant, and nothing changes.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AReasonPastItsLengthIsMalformedAsync()
+    {
+        Browser administrator = await AuthorisedAsync(
+            Permissions.RestrictionEdit,
+            Permissions.RestrictionGrant,
+            Permissions.SystemAdminister);
+        string overlong = new('r', 1025);
+
+        Answer edited = await EditedAsync(administrator, Looser, overlong);
+        Answer deleted = await administrator.SendAsync(
+            "DELETE",
+            "/admin/restrictions/sms.source",
+            ("reason", overlong));
+        Answer granted = await administrator.SendAsync(
+            "POST",
+            "/admin/restrictions/sms.destination/grant",
+            ("keyValue", "+201001234567"),
+            ("credit", 3),
+            ("reason", overlong));
+
+        Assert.All(
+            new[] { edited, deleted, granted },
+            answer =>
+            {
+                Assert.Equal(StatusCodes.Status400BadRequest, answer.Status);
+                Assert.Equal("reason", answer.Json().GetProperty("details").GetProperty("member").GetString());
+            });
+        Assert.Contains(await InForceAsync(), one => one.Name == "sms.source");
+        Assert.Empty(_deployment.Events.Of<SendingRestrictionChanged>());
+        Assert.Empty(_deployment.Events.Of<SendingRestrictionGranted>());
     }
 
     /// <summary>

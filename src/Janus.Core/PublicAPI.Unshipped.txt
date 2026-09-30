@@ -3895,7 +3895,9 @@ static Janus.Core.ErrorCodes.RequestReceivedFuture.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ResourceNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.Restricted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RestrictionExceeded.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.RestrictionNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RoleInUse.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.RoleNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ScreeningUnavailable.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.SessionCsrfInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.SessionExpired.get -> Janus.Core.ErrorCode

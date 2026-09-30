@@ -204,7 +204,6 @@ public sealed class RoleEndpointTests : IAsyncLifetime
         Answer removed = await RemovedAsync(administrator, "editor");
         Answer derived = await RemovedAsync(administrator, "reader");
         Answer granted = await RemovedAsync(administrator, "auditor");
-        Answer unknown = await RemovedAsync(administrator, "no-such-role");
 
         Assert.Equal(StatusCodes.Status204NoContent, removed.Status);
         Assert.Null(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
@@ -212,7 +211,32 @@ public sealed class RoleEndpointTests : IAsyncLifetime
         Assert.Equal(StatusCodes.Status409Conflict, derived.Status);
         Assert.Equal(ErrorCodes.RoleInUse.ToString(), derived.Text("code"));
         Assert.Equal(StatusCodes.Status409Conflict, granted.Status);
-        Assert.Equal("name", Member(unknown));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004, D-166: a path naming a role the deployment does not hold is a
+    /// record not found, answered after the permission and the reason are judged, and
+    /// nothing is written down.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_AnUnknownRoleIsNotFoundAsync()
+    {
+        (Browser administrator, SubjectId subject) = await AuthorisedAsync();
+
+        Answer refused = await RemovedAsync(administrator, "no-such-role");
+
+        _deployment.Gate.Grant(subject, Administration, Permissions.RoleManage);
+
+        Answer unreasoned = await administrator.SendAsync("DELETE", "/admin/roles/no-such-role", "{}");
+        Answer unknown = await RemovedAsync(administrator, "no-such-role");
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
+        Assert.Equal("reason", Member(unreasoned));
+        Assert.Equal(StatusCodes.Status404NotFound, unknown.Status);
+        Assert.Equal(ErrorCodes.RoleNotFound.ToString(), unknown.Text("code"));
+        Assert.Empty(_deployment.RoleChanges.Changes);
     }
 
     /// <summary>

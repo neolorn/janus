@@ -6764,6 +6764,8 @@ of a name the set does not hold.
 *Chapter text that should change.* 09 section 8 could show `reason` in the `PUT` body,
 give `DELETE` its body, and add the 400 for a name the set does not hold.
 
+**Superseded by D-166.**
+
 ---
 
 ## 184. How a grant names the whole organization, and what else it must name
@@ -6931,6 +6933,8 @@ organization.
 *Chapter text that should change.* 09 section 8 could give the body of `POST`, its 201
 and 204, the path and body of `DELETE`, the 400s, and say that `role:manage` is asked
 in the administrative organization.
+
+**Superseded by D-166.**
 
 ---
 

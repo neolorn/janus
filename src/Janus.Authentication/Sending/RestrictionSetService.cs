@@ -180,8 +180,9 @@ internal sealed class RestrictionSetService(
     private static Restriction? Named(IReadOnlyList<Restriction> declared, string name) =>
         declared.FirstOrDefault(one => string.Equals(one.Name, name, StringComparison.Ordinal));
 
-    private static Error Unnamed() =>
-        Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement("name"));
+    // X5, D-166: a path naming a restriction the set does not hold names no record, and
+    // under /admin nothing is concealed.
+    private static Error Unnamed() => Error.From(ErrorCodes.RestrictionNotFound);
 
     private static TValue Held<TValue>(Error error, ref Error? failure)
     {
