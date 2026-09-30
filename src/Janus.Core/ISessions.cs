@@ -49,7 +49,10 @@ public interface ISessions
     /// <param name="context">Who is asking.</param>
     /// <param name="session">Which session.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Success, or the failure where the session is not the account's.</returns>
+    /// <returns>
+    /// Success, or the failure: <c>authz.resource.notfound</c> where the account holds
+    /// no such session, whether none has the identifier or another account's has it.
+    /// </returns>
     ValueTask<Result> EndAsync(
         AccessContext context,
         SessionId session,

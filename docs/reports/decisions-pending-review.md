@@ -3498,6 +3498,8 @@ sent,
 `GateBehaviourTests.AUTHZ_GATE_005_AC1_APageOfFiftyIsAnsweredWithoutAQueryPerRecordAsync`,
 `GateBehaviourTests.AUTHZ_GATE_005_AC2_ADerivedGrantReachesTheCapabilityPageAsync`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 111. An explanation takes the host's rows and names the grant a fact produced
@@ -6770,6 +6772,8 @@ of a name the set does not hold.
 *Chapter text that should change.* 09 section 8 could show `reason` in the `PUT` body,
 give `DELETE` its body, and add the 400 for a name the set does not hold.
 
+**Superseded by D-166.**
+
 ---
 
 ## 184. How a grant names the whole organization, and what else it must name
@@ -6813,6 +6817,8 @@ hold.
 *Chapter text that should change.* 09 section 8 could say how the body names the whole
 organization, that `grant:manage` is asked in the grant's organization, and add the 400
 for a role, record or group the deployment does not hold.
+
+**Superseded by D-166.**
 
 ---
 
@@ -6936,6 +6942,8 @@ organization.
 and 204, the path and body of `DELETE`, the 400s, and say that `role:manage` is asked
 in the administrative organization.
 
+**Superseded by D-166.**
+
 ---
 
 ## 188. A change to a role is reasoned, audited, and guarded as a grant of what it carries
@@ -6977,6 +6985,8 @@ which is the "one step removed" OPS-CFG-007 exists to prevent, and would let the
 *Chapter text that should change.* AUTHZ-GRANT-004 could require the reason and the
 audit record of a role change, and OPS-CFG-007 could name role changes.
 
+**Superseded by D-166.**
+
 ---
 
 ## 189. A role a grant or a derivation names is not removed, and the refusal has a code of its own
@@ -7010,6 +7020,8 @@ the others in 10 section 1.3.
 *Chapter text that should change.* 10 section 1.3 could add
 `authz.role.inuse`: "A grant or a derivation names the role, so it cannot be removed;
 409", and 09 section 8 could list it under `DELETE /admin/roles`.
+
+**Superseded by D-166.**
 
 ---
 
@@ -9274,6 +9286,8 @@ pins everything the end writes.
 *Chapter text that should change.* IDN-MEM-001 could state that ending a membership does
 not remove the account's grants in the organization, pointing at chapter 16 step 4, or
 the owner could decide that it does and reorder chapter 16.
+
+**Superseded by D-166.**
 
 ---
 
@@ -13900,6 +13914,8 @@ identifier and nothing the endpoint wrote. AUTHZ-CONCEAL-001 could say that a ho
 the gate before it looks the record up, since a record the library holds no row for is
 the genuine absence a concealed refusal is identical to.
 
+**Superseded by D-166.**
+
 ---
 
 ## 340. How a client enters the registry, and how its secret is rotated
@@ -16359,6 +16375,8 @@ does the answer hold for such a permission: nothing, false, or a refusal?
 
 *Chapter text that should change.* BFF-CAP-002 AC2 could say "is left out of the
 answer".
+
+**Superseded by D-166.**
 
 ---
 

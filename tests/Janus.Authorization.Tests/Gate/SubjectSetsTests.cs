@@ -32,7 +32,7 @@ public sealed class SubjectSetsTests
     {
         var groups = new GroupsInMemory();
         var grants = new GrantsInMemory();
-        var sets = new SubjectSets(groups, grants, new RestrictionsInMemory());
+        var sets = new SubjectSets(groups, grants, new RestrictionsInMemory(), new AdministrativeOrganizationInMemory());
         var context = AccessContext.Of(Subject());
 
         for (int check = 0; check < 10; check++)
@@ -60,7 +60,7 @@ public sealed class SubjectSetsTests
         grants.Bump(subject);
         grants.Bump(subject);
 
-        SubjectSet resolved = await new SubjectSets(groups, grants, new RestrictionsInMemory())
+        SubjectSet resolved = await new SubjectSets(groups, grants, new RestrictionsInMemory(), new AdministrativeOrganizationInMemory())
             .OfAsync(AccessContext.Of(subject), TestContext.Current.CancellationToken);
 
         Assert.Equal(2, resolved.Version);
@@ -78,7 +78,7 @@ public sealed class SubjectSetsTests
     {
         var groups = new GroupsInMemory();
         var grants = new GrantsInMemory();
-        var sets = new SubjectSets(groups, grants, new RestrictionsInMemory());
+        var sets = new SubjectSets(groups, grants, new RestrictionsInMemory(), new AdministrativeOrganizationInMemory());
         SubjectId subject = Subject();
         var context = AccessContext.Of(subject);
 
@@ -89,7 +89,7 @@ public sealed class SubjectSetsTests
         SubjectSet again = await sets.OfAsync(context, TestContext.Current.CancellationToken);
         int held = groups.Reads;
 
-        SubjectSet afterwards = await new SubjectSets(groups, grants, new RestrictionsInMemory())
+        SubjectSet afterwards = await new SubjectSets(groups, grants, new RestrictionsInMemory(), new AdministrativeOrganizationInMemory())
             .OfAsync(context, TestContext.Current.CancellationToken);
 
         Assert.Equal(1, held);
@@ -127,7 +127,7 @@ public sealed class SubjectSetsTests
                 TestContext.Current.CancellationToken);
         }
 
-        SubjectSet resolved = await new SubjectSets(groups, grants, new RestrictionsInMemory())
+        SubjectSet resolved = await new SubjectSets(groups, grants, new RestrictionsInMemory(), new AdministrativeOrganizationInMemory())
             .OfAsync(AccessContext.Of(subject), TestContext.Current.CancellationToken);
 
         Assert.Equal(
@@ -143,7 +143,7 @@ public sealed class SubjectSetsTests
     [Fact]
     public async Task AUTHZ_PRIN_003_AC2_APrincipalWithNoAccountResolvesToNothingAsync()
     {
-        SubjectSet resolved = await new SubjectSets(new GroupsInMemory(), new GrantsInMemory(), new RestrictionsInMemory())
+        SubjectSet resolved = await new SubjectSets(new GroupsInMemory(), new GrantsInMemory(), new RestrictionsInMemory(), new AdministrativeOrganizationInMemory())
             .OfAsync(
                 AccessContext.Of(SystemPrincipal.ForOrganization(
                     "retention",

@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
@@ -161,6 +162,10 @@ public sealed class HostFixture : IAsyncLifetime
             MaintenanceCredential = Encoding.UTF8.GetBytes(MaintenanceConnectionString),
         });
 
+        // An operation that tells somebody, the end of a membership among them, sends
+        // through the transports a host registers.
+        services.AddSingleton<IMailTransport>(new MailTransportInMemory());
+        services.AddSingleton<ISmsTransport>(new SmsTransportInMemory());
         services.AddJanus(ConnectionString, Declaration(), ApplicationKind.Public);
 
         // PRIV-RIGHT-005b: the deployment declares its documents sensitive, so it

@@ -118,11 +118,15 @@ internal sealed class ResourceService(
         ResourceReference? containedIn,
         CancellationToken cancellationToken)
     {
-        if (model.Find(resource.Type) is null
-            || await resources.FindAsync(resource, cancellationToken).ConfigureAwait(false)
-                is not RegisteredResource moving)
+        if (model.Find(resource.Type) is null)
         {
-            return Result.Failure(Malformed("resourceId"));
+            return Result.Failure(Malformed("resourceType"));
+        }
+
+        if (await resources.FindAsync(resource, cancellationToken).ConfigureAwait(false)
+            is not RegisteredResource moving)
+        {
+            return Result.Failure(Invalid("resourceId"));
         }
 
         // AUTHZ-MODEL-004 refuses a containment cycle among the types, so a record
@@ -134,7 +138,7 @@ internal sealed class ResourceService(
                     is not RegisteredResource holding
                     || holding.Organization != moving.Organization)))
         {
-            return Result.Failure(Malformed("containedIn"));
+            return Result.Failure(Invalid("containedIn"));
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -154,8 +158,14 @@ internal sealed class ResourceService(
         return Result.Success();
     }
 
+    // X5, D-166: a type outside the vocabulary the model fixes at startup is a word the
+    // request cannot be read with.
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
+
+    // X5, D-166: a registration read and understood whose meaning cannot be carried out.
+    private static Error Invalid(string member) =>
+        Error.From(ErrorCodes.RequestInvalid, "member", JsonSerializer.SerializeToElement(member));
 
     private Error? Refused(
         ResourceRegistration registration,
@@ -170,7 +180,7 @@ internal sealed class ResourceService(
 
         if (placed.ContainsKey(registration.Resource) || held.ContainsKey(registration.Resource))
         {
-            return Malformed("resourceId");
+            return Invalid("resourceId");
         }
 
         // AUTHZ-SCOPE-001: a tree begins and ends in one organization.
@@ -180,7 +190,7 @@ internal sealed class ResourceService(
                         || held.TryGetValue(container, out holding))
                     && holding == registration.Organization)))
         {
-            return Malformed("containedIn");
+            return Invalid("containedIn");
         }
 
         // IDN-LIFE-002a AC1: data of a sensitive type about nobody, or about somebody
@@ -189,7 +199,7 @@ internal sealed class ResourceService(
         if (declared.SensitiveCategories.Count > 0
             && (registration.Subject is not SubjectId subject || !standing.Contains(subject)))
         {
-            return Malformed("subject");
+            return Invalid("subject");
         }
 
         return null;

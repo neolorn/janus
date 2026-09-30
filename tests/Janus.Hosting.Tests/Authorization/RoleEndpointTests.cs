@@ -3,6 +3,8 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication;
+using Janus.Authentication.Invitations;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Roles;
 using Janus.Authorization.Tests.Roles;
@@ -204,7 +206,6 @@ public sealed class RoleEndpointTests : IAsyncLifetime
         Answer removed = await RemovedAsync(administrator, "editor");
         Answer derived = await RemovedAsync(administrator, "reader");
         Answer granted = await RemovedAsync(administrator, "auditor");
-        Answer unknown = await RemovedAsync(administrator, "no-such-role");
 
         Assert.Equal(StatusCodes.Status204NoContent, removed.Status);
         Assert.Null(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
@@ -212,7 +213,137 @@ public sealed class RoleEndpointTests : IAsyncLifetime
         Assert.Equal(StatusCodes.Status409Conflict, derived.Status);
         Assert.Equal(ErrorCodes.RoleInUse.ToString(), derived.Text("code"));
         Assert.Equal(StatusCodes.Status409Conflict, granted.Status);
-        Assert.Equal("name", Member(unknown));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004 AC6 and REG-INV-001: a role an open invitation names grants at
+    /// the acknowledgement, so it is not removed while the invitation stands, and is
+    /// removed once the invitation is revoked.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_ARoleAnOpenInvitationNamesIsNotRemovedAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Permissions.RoleManage);
+
+        _ = await DefinedAsync(administrator, Reading);
+
+        Invitation invitation = await InvitedAsync(actor, Editor, _deployment.Clock.GetUtcNow());
+
+        Answer refused = await RemovedAsync(administrator, "editor");
+
+        Assert.Equal(StatusCodes.Status409Conflict, refused.Status);
+        Assert.Equal(ErrorCodes.RoleInUse.ToString(), refused.Text("code"));
+        Assert.NotNull(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
+
+        invitation.Revoke(_deployment.Clock.GetUtcNow());
+
+        Answer removed = await RemovedAsync(administrator, "editor");
+
+        Assert.Equal(StatusCodes.Status204NoContent, removed.Status);
+        Assert.Null(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004 AC6: an invitation stands until it is acknowledged or revoked,
+    /// expired or not, so a role an expired one names is not removed either.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_ARoleAStandingInvitationNamesIsNotRemovedAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Permissions.RoleManage);
+
+        _ = await DefinedAsync(administrator, Reading);
+
+        Invitation invitation = await InvitedAsync(actor, Editor, _deployment.Clock.GetUtcNow().AddDays(-8));
+
+        Answer refused = await RemovedAsync(administrator, "editor");
+
+        Assert.True(invitation.HasExpired(_deployment.Clock.GetUtcNow()));
+        Assert.Equal(StatusCodes.Status409Conflict, refused.Status);
+        Assert.Equal(ErrorCodes.RoleInUse.ToString(), refused.Text("code"));
+        Assert.NotNull(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004, D-166: a path naming a role the deployment does not hold is a
+    /// record not found, answered after the permission and the reason are judged, and
+    /// nothing is written down.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_AnUnknownRoleIsNotFoundAsync()
+    {
+        (Browser administrator, SubjectId subject) = await AuthorisedAsync();
+
+        Answer refused = await RemovedAsync(administrator, "no-such-role");
+
+        _deployment.Gate.Grant(subject, Administration, Permissions.RoleManage);
+
+        Answer unreasoned = await administrator.SendAsync("DELETE", "/admin/roles/no-such-role", "{}");
+        Answer unknown = await RemovedAsync(administrator, "no-such-role");
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
+        Assert.Equal("reason", Member(unreasoned));
+        Assert.Equal(StatusCodes.Status404NotFound, unknown.Status);
+        Assert.Equal(ErrorCodes.RoleNotFound.ToString(), unknown.Text("code"));
+        Assert.Empty(_deployment.RoleChanges.Changes);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002, D-166: the role the reserved account holds keeps every permission
+    /// the library declares, so a stepped-up system administrator taking one out is
+    /// refused and nothing changes; adding a permission the host declares stays
+    /// allowed, and a role the reserved account does not hold is narrowed as before.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_TheReservedAccountsRoleKeepsEveryLibraryPermissionAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(
+            Permissions.RoleManage,
+            Permissions.SystemAdminister);
+        var reserved = new SubjectId(Guid.NewGuid());
+        Grant bootstrapped = Grant
+            .Create(
+                GrantId.New(_deployment.Clock),
+                GrantSubject.Of(reserved),
+                SystemAdministrator,
+                Administration,
+                on: null,
+                deny: false,
+                GrantKind.Stored,
+                expiresAt: null,
+                actor,
+                _deployment.Clock.GetUtcNow(),
+                "Bootstrap.")
+            .Match(created => created, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        await _deployment.AccessGrants.CreateAsync(bootstrapped, CancellationToken.None);
+        _deployment.Reserves(reserved);
+
+        string[] library = [.. Permissions.All.Select(permission => permission.ToString())];
+
+        Answer narrowed = await DefinedAsync(administrator, [.. library.Skip(1)], name: SystemAdministrator.ToString());
+
+        Assert.Equal(StatusCodes.Status403Forbidden, narrowed.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), narrowed.Text("code"));
+        Role standing = (await _deployment.Roles.FindAsync(SystemAdministrator, CancellationToken.None))!;
+
+        Assert.All(Permissions.All, permission => Assert.True(standing.Allows(permission)));
+        Assert.Empty(_deployment.RoleChanges.Changes);
+
+        Answer widened = await DefinedAsync(administrator, [.. library, "article:read"], name: SystemAdministrator.ToString());
+        Answer other = await DefinedAsync(administrator, Administering, name: "auditor");
+        Answer otherNarrowed = await DefinedAsync(administrator, Reading, name: "auditor");
+
+        Assert.Equal(StatusCodes.Status204NoContent, widened.Status);
+        Assert.True((await _deployment.Roles.FindAsync(SystemAdministrator, CancellationToken.None))!
+            .Allows(Permission.Parse("article:read")));
+        Assert.Equal(StatusCodes.Status201Created, other.Status);
+        Assert.Equal(StatusCodes.Status204NoContent, otherNarrowed.Status);
     }
 
     /// <summary>
@@ -241,9 +372,10 @@ public sealed class RoleEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// CONV-CODE-006 AC2: a body missing the reason defining or removing a role requires
-    /// is refused naming it before the service is reached, so a caller the service would
-    /// refuse for want of the permission is answered for the body, and nothing changes.
+    /// CONV-CODE-006 AC2: a body missing the reason defining or removing a role requires,
+    /// or carrying one past 1024 characters (API-CONV-002), is refused naming it before
+    /// the service is reached, so a caller the service would refuse for want of the
+    /// permission is answered for the body, and nothing changes.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -257,10 +389,12 @@ public sealed class RoleEndpointTests : IAsyncLifetime
             ("name", "editor"),
             ("permissions", Editing));
         Answer unremoved = await caller.SendAsync("DELETE", "/admin/roles/" + SystemAdministrator, "{}");
+        Answer overlong = await DefinedAsync(caller, Editing, reason: new string('r', 1025));
 
         Assert.Equal(ErrorCodes.RequestMalformed.ToString(), undefined.Text("code"));
         Assert.Equal("reason", Member(undefined));
         Assert.Equal("reason", Member(unremoved));
+        Assert.Equal("reason", Member(overlong));
         Assert.Null(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
         Assert.NotNull(await _deployment.Roles.FindAsync(SystemAdministrator, CancellationToken.None));
         Assert.Empty(_deployment.RoleChanges.Changes);
@@ -287,6 +421,27 @@ public sealed class RoleEndpointTests : IAsyncLifetime
 
     private static Task<Answer> RemovedAsync(Browser administrator, string name) =>
         administrator.SendAsync("DELETE", "/admin/roles/" + name, ("reason", "No longer used."));
+
+    // An invitation into the branch naming the role, standing, for seven days from
+    // when it was issued.
+    private async Task<Invitation> InvitedAsync(SubjectId inviter, RoleName role, DateTimeOffset issuedAt)
+    {
+        var invitation = Invitation.Issued(
+            InvitationId.New(_deployment.Clock),
+            Branch,
+            inviter,
+            new InvitedIdentifiers("invited@example.test", null, null),
+            [role],
+            [],
+            mailbox: null,
+            OpaqueToken.Of(Guid.NewGuid().ToString("N")).Fingerprint(),
+            issuedAt,
+            TimeSpan.FromDays(7));
+
+        await _deployment.Invitations.AddAsync(invitation, CancellationToken.None);
+
+        return invitation;
+    }
 
     // A grant of the role that has since been revoked, whose row still names it.
     private async Task RevokedGrantOfAsync(RoleName role, SubjectId actor)

@@ -247,6 +247,64 @@ public sealed class PermissionRuleTests
         Assert.Equal("folder", Assert.IsType<string>(fragment.Parameters["identity_authz_derived0_on"]));
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-004, D-166: where derivations on two containers admit one record, the
+    /// row an explanation names is the nearest container's, whichever the host's query
+    /// answers first.
+    /// </summary>
+    [Fact]
+    public void AUTHZ_GATE_004_TheNearestAdmittingContainerIsNamed()
+    {
+        SubjectId reviewer = Subject();
+        var organization = new OrganizationId(Guid.NewGuid());
+        HostDomain.Workspace workspace = HostDomain.NewWorkspace(organization.Value);
+        HostDomain.Folder folder = HostDomain.NewFolder(workspace.Id, reviewer);
+        HostDomain.Article article = HostDomain.NewArticle(folder.Id, reviewer);
+        RelationshipDeclaration[] declared =
+        [
+            .. HostDomain.Declared()
+                .Relationship<HostDomain.Article>(
+                    "author",
+                    "article",
+                    "host.articles",
+                    item => item.Author,
+                    "author",
+                    item => item.Id,
+                    "id")
+                .Build()
+                .Relationships
+                .OrderBy(relationship => relationship.On.ToString(), StringComparer.Ordinal)
+                .Reverse(),
+        ];
+        var rule = new PermissionRule(
+            [Permission.Parse("article:read")],
+            Article,
+            organization,
+            SubjectSet.Of(reviewer, [], 1, restricted: false),
+            DateTimeOffset.UnixEpoch,
+            declared);
+        AncestryEntry[] ancestry =
+        [
+            new("article", article.Id, "article", article.Id, 0, organization.Value),
+            new("article", article.Id, "folder", folder.Id, 1, organization.Value),
+            new("article", article.Id, "workspace", workspace.Id, 2, organization.Value),
+        ];
+        FilterSources<HostDomain.Article> sources = new FilterSources<HostDomain.Article>(
+                ancestry.AsQueryable(),
+                Array.Empty<EffectiveGrant>().AsQueryable(),
+                item => item.Id)
+            .Relationship("reviewer", new[] { folder }.AsQueryable())
+            .Relationship("author", new[] { article }.AsQueryable());
+
+        AdmittedRecord[] admitted = [.. rule.ToAdmittedRecords(sources, [ResourceId.Parse(article.Id)])!];
+
+        Assert.Equal("reviewer", admitted[0].Relationship);
+        Assert.Equal(2, admitted.Length);
+        Assert.Equal(
+            new AdmittedRecord(article.Id, article.Id, "author", 0),
+            AdmittedRecord.Nearest(admitted));
+    }
+
     // What a rendering reads from, in the two words a statement names it by.
     private static Regex Read() => new(
         @"(?:FROM|JOIN)\s+([A-Za-z_][A-Za-z0-9_.]*)",

@@ -10,6 +10,7 @@ using Janus.Authentication.Mailboxes;
 using Janus.Core;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authentication.Mailboxes;
+using Janus.Storage.Authorization.Roles;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Xunit;
@@ -288,6 +289,38 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
 
     private static string Fresh(string name) => name + "." + Guid.NewGuid().ToString("N") + "@example.test";
 
+    /// <summary>
+    /// AUTHZ-GRANT-004 AC6 and REG-INV-001: a role a standing invitation names is named,
+    /// the invitation expired or not; one only a revoked or an acknowledged invitation
+    /// names is not, since neither will grant it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_ARoleAStandingInvitationNamesIsNamedAsync()
+    {
+        string unique = Guid.NewGuid().ToString("N")[..8];
+        var standing = RoleName.Parse("standing-" + unique);
+        var revoked = RoleName.Parse("revoked-" + unique);
+        var acknowledged = RoleName.Parse("acknowledged-" + unique);
+        SubjectId invitee = await _deployment.AccountAsync(Noon);
+
+        Invitation expired = await IssuedAsync("standing@example.test", roles: [standing]);
+        Invitation taken = await IssuedAsync("revoked@example.test", roles: [revoked]);
+        Invitation used = await IssuedAsync("acknowledged@example.test", roles: [acknowledged]);
+
+        await ChangeAsync(taken.Id, held => held.Revoke(Noon.AddHours(1)));
+        await ChangeAsync(used.Id, held => held.AttachTo(invitee, Noon.AddHours(1)));
+        await ChangeAsync(used.Id, held => held.Acknowledge(Noon.AddHours(2)));
+
+        await using StoreContext reading = database.Context();
+        var references = new RoleReferences(reading);
+
+        Assert.True(expired.HasExpired(Noon.AddDays(8)));
+        Assert.True(await references.NamedAsync(standing, TestContext.Current.CancellationToken));
+        Assert.False(await references.NamedAsync(revoked, TestContext.Current.CancellationToken));
+        Assert.False(await references.NamedAsync(acknowledged, TestContext.Current.CancellationToken));
+    }
+
     private InvitationStore Store(StoreContext context) =>
         new(context, _deployment.DataKey(context), _deployment.Randomness);
 
@@ -309,7 +342,10 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
     private MailboxStore Mailboxes(StoreContext context) =>
         new(context, _deployment.DataKey(context), _deployment.Ring, _deployment.Randomness);
 
-    private async Task<Invitation> IssuedAsync(string email, string? corporate = null)
+    private async Task<Invitation> IssuedAsync(
+        string email,
+        string? corporate = null,
+        RoleName[]? roles = null)
     {
         OrganizationId organization = await _deployment.OrganizationAsync(Noon);
         SubjectId inviter = await _deployment.AccountAsync(Noon);
@@ -320,7 +356,7 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
             organization,
             inviter,
             new InvitedIdentifiers(email, "+441632960011", corporate),
-            [RoleName.Parse("clerk"), RoleName.Parse("auditor")],
+            roles ?? [RoleName.Parse("clerk"), RoleName.Parse("auditor")],
             [new InvitationDocument("staff-handbook", "3")],
             mailbox?.Id,
             OpaqueToken.Of(Guid.NewGuid().ToString("N")).Fingerprint(),

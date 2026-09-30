@@ -68,15 +68,6 @@ internal interface IGrantStore
     ValueTask<bool> ExistsAsync(Grant grant, DateTimeOffset at, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Whether any grant confers the role, live, expired or revoked, which is what keeps
-    /// the role in place: a grant's history names it.
-    /// </summary>
-    /// <param name="role">Which role.</param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Whether one does.</returns>
-    ValueTask<bool> NamesAsync(RoleName role, CancellationToken cancellationToken);
-
-    /// <summary>
     /// Whether any grant was given to an account or a group, live, expired or revoked,
     /// which is what keeps a group in place: a grant's history names it.
     /// </summary>

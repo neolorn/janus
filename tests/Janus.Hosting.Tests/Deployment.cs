@@ -965,6 +965,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Authorization.Gate.IAdministrativeOrganization>(GateAdministrative);
         _ = services.AddSingleton<Janus.Authorization.Grants.IEmergencyAccount>(GrantEmergency);
         _ = services.AddSingleton<Janus.Authorization.Grants.IGrantStore>(AccessGrants);
+        _ = services.AddSingleton<Janus.Authorization.Roles.IRoleReferences>(
+            new Janus.Hosting.Tests.Authorization.RoleReferencesInMemory(AccessGrants, Invitations));
         _ = services.AddSingleton<Janus.Authorization.Roles.IRoleStore>(Roles);
         _ = services.AddSingleton<Janus.Authorization.Groups.IGroupStore>(Groups);
         _ = services.AddSingleton<Janus.Authorization.Resources.IResourceStore>(Resources);

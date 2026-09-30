@@ -271,6 +271,7 @@ internal static class StorageRegistration
         services.AddScoped<IAuditTrailStore, AuditTrailStore>();
 
         services.AddScoped<IRoleStore, RoleStore>();
+        services.AddScoped<IRoleReferences, RoleReferences>();
         services.AddScoped<IRoleAudit, RoleAudit>();
         services.AddScoped<IGrantStore, GrantStore>();
         services.AddScoped<IGroupStore, GroupStore>();

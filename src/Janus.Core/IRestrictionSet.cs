@@ -33,8 +33,8 @@ public interface IRestrictionSet
     /// <param name="name">Which restriction.</param>
     /// <param name="cancellationToken">Abandons the read.</param>
     /// <returns>
-    /// The restriction, or the refusal: <c>api.request.malformed</c> naming <c>name</c>
-    /// where no restriction has it.
+    /// The restriction, or the refusal: <c>auth.restriction.notfound</c> where no
+    /// restriction has the name.
     /// </returns>
     ValueTask<Result<Restriction>> ReadAsync(
         AccessContext context,
@@ -49,7 +49,10 @@ public interface IRestrictionSet
     /// <param name="replacement">What the restriction becomes, under its own name.</param>
     /// <param name="reason">Why, which a loosening requires.</param>
     /// <param name="cancellationToken">Abandons the change.</param>
-    /// <returns>Success, or the refusal.</returns>
+    /// <returns>
+    /// Success, or the refusal: <c>api.request.malformed</c> naming <c>reason</c> where
+    /// it is past 1024 characters.
+    /// </returns>
     ValueTask<Result> EditAsync(
         AccessContext context,
         SessionId session,
@@ -66,8 +69,9 @@ public interface IRestrictionSet
     /// <param name="reason">Why, which the loosening requires.</param>
     /// <param name="cancellationToken">Abandons the change.</param>
     /// <returns>
-    /// Success, or the refusal: <c>api.request.malformed</c> naming <c>name</c> where
-    /// no restriction has it.
+    /// Success, or the refusal: <c>auth.restriction.notfound</c> where no restriction
+    /// has the name, <c>api.request.malformed</c> naming <c>reason</c> where it is past
+    /// 1024 characters.
     /// </returns>
     ValueTask<Result> DeleteAsync(
         AccessContext context,
@@ -87,7 +91,12 @@ public interface IRestrictionSet
     /// <param name="credit">How many sends the credit is worth.</param>
     /// <param name="reason">Why, which every grant requires.</param>
     /// <param name="cancellationToken">Abandons the grant.</param>
-    /// <returns>Success, or the refusal.</returns>
+    /// <returns>
+    /// Success, or the refusal: <c>auth.restriction.notfound</c> where no restriction
+    /// has the name, <c>config.value.notallowed</c> for a credit at or below zero,
+    /// <c>api.request.malformed</c> naming <c>reason</c> where it is past 1024
+    /// characters.
+    /// </returns>
     ValueTask<Result> GrantAsync(
         AccessContext context,
         SessionId session,

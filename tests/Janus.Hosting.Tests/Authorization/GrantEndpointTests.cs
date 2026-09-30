@@ -432,6 +432,44 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// OPS-BOOT-002, D-166: the reserved account's <c>system-administrator</c> grant is
+    /// what the break-glass session holds, so a system administrator stepped up is
+    /// refused its revocation and the grant stands.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_TheReservedAccountsAdministrationIsNotRevokedAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(
+            Administration,
+            Permissions.GrantManage,
+            Permissions.SystemAdminister);
+        Grant bootstrapped = Grant
+            .Create(
+                GrantId.New(_deployment.Clock),
+                new GrantSubject(SubjectType.User, Holder),
+                SystemAdministrator,
+                Administration,
+                on: null,
+                deny: false,
+                GrantKind.Stored,
+                expiresAt: null,
+                new SubjectId(Holder),
+                _deployment.Clock.GetUtcNow(),
+                "Bootstrap.")
+            .Match(grant => grant, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        await _deployment.AccessGrants.CreateAsync(bootstrapped, CancellationToken.None);
+        _deployment.Reserves(new SubjectId(Holder));
+
+        Answer refused = await RevokedAsync(administrator, bootstrapped.Id.ToString());
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
+        Assert.Null((await _deployment.AccessGrants.FindAsync(bootstrapped.Id, CancellationToken.None))!.RevokedAt);
+    }
+
+    /// <summary>
     /// AUTH-STEP-001 and chapter 10 section 5a: granting and revoking are the
     /// <c>grant:manage</c> step-up action, so a session whose proof is no longer recent
     /// changes nothing.
@@ -458,9 +496,10 @@ public sealed class GrantEndpointTests : IAsyncLifetime
 
     /// <summary>
     /// AUTHZ-GRANT-001: a grant names a role, an organization, and a group of the
-    /// grant's own organization; anything else is a malformed request naming the
-    /// member. A record the deployment holds no registration for is refused rather
-    /// than malformed (CONV-DESIGN-002 AC3).
+    /// grant's own organization. A body that cannot be read is malformed; a role the
+    /// deployment does not hold, or a group that does not exist or belongs to another
+    /// organization, is unresolved, naming the member (D-166). A record the deployment
+    /// holds no registration for is refused rather than malformed (CONV-DESIGN-002 AC3).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -476,6 +515,8 @@ public sealed class GrantEndpointTests : IAsyncLifetime
         Answer unnamed = await GrantedAsync(administrator, "organization", "not-an-organization");
         Answer unknownRole = await GrantedAsync(administrator, "document", "d-1", role: RoleName.Parse("auditor"));
         Answer foreignGroup = await GrantedAsync(administrator, "document", "d-1", group: foreign.Id);
+        Answer missingGroup = await GrantedAsync(
+            administrator, "document", "d-1", group: new GroupId(Guid.NewGuid()));
         Answer localGroup = await GrantedAsync(administrator, "document", "d-1", group: local.Id);
         Answer untyped = await administrator.SendAsync(
             "POST",
@@ -488,8 +529,9 @@ public sealed class GrantEndpointTests : IAsyncLifetime
             ("reason", "Needs it."));
 
         Assert.Equal("resourceId", Member(unnamed));
-        Assert.Equal("role", Member(unknownRole));
-        Assert.Equal("subjectId", Member(foreignGroup));
+        Assert.Equal("role", Unresolved(unknownRole));
+        Assert.Equal("subjectId", Unresolved(foreignGroup));
+        Assert.Equal("subjectId", Unresolved(missingGroup));
         Assert.Equal("resourceType", Member(untyped));
         Assert.Equal(StatusCodes.Status201Created, localGroup.Status);
         Assert.Equal(
@@ -666,6 +708,14 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     private static string Member(Answer answer)
     {
         Assert.Equal(StatusCodes.Status400BadRequest, answer.Status);
+
+        return answer.Json().GetProperty("details").GetProperty("member").GetString()!;
+    }
+
+    private static string Unresolved(Answer answer)
+    {
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, answer.Status);
+        Assert.Equal(ErrorCodes.GrantUnresolved.ToString(), answer.Text("code"));
 
         return answer.Json().GetProperty("details").GetProperty("member").GetString()!;
     }

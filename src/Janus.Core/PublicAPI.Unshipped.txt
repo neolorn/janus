@@ -3848,6 +3848,7 @@ static Janus.Core.ErrorCodes.GrantDuplicate.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GrantExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GrantNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GrantReasonRequired.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.GrantUnresolved.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GroupCycle.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GroupInUse.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierDomainNotAllowed.get -> Janus.Core.ErrorCode
@@ -3905,7 +3906,9 @@ static Janus.Core.ErrorCodes.RequestReceivedFuture.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ResourceNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.Restricted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RestrictionExceeded.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.RestrictionNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RoleInUse.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.RoleNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RotationNotReady.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ScreeningUnavailable.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.SessionCsrfInvalid.get -> Janus.Core.ErrorCode
@@ -3925,6 +3928,7 @@ static Janus.Core.ErrorCodes.StartupRelyingPartyId.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupSchemaMismatch.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupSecretUnavailable.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupSubscriberName.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.StartupTypeReserved.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupUndeclaredDerivationReference.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupUndeclaredPermission.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupUndeclaredTypeReference.get -> Janus.Core.ErrorCode

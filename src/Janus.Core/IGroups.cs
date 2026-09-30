@@ -79,7 +79,9 @@ public interface IGroups
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Success, also where it is a member already, or the refusal:
-    /// <c>authz.group.cycle</c> where the member already reaches the group.
+    /// <c>authz.group.cycle</c> where the member already reaches the group,
+    /// <c>api.request.invalid</c> naming <c>subjectId</c> where a member group does not
+    /// exist or belongs to another organization.
     /// </returns>
     ValueTask<Result> AddMemberAsync(
         AccessContext context,

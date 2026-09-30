@@ -385,8 +385,8 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// AUTHZ-GROUP-001 and API-CONV-002: a change names an organization, a name and a
-    /// reason of 1 to 1024 characters, and a member group of the same organization;
+    /// AUTHZ-GROUP-001 and API-CONV-002: a change names an organization, a name, a
+    /// reason of 1 to 1024 characters and a member of a type the vocabulary holds;
     /// anything else is a malformed request naming the field. A group the deployment
     /// holds no row for is refused rather than malformed (CONV-DESIGN-002 AC3).
     /// </summary>
@@ -396,13 +396,11 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     {
         (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
         GroupId tellers = Id(await CreatedAsync(administrator, "Tellers"));
-        Group foreign = await HeldAsync(Administration, "Operators");
 
         Answer unscoped = await administrator.SendAsync("GET", "/admin/groups");
         Answer unnamed = await CreatedAsync(administrator, " ");
         Answer overlong = await CreatedAsync(administrator, new string('n', 1025));
         Answer unreasoned = await CreatedAsync(administrator, "Auditors", reason: " ");
-        Answer crossing = await AddedAsync(administrator, tellers, GrantSubject.Of(foreign.Id));
         Answer untyped = await administrator.SendAsync(
             "POST",
             "/admin/groups/" + tellers + "/members",
@@ -414,10 +412,39 @@ public sealed class GroupEndpointTests : IAsyncLifetime
         Assert.Equal("name", Member(unnamed));
         Assert.Equal("name", Member(overlong));
         Assert.Equal("reason", Member(unreasoned));
-        Assert.Equal("subjectId", Member(crossing));
         Assert.Equal("subjectType", Member(untyped));
         Assert.Equal("reason", Member(silent));
         Assert.Empty(await _deployment.Groups.MembersAsync(tellers, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// AUTHZ-GROUP-001, D-166: a member group that does not exist, or that belongs to
+    /// another organization, is a body read and understood that names nothing the group
+    /// can hold, refused naming <c>subjectId</c>, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GROUP_001_AMemberGroupTheGroupCannotHoldIsInvalidAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
+        GroupId tellers = Id(await CreatedAsync(administrator, "Tellers"));
+        Group foreign = await HeldAsync(Administration, "Operators");
+
+        Answer crossing = await AddedAsync(administrator, tellers, GrantSubject.Of(foreign.Id));
+        Answer missing = await AddedAsync(administrator, tellers, GrantSubject.Of(new GroupId(Guid.NewGuid())));
+
+        Assert.All(
+            new[] { crossing, missing },
+            answer =>
+            {
+                Assert.Equal(StatusCodes.Status422UnprocessableEntity, answer.Status);
+                Assert.Equal(ErrorCodes.RequestInvalid.ToString(), answer.Text("code"));
+                Assert.Equal("subjectId", answer.Json().GetProperty("details").GetProperty("member").GetString());
+            });
+        Assert.Empty(await _deployment.Groups.MembersAsync(tellers, CancellationToken.None));
+        Assert.DoesNotContain(
+            _deployment.GroupChanges.Changes,
+            change => change.Action == AuditActions.GroupMemberAdded);
     }
 
     /// <summary>

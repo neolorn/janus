@@ -117,6 +117,13 @@ public static class ErrorCodes
     public static ErrorCode StartupNoOrganizationPath { get; } = ErrorCode.Parse("model.type.noorganizationpath");
 
     /// <summary>
+    /// Startup: a resource type takes the name <c>organization</c>, which the library
+    /// reserves for the whole organization. Name the type something else.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-MODEL-002, AUTHZ-MODEL-004, D-166, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupTypeReserved { get; } = ErrorCode.Parse("model.type.reserved");
+
+    /// <summary>
     /// Startup: a purpose rests on a basis that requires an assessment and names
     /// none. Name the legitimate interest assessment, or rest the purpose elsewhere.
     /// </summary>
@@ -774,6 +781,13 @@ public static class ErrorCodes
     public static ErrorCode RestrictionExceeded { get; } = ErrorCode.Parse("auth.restriction.exceeded");
 
     /// <summary>
+    /// The restriction named in the path is not in the set. Name a restriction the set
+    /// holds.
+    /// </summary>
+    /// <remarks>Implements AUTH-ABUSE-004, D-166, chapter 10 section 1.2.</remarks>
+    public static ErrorCode RestrictionNotFound { get; } = ErrorCode.Parse("auth.restriction.notfound");
+
+    /// <summary>
     /// A conformance finding: the provider admitted a request it refuses, or its
     /// discovery document names a form it retires. The details name the probe, what was
     /// sent, the refusal expected and what came back; restore the provider to the
@@ -828,6 +842,14 @@ public static class ErrorCodes
     public static ErrorCode GrantReasonRequired { get; } = ErrorCode.Parse("authz.grant.reasonrequired");
 
     /// <summary>
+    /// A grant names a role the deployment does not hold, or a group that does not
+    /// exist or belongs to another organization. Name a role and a holder that exist
+    /// where the grant is made.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-001, REG-INV-001, D-166, chapter 10 section 1.3.</remarks>
+    public static ErrorCode GrantUnresolved { get; } = ErrorCode.Parse("authz.grant.unresolved");
+
+    /// <summary>
     /// Adding the member would make a group contain itself. Add it somewhere the
     /// group does not already reach.
     /// </summary>
@@ -854,8 +876,10 @@ public static class ErrorCodes
     /// the caller holds a permission on.
     /// </summary>
     /// <remarks>
-    /// Implements AUTHZ-CONCEAL-001, AUTHZ-CONCEAL-002, API-CONV-003 and BFF-ERR-003. The
-    /// browser profile answers it; nothing in the library returns it from an operation.
+    /// Implements AUTHZ-CONCEAL-001, AUTHZ-CONCEAL-002, API-CONV-003, BFF-ERR-003 and
+    /// D-166. The browser profile answers it for a concealed denial, and an operation on
+    /// the caller's own browsers and sessions returns it, with empty details, for one
+    /// the account does not hold.
     /// </remarks>
     public static ErrorCode ResourceNotFound { get; } = ErrorCode.Parse("authz.resource.notfound");
 
@@ -872,6 +896,13 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements AUTHZ-GRANT-004 and AUTHZ-GRANT-003 AC3.</remarks>
     public static ErrorCode RoleInUse { get; } = ErrorCode.Parse("authz.role.inuse");
+
+    /// <summary>
+    /// The role named in the path is not one the deployment holds. Name a role that
+    /// exists.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-GRANT-004, D-166, chapter 10 section 1.3.</remarks>
+    public static ErrorCode RoleNotFound { get; } = ErrorCode.Parse("authz.role.notfound");
 
     /// <summary>
     /// A conformance finding: a case of the host's truth table decided otherwise than

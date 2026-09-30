@@ -839,20 +839,36 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-SESS-013: a session of another account is not the caller's to end.
+    /// CONV-DESIGN-002 AC3, AUTH-SESS-013, D-166: a session of another account is not the
+    /// caller's to end, and is answered as one that does not exist, with the same code
+    /// and no details, and it goes on.
     /// </summary>
+    /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task EndAsync_ASessionOfAnotherAccount_IsRefusedAsync()
+    public async Task CONV_DESIGN_002_AC3_AnotherAccountsSessionIsAnsweredAsNoneAsync()
     {
         IssuedSession theirs = await BegunAsync(Subject(), [Factor.Password]);
 
-        Result ended = await Service.EndAsync(
+        Error another = Failure(await Service.EndAsync(
             AccessContext.Of(Subject()),
             theirs.Id,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken));
+        Error unknown = Failure(await Service.EndAsync(
+            AccessContext.Of(Subject()),
+            new SessionId(Guid.NewGuid()),
+            TestContext.Current.CancellationToken));
 
-        Assert.Equal(ErrorCodes.Denied, Refusal(ended));
+        Assert.All(
+            new[] { another, unknown },
+            refusal =>
+            {
+                Assert.Equal(ErrorCodes.ResourceNotFound, refusal.Code);
+                Assert.Empty(refusal.Details);
+            });
         Assert.Null(await RefusalAsync(theirs.Secret));
+
+        static Error Failure(Result result) =>
+            result.Match(() => throw new Xunit.Sdk.XunitException("The end was not refused."), error => error);
     }
 
     /// <summary>

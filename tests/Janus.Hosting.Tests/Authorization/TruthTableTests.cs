@@ -69,6 +69,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a grant on the container the record was moved into", Decided.Allowed),
         ("a grant on the container the record was moved out of", Decided.Denied),
         ("a record of a type the model does not declare", Decided.Raised),
+        ("a permission the model does not declare", Decided.Raised),
     ];
 
     // The decisions an operation's own gate step makes over what no list shows, each
@@ -82,10 +83,13 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a change to a group no row names, by a caller managing groups", Decided.Denied),
         ("a change to a group no row names, by a restricted caller", Decided.Restricted),
         ("a grant on a record no registration names, by a caller managing grants", Decided.Denied),
+        ("a lookup of a record no registration names, by a caller reading grants", Decided.Denied),
         ("a change to the account's own settings", Decided.Allowed),
         ("a change to the account's own settings, by a restricted caller", Decided.Restricted),
         ("a page's record whose subject gave the consent its purpose asks", Decided.Allowed),
         ("a page's record whose subject gave no consent to its purpose", Decided.ConsentRequired),
+        ("a grant in the administrative organization, to a member of it", Decided.Allowed),
+        ("a grant in the administrative organization, to an account holding no membership of it", Decided.Denied),
     ];
 
     /// <summary>
@@ -346,7 +350,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         return Rendered(await scope.ServiceProvider.GetRequiredService<IAccessGate>()
             .FilterAsync(
                 AccessContext.Of(written.Account),
-                HostPermissions.Read,
+                written.Asked,
                 written.Record.Type,
                 written.Deployment.Organization,
                 Sources(reading),
@@ -372,9 +376,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             ? decided
             : throw new InvalidOperationException(error.Code.ToString());
 
-    // CONV-ERR-001, AUTHZ-PRIN-003: a type the model does not declare is raised by the
-    // gate before anything is read, which is what the case decides; the test's own
-    // failures are never read as one.
+    // CONV-ERR-001, AUTHZ-PRIN-003: a type or a permission the model does not declare is
+    // raised by the gate before anything is read, which is what the case decides; the
+    // test's own failures are never read as one.
     private static async Task<Decided> RaisedOrAsync(Func<Task<Decided>> asked)
     {
         try
@@ -410,7 +414,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
                 .RequireAsync(
                     AccessContext.Of(written.Account),
-                    HostPermissions.Read,
+                    written.Asked,
                     written.Record,
                     Sources(reading),
                     TestContext.Current.CancellationToken);
@@ -442,7 +446,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 fragment = Rendered(await scope.ServiceProvider.GetRequiredService<IAccessGate>()
                     .FragmentAsync(
                         AccessContext.Of(written.Account),
-                        HostPermissions.Read,
+                        written.Asked,
                         written.Record.Type,
                         written.Deployment.Organization,
                         "identity_authz_row",
@@ -511,7 +515,13 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         await ReviewAsync(deployment, scenario, account, inner, outer);
         await MovedAsync(scenario, record, elsewhere);
 
-        return new Case(host, deployment, account, record, sibling, inner, outer);
+        // CONV-ERR-001, AUTHZ-PRIN-003: a permission no rule governs is asked of a record
+        // the whole organization's grant would otherwise admit.
+        Permission asked = scenario == "a permission the model does not declare"
+            ? Permission.Parse("document:share")
+            : HostPermissions.Read;
+
+        return new Case(host, deployment, account, record, sibling, inner, outer, asked);
     }
 
     // AUTHZ-INHERIT-002: the record is moved by the library, whose rewrite of the
@@ -533,9 +543,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Assert.True(moved.Match(() => true, _ => false));
     }
 
-    // Each operation case in a deployment of its own, its caller holding the management
-    // of grants and of groups across the organization, so that what refuses a row no
-    // row names is the row's absence and never the caller's want of a permission.
+    // Each operation case in a deployment of its own, its caller holding the reading and
+    // management of grants and the management of groups across the organization, so
+    // that what refuses a row no row names is the row's absence and never the caller's
+    // want of a permission.
     private async Task<Decided> OperationAsync(string scenario)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -545,7 +556,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             [HostPermissions.Read, HostPermissions.Recommend],
             cancellationToken);
         RoleName managing = await deployment.RoleAsync(
-            [Permissions.GrantManage, Permissions.GroupManage],
+            [Permissions.GrantManage, Permissions.GrantRead, Permissions.GroupManage],
             cancellationToken);
         SubjectId caller = await deployment.AccountAsync(cancellationToken);
 
@@ -595,6 +606,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                             cancellationToken))
                     .Match(_ => Decided.Allowed, Refused);
 
+            case "a lookup of a record no registration names, by a caller reading grants":
+                return (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                        .WhoCanAccessAsync(context, Reference(Document), cancellationToken))
+                    .Match(_ => Decided.Allowed, Refused);
+
             case "a change to the account's own settings":
             case "a change to the account's own settings, by a restricted caller":
                 return await scope.ServiceProvider.GetRequiredService<ISettingsRestriction>()
@@ -610,9 +626,43 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     caller,
                     consented: scenario == "a page's record whose subject gave the consent its purpose asks");
 
+            case "a grant in the administrative organization, to a member of it":
+            case "a grant in the administrative organization, to an account holding no membership of it":
+                return await AdministeredAsync(
+                    deployment,
+                    managing,
+                    caller,
+                    member: scenario == "a grant in the administrative organization, to a member of it");
+
             default:
                 throw new ArgumentOutOfRangeException(nameof(scenario), scenario, "No such case.");
         }
+    }
+
+    // IDN-LIFE-009a, D-166: the caller's grant in the administrative organization,
+    // asked of that organization as an administrative operation asks it.
+    private async Task<Decided> AdministeredAsync(
+        Deployment deployment,
+        RoleName managing,
+        SubjectId caller,
+        bool member)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
+
+        if (member)
+        {
+            await deployment.MemberAsync(caller, administrative, cancellationToken);
+        }
+
+        await deployment.GrantAsync(
+            GrantSubject.Of(caller), managing, null, false, null, administrative, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .RequireAsync(AccessContext.Of(caller), Permissions.GrantRead, administrative, cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
     }
 
     // AUTHZ-GATE-005 AC1, PRIV-SENS-002 AC1: one page holding a record of a subject who
@@ -816,9 +866,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     holder, role, inner, false, null, null, cancellationToken);
                 break;
 
-            // The whole organization is granted, so a type the gate answered rather than
-            // raised would be allowed.
+            // The whole organization is granted, so a type or a permission the gate
+            // answered rather than raised would be allowed.
             case "a record of a type the model does not declare":
+            case "a permission the model does not declare":
                 await deployment.GrantAsync(
                     holder, role, null, false, null, null, cancellationToken);
                 break;
@@ -988,5 +1039,6 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ResourceReference Record,
         ResourceReference Sibling,
         ResourceReference Inner,
-        ResourceReference Outer);
+        ResourceReference Outer,
+        Permission Asked);
 }

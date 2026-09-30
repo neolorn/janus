@@ -74,6 +74,27 @@ public sealed class AccessEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTHZ-DERIVE-007 AC3, 09 section 8: a record of a declared type the deployment
+    /// holds no registration for reads as the gate's refusal, 403 <c>authz.denied</c>,
+    /// even to a caller holding <c>grant:read</c>, and never as a malformed request.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_007_AnUnregisteredRecordReadsAsARefusalAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Company, Permissions.GrantRead);
+
+        Answer refused = await browser.SendAsync(
+            "GET",
+            $"/admin/access?resourceType=document&resourceId={Guid.NewGuid()}");
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
+    }
+
+    /// <summary>
     /// AUTHZ-CONCEAL-005: a caller without <c>grant:read</c> is refused 403.
     /// </summary>
     /// <returns>The work of the test.</returns>

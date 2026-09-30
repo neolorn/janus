@@ -104,6 +104,11 @@ internal static class RestrictionEndpoints
             return Answers.Malformed(member);
         }
 
+        if (Overlong(body.Reason))
+        {
+            return Answers.Malformed("reason");
+        }
+
         return Answers.Of(
             await restrictions
                 .EditAsync(
@@ -128,6 +133,11 @@ internal static class RestrictionEndpoints
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(restrictions);
         ArgumentNullException.ThrowIfNull(browser);
+
+        if (Overlong(body.Reason))
+        {
+            return Answers.Malformed("reason");
+        }
 
         return Answers.Of(
             await restrictions
@@ -164,9 +174,14 @@ internal static class RestrictionEndpoints
 
         // AUTH-ABUSE-004: every grant carries a reason, and chapter 10 names the refusal
         // of one without, so an absent one is answered by it rather than as malformed.
-        if (body.Reason is not { Length: > 0 } reason)
+        if (body.Reason?.Trim() is not { Length: > 0 } reason)
         {
             return Answers.Refused(Error.From(ErrorCodes.ConfigurationChangeReasonRequired));
+        }
+
+        if (reason.Length > 1024)
+        {
+            return Answers.Malformed("reason");
         }
 
         return Answers.Of(
@@ -182,4 +197,8 @@ internal static class RestrictionEndpoints
                 .ConfigureAwait(false),
             Nothing);
     }
+
+    // API-CONV-002, X4: a reason past 1024 characters after trimming is a request the
+    // boundary does not read, refused before the service is called (CONV-CODE-006 AC2).
+    private static bool Overlong(string? reason) => reason?.Trim().Length > 1024;
 }

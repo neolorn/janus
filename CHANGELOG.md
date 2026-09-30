@@ -30,11 +30,13 @@ against the public contract of LIB-API-001.
 - `IResources` in `Janus.Core`: a host registers each record it creates, many at once
   for an import, and moves one, inside its own unit of work, and the ancestry the
   permission filter reads is written in the same transaction. A record is placed only in
-  a container of the type its own is declared contained in and of the same organization;
-  anything else is refused as `api.request.malformed` naming `resourceType`,
-  `resourceId` or `containedIn`, and a refused batch writes nothing. A record of a
-  sensitive type names a subject holding an account that is neither being deleted nor
-  deleted, or it is refused naming `subject`.
+  a container of the type its own is declared contained in and of the same organization.
+  A type the model does not declare is refused as `api.request.malformed` naming
+  `resourceType`; a record registered already or not registered to move (`resourceId`)
+  and a container that cannot hold it (`containedIn`) are refused as
+  `api.request.invalid`, and a refused batch writes nothing. A record of a sensitive
+  type names a subject holding an account that is neither being deleted nor deleted, or
+  it is refused as `api.request.invalid` naming `subject`.
 - A person signs in, registers or links an identity with Google or Apple.
   `GET /auth/providers/{provider}` with `intent` of `signin`, `register` or `link` and a
   local `returnTo` sends the browser to the provider with a single-use state and nonce,
@@ -358,8 +360,10 @@ against the public contract of LIB-API-001.
   `system:administer`, and a step-up to generate. The reserved account is never suspended, taken down,
   deleted, granted anything or added to a group, and is given no password, identifier,
   factor, provider link, recovery codes or mail credential; each is refused with
-  `authz.denied`. The reserved account is marked on its row, and the credential and its
-  attempts are kept in two tables of their own.
+  `authz.denied`. Its `system-administrator` grant is never revoked, and the role it
+  holds never loses a permission the library declares (a host permission may be
+  added), each refused with `authz.denied`. The reserved account is marked on its row,
+  and the credential and its attempts are kept in two tables of their own.
 - `POST /callbacks/providers/google` and `POST /callbacks/providers/apple` take the
   security events Google (Cross-Account Protection) and Sign in with Apple send about an
   identity linked to an account, on the machine profile and held to
@@ -543,7 +547,12 @@ against the public contract of LIB-API-001.
   record on as a derived grant; where `authz.reverselookup.budget` runs out first the
   answer carries `partial: true` and the relationships left unevaluated. Without those
   rows, a record a derivation reaches is refused with `authz.derivation.sourcesmissing`,
-  over HTTP included.
+  over HTTP included, once `grant:read` is held. A type the model does not declare is
+  refused 400 naming `resourceType`, and an organization identifier that is not a UUID
+  400 naming `resourceId`; a record the deployment holds no registration for is refused
+  403 `authz.denied`, recorded against no organization and counted, exactly as a caller
+  without `grant:read` is refused, so the view tells no one whether a record is
+  registered.
 - Staff mailboxes are provisioned through `IMailServer`, which a deployment registers
   where its staff mail is hosted and which no package ships. A mailbox is owed
   `disabled` from its reservation, `enabled` while its holder is an active member of the
@@ -702,16 +711,19 @@ against the public contract of LIB-API-001.
   that holds no member, belongs to no group and was never given a grant (409
   `authz.group.inuse` otherwise), and `POST|DELETE /admin/groups/{id}/members` adds or
   takes out an account or a group of the same organization (409 `authz.group.cycle`
-  where the group would contain itself). All ask `group:manage` in the group's
-  organization and a reason, and are recorded in the audit trail; a change of members
-  also needs step-up, and `system:administer` where the group reaches a role carrying
-  it. `IGroups` is the same set of operations in process. A group the deployment holds
-  no row for belongs to no organization, so every caller is refused it with 403
-  `authz.denied`, as a caller without `group:manage` is.
+  where the group would contain itself, 422 `api.request.invalid` naming `subjectId` for
+  a member group that does not exist or belongs to another organization). All ask
+  `group:manage` in the group's organization and a reason, and are recorded in the audit
+  trail; a change of members also needs step-up, and `system:administer` where the group
+  reaches a role carrying it. `IGroups` is the same set of operations in process. A
+  group the deployment holds no row for belongs to no organization, so every caller is
+  refused it with 403 `authz.denied`, as a caller without `group:manage` is.
 - `GET /admin/roles` reads every role with its permissions, `POST /admin/roles` creates
   a role or gives an existing one the permissions stated, and
-  `DELETE /admin/roles/{name}` removes one no grant or derivation names (409
-  `authz.role.inuse` otherwise). All ask `role:manage` in the administrative
+  `DELETE /admin/roles/{name}` removes one no grant, derivation or standing invitation
+  (neither acknowledged nor revoked, expired or not) names (409
+  `authz.role.inuse` otherwise, 404 `authz.role.notfound` for a role the deployment
+  does not hold). All ask `role:manage` in the administrative
   organization; changes need step-up and a reason, are recorded in the audit trail with
   the permissions before and after, and need `system:administer` where the role carries
   it before or after. `IRoles` is the same set of operations in process.
@@ -723,7 +735,10 @@ against the public contract of LIB-API-001.
   `IGrants` is the same pair of operations in process. A revocation naming no grant, and
   a grant on a record the deployment holds no registration for, are refused with 403
   `authz.denied` in the same way; a revoked or derived grant answers 404
-  `authz.grant.notfound` only to a caller holding `grant:manage` where it is scoped.
+  `authz.grant.notfound` only to a caller holding `grant:manage` where it is scoped. A
+  grant naming a role the deployment does not hold, or a group that does not exist or
+  belongs to another organization, answers 422 `authz.grant.unresolved` naming `role`
+  or `subjectId`.
 - `GET /admin/grants?organization=...&subjectType=user|group&subjectId=...` and
   `IGrants.HeldAsync` read the live grants one account or group holds in its own name in
   an organization, oldest first, each with its identifier, kind, role, what it is on,
@@ -738,8 +753,10 @@ against the public contract of LIB-API-001.
   host supplier the deployment did not register is refused there with
   `config.value.notallowed` naming the `supplier`; and
   `POST /admin/restrictions/{name}/grant` adds credit to one key under
-  `restriction:grant`, behind step-up and with a reason. `IRestrictionSet` is the same
-  set of operations in process.
+  `restriction:grant`, behind step-up and with a reason. A name the set does not hold
+  answers 404 `auth.restriction.notfound` to a read, a deletion and a grant, and a
+  reason past 1024 characters is refused with `api.request.malformed` naming `reason`.
+  `IRestrictionSet` is the same set of operations in process.
 - `GET /admin/config/{key}` reads one runtime key under `config:read`: its value in
   force and its default in the key's own JSON type, whether it is protected, and which
   way it loosens (`increase`, `decrease` or `any-change`). `PUT /admin/config/{key}`
@@ -761,7 +778,9 @@ against the public contract of LIB-API-001.
   administrative organization, whichever organization the refusal was recorded in
   (`IAccessGate.ResolveAsync`, which takes no organization), and
   `GET /account/explanations/{correlationId}` resolves one for the principal it refused
-  where the refused type is not concealed (`IAccessGate.ResolveOwnAsync`).
+  where the refused type is not concealed (`IAccessGate.ResolveOwnAsync`). A caller
+  without `audit:read` is answered with the gate's own refusal, whose correlation
+  identifier resolves to the denial recorded for it.
 - `POST /admin/accounts/{subject}/sessions/revoke` ends every session of one account
   under `session:revoke-account`, and `POST /admin/sessions/revoke-all` ends every
   session in the deployment under `session:revoke`, the caller's own included, each
@@ -1259,8 +1278,6 @@ against the public contract of LIB-API-001.
   `retryAt`, before any session is looked up. Each instance of a deployment counts on
   its own, by the connection address after the proxies the host trusts, so a
   deployment of several instances sets the key to each one's share.
-- Capabilities never list a permission the authorization model does not declare,
-  whatever a stored role still allows.
 - A host's restriction key supplier is asked once for each key name when a send is
   judged, however many restrictions count under that key.
 - Every throttled answer (sign-in, sign-in link and email code, recovery, break-glass
@@ -1473,8 +1490,9 @@ against the public contract of LIB-API-001.
   code.
 - `ISessions` in `Janus.Core`: an account sees its live sessions with the time of
   sign-in, the time of last use, the device and a city-level location, ends one of them
-  on its own, or signs out everywhere. An administrator ends one account's sessions, and
-  the emergency operation ends every session in the deployment.
+  on its own, or signs out everywhere; a session of another account is answered 404
+  `authz.resource.notfound`, as one nobody holds. An administrator ends one account's
+  sessions, and the emergency operation ends every session in the deployment.
 - `IAccessGate` in `Janus.Core`: the one place a permission is evaluated. A check and a
   list filter are the same rule rendered two ways, an expression a host composes into
   its own LINQ query and a parameterised PostgreSQL fragment a hand-written query
@@ -1500,19 +1518,25 @@ against the public contract of LIB-API-001.
   it was inherited from, and the principal it was decided for, or states that no grant
   matched. An explanation can be asked with the host's own rows, and on a type a
   derivation reaches it names the grant the fact produced: no identifier, the derived
-  kind, the role the derivation confers, and the container it was inherited from. The
-  identifier an explained grant carries is optional for that reason: a derived grant is
-  a fact being true and no row holds it. A page of capabilities costs one query over the
-  host's own rows however many permissions it asks for: every derivation reaching the
-  type is evaluated in that one query, and what the role each confers allows is read
-  from the model, so a page that offers three actions costs what a page offering one
-  costs.
+  kind, the role the derivation confers, and the container it was inherited from, the
+  nearest where several admit the record. The identifier an explained grant carries is
+  optional for that reason: a derived grant is a fact being true and no row holds it. A
+  page of capabilities with the host's rows costs one query over those rows however many
+  permissions it asks for: the stored grants and every derivation reaching the type are
+  evaluated in that one query, a deny defeating a derived grant there, and what the role
+  each derivation confers allows is read from the model, so a page that offers three
+  actions costs what a page offering one costs. A single check with the host's rows is
+  one query over them as well, and neither reads a grant through the library's own
+  connection.
 - A refusal on one record answers as a record that does not exist unless the type says
   otherwise, and a type says so in one place for every record of it. A type that
   conceals has no self-service explanation, because saying that no grant matched says
   that the record is there. The browser profile answers such a refusal as `404
   authz.resource.notfound` carrying the identifier it was recorded under, whatever the
   endpoint wrote after it, and the answer is the same whether or not the record exists.
+- The refusal of a record the library holds no row for runs the same statements as the
+  refusal of a registered one, the reading of the host's rows included, so how long it
+  takes says nothing about whether the record exists.
 - Every refusal carries a correlation identifier, whatever the request was made under,
   background work included, which is the audit row it was recorded as. A refusal of work
   done under neither identity is recorded with neither named, which is the recorded fact
@@ -1521,12 +1545,17 @@ against the public contract of LIB-API-001.
   identifier to the permission and the principal, whichever organization the refusal was
   recorded in; it says nothing about whether the record exists. A permission that names
   no record is refused as a permission the caller does not hold, with nothing concealed.
-- A check, a filter or a fragment naming a resource type the model does not declare
-  raises at the request, before the caller's restriction is read or anything is
-  recorded, so the calling code's fault is the same whoever asks.
+- A check, a filter, a fragment, a capability page or an explanation naming a resource
+  type or a permission the model does not declare raises at the request, before the
+  caller's restriction is read or anything is recorded, so the calling code's fault is
+  the same whoever asks. A capability page asked for such a permission raises rather
+  than leaving it out, whatever a stored role still allows.
 - A refusal is recorded with the grant that decided it, where one did, so its correlation
   identifier resolves to what the gate explained at the time: a deny grant is named with
   the container it sat on, rather than the refusal reading as one no grant matched.
+- A refusal is recorded outside any transaction the caller holds open and committed at
+  once, so a rollback of the caller's work leaves it standing: it still resolves by its
+  correlation identifier and counts toward `alerting.denials.threshold`.
 - A refusal the library answers is logged under the correlation identifier the answer
   carries, by its code. A fault is logged at error with the code and the structured
   context the answer withholds, so a `system.fault` is traced to its cause by that
@@ -1583,9 +1612,10 @@ against the public contract of LIB-API-001.
   reference to one of the host's fields is an expression the compiler checks.
 - The authorization model is built and checked once, at startup: a containment cycle, a
   reference to a type that was never declared, a type that reaches no organization, a
-  type with no purpose, a purpose whose basis needs an assessment and names none, and a
-  derivation from a relationship that was never declared each stop the deployment with
-  their own code.
+  type with no purpose, a purpose whose basis needs an assessment and names none, a
+  derivation from a relationship that was never declared, and a type named
+  `organization`, which the library reserves for the whole organization
+  (`model.type.reserved`), each stop the deployment with their own code.
 - The two checks the declaration alone cannot decide run as the deployment starts and
   before it serves a request: a role someone wrote allowing a permission the model does
   not declare, and a derivation naming a column no index reaches, each stop the process
@@ -1798,7 +1828,9 @@ against the public contract of LIB-API-001.
   and the takedown) is permitted only where the caller holds its permission in the
   administrative organization; a grant in any other organization does not reach it, and
   before bootstrap has marked an organization administrative every such operation is
-  refused.
+  refused. A grant in the administrative organization confers only while its holder
+  holds a current membership of it: ending that membership stops what the grant
+  confers and removes no grant.
 - The three database roles the deployment attaches credentials to. `identity_migrate`
   owns the schema and is the only role that alters it, `identity_app` reads and writes
   rows, and `identity_maintenance` executes the two audit partition functions and reads
@@ -1886,7 +1918,8 @@ against the public contract of LIB-API-001.
   begun, and a link the account abandons is spent at once.
 - The account lists the browsers it knows, the ones it trusts for the second step and
   the ones the new-device check remembers, and forgets any of them: a trusted browser is
-  asked for the second step again, a remembered one faces the check again.
+  asked for the second step again, a remembered one faces the check again. Another
+  account's browser is answered 404 `authz.resource.notfound`, as one nobody holds.
 - A sign-in in flight, a link or code sent for one, and a requirement a policy raised
   are kept in tables of the library's schema. Neither the handle a browser carries nor
   the link it was sent is held as it was issued: each is kept as its fingerprint, and

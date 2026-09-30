@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authorization.Gate;
@@ -19,4 +20,15 @@ internal sealed class AdministrativeOrganizationInMemory : IAdministrativeOrgani
     /// <inheritdoc/>
     public ValueTask<OrganizationId?> FindAsync(CancellationToken cancellationToken) =>
         ValueTask.FromResult(Organization);
+
+    /// <summary>
+    /// The accounts holding a current membership of the organization.
+    /// </summary>
+    public HashSet<SubjectId> Members { get; } = [];
+
+    /// <inheritdoc/>
+    public ValueTask<OrganizationId?> WithoutMembershipAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Members.Contains(subject) ? null : Organization);
 }
