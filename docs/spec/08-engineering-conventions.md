@@ -259,11 +259,14 @@ in its operation's transaction.
 **Own records.** An operation on the caller's own records (the account, its credentials,
 devices, sessions, consents, objections, privacy requests, invitations and app
 passwords), which no permission of `10` section 2.1 governs, SHALL perform as its gate
-step the check that the access context names an account, before any load. A record such
-an operation names by identifier SHALL be loaded after that check, and a record of
-another account SHALL be answered as an identifier that names no record.
+step the check that the access context names an account and, where the operation is one
+of the step-up actions OPS-BOOT-002 lists and the context is the break-glass session or
+a session another application opened from it (BFF-SESS-006), its refusal with 403
+`authz.denied`, before any load. A record such an operation names by identifier SHALL be
+loaded after that check, and a record of another account SHALL be answered as an
+identifier that names no record.
 
-*Source: LIB-API-005, AUTHZ-IMP-001, D-149, D-162, D-166, D-172*
+*Source: LIB-API-005, AUTHZ-IMP-001, D-149, D-162, D-166, D-172, D-179*
 
 Explicit calls read top to bottom and are what a reviewer and a test can see. A
 pipeline hides the order in registration code, and the two mainstream mediator and
@@ -281,21 +284,23 @@ rule (CONV-DEP-003) would refuse in any case.
    requiring it) and every implementation is `internal sealed`.
 2. No package whose purpose is request dispatch, pipeline behaviours or object mapping
    is referenced.
-3. Each operation method performs its gate step before any load or write: the gate
-   call, or for an operation on the caller's own records the check that the context
-   names an account. Resolving the organization the gate is asked in (the administrative
-   organization, the organization the path names, or the organization one row belongs
-   to, read alone and used for nothing else before the gate) is part of the gate step;
-   where it resolves nothing, the operation is refused as API-CONV-003 answers a path
-   naming no record, with 404 `identity.organization.notfound` where the path names no
-organization. Five operations meet no gate: read-volume counting (OPS-ALERT-005); the
-provider probes of the conformance suite (LIB-TEST-001), which read no record of a
-person;
-   derivation refresh (AUTHZ-DERIVE-005), which the host calls from its own gated
-   operation and the daily drift check calls under its system principal
-   `derivation-driftcheck`; loss-report cancellation, whose authority is the token its
-   notice carried or the report's holder (AUTH-RECOV-007); and registration begin, which
-   precedes any account (REG-SESS-002).
+3. Each operation method performs its gate step before any load or write: the gate call,
+   or for an operation on the caller's own records the check that the context names an
+   account and, for a step-up action OPS-BOOT-002 lists, the refusal of the context of
+   the break-glass session or a session another application opened from it
+   (BFF-SESS-006) with `authz.denied`. Resolving the organization the gate is asked in
+   (the administrative organization, the organization the path names, or the
+   organization one row belongs to, read alone and used for nothing else before the
+   gate) is part of the gate step; where it resolves nothing, the operation is refused
+   as API-CONV-003 answers a path naming no record, with 404
+   `identity.organization.notfound` where the path names no organization. Five
+   operations meet no gate: read-volume counting (OPS-ALERT-005); the provider probes of
+   the conformance suite (LIB-TEST-001), which read no record of a person; derivation
+   refresh (AUTHZ-DERIVE-005), which the host calls from its own gated operation and the
+   daily drift check calls under its system principal `derivation-driftcheck`;
+   loss-report cancellation, whose authority is the token its notice carried or the
+   report's holder (AUTH-RECOV-007); and registration begin, which precedes any account
+   (REG-SESS-002).
 4. An operation on the caller's own records given a context that names no account reads
    nothing; one naming another account's record answers exactly as one naming no record.
 5. An operation that rolls back leaves no event row and no outbox row, and no transport

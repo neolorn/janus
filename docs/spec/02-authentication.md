@@ -1611,13 +1611,13 @@ tests; a spec change that breaks one is a defect in the change.
 
 ---
 
-**AUTH-STEP-004** — A **break-glass session SHALL satisfy the step-up requirement**
-for the duration of its lifetime. It satisfies gates only: the step-up actions
-OPS-BOOT-002 refuses from the break-glass session (giving the reserved account a
-sign-in method among them) stay refused with `authz.denied`, whatever the reserved
-account's policy lists.
+**AUTH-STEP-004** — A **break-glass session SHALL satisfy the step-up requirement** for
+the duration of its lifetime. It satisfies gates only: the step-up actions OPS-BOOT-002
+refuses from the break-glass session (giving the reserved account a sign-in method among
+them) or from a session another application opened from it (BFF-SESS-006) stay refused
+with `authz.denied`, whatever the reserved account's policy lists.
 
-*Source: D-065, D-166, D-171*
+*Source: D-065, D-166, D-171, D-179*
 
 A printed single-use secret is not phishing-resistant, so under the ordinary rule a
 break-glass session could perform none of the actions it exists for — approving a

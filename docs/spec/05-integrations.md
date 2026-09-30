@@ -594,18 +594,21 @@ server's (`MailServerClient`, LIB-HOST-001); it SHALL name that client as `aud`
 (AUTH-OIDC-006), last no longer than `oidc.accesstoken.lifetime` or the session
 record, and SHALL NOT be stored.
 
-*Source: D-146, D-164, D-166; amends D-006*
+*Source: D-146, D-164, D-166, D-179; amends D-006*
 
-The mail server generates the secret and accepts no supplied or pre-hashed value, so
-the library can neither choose nor retain one. What the library adds is the gate
-(step-up actions `mailcredential:create` and `mailcredential:revoke`), the notice to
-the security-notice set and the audit record; the credential itself is the server's
+The mail server generates the secret and accepts no supplied or pre-hashed value, so the
+library can neither choose nor retain one. What the library adds is the gate (step-up
+actions `mailcredential:create` and `mailcredential:revoke`), the notice to the
+security-notice set and the audit record; the credential itself is the server's
 (INT-MAIL-001). A revoked or disabled account (INT-MAIL-006a) ends every app password
 with it. Where the deployment registers no mail server, or the account holds no mailbox
 the mail server is told to enable, the app-password operations answer
-`identity.mailbox.notfound`. A restricted account keeps its enabled mailbox
-(INT-MAIL-006): it lists and revokes its app passwords and creates none
-(`authz.restricted`, IDN-ACCT-007). `09` section 6 gives every answer.
+`identity.mailbox.notfound`; a creation from the break-glass session or a session
+another application opened from it (BFF-SESS-006) is the exception, refused with
+`authz.denied` at the operation's gate step before the mailbox is looked up
+(OPS-BOOT-002). A restricted account keeps its enabled mailbox (INT-MAIL-006): it lists
+and revokes its app passwords and creates none (`authz.restricted`, IDN-ACCT-007). `09`
+section 6 gives every answer.
 
 **Acceptance criteria**
 1. Creating an app password results in one call to the mail server's app-password

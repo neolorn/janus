@@ -45,7 +45,7 @@ never rendered prose.
 }
 ```
 
-*Source: LIB-API-003, CONV-NAME-003, D-166*
+*Source: LIB-API-003, CONV-NAME-003, D-166, D-179*
 
 The host renders the message in the user's language from the code. `details` carries
 structured context: never a sentence. Every free-text request field (`reason`, `detail`,
@@ -70,6 +70,11 @@ next attempt is looked at, built by one builder wherever it is answered (D-166).
 3. A free-text member that is blank, or longer than 1024 characters after trimming, is
    refused 400 `api.request.malformed` naming it, or, where it is a required reason that
    is blank, with that reason's code.
+4. `details.member` names a member as the request writes it, with no `$` root and no list
+   index: a member inside another by the member names from the body's top joined by
+   dots; an element of a list, or a member inside one, by the list's name; a member
+   inside an element of a body that is itself a list by its own name. It carries nothing
+   of the member's value.
 
 ---
 
@@ -79,7 +84,7 @@ next attempt is looked at, built by one builder wherever it is answered (D-166).
 |---|---|
 | 200 | Success with a body |
 | 204 | Success, no body |
-| 400 | Malformed request: the body is not the shape the endpoint takes, a required member is absent or empty, a free-text member is outside the bound of API-CONV-002, or a word lies outside a closed vocabulary fixed in `10` or at startup (a configuration key the route does not serve, a takedown trigger, an undeclared permission, a role name's form). Carries `api.request.malformed` with `details.member` naming the member and nothing of its value; where the body failed before any member, the code alone |
+| 400 | Malformed request: the body is not the shape the endpoint takes, a required member is absent or empty, a free-text member is outside the bound of API-CONV-002, or a word lies outside a closed vocabulary fixed in `10` or at startup (a configuration key the route does not serve, a takedown trigger, an undeclared permission, a role name's form). Carries `api.request.malformed` with `details.member` naming the member as the request writes it, in the form API-CONV-002 gives, and nothing of its value; where the body failed before any member, the code alone |
 | 401 | No valid session: **session death only** |
 | 403 | Authenticated, not permitted, **and existence is not concealed**. `authz.denied` means only that a permission is absent (section 8 states when an identifier naming no row is answered so); the reserved account's refusals of OPS-BOOT-002 are answered with it too. Also carries `auth.stepup.required` (step-up is a 403, never a 401), `authz.restricted` and `auth.session.csrfinvalid` |
 | 404 | Not found: a path naming a runtime record the deployment does not hold, answered with a named code (under `/admin` nothing is concealed; section 8 states the one case answered as a missing permission instead); **or concealed denial** (`authz.resource.notfound`); also a path under the prefix that no endpoint serves, and a method a served path does not take. 405 is not used and no `Allow` header is sent |
@@ -87,7 +92,7 @@ next attempt is looked at, built by one builder wherever it is answered (D-166).
 | 422 | Well-formed but refused on meaning: a body referring to something that does not exist or cannot be acted on, a blocklisted password, a mixed-script identifier. Answered with a named code, and with `api.request.invalid` (`details.member`) where `10` names none more specific |
 | 429 | Throttled, or refused by a rate limit or a sending restriction (`auth.throttled`, `auth.restriction.exceeded`, and `integration.callback.rejected` for the callback rate limit only); carries `Retry-After` and `details.retryAt` |
 
-*Source: D-016, AUTHZ-CONCEAL-001, D-162, D-166*
+*Source: D-016, AUTHZ-CONCEAL-001, D-162, D-166, D-179*
 
 **Acceptance criteria**
 1. A concealed denial is byte-identical and timing-identical to a genuine 404.
@@ -858,6 +863,19 @@ credential lost, listing and revoking app passwords, the link-borne undo of an i
 change, and a credential set by recovery or enrolled where a policy hold stops its
 sign-in (AUTH-FACT-017) (D-166).
 
+From the break-glass session, or a session another application opened from it
+(BFF-SESS-006), each of the step-up actions `password:set`, `identifier:add`,
+`username:change`, `factor:enrol`, `provider:link`, `recoverycodes:generate`,
+`mailcredential:create`, `account:deactivate` and `account:delete` is refused **403**
+`authz.denied` (OPS-BOOT-002); the routes below do not each list it. The refusal is made
+at the operation's gate step, after the body is read and before any load
+(CONV-DESIGN-002). The reserved account holds no password, identifier, factor,
+credential or mailbox, so it is never answered with the refusal a missing one would
+give: the refusal of an enrolment on an account with no password (AUTH-FACT-002b), the
+**409** of `POST /account/recoverycodes`, the **404** `auth.credential.notfound` of
+`POST /account/credentials/{id}/upgrade`, or the **404** `identity.mailbox.notfound` of
+an app-password creation, whose own entry repeats it (D-179).
+
 ### `GET /account`
 
 **200**: the account in the groups of REG-ACCT-001, every field the person may see
@@ -1331,7 +1349,14 @@ person, makes the server's app-password call and stores **nothing**. Present onl
 the account is `active` or `restricted` and holds a mailbox the mail server is told to
 enable (INT-MAIL-006); otherwise, and where the deployment registers no mail server,
 each answers **404** `identity.mailbox.notfound`. A `restricted` account lists and
-revokes its app passwords and creates none (IDN-ACCT-007).
+revokes its app passwords and creates none (IDN-ACCT-007). A creation from the
+break-glass session, or from a session another application opened from it
+(BFF-SESS-006), is refused **403** `authz.denied` at the operation's gate step, after
+the body is read and before the label is judged and the mailbox is looked up
+(OPS-BOOT-002, CONV-DESIGN-002): a creation without a `label` is **400** from any
+session, and an unusable label is **403** from either session and **422** from any
+other. Listing and revocation from either session answer **404**
+`identity.mailbox.notfound`, the reserved account holding no mailbox.
 
 ```json
 { "label": "...", "expiresAt": "..." }        // POST; expiresAt optional
@@ -1344,12 +1369,13 @@ set), never a cached copy. `POST`: the generated **secret, returned once**, with
 connection.
 **400**: `api.request.malformed` naming `label` where it is absent
 **403**: `auth.stepup.required` (`mailcredential:create`, `mailcredential:revoke`);
-`authz.restricted` for a creation by a restricted account
+`authz.restricted` for a creation by a restricted account; `authz.denied` for a creation
+from the break-glass session or a session opened from it (OPS-BOOT-002)
 **404**: `identity.mailbox.notfound`; `auth.credential.notfound` where the server holds
 no app password of the person under the identifier
 **422**: `auth.credential.labelinvalid`
 
-*Source: D-146; REG-MAIL-002, INT-MAIL-010, D-166*
+*Source: D-146; REG-MAIL-002, INT-MAIL-010, D-166, D-179*
 
 Creation and revocation are notified to the security-notice set and audited; no secret
 or hash appears in the library's database, logs or audit records. Ending a membership
@@ -2165,7 +2191,7 @@ Self-service explanation for **non-concealed** types is `GET /account/explanatio
 | Endpoint | Does |
 |---|---|
 | `GET /admin/compliance/licences` | The licence and permit records as stored (OPS-MAINT-001) |
-| `PUT /admin/compliance/licences` | Replaces the licence and permit records the system warns on (OPS-MAINT-001), each keyed by the caller's `id`; two records under one `id` are refused **422** `api.request.invalid` (`details.member` `id`) |
+| `PUT /admin/compliance/licences` | Replaces the licence and permit records the system warns on (OPS-MAINT-001); the body is the list of records, each keyed by the caller's `id`; two records under one `id` are refused **422** `api.request.invalid` (`details.member` `id`) |
 | `GET` · `POST /admin/compliance/maintenance` | Reads and appends the maintenance log (OPS-MAINT-001); the entry's actor is the signed-in subject; an entry dated after now is refused **422** `api.request.invalid` (`details.member` `performedAt`); no route changes or removes an entry |
 | `PUT /admin/compliance/assessments` | The three human-input fields of the records of processing (PRIV-ROPA-001): the data owner, the implemented organizational security measures, and the links to LIA, DPIA and TIA. A statement replaces the three whole: a field it omits is cleared, and the links are the list it carries. The deployment holds one statement. **204** |
 

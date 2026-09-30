@@ -8966,6 +8966,8 @@ section 7 · `19` · `20` · `docs/guide/janus-explained.md`,
 
 > **Amended.** 221: an erased holder's address is not recognised at issue, since erasure leaves nothing that may match it, and the adapter's refusal to adopt an account that does not carry the new mailbox's identifier is what keeps that person's mail from the next holder; under `replace` the old row records the instant it was replaced, is owed `removed` and keeps its fingerprint until its last holder is erased; "held before" is read from the mailbox that stands for the address (D-178).
 
+> **Amended.** 263 and D.8 break-glass part (3): a creation of an app password from the break-glass session, or a session opened from it, is refused `authz.denied` at the gate step, before the holder is read, as every listed step-up action is, the refusal `StepUpGuard.Unavailable` names being made there and not with the step-up judged after the other refusals; every other account without an enabled mailbox answers `identity.mailbox.notfound` (D-179).
+
 **Date:** 2026-09-25 · **Status:** accepted · **Amends:** D-161 (item 4, the working mode; item 2, where the drift check's rows come from), D-162 (item 22, where the governed send path lives; item 23, when the first attempt is made; item 26, the budget of a text message carrying a link; item 31, where destination records are kept and when they are swept; item 66, where a client secret comes from; C.55, where photo availability is held and what bootstrap writes; C.68 at `POST /auth/link`; C.103, the condition of the mail server row; E, the status of `identity.identifier.invalid`), D-153 (owner decision 2, the source a flood limit counts; owner decision 7, the word lists; the `backup.restoretest.interval` default; the address the bootstrap command prints), D-147 (the retirement of a key-encryption-key version; the name of the startup code for an unavailable secret), D-146 (item 17: a restriction's channel, the notices to a holder, a reason on every edit), D-143 (the policy object gains `photos`), D-129 (the break-glass page takes a reason), D-127 (a takedown reversal restores the state the takedown found), D-079a (a recognised device is exempt from the hold, not from the count), D-071 (three protected switches retired), D-060 (photos are off for the administrative organization until a codec is declared), D-057 (an authorization request's `redirect_uri` is refused at the push, not replaced), D-164 (item 3: the mail server verifies `aud` itself), D-165 (the developer recipient row is a declared example; the provider callback row and INT-GEN-003's sentence restored) · **Extends:** D-162, D-164, D-165
 
 **TL;DR.** The ledger entries 110 to 423 were audited entry by entry against the
@@ -12388,6 +12390,86 @@ paragraph) and PRIV-RIGHT-005a (the released mailbox, criterion 19); `01` IDN-LI
 
 ---
 
+## D-179 — Corrections-4 question 17: an app password asked for from the break-glass session
+
+**Date:** 2026-09-30 · **Status:** accepted · **Amends:** D-166 (263, the order of the refusals; D.8 break-glass part (3), where the refusal of a listed action is made)
+
+**TL;DR.** From the break-glass session, or a session another application opened from
+it, creating a mail app password is refused 403 `authz.denied`, as OPS-BOOT-002 refuses
+every sign-in method for the reserved account. The refusal is part of the operation's
+gate step, made after the body is read and before any load, and 263's 404
+`identity.mailbox.notfound` stays the answer for every other account without a mailbox.
+In passing: `details.member` names a member as the request writes it, never with a JSON
+path's `$` root or a list index.
+
+**The question (Tier 3).** D-166 263, REG-MAIL-002 criterion 3 and the `09` route answer
+404 `identity.mailbox.notfound` where the account holds no mailbox the mail server is told
+to enable, and the reserved account never holds one. OPS-BOOT-002 and its criterion 9 (and
+the test D-166 D.8 part (3) names) refuse `mailcredential:create` from the break-glass
+session with 403 `authz.denied`. Before 263 both held because a missing mailbox also
+answered `authz.denied`; with 263 one of them fails.
+
+**Decision: 403 `authz.denied`, at the gate step.** OPS-BOOT-002 refuses the listed
+step-up actions from the break-glass session "whatever the reserved account's policy
+lists": the refusal belongs to the session, not to what the account holds.
+CONV-DESIGN-002 criterion 3 already puts an operation's gate step before any load, and
+for an operation on the caller's own records that step is the check on the context; the
+break-glass refusal is a check on the context too. So it is made there, after the body
+is read (a creation without a `label` is 400 from any session) and before the label is
+judged or the mailbox looked up, and the break-glass session gets one answer for every
+sign-in method it may not create, whatever the reserved account lacks. Every other
+account without an enabled mailbox is answered 404 `identity.mailbox.notfound` as 263
+says, and listing and revocation from either session, which OPS-BOOT-002 does not
+refuse, answer that 404 as well.
+
+- **Which sessions.** The owner acts through applications opened from the break-glass
+  session, each in a session of its own bound to it (BFF-SESS-006), and an app password
+  is created from the account application. So the refusal reaches the break-glass
+  session and every session another application opened from it, as OPS-BOOT-002
+  criterion 10 and AUTH-STEP-004 criterion 2 already read for the reason, and
+  AUTH-SESS-012 for the assurance such a session inherits from the record it is bound
+  to.
+- **Not the step-up judgement.** D-166 X8 judges an administrative operation's step-up
+  after every other refusal. This is not that judgement: the break-glass session satisfies
+  step-up for its lifetime (AUTH-STEP-004), and the refusal here is the one
+  `StepUpGuard.Unavailable` holds (D-166 D.8 part (3)), which the operation now makes in
+  its gate step. The step-up of an administrative operation, and of an ordinary account, is
+  still judged last. A refusal of a change that names the reserved account, or the role it
+  holds (entries 188 and 254), needs that account or role read, and stays where those
+  entries put it.
+- *Rejected:* 404 for the break-glass session (a second answer for one rule, and a refusal
+  that would depend on the reserved account happening to hold no mailbox).
+
+**In passing: `details.member`.** The agent found an unreadable member answered with
+`details.member` `$.formerMailbox`. `10` says the code names the member, and every
+member the chapters name is a top-level member written as the body writes it, except the
+`id` of a licence record (`PUT /admin/compliance/licences`), whose body is the list of
+records; an element of a list is already named by the list (`buckets`). The row and
+API-CONV-002 now say so: a member is named by its name as the request writes it; a
+member inside another, which no earlier entry needed, by the member names from the
+body's top joined by dots; an element of a list, or a member inside one, by the list's
+name; a member inside an element of a body that is itself a list, by its own name; none
+with a `$` root or a list index. The body reader is shared, so the correction is one
+change, made with the sweep of D-166 section C (X4 and X5, whose refusals name
+`details.member`) and held by the endpoint contract of D.11 (359 and 382), which lists
+each body member by its JSON name.
+
+- Tests carrying OPS-BOOT-002 criterion 9 (the test D.8 part (3) names) prove
+  `POST /account/mail/apppasswords` answers 403 `authz.denied` from the break-glass
+  session and from a session another application opened from it; tests carrying
+  REG-MAIL-002 criterion 3 prove an ordinary account without an enabled mailbox answers
+  404 `identity.mailbox.notfound` for all three operations; a test carrying API-CONV-002
+  criterion 4 proves an unreadable member is named without a `$` root or a list index.
+
+**Propagated to:** `06` OPS-BOOT-002 (its text and criterion 9); `02` AUTH-STEP-004;
+`08` CONV-DESIGN-002 (the own-records paragraph and criterion 3); `05` INT-MAIL-010;
+`07` the Mail server row; `09` API-CONV-002 (criterion 4), API-CONV-003 (the 400 row),
+section 6's opening and the app-password routes; `20` REG-MAIL-002 (its text and
+criterion 3); `10` the `identity.mailbox.notfound`, `api.request.malformed` and
+`api.request.invalid` rows; `09` the `PUT /admin/compliance/licences` row.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -12576,6 +12658,7 @@ paragraph) and PRIV-RIGHT-005a (the released mailbox, criterion 19); `01` IDN-LI
 | Corrections-4 question 13: when the mail server in use is decided; what an `enabled` push does under `Replace` | D-176 |
 | Corrections-4 question 14: what a mailbox push carries, how a refusal to adopt is answered, and the order under `replace` | D-177 |
 | Corrections-4 questions 15 and 16: an erased holder's address, and how a replaced mailbox stands beside its successor | D-178 |
+| Corrections-4 question 17: an app password asked for from the break-glass session | D-179 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

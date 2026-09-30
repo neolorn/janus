@@ -1042,29 +1042,36 @@ carry the reserved-account mark, set by bootstrap and by nothing else; the datab
 SHALL admit at most one account so marked. Every action in a break-glass session is
 audited with `emergency` as acting and effective identity (AUTHZ-IMP-001), the account
 the action concerns as the record's subject (IDN-AUD-001), and the reason the owner
-states with the credential at `/break-glass`; it appears in no device
-list, holds no mailbox, and cannot be granted anything further, suspended, or deleted;
-its `system-administrator` grant cannot be revoked, and the role it holds keeps every
+states with the credential at `/break-glass`; it appears in no device list, holds no
+mailbox, and cannot be granted anything further, suspended, or deleted; its
+`system-administrator` grant cannot be revoked, and the role it holds keeps every
 library-owned permission (`10` section 3). Each of those changes, and deactivating the
 account, taking it down or adding it to a group, SHALL be refused with 403
-`authz.denied`, and so SHALL, from the break-glass session, the step-up actions
-`password:set`, `identifier:add`, `username:change`, `factor:enrol`, `provider:link`,
+`authz.denied`, and so SHALL, from the break-glass session or a session another
+application opened from it (BFF-SESS-006), the step-up actions `password:set`,
+`identifier:add`, `username:change`, `factor:enrol`, `provider:link`,
 `recoverycodes:generate`, `mailcredential:create`, `account:deactivate` and
-`account:delete`, whatever the reserved account's policy lists. It holds a subject key
-like any account, so what a break-glass session records under it is sealed as any
-account's is. The reason given at use is not such a value: it is the owner's statement
-of why the emergency session exists, kept with the session and written in plain text on every audit record the session writes,
-in a field of the record's own; a session another application opens from the break-glass
-session (BFF-SESS-006) takes it from the record it is bound to and writes it the same way;
-it is plain, as every stated reason is, so the trail reads it back (D-170, D-171). The session may approve any
-recovery, including the sole administrator's (AUTH-RECOV-002a). The session SHALL
-satisfy step-up for its lifetime (AUTH-STEP-004). Lifetime is configurable with an
-enforced ceiling (D-138): the session ends `breakglass.session.lifetime` after the use
-that opened it, whatever the policy's absolute lifetime, and its inactivity window is
-the one AUTH-SESS-005 gives the reserved account's policy (`session.aal2.inactivity`
-under the administrative organization's `aal2`), never longer than that lifetime. An
-inactivity expiry ends it for good: the reserved account holds no factor to restore it
-with.
+`account:delete`, whatever the reserved account's policy lists. Each refusal of one of
+those step-up actions is made at the operation's gate step, before anything is loaded
+(CONV-DESIGN-002), so it answers the same whatever the reserved account holds or lacks:
+a creation of a mail app password is refused with `authz.denied` and not answered
+`identity.mailbox.notfound`, although the reserved account holds no mailbox. A refusal
+of a change that names the reserved account, or the role it holds, needs that account or
+role read first, and is made then. The reserved account holds a subject key like any
+account, so what a break-glass session records under it is sealed as any account's is.
+The reason given at use is not such a value: it is the owner's statement of why the
+emergency session exists, kept with the session and written in plain text on every audit
+record the session writes, in a field of the record's own; a session another application
+opens from the break-glass session (BFF-SESS-006) takes it from the record it is bound
+to and writes it the same way; it is plain, as every stated reason is, so the trail
+reads it back (D-170, D-171). The session may approve any recovery, including the sole
+administrator's (AUTH-RECOV-002a). The session SHALL satisfy step-up for its lifetime
+(AUTH-STEP-004). Lifetime is configurable with an enforced ceiling (D-138): the session
+ends `breakglass.session.lifetime` after the use that opened it, whatever the policy's
+absolute lifetime, and its inactivity window is the one AUTH-SESS-005 gives the reserved
+account's policy (`session.aal2.inactivity` under the administrative organization's
+`aal2`), never longer than that lifetime. An inactivity expiry ends it for good: the
+reserved account holds no factor to restore it with.
 
 **Alerting SHALL reach the owner as well as the operator.** The scenario this exists
 for is one in which the operator is unreachable, so alerting only the operator means
@@ -1085,7 +1092,7 @@ credential, one field for the reason, one button. The endpoint
 free-text member under API-CONV-002, and kept with the session. The owner is not technical
 (`12` §1); an API endpoint is not a procedure they can follow.
 
-*Source: D-065, D-129, D-166, D-170, D-171*
+*Source: D-065, D-129, D-166, D-170, D-171, D-179*
 
 **Acceptance criteria**
 1. Use consumes it; a second attempt fails.
@@ -1102,9 +1109,12 @@ free-text member under API-CONV-002, and kept with the session. The owner is not
    `emergency` account holds, or revoke its `system-administrator` grant, is refused
    with `authz.denied` and changes nothing.
 8. A second account carrying the reserved-account mark is refused by the database.
-9. From a break-glass session each step-up action listed above is refused with
-   `authz.denied`; an administrator's suspension, takedown, grant or group addition
-   naming the reserved account is refused the same way.
+9. From a break-glass session, or a session another application opened from it
+   (BFF-SESS-006), each step-up action listed above is refused with `authz.denied`
+   before anything is loaded, `POST /account/mail/apppasswords` included, which answers
+   `authz.denied` and not `identity.mailbox.notfound`; an administrator's suspension,
+   takedown, grant or group addition naming the reserved account is also refused with
+   `authz.denied`, once the reserved account has been read.
 10. Every audit record written in a break-glass session, or in a session another
     application opened from it (BFF-SESS-006), carries the reason given at the
     credential's use, `auth.breakglass.used` included, and the trail read returns it as

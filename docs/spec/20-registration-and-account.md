@@ -992,13 +992,15 @@ Creation and revocation SHALL be step-up actions, notified to the security-notic
 and audited. Each app password SHALL carry a label and MAY carry an expiry. The three
 operations SHALL be present only where the account holds a mailbox the mail server is
 told to enable (INT-MAIL-006); otherwise, and where the deployment registers no mail
-server, each SHALL answer `identity.mailbox.notfound`. A mailbox is owed `enabled`
-while its holder is `active` or `restricted`: a restriction the person asked for does
-not cut them off from their mail or end their app passwords. A `restricted` account
-SHALL list and revoke its app passwords and SHALL be refused creation with
-`authz.restricted` (IDN-ACCT-007).
+server, each SHALL answer `identity.mailbox.notfound`. A mailbox is owed `enabled` while
+its holder is `active` or `restricted`: a restriction the person asked for does not cut
+them off from their mail or end their app passwords. A `restricted` account SHALL list
+and revoke its app passwords and SHALL be refused creation with `authz.restricted`
+(IDN-ACCT-007). A creation from the break-glass session or a session another application
+opened from it (BFF-SESS-006) SHALL be refused with `authz.denied` at the operation's
+gate step, before the mailbox is looked up (OPS-BOOT-002).
 
-*Source: D-146, D-166; amends D-006 (managed through the library, stored by the mail server)*
+*Source: D-146, D-166, D-179; amends D-006 (managed through the library, stored by the mail server)*
 
 A mail credential is the weakest credential in the system (R-A02). The membership step
 ends on this section so that a new staff member can set up a phone client before leaving
@@ -1009,7 +1011,9 @@ the wizard.
 2. Creation and revocation return the step-up code without step-up, and each produces a
    notice and an audit record.
 3. Without a mailbox the mail server is told to enable, listing, creation and revocation
-   each answer `identity.mailbox.notfound`.
+   each answer `identity.mailbox.notfound`, save a creation from the break-glass session
+   or a session another application opened from it, which is refused with `authz.denied`
+   (OPS-BOOT-002).
 4. A `restricted` account's mailbox stays enabled and its app passwords keep working;
    it lists and revokes them, and its creation is refused with `authz.restricted`.
 
