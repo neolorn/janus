@@ -149,7 +149,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Equal(Personal, sent.Destination.Canonical);
         Assert.Equal(
             _invitations.Held[0].Token,
-            OpaqueToken.Of(sent.Values["token"]).Fingerprint());
+            OpaqueToken.Of(sent.Token()).Fingerprint());
 
         IssuedInvitation open = Accepted(await IssueAsync(Customer, Request(phone: Number)));
 
@@ -239,7 +239,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
         Assert.False(_server.Hosts(Corporate));
 
-        string token = _notifications.Mail[^1].Values["token"];
+        string token = _notifications.Mail[^1].Token();
         SubjectId holder = Holder();
         Mailbox reserved = Assert.Single(_mailboxes.Held);
 
@@ -275,7 +275,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
         _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
 
-        string token = _notifications.Mail[^1].Values["token"];
+        string token = _notifications.Mail[^1].Token();
         SubjectId holder = Holder();
 
         _ = _identifiers.Verified(holder, IdentifierKind.Email, Personal);
@@ -753,7 +753,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     {
         _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
 
-        string token = _notifications.Mail[^1].Values["token"];
+        string token = _notifications.Mail[^1].Token();
         SubjectId holder = Holder();
         IdentifierId personal = _identifiers.Verified(holder, IdentifierKind.Email, Personal);
         Invitation invitation = _invitations.Held[0];
@@ -793,7 +793,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
         _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
 
-        string token = _notifications.Mail[^1].Values["token"];
+        string token = _notifications.Mail[^1].Token();
         SubjectId holder = Holder();
 
         _ = _identifiers.Verified(holder, IdentifierKind.Email, Personal);
@@ -899,7 +899,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
         _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
 
-        string staff = _notifications.Mail[^1].Values["token"];
+        string staff = _notifications.Mail[^1].Token();
         SubjectId member = Holder();
 
         _ = _identifiers.Verified(member, IdentifierKind.Email, Personal);
@@ -1262,7 +1262,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
         (SubjectId holder, IdentifierId personal) = await StaffMemberAsync();
         string token = Accepted(await IssueAsync(Customer, Request(email: Personal))).Token
-            ?? _notifications.Mail[^1].Values["token"];
+            ?? _notifications.Mail[^1].Token();
 
         Accepted(await OpenAsync(holder, token));
         Accepted(await AcknowledgeAsync(holder, _invitations.Held[^1].Id));
@@ -1408,6 +1408,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             _mailboxes,
             new MailServerInUseInMemory(server),
             _notifications,
+            Landing.Links,
             _configuration,
             _audit,
             _work,
@@ -1485,7 +1486,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     {
         _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
 
-        string token = _notifications.Mail[^1].Values["token"];
+        string token = _notifications.Mail[^1].Token();
         SubjectId holder = Holder();
         IdentifierId personal = _identifiers.Verified(holder, IdentifierKind.Email, Personal);
 

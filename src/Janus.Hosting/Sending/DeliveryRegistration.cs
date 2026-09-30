@@ -65,13 +65,17 @@ internal static class DeliveryRegistration
     }
 
     // INT-SMS-003: the subscribers an erasure waits for, the erasure ledger among them
-    // where one is registered, and the categories the host declared, as this deployment
-    // registered and declared them.
-    private static MessagePlaceholders Measured(IServiceProvider provider) =>
-        new(
-            ErasureLedgerSubscriber
-                .Joined(provider.GetServices<ISubjectEventSubscriber>(), provider.GetService<IErasureLedger>())
-                .Where(subscriber => subscriber.Required)
-                .Select(subscriber => subscriber.Name),
-            provider.GetRequiredService<AuthorizationDeclaration>().RetentionFloors.Keys);
+    // where one is registered, the categories the host declared and the origins a link
+    // lands on, as this deployment registered and declared them; nothing where it
+    // declared no origins, since no link is measured without them.
+    private static MessagePlaceholders? Measured(IServiceProvider provider) =>
+        provider.GetService<LandingOrigins>() is LandingOrigins landing
+            ? new(
+                ErasureLedgerSubscriber
+                    .Joined(provider.GetServices<ISubjectEventSubscriber>(), provider.GetService<IErasureLedger>())
+                    .Where(subscriber => subscriber.Required)
+                    .Select(subscriber => subscriber.Name),
+                provider.GetRequiredService<AuthorizationDeclaration>().RetentionFloors.Keys,
+                landing)
+            : null;
 }

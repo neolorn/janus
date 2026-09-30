@@ -22,6 +22,7 @@ namespace Janus.Authentication.Identifiers;
 /// <param name="restriction">Whether the account's processing is restricted, as the gate answers it.</param>
 /// <param name="pending">Where the verifications outstanding are held.</param>
 /// <param name="sending">The one path every message takes.</param>
+/// <param name="landing">Where a link the message carries lands.</param>
 /// <param name="notices">What keeps a holder from being told twice in a window.</param>
 /// <param name="sessions">Where the account's sessions are read and ended.</param>
 /// <param name="stepUp">What asks whether the session has proved enough.</param>
@@ -44,6 +45,7 @@ internal sealed class IdentifierService(
     ISettingsRestriction restriction,
     IPendingVerificationStore pending,
     INotificationHandler sending,
+    LandingLinks landing,
     INoticeLedger notices,
     ISessionStore sessions,
     StepUpGuard stepUp,
@@ -480,7 +482,7 @@ internal sealed class IdentifierService(
                 subject,
                 MessageKind.IdentifierSettingsChanged,
                 source,
-                token: null,
+                link: null,
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -554,7 +556,7 @@ internal sealed class IdentifierService(
                 subject,
                 MessageKind.IdentifierSettingsChanged,
                 source,
-                token: null,
+                link: null,
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -731,7 +733,7 @@ internal sealed class IdentifierService(
                 given.Subject,
                 MessageKind.IdentifierAdded,
                 source,
-                token: null,
+                link: null,
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -1195,7 +1197,7 @@ internal sealed class IdentifierService(
                 subject,
                 MessageKind.IdentifierAdded,
                 source,
-                token: null,
+                link: null,
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -1235,7 +1237,7 @@ internal sealed class IdentifierService(
                     Values = new Dictionary<string, string>(capacity: 2, StringComparer.Ordinal)
                     {
                         ["code"] = code,
-                        ["token"] = link.Value,
+                        ["link"] = landing.Of(LinkKind.Identifier, link.Value),
                     },
                 },
                 cancellationToken)
@@ -1271,7 +1273,7 @@ internal sealed class IdentifierService(
                     Subject = waiting.Subject,
                     Values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
                     {
-                        ["token"] = link.Value,
+                        ["link"] = landing.Of(LinkKind.IdentifierConfirm, link.Value),
                     },
                 },
                 cancellationToken)
@@ -1332,7 +1334,7 @@ internal sealed class IdentifierService(
         SubjectId subject,
         MessageKind message,
         string source,
-        [NeverLogged] string? token,
+        [NeverLogged] string? link,
         CancellationToken cancellationToken)
     {
         if (reached.Count is 0)
@@ -1353,11 +1355,11 @@ internal sealed class IdentifierService(
                 language)
             {
                 Subject = subject,
-                Values = token is null
+                Values = link is null
                     ? Nothing
                     : new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
                     {
-                        ["token"] = token,
+                        ["link"] = link,
                     },
             };
 
@@ -1395,7 +1397,7 @@ internal sealed class IdentifierService(
                 subject,
                 MessageKind.IdentifierRemoved,
                 source,
-                undo.Value,
+                landing.Of(LinkKind.Undo, undo.Value),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -1404,7 +1406,7 @@ internal sealed class IdentifierService(
                 subject,
                 MessageKind.IdentifierDetached,
                 source,
-                token: null,
+                link: null,
                 cancellationToken)
             .ConfigureAwait(false);
     }
@@ -1540,7 +1542,7 @@ internal sealed class IdentifierService(
                 waiting.Subject,
                 MessageKind.IdentifierRemoved,
                 source,
-                undo.Value,
+                landing.Of(LinkKind.Undo, undo.Value),
                 cancellationToken)
             .ConfigureAwait(false);
     }

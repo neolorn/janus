@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication.BreakGlass;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Tests.Credentials;
@@ -72,7 +73,7 @@ public sealed class RequestLoggingTests : IAsyncDisposable
                     message,
                     kind,
                     Language,
-                    new MessageTemplate(kind is SendKind.Email ? "subject" : null, "{token}"));
+                    new MessageTemplate(kind is SendKind.Email ? "subject" : null, "{link}"));
             }
         }
     }
@@ -283,7 +284,7 @@ public sealed class RequestLoggingTests : IAsyncDisposable
             MessageKind.SignInLink,
             SendKind.Email,
             Language,
-            new MessageTemplate("link", "{code} {token}"));
+            new MessageTemplate("link", "{code} {link}"));
 
         _ = await Flow.SignedInAsync(quiet);
 
@@ -466,7 +467,7 @@ public sealed class RequestLoggingTests : IAsyncDisposable
         Answer recovered = await recovering.SendAsync(
             "POST",
             "/recovery/complete",
-            ("token", _deployment.Mail.Taken[^1].Body.Trim()),
+            ("token", Landing.Token(_deployment.Mail.Taken[^1].Body)),
             ("password", Renewed));
 
         Assert.Equal(ErrorCodes.FactorRejected.ToString(), refused.Text("code"));

@@ -34,6 +34,7 @@ namespace Janus.Authentication.Recovery;
 /// <param name="stepUp">What the approver's session has to have proved.</param>
 /// <param name="scope">Whether the approver may approve at all.</param>
 /// <param name="sending">Where a message goes out.</param>
+/// <param name="landing">Where a link the message carries lands.</param>
 /// <param name="nonExistence">What answers an ask no link of its own answers.</param>
 /// <param name="throttle">The progressive delay.</param>
 /// <param name="alerts">Where the anomaly alerts go.</param>
@@ -64,6 +65,7 @@ internal sealed class RecoveryService(
     StepUpGuard stepUp,
     AdministrativeScope scope,
     INotificationHandler sending,
+    LandingLinks landing,
     NonExistenceNotice nonExistence,
     ThrottleService throttle,
     IAlertChannels alerts,
@@ -496,7 +498,7 @@ internal sealed class RecoveryService(
                         Subject = subject,
                         Values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
                         {
-                            ["token"] = token.Value,
+                            ["link"] = landing.Of(LinkKind.Recovery, token.Value),
                         },
                     },
                     cancellationToken)
@@ -802,7 +804,7 @@ internal sealed class RecoveryService(
                         Subject = subject,
                         Values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
                         {
-                            ["token"] = token.Value,
+                            ["link"] = landing.Of(LinkKind.Enrolment, token.Value),
                         },
                     },
                     cancellationToken)

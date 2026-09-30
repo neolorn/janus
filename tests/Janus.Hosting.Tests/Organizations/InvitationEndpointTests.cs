@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
@@ -43,7 +44,7 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
             MessageKind.InvitationLink,
             SendKind.Email,
             "en",
-            new MessageTemplate("invitation", "{token}"));
+            new MessageTemplate("invitation", "{link}"));
     }
 
     /// <inheritdoc/>
@@ -73,7 +74,7 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
         Assert.Equal(System.Text.Json.JsonValueKind.Null, bound.Json().GetProperty("token").ValueKind);
         Assert.Equal(
             _deployment.Invitations.Held[0].Token,
-            OpaqueToken.Of(_deployment.Mail.Taken[^1].Body.Trim()).Fingerprint());
+            OpaqueToken.Of(Landing.Token(_deployment.Mail.Taken[^1].Body)).Fingerprint());
 
         Assert.Equal(StatusCodes.Status201Created, open.Status);
         Assert.Equal(

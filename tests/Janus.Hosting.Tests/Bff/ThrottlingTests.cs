@@ -63,7 +63,7 @@ public sealed class ThrottlingTests : IAsyncDisposable
                     message,
                     kind,
                     Language,
-                    new MessageTemplate(kind is SendKind.Email ? "message" : null, "{code} {token}"));
+                    new MessageTemplate(kind is SendKind.Email ? "message" : null, "{code} {link}"));
             }
         }
     }

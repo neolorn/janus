@@ -27,7 +27,7 @@ public sealed class SendingValidationTests
 
     private RestrictionKeySuppliers _suppliers = RestrictionKeySuppliers.None;
 
-    private MessagePlaceholders _places = new([], []);
+    private MessagePlaceholders _places = new([], [], Landing.Origins);
 
     /// <summary>
     /// A deployment answering in two languages.
@@ -106,7 +106,7 @@ public sealed class SendingValidationTests
     [Fact]
     public async Task INT_SMS_003_AC1_ATemplateIsMeasuredWithItsPlacesAtTheirWidestAsync()
     {
-        string written = new string('a', 151) + "{token}";
+        string written = new string('a', 148) + "{raisedAt}";
 
         Assert.False(MessageBudget.Exceeds(written));
         Assert.True(MessageBudget.Exceeds(_places.Widest(written)));
@@ -118,6 +118,80 @@ public sealed class SendingValidationTests
         Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, refusal.Code);
         Assert.Equal("verification-code.sms.en", refusal.Details["key"].GetString());
         Assert.Equal(160, refusal.Details["allowed"].GetInt32());
+    }
+
+    /// <summary>
+    /// LIB-HOST-001, API-LAND-001: no link is measured without the origins it lands on,
+    /// so a deployment that declared none is refused here, as the declaration check
+    /// would name it.
+    /// </summary>
+    [Fact]
+    public async Task LIB_HOST_001_NoLinkIsMeasuredWithoutTheLandingOriginsAsync()
+    {
+        Error refusal = (await new SendingValidation(
+                    _configuration,
+                    _templates,
+                    _suppliers,
+                    places: null,
+                    _mailTransport,
+                    _smsTransport)
+                .ValidateAsync(TestContext.Current.CancellationToken))
+            .Match(() => throw new Xunit.Sdk.XunitException("Startup was not refused."), error => error);
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refusal.Code);
+        Assert.Equal("landingOrigins.authentication", refusal.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// INT-SMS-003, D-166: a text that carries a link is budgeted at two segments of its
+    /// alphabet, 306 units of the default alphabet and 134 outside it, with the link at
+    /// its composed width; a text that does not carry one keeps its one segment.
+    /// </summary>
+    [Fact]
+    public async Task INT_SMS_003_ATextCarryingALinkIsBudgetedAtTwoSegmentsAsync()
+    {
+        int link = _places.Widths["link"];
+
+        _templates.Set(
+            MessageKind.SignInLink,
+            SendKind.Sms,
+            "en",
+            new MessageTemplate(null, new string('a', 306 - link) + "{link}"));
+        _templates.Set(
+            MessageKind.SignInLink,
+            SendKind.Sms,
+            "ar",
+            new MessageTemplate(null, new string('م', 134 - link) + "{link}"));
+
+        await PassedAsync();
+
+        _templates.Set(
+            MessageKind.SignInLink,
+            SendKind.Sms,
+            "en",
+            new MessageTemplate(null, new string('a', 307 - link) + "{link}"));
+
+        Error refusal = await RefusedAsync();
+
+        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, refusal.Code);
+        Assert.Equal("signin-link.sms.en", refusal.Details["key"].GetString());
+        Assert.Equal(306, refusal.Details["allowed"].GetInt32());
+
+        _templates.Set(
+            MessageKind.SignInLink,
+            SendKind.Sms,
+            "en",
+            new MessageTemplate(null, new string('a', 306 - link) + "{link}"));
+        _templates.Set(
+            MessageKind.SignInLink,
+            SendKind.Sms,
+            "ar",
+            new MessageTemplate(null, new string('م', 135 - link) + "{link}"));
+
+        refusal = await RefusedAsync();
+
+        Assert.Equal("signin-link.sms.ar", refusal.Details["key"].GetString());
+        Assert.Equal(134, refusal.Details["allowed"].GetInt32());
     }
 
     /// <summary>
@@ -133,13 +207,13 @@ public sealed class SendingValidationTests
         string[] longer = [new('x', 10), new('y', 10)];
 
         _templates.Set(MessageKind.Alert, SendKind.Sms, "en", new MessageTemplate(null, written));
-        _places = new MessagePlaceholders(["a", "b"], []);
+        _places = new MessagePlaceholders(["a", "b"], [], Landing.Origins);
 
         Assert.Equal("[\"a\",\"b\"]".Length, _places.Widths["outstanding"]);
 
         await PassedAsync();
 
-        _places = new MessagePlaceholders(longer, []);
+        _places = new MessagePlaceholders(longer, [], Landing.Origins);
 
         Assert.Equal(("[\"" + longer[0] + "\",\"" + longer[1] + "\"]").Length, _places.Widths["outstanding"]);
 

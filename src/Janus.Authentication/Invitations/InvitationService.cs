@@ -10,6 +10,7 @@ using Janus.Authentication.Factors;
 using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Organizations;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -36,6 +37,7 @@ namespace Janus.Authentication.Invitations;
 /// with where the deployment has one.
 /// </param>
 /// <param name="sending">What carries the link.</param>
+/// <param name="landing">Where a link the message carries lands.</param>
 /// <param name="configuration">Where the lifetime, the phone setting and the languages are read.</param>
 /// <param name="audit">Where every issue and revocation is written down.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
@@ -66,6 +68,7 @@ internal sealed class InvitationService(
     IMailboxStore mailboxes,
     IMailServerInUse inUse,
     INotificationHandler sending,
+    LandingLinks landing,
     IConfigurationStore configuration,
     IOrganizationAudit audit,
     IUnitOfWork work,
@@ -727,7 +730,7 @@ internal sealed class InvitationService(
                     {
                         Values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
                         {
-                            ["token"] = token.Value,
+                            ["link"] = landing.Of(LinkKind.Invitation, token.Value),
                         },
                     },
                     cancellationToken)

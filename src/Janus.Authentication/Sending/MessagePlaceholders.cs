@@ -20,9 +20,9 @@ namespace Janus.Authentication.Sending;
 /// per place, here, beside the messages themselves. A value whose width the library
 /// fixes carries that width; a name a deployment or a host chooses is held to the rule
 /// of its place where it is written or declared, and carries the width that rule
-/// bounds. The subscribers still to confirm an erasure and the categories a key is
-/// named after are the deployment's, so those two widths are measured at startup from
-/// what it registered and declared.
+/// bounds. The subscribers still to confirm an erasure, the categories a key is named
+/// after and the origins a link lands on are the deployment's, so those three widths are
+/// measured at startup from what it registered and declared.
 /// </remarks>
 internal sealed class MessagePlaceholders
 {
@@ -68,16 +68,21 @@ internal sealed class MessagePlaceholders
     /// The data categories the host declared a retention floor for, each of which names
     /// a key of its own.
     /// </param>
-    /// <exception cref="ArgumentNullException">Either is absent.</exception>
-    public MessagePlaceholders(IEnumerable<string> required, IEnumerable<string> categories)
+    /// <param name="landing">The origins a link lands on.</param>
+    /// <exception cref="ArgumentNullException">One is absent.</exception>
+    public MessagePlaceholders(
+        IEnumerable<string> required,
+        IEnumerable<string> categories,
+        LandingOrigins landing)
     {
         ArgumentNullException.ThrowIfNull(required);
         ArgumentNullException.ThrowIfNull(categories);
+        ArgumentNullException.ThrowIfNull(landing);
 
         _widths = FrozenDictionary.ToFrozenDictionary<string, int>(
         [
             new KeyValuePair<string, int>("code", Factors.VerificationCode.Digits),
-            new KeyValuePair<string, int>("token", OpaqueToken.Width),
+            new KeyValuePair<string, int>("link", LandingLinks.Widest(landing)),
             new KeyValuePair<string, int>("condition", Condition),
             new KeyValuePair<string, int>("raisedAt", Instant),
             new KeyValuePair<string, int>("restriction", Name),
@@ -104,6 +109,19 @@ internal sealed class MessagePlaceholders
     /// Every place the library fills, with the width it is measured at.
     /// </summary>
     public IReadOnlyDictionary<string, int> Widths => _widths;
+
+    /// <summary>
+    /// Whether a template carries a link, which a text is budgeted two segments for.
+    /// </summary>
+    /// <param name="text">The template.</param>
+    /// <returns>Whether it names the place <c>link</c>.</returns>
+    /// <exception cref="ArgumentNullException">The template is absent.</exception>
+    public static bool CarriesLink(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+
+        return text.Contains("{link}", StringComparison.Ordinal);
+    }
 
     /// <summary>
     /// One template with every place it names at its widest. A place the library does

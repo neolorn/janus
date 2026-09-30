@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
@@ -38,7 +39,7 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
                     message,
                     kind,
                     Language,
-                    new MessageTemplate(kind is SendKind.Email ? "recovery" : null, "{token}"));
+                    new MessageTemplate(kind is SendKind.Email ? "recovery" : null, "{link}"));
             }
         }
     }
@@ -178,7 +179,7 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
         Answer cancelled = await elsewhere.SendAsync(
             "POST",
             "/recovery/report-loss/" + credential + "/cancel",
-            ("token", _deployment.Mail.Taken[^1].Body.Trim()));
+            ("token", Landing.Token(_deployment.Mail.Taken[^1].Body)));
 
         Assert.Equal(StatusCodes.Status204NoContent, cancelled.Status);
     }
@@ -276,5 +277,5 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
             : throw new InvalidOperationException("The label is not one.");
 
     // The token the recovery message carried, which never touches any answer.
-    private string Token() => _deployment.Mail.Taken[^1].Body.Trim();
+    private string Token() => Landing.Token(_deployment.Mail.Taken[^1].Body);
 }

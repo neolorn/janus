@@ -10,6 +10,7 @@ using Janus.Authentication.Factors;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
@@ -135,7 +136,7 @@ public sealed class AccountApplicationTests : IAsyncDisposable
             MessageKind.IdentifierRemoved,
             SendKind.Email,
             "en",
-            new MessageTemplate("removed", "{token}"));
+            new MessageTemplate("removed", "{link}"));
 
         Browser browser = await Flow.SignedInAsync(_deployment);
         SubjectId subject = Registered();
@@ -277,7 +278,7 @@ public sealed class AccountApplicationTests : IAsyncDisposable
         {
             if (string.Equals(sent.Subject, "removed", StringComparison.Ordinal))
             {
-                return sent.Body;
+                return Landing.Token(sent.Body);
             }
         }
 

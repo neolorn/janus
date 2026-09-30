@@ -149,6 +149,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Policies,
             Lock,
             _notifications,
+            Landing.Links,
             new NonExistenceNotice(
                 _configuration,
                 _notifications,
@@ -824,7 +825,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             browser: null,
             TestContext.Current.CancellationToken);
 
-        string carried = _notifications.Texts[^1].Values["token"];
+        string carried = _notifications.Texts[^1].Token();
 
         Assert.NotNull(await _pending.FindAsync(
             subject,
@@ -1407,7 +1408,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     // what the person reads rather than what the store holds.
     private string Code() => _notifications.Mail[^1].Values["code"];
 
-    private string Token() => _notifications.Mail[^1].Values["token"];
+    private string Token() => _notifications.Mail[^1].Token();
 
     // A code of the same shape that is not the one sent.
     private static string Other(string code) =>

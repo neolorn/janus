@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
@@ -37,8 +38,8 @@ internal static class Flow
     private const string Language = "en";
 
     /// <summary>
-    /// Makes a deployment able to send: the templates carry the code and the link
-    /// token, and the balance floor is out of the way.
+    /// Makes a deployment able to send: the templates carry the code and the link,
+    /// and the balance floor is out of the way.
     /// </summary>
     /// <param name="deployment">What to prepare.</param>
     public static void Prepare(Deployment deployment)
@@ -56,7 +57,7 @@ internal static class Flow
                     message,
                     kind,
                     Language,
-                    new MessageTemplate(kind is SendKind.Email ? "code" : null, "{code} {token}"));
+                    new MessageTemplate(kind is SendKind.Email ? "code" : null, "{code} {link}"));
             }
         }
     }
@@ -210,7 +211,7 @@ internal static class Flow
     {
         ArgumentNullException.ThrowIfNull(deployment);
 
-        return Sent(deployment, kind).Split(' ')[1];
+        return Landing.Token(Sent(deployment, kind).Split(' ')[1]);
     }
 
     /// <summary>

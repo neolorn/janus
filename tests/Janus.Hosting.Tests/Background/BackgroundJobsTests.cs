@@ -354,6 +354,7 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
             .AddSingleton(new AuthenticationAddresses(
                 "https://accounts.example.test/signin",
                 "https://accounts.example.test"))
+            .AddSingleton(Landing.Origins)
             .AddSingleton(new SignOnClient("this-application"))
             .AddSingleton<ISecretSource>(HostFixture.Secrets(host.MaintenanceConnectionString))
             .AddJanus(host.ConnectionString, HostFixture.Declaration(), ApplicationKind.Public)

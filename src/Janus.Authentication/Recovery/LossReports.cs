@@ -28,6 +28,7 @@ namespace Janus.Authentication.Recovery;
 /// <param name="identifiers">Where the channels a notice reaches are read.</param>
 /// <param name="policies">What policy governs the account.</param>
 /// <param name="sending">Where a message goes out.</param>
+/// <param name="landing">Where a link the message carries lands.</param>
 /// <param name="audit">Where what became of a credential is recorded.</param>
 /// <param name="events">Where what became of a credential is announced.</param>
 /// <param name="configuration">Where the window and the notice interval come from.</param>
@@ -47,6 +48,7 @@ internal sealed class LossReports(
     IIdentifierDirectory identifiers,
     PolicyResolution policies,
     INotificationHandler sending,
+    LandingLinks landing,
     ICredentialAudit audit,
     IEvents events,
     IConfigurationStore configuration,
@@ -520,7 +522,7 @@ internal sealed class LossReports(
         string? language = await LanguageAsync(report.Subject, cancellationToken).ConfigureAwait(false);
         var values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
         {
-            ["token"] = Encoding.UTF8.GetString(report.Cancel),
+            ["link"] = landing.Of(LinkKind.LossReport, Encoding.UTF8.GetString(report.Cancel)),
         };
 
         bool delivered = false;

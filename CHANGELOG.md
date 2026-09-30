@@ -717,6 +717,11 @@ against the public contract of LIB-API-001.
   that is not an `https` origin a registered browser client returns to, or an
   authentication origin that is not the sign-in address's, is refused with
   `model.startup.declarationinvalid` under the same key.
+- Every link the library sends is a whole address, `<origin>/link#<kind>.<token>`, on
+  the declared landing origin of the application its kind belongs to, with the token in
+  the fragment. Templates fill it with the new `{link}` place; the `{token}` place is
+  retired. A text message whose template carries a link is budgeted at two segments
+  (306 units in the default alphabet, 134 outside it), every other at one.
 - What a destination has been sent is kept apart from what an account, a source, the
   deployment or a host key has, each for the longest interval of the restrictions now
   declared on its own kind of key, so a longer source restriction no longer keeps a
