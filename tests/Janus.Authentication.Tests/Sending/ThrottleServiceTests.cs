@@ -161,6 +161,30 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-001: the delay a failure earns is the one the count it wrote earns,
+    /// so decay does not shorten a delay already running: a source at nine failures is
+    /// held the whole sixty seconds, and the instant it is next looked at is the one the
+    /// refusal names.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_ASourceAtNineFailuresIsHeldTheWholeDelayItEarnedAsync()
+    {
+        var attempt = new ThrottleAttempt("198.51.100.7", null);
+        DateTimeOffset failed = _clock.GetUtcNow();
+
+        await FailedAsync(attempt, times: 9);
+        _clock.Advance(TimeSpan.FromSeconds(59));
+
+        TimeSpan left = await DelayAsync(attempt);
+
+        _clock.Advance(left);
+
+        Assert.Equal(TimeSpan.FromSeconds(1), left);
+        Assert.Equal(failed + TimeSpan.FromSeconds(60), _clock.GetUtcNow());
+        Assert.Equal(TimeSpan.Zero, await DelayAsync(attempt));
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-001 AC3: an attack spread across addresses raises no source
     /// counter above the threshold, and is caught by the account component.
     /// </summary>

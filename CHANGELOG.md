@@ -1193,7 +1193,8 @@ against the public contract of LIB-API-001.
   and the recovery approval limits) carries `retryAt` in its details and a matching
   `Retry-After` header. The progressive delay runs from the failure that earned it and
   grows when failures follow one another, so `retryAt` is the instant the next attempt
-  is looked at.
+  is looked at. The delay is the one the count that failure wrote earns: decay forgives
+  failures still to come and never shortens a delay already running.
 - `Error.Throttled` in `Janus.Core` builds the `auth.throttled` refusal, its one detail
   `retryAt` the instant in UTC. Every throttle of the library answers through it, the
   export limits and the per-source request limit included.
