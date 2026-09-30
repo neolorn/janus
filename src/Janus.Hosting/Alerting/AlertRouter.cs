@@ -71,17 +71,18 @@ internal sealed class AlertRouter(
             .FirstAsync(Alerts.Deduplication(raised.IdempotencyKey), raised.RaisedAt, window, cancellationToken)
             .ConfigureAwait(false);
 
-        Result<AlertDelivery> delivered = first
-            ? await DeliverAsync(raised, audience, cancellationToken).ConfigureAwait(false)
-            : Result.Success(new AlertDelivery(0, 0, SmsUnreachable: false, Deduplicated: true));
-
+        // D-022: the claim is committed before anything is sent, because the delivery
+        // acts on what the channels answer and no transport is called while a
+        // transaction is open.
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
             return Result.Failure<AlertDelivery>(notCommitted);
         }
 
-        return delivered;
+        return first
+            ? await DeliverAsync(raised, audience, cancellationToken).ConfigureAwait(false)
+            : Result.Success(new AlertDelivery(0, 0, SmsUnreachable: false, Deduplicated: true));
     }
 
     /// <summary>

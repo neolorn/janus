@@ -717,6 +717,10 @@ against the public contract of LIB-API-001.
   that is not an `https` origin a registered browser client returns to, or an
   authentication origin that is not the sign-in address's, is refused with
   `model.startup.declarationinvalid` under the same key.
+- An alert's deduplication claim is committed before the alert is sent, and the
+  `alert-dispatch` pass removes a carried condition afterwards, so no alert transport
+  is called while a transaction is open. A delivery that fails after the claim is not
+  repeated inside the same window.
 - A recovery link and an invitation link are sent and drawn under the `signin` purpose,
   as a sign-in link is, and answer to the restrictions it answers to; no `notification`
   restriction counts them, so `notification.destination` counts notices alone.
