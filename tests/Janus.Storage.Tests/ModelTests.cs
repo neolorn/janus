@@ -668,6 +668,7 @@ public sealed class ModelTests
             "raised_alerts.id",
             "raised_alerts.idempotency_key",
             "raised_alerts.raised_at",
+            "raised_alerts.scope",
 
             // Not an account field: the records each person was given by day and each
             // person's daily mean, by identifier alone and forgotten once older than

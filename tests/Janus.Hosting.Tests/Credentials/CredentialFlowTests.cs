@@ -85,7 +85,7 @@ public sealed class CredentialFlowTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, changed.Status);
         Assert.Equal(
-            [Alerts.Key(AlertCondition.Degradation, "password.blocklist.fallback")],
+            [Alerts.Key(AlertCondition.Degradation, "password.blocklist.fallback", named: null)],
             _deployment.Raised.Waiting.Select(alert => Alerts.Deduplication(alert.Raised.IdempotencyKey)));
         Assert.Equal(1, await _deployment.CarryAlertsAsync());
         Assert.Empty(_deployment.Raised.Waiting);

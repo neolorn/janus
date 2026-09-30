@@ -483,7 +483,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
 
         Assert.Equal(AlertSeverity.High, clustering.Severity);
         Assert.Equal(
-            Alerts.Key(AlertCondition.RecoveryClustering, subject.ToString()),
+            Alerts.Key(AlertCondition.RecoveryClustering, scope: null, subject.ToString()),
             Alerts.Deduplication(clustering.IdempotencyKey));
     }
 

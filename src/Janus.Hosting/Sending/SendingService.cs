@@ -392,7 +392,7 @@ internal sealed class SendingService(
 
                 if ((await alerts
                         .RaiseAsync(
-                            Alerts.Of(
+                            Alerts.Scoped(
                                 AlertCondition.Degradation,
                                 "send:" + WrittenName.Of(delivery.Requested.Kind),
                                 now,

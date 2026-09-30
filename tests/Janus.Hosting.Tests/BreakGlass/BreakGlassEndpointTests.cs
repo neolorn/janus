@@ -221,7 +221,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
         Assert.Equal(AlertSeverity.High, used.Severity);
         Assert.Equal(
-            Alerts.Key(AlertCondition.BreakGlassUsed, Assert.Single(_deployment.BreakGlassAudit.Used).Credential.ToString()),
+            Alerts.Key(AlertCondition.BreakGlassUsed, scope: null, Assert.Single(_deployment.BreakGlassAudit.Used).Credential.ToString()),
             Alerts.Deduplication(used.IdempotencyKey));
         Assert.Empty(used.Details);
     }
@@ -606,7 +606,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
         Assert.Contains(_deployment.Sms.Taken, message => string.Equals(message.Destination.Value, OwnerNumber, StringComparison.Ordinal));
         Assert.Equal(AlertSeverity.High, generated.Severity);
         Assert.Equal(
-            Alerts.Key(AlertCondition.BreakGlassGenerated, issue.ToString()),
+            Alerts.Key(AlertCondition.BreakGlassGenerated, scope: null, issue.ToString()),
             Alerts.Deduplication(generated.IdempotencyKey));
         Assert.Empty(generated.Details);
         Assert.DoesNotContain(
@@ -736,7 +736,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status429TooManyRequests, first.Status);
         Assert.Equal(StatusCodes.Status429TooManyRequests, second.Status);
         Assert.Equal(
-            Alerts.Key(AlertCondition.AuthFailuresSustained, _emergency.ToString()),
+            Alerts.Key(AlertCondition.AuthFailuresSustained, scope: null, _emergency.ToString()),
             Alerts.Deduplication(raised.IdempotencyKey));
     }
 
@@ -767,7 +767,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status429TooManyRequests, refused.Status);
         Assert.Equal(
-            Alerts.Key(AlertCondition.AuthFailuresSustained, scope: null),
+            Alerts.Key(AlertCondition.AuthFailuresSustained, scope: null, named: null),
             Alerts.Deduplication(raised.IdempotencyKey));
     }
 

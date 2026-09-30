@@ -341,7 +341,7 @@ internal sealed class DeploymentBootstrap(
         // credential until the management application issues one, and the alert says so
         // from the start, its event written with it in the one transaction.
         if ((await alerts
-                .RaiseAsync(Alerts.Of(AlertCondition.NoEmergencyCredential, scope: null, now), cancellationToken)
+                .RaiseAsync(Alerts.Of(AlertCondition.NoEmergencyCredential, named: null, now), cancellationToken)
                 .ConfigureAwait(false))
             .Match(() => (Error?)null, error => error) is Error unannounced)
         {

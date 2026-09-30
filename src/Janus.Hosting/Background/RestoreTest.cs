@@ -298,7 +298,7 @@ internal sealed class RestoreTest(
 
         if ((outcome is not RestoreTestOutcome.Passed || outlived)
             && (await alerts
-                    .RaiseAsync(Alerts.Of(AlertCondition.RestoreTestFailed, scope: null, now, measured), cancellationToken)
+                    .RaiseAsync(Alerts.Of(AlertCondition.RestoreTestFailed, named: null, now, measured), cancellationToken)
                     .ConfigureAwait(false))
                 .Match(() => (Error?)null, error => error) is Error unraised)
         {

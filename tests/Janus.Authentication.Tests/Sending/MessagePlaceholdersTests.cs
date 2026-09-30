@@ -50,7 +50,7 @@ public sealed class MessagePlaceholdersTests
         foreach (AlertCondition condition in Enum.GetValues<AlertCondition>())
         {
             Assert.True(
-                Alerts.Key(condition, null).Length <= MessagePlaceholders.Widths["condition"],
+                Alerts.Key(condition, scope: null, named: null).Length <= MessagePlaceholders.Widths["condition"],
                 $"The condition {condition} is written wider than a place allows.");
         }
 

@@ -73,7 +73,7 @@ internal sealed class EnvelopeRotationWatch(
 
         return (await alerts
                 .RaiseAsync(
-                    Alerts.Of(AlertCondition.ExpiryApproaching, Scope, now, Due(performedAt, dueAt)),
+                    Alerts.Scoped(AlertCondition.ExpiryApproaching, Scope, now, Due(performedAt, dueAt)),
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(() => Result.Success(true), Result.Failure<bool>);

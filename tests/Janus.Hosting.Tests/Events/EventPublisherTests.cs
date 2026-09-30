@@ -142,7 +142,7 @@ public sealed class EventPublisherTests : IAsyncDisposable
 
         Assert.Equal(AlertCondition.Degradation, raised.Condition);
         Assert.StartsWith(
-            Alerts.Key(AlertCondition.Degradation, "event:AccountRegistered") + "@",
+            Alerts.Key(AlertCondition.Degradation, scope: null, "event:AccountRegistered") + "@",
             raised.IdempotencyKey,
             StringComparison.Ordinal);
         Assert.Equal(pending.Id.ToString(), raised.Details["event"].GetString());

@@ -37,7 +37,7 @@ internal sealed class EmergencyCredentialWatch(
         }
 
         return await alerts
-            .RaiseAsync(Alerts.Of(AlertCondition.NoEmergencyCredential, scope: null, time.GetUtcNow()), cancellationToken)
+            .RaiseAsync(Alerts.Of(AlertCondition.NoEmergencyCredential, named: null, time.GetUtcNow()), cancellationToken)
             .ConfigureAwait(false);
     }
 }

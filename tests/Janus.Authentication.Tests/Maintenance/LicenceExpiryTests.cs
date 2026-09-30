@@ -46,7 +46,7 @@ public sealed class LicenceExpiryTests
 
         Assert.Equal(AlertCondition.ExpiryApproaching, raised.Condition);
         Assert.StartsWith(
-            Alerts.Key(AlertCondition.ExpiryApproaching, "licence:" + near.Id) + "@",
+            Alerts.Key(AlertCondition.ExpiryApproaching, scope: null, "licence:" + near.Id) + "@",
             raised.IdempotencyKey,
             StringComparison.Ordinal);
         Assert.Equal(near.Id.ToString(), raised.Details["licence"].GetString());

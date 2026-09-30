@@ -70,7 +70,7 @@ public sealed class ReadVolumeTests : IAsyncDisposable
 
         Assert.Equal(AlertCondition.ReadVolumeAnomaly, raised.Condition);
         Assert.Equal(
-            Alerts.Key(AlertCondition.ReadVolumeAnomaly, clerk.ToString()),
+            Alerts.Key(AlertCondition.ReadVolumeAnomaly, scope: null, clerk.ToString()),
             Alerts.Deduplication(raised.IdempotencyKey));
         Assert.Equal(
             ["actor", "dailyMean", "records"],

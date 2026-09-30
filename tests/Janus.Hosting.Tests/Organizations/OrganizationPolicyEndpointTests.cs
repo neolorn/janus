@@ -273,7 +273,7 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, loosened.Status);
         Assert.Equal(AlertSeverity.High, raised.Severity);
-        Assert.Equal(Alerts.Key(AlertCondition.StepUpPolicyWeakened, Branch.ToString()), Alerts.Deduplication(raised.IdempotencyKey));
+        Assert.Equal(Alerts.Key(AlertCondition.StepUpPolicyWeakened, scope: null, Branch.ToString()), Alerts.Deduplication(raised.IdempotencyKey));
         Assert.Equal("policy." + Branch, raised.Details["key"].GetString());
         Assert.Equal(["policy:change"], raised.Details["gates"].EnumerateArray().Select(gate => gate.GetString()));
     }

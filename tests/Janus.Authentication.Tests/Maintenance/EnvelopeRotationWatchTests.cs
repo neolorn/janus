@@ -47,7 +47,7 @@ public sealed class EnvelopeRotationWatchTests
 
         Assert.Equal(AlertCondition.ExpiryApproaching, raised.Condition);
         Assert.StartsWith(
-            Alerts.Key(AlertCondition.ExpiryApproaching, "envelope-rotation") + "@",
+            Alerts.Key(AlertCondition.ExpiryApproaching, "envelope-rotation", named: null) + "@",
             raised.IdempotencyKey,
             StringComparison.Ordinal);
         Assert.Equal("envelope-rotation", raised.Details["task"].GetString());

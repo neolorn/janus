@@ -48,14 +48,20 @@ internal static class Alerts
         };
 
     /// <summary>
-    /// What one raised condition deduplicates under: the condition identifier and the
-    /// account or actor the row names, where it names one (OPS-ALERT-002).
+    /// What one raised condition deduplicates under: the condition identifier, the scope
+    /// it is raised under where it has one, and the account or actor the row names, where
+    /// it names one (OPS-ALERT-002, D-177).
     /// </summary>
     /// <param name="condition">The condition.</param>
-    /// <param name="scope">Whose, or nothing where the row names no one.</param>
+    /// <param name="scope">The scope of chapter 10 section 5.23, or nothing where it has none.</param>
+    /// <param name="named">Whose, or nothing where the row names no one.</param>
     /// <returns>The deduplication key.</returns>
-    public static string Key(AlertCondition condition, string? scope) =>
-        scope is null ? Named(condition) : Named(condition) + ":" + scope;
+    public static string Key(AlertCondition condition, string? scope, string? named)
+    {
+        string key = scope is null ? Named(condition) : Named(condition) + ":" + scope;
+
+        return named is null ? key : key + ":" + named;
+    }
 
     /// <summary>
     /// The deduplication key one raised alert carries, taken back out of its
@@ -77,21 +83,54 @@ internal static class Alerts
     /// Raises one condition.
     /// </summary>
     /// <param name="condition">What fired.</param>
-    /// <param name="scope">Whose, or nothing where the row names no one.</param>
+    /// <param name="named">Whose, or nothing where the row names no one.</param>
     /// <param name="at">When.</param>
     /// <param name="details">The structured detail of the row.</param>
     /// <returns>The event to publish.</returns>
     public static AlertRaised Of(
         AlertCondition condition,
-        string? scope,
+        string? named,
         DateTimeOffset at,
         IReadOnlyDictionary<string, JsonElement>? details = null) =>
+        Raised(condition, scope: null, named, at, details);
+
+    /// <summary>
+    /// Raises one condition under a scope of chapter 10 section 5.23, which the event
+    /// carries and the deduplication key includes, so an alert under one scope never
+    /// hides one under another (OPS-ALERT-002 AC3, D-177).
+    /// </summary>
+    /// <param name="condition">What fired.</param>
+    /// <param name="scope">The scope, naming the one of several things it fired for.</param>
+    /// <param name="at">When.</param>
+    /// <param name="details">The structured detail of the row.</param>
+    /// <returns>The event to publish.</returns>
+    /// <exception cref="ArgumentNullException">The scope is absent.</exception>
+    public static AlertRaised Scoped(
+        AlertCondition condition,
+        string scope,
+        DateTimeOffset at,
+        IReadOnlyDictionary<string, JsonElement>? details = null)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+
+        return Raised(condition, scope, named: null, at, details);
+    }
+
+    private static AlertRaised Raised(
+        AlertCondition condition,
+        string? scope,
+        string? named,
+        DateTimeOffset at,
+        IReadOnlyDictionary<string, JsonElement>? details) =>
         new(
             at,
-            Key(condition, scope) + "@" + at.ToString("O", CultureInfo.InvariantCulture),
+            Key(condition, scope, named) + "@" + at.ToString("O", CultureInfo.InvariantCulture),
             condition,
             Severity(condition),
-            details ?? Nothing);
+            details ?? Nothing)
+        {
+            Scope = scope,
+        };
 
     // The identifier of chapter 10 section 5.23, which the enumeration carries as
     // the written name of each member.

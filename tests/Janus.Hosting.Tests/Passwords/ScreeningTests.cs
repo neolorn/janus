@@ -144,7 +144,7 @@ public sealed class ScreeningTests : IDisposable
             [(BlocklistSource.RangeApi, BlocklistSource.Offline)],
             [.. _log.Entries]);
         Assert.Equal(
-            [Alerts.Key(AlertCondition.Degradation, "password.blocklist.fallback")],
+            [Alerts.Key(AlertCondition.Degradation, "password.blocklist.fallback", named: null)],
             _events.Of<AlertRaised>().Select(raised => Alerts.Deduplication(raised.IdempotencyKey)));
     }
 

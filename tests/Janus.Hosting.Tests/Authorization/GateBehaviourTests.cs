@@ -1589,7 +1589,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             SELECT count(*)::int FROM identity.raised_alerts
             WHERE condition = 'denial-spike' AND idempotency_key LIKE @key
             """,
-            new { key = Alerts.Key(AlertCondition.DenialSpike, account?.ToString()) + "@%" });
+            new { key = Alerts.Key(AlertCondition.DenialSpike, scope: null, account?.ToString()) + "@%" });
     }
 
     private async Task<bool> ChecksAsync(

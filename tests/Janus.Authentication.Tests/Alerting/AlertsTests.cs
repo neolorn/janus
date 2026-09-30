@@ -86,7 +86,7 @@ public sealed class AlertsTests
             Identifiers,
             typeof(AlertCondition)
                 .GetFields(BindingFlags.Public | BindingFlags.Static)
-                .Select(field => Alerts.Key((AlertCondition)field.GetValue(null)!, null)));
+                .Select(field => Alerts.Key((AlertCondition)field.GetValue(null)!, scope: null, named: null)));
 
     /// <summary>
     /// D-166 (291): a condition is never renumbered; the one added for a generated
@@ -133,6 +133,25 @@ public sealed class AlertsTests
         Assert.NotEqual(
             Alerts.Deduplication(one.IdempotencyKey),
             Alerts.Deduplication(other.IdempotencyKey));
+    }
+
+    /// <summary>
+    /// OPS-ALERT-002 AC3, D-177: an alert raised under a scope carries it, and its
+    /// deduplication key is the condition and the scope, so two scopes are two keys.
+    /// </summary>
+    [Fact]
+    public void OPS_ALERT_002_AC3_TheDeduplicationKeyIncludesTheScope()
+    {
+        AlertRaised one = Alerts.Scoped(AlertCondition.Degradation, "mailbox.push:one", Noon);
+        AlertRaised other = Alerts.Scoped(AlertCondition.Degradation, "mailbox.push:two", Noon);
+
+        Assert.Equal("mailbox.push:one", one.Scope);
+        Assert.Equal("degradation:mailbox.push:one", Alerts.Deduplication(one.IdempotencyKey));
+        Assert.NotEqual(Alerts.Deduplication(one.IdempotencyKey), Alerts.Deduplication(other.IdempotencyKey));
+        Assert.Null(Alerts.Of(AlertCondition.Degradation, "account-one", Noon).Scope);
+        Assert.Equal(
+            "degradation:mailbox.push:one:account-one",
+            Alerts.Key(AlertCondition.Degradation, "mailbox.push:one", "account-one"));
     }
 
     /// <summary>

@@ -554,6 +554,12 @@ against the public contract of LIB-API-001.
   fails. A removal of a mailbox no push of which was ever attempted is confirmed
   without being sent. The `mailboxes` table gains `attempted`, true for every row
   written before this release.
+- `AlertRaised.Scope` carries the scope an alert is raised under, where it has one
+  (a mailbox's push or conflict, reconciliation, a send channel, the blocklist fallback,
+  the clock or certificate reference, the envelope rotation), and the deduplication key
+  is the condition, that scope and the account or actor, so an alert under one scope
+  never folds into one under another. The `raised_alerts` table gains `scope`, empty for
+  every row written before this release.
 - Where Continue with Apple is among the system policy's `loginFactors` and
   `notification.email.sendingdomain` is not in `notification.email.relayregistered`, the
   deployment raises `relay-domain-unregistered` with the domain as it starts and

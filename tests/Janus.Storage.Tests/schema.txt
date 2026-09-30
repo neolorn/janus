@@ -844,6 +844,7 @@ table raised_alerts
   column idempotency_key character varying(320) not null
   column condition text not null
   column details jsonb not null
+  column scope character varying(320)
   constraint pk_raised_alerts PRIMARY KEY (id)
 table read_baselines
   column actor uuid not null

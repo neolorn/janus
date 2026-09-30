@@ -145,13 +145,13 @@ internal sealed class MailboxPublisher(
                 // account someone must resolve at the mail server, so the push is marked
                 // failed at this attempt and raises its own alert.
                 mailbox.Failed(now);
-                alert = Alerts.Of(AlertCondition.Degradation, "mailbox.conflict:" + mailbox.Id, now, Conflicting(mailbox));
+                alert = Alerts.Scoped(AlertCondition.Degradation, "mailbox.conflict:" + mailbox.Id, now, Conflicting(mailbox));
             }
             else if (mailbox.Refused(now, schedule.Initial, schedule.Factor, schedule.MaxAttempts, Jitter()))
             {
                 // INT-MAIL-007 AC3: a push the server never took is visible the moment
                 // its budget is spent.
-                alert = Alerts.Of(AlertCondition.Degradation, "mailbox.push:" + mailbox.Id, now, Exhausted(mailbox));
+                alert = Alerts.Scoped(AlertCondition.Degradation, "mailbox.push:" + mailbox.Id, now, Exhausted(mailbox));
             }
 
             if (await RecordedAsync(mailbox, alert, cancellationToken).ConfigureAwait(false) is Error unanswered)

@@ -28,6 +28,7 @@ internal sealed class RaisedAlerts(StoreContext context) : IRaisedAlerts
             RaisedAt = alert.Raised.RaisedAt,
             IdempotencyKey = alert.Raised.IdempotencyKey,
             Condition = alert.Raised.Condition,
+            Scope = alert.Raised.Scope,
             Details = JsonSerializer.Serialize(
                 new Dictionary<string, JsonElement>(alert.Raised.Details, StringComparer.Ordinal),
                 RaisedAlertJson.Default.DictionaryStringJsonElement),
@@ -71,5 +72,8 @@ internal sealed class RaisedAlerts(StoreContext context) : IRaisedAlerts
                 row.Condition,
                 Alerts.Severity(row.Condition),
                 JsonSerializer.Deserialize(row.Details, RaisedAlertJson.Default.DictionaryStringJsonElement)
-                    ?? throw new InvalidOperationException("The stored details are not a document.")));
+                    ?? throw new InvalidOperationException("The stored details are not a document."))
+            {
+                Scope = row.Scope,
+            });
 }

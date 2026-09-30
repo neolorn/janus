@@ -149,7 +149,7 @@ internal sealed class MailboxReconciliation(
         Result<MailboxDrift> outcome,
         CancellationToken cancellationToken) =>
         (await alerts
-                .RaiseAsync(Alerts.Of(AlertCondition.Degradation, Scope, now, details), cancellationToken)
+                .RaiseAsync(Alerts.Scoped(AlertCondition.Degradation, Scope, now, details), cancellationToken)
                 .ConfigureAwait(false))
             .Match(() => outcome, Result.Failure<MailboxDrift>);
 }

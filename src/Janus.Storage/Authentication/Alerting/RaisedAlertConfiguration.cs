@@ -40,6 +40,10 @@ internal sealed class RaisedAlertConfiguration : IEntityTypeConfiguration<Raised
             .HasColumnName("condition")
             .HasConversion(new VocabularyConverter<AlertCondition>());
 
+        builder.Property(alert => alert.Scope)
+            .HasColumnName("scope")
+            .HasMaxLength(KeyLength);
+
         builder.Property(alert => alert.Details)
             .HasColumnName("details")
             .HasColumnType("jsonb");

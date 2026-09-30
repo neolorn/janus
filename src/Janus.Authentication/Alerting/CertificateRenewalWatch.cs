@@ -55,13 +55,13 @@ internal sealed class CertificateRenewalWatch(
 
         return await alerts
             .RaiseAsync(
-                Alerts.Of(AlertCondition.CertificateRenewalFailed, scope: null, time.GetUtcNow(), Failed(failedAt)),
+                Alerts.Of(AlertCondition.CertificateRenewalFailed, named: null, time.GetUtcNow(), Failed(failedAt)),
                 cancellationToken)
             .ConfigureAwait(false);
     }
 
     private AlertRaised Degraded(string scope) =>
-        Alerts.Of(AlertCondition.Degradation, scope, time.GetUtcNow());
+        Alerts.Scoped(AlertCondition.Degradation, scope, time.GetUtcNow());
 
     private static Dictionary<string, JsonElement> Failed(DateTimeOffset failedAt) =>
         new(capacity: 1, StringComparer.Ordinal)

@@ -220,7 +220,7 @@ internal sealed class AlertRouter(
         return default!;
     }
 
-    private static string Named(AlertCondition condition) => Alerts.Key(condition, null);
+    private static string Named(AlertCondition condition) => Alerts.Key(condition, scope: null, named: null);
 
     private static Dictionary<string, string> Values(AlertRaised raised)
     {

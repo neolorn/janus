@@ -199,7 +199,7 @@ public sealed class LocationDatabaseTests
 
         Assert.Null(await ResolvedAsync(Database, "198.51.100.7"));
         Assert.Equal(
-            [Alerts.Key(AlertCondition.Degradation, "location.database.refresh"), Alerts.Key(AlertCondition.Degradation, "location.database.absent")],
+            [Alerts.Key(AlertCondition.Degradation, scope: null, "location.database.refresh"), Alerts.Key(AlertCondition.Degradation, scope: null, "location.database.absent")],
             _events.Of<AlertRaised>().Select(raised => Alerts.Deduplication(raised.IdempotencyKey)));
     }
 
@@ -225,7 +225,7 @@ public sealed class LocationDatabaseTests
     private static void Degraded(string scope, AlertRaised raised)
     {
         Assert.Equal(AlertCondition.Degradation, raised.Condition);
-        Assert.Equal(Alerts.Key(AlertCondition.Degradation, scope), Alerts.Deduplication(raised.IdempotencyKey));
+        Assert.Equal(Alerts.Key(AlertCondition.Degradation, scope: null, scope), Alerts.Deduplication(raised.IdempotencyKey));
     }
 
     private static async Task<ResolvedLocation?> ResolvedAsync(LocationDatabase database, string address) =>

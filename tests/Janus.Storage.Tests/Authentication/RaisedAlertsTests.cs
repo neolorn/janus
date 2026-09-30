@@ -96,6 +96,31 @@ public sealed class RaisedAlertsTests(DatabaseFixture database) : IClassFixture<
             Assert.Single(await new RaisedAlerts(reading).OldestAsync(10, TestContext.Current.CancellationToken)).Id);
     }
 
+    /// <summary>
+    /// OPS-ALERT-002 AC3, D-177: a condition raised under a scope reads back with that
+    /// scope, and one raised under none reads back with none.
+    /// </summary>
+    [Fact]
+    public async Task OPS_ALERT_002_AC3_ARaisedConditionReadsBackWithItsScopeAsync()
+    {
+        await EmptiedAsync();
+
+        AlertRaised scoped = Alerts.Scoped(AlertCondition.Degradation, "mailbox.reconciliation", Noon);
+        AlertRaised named = Alerts.Of(AlertCondition.RestrictionGranted, "someone", Noon.AddMinutes(1));
+
+        await WrittenAsync(scoped);
+        await WrittenAsync(named);
+
+        await using StoreContext reading = database.Context();
+
+        IReadOnlyList<RaisedAlert> waiting = await new RaisedAlerts(reading)
+            .OldestAsync(10, TestContext.Current.CancellationToken);
+
+        Assert.Equal("mailbox.reconciliation", waiting[0].Raised.Scope);
+        Assert.Equal(scoped.IdempotencyKey, waiting[0].Raised.IdempotencyKey);
+        Assert.Null(waiting[1].Raised.Scope);
+    }
+
     private async Task<RaisedAlertId> WrittenAsync(AlertRaised raised)
     {
         var alert = new RaisedAlert(RaisedAlertId.Of(raised.RaisedAt), raised);

@@ -700,7 +700,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
 
         Assert.Equal(AlertCondition.ConcurrentSessionsImplausible, raised.Condition);
         Assert.Equal(
-            Alerts.Key(AlertCondition.ConcurrentSessionsImplausible, subject.ToString()),
+            Alerts.Key(AlertCondition.ConcurrentSessionsImplausible, scope: null, subject.ToString()),
             Alerts.Deduplication(raised.IdempotencyKey));
         Assert.Equal(
             ["other", "session", "subject"],

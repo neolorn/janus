@@ -127,6 +127,8 @@ Janus.Core.AlertRaised.Deconstruct(out System.DateTimeOffset RaisedAt, out strin
 Janus.Core.AlertRaised.Details.get -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>!
 Janus.Core.AlertRaised.Details.init -> void
 Janus.Core.AlertRaised.Equals(Janus.Core.AlertRaised? other) -> bool
+Janus.Core.AlertRaised.Scope.get -> string?
+Janus.Core.AlertRaised.Scope.init -> void
 Janus.Core.AlertRaised.Severity.get -> Janus.Core.AlertSeverity
 Janus.Core.AlertRaised.Severity.init -> void
 Janus.Core.AlertSeverity

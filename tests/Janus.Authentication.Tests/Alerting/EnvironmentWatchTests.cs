@@ -49,7 +49,7 @@ public sealed class EnvironmentWatchTests
         {
             Assert.Equal(AlertCondition.ClockDrift, alert.Condition);
             Assert.Equal(AlertSeverity.Normal, alert.Severity);
-            Assert.Equal(Alerts.Key(AlertCondition.ClockDrift, scope: null), Alerts.Deduplication(alert.IdempotencyKey));
+            Assert.Equal(Alerts.Key(AlertCondition.ClockDrift, scope: null, named: null), Alerts.Deduplication(alert.IdempotencyKey));
             Assert.Equal(30d, alert.Details["toleranceSeconds"].GetDouble());
         });
         Assert.Equal(31d, raised[0].Details["offsetSeconds"].GetDouble());
@@ -112,8 +112,8 @@ public sealed class EnvironmentWatchTests
 
         Assert.Equal(
             [
-                Alerts.Key(AlertCondition.Degradation, "clock.reference.absent"),
-                Alerts.Key(AlertCondition.Degradation, "clock.reference.unread"),
+                Alerts.Key(AlertCondition.Degradation, "clock.reference.absent", named: null),
+                Alerts.Key(AlertCondition.Degradation, "clock.reference.unread", named: null),
             ],
             _alerts.Of<AlertRaised>().Select(alert => Alerts.Deduplication(alert.IdempotencyKey)));
     }
@@ -166,8 +166,8 @@ public sealed class EnvironmentWatchTests
 
         Assert.Equal(
             [
-                Alerts.Key(AlertCondition.Degradation, "certificate.renewal.absent"),
-                Alerts.Key(AlertCondition.Degradation, "certificate.renewal.unread"),
+                Alerts.Key(AlertCondition.Degradation, "certificate.renewal.absent", named: null),
+                Alerts.Key(AlertCondition.Degradation, "certificate.renewal.unread", named: null),
             ],
             _alerts.Of<AlertRaised>().Select(alert => Alerts.Deduplication(alert.IdempotencyKey)));
     }

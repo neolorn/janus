@@ -122,6 +122,27 @@ public sealed class AlertRouterTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-ALERT-002 AC3, D-177: two alerts of one condition under different scopes in
+    /// one window are both delivered, so a degradation for one mailbox never hides one
+    /// for another; a repeat under the same scope still folds.
+    /// </summary>
+    [Fact]
+    public async Task OPS_ALERT_002_AC3_OneConditionUnderTwoScopesIsTwoAlertsAsync()
+    {
+        AlertDelivery one = await RaisedAsync(
+            Alerts.Scoped(AlertCondition.Degradation, "mailbox.conflict:one", Noon));
+        AlertDelivery other = await RaisedAsync(
+            Alerts.Scoped(AlertCondition.Degradation, "mailbox.conflict:two", Noon.AddMinutes(1)));
+        AlertDelivery repeated = await RaisedAsync(
+            Alerts.Scoped(AlertCondition.Degradation, "mailbox.conflict:one", Noon.AddMinutes(2)));
+
+        Assert.False(one.Deduplicated);
+        Assert.False(other.Deduplicated);
+        Assert.True(repeated.Deduplicated);
+        Assert.Equal(4, _mail.Taken.Count);
+    }
+
+    /// <summary>
     /// OPS-ALERT-003: email carries every condition and SMS carries only the severe
     /// ones, so a Normal condition does not spend the prepaid balance.
     /// </summary>

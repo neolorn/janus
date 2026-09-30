@@ -67,13 +67,13 @@ internal sealed class ClockDriftWatch(
 
         return await alerts
             .RaiseAsync(
-                Alerts.Of(AlertCondition.ClockDrift, scope: null, time.GetUtcNow(), Drifted(offset, tolerance)),
+                Alerts.Of(AlertCondition.ClockDrift, named: null, time.GetUtcNow(), Drifted(offset, tolerance)),
                 cancellationToken)
             .ConfigureAwait(false);
     }
 
     private AlertRaised Degraded(string scope) =>
-        Alerts.Of(AlertCondition.Degradation, scope, time.GetUtcNow());
+        Alerts.Scoped(AlertCondition.Degradation, scope, time.GetUtcNow());
 
     private static Dictionary<string, JsonElement> Drifted(TimeSpan offset, TimeSpan tolerance) =>
         new(capacity: 2, StringComparer.Ordinal)

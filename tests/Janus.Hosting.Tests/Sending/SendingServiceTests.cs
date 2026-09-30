@@ -427,7 +427,7 @@ public sealed class SendingServiceTests : IAsyncDisposable
 
         Assert.Equal(AlertCondition.Degradation, raised.Condition);
         Assert.StartsWith(
-            Alerts.Key(AlertCondition.Degradation, "send:email") + "@",
+            Alerts.Key(AlertCondition.Degradation, "send:email", named: null) + "@",
             raised.IdempotencyKey,
             StringComparison.Ordinal);
         Assert.Equal(waiting.Id.ToString(), raised.Details["delivery"].GetString());
