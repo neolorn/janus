@@ -131,6 +131,13 @@ internal sealed class RestrictionAdministration(
             written.Add(replacement with { Name = name });
         }
 
+        // INT-SMS-003: a set the key does not admit, a name outside the rule among it,
+        // is refused before anything is begun, since the refusal writes nothing.
+        if (Settings.Restrictions.Accept(written).Match(_ => (Error?)null, error => error) is Error refused)
+        {
+            return Result.Failure(refused);
+        }
+
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {

@@ -75,10 +75,13 @@ public sealed class RestrictionSetSetting : Setting<IReadOnlyList<Restriction>>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// INT-SMS-003: a restriction's name fills the <c>restriction</c> place of the
+    /// messages that name it, so a name outside the rule is refused where it is written.
+    /// </remarks>
     public override Result<IReadOnlyList<Restriction>> Accept(IReadOnlyList<Restriction> value) =>
-        value is null || value.Any(restriction => restriction is null || restriction.Buckets.Count == 0)
-            ? Result.Failure<IReadOnlyList<Restriction>>(
-                Refused(ErrorCodes.ConfigurationValueNotAllowed, "allowed", "restrictions, each with at least one bucket"))
+        value is null || value.Any(restriction => !Admitted(restriction))
+            ? Result.Failure<IReadOnlyList<Restriction>>(Malformed())
             : Result.Success(value);
 
     /// <inheritdoc />
@@ -90,6 +93,9 @@ public sealed class RestrictionSetSetting : Setting<IReadOnlyList<Restriction>>
     /// <inheritdoc />
     private protected override string Render(IReadOnlyList<Restriction> value) =>
         SettingText.OfShape(value.Select(Write).ToArray());
+
+    private static bool Admitted(Restriction? restriction) =>
+        restriction is not null && PlaceName.Holds(restriction.Name) && restriction.Buckets.Count > 0;
 
     private static bool AtLeastAsStrict(Bucket kept, Bucket bucket) =>
         kept.Maximum <= bucket.Maximum
@@ -116,7 +122,8 @@ public sealed class RestrictionSetSetting : Setting<IReadOnlyList<Restriction>>
         foreach (Written restriction in written)
         {
             if (restriction is null
-                || restriction.Name is null
+                || restriction.Name is not string name
+                || !PlaceName.Holds(name)
                 || restriction.Purpose is null
                 || restriction.Buckets is null
                 || !KeyKind(restriction.Key, out RestrictionKeyKind kind, out string? hostKeyName)
@@ -141,7 +148,7 @@ public sealed class RestrictionSetSetting : Setting<IReadOnlyList<Restriction>>
                 buckets.Add(new Bucket(bucket.Max, interval, window));
             }
 
-            read.Add(new Restriction(restriction.Name, kind, hostKeyName, purpose, buckets));
+            read.Add(new Restriction(name, kind, hostKeyName, purpose, buckets));
         }
 
         return Result.Success<IReadOnlyList<Restriction>>(read);
@@ -168,7 +175,10 @@ public sealed class RestrictionSetSetting : Setting<IReadOnlyList<Restriction>>
     }
 
     private Error Malformed() =>
-        Refused(ErrorCodes.ConfigurationValueNotAllowed, "allowed", "restrictions, each with at least one bucket");
+        Refused(
+            ErrorCodes.ConfigurationValueNotAllowed,
+            "allowed",
+            "restrictions, each named by 1 to 64 lower-case letters and digits separated by single '.', '-' or '_', and each with at least one bucket");
 
     // The shape chapter 09 gives the restriction endpoints, which is what the settings
     // table holds and what the management application reads back.

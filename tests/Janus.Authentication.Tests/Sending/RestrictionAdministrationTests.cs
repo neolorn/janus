@@ -108,6 +108,28 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// INT-SMS-003 AC3: a restriction named outside the rule is refused with
+    /// <c>config.value.notallowed</c> before a transaction is opened, and nothing is
+    /// written.
+    /// </summary>
+    [Fact]
+    public async Task INT_SMS_003_ARestrictionNamedOutsideTheRuleIsRefusedBeforeAnythingBeginsAsync()
+    {
+        Result refused = await Administration.EditAsync(
+            "SMS Destination",
+            Tightened(),
+            "an incident",
+            Satisfied,
+            AccessContext.Of(SubjectId.New(_randomness)),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed, Refusal(refused));
+        Assert.Equal(0, _work.Opened);
+        Assert.Empty(_audit.Edits);
+        Assert.Empty(_events.Published);
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-004 AC3: an edit is written down and announced, carrying whether
     /// it let more through than before.
     /// </summary>

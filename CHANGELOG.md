@@ -696,6 +696,10 @@ against the public contract of LIB-API-001.
   `POST /admin/restrictions/{name}/grant` adds credit to one key under
   `restriction:grant`, behind step-up and with a reason. `IRestrictionSet` is the same
   set of operations in process.
+- A restriction's name is 1 to 64 lower-case letters and digits separated by single
+  `.`, `-` or `_`. `PUT /admin/restrictions/{name}` with a name outside that rule is
+  refused with `config.value.notallowed` before anything is written, and a stored set
+  holding one does not read.
 - `GET /admin/config/{key}` reads one runtime key under `config:read`: its value in
   force and its default in the key's own JSON type, whether it is protected, and which
   way it loosens (`increase`, `decrease` or `any-change`). `PUT /admin/config/{key}`
