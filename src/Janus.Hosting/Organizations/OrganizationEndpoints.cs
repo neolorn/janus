@@ -4,7 +4,6 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Janus.Authentication.Configuration;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
@@ -437,10 +436,15 @@ internal static class OrganizationEndpoints
     // with the code a change without one is, naming that key, before any permission is
     // asked; one past the bound of API-CONV-002 is a request the boundary does not read.
     private static IResult? Unexplained(OrganizationId organization, string? reason) =>
-        ConfigurationAdministration.Unexplained(Settings.OrganizationPolicy.For(organization.ToString()), reason)
-            is Error unexplained
-            ? Answers.Refused(unexplained)
-            : null;
+        (reason?.Trim().Length ?? 0) switch
+        {
+            0 => Answers.Refused(Error.From(
+                ErrorCodes.ConfigurationChangeReasonRequired,
+                "key",
+                JsonSerializer.SerializeToElement(Settings.OrganizationPolicy.For(organization.ToString()).ToString()))),
+            > 1024 => Answers.Malformed("reason"),
+            _ => null,
+        };
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)
     {
