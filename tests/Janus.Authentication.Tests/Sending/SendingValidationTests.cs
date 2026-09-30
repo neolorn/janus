@@ -22,6 +22,8 @@ public sealed class SendingValidationTests
 
     private readonly ConfigurationInMemory _configuration = new();
     private readonly MessageTemplatesInMemory _templates = new();
+    private readonly MailTransportInMemory _mailTransport = new();
+    private readonly SmsTransportInMemory _smsTransport = new();
 
     private RestrictionKeySuppliers _suppliers = RestrictionKeySuppliers.None;
 
@@ -32,7 +34,7 @@ public sealed class SendingValidationTests
         _configuration.Set(Settings.NotificationLanguages, Languages);
 
     private SendingValidation Validation =>
-        new(_configuration, _templates, _suppliers);
+        new(_configuration, _templates, _suppliers, _mailTransport, _smsTransport);
 
     /// <summary>
     /// AUTH-ABUSE-005 AC3 and INT-SMS-003 AC1: a text message over its language's

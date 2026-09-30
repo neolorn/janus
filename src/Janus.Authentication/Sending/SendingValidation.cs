@@ -10,18 +10,28 @@ namespace Janus.Authentication.Sending;
 
 /// <summary>
 /// What is checked once, at startup, so that nothing fails at the moment a person is
-/// waiting for a message: every message exists in every configured language, every
-/// text message fits one message in each of them, every restriction naming a host
-/// key has a supplier, and no declared endpoint is plaintext.
+/// waiting for a message: each channel has a transport, every message exists in every
+/// configured language, every text message fits one message in each of them, every
+/// restriction naming a host key has a supplier, and no declared endpoint is plaintext.
 /// </summary>
 /// <param name="configuration">Where the languages and the restrictions come from.</param>
 /// <param name="templates">
 /// The catalogue in force, the deployment's own or the one the library ships.
 /// </param>
 /// <param name="suppliers">The host-registered key suppliers.</param>
+/// <param name="mailTransport">
+/// What the deployment's mail leaves through, or nothing where it registered none.
+/// </param>
+/// <param name="smsTransport">
+/// What the deployment's text messages leave through, or nothing where it registered
+/// none.
+/// </param>
 /// <remarks>
-/// Implements AUTH-ABUSE-005, INT-SMS-003, INT-SMS-005a, INT-GEN-001, INF-TLS-004 and
-/// LIB-HOST-001. A recipient is never resolved to a language the catalogue cannot
+/// Implements AUTH-ABUSE-005, INT-SMS-003, INT-SMS-005a, INT-SMS-006, INT-MAIL-008,
+/// INT-GEN-001, INF-TLS-004, LIB-EXT-001 and LIB-HOST-001. Every deployment sends mail
+/// and text messages, alerts among them, and the library ships no transport of its own
+/// yet, so a deployment that registered none for a channel is refused here rather than
+/// at its first send (D-166, 270). A recipient is never resolved to a language the catalogue cannot
 /// answer in, because startup refuses that deployment. Declaring no catalogue is not
 /// itself a refusal: the library ships one, and what is checked is the catalogue in
 /// force, whichever it is (LIB-EXT-001).
@@ -29,8 +39,14 @@ namespace Janus.Authentication.Sending;
 internal sealed class SendingValidation(
     IConfigurationStore configuration,
     IMessageTemplates templates,
-    RestrictionKeySuppliers suppliers)
+    RestrictionKeySuppliers suppliers,
+    IMailTransport? mailTransport = null,
+    ISmsTransport? smsTransport = null)
 {
+    private const string MailTransport = "mailTransport";
+
+    private const string SmsTransport = "smsTransport";
+
     /// <summary>
     /// Runs every check, answering with the first that fails.
     /// </summary>
@@ -38,6 +54,16 @@ internal sealed class SendingValidation(
     /// <returns>Nothing, or the failure that stops startup.</returns>
     public async ValueTask<Result> ValidateAsync(CancellationToken cancellationToken)
     {
+        if (mailTransport is null)
+        {
+            return Result.Failure(Absent(MailTransport));
+        }
+
+        if (smsTransport is null)
+        {
+            return Result.Failure(Absent(SmsTransport));
+        }
+
         if (await InsecureAsync(configuration, cancellationToken).ConfigureAwait(false) is Error insecure)
         {
             return Result.Failure(insecure);

@@ -224,10 +224,7 @@ public static class HostingRegistration
             services.GetRequiredService<IPhoneSignalAudit>(),
             services.GetRequiredService<IUnitOfWork>(),
             services.GetRequiredService<TimeProvider>()));
-        services.AddScoped(provider => new SendingValidation(
-            provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IMessageTemplates>(),
-            provider.GetRequiredService<RestrictionKeySuppliers>()));
+        services.AddScoped<SendingValidation>();
         services.AddScoped<ConfigurationAdministration>();
         services.AddScoped<RestrictionAdministration>();
         services.AddScoped<IRestrictionSet, RestrictionSetService>();

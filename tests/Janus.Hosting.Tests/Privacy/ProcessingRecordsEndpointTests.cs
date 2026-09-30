@@ -105,6 +105,24 @@ public sealed class ProcessingRecordsEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-ROPA-002 and LIB-EXT-001, D-166 (270): a deployment that registered a mail
+    /// server and its own transports, and set no address for a shipped mail transport,
+    /// reports the mail server row the library makes true.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_ROPA_002_ARegisteredMailServerIsInTheRegisterAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+
+        JsonElement register = (await browser.SendAsync("GET", "/admin/ropa?format=template")).Json();
+
+        Assert.Contains(
+            "mail server",
+            register.GetProperty("recipients").EnumerateArray().Select(recipient => recipient.GetProperty("name").GetString()));
+    }
+
+    /// <summary>
     /// PRIV-ROPA-001 AC2, and chapter 09 section 8a: the three supplied fields are
     /// flagged while nobody has stated them, and stand in the register once someone
     /// has.

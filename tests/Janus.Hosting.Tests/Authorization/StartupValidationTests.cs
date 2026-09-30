@@ -368,6 +368,43 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// INT-MAIL-008 AC3 and LIB-EXT-001, D-166 (270): a deployment sends mail and the
+    /// library ships no mail transport of its own, so one that registers none does not
+    /// start, and the refusal names the transport.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_MAIL_008_AC3_ADeploymentWithNoMailTransportDoesNotStartAsync()
+    {
+        using IHost deployment = Deployed(mailTransport: false);
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("mailTransport", refused.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// INT-SMS-006 AC2 and LIB-EXT-001, D-166 (270): every deployment sends text
+    /// messages, its alerts among them, and the library ships no SMS transport of its
+    /// own, so one that registers none does not start, and the refusal names the
+    /// transport.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_SMS_006_AC2_ADeploymentWithNoSmsTransportDoesNotStartAsync()
+    {
+        using IHost deployment = Deployed(smsTransport: false);
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("smsTransport", refused.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
     /// LIB-HOST-001 AC2, IDN-LIFE-012a, D-175: a social provider is optional, and one
     /// declared is declared whole, so a declaration that is malformed stops the
     /// deployment as it starts, naming the provider as its credential is named and the
@@ -858,7 +895,9 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool mail = false,
         bool mailClient = false,
         IReadOnlyList<SocialProvider>? providers = null,
-        ISecretSource? secrets = null) =>
+        ISecretSource? secrets = null,
+        bool mailTransport = true,
+        bool smsTransport = true) =>
         new HostBuilder()
             .ConfigureServices(services => Declared(
                 services,
@@ -871,7 +910,9 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
                 mail,
                 mailClient,
                 providers: providers,
-                secrets: secrets))
+                secrets: secrets,
+                mailTransport: mailTransport,
+                smsTransport: smsTransport))
             .Build();
 
     // The library registered over this deployment, as the host's own code registers
@@ -888,8 +929,20 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool mailClient = false,
         string? connection = null,
         IReadOnlyList<SocialProvider>? providers = null,
-        ISecretSource? secrets = null)
+        ISecretSource? secrets = null,
+        bool mailTransport = true,
+        bool smsTransport = true)
     {
+        if (mailTransport)
+        {
+            services.AddSingleton<IMailTransport>(new MailTransportInMemory());
+        }
+
+        if (smsTransport)
+        {
+            services.AddSingleton<ISmsTransport>(new SmsTransportInMemory());
+        }
+
         if (codec)
         {
             services.AddSingleton(new ImageCodecInMemory().Declared);

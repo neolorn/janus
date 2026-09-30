@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
@@ -172,7 +173,9 @@ public sealed class DefaultMessageTemplatesTests
         return await new SendingValidation(
                 configuration,
                 Shipped,
-                RestrictionKeySuppliers.None)
+                RestrictionKeySuppliers.None,
+                new MailTransportInMemory(),
+                new SmsTransportInMemory())
             .ValidateAsync(TestContext.Current.CancellationToken);
     }
 

@@ -38,6 +38,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
     private readonly ComplianceStoreInMemory _compliance = new();
     private readonly RegisterRolesInMemory _roles = new();
     private readonly ConfigurationInMemory _configuration = new();
+    private readonly MailServerInUseInMemory _mail = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly ConsentStoreInMemory _consents = new();
@@ -420,7 +421,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
     [Fact]
     public async Task PRIV_ROPA_002_TheRowsTheLibraryMakesTrueAreAppliedWithoutADeclarationAsync()
     {
-        _configuration.Set(Settings.IntegrationMailEndpoint, "https://mail.example.test/api");
+        _mail.Server = new MailServerInMemory();
 
         ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
@@ -450,15 +451,17 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
             ProviderRegister.Default.Select(row => row.Name));
 
     /// <summary>
-    /// PRIV-ROPA-002: a deployment that calls neither a mail server nor the online
-    /// screening service reports neither of them, so the register states what is true
-    /// of that deployment and not of a shipped list.
+    /// PRIV-ROPA-002 and D-166 (270): a deployment that calls neither a mail server nor
+    /// the online screening service reports neither of them, so the register states what
+    /// is true of that deployment and not of a shipped list; the address of a mail
+    /// transport the library does not ship makes no mail server row.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task PRIV_ROPA_002_AnUncalledProviderIsNotInTheRegisterAsync()
     {
         _configuration.Set(Settings.PasswordBlocklistSource, BlocklistSource.SelfHosted);
+        _configuration.Set(Settings.IntegrationMailEndpoint, "https://mail.example.test/api");
 
         ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
@@ -477,7 +480,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
     [Fact]
     public async Task PRIV_ROPA_002_AC2_AnEditedRowStandsInPlaceOfTheShippedDefaultAsync()
     {
-        _configuration.Set(Settings.IntegrationMailEndpoint, "https://mail.example.test/api");
+        _mail.Server = new MailServerInMemory();
 
         AuthorizationDeclaration declared = Declaration.Declared()
             .Recipient(new RecipientDeclaration(
@@ -943,6 +946,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
             _roles,
             new CategoryRetention(declaration, _configuration),
             _configuration,
+            _mail,
             _work,
             _clock);
 }

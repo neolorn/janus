@@ -23,6 +23,7 @@ namespace Janus.Privacy.Records;
 /// <param name="roles">Where the roles holding a permission are read.</param>
 /// <param name="retention">How long each category is kept.</param>
 /// <param name="configuration">Where the hosting keys are read.</param>
+/// <param name="mail">The mail server in use, where the deployment has one.</param>
 /// <param name="work">The one transaction what a person supplies is written in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -38,6 +39,7 @@ internal sealed class ProcessingRecordsService(
     IRegisterRoles roles,
     CategoryRetention retention,
     IConfigurationStore configuration,
+    IMailServerInUse mail,
     IUnitOfWork work,
     TimeProvider time) : IProcessingRecords
 {
@@ -120,16 +122,17 @@ internal sealed class ProcessingRecordsService(
         bool minors = await ReadAsync(Settings.RegistrationAdultAffirmation, cancellationToken)
             .ConfigureAwait(false) is AttributeRequirement.Off;
 
-        // PRIV-ROPA-002: whether the library itself calls a mail server and the
-        // screening service, which is what makes those two rows of the shipped
-        // register true of this deployment.
-        bool mail = (await ReadAsync(Settings.IntegrationMailEndpoint, cancellationToken)
-            .ConfigureAwait(false)).Length is not 0;
+        // PRIV-ROPA-002, D-166 (270): whether the library itself calls a mail server
+        // and the screening service, which is what makes those two rows of the shipped
+        // register true of this deployment. A mail server is integrated where the host
+        // registered one or the adapter's endpoint was set at the start; the library
+        // ships no mail transport of its own, so no default transport is in use.
+        bool hosted = mail.Chosen().Match(_ => true, _ => false);
 
         bool screening = await ReadAsync(Settings.PasswordBlocklistSource, cancellationToken)
             .ConfigureAwait(false) is BlocklistSource.RangeApi;
 
-        IReadOnlyList<RecipientRecord> recipients = Reached(location, basis, mail, screening);
+        IReadOnlyList<RecipientRecord> recipients = Reached(location, basis, hosted, screening);
         var flags = new List<RegisterFlag>();
 
         Missing(flags, supplied, recipients);

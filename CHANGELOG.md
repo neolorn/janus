@@ -589,6 +589,10 @@ against the public contract of LIB-API-001.
   `restricted`, or the deployment registers no mail server; a context naming no account
   is still `authz.denied`. A restricted account lists and revokes its app passwords and
   is refused creation with `authz.restricted`.
+- A deployment that registers no `IMailTransport` or no `ISmsTransport` does not start:
+  the refusal is `model.startup.declarationmissing` naming `mailTransport` or
+  `smsTransport`. The register's mail server row applies where a mail server is
+  registered; `integration.mail.endpoint` alone no longer makes it true.
 - Where Continue with Apple is among the system policy's `loginFactors` and
   `notification.email.sendingdomain` is not in `notification.email.relayregistered`, the
   deployment raises `relay-domain-unregistered` with the domain as it starts and
