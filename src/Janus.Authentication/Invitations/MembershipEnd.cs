@@ -86,8 +86,7 @@ internal sealed class MembershipEnd(
 
         // IDN-MEM-001, 09 section 8: a path naming no organization is answered for the
         // organization, whichever organization the permission is asked in.
-        if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
-            is not OrganizationStanding standing)
+        if (await ScopeOfAsync(organization, cancellationToken).ConfigureAwait(false) is null)
         {
             return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
         }
@@ -115,6 +114,12 @@ internal sealed class MembershipEnd(
             is Error challenged)
         {
             return Result.Failure(challenged);
+        }
+
+        if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
+            is not OrganizationStanding standing)
+        {
+            return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -184,6 +189,15 @@ internal sealed class MembershipEnd(
 
         return Result.Success();
     }
+
+    // CONV-DESIGN-002 AC3: the organization the path names is where the gate is asked,
+    // and resolving it, read alone, is part of the gate step.
+    private async ValueTask<OrganizationId?> ScopeOfAsync(
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false) is null
+            ? null
+            : organization;
 
     private static string Key(MembershipId membership, DateTimeOffset at) =>
         string.Create(CultureInfo.InvariantCulture, $"{Ended}:{membership.Value}@{at.UtcTicks}");
