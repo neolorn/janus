@@ -1,11 +1,13 @@
 # Corrections 4: D-166 and D-167
 
-Status: stopped at open question 14 (Tier 2). D-168 settled questions 1 and 2 of the first
-stop, D-169 question 3, D-170 questions 4 to 6, D-171 question 7, D-172 questions 8 and 9,
-D-173 question 10, D-174 question 11, D-175 question 12 and D-176 question 13; all but
-D-176 are applied. Of the rest of D-166, section D.8 is applied up to 340, with D-171
-item 3, and D-166 343 and 349 with D-175; D-166 215, which D-171 item 2 puts next and
-D-176 settles in part, stops the run at question 14 (section 2).
+Status: stopped at open questions 15 (Tier 3) and 16 (Tier 2). D-168 settled questions 1
+and 2 of the first stop, D-169 question 3, D-170 questions 4 to 6, D-171 question 7, D-172
+questions 8 and 9, D-173 question 10, D-174 question 11, D-175 question 12, D-176
+question 13 and D-177 question 14; all are applied but D-177 (c), which waits on
+question 16. Of the rest of D-166, section D.8 is
+applied up to 340, with D-171 item 3, D-166 343 and 349 with D-175, and 215 with D-176
+and D-177 but for what needs two mailboxes at one address, which comes with 221; 221
+stops the run at questions 15 and 16 (section 2).
 
 ## 1. Items implemented
 
@@ -126,6 +128,13 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 | The documentation of D-175 | `8e2d4b9` | none | none |
 | The documentation of D-176 | `f9099a2` | none | none |
 | D-166 D.9, 343 and 349 with D-175: each social provider's credential read through the secret source by the provider's name into the key ring of D-171 at the start, a static secret or a signing credential from which the client secret is minted at each exchange; the ring filled once, lent per use, cleared at the stop; a malformed declaration refused with `model.startup.declarationinvalid`, `details.declaration` `socialProvider.<provider>` and `details.field` the member; ledger lines 343 and 283 | `2aa2733` | IDN-LIFE-012, IDN-LIFE-012a, OPS-SEC-002, LIB-HOST-001 AC2, LIB-EXT-001, CONV-CODE-007 AC3, CONV-DESIGN-007 | `StartupValidationTests.LIB_HOST_001_AC2_AMalformedSocialProviderIsRefusedNamingItAsync` (six cases: declared twice, a factor that is not a social provider, `metadata`, `configuration`, `return`, `clientIds`), `StartupValidationTests.IDN_LIFE_012a_ASocialProviderWithoutAUsableCredentialIsRefusedAsync`, `StartupValidationTests.CONV_CODE_007_AC3_AReadAfterTheApplicationStopsThrowsAsync`, `StartupValidationTests.AUTHZ_MODEL_004_AC2_TheChecksStartBeforeEverythingElseRegistered`, `ProviderSignInTests.OPS_SEC_002_ASignedClientSecretIsMintedForEachExchangeAsync`, `KeyRingTests.CONV_CODE_007_AC3_AReadBeforeTheRingIsFilledThrows`, `KeyRingTests.CONV_CODE_007_AC3_TheClearingLeavesEveryArrayZeroAndAReadAfterItThrows`, `KeyRingTests.CONV_CODE_007_TheRingLendsItsOwnCopyInTheFormItWasRead`, `KeyRingTests.CONV_CODE_007_ACredentialTheRingDoesNotHoldIsNamedUnavailable`, `KeyRingTests.CONV_CODE_007_TheRingIsFilledOnce` |
+| The documentation of D-177 | `3543fec` | none | none |
+| D-177 (a) and (b): a push carries the mailbox's identifier (`MailboxId`, now in `Janus.Core`); the listing answers the identifier each account's `description` carries; `integration.mailserver.conflict`, with no status; reconciliation compares each mailbox with the account under its identifier, counts every account carrying no held identifier, and treats an account under a mailbox's identifier at another address as a difference | `3cef29a` | INT-MAIL-001, INT-MAIL-007, CONV-DESIGN-004, REF-001 AC3 | `MailboxReconciliationTests.INT_MAIL_007_AC2_EachMailboxIsComparedWithTheAccountCarryingItsIdentifierAsync`, `MailboxReconciliationTests.INT_MAIL_007_AC2_AListedAddressIsComparedInItsCanonicalFormAsync`, `ApiStatusTests.REF_001_AC3_ACodeARequestCanBeAnsweredWithHasAStatus` |
+| D-176 item 1: the mail server in use chosen once at the start by the key ring's service and held in `IMailServerInUse` (public contract, internal implementation in `Janus.Core`); every consumer asks it; `identity.mailbox.notfound` where none is in use | `d5a2b03` | CONV-DESIGN-007 AC5, INT-MAIL-001, INT-MAIL-006 | `StartupValidationTests.CONV_DESIGN_007_AC5_TheMailServerInUseIsChosenAtTheStartAsync`, `MailServerInUseTests.CONV_DESIGN_007_AC5_AReadBeforeTheChoiceThrowsAndTheChoiceIsMadeOnce`, `MailServerInUseTests.CONV_DESIGN_007_AC5_TheChosenMailServerIsAnswered`, `StartupValidationTests.AUTHZ_MODEL_004_AC2_TheChecksStartBeforeEverythingElseRegistered` |
+| D-166 D.6 215 with D-176: the JMAP adapter in `Janus.Hosting`, registered as its own type and chosen where `integration.mailserver.endpoint` is set at the start; its secret read through `ISecretSource.ReadMailServerSecretAsync` into the ring in the step after the choice; the `disabled` and `enabled` pushes of INT-MAIL-001 criteria 5 and 6; refusal to adopt an account not carrying the mailbox's identifier, a removal included; app passwords under the person's token | `9e7605d` | INT-MAIL-001 AC3 to AC6, INT-MAIL-006 AC1c, INT-MAIL-006a, INT-MAIL-007 AC1, INT-MAIL-010 AC1, CONV-DESIGN-007 AC5, CONV-CODE-007 AC3, LIB-HOST-001, INT-GEN-001 AC1 | `JmapMailServerTests.INT_MAIL_001_AC3_EveryOperationIsOneJmapRequestAsync`, `JmapMailServerTests.INT_MAIL_006_AC1c_AReservedMailboxIsCreatedWithAuthenticationDisabledAsync`, `JmapMailServerTests.INT_MAIL_006a_AC1_ADisablePushDisablesAuthenticationAsync`, `JmapMailServerTests.INT_MAIL_007_AC1_AReplayedPushCreatesNoSecondAccountAsync`, `JmapMailServerTests.INT_MAIL_001_AC4_AnAccountNotCarryingTheIdentifierIsNeverAdoptedAsync`, `JmapMailServerTests.INT_MAIL_001_ARemovalDestroysTheMailboxsOwnAccountAsync`, `JmapMailServerTests.INT_MAIL_001_AC5_AnEnabledPushToAReplaceAccountEnablesAuthenticationAsync`, `JmapMailServerTests.INT_MAIL_001_AC6_ADisabledPushChangesAuthenticationAloneAsync`, `JmapMailServerTests.INT_MAIL_006a_AC3_TheListingAnswersEnabledStateAsync`, `JmapMailServerTests.INT_MAIL_010_AC1_AnAppPasswordIsOneCallCarryingThePersonsTokenAsync`, `JmapMailServerTests.JmapMailServer_AnAnswerThatDoesNotRead_IsAFailureAsync`, `JmapMailServerTests.CONV_DESIGN_007_AC5_TheAdapterIsChosenWhereTheEndpointIsSetAsync`, `JmapMailServerTests.CONV_DESIGN_007_AC5_TheAdapterIsNotChosenWhereTheHostsOrNoneIsAsync`, `JmapMailServerTests.CONV_CODE_007_AC3_AReadOfTheMailServerKeyBeforeTheChoiceThrowsAsync`, `JmapMailServerTests.LIB_HOST_001_AMailServerKeyThatCannotBeReadStopsTheStartAsync`, `JmapMailServerTests.INT_GEN_001_AC1_APlaintextMailServerEndpointStopsStartupAsync`, `KeyRingTests.CONV_CODE_007_AC3_TheMailServerKeyIsReadOnlyOnceItsStepIsDone`, `KeyRingTests.CONV_CODE_007_AMailServerKeyNotHeldIsNamedUnavailable` |
+| D-177 (b) and the reversal of entry 219: a conflict marks the push failed at its first attempt and raises `degradation` `mailbox.conflict:<mailbox id>` in the same transaction; each attempt counted, recorded and committed before it is made; a failed push begun again under its key a day after it was marked failed; a removal of a mailbox never attempted confirmed unsent; migration `RecordWhetherAMailboxPushWasAttempted` | `78b1141` | INT-MAIL-001 AC4, INT-MAIL-007 AC1, AC3, AC6, AC7 | `MailboxPublisherTests.INT_MAIL_001_AC4_AConflictIsMarkedFailedAndRaisedOnItsFirstAttemptAsync`, `MailboxPublisherTests.INT_MAIL_007_AC6_APushMarkedFailedIsBegunAgainADayLaterAsync`, `MailboxPublisherTests.INT_MAIL_007_AC1_EachAttemptIsCountedBeforeItIsMadeAsync`, `MailboxPublisherTests.INT_MAIL_007_AC7_ARemovalNeverAttemptedIsConfirmedUnsentAsync`, `MailboxStoreTests.INT_MAIL_007_AC7_AMailboxWrittenBeforeTheMarkCountsAsAttemptedAsync`, `MailboxPublisherTests.INT_MAIL_007_AC3_APushThatSpendsItsBudgetIsVisibleAsync` |
+| D-177, OPS-ALERT-002 criterion 3: `AlertRaised` carries the scope; the deduplication key is the condition, the scope where there is one, and the account or actor; `raised_alerts.scope`, migration `RecordTheScopeOfARaisedAlert` | `e4a2c75` | OPS-ALERT-001, OPS-ALERT-002 AC3 | `AlertRouterTests.OPS_ALERT_002_AC3_OneConditionUnderTwoScopesIsTwoAlertsAsync`, `AlertsTests.OPS_ALERT_002_AC3_TheDeduplicationKeyIncludesTheScope`, `RaisedAlertsTests.OPS_ALERT_002_AC3_ARaisedConditionReadsBackWithItsScopeAsync` |
+| The provider name checks read every core namespace `07` defines (`Janus.Core` and the four area projects), not `Janus.Core` alone | `e717980` | INT-MAIL-008 AC1, LIB-EXT-001 AC3 | `IntegrationBoundaryTests.INT_MAIL_008_AC1_NoMailServerIsNamedInTheCoreNamespace`, `IntegrationBoundaryTests.LIB_EXT_001_AC3_NoProviderNameAppearsInTheCoreNamespace` |
 | D-171 item 4: a session opened from the break-glass session carries its reason; one opened by an ordinary sign-in carries none (no code change) | `5ebabcd` | OPS-BOOT-002 AC10 | `BreakGlassEndpointTests.OPS_BOOT_002_AC10_ASessionOpenedFromTheBreakGlassSessionCarriesTheReasonAsync` |
 | D-166 D.8, 316: one data key of the deployment, a row of `subject_keys`, under which every value of no subject is held; the rotation re-wraps subject-key rows only, writing back only where the value read still stands; ledger line 316 | `ced2208` | OPS-SEC-003, OPS-MIG-003a AC4, AUTH-KEY-002, PRIV-RIGHT-005a | `KeyRotationTests.OPS_SEC_003_AC3_AfterRetirementEveryValueOfNoSubjectStillReadsAsync`, `KeyRotationTests.OPS_SEC_003_AC3_AProofKeyInFlightStillReadsAfterRetirementAsync`, `KeyRotationTests.OPS_SEC_003_ARotationTouchesNoTableButTheSubjectKeysAndItsProgressAsync`, `KeyRotationTests.OPS_SEC_003_ARotationDoesNotOverwriteAKeyRewrittenAtTheSameVersionAsync`, `DatabaseRoleTests.OPS_MIG_003a_AC4_TheMaintenanceRoleReachesNoValueBesideTheSubjectKeysAsync`, `OidcStoreTests.AUTH_KEY_002_ThePrivateHalfIsWrappedUnderTheDeploymentDataKeyAsync`, `SubjectEraserTests.PRIV_RIGHT_005a_ErasureNeverTouchesTheDeploymentDataKeyAsync`, `SerializedModelTests` (the maintenance grants) |
 
@@ -244,6 +253,14 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 - A minted client secret carries `iss`, `sub` (the first client), `aud` (the provider's issuer), `iat` and `exp` five minutes later from the deployment's clock; the key is disposed after each exchange.
 - Its commit message carries two `Implements:` lines, the slip of `1deb8bc` again. The history is not rewritten.
 
+**215 with D-176 and D-177 (`3cef29a` to `e717980`).**
+- `MailboxId` moves from `Janus.Authentication`, where it was internal, to `Janus.Core`, public: D-177 (a) gives the push the mailbox's identifier, CONV-DESIGN-004 criterion 2 keeps a bare `Guid` out of a public contract where a typed identifier exists, and `07`'s Operations contract row puts the typed identifiers the contracts take in `Janus.Core`.
+- The ring's service is a lifecycle service: it fills the ring before every check, chooses the mail server after the schema, settings, model and sending checks and before the declaration check, reads the adapter's secret then, and clears the ring once the application has stopped. The host's `IMailServer` is resolved once, when the service is built.
+- The adapter reads a page of the listing after another until one is empty, and skips an account whose `@type` is present and not `User`; one whose `@type` is absent is listed, so a non-user is counted as unknown rather than passed over.
+- A mailbox whose holder was erased is not compared, and its account is counted unknown, by construction: the store reads no row whose holder was erased, so its identifier is not held.
+- Not yet applied, since both need two mailboxes at one address (question 16): INT-MAIL-007 criterion 5 (the wait behind an unconfirmed removal) and the first half of criterion 7 (reconciliation after a `replace`). 215's ledger line waits with them.
+- `9e7605d` scoped the mail server naming test to `Janus.Core`, reading INT-MAIL-008 criterion 1's "core namespace" as the existing LIB-EXT-001 criterion 3 test did. `07` defines a core namespace as `Janus.Core` or an area project's, so both tests read too little; `e717980` makes them read all five.
+
 **Criteria no test decides.**
 - D-166 319 (1), the signing algorithm: `token.signing.algorithm` admits only `ES256` at its reading, so `configure` refuses any other value before the check of `SigningKeys` is reached. The check stands in `CompleteAsync`; no value reaches its refusal. Verified by review.
 - D-170 item 1, the writers that take no reason (`CredentialAudit`, `OidcAudit.ReusedAsync`, `BotDefenceAudit`, `PhoneSignalAudit`, `SessionAudit.FailedAsync`): none writes a record a break-glass session can cause, since every credential action is refused in the session (OPS-BOOT-002 AC9) and the others are written where no session acts. Verified by review.
@@ -256,17 +273,18 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 
 | Item | Reason | Waits on |
 |---|---|---|
-| D-166 D.6 215, with D-176 | Open question 14 | Question 14 |
-| D-166 D.8 121 and 336 (the rest of the key ring of D-171) | Not reached: D-171 item 2 puts them after 215 | Question 14 |
-| D-166 D.8, the paragraphs after 121 and 336: 317, 318, 341, 303 (and the audit's subject), 304 and 334 parts (1) and (2), 323, the audit action rows | Not reached: they follow 121 and 336 in the log's order | Question 14 |
-| D-166 section D.2, the entries after 114 (115, 129, 146, 152, 208, 328, 401, 402 and 422, 417, 419, 421, 326, and the preferred second step) | Not reached | Question 14 |
-| D-166 section C, rules X1 and X3 to X9 as sweeps (X2 is applied, under 116; X3 on the configuration routes, under 178) | Not reached | Question 14 |
-| D-166 sections D.1 to D.7 and D.9 to D.11 | Not reached | Question 14 |
-| D-166 section E, every item other than E.6 | Not reached | Question 14 |
-| D-166 section F, the rows of chapter 10 other than those applied under D.8 (the retired step-up and device verification codes, `model.startup.secretunavailable`, `config.change.reasonrequired`, the retired switches, `integration.mailserver.endpoint`, `breakglass-generated`) | Not reached. The three contract tests that failed at `aa7c5e9` now pass at `0dc0ae0` | Question 14 |
-| D-166 section G, the ledger lines of the entries not yet applied | Each goes in the commit that applies its entry | Question 14 |
-| Truth-table rows for D-166 entries 396 and 265 | They state the D-166 outcomes, so they belong with those fixes | Question 14 |
-| The full gate, the pull request for `corrections-4` | The run stopped before step 4 of the work order (section 5) | Question 14 |
+| D-166 D.6 215, what needs two mailboxes at one address: INT-MAIL-007 criterion 5 and the first half of criterion 7; 215's ledger line | Waits on 221 | Question 16 |
+| D-166 D.6 221: `formerMailbox` (`transfer`, `replace`) and its reason, `identity.invitation.mailboxheld`, the step-up and the record, `replace`; 221's ledger line | Open questions 15 and 16 | Questions 15 and 16 |
+| D-166 D.6 263 and 270, D.8 121 and 336 (the rest of the key ring of D-171) | Not reached | Questions 15 and 16 |
+| D-166 D.8, the paragraphs after 121 and 336: 317, 318, 341, 303 (and the audit's subject), 304 and 334 parts (1) and (2), 323, the audit action rows | Not reached: they follow 121 and 336 in the log's order | Questions 15 and 16 |
+| D-166 section D.2, the entries after 114 (115, 129, 146, 152, 208, 328, 401, 402 and 422, 417, 419, 421, 326, and the preferred second step) | Not reached | Questions 15 and 16 |
+| D-166 section C, rules X1 and X3 to X9 as sweeps (X2 is applied, under 116; X3 on the configuration routes, under 178) | Not reached | Questions 15 and 16 |
+| D-166 sections D.1 to D.7 and D.9 to D.11 | Not reached | Questions 15 and 16 |
+| D-166 section E, every item other than E.6 | Not reached | Questions 15 and 16 |
+| D-166 section F, the rows of chapter 10 other than those applied under D.8 (the retired step-up and device verification codes, `model.startup.secretunavailable`, `config.change.reasonrequired`, the retired switches, `integration.mailserver.endpoint`, `breakglass-generated`) | Not reached. The three contract tests that failed at `aa7c5e9` now pass at `0dc0ae0` | Questions 15 and 16 |
+| D-166 section G, the ledger lines of the entries not yet applied | Each goes in the commit that applies its entry | Questions 15 and 16 |
+| Truth-table rows for D-166 entries 396 and 265 | They state the D-166 outcomes, so they belong with those fixes | Questions 15 and 16 |
+| The full gate, the pull request for `corrections-4` | The run stopped before step 4 of the work order (section 5) | Questions 15 and 16 |
 
 ## 3. Resolved by rule
 
@@ -286,6 +304,16 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 | `docs/reports/decisions-pending-review.md`, entry 234 (`c656253`) | The work order asked for 234's ledger line with its commit; section G lists 234 neither as superseded nor as revised, D-166 keeps it "with a fix", and the ledger takes only the lines section G gives | The working guide's section 3 (the closed ledger); D-166 section G | No line is written for a kept entry that section G does not list |
 | `src/Janus.Core/Janus.Core.csproj` and `LibraryStructureTests` (`2aa2733`) | The criterion that the ring's clearing leaves every array zero needs its test to see the ring's internal arrays | CONV-CODE-007 AC3, D-171; CONV-LAYOUT-002 AC1; the working guide's section 3, test infrastructure | `Janus.Core` grants its internals to `Janus.Core.Tests` alone, and the structure test permits that grant; no runtime code changed |
 | `docs/reports/decisions-pending-review.md`, entry 283 (`2aa2733`) | Section G revises 283 by two entries at once, and the ledger's form names one | D-166 section G | The line names both entries: "Revised by entries 343 and 349" |
+| `MailboxPush` and `HostedMailbox` (`3cef29a`) | D-177 (a) gives the push the mailbox's identifier and names no type for it | CONV-DESIGN-004 AC2; `07`, the Operations contract row | The identifier is `MailboxId`, moved to `Janus.Core` and made public |
+| `KeyRingService` (`d5a2b03`) | The chapters say the mail server in use is decided once, at the start, and not when the host's registration is resolved | D-176 item 1; CONV-DESIGN-007 | The host's `IMailServer` is resolved once, when the ring's service is built, and held for the process |
+| `JmapMailServer`, finding a domain and an account (`9e7605d`) | D-166 215 point 4 finds each by name; the mail server's object reference lists `name` as a text filter | D-166 215 point 4 | The query is followed in the same request by a `get` of `name`, and only the exact name counts; no domain is a failure, two accounts do not read |
+| `JmapMailServer`, the `disabled` and `enabled` patches (`9e7605d`) | RFC 8620 section 5.3 names a member in a patch path only where every earlier part exists | D-176 item 2; D-166 215 point 4 | A set the account lacks is written whole, an `Inherit` account as the `Merge` shape of point 4; `enabled` patches `authenticate` out of `disabledPermissions` and, under `Replace`, into `enabledPermissions`; nothing is sent where the account already holds the state |
+| `JmapMailServer`, the listing (`9e7605d`) | D-166 215 point 5 lists accounts of `@type` `User` only, and INT-MAIL-007 compares every account the server lists; a query answers one page | D-166 215 point 5; INT-MAIL-007 | An account whose `@type` is present and not `User` is skipped; pages are read by `position` until one is empty, and an answer at another position does not read |
+| `ISecretSource.ReadMailServerSecretAsync` (`9e7605d`) | D-166 336 names the member and not its answer | `07` LIB-HOST-001; D-166 336 | It answers a result, as the provider credential's member does |
+| `IntegrationBoundaryTests` (`9e7605d`, `e717980`) | The mail server naming test read all of `src`, while INT-MAIL-008 criterion 1 reads a core namespace and INT-MAIL-001 has the adapter in `Janus.Hosting` name the capability `urn:stalwart:jmap`; `9e7605d` narrowed it to `Janus.Core`, less than a core namespace is | `07`, the definition of a core namespace; INT-MAIL-008 AC1; LIB-EXT-001 AC3 | Both naming tests read `Janus.Core` and the four area projects, exactly what `07` names; test only |
+| `mailboxes.attempted` (`78b1141`) | D-177 confirms unsent a removal of a mailbox no push of which was ever attempted, which needs that fact kept across keys; a row written before cannot tell | INT-MAIL-007; D-177 | A column of the table, by the existing migration pattern; a row written before counts as attempted, which can only send a removal the rule would have skipped |
+| `Mailbox`, the day before a failed push begins again (`78b1141`) | INT-MAIL-007 fixes the interval at a day and names no key | INT-MAIL-007; D-177 | A constant of `Mailbox`, not a setting |
+| `AlertRaised.Scope` (`e4a2c75`) | Keys already carried discriminators that `10` section 5.23 does not name as scopes (`event:<type>`, `location.database.*`, `licence:<id>`) | OPS-ALERT-002; `10` section 5.23, Scopes | Only a scope the Scopes table names is carried as `Scope`; the others stay in the key as before, so no key changes |
 | `AlertsTests` (`72f0e85`) | `breakglass-generated` takes the next free value, 31, but is declared after `breakglass-used` in the table's order, so the test that read the order from the values failed | OPS-ALERT-001; the working guide's section 3, test infrastructure | The test reads the declaration order from the enumeration's fields |
 
 ## 4. Open questions
@@ -587,7 +615,7 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
   D-166 215: a set is an object mapping each member to `true`. Nothing of 215 is
   committed.
 - **Settled by D-176** (reading 1, the mail server in use chosen once at the start; and
-  reading (b)). Not yet applied (question 14).
+  reading (b)), applied in `d5a2b03` and `9e7605d`.
 
 **14. Tier 2. D-166 215 and INT-MAIL-001 against the `07` Mail server row: two things the adapter is not given.**
 
@@ -626,24 +654,64 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
   objects are reached at `<endpoint>/jmap`, as D-166 215 says, and a request carries no
   `accountId`. Nothing of 215 is committed.
 
+- **Settled by D-177** (a) reading 1, (b) reading 2, (c) reading 1 narrowed. Applied in
+  `3cef29a`, `9e7605d`, `78b1141` and `e4a2c75`, but for (c), which waits on question 16.
+
+**15. Tier 3. REG-MAIL-003 and PRIV-RIGHT-005: an erased holder's mailbox and `identity.invitation.mailboxheld`.**
+
+- REG-MAIL-003, the `10` row of `identity.invitation.mailboxheld`, `10` section 5.44 and
+  `13` R-M27: an invitation of a corporate address whose mailbox has been held before, by
+  anyone, an erased holder included, is refused unless it names `formerMailbox`. The
+  issue has to recognise, by the address, a mailbox whose last holder was erased.
+- `04` PRIV-RIGHT-005, its text and criterion 8: erasure neutralises the fingerprint of
+  every mailbox the subject holds or last held, and the address is a personal field under
+  that account's key, which erasure destroys. Nothing left identifies the address. The
+  same paragraph of `04` says no invitation gives the mailbox out again without
+  `formerMailbox`. Kept entry 222 says the neutralised fingerprint leaves the address free
+  for a later invitation, which reserves it as a row of its own, and INT-MAIL-007 counts
+  the account left at the server as unknown. D-166 221, REG-MAIL-003 criterion 6 and
+  INT-MAIL-006 criterion 6 do not name an erased holder.
+- The refusal for an erased holder needs something that identifies the address to
+  survive erasure, which criterion 8 does not leave. This is erasure. No proposal is made.
+
+**16. Tier 2. REG-MAIL-003 and INT-MAIL-007: how two mailboxes stand at one address under `replace`.**
+
+- **What the specification says.** Under `replace` the old mailbox is owed `removed` and
+  a new one is reserved at the same canonical address; the new one's push waits until the
+  server confirms the removal (REG-MAIL-003, INT-MAIL-007 criteria 5 and 7). No chapter
+  says how the old row is marked or how the two rows stand together.
+- **What the code needs.** `ux_mailboxes_fingerprint` is unique over every fingerprint
+  that is not neutral (its reason was entry 221, now superseded), and the store finds one
+  mailbox by address. A mailbox someone has held has no way to be owed `removed`: a
+  release is for a reservation nobody took, and `ck_mailboxes_released` holds it there.
+- **Readings.**
+  1. A nullable `mailboxes.replaced_at`: a `replace` sets it, a mailbox with it set is
+     owed `removed`, the unique index admits only rows without it, and the store finds by
+     address the mailbox not replaced. Smallest fix: one sentence in REG-MAIL-003 or
+     INT-MAIL-006 naming the mark.
+  2. A `replace` neutralises the old row's fingerprint, so the index and the lookup are
+     unchanged. Against it: the neutral fingerprint is erasure's mark, which would gain a
+     second meaning for a living holder's mailbox, and a held mailbox still needs a way to
+     be owed `removed`. Smallest fix: as 1, naming the neutral value.
+
 ## 5. Gate result
 
-**`corrections-4`.** Not run. The run stopped at question 14, before step 6 of the work
+**`corrections-4`.** Not run. The run stopped at questions 15 and 16, before step 6 of the work
 order, so the full gate was not run and no pull request was opened. The branch is pushed so
 its commits can be read.
-- At `2aa2733`, the head of the code, in the repository's own checkout: build with
+- At `e717980`, the head of the code, in the repository's own checkout: build with
   warnings as errors, format, and the unit and contract tests, Analyzers 20,
-  Authentication 811, Authorization 126, Cli 19, Conformance 2, Core 476, Hosting 729,
-  Identity 89, Privacy 223, Storage 33, no failure; and the integration suites,
-  `Janus.Storage.Tests` 419, `Janus.Cli.Tests` 66, `Janus.Conformance.Tests` 10,
-  `Janus.Hosting.Tests` 225, no failure. The migration applied twice and the pipeline's
-  own jobs were not run.
-- Secret scanning: the pinned scanner, run locally as the pipeline runs it, over the 850
-  commits of the history at `f9099a2` before the push: no finding.
+  Authentication 820, Authorization 126, Cli 19, Conformance 2, Core 480, Hosting 756,
+  Identity 89, Privacy 223, Storage 33, no failure. At `e4a2c75`, the integration
+  suites, `Janus.Storage.Tests` 421, `Janus.Cli.Tests` 66, `Janus.Conformance.Tests` 10,
+  `Janus.Hosting.Tests` 227, no failure; `e717980` changes one contract test. The
+  migration applied twice and the pipeline's own jobs were not run.
+- Secret scanning: the pinned scanner, run locally as the pipeline runs it, over the 858
+  commits of the history at `e717980` before the push: no finding.
 - Push runs on the reports of the earlier stops: 36558943751 on `40bd871`, 36566244433 on
   `927de12`, 36588064683 on `3e6b810`, 36597616186 on `f24e546`, 36610818396 on
-  `870b325`, 36648263740 on `f0e149e` and 36651799340 on `87a6eb7`, all green. No code
-  commit was made after `2aa2733`, so the checks above stand for the code at the head.
+  `870b325`, 36648263740 on `f0e149e`, 36651799340 on `87a6eb7` and 36658057913 on
+  `60f5917`, all green.
 - Fast checks at `ced2208` (build with warnings as errors, format, the unit and contract
   tests), in a scratch checkout of that commit so the uncommitted 340 work took no part:
   Analyzers 20, Authentication 813, Authorization 126, Cli 19, Core 468, Hosting 723,
