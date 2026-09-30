@@ -98,8 +98,7 @@ internal sealed class InvitationService(
 
         // 09 section 8: a path naming no organization is answered for the organization,
         // whichever organization the permission is asked in.
-        if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
-            is not OrganizationStanding standing)
+        if (await ScopeOfAsync(organization, cancellationToken).ConfigureAwait(false) is null)
         {
             return Result.Failure<IssuedInvitation>(Error.From(ErrorCodes.OrganizationNotFound));
         }
@@ -109,6 +108,12 @@ internal sealed class InvitationService(
             is Error refused)
         {
             return Result.Failure<IssuedInvitation>(refused);
+        }
+
+        if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
+            is not OrganizationStanding standing)
+        {
+            return Result.Failure<IssuedInvitation>(Error.From(ErrorCodes.OrganizationNotFound));
         }
 
         // IDN-ORG-003 AC12: an organization on its way out takes no new members, since
@@ -269,7 +274,7 @@ internal sealed class InvitationService(
 
         // 09 section 8: a path naming no organization is answered for the organization,
         // whichever organization the permission is asked in.
-        if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false) is null)
+        if (await ScopeOfAsync(organization, cancellationToken).ConfigureAwait(false) is null)
         {
             return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
         }
@@ -759,6 +764,15 @@ internal sealed class InvitationService(
                 .ConfigureAwait(false))
             .Match(_ => (Error?)null, error => error);
     }
+
+    // CONV-DESIGN-002 AC3: the organization the path names is where the gate is asked,
+    // and resolving it, read alone, is part of the gate step.
+    private async ValueTask<OrganizationId?> ScopeOfAsync(
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false) is null
+            ? null
+            : organization;
 
     private async ValueTask<Error?> RefusedAsync(
         AccessContext context,
