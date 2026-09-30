@@ -754,6 +754,10 @@ against the public contract of LIB-API-001.
   written to the audit trail as `identity.organization.erased`. A window cancelled
   inside itself is never reached, and an erasure asked for before the window elapses
   writes nothing.
+- The organization erasure writes its `MembershipChanged` and `OrganizationErased`
+  events in its own transaction, so an event that cannot be written leaves the
+  organization unerased, and its `identity.organization.erased` record is filed under
+  the organization.
 - Startup verifies that the database carries the schema this build was compiled against,
   before any other check reads a table and before the host's web server starts. A
   database behind the model answers `model.startup.schemamismatch`, names every

@@ -340,7 +340,7 @@ internal sealed class FingerprintKeyRotation(
             details["retired"] = JsonSerializer.SerializeToElement(retired);
         }
 
-        await audit.RecordedAsync(action, Principal, subject: null, at, details, cancellationToken).ConfigureAwait(false);
+        await audit.RecordedAsync(action, Principal, subject: null, organization: null, at, details, cancellationToken).ConfigureAwait(false);
     }
 
     // The versions the ring holds, as numbers only; a ring without the key answers none.

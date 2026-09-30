@@ -48,6 +48,9 @@ internal interface IPrivacyAudit
     /// <param name="action">What happened.</param>
     /// <param name="principal">The principal that took it, with its stated reason.</param>
     /// <param name="subject">Whose account it was done on, where it was done on one.</param>
+    /// <param name="organization">
+    /// The organization the entry is filed under, where the action was taken on one.
+    /// </param>
     /// <param name="at">When.</param>
     /// <param name="details">The structured context of the entry.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
@@ -56,6 +59,7 @@ internal interface IPrivacyAudit
         AuditAction action,
         SystemPrincipal principal,
         SubjectId? subject,
+        OrganizationId? organization,
         DateTimeOffset at,
         IReadOnlyDictionary<string, JsonElement> details,
         CancellationToken cancellationToken);

@@ -102,6 +102,7 @@ internal sealed class AuditRetention(
                 AuditActions.AuditPartitionsMaintained,
                 principal,
                 subject: null,
+                organization: null,
                 time.GetUtcNow(),
                 Maintained(created, dropped, security, routine),
                 cancellationToken)

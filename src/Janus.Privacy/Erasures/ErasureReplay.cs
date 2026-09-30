@@ -127,6 +127,7 @@ internal sealed class ErasureReplay(
                 Erased,
                 Replaying,
                 line.Subject,
+                organization: null,
                 time.GetUtcNow(),
                 Named(line),
                 cancellationToken)
