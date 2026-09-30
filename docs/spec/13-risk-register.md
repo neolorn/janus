@@ -599,13 +599,13 @@ every audit record of the session carries.
 
 ### R-O04 · The secrets manager is a boot dependency
 
-Every secret the library needs is read through the host's secret source (`ISecretSource`,
-LIB-EXT-001) from the off-host secrets manager at startup, before the server serves: the
-key-encryption keys, the fingerprint keys, the maintenance credential, the mail server's
-secret where a mail server is integrated, and each social provider's credentials.
-Startup fails closed without any of them (`model.startup.secretunavailable`,
-INF-HOST-003, D-166). A restart while the secrets manager is unreachable therefore keeps
-every application down until it returns.
+Every secret the library needs is read through the host's secret source
+(`ISecretSource`, LIB-EXT-001) from the off-host secrets manager at startup, before the
+server serves: the key-encryption keys, the fingerprint keys, the maintenance
+credential, the mail server's secret where the shipped mail-server adapter is used, and
+each social provider's credentials. Startup fails closed without any of them
+(`model.startup.secretunavailable`, INF-HOST-003, D-166). A restart while the secrets
+manager is unreachable therefore keeps every application down until it returns.
 
 **Accepted.** The alternative — caching the KEK on the host to survive an outage —
 would put the master key on the disk the design keeps it off. A running application
@@ -614,7 +614,7 @@ is unaffected; only a restart during the outage is.
 **Mitigation:** the envelope holds the same keys (DR-009), so a prolonged outage has a
 manual path; the secrets manager's own availability is the provider's, not ours.
 
-*Source: D-105, D-166*
+*Source: D-105, D-166, D-176*
 
 ---
 

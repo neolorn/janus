@@ -200,7 +200,7 @@ others.
 | App passwords | **Stored by Stalwart**, never by this system; managed for the person through the library's first-party OIDC client (INT-MAIL-010) |
 | Storage | Stalwart's own database, not co-located with business data |
 
-*Source: D-006, D-146, D-166*
+*Source: D-006, D-146, D-166, D-176*
 
 **Restated** (D-146): every management operation happens through JMAP objects, so
 "management API" means JMAP and nothing else. The four concerns are unchanged. Should the edition change,
@@ -208,26 +208,36 @@ SCIM v2 is the alternative provisioning push for the account lifecycle; it carri
 credential and would replace the provisioning row only.
 
 **Values (D-166).** The library ships a JMAP adapter for the mail server in
-`Janus.Hosting`. It is used where `integration.mailserver.endpoint` is set and the host
-registers no `IMailServer` of its own (LIB-HOST-001); a host's registration replaces
-it. It speaks JMAP (RFC 8620) at `<integration.mailserver.endpoint>/jmap` with the
-capabilities `urn:ietf:params:jmap:core` and `urn:stalwart:jmap`, presenting the mail
-server's management key, which the library reads through the host's secret source
-(INT-GEN-002). A status other than 2xx, a timeout, an answer that does not read, a
-method error, or any entry the server reports as not created, not updated or not
-destroyed is a failure; nothing is read as success by default. A mailbox is an
-`Account` of `@type` `User` named by the address's local part in the `Domain` of its
-domain, and is created with the library's identifier of the mailbox as its
-`description`. `disabled` is the account with the `authenticate` permission disabled,
-which still receives mail; `enabled` is the account with it not disabled; `removed` is
-the account destroyed (`x:Account/set`). A create that meets an account the server
-already holds under that name adopts it only where its `description` carries the
-mailbox's identifier; otherwise the push fails and raises `degradation` at once,
-naming the mailbox by its identifier and never by its address, without waiting for
-`outbox.retry.maxattempts`, since retrying cannot resolve the conflict. The listing is
-`x:Account/query` with `x:Account/get` of `emailAddress` and `permissions`. App
-passwords are `AppPassword` objects (`x:AppPassword/get`, `x:AppPassword/set`) called
-with the person's token (INT-MAIL-010) and never with the management key.
+`Janus.Hosting`. It is used where `integration.mailserver.endpoint` is set when the
+application starts and the host registers no `IMailServer` of its own (LIB-HOST-001); a
+host's registration replaces it. Which mail server is in use is decided once, at the
+start (CONV-DESIGN-007): a deployment has a mail server registered where the host
+registered one or the key was set at the start, and a change of the key by `configure`
+(OPS-CFG-004) takes effect at the next start. The adapter speaks JMAP (RFC 8620) at
+`<integration.mailserver.endpoint>/jmap` with the capabilities
+`urn:ietf:params:jmap:core` and `urn:stalwart:jmap`, presenting the mail server's
+management key, which the library reads through the host's secret source (INT-GEN-002).
+A status other than 2xx, a timeout, an answer that does not read, a method error, or any
+entry the server reports as not created, not updated or not destroyed is a failure;
+nothing is read as success by default. A mailbox is an `Account` of `@type` `User` named
+by the address's local part in the `Domain` of its domain, and is created with the
+library's identifier of the mailbox as its `description`. `disabled` is the account with
+the `authenticate` permission disabled, which overrides any grant of it, the account
+still receiving mail; `enabled` is the account with it not disabled and, where the
+account's own permissions replace the inherited ones (`Replace`), enabled. A push
+changes that one permission alone: every other permission, and whether the account
+inherits, merges or replaces its permissions, stays as it stands, except that an account
+that inherits them is changed to merge them when it is disabled, `authenticate` its only
+disabled one. `removed` is the account destroyed (`x:Account/set`). A create that meets
+an account the server already holds under that name adopts it only where its
+`description` carries the mailbox's identifier; otherwise the push fails and raises
+`degradation` at once, naming the mailbox by its identifier and never by its address,
+without waiting for `outbox.retry.maxattempts`, since retrying cannot resolve the
+conflict. The listing is `x:Account/query` with `x:Account/get` of `emailAddress` and
+`permissions`; an account is listed enabled exactly where `authenticate` is not disabled
+and, under `Replace`, is enabled. App passwords are `AppPassword` objects
+(`x:AppPassword/get`, `x:AppPassword/set`) called with the person's token (INT-MAIL-010)
+and never with the management key.
 
 **Acceptance criteria**
 1. No code reads Stalwart's database.
@@ -238,6 +248,14 @@ with the person's token (INT-MAIL-010) and never with the management key.
    mailbox's identifier adopts nothing, changes nothing at the server, and raises
    `degradation` on its first attempt; a push the library replays converges on the
    account it created and creates nothing twice.
+5. An `enabled` push to an account whose permissions are `Replace` and do not enable
+   `authenticate` leaves `authenticate` enabled and not disabled, every other permission
+   unchanged and the account still replacing its inherited permissions, and the listing
+   then answers the account enabled.
+6. A `disabled` push to an account that inherits its permissions leaves it merging them
+   with `authenticate` its only disabled permission; one to an account that merges or
+   replaces them adds `authenticate` to its disabled permissions and changes nothing
+   else; the listing then answers the account disabled.
 
 ---
 
@@ -840,19 +858,19 @@ A consent withdrawal would otherwise leave data that cannot lawfully be hosted.
 | Hosting provider | Processor | All stored data | Configured | No |
 | Password screening | Recipient | Hash prefix only | Outside Egypt | No |
 
-*Source: D-036, D-029, D-041, D-162 C.103, D-165, D-166*
+*Source: D-036, D-029, D-041, D-162 C.103, D-165, D-166, D-176*
 
-Each requires an agreement reference in generated records. The register is a
-rendering of configuration, not a separately maintained list. These four rows are the
-processors the library itself makes true and are shipped as defaults (D-162 C.103,
-D-165). The hosting provider and SMS gateway rows are applied to every deployment:
-every deployment holds data, and every deployment declares SMS alert destinations
-(LIB-HOST-001, OPS-ALERT-004). The mail server row is applied where a mail server is
-integrated (an `IMailServer` registered, or `integration.mailserver.endpoint` set) or
-the shipped mail transport is in use (`integration.mail.endpoint` set); the
-password-screening row while online screening is configured. Every other processor or
-recipient is a row the host declares through `recipients` (PRIV-ROPA-002); the library
-ships no such row.
+Each requires an agreement reference in generated records. The register is a rendering
+of configuration, not a separately maintained list. These four rows are the processors
+the library itself makes true and are shipped as defaults (D-162 C.103, D-165). The
+hosting provider and SMS gateway rows are applied to every deployment: every deployment
+holds data, and every deployment declares SMS alert destinations (LIB-HOST-001,
+OPS-ALERT-004). The mail server row is applied where a mail server is integrated (the
+host's `IMailServer`, or the shipped adapter with `integration.mailserver.endpoint` set
+when the application starts; LIB-HOST-001) or the shipped mail transport is in use
+(`integration.mail.endpoint` set); the password-screening row while online screening is
+configured. Every other processor or recipient is a row the host declares through
+`recipients` (PRIV-ROPA-002); the library ships no such row.
 
 A person or firm that administers the deployment for the controller (D-029) is one such
 row. It stays here as an example of a row a host declares, not as a shipped default:

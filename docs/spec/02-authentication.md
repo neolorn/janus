@@ -2534,15 +2534,15 @@ key (AUTH-FACT-006).
 **Values (D-166).** The library reads every secret it needs through the host's
 `ISecretSource` (LIB-EXT-001), asynchronously, in its startup hosted service before the
 server serves: the versions of the key-encryption key, the versions of the fingerprint
-key, the maintenance credential (OPS-MIG-003a), the mail server's secret where a mail
-server is integrated, and each social provider's credential by provider name. No
-secret is an argument of `AddJanus`. A `Janus.Cli` command reads the same values from
-one JSON document on standard input (OPS-SEC-001). A secret that cannot be read stops
-startup with `model.startup.secretunavailable`, `details.key` naming the secret:
-`keyEncryptionKeys`, `fingerprintKeys`, `maintenanceCredential`, `mailServerSecret` or
-`socialProvider.<provider>`, and `input` where a `Janus.Cli` command cannot read its
-document. Every version of the fingerprint key SHALL be at least 32 bytes; a shorter
-one SHALL be refused, never padded.
+key, the maintenance credential (OPS-MIG-003a), the mail server's secret where the
+shipped adapter is the mail server in use (CONV-DESIGN-007), and each social provider's
+credential by provider name. No secret is an argument of `AddJanus`. A `Janus.Cli`
+command reads the same values from one JSON document on standard input (OPS-SEC-001). A
+secret that cannot be read stops startup with `model.startup.secretunavailable`,
+`details.key` naming the secret: `keyEncryptionKeys`, `fingerprintKeys`,
+`maintenanceCredential`, `mailServerSecret` or `socialProvider.<provider>`, and `input`
+where a `Janus.Cli` command cannot read its document. Every version of the fingerprint
+key SHALL be at least 32 bytes; a shorter one SHALL be refused, never padded.
 
 The key the provider encrypts its authorization codes and refresh tokens under SHALL be
 derived from each held version of the key-encryption key by HKDF-SHA256 with the info
@@ -2550,7 +2550,7 @@ string `identity:oidc:token-protection:v1`, the current version encrypting; no k
 its own SHALL be created or stored. A code or refresh token encrypted under a version
 that has been retired (OPS-SEC-003) is refused.
 
-*Source: D-026.3, D-105, D-166*
+*Source: D-026.3, D-105, D-166, D-176*
 
 **Acceptance criteria**
 1. No secret value appears in any configuration file in the repository.

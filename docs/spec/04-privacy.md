@@ -1281,12 +1281,13 @@ dataReceived: [category labels], location: inside · outside, agreementReference
 that section's four rows as defaults (D-162 C.103, D-165): the hosting provider and the
 SMS gateway rows on every deployment, since every deployment holds data and declares
 SMS alert destinations (LIB-HOST-001); the mail server row where a mail server is
-integrated (`IMailServer` registered or `integration.mailserver.endpoint` set) or the
-default mail transport is in use; the password-screening row while online screening is
-configured. The host adds its own; a person or firm that administers the deployment for
-the controller (D-029) is a processor the host declares.
+integrated (the host's `IMailServer`, or the shipped adapter with
+`integration.mailserver.endpoint` set when the application starts; `07` LIB-HOST-001)
+or the shipped mail transport is in use; the password-screening row while online
+screening is configured. The host adds its own; a person or firm that administers the
+deployment for the controller (D-029) is a processor the host declares.
 
-*Source: D-036, D-041, D-029, D-166*
+*Source: D-036, D-041, D-029, D-166, D-176*
 
 **Acceptance criteria**
 1. Each processor appears with characterisation and agreement reference.

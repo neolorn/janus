@@ -489,8 +489,9 @@ declaration is absent with `model.startup.declarationmissing` naming the declara
   (`webauthn.origins`) and algorithms (`webauthn.algorithms`), the hosting location
   (`hosting.location`) and cross-border basis (`hosting.crossborderbasis`), the shipped
   transports' endpoints (`integration.mail.endpoint`, `integration.sms.endpoint`), the
-  mail server adapter's endpoint (`integration.mailserver.endpoint`) and the default
-  client (`redirect.defaultclient`)
+  mail server adapter's endpoint (`integration.mailserver.endpoint`, which decides at
+  the start which mail server is in use, so a change takes effect at the next start,
+  CONV-DESIGN-007) and the default client (`redirect.defaultclient`)
 
 Audit logging, token signature verification and step-up enforcement have no switch:
 the library performs them unconditionally. The emergency route past step-up is the
@@ -499,7 +500,7 @@ break-glass session (AUTH-STEP-004).
 This list and `10` section 4.8 are the same list; a key marked protected in `10`
 appears in both or in neither (D-152).
 
-*Source: D-148; D-010, D-020.1, D-045, D-146, D-152, D-166*
+*Source: D-148; D-010, D-020.1, D-045, D-146, D-152, D-166, D-176*
 
 The selection test is not "how sensitive is this setting" but **"does turning this
 off blind us to the person turning it off."** The governing language is protected on a

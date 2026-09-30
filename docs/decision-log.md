@@ -8958,6 +8958,10 @@ section 7 · `19` · `20` · `docs/guide/janus-explained.md`,
 
 > **Amended.** 343: a malformed social provider declaration is named by `details.declaration` `socialProvider.<provider>` and `details.field`, not `details.key` (D-175).
 
+> **Amended.** Paragraph 215: point 2, the mail server in use is chosen once at the start by the service that fills the key ring, not registered by `AddJanus` while the key is set, and the adapter's secret is read, and its absence refused, only where the adapter is the one chosen, not where a host's `IMailServer` is; point 4, under `Replace` an `enabled` push also enables `authenticate` (D-176).
+
+> **Amended.** 263 and 270: "no `IMailServer` registered", "`IMailServer` registered" and "`integration.mailserver.endpoint` set" read as the mail server in use, chosen once at the start (the host's `IMailServer`, or the adapter where the key was set then); no consumer resolves `IMailServer` itself (D-176).
+
 **Date:** 2026-09-25 · **Status:** accepted · **Amends:** D-161 (item 4, the working mode; item 2, where the drift check's rows come from), D-162 (item 22, where the governed send path lives; item 23, when the first attempt is made; item 26, the budget of a text message carrying a link; item 31, where destination records are kept and when they are swept; item 66, where a client secret comes from; C.55, where photo availability is held and what bootstrap writes; C.68 at `POST /auth/link`; C.103, the condition of the mail server row; E, the status of `identity.identifier.invalid`), D-153 (owner decision 2, the source a flood limit counts; owner decision 7, the word lists; the `backup.restoretest.interval` default; the address the bootstrap command prints), D-147 (the retirement of a key-encryption-key version; the name of the startup code for an unavailable secret), D-146 (item 17: a restriction's channel, the notices to a holder, a reason on every edit), D-143 (the policy object gains `photos`), D-129 (the break-glass page takes a reason), D-127 (a takedown reversal restores the state the takedown found), D-079a (a recognised device is exempt from the hold, not from the count), D-071 (three protected switches retired), D-060 (photos are off for the administrative organization until a codec is declared), D-057 (an authorization request's `redirect_uri` is refused at the push, not replaced), D-164 (item 3: the mail server verifies `aud` itself), D-165 (the developer recipient row is a declared example; the provider callback row and INT-GEN-003's sentence restored) · **Extends:** D-162, D-164, D-165
 
 **TL;DR.** The ledger entries 110 to 423 were audited entry by entry against the
@@ -11756,6 +11760,8 @@ section 5.24.
 
 ## D-171 — Corrections-4 question 7: the key ring for startup secrets; the unit of work's result; the derived break-glass session
 
+> **Amended.** Item 1: the start fills the ring in steps, the mail server's secret last, once the settings table can be read and the mail server in use is chosen; a read of a secret before the step that reads it is done is the fault (D-176).
+
 **Date:** 2026-09-29 · **Status:** accepted · **Amends:** D-170 (item 1, which sessions keep the reason), D-166 (215, the mail server's secret is borrowed from the ring, not read and cleared at each use) · **Extends:** D-166 (121 and 336, X9)
 
 **TL;DR.** D-166 has every secret read once through the host's secret source at startup,
@@ -12062,6 +12068,114 @@ proves each of the five refusals with its two details.
 
 ---
 
+## D-176 — Corrections-4 question 13: when the mail server in use is decided; what an `enabled` push does under `Replace`
+
+**Date:** 2026-09-30 · **Status:** accepted · **Amends:** D-166 (215 points 2 and 4; 263 and 270, what "`IMailServer` registered" means), D-171 (item 1, the ring is filled in steps)
+
+**TL;DR.** `AddJanus` makes every registration before a stored value can be read, so it
+cannot register the mail-server adapter "while" `integration.mailserver.endpoint` is set.
+The mail server in use is chosen once, at the start, by the same service that fills the key
+ring, and held for the life of the process; a change of the key by `configure` takes
+effect at the next start. Under `Replace`, an `enabled` push also enables `authenticate`,
+so the push gives the account the state it carries and the listing reads that state back.
+
+**1. When the mail server in use is decided (question 13, Tier 2).** Chapter `07` (the Mail
+server row and the LIB-EXT-001 row), the `10` row and D-166 215 point 2 say the library
+registers the shipped JMAP adapter while `integration.mailserver.endpoint` is set and the
+host registered no `IMailServer`. The key is protected and stored in the settings table,
+where `configure` writes it; `AddJanus` registers everything before anything can be read;
+and the consumers read "no `IMailServer` registered" (D-166 263), or that and the key
+(270), as "no mail server". Reading 1 decides once, at the start; reading 2 registers the
+adapter always and has each consumer read the key before acting.
+
+**Decision: reading 1.**
+
+- The adapter needs the mail server's secret, which is read once, at the start, into the
+  key ring (D-171), and only where the adapter is used (LIB-HOST-001). Under reading 2 an
+  endpoint set after the start would switch on an integration whose credential the ring
+  does not hold: every push would fail until a restart, so a restart is needed either way,
+  and until then the process would answer two things at once (the app-password operations
+  and the invitation rule of REG-MAIL-001 would treat as present a mail server that cannot
+  be reached). A protected key is changed from the server, by `configure` or by
+  redeployment, never through the application (OPS-CFG-004, D-071), and OPS-CFG-004 lists
+  this key; one answer per process is the right shape.
+- **The mechanism (CONV-DESIGN-007).** `AddJanus` registers the shipped adapter as its
+  own internal type, never as `IMailServer`, and `IMailServer` resolves only a host's
+  own registration. The mail server in use is chosen once, by the service that fills the
+  key ring (D-166 121) and in the same start: the host's `IMailServer` where it
+  registered one, the adapter's secret then not read; otherwise the adapter where the
+  key is set, its secret read into the ring; otherwise none. The start fills the ring in
+  steps, since the settings table can be read only after the key-encryption key and the
+  fingerprint key are (OPS-CFG-008): every secret but the adapter's first; then, the
+  settings table now readable, the choice; then the adapter's secret where the adapter
+  is chosen. A key is lent from the ring once the step that reads it is done, and a read
+  of a key before that is the fault of CONV-CODE-007. The choice is held in a singleton
+  whose contract is a public interface in `Janus.Core` (the push, reconciliation, the
+  app-password operations, the invitation's mailbox rule and the records of processing
+  ask it from several areas, CONV-LAYOUT-002) and whose implementation is internal to
+  `Janus.Core`, registered where the ring is (by `Janus.Hosting` and `Janus.Cli`) and
+  filled only at the application's start: no `Janus.Cli` command asks it, since a push a
+  command owes is written to the outbox, which the application's worker delivers
+  (INT-MAIL-007). No consumer resolves or receives `IMailServer` itself. A read before
+  the start filled it is a fault, as it is for the ring.
+- "A mail server registered", wherever a chapter or D-166 (263, 270) says it
+  (INT-MAIL-006, REG-MAIL-001, INT-MAIL-010, the records of processing), means that
+  choice: the host's `IMailServer`, or the adapter where the key was set at the start. A
+  change of the key by `configure` is written, recorded and alerted as OPS-CFG-004 says
+  and takes effect at the next start, so a deployment never shows a mail server in one
+  place and none in another.
+- *Rejected:* reading 2 (above); a factory registration that can answer no `IMailServer`
+  (the built-in container has no clean "none", and every consumer would still re-derive
+  the rule); reading the settings table inside `AddJanus` (nothing can be read there,
+  CONV-DESIGN-007).
+- Tests carrying CONV-DESIGN-007 criterion 5 prove that with the key set and no host
+  registration the choice is the adapter and the ring holds its secret; with a host
+  registration it is the host's and that secret is not read; with the key empty it is none
+  and nothing is pushed; a change of the key after the start changes nothing until the
+  next start; and a read before the start is a fault.
+
+**2. An `enabled` push to a `Replace` account (215 points 4 and 5).** The mail server's
+object reference gives an account's permissions three kinds: `Inherit` (the roles'
+permissions, no lists), `Merge` (the roles' permissions with the account's
+`enabledPermissions` added and its `disabledPermissions` taken away) and `Replace` (the
+account's own lists instead of the roles'); `disabledPermissions` takes precedence over
+`enabledPermissions`. Point 4's `enabled` only takes `authenticate` out of
+`disabledPermissions`. On a `Replace` account that does not enable `authenticate` the push
+is confirmed, the person still cannot sign in to their mail, and point 5 lists the account
+as disabled at every reconciliation. The readings were (a) the drift is the intended
+signal, and (b) under `Replace`, `enabled` also enables `authenticate`.
+
+**Decision: reading (b).** A push carries the state the mailbox is owed, and `authenticate`
+is the one permission the library sets on a mailbox it provisions (215 point 4,
+INT-MAIL-006a; provisioning stays the library's own, D-006). A push the server confirms
+that does not give that state has not done its work, and the person owed their mail would
+be without it until someone acted on a daily degradation. So `enabled` takes
+`authenticate` out of `disabledPermissions` and, where the account's permissions are
+`Replace`, puts it in `enabledPermissions`. `disabled` puts it in `disabledPermissions`,
+which takes precedence under `Merge` and `Replace` alike; an `Inherit` account becomes
+`Merge` with `authenticate` its only disabled permission, which point 4 already asks, now
+stated. Every other permission, and the kind of a `Merge` or `Replace` account, stay as
+the operator set them. Reconciliation still changes nothing (INT-MAIL-007): an operator's
+later edit shows as drift until the next push the state owed begins. *Rejected:* (a) (a
+confirmed push the listing contradicts by construction, and a person cut off from mail
+with only a daily signal). A test carrying INT-MAIL-001 criterion 5 proves that an
+`enabled` push to a `Replace` account that does not enable `authenticate` leaves it in
+`enabledPermissions` and out of `disabledPermissions`, keeps every other permission and
+the kind, and that the listing then answers the account enabled. A test carrying
+criterion 6 proves that a `disabled` push to an `Inherit` account leaves it `Merge` with
+`authenticate` its only disabled permission, that one to a `Merge` or `Replace` account
+adds `authenticate` to `disabledPermissions` and changes nothing else, and that the
+listing then answers the account disabled.
+
+**Propagated to:** `07` the Mail server row, the LIB-EXT-001 row and LIB-API-001; `05`
+INT-MAIL-001 (the values paragraph and criteria 5 and 6) and section 6; `04`
+PRIV-ROPA-002; `02` AUTH-KEY-002; `06` OPS-CFG-004; `08` CONV-DESIGN-007 (the mechanism,
+the lifetimes and criterion 5), CONV-CODE-007 (the fault rule and criterion 3),
+CONV-LAYOUT-001 and CONV-LAYOUT-002; `10` the
+`integration.mailserver.endpoint` rows; `11` section 9; `13` R-O04.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -12247,6 +12361,7 @@ proves each of the five refusals with its two details.
 | Corrections-4 question 10: which values under the deployment key are bound to their row, and the migration that moves the key | D-173 |
 | Corrections-4 question 11: where the database refuses the deployment key's identifier | D-174 |
 | Corrections-4 question 12: how a malformed social provider declaration is named | D-175 |
+| Corrections-4 question 13: when the mail server in use is decided; what an `enabled` push does under `Replace` | D-176 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

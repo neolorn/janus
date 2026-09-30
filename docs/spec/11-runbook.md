@@ -401,13 +401,15 @@ audit entry (OPS-CFG-002).
 **Protected settings** (`10-reference`, section 4.8) cannot be changed through the
 application at all: they require access the application does not have. They are
 changed from the server with the `configure` command of `Janus.Cli`, which takes a
-reason and raises a High alert for each key (OPS-CFG-004). Audit logging, token
-signature verification and step-up enforcement have no switch at all. If an incident
-appears to require disabling rate limiting or export auditing, that is the moment
-those protections exist for. They are on the list precisely because turning them off
-would blind the system to whoever turned them off.
+reason and raises a High alert for each key (OPS-CFG-004). A change of the mail server
+adapter's endpoint (`integration.mailserver.endpoint`) made with `configure` takes effect
+when the application next starts, since the mail server in use is chosen at the start
+(CONV-DESIGN-007). Audit logging, token signature verification and step-up enforcement
+have no switch at all. If an incident appears to require disabling rate limiting or
+export auditing, that is the moment those protections exist for. They are on the list
+precisely because turning them off would blind the system to whoever turned them off.
 
-*Source: OPS-CFG-002, OPS-CFG-004, OPS-CFG-008, D-166*
+*Source: OPS-CFG-002, OPS-CFG-004, OPS-CFG-008, D-166, D-176*
 
 ---
 

@@ -27,7 +27,7 @@ area**, published as a single package.
 
 | Project | Contains | Depends on |
 |---|---|---|
-| `Janus.Core` | Contracts, abstractions, the public surface; internally, the key ring's implementation (CONV-CODE-007) | nothing |
+| `Janus.Core` | Contracts, abstractions, the public surface; internally, the key ring's implementation (CONV-CODE-007) and the implementation of the contract of the mail server in use (CONV-DESIGN-007) | nothing |
 | `Janus.Identity` | The account, identifier, organization and membership aggregates, their rules and their persistence ports | Core |
 | `Janus.Authentication` | Factors, sessions, flows; the services of the account, identifier, registration, organization and invitation operations, which gate through this area's step-up guard; the sending restrictions and the governed send path (evaluation, outbox row, counting), whose contract `Janus.Core` declares so that every area sends through it | Core |
 | `Janus.Authorization` | Grants, model builder, gate | Core |
@@ -44,7 +44,7 @@ project that depends on the four area projects: it implements their persistence 
 (CONV-DESIGN-003), and no area depends on Storage. The OIDC provider (`02` section 8) is
 the `Oidc` feature of `Janus.Authentication` with its stores in `Janus.Storage`.
 
-*Source: LIB-PKG-001, LIB-PKG-002, D-147, D-149, D-162, D-166, D-172*
+*Source: LIB-PKG-001, LIB-PKG-002, D-147, D-149, D-162, D-166, D-172, D-176*
 
 Separate projects make the boundaries a compiler concern rather than a review
 concern. Under a single project with folders, LIB-PKG-001's acceptance criteria
@@ -74,10 +74,11 @@ in `Janus.Core` that the owning area implements: `IAccessGate` (`Janus.Authoriza
 (`10` section 5a, `privacy:export`), and the governed send, which `Janus.Authentication`
 implements and `Janus.Identity` and `Janus.Privacy` call (AUTH-ABUSE-004). The key ring's
 contract (CONV-CODE-007), which every area borrows a key through and no area owns, is a
-public interface in `Janus.Core` whose implementation is internal to `Janus.Core`. No area
-reaches another area's internals.
+public interface in `Janus.Core` whose implementation is internal to `Janus.Core`, and so
+is the contract of the mail server in use (CONV-DESIGN-007), which several areas ask and
+no area owns. No area reaches another area's internals.
 
-*Source: LIB-API-001, LIB-API-002, D-162, D-166, D-171*
+*Source: LIB-API-001, LIB-API-002, D-162, D-166, D-171, D-176*
 
 Makes the public surface reviewable by reading one project.
 
@@ -432,26 +433,48 @@ identifier or value exists (CONV-DESIGN-004) binds to that type at the edge thro
 
 ---
 
-**CONV-DESIGN-007** — Dependency injection SHALL use the built-in container only.
-Each project exposes exactly one `internal static` registration method
-(`AddIdentityArea(this IServiceCollection)`), called from the single public
-`AddJanus` entry point in `Janus.Hosting`. Lifetimes: services and ports scoped; stateless helpers singleton; the key ring of
-CONV-CODE-007 singleton; nothing transient without a recorded reason. Options
-SHALL be bound through `IOptions<T>` with `ValidateOnStart`; the runtime-changeable
-keys of `10` section 4 are read through the configuration store abstraction, never
-through `IOptions`. A stored value that does not read under its key is a fault: the read
-throws, and no read falls back to a default or a constant (OPS-CFG-008, CONV-ERR-001).
-Time comes from `TimeProvider`; randomness from
+**CONV-DESIGN-007** — Dependency injection SHALL use the built-in container only. Each
+project exposes exactly one `internal static` registration method (`AddIdentityArea(this
+IServiceCollection)`), called from the single public `AddJanus` entry point in
+`Janus.Hosting`. Lifetimes: services and ports scoped; stateless helpers singleton; the
+key ring of CONV-CODE-007 and the mail server in use (below) singleton; nothing
+transient without a recorded reason. Options SHALL be bound through `IOptions<T>` with
+`ValidateOnStart`; the runtime-changeable keys of `10` section 4 are read through the
+configuration store abstraction, never through `IOptions`. A stored value that does not
+read under its key is a fault: the read throws, and no read falls back to a default or a
+constant (OPS-CFG-008, CONV-ERR-001). Time comes from `TimeProvider`; randomness from
 `RandomNumberGenerator`; both injected, never static. Every secret the library needs
 (the members LIB-HOST-001 lists for the secret source) is read once, through the
-host-supplied `ISecretSource` of LIB-EXT-001, asynchronously, when the application starts
-and before the server serves a request, into the key ring of CONV-CODE-007; no secret is
-an argument of `AddJanus`. A
-`Janus.Cli` command reads the same values once, at its start, into the same key ring, from one JSON key
-document on standard input that the operator pipes from the secrets manager's own client
-(OPS-SEC-001). The library ships no secrets-manager client.
+host-supplied `ISecretSource` of LIB-EXT-001, asynchronously, when the application
+starts and before the server serves a request, into the key ring of CONV-CODE-007; no
+secret is an argument of `AddJanus`. A `Janus.Cli` command reads the same values once,
+at its start, into the same key ring, from one JSON key document on standard input that
+the operator pipes from the secrets manager's own client (OPS-SEC-001). The library
+ships no secrets-manager client.
 
-*Source: OPS-CFG-001, OPS-CFG-008, D-149, D-166, D-171*
+**The mail server in use.** Every registration is made before a stored value can be
+read, so none depends on `integration.mailserver.endpoint`. `AddJanus` registers the
+shipped mail-server adapter as its own internal type, never as `IMailServer`, and
+`IMailServer` resolves only a host's own registration. The mail server in use is chosen
+once, by the service that fills the key ring and in the same start: the host's
+`IMailServer` where it registered one, the adapter's secret then not read; otherwise the
+adapter where the key is set, its secret read into the ring; otherwise none. The choice
+is held in a singleton whose contract is a public interface in `Janus.Core` (the push,
+reconciliation, the app-password operations, the invitation's mailbox rule and the
+records of processing ask it from several areas, CONV-LAYOUT-002) and whose
+implementation is internal to `Janus.Core`, registered where the ring is (by
+`Janus.Hosting` and `Janus.Cli`) and filled only at the application's start: no
+`Janus.Cli` command asks it, since a push a command owes is written to the outbox, which
+the application's worker delivers (INT-MAIL-007). No consumer resolves or receives
+`IMailServer` itself. A read before the start filled it is a fault, as it is for the
+ring. The start fills the ring in steps, since the settings table can be read only after
+the key-encryption key and the fingerprint key are (OPS-CFG-008): every secret but the
+adapter's first; then, the settings table now readable, the choice; then the adapter's
+secret where the adapter is chosen. A key is lent from the ring once the step that reads
+it is done, and a read of a key before that is the fault of CONV-CODE-007. A change of
+the key by `configure` (OPS-CFG-004) takes effect at the next start.
+
+*Source: OPS-CFG-001, OPS-CFG-008, D-149, D-166, D-171, D-176*
 
 **Acceptance criteria**
 1. A host calls one method to register the library.
@@ -460,6 +483,12 @@ document on standard input that the operator pipes from the secrets manager's ow
 3. Startup fails when a required option is missing (LIB-HOST-001).
 4. No configuration read answers a default or a constant where the stored value does not
    read under its key.
+5. The mail server in use is decided once, at the start: with
+   `integration.mailserver.endpoint` set and no host registration it is the shipped
+   adapter and the ring holds its secret; with a host registration it is the host's and
+   that secret is not read; with the key empty there is none and nothing is pushed; a
+   change of the key after the start changes nothing until the next start; a read before
+   the start filled it is a fault.
 
 ---
 
@@ -674,24 +703,26 @@ is API-CONV-003's.
 they cross a port, and be cleared after use; nothing SHALL derive its own primitive
 where the base class library or a permitted package provides one (CONV-DESIGN-008).
 
-*Source: AUTH-PASS-007, AUTH-KEY-002, D-149, D-166, D-171*
+*Source: AUTH-PASS-007, AUTH-KEY-002, D-149, D-166, D-171, D-176*
 
 **The key ring.** The secrets read once at startup (CONV-DESIGN-007) are needed for the
-life of the process, so they are the first exception to "inside a method" and to "cleared
-after use". They are held in one key ring, a singleton whose contract is a public
-interface in `Janus.Core` (every area borrows a key through it and no area owns it,
-CONV-LAYOUT-002) and whose implementation is internal to `Janus.Core`, registered by
-`Janus.Hosting` and `Janus.Cli`. A host could resolve it, but every secret it holds is one
-the host's own `ISecretSource` supplied. It holds each secret, every version the
+life of the process, so they are the first exception to "inside a method" and to
+"cleared after use". They are held in one key ring, a singleton whose contract is a
+public interface in `Janus.Core` (every area borrows a key through it and no area owns
+it, CONV-LAYOUT-002) and whose implementation is internal to `Janus.Core`, registered by
+`Janus.Hosting` and `Janus.Cli`. A host could resolve it, but every secret it holds is
+one the host's own `ISecretSource` supplied. It holds each secret, every version the
 deployment holds, in a pinned `byte[]` allocated once, so the runtime never moves it and
 leaves no copy behind. The ring never hands out its arrays: a use borrows a key as
 `ReadOnlySpan<byte>` or `ReadOnlyMemory<byte>` for the length of that use and keeps
 nothing. Its methods return results (CONV-DESIGN-005): asked for a version it does not
-hold, it answers `model.startup.secretunavailable` with `details.key` naming the secret and
-`details.version` the version. No service receives a key when it is registered or
-constructed; each asks the ring at its use. A read before the ring is filled, or after it
-is cleared, is a fault. The ring clears every array when the application stops, after the
-worker and the server have stopped, or when a `Janus.Cli` command ends.
+hold, it answers `model.startup.secretunavailable` with `details.key` naming the secret
+and `details.version` the version. No service receives a key when it is registered or
+constructed; each asks the ring at its use. The start fills the ring in steps, the mail
+server's secret last (CONV-DESIGN-007); a read of a secret before the step that reads it
+is done, or after the ring is cleared, is a fault. The ring clears every array when the
+application stops, after the worker and the server have stopped, or when a `Janus.Cli`
+command ends.
 
 What a use derives from a key follows the rule above: inside the method, cleared after
 use. The second exception is the OIDC provider's credentials: its signing credentials,
@@ -715,9 +746,9 @@ object holds key bytes (D-171).
    compiles in or publishes (a literal, a constant, a member of its error-code or factor
    catalogue) is not a secret.
 2. No custom implementation of a hash, cipher, key derivation or random source exists.
-3. No service receives a key at registration or construction; a read before the ring is
-   filled throws; the ring's clearing leaves every array zero; after the application
-   stops or the command ends, a read throws.
+3. No service receives a key at registration or construction; a read of a secret before
+   the start has read it into the ring throws; the ring's clearing leaves every array
+   zero; after the application stops or the command ends, a read throws.
 4. The only key material outside the key ring is the OIDC provider's signing and
    encryption credentials in its own server options; the library's copy of the bytes each
    was made from is zero when the making returns, and a signing credential a rotation
