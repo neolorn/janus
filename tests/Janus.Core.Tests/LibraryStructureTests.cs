@@ -425,8 +425,9 @@ public sealed class LibraryStructureTests
         TimeSpan.FromSeconds(5));
 
     // CONV-ERR-001 AC1: the families of the catalogue a denial is spelled in, the
-    // authentication and the authorization refusals.
-    private static readonly string[] Refusals = ["auth.", "authz."];
+    // authentication, the authorization and the consent refusals, which the gate
+    // answers too.
+    private static readonly string[] Refusals = ["auth.", "authz.", "privacy.consent."];
 
     // CONV-ERR-003 AC2: the head of a catch clause, up to the brace that opens its block.
     private static readonly Regex Catch = new(
@@ -1095,8 +1096,9 @@ public sealed class LibraryStructureTests
 
     /// <summary>
     /// CONV-ERR-001 AC1: no file of the library raises or makes an exception that
-    /// carries an authentication or authorization code of the catalogue, or whose type
-    /// is itself a refusal of access, so every denial reaches its caller as a result.
+    /// carries an authentication, authorization or consent code of the catalogue, or
+    /// whose type is itself a refusal of access, so every denial reaches its caller as a
+    /// result.
     /// </summary>
     [Fact]
     public void CONV_ERR_001_AC1_NoDenialIsSignalledByAnException()
@@ -1129,7 +1131,9 @@ public sealed class LibraryStructureTests
                     .Select(raised => Path.GetFileName(file) + ":" + LineOf(code, raised.Index));
             });
 
-        Assert.NotEmpty(denials);
+        Assert.Contains(nameof(ErrorCodes.ConsentRequired), denials);
+        Assert.Contains(nameof(ErrorCodes.ConsentSuperseded), denials);
+        Assert.Contains(nameof(ErrorCodes.ConsentWrittenRequired), denials);
         Assert.Empty(thrown);
     }
 

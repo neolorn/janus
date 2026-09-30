@@ -15890,6 +15890,8 @@ contract method's refusals.
 
 *Chapter text that should change.* None.
 
+**Superseded by D-166.**
+
 ---
 
 ## 386. A service contract is every public interface of the core that the host does not implement
