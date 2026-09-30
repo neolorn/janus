@@ -996,9 +996,11 @@ internal sealed class AccessGate(
 
     // AUTHZ-SCOPE-001, AUTHZ-CONCEAL-005, AUTHZ-DERIVE-007: the view is the grant:read
     // permission's in the organization the record sits in, read from the record, and
-    // nothing is concealed from a caller without it. Without the host's rows, a type a
-    // derivation reaches is refused as every other path refuses it, since the stored
-    // grants alone are not who can access it (D-161, D-162).
+    // nothing is concealed from a caller without it. A record the registry does not hold
+    // belongs to no organization, so no grant reaches it, and it is refused exactly as a
+    // caller without grant:read is refused where it is (D-166). Without the host's rows,
+    // a type a derivation reaches is refused as every other path refuses it, since the
+    // stored grants alone are not who can access it (D-161, D-162).
     private async ValueTask<Result<ResourceAccess>> LookedUpAsync(
         AccessContext context,
         ResourceReference resource,
@@ -1014,10 +1016,29 @@ internal sealed class AccessGate(
             return Result.Failure<ResourceAccess>(Malformed("resourceType"));
         }
 
-        if (await ScopeOfAsync(resource, organizationWide, cancellationToken).ConfigureAwait(false)
-            is not OrganizationId organization)
+        OrganizationId? scoped;
+
+        if (organizationWide)
         {
-            return Result.Failure<ResourceAccess>(Malformed("resourceId"));
+            // What cannot be read as an organization's identifier is a request that
+            // cannot be read, and nothing is looked up for it.
+            if (!Guid.TryParse(resource.Id.ToString(), out Guid named))
+            {
+                return Result.Failure<ResourceAccess>(Malformed("resourceId"));
+            }
+
+            scoped = new OrganizationId(named);
+        }
+        else
+        {
+            scoped = (await records.FindAsync(resource, cancellationToken).ConfigureAwait(false))?.Organization;
+        }
+
+        if (scoped is not OrganizationId organization)
+        {
+            return Result.Failure<ResourceAccess>(
+                await RefuseUnscopedAsync(context, Permissions.GrantRead, cancellationToken)
+                    .ConfigureAwait(false));
         }
 
         Result held = await RequireAsync(context, Permissions.GrantRead, organization, cancellationToken)
@@ -1037,14 +1058,6 @@ internal sealed class AccessGate(
             .LookedUpAsync(resource, organization, relationships, cancellationToken)
             .ConfigureAwait(false));
     }
-
-    private async ValueTask<OrganizationId?> ScopeOfAsync(
-        ResourceReference resource,
-        bool organizationWide,
-        CancellationToken cancellationToken) =>
-        organizationWide
-            ? Guid.TryParse(resource.Id.ToString(), out Guid organization) ? new OrganizationId(organization) : null
-            : (await records.FindAsync(resource, cancellationToken).ConfigureAwait(false))?.Organization;
 
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));

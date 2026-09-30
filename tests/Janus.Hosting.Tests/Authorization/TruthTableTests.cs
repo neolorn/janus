@@ -83,6 +83,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a change to a group no row names, by a caller managing groups", Decided.Denied),
         ("a change to a group no row names, by a restricted caller", Decided.Restricted),
         ("a grant on a record no registration names, by a caller managing grants", Decided.Denied),
+        ("a lookup of a record no registration names, by a caller reading grants", Decided.Denied),
         ("a change to the account's own settings", Decided.Allowed),
         ("a change to the account's own settings, by a restricted caller", Decided.Restricted),
         ("a page's record whose subject gave the consent its purpose asks", Decided.Allowed),
@@ -540,9 +541,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Assert.True(moved.Match(() => true, _ => false));
     }
 
-    // Each operation case in a deployment of its own, its caller holding the management
-    // of grants and of groups across the organization, so that what refuses a row no
-    // row names is the row's absence and never the caller's want of a permission.
+    // Each operation case in a deployment of its own, its caller holding the reading and
+    // management of grants and the management of groups across the organization, so
+    // that what refuses a row no row names is the row's absence and never the caller's
+    // want of a permission.
     private async Task<Decided> OperationAsync(string scenario)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -552,7 +554,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             [HostPermissions.Read, HostPermissions.Recommend],
             cancellationToken);
         RoleName managing = await deployment.RoleAsync(
-            [Permissions.GrantManage, Permissions.GroupManage],
+            [Permissions.GrantManage, Permissions.GrantRead, Permissions.GroupManage],
             cancellationToken);
         SubjectId caller = await deployment.AccountAsync(cancellationToken);
 
@@ -600,6 +602,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                                 ExpiresAt: null,
                                 "The reason the grant was asked for."),
                             cancellationToken))
+                    .Match(_ => Decided.Allowed, Refused);
+
+            case "a lookup of a record no registration names, by a caller reading grants":
+                return (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                        .WhoCanAccessAsync(context, Reference(Document), cancellationToken))
                     .Match(_ => Decided.Allowed, Refused);
 
             case "a change to the account's own settings":

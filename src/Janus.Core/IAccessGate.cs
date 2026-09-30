@@ -216,11 +216,15 @@ public interface IAccessGate
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The live stored and materialised grants on the record, on what contains it and
-    /// on its whole organization; or <c>authz.denied</c> without the permission,
-    /// <c>api.request.malformed</c> naming <c>resourceType</c> or <c>resourceId</c>
-    /// where the type is not declared or the record is not registered, and
-    /// <c>authz.derivation.sourcesmissing</c> on a type a derivation the host's rows
-    /// decide reaches, whose answer the stored grants alone are not.
+    /// on its whole organization; or <c>api.request.malformed</c> naming
+    /// <c>resourceType</c> where the type is not declared, or <c>resourceId</c> where
+    /// the type is <c>organization</c> and the identifier is not a UUID;
+    /// <c>authz.denied</c> without the permission, and for a record the registry does
+    /// not hold, which belongs to no organization and is refused exactly as a caller
+    /// without the permission is refused, recorded against no organization and counted;
+    /// and <c>authz.derivation.sourcesmissing</c>, asked after the permission, on a type
+    /// a derivation the host's rows decide reaches, whose answer the stored grants alone
+    /// are not.
     /// </returns>
     ValueTask<Result<ResourceAccess>> WhoCanAccessAsync(
         AccessContext context,
@@ -240,8 +244,9 @@ public interface IAccessGate
     /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The same answer as the overload without sources, with every declared derivation
-    /// evaluated over the host's rows for the record and what contains it. A grant a
+    /// The same answer and the same refusals as the overload without sources, with
+    /// every declared derivation evaluated over the host's rows for the record and what
+    /// contains it. A grant a
     /// fact produced carries no identifier and names itself as derived. Evaluation
     /// stops at <c>authz.reverselookup.budget</c>, and what it did not reach is named.
     /// </returns>

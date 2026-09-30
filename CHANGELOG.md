@@ -513,7 +513,12 @@ against the public contract of LIB-API-001.
   record on as a derived grant; where `authz.reverselookup.budget` runs out first the
   answer carries `partial: true` and the relationships left unevaluated. Without those
   rows, a record a derivation reaches is refused with `authz.derivation.sourcesmissing`,
-  over HTTP included.
+  over HTTP included, once `grant:read` is held. A type the model does not declare is
+  refused 400 naming `resourceType`, and an organization identifier that is not a UUID
+  400 naming `resourceId`; a record the deployment holds no registration for is refused
+  403 `authz.denied`, recorded against no organization and counted, exactly as a caller
+  without `grant:read` is refused, so the view tells no one whether a record is
+  registered.
 - Staff mailboxes are provisioned through `IMailServer`, which a deployment registers
   where its staff mail is hosted and which no package ships. A mailbox is owed
   `disabled` from its reservation, `enabled` while its holder is an active member of the

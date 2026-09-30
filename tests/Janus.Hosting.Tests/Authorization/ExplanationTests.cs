@@ -746,6 +746,38 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
+    /// CONV-DESIGN-002 AC3, AUTHZ-SCOPE-001 and AUTHZ-DERIVE-007 AC3: the view of who can
+    /// access a record the deployment holds no registration for is refused as the gate
+    /// refuses a caller without <c>grant:read</c> on a registered one: the same code and
+    /// the same details, under an identifier recorded against no organization, which the
+    /// caller resolves as their own refusal with no grant named.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AC3_ALookupOfARecordNoRowNamesIsRefusedAsTheGateRefusesAsync()
+    {
+        Deployed deployed = await DeployAsync(granted: false);
+
+        Error present = await LookedUpAsync(deployed.Account, deployed.Record);
+        Error absent = await LookedUpAsync(deployed.Account, Reference(Document));
+
+        Assert.Equal(ErrorCodes.Denied, present.Code);
+        Assert.Equal(ErrorCodes.Denied, absent.Code);
+        Assert.Equal(
+            present.Details.Keys.Order(StringComparer.Ordinal),
+            absent.Details.Keys.Order(StringComparer.Ordinal));
+
+        var correlation = new AuditRecordId(absent.Details["correlation"].GetGuid());
+        AccessExplanation explanation = Explained(await ResolvedOwnAsync(deployed.Account, correlation));
+
+        Assert.Equal(1, await RecordedAsync(correlation));
+        Assert.Null(await OrganizationOfAsync(correlation));
+        Assert.Equal(AccessOutcome.Denied, explanation.Outcome);
+        Assert.Equal(Permissions.GrantRead, explanation.Permission);
+        Assert.Null(explanation.Grant);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-002 AC3 and AUTHZ-GATE-006: a caller whose account is restricted is
     /// refused a change to a group or a grant as a restriction, whether or not the
     /// deployment holds a row for it.
@@ -924,6 +956,16 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
             "SELECT organization FROM identity.audit_records WHERE id = @id;",
             new { id = correlation.Value },
             cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    // The view of who can access a record, as its endpoint asks it.
+    private async Task<Error> LookedUpAsync(SubjectId caller, ResourceReference resource)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .WhoCanAccessAsync(AccessContext.Of(caller), resource, TestContext.Current.CancellationToken))
+            .Match(_ => throw new InvalidOperationException("The view was not refused."), error => error);
     }
 
     // A group's removal as its endpoint asks it, with the reason its body carries.
