@@ -10888,6 +10888,8 @@ and holds the audience in runtime configuration an administrator can change. Und
 *Chapter text that should change.* 07 LIB-HOST-001 could list `SocialProvider` as an
 optional host declaration with the startup refusals above; 10 could carry its row.
 
+**Revised by entries 343 and 349.**
+
 ---
 
 ## 284. How a provider's event finds the account it concerns
@@ -14125,6 +14127,8 @@ What is built:
 discovery address, the return address and the secret, say that the first client
 identifier is the one a sign-in runs under, and say that Apple's signed secret is
 minted by the host; the rows owed for LIB-HOST-001 below carry the three members.
+
+**Superseded by D-166.**
 
 ---
 

@@ -26,6 +26,7 @@ internal static class ApiStatus
         // runs reports and no request raises.
         [ErrorCodes.StartupGoverningLanguage] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupDeclarationMissing] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupDeclarationInvalid] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupSubscriberName] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupPreferenceDeclaration] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupContainmentCycle] = StatusCodes.Status500InternalServerError,

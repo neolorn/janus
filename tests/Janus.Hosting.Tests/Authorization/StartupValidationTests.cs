@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -57,6 +58,21 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         "DELETE FROM identity.settings WHERE key = '"
         + Settings.RedirectDefaultClient.Key
         + "';";
+
+    // IDN-LIFE-012a: a provider declared whole, and the static secret the host's secret
+    // source answers for it.
+    private static readonly SocialProvider Google = new(
+        Factor.Google,
+        new Uri("https://accounts.google.test/.well-known/risc-configuration"),
+        ["the-client"],
+        new Uri("https://accounts.google.test/.well-known/openid-configuration"),
+        new Uri("https://identity.example.test/callbacks/providers/google/return"));
+
+    private static readonly IReadOnlyDictionary<string, ProviderCredential> GoogleSecret =
+        new Dictionary<string, ProviderCredential>(StringComparer.Ordinal)
+        {
+            ["google"] = ProviderCredential.Secret("the-client-secret"u8.ToArray()),
+        };
 
 
     /// <summary>
@@ -352,53 +368,146 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
-    /// IDN-LIFE-012a, LIB-HOST-001: a social provider is optional, and one declared is
-    /// declared whole, so a declaration that could verify none of its events stops the
-    /// deployment as it starts, naming the part that does not hold; one declared whole
-    /// starts.
+    /// LIB-HOST-001 AC2, IDN-LIFE-012a, D-175: a social provider is optional, and one
+    /// declared is declared whole, so a declaration that is malformed stops the
+    /// deployment as it starts, naming the provider as its credential is named and the
+    /// member at fault; one declared whole starts.
     /// </summary>
-    /// <param name="part">The part that does not hold.</param>
+    /// <param name="fault">What is wrong with the declaration.</param>
+    /// <param name="declaration">The declaration the refusal names.</param>
+    /// <param name="field">The member the refusal names.</param>
     /// <returns>The work of running it.</returns>
     [Theory]
-    [InlineData("provider")]
-    [InlineData("metadata")]
-    [InlineData("clientIds")]
-    [InlineData("configuration")]
-    [InlineData("return")]
-    [InlineData("secret")]
-    public async Task IDN_LIFE_012a_ASocialProviderDeclaredShortOfWholeIsRefusedAsync(string part)
+    [InlineData("twice", "socialProvider.google", "provider")]
+    [InlineData("notsocial", "socialProvider.password", "provider")]
+    [InlineData("metadata", "socialProvider.google", "metadata")]
+    [InlineData("configuration", "socialProvider.google", "configuration")]
+    [InlineData("return", "socialProvider.google", "return")]
+    [InlineData("clientIds", "socialProvider.google", "clientIds")]
+    public async Task LIB_HOST_001_AC2_AMalformedSocialProviderIsRefusedNamingItAsync(
+        string fault,
+        string declaration,
+        string field)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-        var whole = new SocialProvider(
-            Factor.Google,
-            new Uri("https://accounts.google.test/.well-known/risc-configuration"),
-            ["the-client"],
-            new Uri("https://accounts.google.test/.well-known/openid-configuration"),
-            new Uri("https://identity.example.test/callbacks/providers/google/return"),
-            "the-client-secret"u8.ToArray());
-        SocialProvider[] declared = part switch
+        SocialProvider whole = Google;
+        SocialProvider[] declared = fault switch
         {
-            "provider" => [whole, whole with { Provider = Factor.Password }],
+            "twice" => [whole, whole],
+            "notsocial" => [whole with { Provider = Factor.Password }],
             "metadata" => [whole with { Metadata = new Uri("http://accounts.google.test/risc") }],
-            "clientIds" => [whole with { ClientIds = [] }],
             "configuration" => [whole with { Configuration = new Uri("http://accounts.google.test/openid") }],
             "return" => [whole with { Return = new Uri("https://identity.example.test/callbacks/providers/apple/return") }],
-            _ => [whole with { Secret = ReadOnlyMemory<byte>.Empty }],
+            _ => [whole with { ClientIds = [] }],
         };
+        var secrets = new SecretSourceInMemory(GoogleSecret);
 
-        using (IHost refusedHost = Deployed(providers: declared))
+        using (IHost refusedHost = Deployed(providers: declared, secrets: secrets))
         {
             StartupException refused = await Assert.ThrowsAsync<StartupException>(
                 async () => await refusedHost.StartAsync(cancellationToken));
 
-            Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
-            Assert.Equal("socialProvider." + part, refused.Failure?.Details["key"].GetString());
+            Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+            Assert.Equal(declaration, refused.Failure?.Details["declaration"].GetString());
+            Assert.Equal(field, refused.Failure?.Details["field"].GetString());
         }
 
-        using IHost started = Deployed(providers: [whole]);
+        using IHost started = Deployed(providers: [whole], secrets: secrets);
 
         await started.StartAsync(cancellationToken);
         await started.StopAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012a, IDN-LIFE-012, D-166: a declared provider's credential is read
+    /// through the secret source as the deployment starts, and one the source cannot
+    /// answer, answers empty, or answers as a signing credential with a blank issuer,
+    /// a blank key identifier or a key that is not a P-256 private key stops it, naming
+    /// the provider's credential; a static secret and a signing credential that hold
+    /// start it.
+    /// </summary>
+    /// <param name="fault">What is wrong with the credential, or nothing.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("unanswered")]
+    [InlineData("empty")]
+    [InlineData("issuer")]
+    [InlineData("keyId")]
+    [InlineData("rsa")]
+    [InlineData("p384")]
+    [InlineData("nosource")]
+    public async Task IDN_LIFE_012a_ASocialProviderWithoutAUsableCredentialIsRefusedAsync(string fault)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var p256 = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var p384 = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+        using var rsa = RSA.Create(2048);
+        ProviderCredential? credential = fault switch
+        {
+            "unanswered" or "nosource" => null,
+            "empty" => ProviderCredential.Secret(ReadOnlyMemory<byte>.Empty),
+            "issuer" => ProviderCredential.Signed(" ", "KEY1", p256.ExportPkcs8PrivateKey()),
+            "keyId" => ProviderCredential.Signed("TEAM1", "", p256.ExportPkcs8PrivateKey()),
+            "rsa" => ProviderCredential.Signed("TEAM1", "KEY1", rsa.ExportPkcs8PrivateKey()),
+            _ => ProviderCredential.Signed("TEAM1", "KEY1", p384.ExportPkcs8PrivateKey()),
+        };
+        SecretSourceInMemory? secrets = fault is "nosource"
+            ? null
+            : new SecretSourceInMemory(credential is null
+                ? new Dictionary<string, ProviderCredential>(StringComparer.Ordinal)
+                : new Dictionary<string, ProviderCredential>(StringComparer.Ordinal) { ["google"] = credential });
+
+        using (IHost refusedHost = Deployed(providers: [Google], secrets: secrets))
+        {
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await refusedHost.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupSecretUnavailable, refused.Failure?.Code);
+            Assert.Equal("socialProvider.google", refused.Failure?.Details["key"].GetString());
+        }
+
+        var signed = new SecretSourceInMemory(new Dictionary<string, ProviderCredential>(StringComparer.Ordinal)
+        {
+            ["google"] = ProviderCredential.Signed("TEAM1", "KEY1", p256.ExportPkcs8PrivateKey()),
+        });
+
+        SecretSourceInMemory[] holding = [new SecretSourceInMemory(GoogleSecret), signed];
+
+        foreach (SecretSourceInMemory source in holding)
+        {
+            using IHost started = Deployed(providers: [Google], secrets: source);
+
+            await started.StartAsync(cancellationToken);
+            await started.StopAsync(cancellationToken);
+
+            Assert.Equal(["google"], source.Asked);
+        }
+    }
+
+    /// <summary>
+    /// CONV-CODE-007 AC3, D-171: the key ring lends what the deployment read at its start
+    /// while the application runs, and once it has stopped, after the worker and the
+    /// server, a read is a fault.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_CODE_007_AC3_AReadAfterTheApplicationStopsThrowsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using IHost deployment = Deployed(providers: [Google], secrets: new SecretSourceInMemory(GoogleSecret));
+        IKeyRing ring = deployment.Services.GetRequiredService<IKeyRing>();
+
+        await deployment.StartAsync(cancellationToken);
+
+        int lent = ring.BorrowProviderCredential("google", credential => credential.Material.Length)
+            .Match(length => length, _ => 0);
+
+        await deployment.StopAsync(cancellationToken);
+
+        Assert.Equal("the-client-secret".Length, lent);
+        Assert.Throws<InvalidOperationException>(
+            () => ring.BorrowProviderCredential("google", credential => credential.Material.Length));
     }
 
     /// <summary>
@@ -434,9 +543,9 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
     /// <summary>
     /// AUTHZ-MODEL-004 AC2: the web server is a hosted service of the host's, and
-    /// hosted services start in the order they were registered, so the checks that read
-    /// the database stand at the head of the collection and no request is served
-    /// before them (D-160).
+    /// hosted services start in the order they were registered, so the key ring's
+    /// reading and after it the checks that read the database stand at the head of the
+    /// collection and no request is served before them (D-160, CONV-DESIGN-007).
     /// </summary>
     [Fact]
     public void AUTHZ_MODEL_004_AC2_TheChecksStartBeforeEverythingElseRegistered()
@@ -447,11 +556,12 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
         Declared(services);
 
-        ServiceDescriptor first = services.First(
-            service => service.ServiceType == typeof(IHostedService));
+        ServiceDescriptor[] hosted = [.. services.Where(service => service.ServiceType == typeof(IHostedService))];
 
-        Assert.Equal(0, services.IndexOf(first));
-        Assert.Equal(typeof(SchemaValidationService), first.ImplementationType);
+        Assert.Equal(0, services.IndexOf(hosted[0]));
+        Assert.Equal(1, services.IndexOf(hosted[1]));
+        Assert.Equal(typeof(KeyRingService), hosted[0].ImplementationType);
+        Assert.Equal(typeof(SchemaValidationService), hosted[1].ImplementationType);
     }
 
     /// <summary>
@@ -692,7 +802,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool codec = false,
         bool mail = false,
         bool mailClient = false,
-        IReadOnlyList<SocialProvider>? providers = null) =>
+        IReadOnlyList<SocialProvider>? providers = null,
+        ISecretSource? secrets = null) =>
         new HostBuilder()
             .ConfigureServices(services => Declared(
                 services,
@@ -704,7 +815,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
                 codec,
                 mail,
                 mailClient,
-                providers: providers))
+                providers: providers,
+                secrets: secrets))
             .Build();
 
     // The library registered over this deployment, as the host's own code registers
@@ -720,7 +832,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool mail = false,
         bool mailClient = false,
         string? connection = null,
-        IReadOnlyList<SocialProvider>? providers = null)
+        IReadOnlyList<SocialProvider>? providers = null,
+        ISecretSource? secrets = null)
     {
         if (codec)
         {
@@ -770,6 +883,11 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         foreach (SocialProvider provider in providers ?? [])
         {
             services.AddSingleton(provider);
+        }
+
+        if (secrets is not null)
+        {
+            services.AddSingleton(secrets);
         }
 
         return services.AddJanus(

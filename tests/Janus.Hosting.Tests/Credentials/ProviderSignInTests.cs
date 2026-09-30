@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
@@ -13,6 +14,8 @@ using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Credentials;
@@ -133,9 +136,50 @@ public sealed class ProviderSignInTests : IAsyncDisposable
 
         Assert.Equal(Page, landed.Location);
         Assert.False(Assert.Single(_deployment.SocialProviders.Exchanges).ContainsKey("code_verifier"));
-        Assert.Equal(
-            "the-apple-signed-secret",
-            Assert.Single(_deployment.SocialProviders.Exchanges)["client_secret"]);
+    }
+
+    /// <summary>
+    /// OPS-SEC-002, IDN-LIFE-012 AC5 (D-166 343): with a signing credential supplied,
+    /// each exchange presents a client secret minted for it, signed with ES256 under the
+    /// declared key and naming it, carrying the five claims and lasting five minutes from
+    /// the moment it was made; two exchanges a year apart on the clock both succeed with
+    /// no redeclaration and no restart.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_002_ASignedClientSecretIsMintedForEachExchangeAsync()
+    {
+        SubjectId subject = await RegisteredAsync();
+
+        await LinkedAsync(subject, Factor.Apple, AppleSubject);
+
+        DateTimeOffset first = _deployment.Clock.GetUtcNow();
+
+        Assert.Equal(Page, (await SignedInWithAppleAsync()).Location);
+
+        _deployment.Clock.Advance(TimeSpan.FromDays(365));
+
+        DateTimeOffset second = _deployment.Clock.GetUtcNow();
+
+        Assert.Equal(Page, (await SignedInWithAppleAsync()).Location);
+
+        IReadOnlyList<IReadOnlyDictionary<string, string>> exchanges = _deployment.SocialProviders.Exchanges;
+
+        Assert.Equal(2, exchanges.Count);
+
+        JsonWebToken earlier = await MintedAsync(exchanges[0]["client_secret"], first);
+        JsonWebToken later = await MintedAsync(exchanges[1]["client_secret"], second);
+
+        foreach (JsonWebToken minted in (JsonWebToken[])[earlier, later])
+        {
+            Assert.Equal(SecurityAlgorithms.EcdsaSha256, minted.Alg);
+            Assert.Equal(SocialProvidersInMemory.AppleSecretKey, minted.Kid);
+            Assert.Equal(SocialProvidersInMemory.AppleClient, minted.Subject);
+            Assert.Equal(["aud", "exp", "iat", "iss", "sub"], minted.Claims.Select(claim => claim.Type).Order(StringComparer.Ordinal));
+        }
+
+        Assert.Equal(first.UtcDateTime, earlier.IssuedAt);
+        Assert.Equal(second.UtcDateTime, later.IssuedAt);
     }
 
     /// <summary>
@@ -709,6 +753,36 @@ public sealed class ProviderSignInTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status404NotFound, refused.Status);
         Assert.Equal(ErrorCodes.CredentialNotFound.ToString(), refused.Text("code"));
+    }
+
+    // A client secret presented to Apple, as it verifies under the public half of the
+    // key Apple issued: by the deployment's account, for Apple itself, and lapsing five
+    // minutes after the moment it was minted.
+    private async Task<JsonWebToken> MintedAsync(string secret, DateTimeOffset minted)
+    {
+        TokenValidationResult read = await new JsonWebTokenHandler().ValidateTokenAsync(
+            secret,
+            new TokenValidationParameters
+            {
+                IssuerSigningKey = _deployment.SocialProviders.AppleSecretVerifier,
+                ValidAlgorithms = [SecurityAlgorithms.EcdsaSha256],
+                ValidIssuer = SocialProvidersInMemory.AppleTeam,
+                ValidAudience = "https://appleid.apple.test",
+                LifetimeValidator = (_, expires, _, _) => expires == minted.UtcDateTime.AddMinutes(5),
+            });
+
+        Assert.True(read.IsValid);
+
+        return Assert.IsType<JsonWebToken>(read.SecurityToken);
+    }
+
+    // A fresh browser signs in with Apple over the round trip.
+    private async Task<Answer> SignedInWithAppleAsync()
+    {
+        var browser = new Browser(_deployment);
+        string authorization = Where(await browser.SendAsync("GET", Start("apple", "signin")));
+
+        return await ReturnedAsync(browser, "apple", authorization, new ProviderPerson(AppleSubject));
     }
 
     private static string Start(string provider, string intent) =>

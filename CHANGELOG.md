@@ -49,14 +49,24 @@ against the public contract of LIB-API-001.
   an address already registered answers exactly as a new one does. A refusal returns the
   browser to `returnTo` with the code in `error`. A host declares each provider with a
   `SocialProvider`: the address of the provider's discovery document and of its document
-  naming its issuer and keys, the deployment's client identifiers there, the address the
-  provider returns the browser to, and the client secret. Startup stops a deployment
-  under `model.startup.declarationmissing` where a provider is declared twice, is not a
-  social provider, has a keys address that is not HTTPS or has no client, and, naming
-  `configuration`, `return` or `secret`, where its discovery address is not HTTPS, its
-  return address is not HTTPS or does not end in
-  `/callbacks/providers/{provider}/return` for the provider it is declared for, or its
-  secret is empty.
+  naming its issuer and keys, the deployment's client identifiers there, and the address
+  the provider returns the browser to. Startup stops a deployment under
+  `model.startup.declarationinvalid` where a provider is declared twice or is not a
+  social provider (`details.field` `provider`), where its keys address or its discovery
+  address is not HTTPS (`metadata`, `configuration`), where its return address is not
+  HTTPS or does not end in `/callbacks/providers/{provider}/return` for the provider it
+  is declared for (`return`), or where it has no client (`clientIds`);
+  `details.declaration` names the provider as `socialProvider.<provider>`. What the
+  application presents at the provider's token endpoint is read, as the deployment
+  starts, through `ISecretSource.ReadProviderCredentialAsync` by the provider's name, as
+  a `ProviderCredential`: a static secret the provider issued, or a signing credential
+  (the issuer the provider knows the account by, the key identifier and the P-256
+  private key it issued), from which a client secret signed with ES256 and good for five
+  minutes is minted at each exchange and never stored, so a secret like Apple's never
+  lapses and never needs a restart. A credential the source cannot answer, answers
+  empty, or answers as a signing credential with a blank issuer or key identifier or a
+  key that is not a P-256 private key stops the start under
+  `model.startup.secretunavailable`, `details.key` `socialProvider.<provider>`.
 - `POST /account/link/{provider}` answers `204` where the signed-in account may link the
   provider, and `DELETE /account/link/{provider}` unlinks it at the provider-unlink
   step-up. Unlinking the only way left to sign in to the account, here or through the
@@ -1489,6 +1499,11 @@ against the public contract of LIB-API-001.
   and the library ships no secrets-manager client and no default.
   `ISecretSource.ReadFingerprintKeysAsync` and `AddJanus` take a `FingerprintKeys`: the
   current version and every version still held.
+- `IKeyRing` in `Janus.Core`: the one key ring the secrets read at startup are held in,
+  each in a pinned array of its own, and lent for the length of one use. A read before
+  the ring is filled, or after it is cleared when the application stops (after the
+  worker and the web server), is a fault. The ring's reading is the first hosted service
+  the library registers.
 - `IUnitOfWork` in `Janus.Core`: an operation runs in one transaction and commits once,
   and hand-written SQL takes its connection from the one accessor, so a query written by
   hand runs on the same connection and inside the same transaction as the rest of the

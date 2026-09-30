@@ -18,6 +18,7 @@ using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 
 namespace Janus.Hosting.Credentials;
 
@@ -36,6 +37,8 @@ namespace Janus.Hosting.Credentials;
 /// <param name="cookies">Where a session begun here is written.</param>
 /// <param name="browser">What the request arrived carrying.</param>
 /// <param name="channel">Where the back-channel request is made from.</param>
+/// <param name="ring">Where each provider's credential is borrowed from at the exchange.</param>
+/// <param name="time">The clock a minted client secret is dated by.</param>
 /// <param name="randomness">What the state, the nonce and the proof key are drawn from.</param>
 /// <param name="log">Where a refused round trip is recorded.</param>
 /// <remarks>
@@ -45,7 +48,9 @@ namespace Janus.Hosting.Credentials;
 /// beside that as fingerprints; the code is traded here and never in the browser; the
 /// identity is the provider's <c>sub</c>, and the address the token names is never a
 /// key. A browser that left for the provider comes back to the path it started from,
-/// carrying the code of any refusal and never its words (CONV-CONTENT-001).
+/// carrying the code of any refusal and never its words (CONV-CONTENT-001). A signing
+/// credential has the client secret minted at each exchange, so none is stored and
+/// none lapses (OPS-SEC-002).
 /// </remarks>
 internal sealed class ProviderSignIn(
     ProviderKeys providers,
@@ -57,9 +62,14 @@ internal sealed class ProviderSignIn(
     BrowserSessionCookies cookies,
     RequestSession browser,
     IHttpClientFactory channel,
+    IKeyRing ring,
+    TimeProvider time,
     RandomNumberGenerator randomness,
     ILogger<ProviderSignIn> log)
 {
+    // IDN-LIFE-012: how long a client secret minted for one exchange is good for.
+    private static readonly TimeSpan MintedLifetime = TimeSpan.FromMinutes(5);
+
     // What a round trip is started for, as the start names it.
     private static readonly FrozenDictionary<string, ProviderIntent> Intents =
         new Dictionary<string, ProviderIntent>(StringComparer.Ordinal)
@@ -402,8 +412,8 @@ internal sealed class ProviderSignIn(
     {
         if (providers.Of(provider) is not SocialProvider declared
             || await providers.SignInAsync(provider, cancellationToken).ConfigureAwait(false)
-                is not { Token: Uri exchange }
-            || await ExchangedAsync(declared, exchange, attempt, code, cancellationToken)
+                is not { Token: Uri exchange } configured
+            || await ExchangedAsync(declared, configured.Issuer, exchange, attempt, code, cancellationToken)
                 .ConfigureAwait(false) is not string token
             || await providers.IdentityAsync(provider, token, cancellationToken).ConfigureAwait(false)
                 is not JsonWebToken identity
@@ -420,18 +430,27 @@ internal sealed class ProviderSignIn(
 
     private async Task<string?> ExchangedAsync(
         SocialProvider declared,
+        string issuer,
         Uri exchange,
         ProviderAttempt attempt,
         [NeverLogged] string code,
         CancellationToken cancellationToken)
     {
+        // CONV-CODE-007: the credential is borrowed for the making of the form value and
+        // no longer; a provider the deployment declared had it read at startup.
+        string secret = ring
+            .BorrowProviderCredential(
+                ProviderRoutes.NameOf(declared.Provider),
+                credential => Presented(credential, declared.ClientIds[0], issuer))
+            .Match(presented => presented, error => throw new InvalidOperationException(error.Code.ToString()));
+
         var parameters = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["grant_type"] = "authorization_code",
             ["code"] = code,
             ["redirect_uri"] = declared.Return.AbsoluteUri,
             ["client_id"] = declared.ClientIds[0],
-            ["client_secret"] = Encoding.UTF8.GetString(declared.Secret.Span),
+            ["client_secret"] = secret,
         };
 
         if (attempt.Verifier is string verifier)
@@ -458,6 +477,43 @@ internal sealed class ProviderSignIn(
             && token.ValueKind is JsonValueKind.String
                 ? token.GetString()
                 : null;
+    }
+
+    // IDN-LIFE-012, OPS-SEC-002: a static secret is presented as the provider issued
+    // it; from a signing credential a client secret is minted for this exchange alone,
+    // signed with ES256 under the key the provider issued, naming the client as its
+    // subject and the provider's issuer as its audience, and good for five minutes.
+    private string Presented(ProviderCredential credential, string client, string issuer)
+    {
+        if (!credential.IsSigned)
+        {
+            return Encoding.UTF8.GetString(credential.Material.Span);
+        }
+
+        using var key = ECDsa.Create();
+
+        key.ImportPkcs8PrivateKey(credential.Material.Span, out _);
+
+        DateTime now = time.GetUtcNow().UtcDateTime;
+
+        // The key is made for this exchange and disposed after it, so no signature
+        // provider made over it is kept for the next.
+        var signing = new ECDsaSecurityKey(key)
+        {
+            KeyId = credential.KeyId,
+            CryptoProviderFactory = new CryptoProviderFactory { CacheSignatureProviders = false },
+        };
+
+        return new JsonWebTokenHandler { SetDefaultTimesOnTokenCreation = false }.CreateToken(
+            new SecurityTokenDescriptor
+            {
+                Issuer = credential.Issuer,
+                Audience = issuer,
+                IssuedAt = now,
+                Expires = now + MintedLifetime,
+                Claims = new Dictionary<string, object>(StringComparer.Ordinal) { ["sub"] = client },
+                SigningCredentials = new SigningCredentials(signing, SecurityAlgorithms.EcdsaSha256),
+            });
     }
 
     // REG-IDENT-008: an identity already linked signs in rather than registering, and

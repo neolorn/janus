@@ -7,9 +7,11 @@
                       ReferenceOutputAssembly="false" />
   </ItemGroup>
 
+  <!-- CONV-LAYOUT-002 AC1, D-171: the key ring's clearing is seen by its own tests. -->
   <ItemGroup>
     <InternalsVisibleTo Include="Janus.Hosting" />
     <InternalsVisibleTo Include="Janus.Cli" />
+    <InternalsVisibleTo Include="Janus.Core.Tests" />
   </ItemGroup>
 
 </Project>

@@ -37,4 +37,13 @@ public interface ISecretSource
     /// <param name="cancellationToken">Abandons the read.</param>
     /// <returns>The connection, as its UTF-8 bytes.</returns>
     ValueTask<ReadOnlyMemory<byte>> ReadMaintenanceCredentialAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads what this application presents at a declared social provider's token
+    /// endpoint, asked only for a provider the deployment declares.
+    /// </summary>
+    /// <param name="provider">The provider's name, as the factor catalogue spells it: <c>google</c> or <c>apple</c>.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>The credential, or the failure the source met reading it.</returns>
+    ValueTask<Result<ProviderCredential>> ReadProviderCredentialAsync(string provider, CancellationToken cancellationToken);
 }

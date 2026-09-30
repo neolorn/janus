@@ -131,6 +131,7 @@ public sealed class ErrorCodesTests
         "model.derivation.unindexed",
         "model.purpose.missingassessment",
         "model.role.undeclaredpermission",
+        "model.startup.declarationinvalid",
         "model.startup.declarationmissing",
         "model.startup.governinglanguage",
         "model.startup.labellimit",

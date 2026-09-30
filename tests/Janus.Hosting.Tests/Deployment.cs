@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -71,6 +72,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OpenIddict.Abstractions;
 
@@ -94,6 +96,7 @@ internal sealed class Deployment : IAsyncDisposable
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly WebApplication _application;
     private readonly RequestDelegate _pipeline;
+    private readonly KeyRingService _ring;
 
     // LIB-HOST-001: where a browser holding no session is sent is a declaration no
     // deployment starts without, so every deployment here carries one (AUTH-SESS-012).
@@ -157,6 +160,8 @@ internal sealed class Deployment : IAsyncDisposable
 
         Declared = preferences ?? PreferenceDeclarations.None;
         Accounts = new AccountDirectoryInMemory(Declared);
+        SocialProviders = new SocialProvidersInMemory(Clock);
+        Secrets = new SecretSourceInMemory(SocialProviders.Credentials);
 
         // Two of the keys a deployment names or does not start, which a ceremony and
         // the challenge every sign-in carries are read from (OPS-CFG-001), and the
@@ -200,6 +205,12 @@ internal sealed class Deployment : IAsyncDisposable
 
         _pipeline = ((IApplicationBuilder)_application).Build();
 
+        // CONV-DESIGN-007: the key ring is filled from the secret source before anything
+        // borrows from it, which is what its hosted service does in a deployment that a
+        // web server starts.
+        _ring = _application.Services.GetServices<IHostedService>().OfType<KeyRingService>().Single();
+        _ring.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+
         // AUTH-KEY-001: the server is put together with the key the store holds at
         // startup, which is what the hosted service of the same name does in a
         // deployment that a web server starts.
@@ -226,7 +237,13 @@ internal sealed class Deployment : IAsyncDisposable
     /// Google and Apple, as the deployment reads their keys and as they sign their
     /// security events (IDN-LIFE-012a).
     /// </summary>
-    public SocialProvidersInMemory SocialProviders { get; } = new();
+    public SocialProvidersInMemory SocialProviders { get; }
+
+    /// <summary>
+    /// The host's secret source, answering each provider's credential as the providers
+    /// issued it.
+    /// </summary>
+    public SecretSourceInMemory Secrets { get; }
 
     /// <summary>
     /// What was recorded of what happened to a credential.
@@ -811,6 +828,10 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<CallbackAdmission>();
         _ = services.AddScoped<DeliveryReports>();
 
+        // CONV-CODE-007: the one key ring, filled from the host's secret source.
+        _ = services.AddSingleton<ISecretSource>(Secrets);
+        _ = services.AddKeyRing();
+
         // IDN-LIFE-012a: what the host declared of each provider, whose documents are
         // read from the fake that signs its events.
         foreach (SocialProvider declared in providers)
@@ -1012,6 +1033,7 @@ internal sealed class Deployment : IAsyncDisposable
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {
+        await _ring.StopAsync(CancellationToken.None);
         await _application.DisposeAsync();
         await Work.DisposeAsync();
 

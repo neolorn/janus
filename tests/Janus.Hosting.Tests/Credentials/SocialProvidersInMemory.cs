@@ -17,9 +17,12 @@ namespace Janus.Hosting.Tests.Credentials;
 /// <summary>
 /// Google and Apple as the deployment reaches them: each publishes a document naming
 /// its issuer and its key set, signs its security events with a key generated here, and
-/// exchanges a code it issued for an identity token it signs with the same key.
+/// exchanges a code it issued for an identity token it signs with the same key. Google
+/// takes the static secret it issued; Apple takes a client secret signed with the key it
+/// issued the deployment, and holds the public half to verify it.
 /// </summary>
-internal sealed class SocialProvidersInMemory : HttpMessageHandler
+/// <param name="clock">The deployment's clock, which a client secret's lifetime is judged by.</param>
+internal sealed class SocialProvidersInMemory(TimeProvider clock) : HttpMessageHandler
 {
     /// <summary>
     /// The deployment's client at Google.
@@ -45,9 +48,21 @@ internal sealed class SocialProvidersInMemory : HttpMessageHandler
 
     private const string AppleIssuer = "https://appleid.apple.test";
 
+    private const string GoogleSecret = "the-google-client-secret";
+
     private const string GoogleKey = "google-key-1";
 
     private const string AppleKey = "apple-key-1";
+
+    /// <summary>
+    /// The identifier Apple knows the deployment's account by.
+    /// </summary>
+    public const string AppleTeam = "TEAMID0001";
+
+    /// <summary>
+    /// The identifier of the key Apple issued the deployment for its client secret.
+    /// </summary>
+    public const string AppleSecretKey = "SECRETKEY1";
 
     private static readonly Uri GoogleMetadata = new("https://accounts.google.test/.well-known/risc-configuration");
 
@@ -73,6 +88,8 @@ internal sealed class SocialProvidersInMemory : HttpMessageHandler
 
     private readonly RSA _stranger = RSA.Create(2048);
 
+    private readonly ECDsa _appleSecret = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+
     private readonly Dictionary<string, Issued> _issued = new(StringComparer.Ordinal);
 
     private readonly List<IReadOnlyDictionary<string, string>> _exchanges = [];
@@ -87,8 +104,7 @@ internal sealed class SocialProvidersInMemory : HttpMessageHandler
         GoogleMetadata,
         [GoogleClient],
         GoogleConfiguration,
-        GoogleReturn,
-        Encoding.UTF8.GetBytes("the-google-client-secret"));
+        GoogleReturn);
 
     /// <summary>
     /// What the deployment declares for Apple, whose discovery document is also the one
@@ -99,8 +115,24 @@ internal sealed class SocialProvidersInMemory : HttpMessageHandler
         AppleMetadata,
         [AppleClient],
         AppleMetadata,
-        AppleReturn,
-        Encoding.UTF8.GetBytes("the-apple-signed-secret"));
+        AppleReturn);
+
+    /// <summary>
+    /// What the host's secret source answers for each provider, by its name: the
+    /// static secret Google issued, and the signing credential Apple issued.
+    /// </summary>
+    public IReadOnlyDictionary<string, ProviderCredential> Credentials =>
+        new Dictionary<string, ProviderCredential>(StringComparer.Ordinal)
+        {
+            ["google"] = ProviderCredential.Secret(Encoding.UTF8.GetBytes(GoogleSecret)),
+            ["apple"] = ProviderCredential.Signed(AppleTeam, AppleSecretKey, _appleSecret.ExportPkcs8PrivateKey()),
+        };
+
+    /// <summary>
+    /// The public half of the key Apple issued the deployment, which a client secret
+    /// presented to it verifies under.
+    /// </summary>
+    public SecurityKey AppleSecretVerifier => new ECDsaSecurityKey(_appleSecret) { KeyId = AppleSecretKey };
 
     /// <summary>
     /// Whether the providers' documents can be read at all.
@@ -242,6 +274,7 @@ internal sealed class SocialProvidersInMemory : HttpMessageHandler
             _google.Dispose();
             _apple.Dispose();
             _stranger.Dispose();
+            _appleSecret.Dispose();
         }
 
         base.Dispose(disposing);
@@ -348,13 +381,16 @@ internal sealed class SocialProvidersInMemory : HttpMessageHandler
 
         bool google = request.RequestUri == GoogleToken;
         SocialProvider declared = google ? Google : Apple;
+        bool secret = google
+            ? presented.GetValueOrDefault("client_secret") == GoogleSecret
+            : await MintedAsync(presented.GetValueOrDefault("client_secret"));
 
         if (!presented.TryGetValue("code", out string? code)
             || !_issued.Remove(code, out Issued? issued)
             || issued.Provider != declared.Provider
             || presented.GetValueOrDefault("grant_type") is not "authorization_code"
             || presented.GetValueOrDefault("client_id") != declared.ClientIds[0]
-            || presented.GetValueOrDefault("client_secret") != Encoding.UTF8.GetString(declared.Secret.Span)
+            || !secret
             || presented.GetValueOrDefault("redirect_uri") != declared.Return.AbsoluteUri
             || (issued.Challenge is string challenge
                 && (!presented.TryGetValue("code_verifier", out string? verifier)
@@ -378,6 +414,31 @@ internal sealed class SocialProvidersInMemory : HttpMessageHandler
                 Encoding.UTF8,
                 "application/json"),
         };
+    }
+
+    // What Apple checks of a client secret it is presented: signed with ES256 under the
+    // key it issued, by the account it issued it to, for the client the code was issued
+    // to and for itself, made to last five minutes, and not lapsed by the deployment's
+    // clock.
+    private async Task<bool> MintedAsync(string? secret)
+    {
+        TokenValidationResult read = await new JsonWebTokenHandler()
+            .ValidateTokenAsync(
+                secret,
+                new TokenValidationParameters
+                {
+                    IssuerSigningKey = AppleSecretVerifier,
+                    ValidAlgorithms = [SecurityAlgorithms.EcdsaSha256],
+                    ValidIssuer = AppleTeam,
+                    ValidAudience = AppleIssuer,
+                    LifetimeValidator = (_, expires, _, _) => expires > clock.GetUtcNow().UtcDateTime,
+                });
+
+        return read.IsValid
+            && read.SecurityToken is JsonWebToken minted
+            && minted.Kid == AppleSecretKey
+            && minted.Subject == AppleClient
+            && minted.ValidTo - minted.IssuedAt == TimeSpan.FromMinutes(5);
     }
 
     private string Identity(Issued issued, bool google)

@@ -73,6 +73,14 @@ public static class ErrorCodes
     public static ErrorCode StartupDeclarationMissing { get; } = ErrorCode.Parse("model.startup.declarationmissing");
 
     /// <summary>
+    /// Startup: a declaration is present but malformed. The details name it under
+    /// <c>declaration</c> and the member at fault under <c>field</c>; correct the
+    /// declaration.
+    /// </summary>
+    /// <remarks>Implements LIB-HOST-001, IDN-LIFE-012, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupDeclarationInvalid { get; } = ErrorCode.Parse("model.startup.declarationinvalid");
+
+    /// <summary>
     /// Startup: two subject-event subscribers are registered under one name, or one is
     /// registered under the name the erasure ledger's confirmation is recorded under.
     /// The details name it under <c>handler</c>; give each subscriber a name of its own.

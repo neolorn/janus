@@ -51,7 +51,8 @@ namespace Janus.Hosting;
 /// server trusts is the deployment's to say. A social provider is optional, and one
 /// declared is declared whole: named once, as a social provider, with the HTTPS address
 /// of its document and at least one client, since a declaration short of that would
-/// verify none of the events it was declared for.
+/// verify none of the events it was declared for; one that is malformed is refused as
+/// invalid rather than missing, naming the provider and the member at fault (D-175).
 /// </remarks>
 internal sealed class DeclarationCoverage(
     PasskeyAddresses? addresses,
@@ -127,9 +128,9 @@ internal sealed class DeclarationCoverage(
             return Missing(MailClient);
         }
 
-        if (Undeclared() is string part)
+        if (Malformed() is (string declaration, string field))
         {
-            return Missing(Social + "." + part);
+            return Invalid(declaration, field);
         }
 
         return await PhotographedAsync(cancellationToken).ConfigureAwait(false);
@@ -141,37 +142,48 @@ internal sealed class DeclarationCoverage(
             "key",
             JsonSerializer.SerializeToElement(key)));
 
-    // IDN-LIFE-012, IDN-LIFE-012a: the part of a social provider's declaration that
-    // does not hold, or nothing where every one holds.
-    private string? Undeclared()
+    private static Result Invalid(string declaration, string field) =>
+        Result.Failure(new Error(
+            ErrorCodes.StartupDeclarationInvalid,
+            new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+            {
+                ["declaration"] = JsonSerializer.SerializeToElement(declaration),
+                ["field"] = JsonSerializer.SerializeToElement(field),
+            }));
+
+    // IDN-LIFE-012, IDN-LIFE-012a, D-175: the social provider declaration that does not
+    // hold, as the refusal of its credential names it, and its member at fault, or
+    // nothing where every one holds.
+    private (string Declaration, string Field)? Malformed()
     {
         var named = new HashSet<Factor>();
 
         foreach (SocialProvider declared in providers)
         {
+            string declaration = Social + "." + ProviderRoutes.NameOf(declared.Provider);
+
             if (!named.Add(declared.Provider)
                 || FactorCatalogue.Of(declared.Provider).AssuranceLevel is not AssuranceLevel.Delegated)
             {
-                return "provider";
+                return (declaration, "provider");
             }
 
             if (declared.Metadata is not { IsAbsoluteUri: true } metadata || metadata.Scheme != Uri.UriSchemeHttps)
             {
-                return "metadata";
+                return (declaration, "metadata");
             }
 
             if (declared.ClientIds is not { Count: > 0 } clients || clients.Any(string.IsNullOrWhiteSpace))
             {
-                return "clientIds";
+                return (declaration, "clientIds");
             }
 
             // IDN-LIFE-012, REG-IDENT-008: a provider people sign in with is read from
-            // its discovery document, returns them to the library's own route for it,
-            // and is presented a secret at the exchange.
+            // its discovery document and returns them to the library's own route for it.
             if (declared.Configuration is not { IsAbsoluteUri: true } configuration
                 || configuration.Scheme != Uri.UriSchemeHttps)
             {
-                return "configuration";
+                return (declaration, "configuration");
             }
 
             if (declared.Return is not { IsAbsoluteUri: true } returned
@@ -182,12 +194,7 @@ internal sealed class DeclarationCoverage(
                         "/callbacks/providers/" + route.Key + "/return",
                         StringComparison.Ordinal)))
             {
-                return "return";
-            }
-
-            if (declared.Secret.IsEmpty)
-            {
-                return "secret";
+                return (declaration, "return");
             }
         }
 

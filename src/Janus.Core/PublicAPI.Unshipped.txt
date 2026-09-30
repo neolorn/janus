@@ -1270,6 +1270,8 @@ Janus.Core.IInvitations.AttachedAsync(Janus.Core.AccessContext! context, System.
 Janus.Core.IInvitations.EndMembershipAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, Janus.Core.SubjectId member, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IInvitations.IssueAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.InvitationRequest! request, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.IssuedInvitation!>>
 Janus.Core.IInvitations.RevokeAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, Janus.Core.InvitationId invitation, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IKeyRing
+Janus.Core.IKeyRing.BorrowProviderCredential<TValue>(string! provider, System.Func<Janus.Core.ProviderCredential!, TValue>! use) -> Janus.Core.Result<TValue>
 Janus.Core.ILegalDocuments
 Janus.Core.ILegalDocuments.PublishAsync(Janus.Core.AccessContext! context, Janus.Core.DocumentPublication! publication, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.DocumentVersion!>>
 Janus.Core.ILegalDocuments.ReadAsync(string! document, string? version, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.DocumentVersion!>>
@@ -1365,6 +1367,7 @@ Janus.Core.ISecretSource
 Janus.Core.ISecretSource.ReadFingerprintKeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.FingerprintKeys!>
 Janus.Core.ISecretSource.ReadKeyEncryptionKeysAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.KeyEncryptionKeys!>
 Janus.Core.ISecretSource.ReadMaintenanceCredentialAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.ReadOnlyMemory<byte>>
+Janus.Core.ISecretSource.ReadProviderCredentialAsync(string! provider, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.ProviderCredential!>>
 Janus.Core.ISessions
 Janus.Core.ISessions.EndAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.ISessions.EndEverywhereAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -2078,6 +2081,11 @@ Janus.Core.ProfileEdit.LegalName.init -> void
 Janus.Core.ProfileEdit.ProfileEdit(string? DisplayName = null, string? LegalName = null, string? Username = null, string? DateOfBirth = null) -> void
 Janus.Core.ProfileEdit.Username.get -> string?
 Janus.Core.ProfileEdit.Username.init -> void
+Janus.Core.ProviderCredential
+Janus.Core.ProviderCredential.IsSigned.get -> bool
+Janus.Core.ProviderCredential.Issuer.get -> string?
+Janus.Core.ProviderCredential.KeyId.get -> string?
+Janus.Core.ProviderCredential.Material.get -> System.ReadOnlyMemory<byte>
 Janus.Core.ProviderRegister
 Janus.Core.PublishedSigningKey
 Janus.Core.PublishedSigningKey.<Clone>$() -> Janus.Core.PublishedSigningKey!
@@ -2597,7 +2605,7 @@ Janus.Core.SocialProvider.ClientIds.get -> System.Collections.Generic.IReadOnlyL
 Janus.Core.SocialProvider.ClientIds.init -> void
 Janus.Core.SocialProvider.Configuration.get -> System.Uri!
 Janus.Core.SocialProvider.Configuration.init -> void
-Janus.Core.SocialProvider.Deconstruct(out Janus.Core.Factor Provider, out System.Uri! Metadata, out System.Collections.Generic.IReadOnlyList<string!>! ClientIds, out System.Uri! Configuration, out System.Uri! Return, out System.ReadOnlyMemory<byte> Secret) -> void
+Janus.Core.SocialProvider.Deconstruct(out Janus.Core.Factor Provider, out System.Uri! Metadata, out System.Collections.Generic.IReadOnlyList<string!>! ClientIds, out System.Uri! Configuration, out System.Uri! Return) -> void
 Janus.Core.SocialProvider.Equals(Janus.Core.SocialProvider? other) -> bool
 Janus.Core.SocialProvider.Metadata.get -> System.Uri!
 Janus.Core.SocialProvider.Metadata.init -> void
@@ -2605,9 +2613,7 @@ Janus.Core.SocialProvider.Provider.get -> Janus.Core.Factor
 Janus.Core.SocialProvider.Provider.init -> void
 Janus.Core.SocialProvider.Return.get -> System.Uri!
 Janus.Core.SocialProvider.Return.init -> void
-Janus.Core.SocialProvider.Secret.get -> System.ReadOnlyMemory<byte>
-Janus.Core.SocialProvider.Secret.init -> void
-Janus.Core.SocialProvider.SocialProvider(Janus.Core.Factor Provider, System.Uri! Metadata, System.Collections.Generic.IReadOnlyList<string!>! ClientIds, System.Uri! Configuration, System.Uri! Return, System.ReadOnlyMemory<byte> Secret) -> void
+Janus.Core.SocialProvider.SocialProvider(Janus.Core.Factor Provider, System.Uri! Metadata, System.Collections.Generic.IReadOnlyList<string!>! ClientIds, System.Uri! Configuration, System.Uri! Return) -> void
 Janus.Core.SqlFilter
 Janus.Core.SqlFilter.<Clone>$() -> Janus.Core.SqlFilter!
 Janus.Core.SqlFilter.Deconstruct(out string! Text, out System.Collections.Generic.IReadOnlyDictionary<string!, object!>! Parameters) -> void
@@ -3860,6 +3866,7 @@ static Janus.Core.ErrorCodes.SessionCsrfInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.SessionExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.SmsBalanceFloor.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupContainmentCycle.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.StartupDeclarationInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupDeclarationMissing.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupGoverningLanguage.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupLabelLimit.get -> Janus.Core.ErrorCode
@@ -4077,6 +4084,8 @@ static Janus.Core.ProfileDetail.operator !=(Janus.Core.ProfileDetail? left, Janu
 static Janus.Core.ProfileDetail.operator ==(Janus.Core.ProfileDetail? left, Janus.Core.ProfileDetail? right) -> bool
 static Janus.Core.ProfileEdit.operator !=(Janus.Core.ProfileEdit? left, Janus.Core.ProfileEdit? right) -> bool
 static Janus.Core.ProfileEdit.operator ==(Janus.Core.ProfileEdit? left, Janus.Core.ProfileEdit? right) -> bool
+static Janus.Core.ProviderCredential.Secret(System.ReadOnlyMemory<byte> secret) -> Janus.Core.ProviderCredential!
+static Janus.Core.ProviderCredential.Signed(string! issuer, string! keyId, System.ReadOnlyMemory<byte> key) -> Janus.Core.ProviderCredential!
 static Janus.Core.ProviderRegister.Default.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RecipientDeclaration!>!
 static Janus.Core.PublishedSigningKey.operator !=(Janus.Core.PublishedSigningKey? left, Janus.Core.PublishedSigningKey? right) -> bool
 static Janus.Core.PublishedSigningKey.operator ==(Janus.Core.PublishedSigningKey? left, Janus.Core.PublishedSigningKey? right) -> bool

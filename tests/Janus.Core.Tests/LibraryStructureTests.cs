@@ -1634,6 +1634,13 @@ public sealed class LibraryStructureTests
             permitted.AddRange(["Janus.Hosting", "Janus.Cli"]);
         }
 
+        // D-171: Janus.Core opens its internals to its own test project for one reason,
+        // so a test can see the key ring's clearing leave every array zero.
+        if (string.Equals(project, "Janus.Core", StringComparison.Ordinal))
+        {
+            permitted.Add("Janus.Core.Tests");
+        }
+
         // Janus.Storage holds the rows the protocol server keeps its own records in,
         // so the project that stands the server up reads them and its test project
         // stands the same server up over fakes of them (AUTH-OIDC-001, D-162).

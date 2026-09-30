@@ -636,6 +636,11 @@ public static class HostingRegistration
         services.Insert(8, ServiceDescriptor.Singleton<IHostedService, SigningKeyValidationService>());
         services.Insert(9, ServiceDescriptor.Singleton<IHostedService, RelayValidationService>());
 
+        // CONV-DESIGN-007, D-171: the secrets are read into the key ring ahead of even
+        // those checks, and as the first service to start its reading is the last to
+        // stop, after the worker and the server, when it clears the ring.
+        services.AddKeyRing();
+
         // INF-BG-001: the scheduled work starts once the checks above have passed.
         services.AddHostedService(provider => new BackgroundWorker(
             provider.GetRequiredService<IServiceScopeFactory>(),

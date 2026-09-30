@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Janus.Core;
 
 namespace Janus.Hosting.Credentials;
@@ -15,6 +17,9 @@ namespace Janus.Hosting.Credentials;
 /// </remarks>
 internal static class ProviderRoutes
 {
+    private static readonly JsonSerializerOptions Spelled =
+        new() { Converters = { new JsonStringEnumConverter() } };
+
     /// <summary>
     /// Each provider by the segment its routes carry.
     /// </summary>
@@ -24,4 +29,13 @@ internal static class ProviderRoutes
             ["google"] = Factor.Google,
             ["apple"] = Factor.Apple,
         }.ToFrozenDictionary(StringComparer.Ordinal);
+
+    /// <summary>
+    /// A provider's name, as the factor catalogue spells it: the name its routes carry,
+    /// its credential is read from the secret source by, and its refusals name it by.
+    /// </summary>
+    /// <param name="provider">Which factor the declaration names.</param>
+    /// <returns>The name.</returns>
+    public static string NameOf(Factor provider) =>
+        JsonSerializer.SerializeToElement(provider, Spelled).GetString()!;
 }
