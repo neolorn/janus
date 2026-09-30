@@ -286,14 +286,20 @@ internal sealed class InvitationAcknowledgement(
             identifier.IsVerified && string.Equals(identifier.Canonical, canonical, StringComparison.Ordinal));
     }
 
+    // AUTH-FACT-017 and chapter 10 section 1.1: the requirement the account is held
+    // at, with no deadline, because no grace applies to an account joining.
     private static Error Enrol(PolicyField field, string value) =>
         new(
             ErrorCodes.StepUpRequired,
-            new Dictionary<string, JsonElement>(capacity: 3, StringComparer.Ordinal)
+            new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
             {
                 ["outcome"] = JsonSerializer.SerializeToElement(WrittenName.Of(StepUpOutcome.Enrol)),
-                ["field"] = JsonSerializer.SerializeToElement(WrittenName.Of(field)),
-                ["value"] = JsonSerializer.SerializeToElement(value),
+                ["policyRequirement"] = JsonSerializer.SerializeToElement(
+                    new Dictionary<string, string>(capacity: 2, StringComparer.Ordinal)
+                    {
+                        ["field"] = WrittenName.Of(field),
+                        ["value"] = value,
+                    }),
             });
 
     private static SendDestination Destination(HeldIdentifier identifier) =>

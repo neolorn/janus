@@ -1743,6 +1743,9 @@ against the public contract of LIB-API-001.
 - Acknowledging an invitation judges the organization's domain lock as it then stands
   on the address the member will sign in with, and refuses one outside it with
   `identity.identifier.domainnotallowed`.
+- An acknowledgement held at enrolment names the unmet requirement as
+  `policyRequirement` `{ field, value }`, with no deadline, in place of a flat `field`
+  and `value`.
 - An audit trail. Every record names who acted, whose identity the action was taken
   under, the instant it occurred and the organization where one applies; an event about
   a principal holding no membership carries none, and the absence is the recorded fact.
