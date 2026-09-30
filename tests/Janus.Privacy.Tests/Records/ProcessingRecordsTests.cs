@@ -614,7 +614,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
                 RequiresWrittenConsentForSensitive: false,
                 RequiresAssessment: false,
                 IsObjectable: false))
-            .Resource<Declaration.Statement>("invoice", invoice => invoice
+            .Resource<Declaration.Statement>("statement", statement => statement
                 .BelongsToOrganization()
                 .Purpose("performance", "contract", data: ["identity", "statement"], subjects: ["customers"])
                 .Purpose(books, "legal-obligation", data: ["statement"], subjects: ["customers"])
