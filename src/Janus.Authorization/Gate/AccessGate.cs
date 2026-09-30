@@ -73,6 +73,8 @@ internal sealed class AccessGate(
         ResourceReference resource,
         CancellationToken cancellationToken)
     {
+        Declared(permission);
+
         if (FollowsFromTheHostsData(resource.Type))
         {
             return Result.Failure(Error.From(ErrorCodes.DerivationSourcesMissing));
@@ -111,9 +113,10 @@ internal sealed class AccessGate(
     {
         ArgumentNullException.ThrowIfNull(sources);
 
-        // CONV-ERR-001, AUTHZ-PRIN-003: a type the model does not declare is the calling
-        // code's fault, raised before anything is read or recorded.
+        // CONV-ERR-001, AUTHZ-PRIN-003: a type or a permission the model does not declare
+        // is the calling code's fault, raised before anything is read or recorded.
         Declared(resource.Type);
+        Declared(permission);
 
         if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
         {
@@ -162,6 +165,8 @@ internal sealed class AccessGate(
         OrganizationId organization,
         CancellationToken cancellationToken)
     {
+        Declared(permission);
+
         if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure(Error.From(ErrorCodes.Restricted));
@@ -203,6 +208,7 @@ internal sealed class AccessGate(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
+        Declared(permission);
 
         // AUTHZ-GATE-004: on a type whose denial answers as a record that does not
         // exist, an explanation saying no grant matched says that it does. This is asked
@@ -241,6 +247,7 @@ internal sealed class AccessGate(
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(sources);
+        Declared(permission);
 
         // AUTHZ-GATE-004: concealment is read first, so a concealing type answers one
         // way whatever else is true of it (AUTHZ-CONCEAL-003).
@@ -363,9 +370,10 @@ internal sealed class AccessGate(
         FilterSources<TResource> sources,
         CancellationToken cancellationToken)
     {
-        // CONV-ERR-001, AUTHZ-PRIN-003: a type the model does not declare is the calling
-        // code's fault, raised before anything is read or recorded.
+        // CONV-ERR-001, AUTHZ-PRIN-003: a type or a permission the model does not declare
+        // is the calling code's fault, raised before anything is read or recorded.
         Declared(type);
+        Declared(permission);
 
         if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
         {
@@ -401,9 +409,10 @@ internal sealed class AccessGate(
         string column,
         CancellationToken cancellationToken)
     {
-        // CONV-ERR-001, AUTHZ-PRIN-003: a type the model does not declare is the calling
-        // code's fault, raised before anything is read or recorded.
+        // CONV-ERR-001, AUTHZ-PRIN-003: a type or a permission the model does not declare
+        // is the calling code's fault, raised before anything is read or recorded.
         Declared(type);
+        Declared(permission);
 
         if (await RestrictedAsync(context, permission, cancellationToken).ConfigureAwait(false))
         {
@@ -436,6 +445,7 @@ internal sealed class AccessGate(
     {
         ArgumentNullException.ThrowIfNull(resources);
         ArgumentNullException.ThrowIfNull(permissions);
+        Declared(permissions);
 
         if (FollowsFromTheHostsData(type))
         {
@@ -443,7 +453,7 @@ internal sealed class AccessGate(
                 Error.From(ErrorCodes.DerivationSourcesMissing));
         }
 
-        return await PageAsync(context, type, resources, Asked(permissions), NoneAdmitted, cancellationToken)
+        return await PageAsync(context, type, resources, permissions, NoneAdmitted, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -459,23 +469,38 @@ internal sealed class AccessGate(
         ArgumentNullException.ThrowIfNull(resources);
         ArgumentNullException.ThrowIfNull(permissions);
         ArgumentNullException.ThrowIfNull(sources);
-
-        IReadOnlyList<Permission> asked = Asked(permissions);
+        Declared(type);
+        Declared(permissions);
 
         return await PageAsync(
             context,
             type,
             resources,
-            asked,
-            (organization, token) => DerivedAsync(context, type, organization, asked, resources, sources, token),
+            permissions,
+            (organization, token) => DerivedAsync(context, type, organization, permissions, resources, sources, token),
             cancellationToken).ConfigureAwait(false);
     }
 
-    // BFF-CAP-002 AC2: a permission the model does not declare is no capability, so it
-    // is not asked about at all and is absent from every row, whatever a stored role
-    // still allows; the permissions it is asked beside are answered as they are alone.
-    private IReadOnlyList<Permission> Asked(IReadOnlyList<Permission> permissions) =>
-        [.. permissions.Where(model.Declares)];
+    // CONV-ERR-001, AUTHZ-PRIN-003, BFF-CAP-002 AC2: a permission the model does not
+    // declare is no capability and no rule governs it, so naming one is the calling
+    // code's fault, raised before anything is read, whatever a stored role still allows.
+    private void Declared(IReadOnlyList<Permission> permissions)
+    {
+        foreach (Permission permission in permissions)
+        {
+            Declared(permission);
+        }
+    }
+
+    private void Declared(Permission permission)
+    {
+        if (!model.Declares(permission))
+        {
+            throw new InvalidOperationException(string.Create(
+                CultureInfo.InvariantCulture,
+                $"The permission '{permission}' is not declared, so no policy governs it."));
+        }
+    }
 
     // AUTHZ-GATE-005 AC1: one query answers the whole page for the stored grants, and
     // one further query over the host's rows answers what the derivations confer, so

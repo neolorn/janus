@@ -758,13 +758,13 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
-    /// BFF-CAP-002 AC2: a permission the model does not declare, asked for beside one
-    /// it does, is in no capability's <c>can</c> and no <c>requires</c>, even where a
-    /// stored role allows it, and what is declared is answered as it is alone.
+    /// BFF-CAP-002 AC2, AUTHZ-PRIN-003 AC1: a permission the model does not declare,
+    /// asked for beside one it does, is no capability of any response: the page raises
+    /// even where a stored role allows it, and answers nothing.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task BFF_CAP_002_AC2_AnUndeclaredPermissionAppearsInNoCapabilityAsync()
+    public async Task BFF_CAP_002_AC2_AnUndeclaredPermissionIsRaisedAndAnsweredInNoCapabilityAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         var undeclared = Permission.Parse("document:share");
@@ -786,7 +786,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
         await using HostContext reading = host.Context();
 
-        Capability capability = Assert.Single(Rendered(
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await scope.ServiceProvider.GetRequiredService<IAccessGate>()
                 .CapabilitiesAsync(
                     AccessContext.Of(nested.Account),
@@ -794,10 +794,50 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
                     [nested.Record.Id],
                     [HostPermissions.Read, undeclared],
                     Sources(reading),
-                    cancellationToken)));
+                    cancellationToken));
+    }
 
-        Assert.Equal([HostPermissions.Read], capability.Can);
-        Assert.Empty(capability.Requires);
+    /// <summary>
+    /// CONV-ERR-001 AC3, AUTHZ-PRIN-003 AC1: a permission the model does not declare,
+    /// named by the calling code at a request, raises at every gate entry point that
+    /// takes one, before the gate reads anything of the caller or records a refusal, so
+    /// a restricted caller meets the same fault as any other.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_ERR_001_AC3_AnUndeclaredPermissionRaisesAtTheRequestBeforeTheGateReadsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync();
+        var undeclared = Permission.Parse("document:share");
+        var context = AccessContext.Of(nested.Account);
+        OrganizationId organization = nested.Deployment.Organization;
+
+        await nested.Deployment.RestrictAsync(nested.Account, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+        IAccessGate gate = scope.ServiceProvider.GetRequiredService<IAccessGate>();
+
+        Func<Task>[] asking =
+        [
+            async () => await gate.RequireAsync(context, undeclared, nested.Record, cancellationToken),
+            async () => await gate.RequireAsync(context, undeclared, nested.Record, Sources(reading), cancellationToken),
+            async () => await gate.RequireAsync(context, undeclared, organization, cancellationToken),
+            async () => await gate.FilterAsync(context, undeclared, Document, organization, Sources(reading), cancellationToken),
+            async () => await gate.FragmentAsync(context, undeclared, Document, organization, "document", "id", cancellationToken),
+            async () => await gate.ExplainAsync(context, undeclared, nested.Record, cancellationToken),
+            async () => await gate.ExplainAsync(context, undeclared, nested.Record, Sources(reading), cancellationToken),
+            async () => await gate.CapabilitiesAsync(context, Document, [nested.Record.Id], [undeclared], cancellationToken),
+            async () => await gate.CapabilitiesAsync(context, Document, [nested.Record.Id], [undeclared], Sources(reading), cancellationToken),
+        ];
+
+        foreach (Func<Task> asked in asking)
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(asked);
+        }
+
+        Assert.Equal(0, await DenialsRecordedAsync(nested.Account));
     }
 
     /// <summary>

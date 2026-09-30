@@ -16344,6 +16344,8 @@ does the answer hold for such a permission: nothing, false, or a refusal?
 *Chapter text that should change.* BFF-CAP-002 AC2 could say "is left out of the
 answer".
 
+**Superseded by D-166.**
+
 ---
 
 ## 397. "Once per send" is once per key name in one judgement of a send

@@ -1185,8 +1185,6 @@ against the public contract of LIB-API-001.
   `retryAt`, before any session is looked up. Each instance of a deployment counts on
   its own, by the connection address after the proxies the host trusts, so a
   deployment of several instances sets the key to each one's share.
-- Capabilities never list a permission the authorization model does not declare,
-  whatever a stored role still allows.
 - A host's restriction key supplier is asked once for each key name when a send is
   judged, however many restrictions count under that key.
 - Every throttled answer (sign-in, sign-in link and email code, recovery, break-glass
@@ -1444,9 +1442,11 @@ against the public contract of LIB-API-001.
   identifier to the permission and the principal, whichever organization the refusal was
   recorded in; it says nothing about whether the record exists. A permission that names
   no record is refused as a permission the caller does not hold, with nothing concealed.
-- A check, a filter or a fragment naming a resource type the model does not declare
-  raises at the request, before the caller's restriction is read or anything is
-  recorded, so the calling code's fault is the same whoever asks.
+- A check, a filter, a fragment, a capability page or an explanation naming a resource
+  type or a permission the model does not declare raises at the request, before the
+  caller's restriction is read or anything is recorded, so the calling code's fault is
+  the same whoever asks. A capability page asked for such a permission raises rather
+  than leaving it out, whatever a stored role still allows.
 - A refusal is recorded with the grant that decided it, where one did, so its correlation
   identifier resolves to what the gate explained at the time: a deny grant is named with
   the container it sat on, rather than the refusal reading as one no grant matched.

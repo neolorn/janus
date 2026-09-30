@@ -20,7 +20,11 @@ namespace Janus.Core;
 /// export operation: while <c>exfiltration.export.stepuprequired</c> is on it asks for
 /// step-up whether or not the host bound it to a gate, and each check, filter or
 /// fragment that admits it counts against the actor's
-/// <c>exfiltration.export.ratelimit</c> for the hour and is recorded on its own.
+/// <c>exfiltration.export.ratelimit</c> for the hour and is recorded on its own. A
+/// resource type or a permission the model does not declare, named at any member that
+/// takes one, is the calling code's fault: it raises
+/// <see cref="InvalidOperationException"/> before anything is read or recorded
+/// (AUTHZ-PRIN-003 AC1, CONV-ERR-001 AC3).
 /// </remarks>
 public interface IAccessGate
 {
