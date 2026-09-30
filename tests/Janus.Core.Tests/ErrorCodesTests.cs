@@ -125,6 +125,7 @@ public sealed class ErrorCodesTests
         "identity.username.taken",
         "integration.callback.rejected",
         "integration.endpoint.insecure",
+        "integration.mailserver.conflict",
         "integration.sms.balancefloor",
         "model.containment.cycle",
         "model.derivation.undeclaredreference",

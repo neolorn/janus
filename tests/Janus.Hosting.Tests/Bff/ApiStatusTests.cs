@@ -55,12 +55,16 @@ public sealed class ApiStatusTests
     }
 
     /// <summary>
-    /// API-CONV-003: the table decides every code the library raises, so no code can
-    /// reach the boundary and be given a status by accident.
+    /// REF-001 AC3, API-CONV-003: the table decides every code a request can be answered
+    /// with, so no code can reach the boundary and be given a status by accident. A mail
+    /// server's answer to the provisioning job is answered by no request and needs none
+    /// (chapter 10 section 6).
     /// </summary>
     [Fact]
-    public void Of_ACodeTheLibraryRaises_HasAStatusOfItsOwn() =>
-        Assert.All(Catalogue(), code => Assert.True(ApiStatus.Names(code), code.ToString()));
+    public void REF_001_AC3_ACodeARequestCanBeAnsweredWithHasAStatus() =>
+        Assert.All(
+            Catalogue().Where(code => code != ErrorCodes.MailServerConflict),
+            code => Assert.True(ApiStatus.Names(code), code.ToString()));
 
     /// <summary>
     /// BFF-ERR-002 AC1: a fault answers as a fault. The code behind it, and anything

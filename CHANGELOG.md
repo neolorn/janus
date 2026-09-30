@@ -523,6 +523,14 @@ against the public contract of LIB-API-001.
   spent. `MailboxReconciliation` compares the server's listing with what is owed and
   raises `degradation` on any difference without changing either side. The address is
   held encrypted under its holder's key and is erased with them.
+- A mailbox push carries the mailbox's identifier (`MailboxPush.Mailbox`, a public
+  `MailboxId`), and the mail server's listing answers, for each account, the identifier
+  it carries (`HostedMailbox.Mailbox`), its address and whether it is enabled. An
+  `IMailServer` answers `integration.mailserver.conflict` where a push meets, at the
+  mailbox's name, an account that does not carry that identifier, and changes nothing.
+  Reconciliation compares each mailbox with the account listed under its identifier,
+  reads the listed address in its canonical form, and counts every account carrying no
+  identifier of a mailbox the library holds.
 - Where Continue with Apple is among the system policy's `loginFactors` and
   `notification.email.sendingdomain` is not in `notification.email.relayregistered`, the
   deployment raises `relay-domain-unregistered` with the domain as it starts and

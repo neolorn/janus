@@ -11,14 +11,16 @@ using Janus.Core;
 namespace Janus.Authentication.Tests.Mailboxes;
 
 /// <summary>
-/// A mail server that hosts mailboxes in memory and honours the contract: a push whose
-/// key it has applied changes nothing, and a listing answers what it holds. Its app
+/// A mail server that hosts accounts in memory and honours the contract: a push whose
+/// key it has applied changes nothing, a push that meets an account under the mailbox's
+/// name not carrying its identifier is answered <c>integration.mailserver.conflict</c>
+/// and changes nothing, and a listing answers what it holds. Its app
 /// passwords belong to the person a token's <c>sub</c> names, read as a server that
 /// validates tokens offline reads it; a token it cannot read is refused.
 /// </summary>
 internal sealed class MailServerInMemory : IMailServer
 {
-    private readonly Dictionary<string, bool> _hosted = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Hosted> _hosted = new(StringComparer.Ordinal);
 
     private readonly HashSet<Guid> _applied = [];
 
@@ -68,19 +70,34 @@ internal sealed class MailServerInMemory : IMailServer
     /// <param name="address">The address.</param>
     /// <returns>Whether it is enabled, or nothing where it is not hosted.</returns>
     public bool? Hosts(string address) =>
-        _hosted.TryGetValue(address, out bool enabled) ? enabled : null;
+        _hosted.TryGetValue(address, out Hosted? hosted) ? hosted.Enabled : null;
 
     /// <summary>
-    /// Changes a mailbox on the server behind the library's back, as an operator
-    /// working in the server's own console does.
+    /// The identifier of the library's mailbox the account at an address carries.
+    /// </summary>
+    /// <param name="address">The address.</param>
+    /// <returns>The identifier, or nothing where no account or none is carried.</returns>
+    public MailboxId? Carried(string address) =>
+        _hosted.TryGetValue(address, out Hosted? hosted) ? hosted.Mailbox : null;
+
+    /// <summary>
+    /// Changes an account on the server behind the library's back, as an operator
+    /// working in the server's own console does. An account already there keeps the
+    /// identifier it carries.
     /// </summary>
     /// <param name="address">The address.</param>
     /// <param name="enabled">Whether it is enabled, or nothing to remove it.</param>
-    public void Set(string address, bool? enabled)
+    /// <param name="mailbox">
+    /// The identifier a new account carries, or nothing for one the library did not
+    /// create.
+    /// </param>
+    public void Set(string address, bool? enabled, MailboxId? mailbox = null)
     {
         if (enabled is bool value)
         {
-            _hosted[address] = value;
+            _hosted[address] = new Hosted(
+                _hosted.TryGetValue(address, out Hosted? standing) ? standing.Mailbox : mailbox,
+                value);
         }
         else
         {
@@ -101,15 +118,23 @@ internal sealed class MailServerInMemory : IMailServer
             return ValueTask.FromResult(Result.Failure(Error.From(ErrorCodes.SystemFault)));
         }
 
+        if (_hosted.TryGetValue(push.Address, out Hosted? found) && found.Mailbox != push.Mailbox)
+        {
+            return ValueTask.FromResult(Result.Failure(Error.From(ErrorCodes.MailServerConflict)));
+        }
+
         if (_applied.Add(push.Key))
         {
             Applied.Add(push);
-            Set(push.Address, push.State switch
-            {
-                MailboxState.Enabled => true,
-                MailboxState.Disabled => false,
-                _ => null,
-            });
+            Set(
+                push.Address,
+                push.State switch
+                {
+                    MailboxState.Enabled => true,
+                    MailboxState.Disabled => false,
+                    _ => null,
+                },
+                push.Mailbox);
         }
 
         return ValueTask.FromResult(
@@ -122,7 +147,7 @@ internal sealed class MailServerInMemory : IMailServer
             Unreachable
                 ? Result.Failure<IReadOnlyList<HostedMailbox>>(Error.From(ErrorCodes.SystemFault))
                 : Result.Success<IReadOnlyList<HostedMailbox>>(
-                    [.. _hosted.Select(pair => new HostedMailbox(pair.Key, pair.Value))]));
+                    [.. _hosted.Select(pair => new HostedMailbox(pair.Value.Mailbox, pair.Key, pair.Value.Enabled))]));
 
     /// <summary>
     /// The app passwords the server holds for one person.
@@ -206,6 +231,8 @@ internal sealed class MailServerInMemory : IMailServer
                 ? Result.Success()
                 : Result.Failure(Error.From(ErrorCodes.CredentialNotFound)));
     }
+
+    private sealed record Hosted(MailboxId? Mailbox, bool Enabled);
 
     // The payload of a compact token is its second segment, base64url without padding.
     private static string? Holder(string accessToken)

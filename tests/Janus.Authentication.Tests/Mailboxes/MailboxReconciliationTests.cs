@@ -87,8 +87,10 @@ public sealed class MailboxReconciliationTests : IDisposable
     [Fact]
     public async Task INT_MAIL_006_AC1c_AReservedMailboxIsNoDriftAsync()
     {
-        await _mailboxes.AddAsync(Mailbox.Reserved(Parsed(Address), Noon), TestContext.Current.CancellationToken);
-        _server.Set(Address, enabled: false);
+        var reserved = Mailbox.Reserved(Parsed(Address), Noon);
+
+        await _mailboxes.AddAsync(reserved, TestContext.Current.CancellationToken);
+        _server.Set(Address, enabled: false, reserved.Id);
 
         MailboxDrift drift = await ReconciledAsync();
 
@@ -129,13 +131,63 @@ public sealed class MailboxReconciliationTests : IDisposable
 
         released.Release(Noon);
         await _mailboxes.AddAsync(released, TestContext.Current.CancellationToken);
-        _server.Set(Address, enabled: false);
+        _server.Set(Address, enabled: false, released.Id);
 
         Assert.Equal([released.Id], (await ReconciledAsync()).Mailboxes);
 
         _server.Set(Address, enabled: null);
 
         Assert.True((await ReconciledAsync()).IsEmpty);
+    }
+
+    /// <summary>
+    /// INT-MAIL-007 AC2, D-177: each mailbox is compared with the account listed under
+    /// its own identifier, so an account at its address that carries no identifier is
+    /// not taken for it and is counted, and the account carrying its identifier at
+    /// another address is a difference.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_007_AC2_EachMailboxIsComparedWithTheAccountCarryingItsIdentifierAsync()
+    {
+        Mailbox held = await HeldAsync(enabledOnServer: true);
+
+        _server.Set(Address, enabled: null);
+        _server.Set(Address, enabled: true);
+
+        MailboxDrift unclaimed = await ReconciledAsync();
+
+        Assert.Equal([held.Id], unclaimed.Mailboxes);
+        Assert.Equal(1, unclaimed.Unknown);
+
+        _server.Set(Address, enabled: null);
+        _server.Set("elsewhere@example.test", enabled: true, held.Id);
+
+        MailboxDrift moved = await ReconciledAsync();
+
+        Assert.Equal([held.Id], moved.Mailboxes);
+        Assert.Equal(0, moved.Unknown);
+    }
+
+    /// <summary>
+    /// INT-MAIL-007 AC2: the server's address is compared in its canonical form, and one
+    /// that does not read is no mailbox's address.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_007_AC2_AListedAddressIsComparedInItsCanonicalFormAsync()
+    {
+        Mailbox held = await HeldAsync(enabledOnServer: true);
+
+        _server.Set(Address, enabled: null);
+        _server.Set("Staff@EXAMPLE.test", enabled: true, held.Id);
+
+        Assert.True((await ReconciledAsync()).IsEmpty);
+
+        _server.Set("Staff@EXAMPLE.test", enabled: null);
+        _server.Set("not an address", enabled: true, held.Id);
+
+        Assert.Equal([held.Id], (await ReconciledAsync()).Mailboxes);
     }
 
     /// <summary>
@@ -169,7 +221,7 @@ public sealed class MailboxReconciliationTests : IDisposable
 
         mailbox.Hold(_holder);
         await _mailboxes.AddAsync(mailbox, TestContext.Current.CancellationToken);
-        _server.Set(Address, enabledOnServer);
+        _server.Set(Address, enabledOnServer, mailbox.Id);
 
         return _mailboxes.Held.Single();
     }

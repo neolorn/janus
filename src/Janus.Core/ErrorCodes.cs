@@ -870,6 +870,19 @@ public static class ErrorCodes
     public static ErrorCode EndpointInsecure { get; } = ErrorCode.Parse("integration.endpoint.insecure");
 
     /// <summary>
+    /// A mail server's answer to a mailbox push, never a route's: the server holds an
+    /// account at the mailbox's name that does not carry the mailbox's identifier, so the
+    /// push adopted nothing and changed nothing there. Find out whose the account is and
+    /// resolve it at the mail server; the push begun again the next day then goes through.
+    /// </summary>
+    /// <remarks>
+    /// Implements INT-MAIL-001, INT-MAIL-007, LIB-HOST-001 and REG-MAIL-003, chapter 10
+    /// section 1.6. The push is marked failed at that attempt and raises
+    /// <c>degradation</c> scoped <c>mailbox.conflict:&lt;mailbox id&gt;</c>.
+    /// </remarks>
+    public static ErrorCode MailServerConflict { get; } = ErrorCode.Parse("integration.mailserver.conflict");
+
+    /// <summary>
     /// The gateway balance is below the configured floor, so ordinary sends are
     /// refused. Top the account up; alert-class messages continue meanwhile.
     /// </summary>
