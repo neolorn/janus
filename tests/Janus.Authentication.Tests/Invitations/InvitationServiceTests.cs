@@ -191,10 +191,10 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Error same = Failure(await IssueAsync(Staff, Request(email: Corporate, corporate: Corporate)));
         Error withoutCorporate = Failure(await IssueAsync(Staff, Request(email: Personal)));
 
-        Assert.Equal(ErrorCodes.IdentifierInvalid, withoutPersonal.Code);
+        Assert.Equal(ErrorCodes.InvitationAddressRequired, withoutPersonal.Code);
         Assert.Equal("email", Member(withoutPersonal));
-        Assert.Equal((ErrorCodes.IdentifierInvalid, "email"), (same.Code, Member(same)));
-        Assert.Equal(ErrorCodes.IdentifierInvalid, withoutCorporate.Code);
+        Assert.Equal((ErrorCodes.InvitationAddressRequired, "email"), (same.Code, Member(same)));
+        Assert.Equal(ErrorCodes.InvitationAddressRequired, withoutCorporate.Code);
         Assert.Equal("corporateEmail", Member(withoutCorporate));
         Assert.Empty(_invitations.Held);
         Assert.Empty(_mailboxes.Held);

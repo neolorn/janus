@@ -29,10 +29,11 @@ public interface IInvitations
     /// The invitation, or the refusal: <c>identity.organization.notfound</c> where the
     /// deployment holds no such organization, <c>authz.denied</c> where its deletion was
     /// requested, <c>identity.identifier.invalid</c> naming the member where an
-    /// identifier is malformed or one the organization's mail requires is absent,
-    /// <c>identity.identifier.mixedscript</c> naming the member where a word mixes
-    /// scripts, <c>identity.identifier.domainnotallowed</c> where the organization's lock
-    /// does not admit the address the member will sign in with,
+    /// identifier is malformed, <c>identity.invitation.addressrequired</c> naming the
+    /// member where one the organization's mail requires is absent or both name one
+    /// address, <c>identity.identifier.mixedscript</c> naming the member where a word
+    /// mixes scripts, <c>identity.identifier.domainnotallowed</c> where the
+    /// organization's lock does not admit the address the member will sign in with,
     /// <c>api.request.malformed</c> naming the member that cannot be taken.
     /// </returns>
     ValueTask<Result<IssuedInvitation>> IssueAsync(

@@ -408,6 +408,14 @@ public static class ErrorCodes
     public static ErrorCode InvitationNotFound { get; } = ErrorCode.Parse("identity.invitation.notfound");
 
     /// <summary>
+    /// The invitation is into an organization whose mail is integrated and names no
+    /// personal email, no corporate address, or the corporate address as the personal
+    /// one. Name both, and different. The details name the member at fault.
+    /// </summary>
+    /// <remarks>Implements REG-INV-001 and REG-MAIL-001, chapter 10 section 1.1.</remarks>
+    public static ErrorCode InvitationAddressRequired { get; } = ErrorCode.Parse("identity.invitation.addressrequired");
+
+    /// <summary>
     /// The corporate address names a mailbox someone has held, and the invitation does
     /// not say what becomes of it. Name <c>formerMailbox</c>, <c>transfer</c> or
     /// <c>replace</c>, with a reason.

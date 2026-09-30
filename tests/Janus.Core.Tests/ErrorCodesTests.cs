@@ -99,6 +99,7 @@ public sealed class ErrorCodesTests
         "identity.identifier.maximum",
         "identity.identifier.mixedscript",
         "identity.identifier.primary",
+        "identity.invitation.addressrequired",
         "identity.invitation.expired",
         "identity.invitation.identifiermismatch",
         "identity.invitation.mailboxheld",

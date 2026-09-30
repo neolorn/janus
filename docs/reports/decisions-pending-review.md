@@ -8230,6 +8230,8 @@ disabled. Where the mail is not integrated, `corporateEmail` is
 *Chapter text that should change.* 09 section 8a could name the members `email`,
 `phone`, `corporateEmail`, `roles` and `documents`, and the 422 code.
 
+**Superseded by D-166.**
+
 ---
 
 ## 224. Which address the domain lock judges at issue, and what a refusal names

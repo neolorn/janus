@@ -1719,6 +1719,10 @@ against the public contract of LIB-API-001.
   `details.requires` `dnsResolver`, and a deployment whose stored lock lists a domain
   does not start without a resolver (`model.startup.declarationmissing`, `details.key`
   `dnsResolver`).
+- An invitation into an organization whose mail is integrated that names no personal
+  `email`, no `corporateEmail`, or one address as both is refused `422`
+  `identity.invitation.addressrequired`, naming the member; `identity.identifier.invalid`
+  stays for an address that does not read.
 - An audit trail. Every record names who acted, whose identity the action was taken
   under, the instant it occurred and the organization where one applies; an event about
   a principal holding no membership carries none, and the absence is the recorded fact.

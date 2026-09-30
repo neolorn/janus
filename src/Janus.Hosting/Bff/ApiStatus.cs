@@ -117,6 +117,7 @@ internal static class ApiStatus
         [ErrorCodes.IdentifierMixedScript] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.InvitationExpired] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.InvitationIdentifierMismatch] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.InvitationAddressRequired] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ProfileInvalid] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ProfileNotAccepted] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ProfileUnderage] = StatusCodes.Status422UnprocessableEntity,

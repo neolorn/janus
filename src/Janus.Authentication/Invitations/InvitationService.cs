@@ -386,17 +386,20 @@ internal sealed class InvitationService(
             return Result.Failure<Bound>(failure);
         }
 
+        // REG-MAIL-001: an integrated invitation sends its link to the personal email
+        // and provisions the corporate one, so it names both, and not as one address;
+        // a value that does not read stays the identifier's refusal above.
         if (integrated)
         {
             if (email is null
                 || (corporate is not null && string.Equals(email.Canonical, corporate.Canonical, StringComparison.Ordinal)))
             {
-                return Result.Failure<Bound>(Named(ErrorCodes.IdentifierInvalid, "email"));
+                return Result.Failure<Bound>(Named(ErrorCodes.InvitationAddressRequired, "email"));
             }
 
             if (corporate is null)
             {
-                return Result.Failure<Bound>(Named(ErrorCodes.IdentifierInvalid, "corporateEmail"));
+                return Result.Failure<Bound>(Named(ErrorCodes.InvitationAddressRequired, "corporateEmail"));
             }
         }
         else if (corporate is not null)

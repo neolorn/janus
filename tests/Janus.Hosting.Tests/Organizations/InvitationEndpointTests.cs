@@ -83,7 +83,8 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
 
     /// <summary>
     /// 09 section 8a and REG-INV-001 AC4: an integrated-mail invitation without a
-    /// personal email is a validation error, <c>422</c>, naming the member.
+    /// personal email, without a corporate address, or naming one address as both, is
+    /// <c>422</c> <c>identity.invitation.addressrequired</c>, naming the member.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -95,10 +96,21 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
             "POST",
             PathOf(Administration),
             """{"corporateEmail":"invited@example.test"}""");
+        Answer uncorporate = await administrator.SendAsync("POST", PathOf(Administration), Personal);
+        Answer same = await administrator.SendAsync(
+            "POST",
+            PathOf(Administration),
+            """{"email":"invited@example.test","corporateEmail":"invited@example.test"}""");
 
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
-        Assert.Equal(ErrorCodes.IdentifierInvalid.ToString(), refused.Text("code"));
+        Assert.Equal(ErrorCodes.InvitationAddressRequired.ToString(), refused.Text("code"));
         Assert.Equal("email", refused.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, uncorporate.Status);
+        Assert.Equal(ErrorCodes.InvitationAddressRequired.ToString(), uncorporate.Text("code"));
+        Assert.Equal("corporateEmail", uncorporate.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, same.Status);
+        Assert.Equal(ErrorCodes.InvitationAddressRequired.ToString(), same.Text("code"));
+        Assert.Equal("email", same.Json().GetProperty("details").GetProperty("member").GetString());
         Assert.Empty(_deployment.Invitations.Held);
         Assert.Empty(_deployment.Mailboxes.Held);
     }
