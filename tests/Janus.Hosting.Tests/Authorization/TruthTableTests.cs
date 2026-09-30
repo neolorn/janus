@@ -88,6 +88,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a change to the account's own settings, by a restricted caller", Decided.Restricted),
         ("a page's record whose subject gave the consent its purpose asks", Decided.Allowed),
         ("a page's record whose subject gave no consent to its purpose", Decided.ConsentRequired),
+        ("a grant in the administrative organization, to a member of it", Decided.Allowed),
+        ("a grant in the administrative organization, to an account holding no membership of it", Decided.Denied),
     ];
 
     /// <summary>
@@ -624,9 +626,43 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     caller,
                     consented: scenario == "a page's record whose subject gave the consent its purpose asks");
 
+            case "a grant in the administrative organization, to a member of it":
+            case "a grant in the administrative organization, to an account holding no membership of it":
+                return await AdministeredAsync(
+                    deployment,
+                    managing,
+                    caller,
+                    member: scenario == "a grant in the administrative organization, to a member of it");
+
             default:
                 throw new ArgumentOutOfRangeException(nameof(scenario), scenario, "No such case.");
         }
+    }
+
+    // IDN-LIFE-009a, D-166: the caller's grant in the administrative organization,
+    // asked of that organization as an administrative operation asks it.
+    private async Task<Decided> AdministeredAsync(
+        Deployment deployment,
+        RoleName managing,
+        SubjectId caller,
+        bool member)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
+
+        if (member)
+        {
+            await deployment.MemberAsync(caller, administrative, cancellationToken);
+        }
+
+        await deployment.GrantAsync(
+            GrantSubject.Of(caller), managing, null, false, null, administrative, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .RequireAsync(AccessContext.Of(caller), Permissions.GrantRead, administrative, cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
     }
 
     // AUTHZ-GATE-005 AC1, PRIV-SENS-002 AC1: one page holding a record of a subject who

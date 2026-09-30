@@ -9279,6 +9279,8 @@ pins everything the end writes.
 not remove the account's grants in the organization, pointing at chapter 16 step 4, or
 the owner could decide that it does and reorder chapter 16.
 
+**Superseded by D-166.**
+
 ---
 
 ## 253. What an erasure does to an invitation attached to the subject

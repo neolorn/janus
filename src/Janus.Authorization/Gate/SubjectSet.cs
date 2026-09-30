@@ -16,12 +16,18 @@ namespace Janus.Authorization.Gate;
 /// </remarks>
 internal sealed class SubjectSet
 {
-    private SubjectSet(Guid[] accounts, Guid[] groups, long version, bool restricted)
+    private SubjectSet(
+        Guid[] accounts,
+        Guid[] groups,
+        long version,
+        bool restricted,
+        OrganizationId? withoutMembership)
     {
         Accounts = accounts;
         Groups = groups;
         Version = version;
         Restricted = restricted;
+        WithoutMembership = withoutMembership;
     }
 
     /// <summary>
@@ -46,19 +52,30 @@ internal sealed class SubjectSet
     public bool Restricted { get; }
 
     /// <summary>
+    /// The administrative organization, where the account holds no current membership
+    /// of it, so that nothing it holds there confers anything (IDN-LIFE-009a, D-166).
+    /// </summary>
+    public OrganizationId? WithoutMembership { get; }
+
+    /// <summary>
     /// The set an account resolves to.
     /// </summary>
     /// <param name="subject">The account.</param>
     /// <param name="groups">The groups holding it, at any depth.</param>
     /// <param name="version">The counter the set was read at.</param>
     /// <param name="restricted">Whether the account's processing is restricted.</param>
+    /// <param name="withoutMembership">
+    /// The administrative organization, where the account holds no current membership
+    /// of it, or nothing.
+    /// </param>
     /// <returns>The set.</returns>
     /// <exception cref="ArgumentNullException">The groups are absent.</exception>
     public static SubjectSet Of(
         SubjectId subject,
         IReadOnlyList<GroupId> groups,
         long version,
-        bool restricted)
+        bool restricted,
+        OrganizationId? withoutMembership = null)
     {
         ArgumentNullException.ThrowIfNull(groups);
 
@@ -66,12 +83,13 @@ internal sealed class SubjectSet
             [subject.Value],
             [.. groups.Select(group => group.Value)],
             version,
-            restricted);
+            restricted,
+            withoutMembership);
     }
 
     /// <summary>
     /// The set a principal with no account resolves to, which holds no grant at all.
     /// </summary>
     /// <returns>The empty set.</returns>
-    public static SubjectSet None() => new([], [], 0, restricted: false);
+    public static SubjectSet None() => new([], [], 0, restricted: false, withoutMembership: null);
 }

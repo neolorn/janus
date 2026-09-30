@@ -97,7 +97,10 @@ internal sealed class PermissionRule
 
         _permissions = [.. permissions.Select(permission => permission.ToString())];
         _organization = organization;
-        _subjects = subjects;
+
+        // IDN-LIFE-009a, D-166: in the administrative organization nothing confers on an
+        // account holding no current membership of it, and its grants stand.
+        _subjects = subjects.WithoutMembership == organization ? SubjectSet.None() : subjects;
         _at = at;
         _derivations = [];
     }

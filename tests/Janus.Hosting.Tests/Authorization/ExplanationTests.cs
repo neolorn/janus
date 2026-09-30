@@ -1078,17 +1078,20 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         await deployment.RegisterAsync(note, container, cancellationToken);
 
         RoleName supporting = await deployment.RoleAsync([Permissions.AuditRead], cancellationToken);
+        OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
 
         await deployment.GrantAsync(
             GrantSubject.Of(support), supporting, null, false, null, null, cancellationToken);
 
+        // IDN-LIFE-009a, D-166: the support role confers there on a member only.
+        await deployment.MemberAsync(support, administrative, cancellationToken);
         await deployment.GrantAsync(
             GrantSubject.Of(support),
             supporting,
             null,
             false,
             null,
-            await deployment.AdministrativeAsync(cancellationToken),
+            administrative,
             cancellationToken);
 
         GrantId grant = default;

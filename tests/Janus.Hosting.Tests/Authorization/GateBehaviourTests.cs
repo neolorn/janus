@@ -496,6 +496,38 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
+    /// IDN-LIFE-009a, D-166: a grant in the administrative organization confers nothing
+    /// on an account holding no current membership of it, and the same grant confers
+    /// once the account holds one.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_LIFE_009a_AnAdministrativeGrantConfersNothingWithoutAMembershipAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        RoleName role = await deployment.BeginAsync([HostPermissions.Read], cancellationToken);
+        OrganizationId administrative = await deployment.AdministrativeAsync(cancellationToken);
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+
+        await deployment.GrantAsync(
+            GrantSubject.Of(account),
+            role,
+            null,
+            false,
+            null,
+            administrative,
+            cancellationToken);
+
+        Assert.False(await HeldAsync(account, administrative));
+
+        await deployment.MemberAsync(account, administrative, cancellationToken);
+
+        Assert.True(await HeldAsync(account, administrative));
+    }
+
+    /// <summary>
     /// AUTHZ-GATE-004, OPS-ALERT-001 AC1: the refusals that name no acting subject are
     /// counted together, so a run of them raises <c>denial-spike</c> with no scope.
     /// </summary>
@@ -1669,6 +1701,21 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             WHERE condition = 'denial-spike' AND idempotency_key LIKE @key
             """,
             new { key = Alerts.Key(AlertCondition.DenialSpike, scope: null, account?.ToString()) + "@%" });
+    }
+
+    // An organization-wide check, as an administrative operation makes it.
+    private async Task<bool> HeldAsync(SubjectId account, OrganizationId organization)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+            .RequireAsync(
+                AccessContext.Of(account),
+                HostPermissions.Read,
+                organization,
+                TestContext.Current.CancellationToken);
+
+        return outcome.Match(() => true, _ => false);
     }
 
     // A refusal inside a unit of work the caller then abandons, which rolls it back.

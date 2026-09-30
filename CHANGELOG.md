@@ -1748,7 +1748,9 @@ against the public contract of LIB-API-001.
   and the takedown) is permitted only where the caller holds its permission in the
   administrative organization; a grant in any other organization does not reach it, and
   before bootstrap has marked an organization administrative every such operation is
-  refused.
+  refused. A grant in the administrative organization confers only while its holder
+  holds a current membership of it: ending that membership stops what the grant
+  confers and removes no grant.
 - The three database roles the deployment attaches credentials to. `identity_migrate`
   owns the schema and is the only role that alters it, `identity_app` reads and writes
   rows, and `identity_maintenance` executes the two audit partition functions and reads
