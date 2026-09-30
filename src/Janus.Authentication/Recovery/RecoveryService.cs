@@ -123,7 +123,7 @@ internal sealed class RecoveryService(
 
         if (delay > TimeSpan.Zero)
         {
-            return Result.Failure(ThrottleService.Refusal(time.GetUtcNow() + delay));
+            return Result.Failure(Error.Throttled(time.GetUtcNow() + delay));
         }
 
         if (channel is null)
@@ -720,7 +720,7 @@ internal sealed class RecoveryService(
 
         if (Later(Lifts(drawn, perAccount, now), Lifts(given, perApprover, now)) is DateTimeOffset lifts)
         {
-            return Result.Failure<ApprovedRecovery>(ThrottleService.Refusal(lifts));
+            return Result.Failure<ApprovedRecovery>(Error.Throttled(lifts));
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))

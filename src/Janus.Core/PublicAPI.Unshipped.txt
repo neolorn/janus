@@ -3790,6 +3790,7 @@ static Janus.Core.ErasureRequested.operator !=(Janus.Core.ErasureRequested? left
 static Janus.Core.ErasureRequested.operator ==(Janus.Core.ErasureRequested? left, Janus.Core.ErasureRequested? right) -> bool
 static Janus.Core.Error.From(Janus.Core.ErrorCode code) -> Janus.Core.Error!
 static Janus.Core.Error.From(Janus.Core.ErrorCode code, string! name, System.Text.Json.JsonElement value) -> Janus.Core.Error!
+static Janus.Core.Error.Throttled(System.DateTimeOffset retryAt) -> Janus.Core.Error!
 static Janus.Core.Error.operator !=(Janus.Core.Error? left, Janus.Core.Error? right) -> bool
 static Janus.Core.Error.operator ==(Janus.Core.Error? left, Janus.Core.Error? right) -> bool
 static Janus.Core.ErrorCode.Parse(string! value) -> Janus.Core.ErrorCode

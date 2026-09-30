@@ -1194,6 +1194,9 @@ against the public contract of LIB-API-001.
   `Retry-After` header. The progressive delay runs from the failure that earned it and
   grows when failures follow one another, so `retryAt` is the instant the next attempt
   is looked at.
+- `Error.Throttled` in `Janus.Core` builds the `auth.throttled` refusal, its one detail
+  `retryAt` the instant in UTC. Every throttle of the library answers through it, the
+  export limits and the per-source request limit included.
 - `auth.stepup.required` carries `required` (`level`, `phishingResistant`, `maxAge` in
   seconds), `outcome`, `options` and `pendingUntil` on every gated operation, as the API
   contract gives them, and nothing else.

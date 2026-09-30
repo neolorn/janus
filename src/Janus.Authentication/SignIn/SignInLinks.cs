@@ -362,7 +362,7 @@ internal sealed class SignInLinks(
 
         if (delay > TimeSpan.Zero)
         {
-            return Result.Failure(ThrottleService.Refusal(time.GetUtcNow() + delay));
+            return Result.Failure(Error.Throttled(time.GetUtcNow() + delay));
         }
 
         if (channel is null)

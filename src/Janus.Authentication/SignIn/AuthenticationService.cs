@@ -880,7 +880,7 @@ internal sealed class AuthenticationService(
             return failure;
         }
 
-        return delay > TimeSpan.Zero ? ThrottleService.Refusal(time.GetUtcNow() + delay) : null;
+        return delay > TimeSpan.Zero ? Error.Throttled(time.GetUtcNow() + delay) : null;
     }
 
     private async ValueTask<Challenge?> OpenAsync(string handle, CancellationToken cancellationToken)

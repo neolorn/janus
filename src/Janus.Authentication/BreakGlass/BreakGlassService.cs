@@ -129,7 +129,7 @@ internal sealed class BreakGlassService(
             return attempted == GlobalAttempts + 1
                 && await LimitReachedAsync(now, cancellationToken).ConfigureAwait(false) is Error unraised
                 ? Result.Failure<IssuedSession>(unraised)
-                : Result.Failure<IssuedSession>(ThrottleService.Refusal(now + GlobalWindow));
+                : Result.Failure<IssuedSession>(Error.Throttled(now + GlobalWindow));
         }
 
         var attempt = new ThrottleAttempt(origin.Address, Identifier: null);
@@ -145,7 +145,7 @@ internal sealed class BreakGlassService(
 
         if (delay > TimeSpan.Zero)
         {
-            return Result.Failure<IssuedSession>(ThrottleService.Refusal(now + delay));
+            return Result.Failure<IssuedSession>(Error.Throttled(now + delay));
         }
 
         if (BreakGlassCode.Checked(credential) is not string canonical

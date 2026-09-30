@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
@@ -103,17 +102,6 @@ internal sealed class ThrottleService(
 
         return ledger.Identify(written);
     }
-
-    /// <summary>
-    /// The refusal a standing delay produces, which says when the next attempt is
-    /// looked at and nothing about whether the account exists. Every throttle of the
-    /// library answers in this one shape, which the boundary turns into
-    /// <c>Retry-After</c> (AUTH-ABUSE-002, BFF-ABUSE-001).
-    /// </summary>
-    /// <param name="lifts">When the delay has run.</param>
-    /// <returns>The failure.</returns>
-    public static Error Refusal(DateTimeOffset lifts) =>
-        Error.From(ErrorCodes.Throttled, "retryAt", JsonSerializer.SerializeToElement(lifts));
 
     /// <summary>
     /// Counts one failed attempt against every scope it belongs to.

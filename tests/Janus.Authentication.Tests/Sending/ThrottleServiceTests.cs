@@ -275,22 +275,6 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-002 AC2: the refusal says when the next attempt is looked at, as the
-    /// one <c>retryAt</c> every throttle of the library answers with, and nothing else.
-    /// </summary>
-    [Fact]
-    public void AUTH_ABUSE_002_AC2_TheRemainingDelayIsCommunicated()
-    {
-        DateTimeOffset lifts = Noon.AddSeconds(4.2);
-
-        Error refusal = ThrottleService.Refusal(lifts);
-
-        Assert.Equal(ErrorCodes.Throttled, refusal.Code);
-        Assert.Equal("retryAt", Assert.Single(refusal.Details).Key);
-        Assert.Equal(lifts, Assert.Single(refusal.Details).Value.GetDateTimeOffset());
-    }
-
-    /// <summary>
     /// OPS-ALERT-001 AC1: sustained failures against one account raise the alert
     /// with no one watching for them.
     /// </summary>

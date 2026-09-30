@@ -77,10 +77,7 @@ internal sealed class ExportService(
         if (await SpentAsync(subject, now, cancellationToken).ConfigureAwait(false)
             is DateTimeOffset retryAt)
         {
-            return Result.Failure<SubjectExport>(Error.From(
-                ErrorCodes.Throttled,
-                "retryAt",
-                JsonSerializer.SerializeToElement(retryAt)));
+            return Result.Failure<SubjectExport>(Error.Throttled(retryAt));
         }
 
         var export = new SubjectExport(
