@@ -570,6 +570,7 @@ public static class HostingRegistration
             provider.GetRequiredService<DomainLock>(),
             provider.GetRequiredService<IInvitationStore>(),
             provider.GetRequiredService<IAccountDirectory>(),
+            provider.GetRequiredService<IIdentifierDirectory>(),
             provider.GetRequiredService<InvitationAcknowledgement>(),
             provider.GetRequiredService<MembershipEnd>(),
             provider.GetRequiredService<IMailboxStore>(),

@@ -8906,6 +8906,8 @@ carries both.
 `identity.invitation.notfound` for the 404, and say which invitation is read.
 Chapter 10 section 1.1 could add the row for `identity.invitation.notfound`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 243. How the account keeps the personal email through the membership

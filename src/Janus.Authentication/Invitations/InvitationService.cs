@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Identifiers;
 using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Organizations;
 using Janus.Authentication.Policies;
@@ -28,6 +29,9 @@ namespace Janus.Authentication.Invitations;
 /// <param name="locks">Whether the organization's domain lock admits an address.</param>
 /// <param name="invitations">Where invitations are kept.</param>
 /// <param name="accounts">Where the name of who issued an invitation is read.</param>
+/// <param name="identifiers">
+/// Where the primary email of who issued an invitation is read, where they show no name.
+/// </param>
 /// <param name="acknowledgement">What attaches the membership an invitation offers.</param>
 /// <param name="end">What ends a membership.</param>
 /// <param name="mailboxes">Where the corporate mailboxes are reserved.</param>
@@ -61,6 +65,7 @@ internal sealed class InvitationService(
     DomainLock locks,
     IInvitationStore invitations,
     IAccountDirectory accounts,
+    IIdentifierDirectory identifiers,
     InvitationAcknowledgement acknowledgement,
     MembershipEnd end,
     IMailboxStore mailboxes,
@@ -645,16 +650,21 @@ internal sealed class InvitationService(
                 .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The invitation's organization has no row.");
 
-        // The person is shown who invited them by the name that account shows, and by
-        // nothing of theirs the account does not show (REG-INV-002).
+        // 09 section 6a: the person is shown who invited them by the name that account
+        // shows, else by its primary email, and by nothing where neither reads, as for
+        // an inviter since erased.
         HeldProfile inviter = await accounts.ProfileAsync(invitation.Inviter, cancellationToken)
             .ConfigureAwait(false);
+        string? invitedBy = inviter.DisplayName?.Value
+            ?? (await identifiers.HeldAsync(invitation.Inviter, cancellationToken).ConfigureAwait(false))
+                .OfKind(IdentifierKind.Email)
+                .FirstOrDefault(email => email.IsPrimary)?.Entered;
 
         return Result.Success(new AttachedInvitation(
             invitation.Id,
             invitation.Organization,
             standing.Name,
-            inviter.DisplayName?.Value,
+            invitedBy,
             invitation.Roles,
             invitation.Documents,
             invitation.ExpiresAt));

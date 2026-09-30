@@ -731,6 +731,30 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-INV-002 and 09 section 6a: an inviter whose account shows no display name is
+    /// shown by their primary email, and by nothing where they hold none either.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_001_AnInviterWithNoDisplayNameIsShownByTheirPrimaryEmailAsync()
+    {
+        _accounts.Holds(_inviter, new HeldProfile(DisplayName: null, LegalName: null, DateOfBirth: null, PhotoUpdatedAt: null));
+
+        string token = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+        var holder = SubjectId.New(_randomness);
+
+        Accepted(await OpenAsync(holder, token));
+
+        AttachedInvitation unnamed = Accepted(await AttachedAsync(holder));
+
+        _ = _identifiers.Verified(_inviter, IdentifierKind.Email, "inviter@staff.test");
+
+        AttachedInvitation addressed = Accepted(await AttachedAsync(holder));
+
+        Assert.Null(unnamed.InvitedBy);
+        Assert.Equal("inviter@staff.test", addressed.InvitedBy);
+    }
+
+    /// <summary>
     /// REG-INV-001 AC2 and AC3, IDN-LIFE-009a AC1: until the person acknowledges, the
     /// account holds no membership of the organization and no grant; acknowledging
     /// attaches the membership carrying the documents at the versions shown, grants the
@@ -1419,6 +1443,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             new DomainLock(_memberships, _configuration, _domains),
             _invitations,
             _accounts,
+            _identifiers,
             new InvitationAcknowledgement(
                 _invitations,
                 _organizations,
