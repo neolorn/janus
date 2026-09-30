@@ -158,6 +158,7 @@ internal sealed class IdentifierService(
     /// <inheritdoc/>
     public async ValueTask<Result> VerifyAsync(
         AccessContext context,
+        SessionId session,
         IdentifierId identifier,
         [NeverLogged] string code,
         string source,
@@ -179,7 +180,7 @@ internal sealed class IdentifierService(
             return Result.Failure(restricted);
         }
 
-        return await ProvedAsync(subject, identifier, code, source, cancellationToken)
+        return await ProvedAsync(subject, session, identifier, code, source, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -197,14 +198,16 @@ internal sealed class IdentifierService(
         return await enrolments.FindAsync(enrolment, cancellationToken).ConfigureAwait(false)
             is not EnrolmentSession opened
             ? Result.Failure(Error.From(ErrorCodes.EnrolmentTokenInvalid))
-            : await ProvedAsync(opened.Subject, identifier, code, source, cancellationToken)
+            : await ProvedAsync(opened.Subject, completing: null, identifier, code, source, cancellationToken)
                 .ConfigureAwait(false);
     }
 
     // The code is judged the same way whoever presented it: what differs is only how
-    // the account it belongs to was established.
+    // the account it belongs to was established, and the session, where there is one,
+    // that a replacement it completes keeps (IDN-LIFE-008).
     private async ValueTask<Result> ProvedAsync(
         SubjectId subject,
+        SessionId? completing,
         IdentifierId identifier,
         [NeverLogged] string code,
         string source,
@@ -274,7 +277,7 @@ internal sealed class IdentifierService(
 
         staged.Verify(now);
 
-        Result settled = await SettleAsync(waiting, now, source, cancellationToken)
+        Result settled = await SettleAsync(waiting, completing, now, source, cancellationToken)
             .ConfigureAwait(false);
 
         if (settled.Match(() => (Error?)null, error => error) is Error unsettled)
@@ -328,7 +331,9 @@ internal sealed class IdentifierService(
 
             waiting.ConfirmOld(now);
 
-            Result settled = await SettleAsync(waiting, now, source, cancellationToken)
+            // IDN-LIFE-008 AC1: the displaced address confirms from no session of the
+            // account, so a replacement it completes keeps none.
+            Result settled = await SettleAsync(waiting, completing: null, now, source, cancellationToken)
                 .ConfigureAwait(false);
 
             if (settled.Match(() => (Error?)null, error => error) is Error unsettled)
@@ -371,7 +376,7 @@ internal sealed class IdentifierService(
 
         staged.Verify(now);
 
-        Result landed = await SettleAsync(waiting, now, source, cancellationToken)
+        Result landed = await SettleAsync(waiting, session, now, source, cancellationToken)
             .ConfigureAwait(false);
 
         if (landed.Match(() => (Error?)null, error => error) is Error unlanded)
@@ -1455,10 +1460,11 @@ internal sealed class IdentifierService(
     }
 
     // What a completed verification does to the account: an add proves the identifier
-    // it wrote, a replace swaps the value of the one it named and holds the displaced
-    // value for the undo.
+    // it wrote, a replace swaps the value of the one it named, keeps the session it
+    // completed under and holds the displaced value for the undo.
     private async ValueTask<Result> SettleAsync(
         PendingVerification waiting,
+        SessionId? completing,
         DateTimeOffset now,
         string source,
         CancellationToken cancellationToken)
@@ -1474,7 +1480,11 @@ internal sealed class IdentifierService(
 
         if (waiting.IsReplacement)
         {
-            await SwapAsync(waiting, now, source, cancellationToken).ConfigureAwait(false);
+            if ((await SwapAsync(waiting, completing, now, source, cancellationToken).ConfigureAwait(false))
+                .Match(() => (Error?)null, error => error) is Error unswapped)
+            {
+                return Result.Failure(unswapped);
+            }
         }
         else
         {
@@ -1502,8 +1512,9 @@ internal sealed class IdentifierService(
         return Result.Success();
     }
 
-    private async ValueTask SwapAsync(
+    private async ValueTask<Result> SwapAsync(
         PendingVerification waiting,
+        SessionId? completing,
         DateTimeOffset now,
         string source,
         CancellationToken cancellationToken)
@@ -1520,16 +1531,21 @@ internal sealed class IdentifierService(
 
         StagedIdentity staged = waiting.Staged;
 
-        if (failure is not null || held.Find(staged.Id) is not HeldIdentifier displaced)
+        if (failure is not null)
         {
-            return;
+            return Result.Failure(failure);
+        }
+
+        if (held.Find(staged.Id) is not HeldIdentifier displaced)
+        {
+            return Result.Success();
         }
 
         var undo = OpaqueToken.Draw(randomness);
 
         // IDN-LIFE-008 AC1: the value that signed in is gone, so every session but the
-        // one that staged the change ends with it.
-        await EndOthersAsync(waiting.Subject, waiting.Browser, now, cancellationToken)
+        // one the change completes under ends with it, the one that staged it included.
+        await EndOthersAsync(waiting.Subject, completing, now, cancellationToken)
             .ConfigureAwait(false);
 
         await directory
@@ -1554,5 +1570,7 @@ internal sealed class IdentifierService(
                 undo.Value,
                 cancellationToken)
             .ConfigureAwait(false);
+
+        return Result.Success();
     }
 }

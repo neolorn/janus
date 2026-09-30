@@ -41,9 +41,12 @@ public interface IIdentifiers
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Proves an identifier with the code its message carried.
+    /// Proves an identifier with the code its message carried. Where the proof completes
+    /// a replacement, the session it is presented under is the one the account keeps,
+    /// and every other session ends (IDN-LIFE-008).
     /// </summary>
     /// <param name="context">Who is asking.</param>
+    /// <param name="session">The session the code is presented under.</param>
     /// <param name="identifier">Which identifier.</param>
     /// <param name="code">The code typed in.</param>
     /// <param name="source">The address the request came from.</param>
@@ -51,6 +54,7 @@ public interface IIdentifiers
     /// <returns>Success, or the refusal and its code.</returns>
     ValueTask<Result> VerifyAsync(
         AccessContext context,
+        SessionId session,
         IdentifierId identifier,
         [NeverLogged] string code,
         string source,

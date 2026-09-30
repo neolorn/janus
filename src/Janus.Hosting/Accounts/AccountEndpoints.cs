@@ -318,14 +318,18 @@ internal static class AccountEndpoints
         string source = RequestOrigin.Source(context.Request);
 
         // API-LAND-001: a link merely opened, or opened somewhere else, changes
-        // nothing and is answered with the code to type instead.
+        // nothing and is answered with the code to type instead. IDN-LIFE-008: only a
+        // press from the browser that staged the change completes it under a session,
+        // so only that session is kept and rotated; the displaced address's press keeps
+        // none.
         if (request.LinkToken is { Length: > 0 } token)
         {
             Result<LinkLanding> landed = await identifiers
                 .LandAsync(browser.Live?.Id, token, request.Press, source, cancellationToken)
                 .ConfigureAwait(false);
 
-            return browser.Live is Session pressing && landed.Match(landing => landing.Verified, _ => false)
+            return browser.Live is Session pressing
+                && landed.Match(landing => landing.Verified && landing.SameBrowser, _ => false)
                 ? await RotatedAsync(sessions, cookies, pressing, context, Answers.Of(landed, Landed), cancellationToken)
                     .ConfigureAwait(false)
                 : Answers.Of(landed, Landed);
@@ -336,7 +340,7 @@ internal static class AccountEndpoints
             return Answers.Malformed("code");
         }
 
-        if (browser.Context is not AccessContext holder)
+        if (browser.Live is not Session typing)
         {
             return Opened(browser) is not EnrolmentSessionId enrolment
                 ? Nobody()
@@ -348,10 +352,10 @@ internal static class AccountEndpoints
         }
 
         Result verified = await identifiers
-            .VerifyAsync(holder, new IdentifierId(id), code, source, cancellationToken)
+            .VerifyAsync(browser.Asking, typing.Id, new IdentifierId(id), code, source, cancellationToken)
             .ConfigureAwait(false);
 
-        return browser.Live is Session typing && verified.Match(() => true, _ => false)
+        return verified.Match(() => true, _ => false)
             ? await RotatedAsync(sessions, cookies, typing, context, Nothing, cancellationToken)
                 .ConfigureAwait(false)
             : Answers.Of(verified, Nothing);

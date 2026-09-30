@@ -534,10 +534,85 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         Assert.Null((await _sessions.FindAsync(elsewhere, TestContext.Current.CancellationToken))?.EndedAt);
 
-        await VerifiedAsync(email);
+        await VerifiedAsync(email, asking);
 
         Assert.Equal(Second, Named(await HeldAsync(), Second).Canonical);
         Assert.Null((await _sessions.FindAsync(asking, TestContext.Current.CancellationToken))?.EndedAt);
+        Assert.NotNull((await _sessions.FindAsync(elsewhere, TestContext.Current.CancellationToken))?.EndedAt);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-008 AC1: the session kept is the one the replacement completes under,
+    /// not the one that staged it, so a code typed in another session of the account
+    /// keeps that session alone and ends the staging one with the rest.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_008_AC1_AReplacementCompletedInAnotherSessionKeepsThatSessionAloneAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+
+        SessionId elsewhere = Stepped();
+        SessionId staging = Stepped();
+        SessionId completing = Stepped();
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            staging,
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        await VerifiedAsync(email, completing);
+
+        Assert.Equal(Second, Named(await HeldAsync(), Second).Canonical);
+        Assert.Null((await _sessions.FindAsync(completing, TestContext.Current.CancellationToken))?.EndedAt);
+        Assert.NotNull((await _sessions.FindAsync(staging, TestContext.Current.CancellationToken))?.EndedAt);
+        Assert.NotNull((await _sessions.FindAsync(elsewhere, TestContext.Current.CancellationToken))?.EndedAt);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-008 AC1: a replacement the displaced address's confirmation completes
+    /// completes under no session of the account, so every session ends, the one that
+    /// staged it and typed the new code included.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_008_AC1_AReplacementTheOldAddressConfirmsEndsEverySessionAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        SessionId elsewhere = Stepped();
+        SessionId asking = Stepped();
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            asking,
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        await VerifiedAsync(email, asking);
+
+        Assert.Null((await _sessions.FindAsync(asking, TestContext.Current.CancellationToken))?.EndedAt);
+
+        SendRequest asked = _notifications.Mail.Last(
+            sent => sent.Message is MessageKind.IdentifierChangeConfirm);
+
+        Accepted(await Service.LandAsync(
+            session: null,
+            asked.Values["token"],
+            press: true,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(Second, Named(await HeldAsync(), Second).Canonical);
+        Assert.NotNull((await _sessions.FindAsync(asking, TestContext.Current.CancellationToken))?.EndedAt);
         Assert.NotNull((await _sessions.FindAsync(elsewhere, TestContext.Current.CancellationToken))?.EndedAt);
     }
 
@@ -1067,13 +1142,17 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private PendingVerification Waiting(IdentifierId identifier) =>
         _pending.All.Single(pending => pending.Identifier == identifier);
 
-    private async Task VerifiedAsync(IdentifierId identifier)
+    private async Task VerifiedAsync(IdentifierId identifier) =>
+        await VerifiedAsync(identifier, Stepped());
+
+    private async Task VerifiedAsync(IdentifierId identifier, SessionId session)
     {
         PendingVerification waiting = _pending.All.Single(pending =>
             pending.Identifier == identifier);
 
         Accepted(await Service.VerifyAsync(
             Acting,
+            session,
             identifier,
             VerificationCode.Read(waiting.Staged.Code!),
             Source,

@@ -15025,6 +15025,8 @@ is kept and is not rotated, since its browser is not there to receive a new secr
 other sessions when it applies, and that the rotation is of the session that completes
 the change.
 
+**Superseded by D-166.**
+
 ---
 
 ## 364. A test class uses a container when it takes one as a fixture or constructs one

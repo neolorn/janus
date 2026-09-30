@@ -192,6 +192,69 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// BFF-SESS-004 AC2, IDN-LIFE-008 AC1: a replacement staged in one session and
+    /// completed by the code typed in another keeps the completing session, which
+    /// answers to a new secret from then on, and ends the staging one.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_SESS_004_AC2_TheSessionThatCompletesAReplacementAnswersToItsNewSecretAsync()
+    {
+        const string replaced = "replaced@example.test";
+
+        _deployment.Configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        Browser staging = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = Registered();
+        Guid changing = (await _deployment.Identifiers.HeldAsync(subject, TestContext.Current.CancellationToken))
+            .All
+            .Single(held => held.Kind is IdentifierKind.Email)
+            .Id
+            .Value;
+
+        Assert.Equal(
+            StatusCodes.Status202Accepted,
+            (await staging.SendAsync(
+                "PUT",
+                "/account/identifiers/" + changing + "/replace",
+                ("value", replaced))).Status);
+
+        var secret = OpaqueToken.Draw(_randomness);
+        var token = OpaqueToken.Draw(_randomness);
+        var completing = new Browser(_deployment);
+
+        await _deployment.Sessions.AddAsync(
+            Session.Begin(
+                SessionId.New(_deployment.Clock),
+                subject,
+                new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
+                new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")) { Location = Somewhere },
+                _deployment.Clock.GetUtcNow(),
+                TimeSpan.FromDays(1),
+                TimeSpan.FromDays(30),
+                breakGlassReason: null),
+            secret.Fingerprint(),
+            token.Fingerprint(),
+            TestContext.Current.CancellationToken);
+
+        completing.Hold(BrowserCookies.Session, secret.Value);
+        completing.Hold(BrowserCookies.Csrf, token.Value);
+
+        Answer verified = await completing.SendAsync(
+            "POST",
+            "/account/identifiers/" + changing + "/verify",
+            ("code", Flow.Code(_deployment, IdentifierKind.Email)));
+
+        Assert.Equal(StatusCodes.Status204NoContent, verified.Status);
+        Assert.NotEqual(secret.Value, completing.Cookies[BrowserCookies.Session]);
+        Assert.Null(await _deployment.Sessions.FindByFingerprintAsync(
+            secret.Fingerprint(),
+            TestContext.Current.CancellationToken));
+        Assert.Equal(StatusCodes.Status200OK, (await completing.SendAsync("GET", "/account")).Status);
+        Assert.Equal(StatusCodes.Status401Unauthorized, (await staging.SendAsync("GET", "/account")).Status);
+    }
+
+    /// <summary>
     /// FE-ACCT-001 AC4: the declaration decides what a preference set holds, so a key
     /// the host never declared is neither answered with nor taken.
     /// </summary>
