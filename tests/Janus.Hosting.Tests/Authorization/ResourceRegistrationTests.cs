@@ -155,7 +155,7 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
         ]));
 
         Assert.Equal(2, await AncestryOfAsync(document));
-        Assert.Equal("containedIn", Member(refused));
+        Assert.Equal("containedIn", Invalid(refused));
         Assert.Equal(0, await RowsOfAsync(early));
         Assert.Equal(0, await RowsOfAsync(late));
     }
@@ -183,9 +183,9 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
 
         Assert.Equal(
             "containedIn",
-            Member(Refused(await RegisteredAsync(
+            Invalid(Refused(await RegisteredAsync(
                 new ResourceRegistration(Reference(Document), ours.Organization, elsewhere, ours.Account)))));
-        Assert.Equal("containedIn", Member(Refused(await MovedAsync(document, elsewhere))));
+        Assert.Equal("containedIn", Invalid(Refused(await MovedAsync(document, elsewhere))));
     }
 
     /// <summary>
@@ -209,17 +209,72 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
 
         Assert.Equal(
             "containedIn",
-            Member(Refused(await RegisteredAsync(
+            Invalid(Refused(await RegisteredAsync(
                 new ResourceRegistration(Reference(Document), written.Organization, note, written.Account)))));
         Assert.Equal(
             "containedIn",
-            Member(Refused(await RegisteredAsync(
+            Invalid(Refused(await RegisteredAsync(
                 new ResourceRegistration(Reference(Document), written.Organization, null, written.Account)))));
         Assert.Equal(
             "containedIn",
-            Member(Refused(await RegisteredAsync(
+            Invalid(Refused(await RegisteredAsync(
                 new ResourceRegistration(Reference(Workspace), written.Organization, workspace, null)))));
-        Assert.Equal("containedIn", Member(Refused(await MovedAsync(note, null))));
+        Assert.Equal("containedIn", Invalid(Refused(await MovedAsync(note, null))));
+    }
+
+    /// <summary>
+    /// AUTHZ-INHERIT-002, D-166: a type outside the vocabulary the model fixes is a
+    /// request that cannot be read, at a registration and at a move; every refusal on
+    /// what a registration means names its member as invalid; and a batch refused for
+    /// its last record writes none of those before it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_INHERIT_002_ARefusalOnMeaningIsInvalidAndARefusedBatchWritesNothingAsync()
+    {
+        Case ours = await BeginAsync();
+        Case theirs = await BeginAsync();
+        ResourceReference workspace = Reference(Workspace);
+        ResourceReference elsewhere = Reference(Workspace);
+        ResourceReference first = Reference(Document);
+        var undeclared = ResourceType.Parse("journey");
+
+        Ok(await RegisteredManyAsync(
+        [
+            new ResourceRegistration(workspace, ours.Organization, null, null),
+            new ResourceRegistration(elsewhere, theirs.Organization, null, null),
+        ]));
+
+        Assert.Equal(
+            "resourceType",
+            Malformed(Refused(await RegisteredAsync(
+                new ResourceRegistration(Reference(undeclared), ours.Organization, null, null)))));
+        Assert.Equal("resourceType", Malformed(Refused(await MovedAsync(Reference(undeclared), workspace))));
+        Assert.Equal(
+            "resourceId",
+            Invalid(Refused(await RegisteredAsync(
+                new ResourceRegistration(workspace, ours.Organization, null, null)))));
+        Assert.Equal("resourceId", Invalid(Refused(await MovedAsync(Reference(Document), workspace))));
+        Assert.Equal(
+            "containedIn",
+            Invalid(Refused(await RegisteredAsync(
+                new ResourceRegistration(Reference(Document), ours.Organization, Reference(Workspace), ours.Account)))));
+        Assert.Equal(
+            "containedIn",
+            Invalid(Refused(await RegisteredAsync(
+                new ResourceRegistration(Reference(Document), ours.Organization, elsewhere, ours.Account)))));
+        Assert.Equal(
+            "containedIn",
+            Invalid(Refused(await RegisteredAsync(
+                new ResourceRegistration(Reference(Document), ours.Organization, null, ours.Account)))));
+        Assert.Equal(
+            "subject",
+            Invalid(Refused(await RegisteredManyAsync(
+            [
+                new ResourceRegistration(first, ours.Organization, workspace, ours.Account),
+                new ResourceRegistration(Reference(Document), ours.Organization, workspace, null),
+            ]))));
+        Assert.Equal(0, await RowsOfAsync(first));
     }
 
     /// <summary>
@@ -237,16 +292,16 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
 
         Assert.Equal(
             "resourceType",
-            Member(Refused(await RegisteredAsync(new ResourceRegistration(
+            Malformed(Refused(await RegisteredAsync(new ResourceRegistration(
                 Reference(ResourceType.Parse("journey")),
                 written.Organization,
                 null,
                 null)))));
         Assert.Equal(
             "resourceId",
-            Member(Refused(await RegisteredAsync(
+            Invalid(Refused(await RegisteredAsync(
                 new ResourceRegistration(workspace, written.Organization, null, null)))));
-        Assert.Equal("resourceId", Member(Refused(await MovedAsync(Reference(Document), workspace))));
+        Assert.Equal("resourceId", Invalid(Refused(await MovedAsync(Reference(Document), workspace))));
     }
 
     /// <summary>
@@ -275,15 +330,15 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
 
         Assert.Equal(
             "subject",
-            Member(Refused(await RegisteredAsync(
+            Invalid(Refused(await RegisteredAsync(
                 new ResourceRegistration(Reference(Document), written.Organization, workspace, null)))));
         Assert.Equal(
             "subject",
-            Member(Refused(await RegisteredAsync(
+            Invalid(Refused(await RegisteredAsync(
                 new ResourceRegistration(Reference(Document), written.Organization, workspace, nobody)))));
         Assert.Equal(
             "subject",
-            Member(Refused(await RegisteredManyAsync(
+            Invalid(Refused(await RegisteredManyAsync(
             [
                 new ResourceRegistration(Reference(Document), written.Organization, workspace, written.Account),
                 new ResourceRegistration(Reference(Document), written.Organization, workspace, leaving),
@@ -305,9 +360,16 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
     private static Error Refused(Result outcome) =>
         outcome.Match<Error>(() => throw new InvalidOperationException("The call was not refused."), error => error);
 
-    private static string? Member(Error refused)
+    private static string? Malformed(Error refused)
     {
         Assert.Equal(ErrorCodes.RequestMalformed, refused.Code);
+
+        return refused.Details["member"].GetString();
+    }
+
+    private static string? Invalid(Error refused)
+    {
+        Assert.Equal(ErrorCodes.RequestInvalid, refused.Code);
 
         return refused.Details["member"].GetString();
     }

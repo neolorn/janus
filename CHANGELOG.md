@@ -30,11 +30,13 @@ against the public contract of LIB-API-001.
 - `IResources` in `Janus.Core`: a host registers each record it creates, many at once
   for an import, and moves one, inside its own unit of work, and the ancestry the
   permission filter reads is written in the same transaction. A record is placed only in
-  a container of the type its own is declared contained in and of the same organization;
-  anything else is refused as `api.request.malformed` naming `resourceType`,
-  `resourceId` or `containedIn`, and a refused batch writes nothing. A record of a
-  sensitive type names a subject holding an account that is neither being deleted nor
-  deleted, or it is refused naming `subject`.
+  a container of the type its own is declared contained in and of the same organization.
+  A type the model does not declare is refused as `api.request.malformed` naming
+  `resourceType`; a record registered already or not registered to move (`resourceId`)
+  and a container that cannot hold it (`containedIn`) are refused as
+  `api.request.invalid`, and a refused batch writes nothing. A record of a sensitive
+  type names a subject holding an account that is neither being deleted nor deleted, or
+  it is refused as `api.request.invalid` naming `subject`.
 - A person signs in, registers or links an identity with Google or Apple.
   `GET /auth/providers/{provider}` with `intent` of `signin`, `register` or `link` and a
   local `returnTo` sends the browser to the provider with a single-use state and nonce,
