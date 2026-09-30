@@ -4798,6 +4798,8 @@ the moment the window runs out the same offer stages a verification.
 unavailable to other accounts until the undo window ends, and that an account offering it
 meanwhile is answered as REG-IDENT-001 AC2 answers an account offering a held value.
 
+**Superseded by D-166.**
+
 ---
 
 ## 142. A dead cookie leaves the request anonymous and one stage requires a session

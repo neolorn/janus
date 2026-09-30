@@ -1757,8 +1757,12 @@ against the public contract of LIB-API-001.
   one before it has finished with 409 `identity.registration.incomplete`, a confirmation
   while a staged identifier is unverified included. An address or a number that already
   belongs to somebody else is answered exactly as a fresh one is, and its holder is told
-  once that somebody tried. A registration that is abandoned leaves nothing behind. A
-  browser that already holds a session and asks to register is refused with 409
+  once that somebody tried. An address held out of reach for its owner's undo is
+  answered the same, with nothing sent and nobody told, is not vouched for by a
+  provider, is refused as a held one where an invitation binds it, and one taken or
+  reserved since it was staged ends the registration at the terms step with no account
+  created. A registration that is abandoned leaves nothing behind. A browser that
+  already holds a session and asks to register is refused with 409
   `identity.registration.signedin`; nothing is staged for it, and the frontend navigates
   to the account application.
 - An identifier is verified by the code in the message or by pressing the link. The

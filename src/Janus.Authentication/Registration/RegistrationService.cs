@@ -204,8 +204,10 @@ internal sealed class RegistrationService(
         {
             StagedIdentity staged = Locked(IdentifierKind.Email, email);
 
-            if (await directory.OwnerAsync(IdentifierKind.Email, staged.Canonical, cancellationToken)
-                    .ConfigureAwait(false) is not null)
+            // REG-IDENT-006: an address held out of reach for its owner's undo is
+            // refused as one an account holds, so the undo still finds it free.
+            if (await TakenAsync(IdentifierKind.Email, staged.Canonical, cancellationToken)
+                    .ConfigureAwait(false))
             {
                 return Result.Failure<Invitation>(Error.From(ErrorCodes.InvitationIdentifierMismatch));
             }
@@ -958,6 +960,27 @@ internal sealed class RegistrationService(
             return Result.Failure<RegistrationOutcome>(notBegun);
         }
 
+        // REG-SESS-005 AC4: a staged identifier another account took, or that became
+        // reserved for an undo, since it was staged ends the session here, before the
+        // account is written, and the step is answered as an expired session.
+        foreach (StagedIdentity staged in live.Identifiers)
+        {
+            if (!await TakenAsync(staged.Kind, staged.Canonical, cancellationToken).ConfigureAwait(false))
+            {
+                continue;
+            }
+
+            await sessions.RemoveAsync(live.Id, cancellationToken).ConfigureAwait(false);
+
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error unended)
+            {
+                return Result.Failure<RegistrationOutcome>(unended);
+            }
+
+            return Result.Failure<RegistrationOutcome>(Error.From(ErrorCodes.SessionExpired));
+        }
+
         live.AcceptTerms(termsVersion, noticeVersion);
 
         // IDN-ATTR-001: registration settles the account's language from the locale
@@ -1705,8 +1728,8 @@ internal sealed class RegistrationService(
         }
 
         bool vouched = address.Operated
-            && await directory.OwnerAsync(IdentifierKind.Email, canonical, cancellationToken)
-                .ConfigureAwait(false) is null;
+            && !await TakenAsync(IdentifierKind.Email, canonical, cancellationToken)
+                .ConfigureAwait(false);
 
         var staged = StagedIdentity.Of(
             IdentifierId.New(time),
@@ -1748,9 +1771,10 @@ internal sealed class RegistrationService(
         return Result.Success(State(session));
     }
 
-    // The two cases are one path: the lookup decides only whether the code goes to
-    // the person registering or the holder is told instead, and the caller cannot
-    // tell which happened (REG-SESS-005, AUTH-ABUSE-003).
+    // The three cases are one path: the lookup decides only whether the code goes to
+    // the person registering, the holder is told instead, or, for a value held out of
+    // reach for its owner's undo, nothing is sent and nobody is told; the caller cannot
+    // tell which happened (REG-SESS-005, REG-IDENT-006, AUTH-ABUSE-003).
     private async ValueTask<Error?> DispatchAsync(
         RegistrationSession session,
         StagedIdentity staged,
@@ -1760,10 +1784,31 @@ internal sealed class RegistrationService(
             .OwnerAsync(staged.Kind, staged.Canonical, cancellationToken)
             .ConfigureAwait(false);
 
-        return owner is SubjectId holder
-            ? await TellHolderAsync(session, staged, holder, cancellationToken).ConfigureAwait(false)
-            : await SendCodeAsync(session, staged, cancellationToken).ConfigureAwait(false);
+        if (owner is SubjectId holder)
+        {
+            return await TellHolderAsync(session, staged, holder, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (await directory
+                .IsReservedAsync(staged.Kind, staged.Canonical, time.GetUtcNow(), cancellationToken)
+                .ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        return await SendCodeAsync(session, staged, cancellationToken).ConfigureAwait(false);
     }
+
+    // Whether a value belongs to an account or is held out of reach for an undo, which
+    // registration answers alike (REG-SESS-005, REG-IDENT-006).
+    private async ValueTask<bool> TakenAsync(
+        IdentifierKind kind,
+        string canonical,
+        CancellationToken cancellationToken) =>
+        await directory.OwnerAsync(kind, canonical, cancellationToken).ConfigureAwait(false) is not null
+        || await directory
+            .IsReservedAsync(kind, canonical, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
 
     private async ValueTask<Error?> SendCodeAsync(
         RegistrationSession session,

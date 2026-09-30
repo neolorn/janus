@@ -48,6 +48,59 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     public async ValueTask DisposeAsync() => await _deployment.DisposeAsync();
 
     /// <summary>
+    /// REG-IDENT-006 AC2, REG-SESS-005: an address its owner removed is held out of
+    /// reach for the undo, so a registration that tries it meanwhile is answered as for
+    /// a held one, sent nothing, and the owner's undo then restores the address.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AC2_TheUndoRestoresAnAddressARegistrationTriedToTakeAsync()
+    {
+        const string second = "second@example.test";
+
+        _deployment.Templates.Set(
+            MessageKind.IdentifierRemoved,
+            SendKind.Email,
+            "en",
+            new MessageTemplate("removed", "{token}"));
+
+        Browser owner = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        Guid going = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, second).Value;
+
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await owner.SendAsync("DELETE", "/account/identifiers/" + going)).Status);
+
+        string undo = _deployment.Mail.Taken
+            .Last(sent => string.Equals(sent.Subject, "removed", StringComparison.Ordinal))
+            .Body;
+        int sent = _deployment.Mail.Taken.Count;
+
+        Browser other = await Flow.BegunAsync(_deployment);
+
+        _ = await other.SendAsync("PUT", "/register/age", ("dateOfBirth", "1990-01-01"));
+
+        Answer staged = await other.SendAsync("PUT", "/register/email", ("value", second));
+
+        Assert.Equal(StatusCodes.Status202Accepted, staged.Status);
+        Assert.Equal(sent, _deployment.Mail.Taken.Count);
+
+        Answer restored = await owner.SendAsync(
+            "POST",
+            "/account/identifiers/" + going + "/undo",
+            ("linkToken", undo));
+
+        Assert.Equal(StatusCodes.Status204NoContent, restored.Status);
+        Assert.Equal(
+            subject,
+            await _deployment.Identifiers.OwnerAsync(
+                IdentifierKind.Email,
+                second,
+                TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// INT-MAIL-006 AC2: a customer who registers is given no mailbox: none is
     /// reserved, none is written down, and nothing reaches the mail server.
     /// </summary>

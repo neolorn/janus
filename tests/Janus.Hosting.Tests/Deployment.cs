@@ -147,6 +147,7 @@ internal sealed class Deployment : IAsyncDisposable
         builder.Logging.SetMinimumLevel(logging).AddProvider(Logs);
 
         Signals = new RegistrationSignalsInMemory(Clock);
+        Directory = new RegistrationDirectoryInMemory(Identifiers);
         Grants = new OidcAuthorizationStoreInMemory(Tokens);
         Provider = new ProviderInMemory(this);
         Organizations = new Janus.Authentication.Tests.Organizations.OrganizationsInMemory(Memberships);
@@ -292,9 +293,10 @@ internal sealed class Deployment : IAsyncDisposable
     public RegistrationSignalsInMemory Signals { get; }
 
     /// <summary>
-    /// The accounts registration created.
+    /// The accounts registration created, over the reservations the accounts' removed
+    /// identifiers hold.
     /// </summary>
-    public RegistrationDirectoryInMemory Directory { get; } = new();
+    public RegistrationDirectoryInMemory Directory { get; }
 
     /// <summary>
     /// The pre-authentication sessions as they stand.

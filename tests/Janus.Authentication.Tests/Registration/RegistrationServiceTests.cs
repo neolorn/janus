@@ -640,6 +640,80 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-006 AC2, REG-SESS-005: an address held out of reach for its owner's
+    /// undo is answered as a held one, field for field as a fresh one, with no code
+    /// drawn, nothing staged that can verify, and nobody told.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_006_AC2_AReservedAddressIsAnsweredAtRegistrationAsAHeldOneIsAsync()
+    {
+        RegistrationSessionId fresh = await AgedAsync();
+        RegistrationSessionId reserved = await AgedAsync();
+
+        RegistrationState first = Ok(await Service.StageAsync(
+            fresh,
+            IdentifierKind.Email,
+            Address,
+            TestContext.Current.CancellationToken));
+
+        int sent = _notifications.Mail.Count;
+
+        _directory.Reserved(IdentifierKind.Email, Address, Noon + TimeSpan.FromDays(7));
+
+        Later();
+
+        RegistrationState second = Ok(await Service.StageAsync(
+            reserved,
+            IdentifierKind.Email,
+            Address,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(first.Step, second.Step);
+        Assert.Equal(first.ExpiresAt, second.ExpiresAt);
+
+        StagedIdentifier one = Assert.Single(first.Identifiers);
+        StagedIdentifier two = Assert.Single(second.Identifiers);
+
+        Assert.Equal(one with { Id = two.Id }, two);
+        Assert.Null(Identity(reserved, IdentifierKind.Email).Code);
+        Assert.Null(Identity(reserved, IdentifierKind.Email).Link);
+        Assert.Equal(sent, _notifications.Mail.Count);
+    }
+
+    /// <summary>
+    /// REG-SESS-005 AC4: an address another account takes after it was staged ends the
+    /// session at the terms step, answered as an expired session, and no account is
+    /// created.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_005_AC4_AnAddressTakenSinceItWasStagedEndsTheSessionAtTheTermsAsync()
+    {
+        RegistrationSessionId session = await SecuredAsync();
+
+        _directory.Held(IdentifierKind.Email, Address, SubjectId.New(_randomness));
+
+        Assert.Equal(ErrorCodes.SessionExpired, Refused(await AcceptedAsync(session)));
+        Assert.Empty(_directory.Created);
+        Assert.Empty(_sessions.All);
+    }
+
+    /// <summary>
+    /// REG-SESS-005 AC4, REG-IDENT-006: an address that becomes reserved for an undo
+    /// after it was staged ends the session at the terms step the same way.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_005_AC4_AnAddressReservedSinceItWasStagedEndsTheSessionAtTheTermsAsync()
+    {
+        RegistrationSessionId session = await SecuredAsync();
+
+        _directory.Reserved(IdentifierKind.Email, Address, _clock.GetUtcNow() + TimeSpan.FromDays(7));
+
+        Assert.Equal(ErrorCodes.SessionExpired, Refused(await AcceptedAsync(session)));
+        Assert.Empty(_directory.Created);
+        Assert.Empty(_sessions.All);
+    }
+
+    /// <summary>
     /// REG-SESS-005 AC2: what reaches the holder carries neither the code nor the
     /// link, so the deployment's template has nothing to put either in.
     /// </summary>
@@ -1612,6 +1686,23 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     public async Task REG_INV_002_ABoundEmailAnAccountHoldsOpensNoRegistrationAsync()
     {
         _directory.Held(IdentifierKind.Email, Address, SubjectId.New(_randomness));
+
+        string token = Issued(email: Address);
+
+        Assert.Equal(ErrorCodes.InvitationIdentifierMismatch, Refused(await InvitedAsync(token)));
+        Assert.Empty(_sessions.All);
+        Assert.True(_invitations.Held.Single().Opens(_clock.GetUtcNow()));
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 AC2, REG-INV-002: an email the invitation binds that is held out of
+    /// reach for its owner's undo is refused as a held one; the invitation is not spent
+    /// and no registration is opened.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_006_AC2_ABoundEmailReservedForAnUndoOpensNoRegistrationAsync()
+    {
+        _directory.Reserved(IdentifierKind.Email, Address, Noon + TimeSpan.FromDays(7));
 
         string token = Issued(email: Address);
 
