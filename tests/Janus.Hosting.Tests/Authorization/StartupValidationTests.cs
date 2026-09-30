@@ -511,6 +511,46 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// CONV-DESIGN-007 AC5, D-176: the mail server in use is chosen once, as the
+    /// deployment starts: the host's own where it registered one, and none where it
+    /// registered none and the adapter's endpoint is empty. Asked before the start chose,
+    /// it is a fault.
+    /// </summary>
+    /// <param name="registered">Whether the host registers a mail server of its own.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task CONV_DESIGN_007_AC5_TheMailServerInUseIsChosenAtTheStartAsync(bool registered)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using IHost deployment = Deployed(mail: registered, mailClient: registered);
+        IMailServerInUse inUse = deployment.Services.GetRequiredService<IMailServerInUse>();
+
+        Assert.Throws<InvalidOperationException>(() => inUse.Chosen());
+
+        await deployment.StartAsync(cancellationToken);
+
+        Result<IMailServer> chosen = inUse.Chosen();
+
+        await deployment.StopAsync(cancellationToken);
+
+        if (registered)
+        {
+            Assert.Same(
+                deployment.Services.GetRequiredService<IMailServer>(),
+                chosen.Match<IMailServer?>(server => server, _ => null));
+        }
+        else
+        {
+            Assert.Equal(
+                ErrorCodes.MailboxNotFound,
+                chosen.Match<ErrorCode?>(_ => null, error => error.Code));
+        }
+    }
+
+    /// <summary>
     /// API-REDIR-001: the default a destination falls back to is read against the
     /// registry as the deployment starts, so a key naming a client nothing registered
     /// stops it there rather than at the registration that would resolve to nothing.
@@ -543,9 +583,11 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
     /// <summary>
     /// AUTHZ-MODEL-004 AC2: the web server is a hosted service of the host's, and
-    /// hosted services start in the order they were registered, so the key ring's
-    /// reading and after it the checks that read the database stand at the head of the
-    /// collection and no request is served before them (D-160, CONV-DESIGN-007).
+    /// hosted services start in the order they were registered, so the checks that read
+    /// the database, and among them the key ring's choice of the mail server in use,
+    /// stand at the head of the collection and no request is served before them; the key
+    /// ring's reading of the secrets comes before them all, as the start begins (D-160,
+    /// CONV-DESIGN-007, D-176).
     /// </summary>
     [Fact]
     public void AUTHZ_MODEL_004_AC2_TheChecksStartBeforeEverythingElseRegistered()
@@ -557,11 +599,24 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         Declared(services);
 
         ServiceDescriptor[] hosted = [.. services.Where(service => service.ServiceType == typeof(IHostedService))];
+        Type[] leading =
+        [
+            typeof(SchemaValidationService),
+            typeof(SettingsValidationService),
+            typeof(ModelValidationService),
+            typeof(SendingValidationService),
+            typeof(KeyRingService),
+            typeof(HandlerValidationService),
+            typeof(ConfigurationValidationService),
+            typeof(DeclarationValidationService),
+            typeof(RedirectValidationService),
+            typeof(SigningKeyValidationService),
+            typeof(RelayValidationService),
+        ];
 
-        Assert.Equal(0, services.IndexOf(hosted[0]));
-        Assert.Equal(1, services.IndexOf(hosted[1]));
-        Assert.Equal(typeof(KeyRingService), hosted[0].ImplementationType);
-        Assert.Equal(typeof(SchemaValidationService), hosted[1].ImplementationType);
+        Assert.Equal(leading, hosted.Take(leading.Length).Select(service => service.ImplementationType));
+        Assert.Equal(Enumerable.Range(0, leading.Length), hosted.Take(leading.Length).Select(services.IndexOf));
+        Assert.True(typeof(IHostedLifecycleService).IsAssignableFrom(typeof(KeyRingService)));
     }
 
     /// <summary>

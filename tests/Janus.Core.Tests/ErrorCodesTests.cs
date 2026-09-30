@@ -101,6 +101,7 @@ public sealed class ErrorCodesTests
         "identity.invitation.identifiermismatch",
         "identity.invitation.notfound",
         "identity.link.lastcredential",
+        "identity.mailbox.notfound",
         "identity.membership.limitreached",
         "identity.organization.protected",
         "identity.photo.invalid",

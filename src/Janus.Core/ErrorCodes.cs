@@ -392,6 +392,16 @@ public static class ErrorCodes
     public static ErrorCode InvitationNotFound { get; } = ErrorCode.Parse("identity.invitation.notfound");
 
     /// <summary>
+    /// The account holds no mailbox the mail server is told to enable, or the deployment
+    /// has no mail server registered; the app passwords are not present for it. A member
+    /// of the administrative organization is given a mailbox by invitation.
+    /// </summary>
+    /// <remarks>
+    /// Implements INT-MAIL-006, REG-MAIL-002 and CONV-DESIGN-007, chapter 10 section 1.1.
+    /// </remarks>
+    public static ErrorCode MailboxNotFound { get; } = ErrorCode.Parse("identity.mailbox.notfound");
+
+    /// <summary>
     /// The step the request is for is not the step the registration has reached: its
     /// predecessor is incomplete, or it is complete already. Read the session's state
     /// and answer the step it names.

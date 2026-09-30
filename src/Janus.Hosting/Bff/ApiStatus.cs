@@ -74,6 +74,7 @@ internal static class ApiStatus
         [ErrorCodes.TakedownNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.ErasureNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.InvitationNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.MailboxNotFound] = StatusCodes.Status404NotFound,
 
         // A conflict with what is already there, or a precondition the state fails.
         [ErrorCodes.ChangePending] = StatusCodes.Status409Conflict,

@@ -531,6 +531,10 @@ against the public contract of LIB-API-001.
   Reconciliation compares each mailbox with the account listed under its identifier,
   reads the listed address in its canonical form, and counts every account carrying no
   identifier of a mailbox the library holds.
+- The mail server in use is chosen once, as the deployment starts, and read through
+  `IMailServerInUse`: the host's own `IMailServer` where it registers one, and none
+  otherwise, answered as `identity.mailbox.notfound`. Asking before the start has chosen
+  is a fault.
 - Where Continue with Apple is among the system policy's `loginFactors` and
   `notification.email.sendingdomain` is not in `notification.email.relayregistered`, the
   deployment raises `relay-domain-unregistered` with the domain as it starts and

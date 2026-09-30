@@ -1,23 +1,23 @@
 using System;
 using Janus.Core;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 
 namespace Janus.Hosting;
 
 /// <summary>
-/// How the key ring is put together in a deployment: one ring, and the reading that
-/// fills it ahead of every other hosted service.
+/// How the key ring and the mail server in use are put together: one of each for the
+/// process.
 /// </summary>
 /// <remarks>
-/// Implements CONV-CODE-007, CONV-DESIGN-007 and D-171. The ring is a singleton, and no
-/// service receives a secret when it is registered or made; each borrows at its use.
+/// Implements CONV-CODE-007, CONV-DESIGN-007, D-171 and D-176. Both are singletons, and
+/// no service receives a secret or a mail server when it is registered or made; each
+/// asks at its use.
 /// </remarks>
 internal static class KeyRingRegistration
 {
     /// <summary>
-    /// Adds the key ring and puts its reading at the head of the hosted services, so it
-    /// starts before every one registered so far and stops after them.
+    /// Adds the key ring and the mail server in use. The service that fills and chooses
+    /// them is placed among the hosted services by the caller.
     /// </summary>
     /// <param name="services">The host's services.</param>
     /// <returns>The collection, for chaining.</returns>
@@ -28,7 +28,8 @@ internal static class KeyRingRegistration
 
         services.AddSingleton<KeyRing>();
         services.AddSingleton<IKeyRing>(provider => provider.GetRequiredService<KeyRing>());
-        services.Insert(0, ServiceDescriptor.Singleton<IHostedService, KeyRingService>());
+        services.AddSingleton<MailServerInUse>();
+        services.AddSingleton<IMailServerInUse>(provider => provider.GetRequiredService<MailServerInUse>());
 
         return services;
     }

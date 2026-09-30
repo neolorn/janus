@@ -31,9 +31,9 @@ namespace Janus.Authentication.Invitations;
 /// <param name="acknowledgement">What attaches the membership an invitation offers.</param>
 /// <param name="end">What ends a membership.</param>
 /// <param name="mailboxes">Where the corporate mailboxes are reserved.</param>
-/// <param name="server">
-/// The mail server the administrative organization's mail is integrated with, absent
-/// where the deployment registered none.
+/// <param name="inUse">
+/// The mail server in use, which the administrative organization's mail is integrated
+/// with where the deployment has one.
 /// </param>
 /// <param name="sending">What carries the link.</param>
 /// <param name="configuration">Where the lifetime, the phone setting and the languages are read.</param>
@@ -62,7 +62,7 @@ internal sealed class InvitationService(
     InvitationAcknowledgement acknowledgement,
     MembershipEnd end,
     IMailboxStore mailboxes,
-    IMailServer? server,
+    IMailServerInUse inUse,
     INotificationHandler sending,
     IConfigurationStore configuration,
     IOrganizationAudit audit,
@@ -103,7 +103,7 @@ internal sealed class InvitationService(
             return Result.Failure<IssuedInvitation>(Malformed("id"));
         }
 
-        bool integrated = standing.IsAdministrative && server is not null;
+        bool integrated = standing.IsAdministrative && inUse.Chosen().Match(_ => true, _ => false);
         Error? failure = null;
 
         Bound bound = (await BoundAsync(organization, request, integrated, cancellationToken)

@@ -26,7 +26,7 @@ namespace Janus.Hosting;
 /// Which client of the provider this application is, or nothing where the deployment
 /// registered none.
 /// </param>
-/// <param name="mail">The mail server, or nothing where the deployment hosts no mailbox.</param>
+/// <param name="mail">The mail server in use, where the deployment has one.</param>
 /// <param name="mailClient">
 /// Which client of the provider the mail server is, or nothing where the deployment
 /// registered none.
@@ -58,7 +58,7 @@ internal sealed class DeclarationCoverage(
     PasskeyAddresses? addresses,
     AuthenticationAddresses? authentication,
     SignOnClient? signOn,
-    IMailServer? mail,
+    IMailServerInUse mail,
     MailServerClient? mailClient,
     ImageCodec? codec,
     IEnumerable<SocialProvider> providers,
@@ -123,7 +123,7 @@ internal sealed class DeclarationCoverage(
 
         // INT-MAIL-010: the app passwords of a hosted mailbox are reached with a token
         // issued to the mail server's client, and nothing else says which client it is.
-        if (mail is not null && (mailClient is null || mailClient.ClientId.Length is 0))
+        if (mail.Chosen().Match(_ => true, _ => false) && (mailClient is null || mailClient.ClientId.Length is 0))
         {
             return Missing(MailClient);
         }

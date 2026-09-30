@@ -1138,7 +1138,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private InvitationService ServiceWithout => Serving(server: null);
 
     private MailboxPublisher Publisher =>
-        new(_mailboxes, _server, _configuration, new EventsInMemory(), _work, _clock, _randomness);
+        new(_mailboxes, new MailServerInUseInMemory(_server), _configuration, new EventsInMemory(), _work, _clock, _randomness);
 
     private static InvitationRequest Request(
         string? email = null,
@@ -1209,7 +1209,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 _work,
                 _clock),
             _mailboxes,
-            server,
+            new MailServerInUseInMemory(server),
             _notifications,
             _configuration,
             _audit,

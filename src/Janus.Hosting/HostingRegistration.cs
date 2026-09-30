@@ -387,7 +387,7 @@ public static class HostingRegistration
             provider.GetService<PasskeyAddresses>(),
             provider.GetService<AuthenticationAddresses>(),
             provider.GetService<SignOnClient>(),
-            provider.GetService<IMailServer>(),
+            provider.GetRequiredService<IMailServerInUse>(),
             provider.GetService<MailServerClient>(),
             provider.GetService<ImageCodec>(),
             provider.GetServices<SocialProvider>(),
@@ -552,7 +552,7 @@ public static class HostingRegistration
         // that registers none provisions nothing and reconciles nothing.
         services.AddScoped(provider => new MailboxPublisher(
             provider.GetRequiredService<IMailboxStore>(),
-            provider.GetService<IMailServer>(),
+            provider.GetRequiredService<IMailServerInUse>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IAlertChannels>(),
             provider.GetRequiredService<IUnitOfWork>(),
@@ -560,7 +560,7 @@ public static class HostingRegistration
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped(provider => new MailboxReconciliation(
             provider.GetRequiredService<IMailboxStore>(),
-            provider.GetService<IMailServer>(),
+            provider.GetRequiredService<IMailServerInUse>(),
             provider.GetRequiredService<IAlertChannels>(),
             provider.GetRequiredService<TimeProvider>()));
 
@@ -575,7 +575,7 @@ public static class HostingRegistration
             provider.GetRequiredService<AuthenticationAddresses>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IAppPasswords>(provider => new AppPasswords(
-            provider.GetService<IMailServer>(),
+            provider.GetRequiredService<IMailServerInUse>(),
             provider.GetRequiredService<IMailServerTokens>(),
             provider.GetRequiredService<IMailboxStore>(),
             provider.GetRequiredService<IAccountDirectory>(),
@@ -606,7 +606,7 @@ public static class HostingRegistration
             provider.GetRequiredService<InvitationAcknowledgement>(),
             provider.GetRequiredService<MembershipEnd>(),
             provider.GetRequiredService<IMailboxStore>(),
-            provider.GetService<IMailServer>(),
+            provider.GetRequiredService<IMailServerInUse>(),
             provider.GetRequiredService<INotificationHandler>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IOrganizationAudit>(),
@@ -629,16 +629,19 @@ public static class HostingRegistration
         services.Insert(1, ServiceDescriptor.Singleton<IHostedService, SettingsValidationService>());
         services.Insert(2, ServiceDescriptor.Singleton<IHostedService, ModelValidationService>());
         services.Insert(3, ServiceDescriptor.Singleton<IHostedService, SendingValidationService>());
-        services.Insert(4, ServiceDescriptor.Singleton<IHostedService, HandlerValidationService>());
-        services.Insert(5, ServiceDescriptor.Singleton<IHostedService, ConfigurationValidationService>());
-        services.Insert(6, ServiceDescriptor.Singleton<IHostedService, DeclarationValidationService>());
-        services.Insert(7, ServiceDescriptor.Singleton<IHostedService, RedirectValidationService>());
-        services.Insert(8, ServiceDescriptor.Singleton<IHostedService, SigningKeyValidationService>());
-        services.Insert(9, ServiceDescriptor.Singleton<IHostedService, RelayValidationService>());
 
-        // CONV-DESIGN-007, D-171: the secrets are read into the key ring ahead of even
-        // those checks, and as the first service to start its reading is the last to
-        // stop, after the worker and the server, when it clears the ring.
+        // CONV-DESIGN-007, D-171, D-176: the key ring's service reads the secrets as the
+        // start begins, ahead of every check, and clears the ring once everything has
+        // stopped, the worker and the server included. It chooses the mail server in use
+        // here, once the stored values have been checked and an endpoint that is not
+        // https refused, and before any check that asks which mail server is in use.
+        services.Insert(4, ServiceDescriptor.Singleton<IHostedService, KeyRingService>());
+        services.Insert(5, ServiceDescriptor.Singleton<IHostedService, HandlerValidationService>());
+        services.Insert(6, ServiceDescriptor.Singleton<IHostedService, ConfigurationValidationService>());
+        services.Insert(7, ServiceDescriptor.Singleton<IHostedService, DeclarationValidationService>());
+        services.Insert(8, ServiceDescriptor.Singleton<IHostedService, RedirectValidationService>());
+        services.Insert(9, ServiceDescriptor.Singleton<IHostedService, SigningKeyValidationService>());
+        services.Insert(10, ServiceDescriptor.Singleton<IHostedService, RelayValidationService>());
         services.AddKeyRing();
 
         // INF-BG-001: the scheduled work starts once the checks above have passed.

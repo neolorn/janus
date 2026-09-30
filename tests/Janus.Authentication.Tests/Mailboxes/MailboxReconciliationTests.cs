@@ -209,7 +209,7 @@ public sealed class MailboxReconciliationTests : IDisposable
         Assert.False(raised.Details["listed"].GetBoolean());
     }
 
-    private MailboxReconciliation Reconciliation => new(_mailboxes, _server, _events, _clock);
+    private MailboxReconciliation Reconciliation => new(_mailboxes, new MailServerInUseInMemory(_server), _events, _clock);
 
     private async Task<MailboxDrift> ReconciledAsync() =>
         (await Reconciliation.ReconcileAsync(TestContext.Current.CancellationToken))

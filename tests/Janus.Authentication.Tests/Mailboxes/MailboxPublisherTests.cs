@@ -279,7 +279,7 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
     }
 
     private MailboxPublisher Built(IMailServer? server) =>
-        new(_mailboxes, server, _configuration, _events, _work, _clock, _randomness);
+        new(_mailboxes, new MailServerInUseInMemory(server), _configuration, _events, _work, _clock, _randomness);
 
     private async Task<int> PassAsync() =>
         (await Publisher.PublishAsync(TestContext.Current.CancellationToken))

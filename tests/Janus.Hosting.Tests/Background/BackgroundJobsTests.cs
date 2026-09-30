@@ -342,7 +342,7 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
             services.AddSingleton<ISmsTransport>(new SmsTransportInMemory());
         }
 
-        return services
+        ServiceProvider deployed = services
             .AddSingleton<TimeProvider>(new FixedTime(now))
             .AddSingleton<IMailTransport>(new MailTransportInMemory())
             .AddSingleton(new AuthenticationAddresses(
@@ -357,5 +357,14 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
                 HostFixture.Declaration(),
                 ApplicationKind.Public)
             .BuildServiceProvider();
+
+        // CONV-DESIGN-007: the key ring is filled and the mail server in use chosen
+        // before any job asks either, which is what its hosted service does in a
+        // deployment that a web server starts.
+        KeyRingService ring = deployed.GetServices<IHostedService>().OfType<KeyRingService>().Single();
+        ring.StartingAsync(CancellationToken.None).GetAwaiter().GetResult();
+        ring.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        return deployed;
     }
 }

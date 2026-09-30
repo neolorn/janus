@@ -15,7 +15,7 @@ namespace Janus.Authentication.Mailboxes;
 /// The mail app passwords of the signed-in person, created, listed and revoked at the
 /// mail server with a token the library issues for them.
 /// </summary>
-/// <param name="server">The mail server, or nothing where the deployment hosts no mailbox.</param>
+/// <param name="inUse">The mail server in use, where the deployment has one.</param>
 /// <param name="tokens">Where the person's token is issued.</param>
 /// <param name="mailboxes">Where the mailbox the account holds is read.</param>
 /// <param name="accounts">Where the account's state is read.</param>
@@ -33,7 +33,7 @@ namespace Janus.Authentication.Mailboxes;
 /// server's identifier and never the secret or the label.
 /// </remarks>
 internal sealed class AppPasswords(
-    IMailServer? server,
+    IMailServerInUse inUse,
     IMailServerTokens tokens,
     IMailboxStore mailboxes,
     IAccountDirectory accounts,
@@ -214,7 +214,8 @@ internal sealed class AppPasswords(
         AccessContext context,
         CancellationToken cancellationToken)
     {
-        if (server is null || context.Effective is not SubjectId subject)
+        if (inUse.Chosen().Match<IMailServer?>(chosen => chosen, _ => null) is not IMailServer server
+            || context.Effective is not SubjectId subject)
         {
             return null;
         }

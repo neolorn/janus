@@ -14,7 +14,7 @@ namespace Janus.Authentication.Mailboxes;
 /// mail server hosts, existence, address and enabled state all.
 /// </summary>
 /// <param name="mailboxes">Where the library's mailboxes are.</param>
-/// <param name="server">The mail server, absent where the deployment registered none.</param>
+/// <param name="inUse">The mail server in use, where the deployment has one.</param>
 /// <param name="alerts">Where the drift's alert goes.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -32,7 +32,7 @@ namespace Janus.Authentication.Mailboxes;
 /// </remarks>
 internal sealed class MailboxReconciliation(
     IMailboxStore mailboxes,
-    IMailServer? server,
+    IMailServerInUse inUse,
     IAlertChannels alerts,
     TimeProvider time)
 {
@@ -45,7 +45,7 @@ internal sealed class MailboxReconciliation(
     /// <returns>What differs, or the failure that stopped the comparison.</returns>
     public async ValueTask<Result<MailboxDrift>> ReconcileAsync(CancellationToken cancellationToken)
     {
-        if (server is null)
+        if (inUse.Chosen().Match<IMailServer?>(chosen => chosen, _ => null) is not IMailServer server)
         {
             return Result.Success(new MailboxDrift([], Unknown: 0));
         }

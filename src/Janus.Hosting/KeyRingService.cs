@@ -12,27 +12,33 @@ namespace Janus.Hosting;
 
 /// <summary>
 /// Reads the secrets the deployment needs through the host's secret source into the key
-/// ring before the web server starts, and clears the ring once everything after it has
-/// stopped.
+/// ring, and chooses the mail server in use, before the web server starts; clears the
+/// ring once everything has stopped.
 /// </summary>
 /// <param name="ring">The key ring it fills and clears.</param>
+/// <param name="inUse">The mail server in use, which it chooses.</param>
 /// <param name="providers">The social providers the deployment declares.</param>
+/// <param name="host">The host's own mail server, or nothing where it registered none.</param>
 /// <param name="source">The host's secret source, or nothing where it registered none.</param>
 /// <remarks>
-/// Implements CONV-DESIGN-007, CONV-CODE-007, IDN-LIFE-012 and D-171. It stands at the
-/// head of the hosted services, so it starts before every other and stops after every
-/// other, the background worker and the web server among them. A credential is judged
-/// usable here, where the deployment can still be stopped, and not at the first exchange
-/// that would present it.
+/// Implements CONV-DESIGN-007, CONV-CODE-007, IDN-LIFE-012, D-171 and D-176. The start
+/// fills the ring in steps: every secret as the start begins, ahead of every hosted
+/// service; then, in its own place among them, the choice of the mail server in use. It
+/// clears the ring once every hosted service has stopped, the background worker and the
+/// web server among them. A credential is judged usable here, where the deployment can
+/// still be stopped, and not at the first exchange that would present it. The host's mail
+/// server, where it registered one, is the one in use for the life of the process.
 /// </remarks>
 internal sealed class KeyRingService(
     KeyRing ring,
+    MailServerInUse inUse,
     IEnumerable<SocialProvider> providers,
-    ISecretSource? source = null) : IHostedService
+    IMailServer? host = null,
+    ISecretSource? source = null) : IHostedLifecycleService
 {
     /// <inheritdoc/>
     /// <exception cref="StartupException">A secret cannot be read, or is unusable.</exception>
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartingAsync(CancellationToken cancellationToken)
     {
         // LIB-HOST-001: a declaration that is not a social provider, or one declared
         // twice, is refused by name after this; the credential read is the one of each
@@ -59,7 +65,26 @@ internal sealed class KeyRingService(
     }
 
     /// <inheritdoc/>
-    public Task StopAsync(CancellationToken cancellationToken)
+    public Task StartAsync(CancellationToken cancellationToken)
+    {
+        // CONV-DESIGN-007 AC5: the host's mail server where it registered one; none
+        // otherwise.
+        inUse.Choose(host);
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <inheritdoc/>
+    public Task StoppingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <inheritdoc/>
+    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <inheritdoc/>
+    public Task StoppedAsync(CancellationToken cancellationToken)
     {
         ring.Clear();
 

@@ -264,7 +264,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
 
     private AppPasswords Built(IMailServer? server) =>
         new(
-            server,
+            new MailServerInUseInMemory(server),
             _tokens,
             _mailboxes,
             _accounts,

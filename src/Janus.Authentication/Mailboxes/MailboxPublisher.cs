@@ -17,7 +17,7 @@ namespace Janus.Authentication.Mailboxes;
 /// until the server confirms it.
 /// </summary>
 /// <param name="mailboxes">Where the mailboxes are.</param>
-/// <param name="server">The mail server, absent where the deployment registered none.</param>
+/// <param name="inUse">The mail server in use, where the deployment has one.</param>
 /// <param name="configuration">Where the retry schedule is read.</param>
 /// <param name="alerts">Where a spent budget's alert goes.</param>
 /// <param name="work">The one transaction each mailbox's progress is recorded in.</param>
@@ -33,7 +33,7 @@ namespace Janus.Authentication.Mailboxes;
 /// </remarks>
 internal sealed class MailboxPublisher(
     IMailboxStore mailboxes,
-    IMailServer? server,
+    IMailServerInUse inUse,
     IConfigurationStore configuration,
     IAlertChannels alerts,
     IUnitOfWork work,
@@ -47,7 +47,7 @@ internal sealed class MailboxPublisher(
     /// <returns>How many pushes the server confirmed, or the failure that stopped the pass.</returns>
     public async ValueTask<Result<int>> PublishAsync(CancellationToken cancellationToken)
     {
-        if (server is null)
+        if (inUse.Chosen().Match<IMailServer?>(chosen => chosen, _ => null) is not IMailServer server)
         {
             return Result.Success(0);
         }
