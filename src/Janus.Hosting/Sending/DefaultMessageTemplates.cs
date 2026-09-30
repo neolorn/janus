@@ -53,6 +53,16 @@ internal sealed class DefaultMessageTemplates : IMessageTemplates
                 "استخدم هذا لتسجيل الدخول: {token}. ينتهي بعد قليل. إن لم تطلبه فتجاهل هذه الرسالة.",
                 "لتسجيل الدخول: {token}")),
         (
+            MessageKind.SignInCode,
+            new Words(
+                "Your sign-in code",
+                "Your sign-in code is {code}. It expires shortly. If you did not ask for it, ignore this message.",
+                null),
+            new Words(
+                "رمز تسجيل الدخول",
+                "رمز تسجيل الدخول الخاص بك هو {code}. ينتهي بعد قليل. إن لم تطلبه فتجاهل هذه الرسالة.",
+                null)),
+        (
             MessageKind.SecondStepCode,
             new Words(
                 "Your sign-in code",

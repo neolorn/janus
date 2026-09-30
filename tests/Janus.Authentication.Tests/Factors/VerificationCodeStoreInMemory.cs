@@ -27,6 +27,12 @@ internal sealed class VerificationCodeStoreInMemory : IVerificationCodeStore
         ValueTask.FromResult(_codes.GetValueOrDefault(Key(holder)));
 
     /// <inheritdoc/>
+    public ValueTask<VerificationCode?> FindForUpdateAsync(
+        byte[] holder,
+        CancellationToken cancellationToken) =>
+        FindAsync(holder, cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask AddAsync(VerificationCode code, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(code);

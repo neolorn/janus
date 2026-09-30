@@ -1258,6 +1258,15 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- A code try is decided under a lock on the code's row, so wrong codes presented at once
+  are counted as the same number presented one after another, and the right code
+  presented twice at once answers once. Each wrong try up to the cap is refused
+  `auth.code.invalid`, the one reaching it ending the code, and whatever follows is
+  refused `auth.code.expired`. The `emailCode` sign-in code and the code a sign-in link
+  shows are authentication codes: capped by the new key `code.signin.attempts` (5,
+  ceiling 10), the first living the new key `code.signin.lifetime` (10 minutes, ceiling
+  30) and sent by mail alone as the new message kind `sign-in-code`, the second living
+  as long as its link.
 - A value the library reads from text under a rule, left unset (such as its `default`),
   throws `InvalidOperationException` where its text is read, so no such value reaches a
   row.

@@ -153,8 +153,18 @@ internal sealed class SignInLinks(
     /// <param name="held">The pending sign-in.</param>
     /// <param name="entered">What was typed.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Success, or what the code produced.</returns>
+    /// <returns>
+    /// Success, which spends it; <c>auth.code.invalid</c> where the code was wrong, the
+    /// try that reaches <c>code.signin.attempts</c> included, which ends it;
+    /// <c>auth.code.expired</c> where it is gone or has lapsed.
+    /// </returns>
     /// <exception cref="ArgumentNullException">The pending sign-in is absent.</exception>
+    /// <remarks>
+    /// Implements AUTH-FACT-004. The code is an authentication code, held to its own
+    /// cap, and every try is decided under a lock on the pending sign-in's row, so
+    /// concurrent tries count as the same number of sequential ones and the right code
+    /// answers once.
+    /// </remarks>
     public async ValueTask<Result> SpendCodeAsync(
         PendingSignIn held,
         [NeverLogged] string entered,
@@ -165,7 +175,7 @@ internal sealed class SignInLinks(
         Error? failure = null;
 
         int attempts = (await configuration
-                .ReadAsync(Settings.CodeVerificationAttempts, cancellationToken)
+                .ReadAsync(Settings.CodeSigninAttempts, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<int>(error, ref failure));
 
@@ -174,44 +184,33 @@ internal sealed class SignInLinks(
             return Result.Failure(failure);
         }
 
-        if (!held.Matches(entered))
-        {
-            held.Missed();
-
-            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notBegunAgain)
-            {
-                return Result.Failure(notBegunAgain);
-            }
-
-            // Enough wrong codes end the link, which is what stops a six-digit code
-            // being guessed at leisure (AUTH-FACT-004).
-            if (held.WrongAttempts >= attempts)
-            {
-                await pending.RemoveAsync(held.Fingerprint, cancellationToken).ConfigureAwait(false);
-            }
-            else
-            {
-                await pending.RecordAsync(held, cancellationToken).ConfigureAwait(false);
-            }
-
-            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
-            {
-                return Result.Failure(notCommittedAgain);
-            }
-
-            return Result.Failure(
-                Error.From(held.WrongAttempts >= attempts ? ErrorCodes.CodeExpired : ErrorCodes.CodeInvalid));
-        }
-
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
 
-        await pending.RemoveAsync(held.Fingerprint, cancellationToken).ConfigureAwait(false);
+        PendingSignIn? locked = await pending
+            .FindForUpdateAsync(held.Fingerprint, cancellationToken)
+            .ConfigureAwait(false);
+
+        DateTimeOffset now = time.GetUtcNow();
+        Result answer = Spent(locked, entered, now);
+
+        if (locked is not null && !locked.HasExpired(now))
+        {
+            // The right code is spent by the try it answered, and enough wrong codes end
+            // the link, which is what stops a six-digit code being guessed at leisure
+            // (AUTH-FACT-004 AC3).
+            if (answer.Match(() => true, _ => false) || locked.WrongAttempts >= attempts)
+            {
+                await pending.RemoveAsync(locked.Fingerprint, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                await pending.RecordAsync(locked, cancellationToken).ConfigureAwait(false);
+            }
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -219,7 +218,7 @@ internal sealed class SignInLinks(
             return Result.Failure(notCommitted);
         }
 
-        return Result.Success();
+        return answer;
     }
 
     /// <summary>
@@ -298,7 +297,9 @@ internal sealed class SignInLinks(
 
     // What each kind of ask sends, and on which channels. The email code is a code to
     // type and carries no link; a link carries both, because the browser that opened
-    // it elsewhere shows the code (REG-SESS-003).
+    // it elsewhere shows the code (REG-SESS-003). Both codes are authentication codes:
+    // the email code lives code.signin.lifetime and the code a link shows lives as long
+    // as its link (AUTH-FACT-004).
     private static readonly Ask Links = new(
         [IdentifierKind.Email, IdentifierKind.Phone],
         MessageKind.SignInLink,
@@ -307,8 +308,8 @@ internal sealed class SignInLinks(
 
     private static readonly Ask Codes = new(
         [IdentifierKind.Email],
-        MessageKind.VerificationCode,
-        Settings.CodeVerificationLifetime,
+        MessageKind.SignInCode,
+        Settings.CodeSigninLifetime,
         CarriesLink: false);
 
     private sealed record Ask(
@@ -529,6 +530,26 @@ internal sealed class SignInLinks(
         }
 
         return Result.Success();
+    }
+
+    // AUTH-FACT-004 AC3: each wrong try is refused as wrong, the one that reaches the
+    // cap included; whatever is presented once the code is gone or has lapsed is refused
+    // as expired, the right code included.
+    private static Result Spent(PendingSignIn? locked, [NeverLogged] string entered, DateTimeOffset now)
+    {
+        if (locked is null || locked.HasExpired(now))
+        {
+            return Result.Failure(Error.From(ErrorCodes.CodeExpired));
+        }
+
+        if (locked.Matches(entered))
+        {
+            return Result.Success();
+        }
+
+        locked.Missed();
+
+        return Result.Failure(Error.From(ErrorCodes.CodeInvalid));
     }
 
     private sealed record Channel(

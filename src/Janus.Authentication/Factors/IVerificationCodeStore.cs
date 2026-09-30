@@ -23,6 +23,15 @@ internal interface IVerificationCodeStore
     ValueTask<VerificationCode?> FindAsync(byte[] holder, CancellationToken cancellationToken);
 
     /// <summary>
+    /// The code outstanding against a holder, its row held until the operation's
+    /// transaction ends, so a try decided on it is decided alone (AUTH-FACT-004 AC4).
+    /// </summary>
+    /// <param name="holder">What the code was issued against.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The code as it stands once the lock is taken, or nothing.</returns>
+    ValueTask<VerificationCode?> FindForUpdateAsync(byte[] holder, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Records a newly issued code, replacing whatever the holder had outstanding.
     /// </summary>
     /// <param name="code">The code.</param>

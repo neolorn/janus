@@ -296,6 +296,7 @@ public sealed class VocabularyContractTests
                 "recovery-link",
                 "secondstep-code",
                 "security-notice",
+                "sign-in-code",
                 "signin-link",
                 "verification-code",
             ],

@@ -1005,11 +1005,74 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-FACT-016 AC3: a wrong code does not complete the sign-in, and after
-    /// <c>code.verification.attempts</c> of them the right one is refused too.
+    /// AUTH-FACT-004 AC6: an email sign-in code is an authentication code, sent as
+    /// <c>sign-in-code</c>, living <c>code.signin.lifetime</c> and spent after
+    /// <c>code.signin.attempts</c> wrong tries, whatever the verification code's keys hold.
     /// </summary>
     [Fact]
-    public async Task AUTH_FACT_016_AC3_WrongCodesInvalidateTheHeldSignInAsync()
+    public async Task AUTH_FACT_004_AC6_AnEmailSignInCodeIsHeldToItsOwnKeysAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailCode);
+        Remembered(subject);
+        AuthenticationCodeKeys();
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        Assert.True((await Service.SendCodeAsync(Address, Language, Source, TestContext.Current.CancellationToken))
+            .Match(() => true, _ => false));
+        Assert.Equal(MessageKind.SignInCode, _notifications.Mail[^1].Message);
+        Assert.Equal(
+            Noon + TimeSpan.FromMinutes(4),
+            (await _pending.FindAsync(subject, Factor.EmailCode, TestContext.Current.CancellationToken))?.ExpiresAt);
+
+        string right = Code();
+
+        Assert.Equal(ErrorCodes.CodeInvalid, Refused(await PresentAsync(began.Challenge, Factor.EmailCode, Other(right))));
+        Assert.Equal(ErrorCodes.CodeInvalid, Refused(await PresentAsync(began.Challenge, Factor.EmailCode, Other(right))));
+        Assert.Equal(ErrorCodes.CodeExpired, Refused(await PresentAsync(began.Challenge, Factor.EmailCode, right)));
+
+        _ = await Service.SendCodeAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+        _clock.Advance(TimeSpan.FromMinutes(4));
+
+        Assert.Equal(ErrorCodes.CodeExpired, Refused(await PresentAsync(began.Challenge, Factor.EmailCode, Code())));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-004 AC6: the code a sign-in link shows elsewhere lives as long as its
+    /// link, <c>link.magic.lifetime</c>, and is spent after <c>code.signin.attempts</c>
+    /// wrong tries, whatever the verification code's keys hold.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_004_AC6_TheCodeASignInLinkShowsIsHeldToTheLinkAndTheSignInCapAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailLink);
+        Remembered(subject);
+        AuthenticationCodeKeys();
+        _configuration.Set(Settings.LinkMagicLifetime, TimeSpan.FromMinutes(20));
+
+        (string challenge, string token, _) = await AskedAsync(subject);
+
+        Assert.Equal(
+            Noon + TimeSpan.FromMinutes(20),
+            (await _pending.FindAsync(subject, Factor.EmailLink, TestContext.Current.CancellationToken))?.ExpiresAt);
+
+        string shown = Assert.IsType<string>((await LandedAsync(challenge, browser: null, token, press: false)).Code);
+
+        Assert.Equal(ErrorCodes.CodeInvalid, Refused(await PresentAsync(challenge, Factor.EmailLink, Other(shown))));
+        Assert.Equal(ErrorCodes.CodeInvalid, Refused(await PresentAsync(challenge, Factor.EmailLink, Other(shown))));
+        Assert.Equal(ErrorCodes.CodeExpired, Refused(await PresentAsync(challenge, Factor.EmailLink, shown)));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-004 AC3: a wrong new-device code does not complete the sign-in, and
+    /// after <c>code.verification.attempts</c> of them the right one is refused too.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_004_AC3_WrongCodesInvalidateTheHeldSignInAsync()
     {
         await AccountAsync();
         _configuration.Set(Settings.CodeVerificationAttempts, 2);
@@ -1298,6 +1361,16 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         await _work.CommitAsync(TestContext.Current.CancellationToken);
 
         return subject;
+    }
+
+    // The authentication codes' keys set apart from the verification code's, so a code
+    // held to the wrong ones shows (AUTH-FACT-004 AC6).
+    private void AuthenticationCodeKeys()
+    {
+        _configuration.Set(Settings.CodeVerificationLifetime, TimeSpan.FromMinutes(30));
+        _configuration.Set(Settings.CodeVerificationAttempts, 10);
+        _configuration.Set(Settings.CodeSigninLifetime, TimeSpan.FromMinutes(4));
+        _configuration.Set(Settings.CodeSigninAttempts, 2);
     }
 
     // The account has been seen on this browser, so the new-device check is not what

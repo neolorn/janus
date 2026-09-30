@@ -345,6 +345,20 @@ public static class Settings
     public static IntegerSetting CodeVerificationAttempts { get; } =
         new("code.verification.attempts", SettingScope.Runtime, 5, ceiling: 10);
 
+    /// <summary>
+    /// How long an authentication code that is sent lives: the <c>emailCode</c> sign-in
+    /// code and the <c>phoneCode</c> second-step code.
+    /// </summary>
+    public static DurationSetting CodeSigninLifetime { get; } =
+        new("code.signin.lifetime", SettingScope.Runtime, "PT10M", ceiling: "PT30M");
+
+    /// <summary>
+    /// Wrong tries after which an authentication code is invalidated and a correct one
+    /// refused.
+    /// </summary>
+    public static IntegerSetting CodeSigninAttempts { get; } =
+        new("code.signin.attempts", SettingScope.Runtime, 5, ceiling: 10);
+
     /// <summary>How long a sign-in link lives.</summary>
     public static DurationSetting LinkMagicLifetime { get; } =
         new("link.magic.lifetime", SettingScope.Runtime, "PT15M", ceiling: "PT1H");
@@ -960,6 +974,8 @@ public static class Settings
         Restrictions,
         CodeVerificationLifetime,
         CodeVerificationAttempts,
+        CodeSigninLifetime,
+        CodeSigninAttempts,
         LinkMagicLifetime,
         LinkInvitationLifetime,
         PhotoMaxBytes,

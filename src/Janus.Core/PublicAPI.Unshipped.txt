@@ -1707,6 +1707,7 @@ Janus.Core.MessageKind.RecoveryCodesReminder = 20 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.RecoveryLink = 14 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.SecondStepCode = 2 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.SecurityNotice = 3 -> Janus.Core.MessageKind
+Janus.Core.MessageKind.SignInCode = 21 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.SignInLink = 1 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.VerificationCode = 0 -> Janus.Core.MessageKind
 Janus.Core.MessageTemplate
@@ -3605,6 +3606,8 @@ static Janus.Core.Configuration.Settings.BackupRestoreTestInterval.get -> Janus.
 static Janus.Core.Configuration.Settings.BackupRestoreTestObjective.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.BackupRetention.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.BreakGlassSessionLifetime.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.CodeSigninAttempts.get -> Janus.Core.Configuration.IntegerSetting!
+static Janus.Core.Configuration.Settings.CodeSigninLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.CodeVerificationAttempts.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.CodeVerificationLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.DerivationMaterialisedDriftCheck.get -> Janus.Core.Configuration.DurationSetting!
