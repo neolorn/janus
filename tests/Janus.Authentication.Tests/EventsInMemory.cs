@@ -14,6 +14,8 @@ namespace Janus.Authentication.Tests;
 /// </summary>
 internal sealed class EventsInMemory : IEvents, IAlertChannels
 {
+    private readonly Lock _gate = new();
+
     /// <summary>
     /// Every event published, in order.
     /// </summary>
@@ -43,7 +45,10 @@ internal sealed class EventsInMemory : IEvents, IAlertChannels
             return ValueTask.FromResult(Result.Failure(refused));
         }
 
-        Published.Add(raised);
+        lock (_gate)
+        {
+            Published.Add(raised);
+        }
 
         return ValueTask.FromResult(Result.Success());
     }

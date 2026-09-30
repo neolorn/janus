@@ -315,7 +315,9 @@ against the public contract of LIB-API-001.
   publishes the outbox, provisions mailboxes, carries raised alerts, reconciles the mail
   server daily and reads the gateway balance. Two passes that carry the same condition
   at once deliver it once. Each job runs as a named principal of its
-  own, once across the processes of a deployment, and a job whose last success is older
+  own, once across the processes of a deployment, and a long run holds no other job's
+  turn: a job has one run at a time in flight in a process, and the worker waits for the
+  runs in flight when it stops. A job whose last success is older
   than twice its interval raises `background-job-failed`; the lapse of `alert-dispatch`
   itself is also delivered straight from the worker, so a stalled carrier still reports
   itself. `SystemOperation` carries

@@ -12,6 +12,8 @@ namespace Janus.Authentication.Tests.Alerting;
 /// </summary>
 internal sealed class AlertLedgerInMemory : IAlertLedger
 {
+    private readonly Lock _gate = new();
+
     private readonly Dictionary<string, DateTimeOffset> _raised = new(StringComparer.Ordinal);
 
     /// <inheritdoc/>
@@ -21,13 +23,16 @@ internal sealed class AlertLedgerInMemory : IAlertLedger
         TimeSpan window,
         CancellationToken cancellationToken)
     {
-        if (_raised.TryGetValue(key, out DateTimeOffset standing) && standing > at - window)
+        lock (_gate)
         {
-            return ValueTask.FromResult(false);
+            if (_raised.TryGetValue(key, out DateTimeOffset standing) && standing > at - window)
+            {
+                return ValueTask.FromResult(false);
+            }
+
+            _raised[key] = at;
+
+            return ValueTask.FromResult(true);
         }
-
-        _raised[key] = at;
-
-        return ValueTask.FromResult(true);
     }
 }

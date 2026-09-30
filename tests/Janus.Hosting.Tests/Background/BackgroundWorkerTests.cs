@@ -79,18 +79,18 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
         int ran = 0;
         using BackgroundWorker worker = Worker(Counted("counted", () => ran++));
 
-        Assert.Equal(Sweep, await worker.RunDueAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(Sweep, await RoundAsync(worker));
         Assert.Equal(1, ran);
         Assert.Equal(Noon, _runs.SucceededAt("counted"));
 
         _clock.Advance(Sweep - TimeSpan.FromSeconds(1));
 
-        Assert.Equal(TimeSpan.FromSeconds(1), await worker.RunDueAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(TimeSpan.FromSeconds(1), await RoundAsync(worker));
         Assert.Equal(1, ran);
 
         _clock.Advance(TimeSpan.FromSeconds(1));
 
-        _ = await worker.RunDueAsync(TestContext.Current.CancellationToken);
+        _ = await RoundAsync(worker);
 
         Assert.Equal(2, ran);
     }
@@ -108,11 +108,11 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
 
         _configuration.Set(Settings.SweepInterval, TimeSpan.FromMinutes(1));
 
-        Assert.Equal(TimeSpan.FromMinutes(1), await worker.RunDueAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(TimeSpan.FromMinutes(1), await RoundAsync(worker));
 
         _clock.Advance(TimeSpan.FromMinutes(1));
 
-        _ = await worker.RunDueAsync(TestContext.Current.CancellationToken);
+        _ = await RoundAsync(worker);
 
         Assert.Equal(2, ran);
     }
@@ -131,8 +131,8 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
         using BackgroundWorker first = Worker(job);
         using BackgroundWorker second = Worker(job);
 
-        _ = await first.RunDueAsync(TestContext.Current.CancellationToken);
-        _ = await second.RunDueAsync(TestContext.Current.CancellationToken);
+        _ = await RoundAsync(first);
+        _ = await RoundAsync(second);
 
         Assert.Equal(1, ran);
     }
@@ -257,7 +257,7 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
 
         using BackgroundWorker worker = Worker(job);
 
-        _ = await worker.RunDueAsync(TestContext.Current.CancellationToken);
+        _ = await RoundAsync(worker);
 
         Assert.NotNull(handed);
         Assert.Same(job.Principal, handed.Principal);
@@ -270,6 +270,60 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
             SystemOperation.ExpirySweep,
             Settings.SweepInterval,
             (_, _, _) => ValueTask.FromResult(Result.Success())));
+    }
+
+    /// <summary>
+    /// INF-BG-001 (D-166, 334): a run in progress holds no other job's turn. The worker
+    /// starts it and goes on, keeps no second run of the job in flight however many
+    /// rounds pass, judges the job's lapse after its own run, and waits for it when it
+    /// stops.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INF_BG_001_ARunInProgressHoldsNoOtherJobsTurnAsync()
+    {
+        var release = new TaskCompletionSource<Result>(TaskCreationOptions.RunContinuationsAsynchronously);
+        int started = 0;
+        int beside = 0;
+
+        var slow = BackgroundJob.Every(
+            "slow",
+            "OPS-OBS-003",
+            SystemOperation.ExpirySweep,
+            Settings.SweepInterval,
+            async (_, _, cancellationToken) =>
+            {
+                _ = Interlocked.Increment(ref started);
+
+                return await release.Task.WaitAsync(cancellationToken);
+            });
+
+        using BackgroundWorker worker = Worker(slow, Counted("beside", () => beside++));
+
+        _ = await worker.RunDueAsync(TestContext.Current.CancellationToken);
+
+        for (int turn = 0; turn < 3; turn++)
+        {
+            await BesideEndedAsync(worker);
+
+            Assert.Equal(turn + 1, Volatile.Read(ref beside));
+
+            _clock.Advance(Sweep);
+            _ = await worker.RunDueAsync(TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(1, Volatile.Read(ref started));
+        Assert.Null(_runs.SucceededAt("slow"));
+        Assert.Empty(_alerts.Of<AlertRaised>());
+
+        release.SetResult(Result.Failure(Error.From(ErrorCodes.SystemFault)));
+
+        await worker.SettledAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, Volatile.Read(ref started));
+        Assert.Equal(
+            ["slow"],
+            _alerts.Of<AlertRaised>().Select(raised => raised.Details["job"].GetString()));
     }
 
     /// <summary>
@@ -299,14 +353,40 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
             _clock,
             _logging.CreateLogger<BackgroundWorker>());
 
+    // One round run to its end: the runs it started are awaited, and what comes back is
+    // how long the worker then waits.
+    private static async Task<TimeSpan> RoundAsync(BackgroundWorker worker)
+    {
+        _ = await worker.RunDueAsync(TestContext.Current.CancellationToken);
+
+        await worker.SettledAsync(TestContext.Current.CancellationToken);
+
+        return await worker.RunDueAsync(TestContext.Current.CancellationToken);
+    }
+
     // Each turn moves the clock on by the sweep interval and runs what is due.
     private async Task TurnsAsync(BackgroundWorker worker, int turns)
     {
         for (int turn = 0; turn < turns; turn++)
         {
-            _ = await worker.RunDueAsync(TestContext.Current.CancellationToken);
+            _ = await RoundAsync(worker);
 
             _clock.Advance(Sweep);
+        }
+    }
+
+    // The run of the job beside the slow one has ended, while the slow one is still in
+    // flight: the worker knows when its next turn is, and with the clock standing,
+    // starts nothing.
+    private static async Task BesideEndedAsync(BackgroundWorker worker)
+    {
+        using var patience = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+
+        patience.CancelAfter(TimeSpan.FromSeconds(10));
+
+        while (await worker.RunDueAsync(patience.Token) != Sweep)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(5), patience.Token);
         }
     }
 

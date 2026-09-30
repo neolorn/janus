@@ -50,6 +50,8 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
 
         _ = await worker.RunDueAsync(TestContext.Current.CancellationToken);
 
+        await worker.SettledAsync(TestContext.Current.CancellationToken);
+
         await using NpgsqlConnection connection = await host.OpenAsync();
 
         IEnumerable<string> succeeded = await connection.QueryAsync<string>(
@@ -83,8 +85,10 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
 
         await using ServiceProvider services = Deployed(Authorization.Deployment.Noon.AddDays(40));
 
-        _ = await services.GetServices<IHostedService>().OfType<BackgroundWorker>().Single()
-            .RunDueAsync(cancellationToken);
+        BackgroundWorker worker = services.GetServices<IHostedService>().OfType<BackgroundWorker>().Single();
+
+        _ = await worker.RunDueAsync(cancellationToken);
+        await worker.SettledAsync(TestContext.Current.CancellationToken);
 
         await using NpgsqlConnection connection = await host.OpenAsync();
 
@@ -140,8 +144,10 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
 
         await using ServiceProvider services = Deployed(noon.AddDays(1));
 
-        _ = await services.GetServices<IHostedService>().OfType<BackgroundWorker>().Single()
-            .RunDueAsync(cancellationToken);
+        BackgroundWorker worker = services.GetServices<IHostedService>().OfType<BackgroundWorker>().Single();
+
+        _ = await worker.RunDueAsync(cancellationToken);
+        await worker.SettledAsync(TestContext.Current.CancellationToken);
 
         await using NpgsqlConnection connection = await host.OpenAsync();
 
@@ -189,8 +195,10 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
 
         await using ServiceProvider services = Deployed(noon);
 
-        _ = await services.GetServices<IHostedService>().OfType<BackgroundWorker>().Single()
-            .RunDueAsync(cancellationToken);
+        BackgroundWorker worker = services.GetServices<IHostedService>().OfType<BackgroundWorker>().Single();
+
+        _ = await worker.RunDueAsync(cancellationToken);
+        await worker.SettledAsync(TestContext.Current.CancellationToken);
 
         await using NpgsqlConnection connection = await host.OpenAsync();
 
@@ -223,8 +231,10 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
             () => throw new Xunit.Sdk.XunitException("The poll succeeded."),
             error => error);
 
-        _ = await services.GetServices<IHostedService>().OfType<BackgroundWorker>().Single()
-            .RunDueAsync(cancellationToken);
+        BackgroundWorker worker = services.GetServices<IHostedService>().OfType<BackgroundWorker>().Single();
+
+        _ = await worker.RunDueAsync(cancellationToken);
+        await worker.SettledAsync(TestContext.Current.CancellationToken);
 
         await using NpgsqlConnection connection = await host.OpenAsync();
 

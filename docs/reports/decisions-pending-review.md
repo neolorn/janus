@@ -13573,6 +13573,8 @@ test and that a failed one raises. Chapter 10 could list `ops.restoretest.comple
 If "at least quarterly" means once in every calendar quarter, the
 `backup.restoretest.interval` row could be written as `P90D`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 335. How the recovery-code reminder is sent

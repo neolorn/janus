@@ -24,11 +24,13 @@ namespace Janus.Hosting.Background;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="log">The host's logger.</param>
 /// <remarks>
-/// Implements INF-BG-001, INF-BG-002 and OPS-OBS-003. Every process of a deployment
-/// runs the worker and the database decides which one takes each run, so no person
-/// has to start anything and no two processes run one job at once. A failure is
-/// judged by the last success rather than by the failing run, so a job that stopped
-/// being attempted at all is noticed as surely as one that fails.
+/// Implements INF-BG-001, INF-BG-002 and OPS-OBS-003 (D-166, 334). Every process of a
+/// deployment runs the worker and the database decides which one takes each run, so no
+/// person has to start anything and no two processes run one job at once. A run is
+/// started and not awaited, so a long run holds no other job's turn; a job has at most
+/// one run in flight in the process, and its lapse is judged after its own run. A
+/// failure is judged by the last success rather than by the failing run, so a job that
+/// stopped being attempted at all is noticed as surely as one that fails.
 /// </remarks>
 internal sealed class BackgroundWorker(
     IServiceScopeFactory scopes,
@@ -38,45 +40,118 @@ internal sealed class BackgroundWorker(
 {
     private const string Fault = "fault";
 
+    private readonly Lock _gate = new();
+
     private readonly Dictionary<string, DateTimeOffset> _due = new(StringComparer.Ordinal);
 
+    private readonly Dictionary<string, Task> _running = new(StringComparer.Ordinal);
+
+    private TaskCompletionSource _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     /// <summary>
-    /// Runs every job whose time has come, and says how long until the next one's has.
+    /// Starts every job whose time has come and none of whose runs is in flight, and says
+    /// how long until the next one's time comes.
     /// </summary>
-    /// <param name="cancellationToken">Abandons the round.</param>
-    /// <returns>How long to wait before the next round.</returns>
+    /// <param name="cancellationToken">Abandons the round and the runs it starts.</param>
+    /// <returns>
+    /// How long to wait before the next round, not counting the jobs whose runs are in
+    /// flight.
+    /// </returns>
     public async ValueTask<TimeSpan> RunDueAsync(CancellationToken cancellationToken)
     {
-        foreach (BackgroundJob job in jobs)
-        {
-            DateTimeOffset now = time.GetUtcNow();
+        List<Task> ended = [];
+        TimeSpan wait;
 
-            if (_due.TryGetValue(job.Name, out DateTimeOffset due) && due > now)
+        lock (_gate)
+        {
+            if (_ended.Task.IsCompleted)
             {
-                continue;
+                _ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             }
 
-            _due[job.Name] = now + await ConsiderAsync(job, now, cancellationToken).ConfigureAwait(false);
+            DateTimeOffset now = time.GetUtcNow();
+
+            foreach (BackgroundJob job in jobs)
+            {
+                if (_running.TryGetValue(job.Name, out Task? turn))
+                {
+                    if (!turn.IsCompleted)
+                    {
+                        continue;
+                    }
+
+                    _ = _running.Remove(job.Name);
+                    ended.Add(turn);
+                }
+
+                if (_due.TryGetValue(job.Name, out DateTimeOffset due) && due > now)
+                {
+                    continue;
+                }
+
+                _running[job.Name] = Task.Run(() => TurnAsync(job, now, cancellationToken), CancellationToken.None);
+            }
+
+            DateTimeOffset[] waiting = [.. _due.Where(entry => !_running.ContainsKey(entry.Key)).Select(entry => entry.Value)];
+
+            wait = waiting.Length == 0
+                ? Timeout.InfiniteTimeSpan
+                : TimeSpan.FromTicks(Math.Max((waiting.Min() - now).Ticks, 0));
         }
 
-        if (_due.Count == 0)
+        // A fault no containment took ends the worker as it did when the run was
+        // awaited in place, and a cancellation is the worker stopping.
+        await Task.WhenAll(ended).ConfigureAwait(false);
+
+        return wait;
+    }
+
+    /// <summary>
+    /// Waits for the runs in flight to end.
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the wait, and not the runs.</param>
+    /// <returns>The work of waiting.</returns>
+    public async Task SettledAsync(CancellationToken cancellationToken)
+    {
+        Task[] running;
+
+        lock (_gate)
         {
-            return Timeout.InfiniteTimeSpan;
+            running = [.. _running.Values];
         }
 
-        TimeSpan wait = _due.Values.Min() - time.GetUtcNow();
-
-        return wait > TimeSpan.Zero ? wait : TimeSpan.Zero;
+        await Task.WhenAll(running).WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            TimeSpan wait = await RunDueAsync(stoppingToken).ConfigureAwait(false);
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                TimeSpan wait = await RunDueAsync(stoppingToken).ConfigureAwait(false);
+                Task ended;
 
-            await Task.Delay(wait, time, stoppingToken).ConfigureAwait(false);
+                lock (_gate)
+                {
+                    ended = _ended.Task;
+                }
+
+                // The next round comes when the next job is due or a run ends, whichever
+                // is first, since a run that ends is what makes its job's turn known.
+                using var round = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+
+                _ = await Task.WhenAny(Task.Delay(wait, time, round.Token), ended).ConfigureAwait(false);
+
+                await round.CancelAsync().ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            // The stopping token is spent by now, and the runs it cancelled are what is
+            // waited for.
+            await SettledAsync(CancellationToken.None).ConfigureAwait(false);
         }
     }
 
@@ -125,6 +200,26 @@ internal sealed class BackgroundWorker(
             ["job"] = JsonSerializer.SerializeToElement(job.Name),
             ["reason"] = JsonSerializer.SerializeToElement(job.Principal.Reason),
         };
+
+    // One job's turn in flight: when it ends, the job's next turn is known and the
+    // worker is woken to look at it.
+    private async Task TurnAsync(BackgroundJob job, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        TimeSpan next = job.Fallback;
+
+        try
+        {
+            next = await ConsiderAsync(job, now, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                _due[job.Name] = now + next;
+                _ = _ended.TrySetResult();
+            }
+        }
+    }
 
     // One job's turn: its run claimed and taken where this process won the claim, and
     // its lapse raised where it has lapsed, whatever the run did. What comes back is
