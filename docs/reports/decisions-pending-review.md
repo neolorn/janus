@@ -5621,6 +5621,8 @@ them. `10` section 5b already names `OrganizationErased`; the row should say it 
 the organization and the count of memberships ended and no subject. `10` section 5 needs
 the new audit action `identity.organization.erased` (listed under "Rows for chapter 10").
 
+**Superseded by D-166.**
+
 ---
 
 ## 156. The shipped lawful bases and sensitive categories exist

@@ -268,7 +268,7 @@ table erasures
   column status text not null
   column attempts integer not null
   constraint ck_erasures_attempts CHECK ((attempts >= 0))
-  constraint ck_erasures_reason CHECK ((reason = ANY (ARRAY['erasure-request'::text, 'minor-takedown'::text, 'organization-erasure'::text])))
+  constraint ck_erasures_reason CHECK ((reason = ANY (ARRAY['erasure-request'::text, 'minor-takedown'::text])))
   constraint ck_erasures_status CHECK ((status = ANY (ARRAY['awaiting-subscribers'::text, 'complete'::text, 'failed'::text])))
   constraint ck_erasures_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint fk_erasures_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
@@ -720,7 +720,7 @@ table outbox
   column next_attempt_at timestamp with time zone not null
   constraint ck_outbox_attempts CHECK ((attempts >= 0))
   constraint ck_outbox_kind CHECK ((kind = ANY (ARRAY['erasure-requested'::text, 'export-requested'::text, 'restriction-changed'::text, 'takedown-executed'::text])))
-  constraint ck_outbox_reason CHECK ((reason = ANY (ARRAY['erasure-request'::text, 'minor-takedown'::text, 'organization-erasure'::text])))
+  constraint ck_outbox_reason CHECK ((reason = ANY (ARRAY['erasure-request'::text, 'minor-takedown'::text])))
   constraint ck_outbox_status CHECK ((status = ANY (ARRAY['awaiting-subscribers'::text, 'complete'::text, 'failed'::text])))
   constraint ck_outbox_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint fk_outbox_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT

@@ -758,6 +758,9 @@ against the public contract of LIB-API-001.
   events in its own transaction, so an event that cannot be written leaves the
   organization unerased, and its `identity.organization.erased` record is filed under
   the organization.
+- An organization's erasure erases no account, so `ErasureReason` holds
+  `erasure-request` and `minor-takedown` only; `organization-erasure` is gone from it
+  and from the erasures and outbox tables.
 - The organization erasure replaces every domain the organization listed with its
   identifier, as it does the name, and marks each one still listed removed at the
   erasure.

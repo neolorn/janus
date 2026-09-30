@@ -381,7 +381,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
 
         await EraseAsync(awaiting, ErasureReason.ErasureRequest);
         await EraseAsync(failed, ErasureReason.MinorTakedown);
-        await EraseAsync(complete, ErasureReason.OrganizationErasure);
+        await EraseAsync(complete, ErasureReason.ErasureRequest);
 
         await using (StoreContext progressing = database.Context())
         {
@@ -694,9 +694,9 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
-    /// IDN-ORG-005 AC1, AC2: an organization's erasure runs over its members, and
-    /// afterwards the audit records naming the organization are still there to be
-    /// queried, with the personal details they carried no longer readable.
+    /// IDN-ORG-005 AC1, AC2: the audit records naming an organization are still there to
+    /// be queried once a member is erased, with the personal details they carried no
+    /// longer readable; an organization's own erasure erases no account (IDN-ORG-003).
     /// </summary>
     [Fact]
     public async Task IDN_ORG_005_AC1_TheOrganizationsTrailSurvivesItsErasureAsync()
@@ -725,7 +725,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await EraseAsync(member, ErasureReason.OrganizationErasure);
+        await EraseAsync(member, ErasureReason.ErasureRequest);
 
         await using NpgsqlConnection connection = await database.OpenAsync();
 

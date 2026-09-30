@@ -901,7 +901,6 @@ Janus.Core.ErasureProgress.Subscribers.init -> void
 Janus.Core.ErasureReason
 Janus.Core.ErasureReason.ErasureRequest = 0 -> Janus.Core.ErasureReason
 Janus.Core.ErasureReason.MinorTakedown = 1 -> Janus.Core.ErasureReason
-Janus.Core.ErasureReason.OrganizationErasure = 2 -> Janus.Core.ErasureReason
 Janus.Core.ErasureRequested
 Janus.Core.ErasureRequested.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.ErasureReason Reason) -> void
 Janus.Core.ErasureRequested.Equals(Janus.Core.ErasureRequested? other) -> bool
