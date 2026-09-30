@@ -50,7 +50,7 @@ public static class AuditActions
     /// <summary>
     /// The bot defence answered a send with a signal, which is recorded without the signal's own detail.
     /// </summary>
-    /// <remarks>Implements AUTH-ABUSE-009, chapter 10 section 5.</remarks>
+    /// <remarks>Implements AUTH-ABUSE-008 and LIB-HOST-001, chapter 10 section 5.</remarks>
     public static AuditAction BotDefenceSignalled { get; } = AuditAction.Parse("auth.botdefence.signalled");
 
     /// <summary>
@@ -140,20 +140,21 @@ public static class AuditActions
     /// <summary>
     /// A credential was invalidated by a loss report that took effect.
     /// </summary>
-    /// <remarks>Implements AUTH-REC-004, chapter 10 section 5.</remarks>
+    /// <remarks>Implements AUTH-RECOV-007, chapter 10 section 5.</remarks>
     public static AuditAction CredentialInvalidated { get; } = AuditAction.Parse("auth.credential.invalidated");
 
     /// <summary>
-    /// An invalidation was held rather than carried out, because carrying it out would leave the account with no way in.
+    /// The window of a suspended credential ended with none of its notices delivered, so the
+    /// invalidation was held and the credential stays suspended.
     /// </summary>
-    /// <remarks>Implements AUTH-REC-004, chapter 10 section 5.</remarks>
+    /// <remarks>Implements AUTH-RECOV-007 AC3, chapter 10 section 5.</remarks>
     public static AuditAction CredentialInvalidationHeld { get; } = AuditAction.Parse("auth.credential.invalidationheld");
 
     /// <summary>
-    /// A credential was given or renamed a label by its holder.
+    /// The holder gave a credential a label or renamed it.
     /// </summary>
-    /// <remarks>Implements REG-PM-002, chapter 10 section 5.</remarks>
-    public static AuditAction CredentialLabelled { get; } = AuditAction.Parse("identity.credential.labelled");
+    /// <remarks>Implements AUTH-FACT-001, chapter 10 section 5.</remarks>
+    public static AuditAction CredentialLabelled { get; } = AuditAction.Parse("auth.credential.labelled");
 
     /// <summary>
     /// A credential was removed from an account.
@@ -164,13 +165,13 @@ public static class AuditActions
     /// <summary>
     /// A loss report was cancelled before it took effect.
     /// </summary>
-    /// <remarks>Implements AUTH-REC-004, chapter 10 section 5.</remarks>
+    /// <remarks>Implements AUTH-RECOV-007, chapter 10 section 5.</remarks>
     public static AuditAction CredentialReportCancelled { get; } = AuditAction.Parse("auth.credential.reportcancelled");
 
     /// <summary>
     /// A credential was reported lost, which starts the window before it is invalidated.
     /// </summary>
-    /// <remarks>Implements AUTH-REC-004, chapter 10 section 5.</remarks>
+    /// <remarks>Implements AUTH-RECOV-007, chapter 10 section 5.</remarks>
     public static AuditAction CredentialReportedLost { get; } = AuditAction.Parse("auth.credential.reportedlost");
 
     /// <summary>
@@ -398,7 +399,7 @@ public static class AuditActions
     /// <summary>
     /// An assisted recovery was approved, naming the approver and the reason given.
     /// </summary>
-    /// <remarks>Implements AUTH-REC-006, chapter 10 section 5.</remarks>
+    /// <remarks>Implements AUTH-RECOV-002 and AUTH-RECOV-002a, chapter 10 section 5.</remarks>
     public static AuditAction RecoveryApproved { get; } = AuditAction.Parse("auth.recovery.approved");
 
     /// <summary>
@@ -411,7 +412,7 @@ public static class AuditActions
     /// <summary>
     /// A refresh token was presented a second time, which revokes the family it belongs to.
     /// </summary>
-    /// <remarks>Implements AUTH-TOK-004, chapter 10 section 5.</remarks>
+    /// <remarks>Implements AUTH-OIDC-003, chapter 10 section 5.</remarks>
     public static AuditAction RefreshTokenReused { get; } = AuditAction.Parse("auth.oidc.refreshreused");
 
     /// <summary>

@@ -1889,7 +1889,8 @@ against the public contract of LIB-API-001.
   of the account ends, as a removal ends them, and the session that removes an
   identifier or completes the verification of one is given a new secret, the one before
   it answering nothing. The session list marks the one asking and says no more about
-  where each was used than the city.
+  where each was used than the city. A credential given a label or renamed is audited
+  as `auth.credential.labelled`.
 - A profile field the deployment has switched off is neither accepted from a request nor
   carried in an answer, and the date of birth is never the person's to change. A
   preference key the host never declared is refused and never returned. A username, once
