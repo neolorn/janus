@@ -185,6 +185,14 @@ dotnet_naming_rule.locals_and_parameters_are_camel_case.severity = error
 # CA1062: guards are placed by CONV-CODE-006, not on every public member.
 dotnet_diagnostic.CA1062.severity = none
 
+[src/Janus.Storage/Migrations/*.Designer.cs]
+# The files EF Core's migration tool writes are generated code; a pragma the tool
+# writes there is the tool's, not a suppression (CONV-SETUP-004).
+generated_code = true
+
+[src/Janus.Storage/Migrations/StoreContextModelSnapshot.cs]
+generated_code = true
+
 [src/**.cs]
 # CA1812: every service is internal sealed and constructed by dependency injection
 # (CONV-DESIGN-002).

@@ -983,6 +983,42 @@ public sealed class LibraryStructureTests
             BelowError(Repository.ReadText(".editorconfig")));
 
     /// <summary>
+    /// CONV-SETUP-004 AC3, the suppressions: the .editorconfig marks as generated code
+    /// exactly the files EF Core's migration tool writes, each migration's designer file
+    /// and the model snapshot, and every other file that disables a warning justifies it
+    /// on the same line.
+    /// </summary>
+    [Fact]
+    public void CONV_SETUP_004_AC3_OnlyTheMigrationToolsFilesAreGeneratedAndEverySuppressionIsJustified()
+    {
+        string[] generated = Generated(Repository.ReadText(".editorconfig"));
+        string[] sources =
+        [
+            .. Sources().Select(file => Path.GetRelativePath(Repository.Root, file).Replace('\\', '/')),
+        ];
+        IEnumerable<string> written = sources.Where(file =>
+            file.StartsWith("src/Janus.Storage/Migrations/", StringComparison.Ordinal)
+            && (file.EndsWith(".Designer.cs", StringComparison.Ordinal)
+                || file.EndsWith("/StoreContextModelSnapshot.cs", StringComparison.Ordinal)));
+        IEnumerable<string> unjustified = sources
+            .Where(file => !generated.Any(section => Covers(section, file)))
+            .SelectMany(file => Repository
+                .ReadText(file)
+                .ReplaceLineEndings("\n")
+                .Split('\n')
+                .Where(line => line.TrimStart().StartsWith("#pragma warning disable", StringComparison.Ordinal)
+                    && !line.Contains("//", StringComparison.Ordinal))
+                .Select(line => file + ": " + line.Trim()));
+
+        Assert.Equal(
+            ["src/Janus.Storage/Migrations/*.Designer.cs", "src/Janus.Storage/Migrations/StoreContextModelSnapshot.cs"],
+            generated);
+        Assert.NotEmpty(written);
+        Assert.All(written, file => Assert.Contains(generated, section => Covers(section, file)));
+        Assert.Empty(unjustified);
+    }
+
+    /// <summary>
     /// CONV-VCS-005 AC2: no project, props or targets file states a version, and the
     /// version comes from MinVer, which every project inherits.
     /// </summary>
@@ -1507,6 +1543,37 @@ public sealed class LibraryStructureTests
 
         return [.. below];
     }
+
+    // The sections of an .editorconfig that mark their files generated code, in the
+    // order the file holds them.
+    private static string[] Generated(string configuration)
+    {
+        var marked = new List<string>();
+        string section = string.Empty;
+
+        foreach (string line in configuration.ReplaceLineEndings("\n").Split('\n').Select(entry => entry.Trim()))
+        {
+            if (line.StartsWith('[') && line.EndsWith(']'))
+            {
+                section = line[1..^1];
+            }
+            else if (Regex.IsMatch(line, @"^generated_code\s*=\s*true$", RegexOptions.None, TimeSpan.FromSeconds(5)))
+            {
+                marked.Add(section);
+            }
+        }
+
+        return [.. marked];
+    }
+
+    // Whether a section of the .editorconfig reaches a file, for the sections that
+    // name a folder and a file name with at most a wildcard in it.
+    private static bool Covers(string section, string file) =>
+        Regex.IsMatch(
+            file,
+            "^" + Regex.Escape(section).Replace(@"\*", "[^/]*", StringComparison.Ordinal) + "$",
+            RegexOptions.None,
+            TimeSpan.FromSeconds(5));
 
     // The source files of the test projects, as code with the comments taken out.
     private static IEnumerable<(string File, string Code)> TestSources() =>
