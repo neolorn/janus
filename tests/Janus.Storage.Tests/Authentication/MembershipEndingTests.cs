@@ -90,10 +90,14 @@ public sealed class MembershipEndingTests(DatabaseFixture database)
     private async Task<MembershipId> AttachAsync(SubjectId subject, OrganizationId organization, DateTimeOffset at)
     {
         await using StoreContext writing = database.Context();
+        await using UnitOfWork work = new(writing);
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
 
         MembershipId attached = (await new MembershipAttachment(
                     new MembershipStore(writing),
                     new GrantStore(writing, new DataConnections(writing)),
+                    new DataConnections(writing),
                     TimeProvider.System)
                 .AttachAsync(
                     subject,
@@ -107,7 +111,7 @@ public sealed class MembershipEndingTests(DatabaseFixture database)
                     TestContext.Current.CancellationToken))
             .Match(made => made, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
 
-        await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        await work.CommitAsync(TestContext.Current.CancellationToken);
 
         return attached;
     }

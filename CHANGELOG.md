@@ -1689,6 +1689,10 @@ against the public contract of LIB-API-001.
   for another, and a second membership of an organization the account is already a
   member of is refused whatever the setting says, naming that organization. Nothing in
   the schema separates staff from customers.
+- Two invitations acknowledged together for one account are decided one after the
+  other, under a lock on the account's row, so they never leave more memberships than
+  the setting allows; the database also refuses a second current membership of one
+  organization for an account (`ux_memberships_current`).
 - An audit trail. Every record names who acted, whose identity the action was taken
   under, the instant it occurred and the organization where one applies; an event about
   a principal holding no membership carries none, and the absence is the recorded fact.

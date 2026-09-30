@@ -598,6 +598,7 @@ table memberships
   constraint pk_memberships PRIMARY KEY (id)
   index ix_memberships_organization using btree (organization)
   index ix_memberships_subject using btree (subject)
+  index ux_memberships_current unique using btree (subject, organization) WHERE (ended_at IS NULL)
 table nonexistence_notices
   column id uuid not null
   column destination bytea not null

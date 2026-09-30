@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Authentication.Invitations;
 using Janus.Authorization.Grants;
 using Janus.Core;
@@ -16,19 +17,29 @@ namespace Janus.Storage.Authentication.Invitations;
 /// </summary>
 /// <param name="memberships">Where the account's memberships are read and the new one written.</param>
 /// <param name="grants">Where the grants are written.</param>
+/// <param name="connections">The connection and transaction the operation holds.</param>
 /// <param name="time">The clock the identifiers are drawn from.</param>
 /// <remarks>
 /// Implements REG-INV-001, IDN-LIFE-009a, IDN-MEM-002 and CONV-LAYOUT-001. Whether
-/// the account may hold another membership is the membership's own rule, and each
-/// grant is made as any stored grant is.
+/// the account may hold another membership is the membership's own rule, decided under
+/// a lock on the account's row so two attachments made together decide one after the
+/// other; the database holds one current membership of an organization per account
+/// whatever writes it. Each grant is made as any stored grant is.
 /// </remarks>
 internal sealed class MembershipAttachment(
     IMembershipStore memberships,
     IGrantStore grants,
+    DataConnections connections,
     TimeProvider time) : IMembershipAttachment
 {
+    private const string Hold =
+        """
+        SELECT 1 FROM identity.accounts WHERE subject = @subject FOR UPDATE;
+        """;
+
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    /// <exception cref="InvalidOperationException">No transaction is running.</exception>
     public async ValueTask<Result<MembershipId>> AttachAsync(
         SubjectId subject,
         OrganizationId organization,
@@ -43,6 +54,24 @@ internal sealed class MembershipAttachment(
         ArgumentNullException.ThrowIfNull(acknowledged);
         ArgumentNullException.ThrowIfNull(roles);
         ArgumentNullException.ThrowIfNull(reason);
+
+        // IDN-MEM-002, X3 of D-166: the memberships are read, and the new one decided,
+        // under the account's row lock, so a second attachment waits for this one to
+        // commit and decides on what it made.
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        if (ambient.Transaction is null)
+        {
+            throw new InvalidOperationException("A membership is attached only inside the operation's transaction.");
+        }
+
+        _ = await ambient.Connection
+            .ExecuteScalarAsync<int?>(new CommandDefinition(
+                Hold,
+                new { subject = subject.Value },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
 
         IReadOnlyList<Membership> held = await memberships
             .FindBySubjectAsync(subject, cancellationToken)
