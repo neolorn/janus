@@ -171,8 +171,8 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
 
     /// <summary>
     /// INF-BG-001 AC2: a job that throws does not stop the others, is written down by
-    /// the type of what it threw and never by its message (CONV-LOG-003), and lapses
-    /// like one that failed.
+    /// the full type name and frames of what it threw and never by its message
+    /// (CONV-LOG-003), and lapses like one that failed.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -185,7 +185,7 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
 
         Assert.Equal(4, ran);
         Assert.Equal("throwing", Assert.Single(_alerts.Of<AlertRaised>()).Details["job"].GetString());
-        Assert.Contains(_logs.Lines, line => line.Contains("Failure=InvalidOperationException", StringComparison.Ordinal));
+        Assert.Contains(_logs.Lines, line => line.Contains("Failure=System.InvalidOperationException", StringComparison.Ordinal));
         Assert.DoesNotContain(_logs.Lines, line => line.Contains("person@example.test", StringComparison.Ordinal));
     }
 

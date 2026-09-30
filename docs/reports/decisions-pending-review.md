@@ -16233,6 +16233,8 @@ and port. The chapter does not say where in the pipeline the fault is caught.
 *Chapter text that should change.* BFF-ERR-002 AC2 could say that the detail kept is
 the fault's type, since CONV-LOG-003 keeps its message out of the log.
 
+**Superseded by D-166.**
+
 ---
 
 ## 394. An authorization refusal the server cannot send to a client is answered to the browser in the envelope; the back-channel endpoints keep the protocol's JSON

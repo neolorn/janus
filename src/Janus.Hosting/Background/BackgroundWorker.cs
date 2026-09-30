@@ -83,8 +83,8 @@ internal sealed class BackgroundWorker(
     // INF-BG-001: one job's fault is not the worker's, so it becomes the job's failure,
     // is written down, and the other jobs keep their turns; the job's lapse is what
     // raises it. A cancellation is the worker's own only when the worker is stopping;
-    // one a job's own timeout threw is that job's fault like any other. The type is
-    // all that is kept of it, because a message can carry a value (CONV-LOG-003).
+    // one a job's own timeout threw is that job's fault like any other. It is kept by
+    // its fault log entry, never by a message, which can carry a value (CONV-LOG-003).
     private static async ValueTask<Result> ContainedAsync(
         Func<ValueTask<Result>> step,
         CancellationToken cancellationToken)
@@ -99,7 +99,7 @@ internal sealed class BackgroundWorker(
             return Result.Failure(Error.From(
                 ErrorCodes.SystemFault,
                 Fault,
-                JsonSerializer.SerializeToElement(fault.GetType().Name)));
+                JsonSerializer.SerializeToElement(FaultLog.Of(fault))));
         }
     }
 
@@ -110,8 +110,8 @@ internal sealed class BackgroundWorker(
         return default!;
     }
 
-    // What a failure is written down as: the type of what was thrown where it was a
-    // fault, and its code otherwise.
+    // What a failure is written down as: the fault log entry of what was thrown where
+    // it was a fault, and its code otherwise.
     private static string Described(Error error) =>
         error.Details.TryGetValue(Fault, out JsonElement fault)
             ? fault.GetString() ?? string.Empty

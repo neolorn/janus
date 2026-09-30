@@ -1277,8 +1277,10 @@ against the public contract of LIB-API-001.
 - Under the mount, a path no endpoint serves and a method a path does not take answer
   404 `authz.resource.notfound` in the error envelope, and a fault answers 500
   `system.fault` with the correlation identifier and nothing of what was thrown; the
-  log keeps the fault's type under that identifier. The host's routes outside the
-  mount answer as the host has them answer.
+  log keeps under that identifier the full type name and stack frames of the fault and
+  of each fault beneath it, and never a message, as it does for a fault a background job
+  or a restore test step throws. The host's routes outside the mount answer as the host
+  has them answer.
 - An authorization request refused where the refusal cannot go back to a client is
   answered to the browser in the error envelope rather than as the provider's text:
   400 `api.request.malformed` with the protocol's code in `details.error`, or 500
