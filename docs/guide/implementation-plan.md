@@ -33,17 +33,21 @@ start until Milestone 1's exit gate is green.
 5. The decision log is rationale only. Read an entry when a requirement seems odd; never
    build from the log. Nothing outside `docs/` is part of the specification.
 6. Where the specification is silent on something the code needs, that is a spec defect:
-   stop, report it in the phase report with the item it touches, and wait. Do not invent
-   behaviour.
+   park the item it touches and every item that depends on it, report it at once, and go
+   on with the rest (section 2). Do not invent behaviour.
 
 ## 2. Working rules
 
 - **One phase at a time.** A phase ends with a report: items implemented, criteria proven
-  (test names), items deferred with reason, spec defects found. In Milestone 1 the implementer
-  continues to the next phase on its own when the report lists no open question, no
-  deferred item and a green gate; otherwise it stops and waits. A Tier 2 or Tier 3
-  question ends the run (the working guide, section 3; D-166). Milestone 2 never starts
-  without the owner.
+  (test names), items deferred with reason, spec defects found. In Milestone 1 the
+  implementer continues to the next phase on its own when the report lists no unanswered
+  question, no deferred item and a green gate; otherwise it stops and waits. A Tier 2 or
+  Tier 3 question parks the item it touches and every item that depends on it, is reported
+  at once, and the run goes on with the rest; the run ends when the work is done or every
+  item left waits on an answer (the working guide, section 3; D-182). Work that splits
+  into parts sharing no item MAY run in parallel, each on a local branch merged into the
+  working branch (the working guide, section 6; D-182). Milestone 2 never starts without
+  the owner.
 - **Fast checks per commit** (build, analysers, unit suites); the **full gate** (integration,
   migration twice, contract tests, conformance suite) runs once per phase before the
   report (CONV-GATE-001, CONV-GATE-002).
@@ -55,12 +59,13 @@ start until Milestone 1's exit gate is green.
 - **Secure by default.** Every key ships with its `10` default; a host that configures
   nothing but the required values (eleven, three of them conditional, `10` section 4)
   gets a conformant deployment (OPS-CFG-003).
-- **Stop conditions.** Any Tier 2 or Tier 3 question of the working guide ends the run
-  with a report instead of a guess, among them: an acceptance criterion that cannot be
-  tested as written; two chapters that disagree; a dependency the environment does not
-  provide; a standard or product behaviour the spec asserts that the implementation
-  cannot confirm. From D-161 to D-166 such questions were decided alone while the owner
-  was absent; D-166 ended that mode.
+- **Stop conditions.** Any Tier 2 or Tier 3 question of the working guide parks the item
+  it touches, with a report instead of a guess, among them: an acceptance criterion that
+  cannot be tested as written; two chapters that disagree; a dependency the environment
+  does not provide; a standard or product behaviour the spec asserts that the
+  implementation cannot confirm. From D-161 to D-166 such questions were decided alone
+  while the owner was absent; D-166 ended that mode, and D-182 ended the stop of the whole
+  run at each question.
 
 ## 3. Milestone 1: the library
 
@@ -129,9 +134,10 @@ Each report is short and has the same shape:
 2. Items in the phase not implemented, each with the reason and the item it waits on.
 3. Resolved by rule: slips resolved in code under the conditions the working guide's section 3
    sets, each with the governing item and the rule applied.
-4. Open questions: item, what the code needed, what the spec says, the readings seen,
-   the smallest fix for each. No fix is applied to a chapter from the code side; it goes
-   through the decision log.
+4. Open questions: every question the run asked, answered or not: item, what the code
+   needed, what the spec says, the readings seen, the smallest fix for each, the items it
+   parked and, once answered, the decision-log entry that answered it. No fix is applied
+   to a chapter from the code side; it goes through the decision log.
 5. Gate result: fast checks per commit, full gate once, both green, with the run
    identifiers.
 6. Nothing else. No narrative, no measurements not asked for.

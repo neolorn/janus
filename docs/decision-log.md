@@ -8456,6 +8456,8 @@ tools for a reason.
 
 > **Amended.** The working mode of item 4 ends; Tier 2 and Tier 3 questions stop and ask again. The drift check of item 2 reads the relationship sources the host declares (D-166).
 
+> **Amended.** Item 4: a Tier 2 or Tier 3 question is still asked and never decided by the implementer, but it parks its item, not the run (D-182).
+
 **Date:** 2026-09-19 · **Status:** accepted · **Amends:** D-160, D-043, the working guide (rule tiers) · **Extends:** D-160
 
 **TL;DR.** Three derivation gaps closed, and a change of working mode: the owner cannot
@@ -8973,6 +8975,8 @@ section 7 · `19` · `20` · `docs/guide/janus-explained.md`,
 > **Amended.** 263 and D.8 break-glass part (3): a creation of an app password from the break-glass session, or a session opened from it, is refused `authz.denied` at the gate step, before the holder is read, as every listed step-up action is, the refusal `StepUpGuard.Unavailable` names being made there and not with the step-up judged after the other refusals; every other account without an enabled mailbox answers `identity.mailbox.notfound` (D-179).
 
 > **Amended.** 319: the algorithm check `configure` runs is the one admitted value of `token.signing.algorithm`, `ES256`, any other refused with `config.value.notallowed` (D-181).
+
+> **Amended.** Section B, and the Tier 2 stop of section C rule X5: a Tier 2 or Tier 3 question parks the item it touches and every item that depends on it, is reported at once, and the run goes on with the rest; the run ends when the work is done or every item left waits on an answer; independent parts may run in parallel (D-182).
 
 **Date:** 2026-09-25 · **Status:** accepted · **Amends:** D-161 (item 4, the working mode; item 2, where the drift check's rows come from), D-162 (item 22, where the governed send path lives; item 23, when the first attempt is made; item 26, the budget of a text message carrying a link; item 31, where destination records are kept and when they are swept; item 66, where a client secret comes from; C.55, where photo availability is held and what bootstrap writes; C.68 at `POST /auth/link`; C.103, the condition of the mail server row; E, the status of `identity.identifier.invalid`), D-153 (owner decision 2, the source a flood limit counts; owner decision 7, the word lists; the `backup.restoretest.interval` default; the address the bootstrap command prints), D-147 (the retirement of a key-encryption-key version; the name of the startup code for an unavailable secret), D-146 (item 17: a restriction's channel, the notices to a holder, a reason on every edit), D-143 (the policy object gains `photos`), D-129 (the break-glass page takes a reason), D-127 (a takedown reversal restores the state the takedown found), D-079a (a recognised device is exempt from the hold, not from the count), D-071 (three protected switches retired), D-060 (photos are off for the administrative organization until a codec is declared), D-057 (an authorization request's `redirect_uri` is refused at the push, not replaced), D-164 (item 3: the mail server verifies `aud` itself), D-165 (the developer recipient row is a declared example; the provider callback row and INT-GEN-003's sentence restored) · **Extends:** D-162, D-164, D-165
 
@@ -11514,6 +11518,8 @@ REG-INV-001, 002, REG-MAIL-001 to 003, REG-PM-001, REG-PROF-001, REG-SESS-001 to
 
 ## D-167 — Secret scanning over the full history: the scanner's own release, checksum-pinned; an allow-list entry names the file and the value
 
+> **Amended.** Items 4 and 5: a Tier 3 finding parks the item it touches, not the run; a finding that is, or may be, a real credential still ends the run at once (D-182).
+
 **Date:** 2026-09-26 · **Status:** accepted · **Amends:** D-150 (item 3, the secret scanner), D-166 (section B, the Tier 1 allowances) · **Extends:** D-042.3
 
 **TL;DR.** OPS-DEP-004 asked for gitleaks from its official action and a scan of the full
@@ -12740,6 +12746,66 @@ line); `10` section 1 (`config.value.notallowed`), section 4 (`token.signing.alg
 
 ---
 
+## D-182 — Questions park their item, not the run; independent parts run in parallel
+
+**Date:** 2026-09-30 · **Status:** accepted · **Amends:** D-161 (item 4, as D-166 left it), D-166 (section B and rule X5, the stop at each question), D-167 (items 4 and 5)
+
+**TL;DR.** A Tier 2 or Tier 3 question is still written up, asked and never decided by the
+implementer, but it no longer ends the run. It parks the item it touches and every item
+that depends on it, it is reported at once, and the run goes on with the rest; the run
+ends when the work is done or every item left waits on an answer. Work that splits into
+parts sharing no item may run in parallel, each part on a local branch merged into the
+working branch one at a time.
+
+**The question.** D-166 section B made every Tier 2 and Tier 3 question end the run. Since
+then, seventeen questions in corrections-4 (questions 4 to 20) each ended a run, and each
+cost a round trip of hours while the items that did not depend on it waited. The stop
+exists so that nothing is built on a guess; it does not need the unrelated work to wait.
+
+**Decision.**
+
+- **A question parks its item.** The implementer writes the question up as before (Tier 2
+  with the readings and the smallest fix for each, Tier 3 without a proposal) and reports
+  it in its message to the owner at once, not only at the end of the run. It builds
+  nothing of the item, and nothing that depends on it, until the answer comes, and goes on
+  with every other item. The owner answers while the run goes on; the answer comes as a
+  decision-log entry and the chapters it changes, which the implementer commits in a
+  `docs:` commit of their own before taking the parked item up again from the chapters as
+  they now read. The run ends when the work is done or every item left waits on an answer.
+  A finding that is, or may be, a real credential still ends the run at once (D-167).
+- **Independent parts may run in parallel.** Work that splits into parts that share no
+  item and touch different areas may be done by helpers the implementer starts and
+  directs, each on a local branch cut from the working branch and named for its area,
+  never with a name a tool chose, since the merge commit carries that name into history.
+  Every rule holds in each part: tests first, fast checks per commit, one logical change
+  per commit, the truth table with any change to permission logic (CONV-VCS-004), a
+  question parked and reported at once. The implementer merges each finished part into the
+  working branch one at a time, with a merge commit, and runs the fast checks after each
+  merge. A migration a part added is never merged by hand: where the model snapshot
+  conflicts, the part's migration is dropped and generated again from the merged model,
+  with every operation the model does not produce carried over unchanged, in the merge
+  commit. The lines of both sides are kept in the changelog, the error-code catalogue, the
+  unshipped public surface and the ledger. A helper writes no report; the implementer
+  writes its records and questions into the report on the working branch. No part outlives
+  the run: a part whose item is parked merges the commits it finished. Parts are never
+  pushed; the working branch alone is pushed and reaches `main` by pull request
+  (CONV-VCS-001). The rules that span every area (the D-166 section C sweeps, the section
+  F rows, the section G lines) run on the working branch after the merges, and the full
+  gate once, at the end.
+- **Reports keep their shape.** A report is clean when it lists no unanswered question.
+  **Open questions** lists every question the run asked, answered or not, with the item it
+  parked and, once answered, the decision-log entry that answered it.
+- *Rejected:* ending the run at each question (hours lost per question for work that did
+  not depend on it); letting the implementer decide again while the owner is away (D-166
+  reversed 101 of the decisions taken that way); pushing the parts or opening a pull
+  request for each (the working branch is the one change under review).
+
+**Propagated to:** the working guide (sections 3, 5, 6, 7, 9 and 10);
+`guide/implementation-plan.md` sections 1, 2 and 5 (the silent specification, the working
+rules and the stop conditions, the report); `08` the preamble, CONV-VCS-001, CONV-VCS-003.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -12931,6 +12997,7 @@ line); `10` section 1 (`config.value.notallowed`), section 4 (`token.signing.alg
 | Corrections-4 question 17: an app password asked for from the break-glass session | D-179 |
 | Corrections-4 questions 18 and 19: how an absent secret source is named, and one way to reach an optional declaration | D-180 |
 | Corrections-4 question 20: how a replaced signing credential leaves the provider | D-181 |
+| Questions park their item, not the run; independent parts run in parallel | D-182 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

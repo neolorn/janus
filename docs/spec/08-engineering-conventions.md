@@ -11,9 +11,9 @@ platform constraints.
 defaults. Anything not addressed here follows standard .NET practice.
 
 **Nothing in this document is a suggestion.** Every design and code choice below is
-fixed so that the implementer decides none of them. Where a choice is
-not covered here or by another chapter, the implementer stops and reports rather than
-choosing (D-149).
+fixed so that the implementer decides none of them. Where a choice is not covered here
+or by another chapter, the implementer parks the item and reports it rather than
+choosing (D-149, D-182).
 
 **Root namespace:** `Janus`. Settled — the library is internal to the company's own
 projects and is not published publicly, so no registry check applies.
@@ -1164,10 +1164,11 @@ Two paths could disagree, and the log would be the one nobody notices is wrong.
 
 ## 6. Version control
 
-**CONV-VCS-001** — Trunk-based development with short-lived branches, merged via pull
-request.
+**CONV-VCS-001** — Trunk-based development with short-lived branches; a branch reaches
+the default branch only by pull request, and a local branch that is never pushed may be
+merged into the branch it was cut from (D-182).
 
-*Source: OPS-MIG-005*
+*Source: OPS-MIG-005, D-182*
 
 Long-lived branches combine badly with expand-and-contract migrations.
 
@@ -1194,19 +1195,20 @@ current plan.
 
 ---
 
-**CONV-VCS-003** — Commit messages SHALL follow **Conventional Commits 1.0.0**: a
-type from `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `build`, `ci`, `chore`, an
+**CONV-VCS-003** — Commit messages SHALL follow **Conventional Commits 1.0.0**: a type
+from `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `build`, `ci`, `chore`, an
 optional scope naming the area or feature (`feat(identifiers): ...`), a description in
 the imperative of at most 72 characters, and `BREAKING CHANGE:` in the footer or `!`
-after the type for any change that breaks LIB-API-001. One logical change per commit.
-A body is present only when the diff cannot explain itself and SHALL consist of
-fragments, one per line, each beginning with a dash and at most 72 characters, stating
-a reason or a non-obvious consequence; a body SHALL NOT describe what the diff shows
-and SHALL NOT contain sentences of prose (D-150). A commit with two parents (the merge
-commit the platform writes when a pull request is merged) carries no change of its own
-and is outside this item: the gate inspects single-parent commits only (D-158).
+after the type for any change that breaks LIB-API-001. One logical change per commit. A
+body is present only when the diff cannot explain itself and SHALL consist of fragments,
+one per line, each beginning with a dash and at most 72 characters, stating a reason or
+a non-obvious consequence; a body SHALL NOT describe what the diff shows and SHALL NOT
+contain sentences of prose (D-150). A commit with two parents (the merge commit the
+platform writes when a pull request is merged, or the merge of a local branch into the
+branch it was cut from, which carries the resolution of its conflicts, D-182) is outside
+this item: the gate inspects single-parent commits only (D-158).
 
-*Source: D-149, D-158, D-166*
+*Source: D-149, D-158, D-166, D-182*
 
 **Acceptance criteria**
 1. A commit message that does not parse under Conventional Commits 1.0.0, whose
