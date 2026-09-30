@@ -56,7 +56,7 @@ public sealed class DeclaredProcessingTests
     {
         StartupException refused = Assert.Throws<StartupException>(
             () => AuthorizationModel.Of(
-                Declaring(article => article.Encrypted(item => item.Body, item => item.Author))));
+                Declaring(article => article.Encrypted(item => item.Body, item => item.Author, "content"))));
 
         Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
     }
@@ -316,7 +316,7 @@ public sealed class DeclaredProcessingTests
                 // encrypted fields name the column the data subject is read from.
                 _ = workspace
                     .BelongsToOrganization()
-                    .Encrypted(held => held.Title, held => held.Owner)
+                    .Encrypted(held => held.Title, held => held.Owner, "history")
                     .Purpose("recommendations", "agreement", data: ["history"], consent: consent);
 
                 if (sensitive)

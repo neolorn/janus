@@ -268,7 +268,7 @@ public sealed class HostFixture : IAsyncLifetime
             .Resource<HostDocument>("document", type => type
                 .ContainedIn("workspace")
                 .Sensitive("financial")
-                .Encrypted(held => held.Notes, held => held.Owner)
+                .Encrypted(held => held.Notes, held => held.Owner, "history")
                 .Purpose("running the host", "contract", data: ["identity"], subjects: ["members"])
                 .Purpose("keeping the books", "legal-obligation", data: ["history"], subjects: ["members"])
                 .Purpose(

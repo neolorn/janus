@@ -80,7 +80,8 @@ public sealed class AuthorizationModelTests
         Assert.Equal(
             new EncryptedFieldDeclaration(
                 nameof(HostDomain.Article.Body),
-                nameof(HostDomain.Article.Author)),
+                nameof(HostDomain.Article.Author),
+                "content"),
             article.EncryptedFields.Single());
         Assert.Equal(
             nameof(HostDomain.Folder.Reviewer),
@@ -208,7 +209,7 @@ public sealed class AuthorizationModelTests
     public void PRIV_RIGHT_005a_AC1_AnEncryptedFieldNamingNoSubjectColumnFailsStartup()
     {
         StartupException refused = Assert.Throws<StartupException>(
-            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", ""))));
+            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "", "identity"))));
 
         Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
     }
@@ -225,9 +226,27 @@ public sealed class AuthorizationModelTests
     public void PRIV_RIGHT_005a_AC2_ASubjectColumnNamingNoSubjectFailsStartup(string column)
     {
         Assert.Throws<StartupException>(
-            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", column))));
+            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", column, "identity"))));
 
-        Assert.NotNull(AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author"))));
+        Assert.NotNull(AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author", "identity"))));
+    }
+
+    /// <summary>
+    /// PRIV-PRIN-001 AC2: an encrypted field holds a data category a purpose on its type
+    /// names, so one holding a category no purpose there names stops the deployment
+    /// with <c>model.startup.declarationinvalid</c>, naming the type and the field, and
+    /// one whose category a purpose names starts.
+    /// </summary>
+    [Fact]
+    public void PRIV_PRIN_001_AC2_AnEncryptedFieldWhoseCategoryNoPurposeNamesFailsStartup()
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author", "health"))));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("article", refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal("Body", refused.Failure?.Details["field"].GetString());
+        Assert.NotNull(AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author", "identity"))));
     }
 
     /// <summary>
@@ -482,7 +501,7 @@ public sealed class AuthorizationModelTests
             .Resource<HostDomain.Article>("article", article => article
                 .BelongsToOrganization()
                 .Purpose(purpose, basis, data: ["identity"])
-                .Encrypted(item => item.Body, item => item.Author))
+                .Encrypted(item => item.Body, item => item.Author, "identity"))
             .Build();
 
     private static AuthorizationDeclaration Malformed(int index) => index switch

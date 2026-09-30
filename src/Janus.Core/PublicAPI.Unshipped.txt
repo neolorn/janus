@@ -836,8 +836,10 @@ Janus.Core.EmailAddress.Equals(Janus.Core.EmailAddress other) -> bool
 Janus.Core.EmailAddress.Value.get -> string!
 Janus.Core.EncryptedFieldDeclaration
 Janus.Core.EncryptedFieldDeclaration.<Clone>$() -> Janus.Core.EncryptedFieldDeclaration!
-Janus.Core.EncryptedFieldDeclaration.Deconstruct(out string! Field, out string! SubjectColumn) -> void
-Janus.Core.EncryptedFieldDeclaration.EncryptedFieldDeclaration(string! Field, string! SubjectColumn) -> void
+Janus.Core.EncryptedFieldDeclaration.Category.get -> string!
+Janus.Core.EncryptedFieldDeclaration.Category.init -> void
+Janus.Core.EncryptedFieldDeclaration.Deconstruct(out string! Field, out string! SubjectColumn, out string! Category) -> void
+Janus.Core.EncryptedFieldDeclaration.EncryptedFieldDeclaration(string! Field, string! SubjectColumn, string! Category) -> void
 Janus.Core.EncryptedFieldDeclaration.Equals(Janus.Core.EncryptedFieldDeclaration? other) -> bool
 Janus.Core.EncryptedFieldDeclaration.Field.get -> string!
 Janus.Core.EncryptedFieldDeclaration.Field.init -> void
@@ -2369,7 +2371,7 @@ Janus.Core.ResourceTypeDeclarationBuilder<TResource>.BelongsToOrganization() -> 
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.ContainedIn(string! container) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Derivation(string! relationship, string! role, bool materialised = false) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Discloses() -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
-Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Encrypted(System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! field, System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! subject) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
+Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Encrypted(System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! field, System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! subject, string! category) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Purpose(string! name, string! basis, string? assessment = null, System.Collections.Generic.IReadOnlyList<string!>? data = null, System.Collections.Generic.IReadOnlyList<string!>? subjects = null, Janus.Core.ConsentKind? consent = null, string? document = null) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Sensitive(string! category) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.Restriction

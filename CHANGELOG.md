@@ -834,6 +834,11 @@ against the public contract of LIB-API-001.
   the declared type does not hold, or one holding something that is not a subject.
   Ciphertext an erasure could not reach stops the deployment instead of reaching
   production.
+- An encrypted field names the data category it holds: `EncryptedFieldDeclaration`
+  gains `Category` and the builder's `Encrypted` takes it. Startup refuses a field whose
+  category no purpose declared on its type names, with
+  `model.startup.declarationinvalid`, `details.declaration` the type and
+  `details.field` the field.
 - A host declares a retention floor for each data category its purposes are over, with
   `RetentionFloor` on the declaration builder, and `retention.<category>` defaults to
   it, so a deployment starts without a stored period for each category. Building the

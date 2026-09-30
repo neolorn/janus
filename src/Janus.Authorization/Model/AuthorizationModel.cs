@@ -556,8 +556,14 @@ internal sealed class AuthorizationModel
     // PRIV-RIGHT-005a: the subject column is how erasure reaches ciphertext sitting in
     // a host's own table. One naming nothing, or naming something that is not a
     // subject, leaves fields nothing can erase, so the deployment stops here.
+    // PRIV-PRIN-001: a field is held for a purpose, so the category it holds is one a
+    // purpose on its type names, or nothing accounts for holding it.
     private static void CheckEncryptedFields(ResourceTypeDeclaration type)
     {
+        var held = new HashSet<string>(
+            type.Purposes.SelectMany(purpose => purpose.DataCategories),
+            StringComparer.Ordinal);
+
         foreach (EncryptedFieldDeclaration field in type.EncryptedFields)
         {
             if (string.IsNullOrWhiteSpace(field.SubjectColumn))
@@ -577,6 +583,20 @@ internal sealed class AuthorizationModel
                 throw Malformed(
                     "the type " + type.Name + " holds " + field.Field + " under "
                     + field.SubjectColumn + ", which names no subject");
+            }
+
+            if (!held.Contains(field.Category))
+            {
+                throw new StartupException(
+                    "The authorization model is refused: " + type.Name + "." + field.Field
+                    + ", because it holds " + field.Category + ", which no purpose on its type names.",
+                    new Error(
+                        ErrorCodes.StartupDeclarationInvalid,
+                        new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+                        {
+                            ["declaration"] = JsonSerializer.SerializeToElement(type.Name.ToString()),
+                            ["field"] = JsonSerializer.SerializeToElement(field.Field),
+                        }));
             }
         }
     }
