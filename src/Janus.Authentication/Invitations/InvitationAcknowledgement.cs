@@ -136,9 +136,14 @@ internal sealed class InvitationAcknowledgement(
             return Result.Failure(failure);
         }
 
-        if (await UnmetAsync(invitee, policy, cancellationToken).ConfigureAwait(false) is Error enrol)
+        // 09 section 6a: a refusal no enrolment could meet is told before the credential
+        // policy, so nobody is sent to enrol for a membership they cannot take. The
+        // attachment judges the limit again under the account's lock.
+        if (await memberships.RefusedAsync(invitee, invitation.Organization, multiple, cancellationToken)
+                .ConfigureAwait(false)
+            is Error limited)
         {
-            return Result.Failure(enrol);
+            return Result.Failure(limited);
         }
 
         bool corporate = invitation.Mailbox is not null && bound.CorporateEmail is not null;
@@ -148,6 +153,11 @@ internal sealed class InvitationAcknowledgement(
         if (corporate && held.OfKind(IdentifierKind.Email).Count >= maximum)
         {
             return Result.Failure(Error.From(ErrorCodes.IdentifierMaximum));
+        }
+
+        if (await UnmetAsync(invitee, policy, cancellationToken).ConfigureAwait(false) is Error enrol)
+        {
+            return Result.Failure(enrol);
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))

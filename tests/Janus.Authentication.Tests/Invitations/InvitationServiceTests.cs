@@ -51,6 +51,12 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
     private static readonly OrganizationId Customer = new(Guid.NewGuid());
 
+    private static readonly PolicyOverride Aal2WithPasskey = PolicyOverride.None with
+    {
+        RequiredAssurance = AssuranceLevel.Aal2,
+        LoginFactors = new HashSet<Factor> { Factor.Passkey, Factor.Totp },
+    };
+
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly AccessGateInMemory _gate = new();
     private readonly AdministrativeOrganizationInMemory _administrative = new() { Organization = Staff };
@@ -1027,6 +1033,59 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 Source,
                 TestContext.Current.CancellationToken)).Code);
         Assert.Empty(_attachments.Attached);
+    }
+
+    /// <summary>
+    /// REG-INV-002 and 09 section 6a: a refusal no enrolment could meet is told before
+    /// the credential policy, so an account at its membership limit and below the
+    /// organization's assurance is refused for the limit and not sent to enrol.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_002_TheMembershipLimitComesBeforeTheCredentialPolicyAsync()
+    {
+        _configuration.Set(Settings.OrganizationPolicy, Customer.ToString(), Aal2WithPasskey);
+
+        string token = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+        SubjectId holder = Holder();
+
+        _ = _identifiers.Verified(holder, IdentifierKind.Phone, Number);
+        _memberships.Place(holder, Staff);
+        Accepted(await OpenAsync(holder, token));
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.MembershipLimitReached,
+            Failure(await AcknowledgeAsync(holder, _invitations.Held[0].Id)).Code);
+        Assert.True(_invitations.Held[0].Stands);
+        Assert.Empty(_attachments.Attached);
+        Assert.Equal(0, _work.Opened);
+    }
+
+    /// <summary>
+    /// REG-INV-002 and 09 section 6a: the email maximum is told before the credential
+    /// policy as the membership limit is, so an account holding as many emails as it may
+    /// is not sent to enrol for a corporate address it cannot take.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_002_TheEmailMaximumComesBeforeTheCredentialPolicyAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        _configuration.Set(Settings.OrganizationPolicy, Staff.ToString(), Aal2WithPasskey);
+
+        _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+
+        string token = _notifications.Mail[^1].Values["token"];
+        SubjectId holder = Holder();
+
+        _ = _identifiers.Verified(holder, IdentifierKind.Email, Personal);
+        Accepted(await OpenAsync(holder, token));
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.IdentifierMaximum,
+            Failure(await AcknowledgeAsync(holder, _invitations.Held[0].Id)).Code);
+        Assert.Empty(_attachments.Attached);
+        Assert.Equal(0, _work.Opened);
     }
 
     /// <summary>

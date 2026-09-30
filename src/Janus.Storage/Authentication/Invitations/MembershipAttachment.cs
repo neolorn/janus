@@ -38,6 +38,18 @@ internal sealed class MembershipAttachment(
         """;
 
     /// <inheritdoc/>
+    public async ValueTask<Error?> RefusedAsync(
+        SubjectId subject,
+        OrganizationId organization,
+        bool multiple,
+        CancellationToken cancellationToken) =>
+        Membership.Refused(
+            subject,
+            organization,
+            await memberships.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false),
+            multiple);
+
+    /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     /// <exception cref="InvalidOperationException">No transaction is running.</exception>
     public async ValueTask<Result<MembershipId>> AttachAsync(

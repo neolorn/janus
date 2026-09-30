@@ -1737,6 +1737,9 @@ against the public contract of LIB-API-001.
   `identity.invitation.notfound`.
 - The membership step shows an inviter who shows no display name by their primary
   email, and by nothing only where neither reads.
+- Acknowledging an invitation tells the membership limit and the email maximum before
+  the organization's credential policy, so nobody is sent to enrol for a membership
+  they cannot take.
 - An audit trail. Every record names who acted, whose identity the action was taken
   under, the instant it occurred and the organization where one applies; an event about
   a principal holding no membership carries none, and the absence is the recorded fact.
