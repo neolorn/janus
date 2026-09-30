@@ -51,6 +51,10 @@ internal sealed class GrantService(
     // names the whole organization rather than one record in it.
     private static readonly ResourceType OrganizationWide = ResourceType.Parse("organization");
 
+    // The role bootstrap grants the reserved account, which the break-glass session
+    // holds (OPS-BOOT-002).
+    private static readonly RoleName SystemAdministrator = RoleName.Parse("system-administrator");
+
     /// <inheritdoc/>
     public async ValueTask<Result<GrantId>> GrantAsync(
         AccessContext context,
@@ -178,6 +182,15 @@ internal sealed class GrantService(
             is not { Kind: GrantKind.Stored, RevokedAt: null } held)
         {
             return Result.Failure(Error.From(ErrorCodes.GrantNotFound));
+        }
+
+        // OPS-BOOT-002, D-166: the break-glass session holds what this grant confers,
+        // so revoking it would leave the session nothing.
+        if (held.Role == SystemAdministrator
+            && await emergency.FindAsync(cancellationToken).ConfigureAwait(false) is SubjectId reserved
+            && held.Subject == GrantSubject.Of(reserved))
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
         if (await AdministeringRefusedAsync(

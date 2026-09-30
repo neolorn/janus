@@ -240,6 +240,60 @@ public sealed class RoleEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// OPS-BOOT-002, D-166: the role the reserved account holds keeps every permission
+    /// the library declares, so a stepped-up system administrator taking one out is
+    /// refused and nothing changes; adding a permission the host declares stays
+    /// allowed, and a role the reserved account does not hold is narrowed as before.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_TheReservedAccountsRoleKeepsEveryLibraryPermissionAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(
+            Permissions.RoleManage,
+            Permissions.SystemAdminister);
+        var reserved = new SubjectId(Guid.NewGuid());
+        Grant bootstrapped = Grant
+            .Create(
+                GrantId.New(_deployment.Clock),
+                GrantSubject.Of(reserved),
+                SystemAdministrator,
+                Administration,
+                on: null,
+                deny: false,
+                GrantKind.Stored,
+                expiresAt: null,
+                actor,
+                _deployment.Clock.GetUtcNow(),
+                "Bootstrap.")
+            .Match(created => created, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        await _deployment.AccessGrants.CreateAsync(bootstrapped, CancellationToken.None);
+        _deployment.Reserves(reserved);
+
+        string[] library = [.. Permissions.All.Select(permission => permission.ToString())];
+
+        Answer narrowed = await DefinedAsync(administrator, [.. library.Skip(1)], name: SystemAdministrator.ToString());
+
+        Assert.Equal(StatusCodes.Status403Forbidden, narrowed.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), narrowed.Text("code"));
+        Role standing = (await _deployment.Roles.FindAsync(SystemAdministrator, CancellationToken.None))!;
+
+        Assert.All(Permissions.All, permission => Assert.True(standing.Allows(permission)));
+        Assert.Empty(_deployment.RoleChanges.Changes);
+
+        Answer widened = await DefinedAsync(administrator, [.. library, "article:read"], name: SystemAdministrator.ToString());
+        Answer other = await DefinedAsync(administrator, Administering, name: "auditor");
+        Answer otherNarrowed = await DefinedAsync(administrator, Reading, name: "auditor");
+
+        Assert.Equal(StatusCodes.Status204NoContent, widened.Status);
+        Assert.True((await _deployment.Roles.FindAsync(SystemAdministrator, CancellationToken.None))!
+            .Allows(Permission.Parse("article:read")));
+        Assert.Equal(StatusCodes.Status201Created, other.Status);
+        Assert.Equal(StatusCodes.Status204NoContent, otherNarrowed.Status);
+    }
+
+    /// <summary>
     /// AUTH-STEP-001 and chapter 10 section 5a: defining and removing a role are the
     /// <c>grant:manage</c> step-up action, so a session whose proof is no longer recent
     /// changes nothing.
@@ -265,9 +319,10 @@ public sealed class RoleEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// CONV-CODE-006 AC2: a body missing the reason defining or removing a role requires
-    /// is refused naming it before the service is reached, so a caller the service would
-    /// refuse for want of the permission is answered for the body, and nothing changes.
+    /// CONV-CODE-006 AC2: a body missing the reason defining or removing a role requires,
+    /// or carrying one past 1024 characters (API-CONV-002), is refused naming it before
+    /// the service is reached, so a caller the service would refuse for want of the
+    /// permission is answered for the body, and nothing changes.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -281,10 +336,12 @@ public sealed class RoleEndpointTests : IAsyncLifetime
             ("name", "editor"),
             ("permissions", Editing));
         Answer unremoved = await caller.SendAsync("DELETE", "/admin/roles/" + SystemAdministrator, "{}");
+        Answer overlong = await DefinedAsync(caller, Editing, reason: new string('r', 1025));
 
         Assert.Equal(ErrorCodes.RequestMalformed.ToString(), undefined.Text("code"));
         Assert.Equal("reason", Member(undefined));
         Assert.Equal("reason", Member(unremoved));
+        Assert.Equal("reason", Member(overlong));
         Assert.Null(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
         Assert.NotNull(await _deployment.Roles.FindAsync(SystemAdministrator, CancellationToken.None));
         Assert.Empty(_deployment.RoleChanges.Changes);

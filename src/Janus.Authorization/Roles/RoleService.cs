@@ -17,14 +17,17 @@ namespace Janus.Authorization.Roles;
 /// <param name="scope">Whether the caller may manage roles, and holds system administration.</param>
 /// <param name="stepUp">What defining and removing ask of the caller's session.</param>
 /// <param name="roles">Where roles are read and written.</param>
-/// <param name="grants">Whether any grant names a role.</param>
+/// <param name="grants">Whether any grant names a role, and which the reserved account holds.</param>
+/// <param name="administrative">Which organization administers the deployment.</param>
+/// <param name="emergency">Which account the break-glass session belongs to.</param>
 /// <param name="model">Which permissions exist, and which roles a derivation confers.</param>
 /// <param name="audit">Where every change is written down.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements LIB-API-005, AUTHZ-GRANT-004 and OPS-CFG-007. A role is the deployment's
-/// rather than one organization's, so it is managed in the administrative organization.
+/// Implements LIB-API-005, AUTHZ-GRANT-004, OPS-CFG-007 and OPS-BOOT-002. A role is the
+/// deployment's rather than one organization's, so it is managed in the administrative
+/// organization.
 /// Its permissions are read live wherever access is worked out, so a change takes
 /// effect on the next request with nothing to invalidate.
 /// </remarks>
@@ -33,6 +36,8 @@ internal sealed class RoleService(
     IStepUpGate stepUp,
     IRoleStore roles,
     IGrantStore grants,
+    IAdministrativeOrganization administrative,
+    IEmergencyAccount emergency,
     AuthorizationModel model,
     IRoleAudit audit,
     IUnitOfWork work,
@@ -106,12 +111,21 @@ internal sealed class RoleService(
         if (await AdministeringRefusedAsync(context, [held, defined], cancellationToken).ConfigureAwait(false)
             is Error administering)
         {
-            return Result.Failure<bool>(administering);
+            return await EndedAsync<bool>(administering, cancellationToken).ConfigureAwait(false);
+        }
+
+        // OPS-BOOT-002, D-166: the break-glass session holds what the reserved account's
+        // role allows, so that role keeps every permission the library declares. A
+        // permission the host declares may still be added to it.
+        if (!Permissions.All.All(defined.Allows)
+            && await ReservedHoldsAsync(role.Name, cancellationToken).ConfigureAwait(false))
+        {
+            return await EndedAsync<bool>(Error.From(ErrorCodes.Denied), cancellationToken).ConfigureAwait(false);
         }
 
         if (await SteppedUpAsync(acting, session, cancellationToken).ConfigureAwait(false) is Error challenged)
         {
-            return Result.Failure<bool>(challenged);
+            return await EndedAsync<bool>(challenged, cancellationToken).ConfigureAwait(false);
         }
 
         if (held is null)
@@ -244,6 +258,28 @@ internal sealed class RoleService(
         }
 
         return Result.Failure(refusal);
+    }
+
+    private async ValueTask<Result<TValue>> EndedAsync<TValue>(Error refusal, CancellationToken cancellationToken) =>
+        (await EndedAsync(refusal, cancellationToken).ConfigureAwait(false))
+            .Match(() => Result.Failure<TValue>(refusal), Result.Failure<TValue>);
+
+    // Bootstrap grants the reserved account its role in the administrative
+    // organization, and nothing grants it anything further (OPS-BOOT-002).
+    private async ValueTask<bool> ReservedHoldsAsync(RoleName role, CancellationToken cancellationToken)
+    {
+        if (await emergency.FindAsync(cancellationToken).ConfigureAwait(false) is not SubjectId reserved
+            || await administrative.FindAsync(cancellationToken).ConfigureAwait(false)
+                is not OrganizationId organization)
+        {
+            return false;
+        }
+
+        IReadOnlyList<Grant> held = await grants
+            .HeldByAsync([GrantSubject.Of(reserved)], organization, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
+
+        return held.Any(grant => grant.Role == role && !grant.Deny);
     }
 
     private bool Derived(RoleName role) =>

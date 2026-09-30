@@ -432,6 +432,44 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// OPS-BOOT-002, D-166: the reserved account's <c>system-administrator</c> grant is
+    /// what the break-glass session holds, so a system administrator stepped up is
+    /// refused its revocation and the grant stands.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_TheReservedAccountsAdministrationIsNotRevokedAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(
+            Administration,
+            Permissions.GrantManage,
+            Permissions.SystemAdminister);
+        Grant bootstrapped = Grant
+            .Create(
+                GrantId.New(_deployment.Clock),
+                new GrantSubject(SubjectType.User, Holder),
+                SystemAdministrator,
+                Administration,
+                on: null,
+                deny: false,
+                GrantKind.Stored,
+                expiresAt: null,
+                new SubjectId(Holder),
+                _deployment.Clock.GetUtcNow(),
+                "Bootstrap.")
+            .Match(grant => grant, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        await _deployment.AccessGrants.CreateAsync(bootstrapped, CancellationToken.None);
+        _deployment.Reserves(new SubjectId(Holder));
+
+        Answer refused = await RevokedAsync(administrator, bootstrapped.Id.ToString());
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
+        Assert.Null((await _deployment.AccessGrants.FindAsync(bootstrapped.Id, CancellationToken.None))!.RevokedAt);
+    }
+
+    /// <summary>
     /// AUTH-STEP-001 and chapter 10 section 5a: granting and revoking are the
     /// <c>grant:manage</c> step-up action, so a session whose proof is no longer recent
     /// changes nothing.

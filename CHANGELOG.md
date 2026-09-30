@@ -331,8 +331,10 @@ against the public contract of LIB-API-001.
   `system:administer`, and a step-up to generate. The reserved account is never suspended, taken down,
   deleted, granted anything or added to a group, and is given no password, identifier,
   factor, provider link, recovery codes or mail credential; each is refused with
-  `authz.denied`. The reserved account is marked on its row, and the credential and its
-  attempts are kept in two tables of their own.
+  `authz.denied`. Its `system-administrator` grant is never revoked, and the role it
+  holds never loses a permission the library declares (a host permission may be
+  added), each refused with `authz.denied`. The reserved account is marked on its row,
+  and the credential and its attempts are kept in two tables of their own.
 - `POST /callbacks/providers/google` and `POST /callbacks/providers/apple` take the
   security events Google (Cross-Account Protection) and Sign in with Apple send about an
   identity linked to an account, on the machine profile and held to

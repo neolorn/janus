@@ -6977,6 +6977,8 @@ which is the "one step removed" OPS-CFG-007 exists to prevent, and would let the
 *Chapter text that should change.* AUTHZ-GRANT-004 could require the reason and the
 audit record of a role change, and OPS-CFG-007 could name role changes.
 
+**Superseded by D-166.**
+
 ---
 
 ## 189. A role a grant or a derivation names is not removed, and the refusal has a code of its own
