@@ -859,8 +859,10 @@ public static class ErrorCodes
     /// the caller holds a permission on.
     /// </summary>
     /// <remarks>
-    /// Implements AUTHZ-CONCEAL-001, AUTHZ-CONCEAL-002, API-CONV-003 and BFF-ERR-003. The
-    /// browser profile answers it; nothing in the library returns it from an operation.
+    /// Implements AUTHZ-CONCEAL-001, AUTHZ-CONCEAL-002, API-CONV-003, BFF-ERR-003 and
+    /// D-166. The browser profile answers it for a concealed denial, and an operation on
+    /// the caller's own browsers and sessions returns it, with empty details, for one
+    /// the account does not hold.
     /// </remarks>
     public static ErrorCode ResourceNotFound { get; } = ErrorCode.Parse("authz.resource.notfound");
 

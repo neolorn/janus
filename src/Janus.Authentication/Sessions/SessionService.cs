@@ -603,11 +603,12 @@ internal sealed class SessionService(
 
         Session? ending = await sessions.FindAsync(session, cancellationToken).ConfigureAwait(false);
 
-        // A session that is not the caller's is answered as one that does not exist:
-        // the identifier of somebody else's session tells the caller nothing.
+        // CONV-DESIGN-002 AC3, D-166: a session that is not the caller's is answered as
+        // one that does not exist, so the identifier of somebody else's session tells
+        // the caller nothing.
         if (ending is null || ending.Subject != subject)
         {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
+            return Result.Failure(Error.From(ErrorCodes.ResourceNotFound));
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))

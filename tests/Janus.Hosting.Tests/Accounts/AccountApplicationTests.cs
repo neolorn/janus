@@ -14,6 +14,7 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Accounts;
@@ -120,6 +121,36 @@ public sealed class AccountApplicationTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status204NoContent, ended.Status);
         Assert.Equal(1, left.GetArrayLength());
         Assert.True(left[0].GetProperty("current").GetBoolean());
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002 AC3, D-166: another account's session or browser, named in the
+    /// path, is answered as one that does not exist, with the body an identifier nobody
+    /// holds is answered with, apart from the correlation identifier.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AC3_AnotherAccountsSessionOrBrowserReadsAsNoneAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        var another = SubjectId.New(_randomness);
+        Guid theirSession = await OpenedAsync(another);
+        Guid theirBrowser = await KnownAsync(another);
+
+        Answer session = await browser.SendAsync("DELETE", "/account/sessions/" + theirSession);
+        Answer noSession = await browser.SendAsync("DELETE", "/account/sessions/" + Guid.NewGuid());
+        Answer device = await browser.SendAsync("DELETE", "/account/devices/" + theirBrowser);
+        Answer noDevice = await browser.SendAsync("DELETE", "/account/devices/" + Guid.NewGuid());
+
+        Assert.All(
+            new[] { session, noSession, device, noDevice },
+            answer =>
+            {
+                Assert.Equal(StatusCodes.Status404NotFound, answer.Status);
+                Assert.Equal(ErrorCodes.ResourceNotFound.ToString(), answer.Text("code"));
+            });
+        Assert.Equal(Without(noSession), Without(session));
+        Assert.Equal(Without(noDevice), Without(device));
     }
 
     /// <summary>
@@ -323,6 +354,32 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     }
 
     // A second session on the same account, which is what a second device leaves.
+    // The body without the correlation identifier, which differs between any two
+    // requests by design (API-CONV-002 AC2).
+    private static string Without(Answer answer) =>
+        answer.Body.Replace(answer.Text("correlationId"), string.Empty, StringComparison.Ordinal);
+
+    // A browser the account trusts.
+    private async Task<Guid> KnownAsync(SubjectId subject)
+    {
+        var device = Device.Known(
+            DeviceId.New(_deployment.Clock),
+            subject,
+            DeviceKind.Trusted,
+            Labelled("Their laptop"),
+            _deployment.Clock.GetUtcNow(),
+            TimeSpan.FromDays(30));
+
+        await using AsyncServiceScope scope = _deployment.Scope();
+
+        await scope.ServiceProvider.GetRequiredService<IDeviceStore>().AddAsync(
+            device,
+            OpaqueToken.Draw(_randomness).Fingerprint(),
+            TestContext.Current.CancellationToken);
+
+        return device.Id.Value;
+    }
+
     private async Task<Guid> OpenedAsync(SubjectId subject)
     {
         var id = SessionId.New(_deployment.Clock);

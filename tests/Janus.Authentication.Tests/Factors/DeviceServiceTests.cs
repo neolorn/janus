@@ -318,25 +318,44 @@ public sealed class DeviceServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-FACT-015: one account removes none of another's browsers.
+    /// CONV-DESIGN-002 AC3, AUTH-FACT-015, D-166: one account removes none of another's
+    /// browsers, and another account's browser is answered as one that does not exist,
+    /// with the same code and no details, and the trust stands.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task RemoveAsync_ABrowserOfAnotherAccount_IsRefusedAsync()
+    public async Task CONV_DESIGN_002_AC3_AnotherAccountsBrowserIsAnsweredAsNoneAsync()
     {
         SubjectId subject = Subject();
-        await TrustedAsync(subject);
+        OpaqueToken trust = await TrustedAsync(subject);
 
         DeviceSummary held = Assert.Single(Value(await Service.ListAsync(
             AccessContext.Of(subject),
             TestContext.Current.CancellationToken)));
 
-        Assert.Equal(
-            ErrorCodes.Denied,
-            Refusal(await Service.RemoveAsync(
-                AccessContext.Of(Subject()),
-                held.Id,
-                TestContext.Current.CancellationToken)));
+        Error theirs = Failure(await Service.RemoveAsync(
+            AccessContext.Of(Subject()),
+            held.Id,
+            TestContext.Current.CancellationToken));
+        Error unknown = Failure(await Service.RemoveAsync(
+            AccessContext.Of(Subject()),
+            new DeviceId(Guid.NewGuid()),
+            TestContext.Current.CancellationToken));
+
+        Assert.All(
+            new[] { theirs, unknown },
+            refusal =>
+            {
+                Assert.Equal(ErrorCodes.ResourceNotFound, refusal.Code);
+                Assert.Empty(refusal.Details);
+            });
+        Assert.True(await Service.TrustsAsync(
+            subject,
+            trust.Value,
+            TestContext.Current.CancellationToken));
+
+        static Error Failure(Result result) =>
+            result.Match(() => throw new Xunit.Sdk.XunitException("The removal was not refused."), error => error);
     }
 
     /// <summary>

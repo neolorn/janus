@@ -330,7 +330,10 @@ internal sealed class DeviceService(
     /// <param name="context">Who is asking.</param>
     /// <param name="id">Which browser.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Nothing, or the failure where it is not theirs to remove.</returns>
+    /// <returns>
+    /// Nothing, or the failure: <c>authz.resource.notfound</c> where the account holds
+    /// no such browser, whether none has the identifier or another account's has it.
+    /// </returns>
     /// <exception cref="ArgumentNullException">The context is absent.</exception>
     public async ValueTask<Result> RemoveAsync(
         AccessContext context,
@@ -348,9 +351,11 @@ internal sealed class DeviceService(
 
         Device? device = await devices.FindAsync(id, cancellationToken).ConfigureAwait(false);
 
+        // CONV-DESIGN-002 AC3, D-166: another account's browser is answered as one that
+        // does not exist, so its identifier tells the caller nothing.
         if (device is null || device.Subject != subject)
         {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
+            return Result.Failure(Error.From(ErrorCodes.ResourceNotFound));
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))

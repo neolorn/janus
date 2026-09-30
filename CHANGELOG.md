@@ -1413,8 +1413,9 @@ against the public contract of LIB-API-001.
   code.
 - `ISessions` in `Janus.Core`: an account sees its live sessions with the time of
   sign-in, the time of last use, the device and a city-level location, ends one of them
-  on its own, or signs out everywhere. An administrator ends one account's sessions, and
-  the emergency operation ends every session in the deployment.
+  on its own, or signs out everywhere; a session of another account is answered 404
+  `authz.resource.notfound`, as one nobody holds. An administrator ends one account's
+  sessions, and the emergency operation ends every session in the deployment.
 - `IAccessGate` in `Janus.Core`: the one place a permission is evaluated. A check and a
   list filter are the same rule rendered two ways, an expression a host composes into
   its own LINQ query and a parameterised PostgreSQL fragment a hand-written query
@@ -1829,7 +1830,8 @@ against the public contract of LIB-API-001.
   begun, and a link the account abandons is spent at once.
 - The account lists the browsers it knows, the ones it trusts for the second step and
   the ones the new-device check remembers, and forgets any of them: a trusted browser is
-  asked for the second step again, a remembered one faces the check again.
+  asked for the second step again, a remembered one faces the check again. Another
+  account's browser is answered 404 `authz.resource.notfound`, as one nobody holds.
 - A sign-in in flight, a link or code sent for one, and a requirement a policy raised
   are kept in tables of the library's schema. Neither the handle a browser carries nor
   the link it was sent is held as it was issued: each is kept as its fingerprint, and
