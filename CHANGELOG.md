@@ -722,7 +722,9 @@ against the public contract of LIB-API-001.
   administrative organization, whichever organization the refusal was recorded in
   (`IAccessGate.ResolveAsync`, which takes no organization), and
   `GET /account/explanations/{correlationId}` resolves one for the principal it refused
-  where the refused type is not concealed (`IAccessGate.ResolveOwnAsync`).
+  where the refused type is not concealed (`IAccessGate.ResolveOwnAsync`). A caller
+  without `audit:read` is answered with the gate's own refusal, whose correlation
+  identifier resolves to the denial recorded for it.
 - `POST /admin/accounts/{subject}/sessions/revoke` ends every session of one account
   under `session:revoke-account`, and `POST /admin/sessions/revoke-all` ends every
   session in the deployment under `session:revoke`, the caller's own included, each

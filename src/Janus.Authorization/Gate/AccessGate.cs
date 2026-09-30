@@ -312,9 +312,11 @@ internal sealed class AccessGate(
         Result held = await RequireAsync(context, Permissions.AuditRead, organization, cancellationToken)
             .ConfigureAwait(false);
 
-        if (!held.Match(() => true, _ => false))
+        // AUTHZ-CONCEAL-004: the refusal is the gate's own, carrying the identifier it was
+        // recorded under, as every other refusal of the administrative scope does.
+        if (held.Match(() => (Error?)null, error => error) is Error refused)
         {
-            return Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied));
+            return Result.Failure<AccessExplanation>(refused);
         }
 
         DeniedAccess? recorded = await audit.FindAsync(correlation, cancellationToken)

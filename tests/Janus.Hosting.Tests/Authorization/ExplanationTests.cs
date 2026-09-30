@@ -269,6 +269,33 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
+    /// AUTHZ-CONCEAL-004 AC1, AUTHZ-GATE-004 AC4: a caller without <c>audit:read</c>
+    /// asking to resolve an identifier is answered with the gate's own refusal, whose
+    /// correlation identifier resolves to the denial the gate recorded for it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_004_AC1_AResolutionRefusedIsTheGatesRefusalWithItsCorrelationAsync()
+    {
+        Deployed deployed = await DeployAsync(granted: false);
+        AuditRecordId asked = await RefusedAsync(deployed, deployed.Record, HostPermissions.Read);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        Error refusal = Refusal(await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+            .ResolveAsync(AccessContext.Of(deployed.Account), asked, TestContext.Current.CancellationToken));
+
+        var correlation = new AuditRecordId(refusal.Details["correlation"].GetGuid());
+        AccessExplanation explanation = Explained(await ResolvedOwnAsync(deployed.Account, correlation));
+
+        Assert.Equal(ErrorCodes.Denied, refusal.Code);
+        Assert.NotEqual(asked, correlation);
+        Assert.Equal(1, await RecordedAsync(correlation));
+        Assert.Equal(Permissions.AuditRead, explanation.Permission);
+        Assert.Equal(AccessOutcome.Denied, explanation.Outcome);
+    }
+
+    /// <summary>
     /// AUTHZ-GATE-004 AC4, AUTHZ-SCOPE-001: <c>audit:read</c> held in the organization
     /// the refused record sits in, and not in the administrative one, resolves nothing.
     /// </summary>
