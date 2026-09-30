@@ -1751,6 +1751,9 @@ against the public contract of LIB-API-001.
   nothing.
 - A role the invitation grants is written beside an expiring grant of the same role,
   and is skipped only where the account holds it permanently.
+- Taking the corporate address on at an acknowledgement publishes `IdentifierAdded`,
+  and retiring it at the end of the membership publishes `IdentifierRemoved`, each in
+  the transaction that makes the change.
 - An audit trail. Every record names who acted, whose identity the action was taken
   under, the instant it occurred and the organization where one applies; an event about
   a principal holding no membership carries none, and the absence is the recorded fact.

@@ -1294,6 +1294,56 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-INV-001 AC4 and entry 248 of D-166: taking the corporate address on at the
+    /// acknowledgement announces it as added, keyed by the address and the instant, in
+    /// the transaction that adds it, beside its becoming the primary.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_001_AC4_TheCorporateAddressIsAnnouncedAsAddedAsync()
+    {
+        (SubjectId holder, _) = await StaffMemberAsync();
+
+        HeldIdentifier corporate = (await _identifiers.HeldAsync(holder, TestContext.Current.CancellationToken))
+            .OfKind(IdentifierKind.Email)
+            .Single(identifier => identifier.Canonical == Corporate);
+        IdentifierAdded added = Assert.Single(_events.Of<IdentifierAdded>());
+        IdentifierPrimaryChanged promoted = Assert.Single(_events.Of<IdentifierPrimaryChanged>());
+        DateTimeOffset now = _clock.GetUtcNow();
+
+        Assert.Equal((corporate.Id, IdentifierKind.Email, holder), (added.Identifier, added.Kind, added.Subject));
+        Assert.Equal($"{corporate.Id.Value}@{now.UtcTicks}", added.IdempotencyKey);
+        Assert.Equal(corporate.Id, promoted.Identifier);
+        Assert.True(
+            _events.Published.IndexOf(added) < _events.Published.IndexOf(promoted),
+            "The address is announced as added before it is announced as the primary.");
+    }
+
+    /// <summary>
+    /// REG-MAIL-003 and entry 251 of D-166: ending the membership announces the corporate
+    /// address as removed, keyed by the address and the instant, beside the new primary.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_003_TheRetiredCorporateAddressIsAnnouncedAsRemovedAsync()
+    {
+        (SubjectId holder, _) = await StaffMemberAsync();
+        HeldIdentifier corporate = (await _identifiers.HeldAsync(holder, TestContext.Current.CancellationToken))
+            .OfKind(IdentifierKind.Email)
+            .Single(identifier => identifier.Canonical == Corporate);
+
+        _clock.Advance(TimeSpan.FromDays(30));
+        _events.Published.Clear();
+
+        Accepted(await EndAsync(Staff, holder));
+
+        IdentifierRemoved removed = Assert.Single(_events.Of<IdentifierRemoved>());
+        DateTimeOffset now = _clock.GetUtcNow();
+
+        Assert.Equal((corporate.Id, IdentifierKind.Email, holder), (removed.Identifier, removed.Kind, removed.Subject));
+        Assert.Equal($"{corporate.Id.Value}@{now.UtcTicks}", removed.IdempotencyKey);
+        Assert.Equal(now, removed.RaisedAt);
+    }
+
+    /// <summary>
     /// REG-MAIL-003 AC6 and INT-MAIL-006 AC6: an invitation of an address whose standing
     /// mailbox was held before, naming no <c>formerMailbox</c>, is refused and changes
     /// nothing, whoever it invites, the last holder included.

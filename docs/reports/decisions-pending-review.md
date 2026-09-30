@@ -9134,6 +9134,8 @@ events of chapter 09 are the only ones published.
 *Chapter text that should change.* REG-MAIL-001 could say that the security-notice set
 is told of the corporate address when it is taken on.
 
+**Superseded by D-166.**
+
 ---
 
 ## 249. How the acknowledgement is audited and exported
@@ -9258,6 +9260,8 @@ account holds more than one.
 *Chapter text that should change.* REG-MAIL-003 could say that the security-notice set
 as it stands after the change is told once, and that only the end of the administrative
 organization's membership retires the address.
+
+**Superseded by D-166.**
 
 ---
 

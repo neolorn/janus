@@ -35,7 +35,7 @@ namespace Janus.Authentication.Invitations;
 /// <param name="memberships">Where the membership and its grants are written.</param>
 /// <param name="mailboxes">Where the corporate mailbox is given to the person.</param>
 /// <param name="sending">What tells the security-notice set of the corporate address.</param>
-/// <param name="events">Where the membership and the new primary are announced.</param>
+/// <param name="events">Where the membership, the corporate address added and the new primary are announced.</param>
 /// <param name="configuration">Where the membership limit, the email maximum and the languages are read.</param>
 /// <param name="audit">Where the acknowledgement is written down.</param>
 /// <param name="work">The one transaction the acknowledgement runs in.</param>
@@ -219,7 +219,7 @@ internal sealed class InvitationAcknowledgement(
 
         if (corporate)
         {
-            announced.Add(await CorporateAsync(
+            announced.AddRange(await CorporateAsync(
                     invitation,
                     bound,
                     held,
@@ -470,7 +470,10 @@ internal sealed class InvitationAcknowledgement(
     // email the invitation named stays verified beside it through the membership, the
     // mailbox becomes the person's and is owed enabled, and the set as it stood hears
     // of the address once (REG-IDENT-004).
-    private async ValueTask<DomainEvent> CorporateAsync(
+    // REG-MAIL-001: the corporate address is added to the account as it becomes the
+    // primary, so both are announced, each keyed by the address and the instant as an
+    // added identifier is (entry 248 of D-166).
+    private async ValueTask<DomainEvent[]> CorporateAsync(
         Invitation invitation,
         InvitedIdentifiers bound,
         HeldIdentifiers held,
@@ -508,10 +511,17 @@ internal sealed class InvitationAcknowledgement(
         await mailboxes.RecordAsync(mailbox, cancellationToken).ConfigureAwait(false);
         _ = await TellAsync(held.NoticeSet, invitee, source, cancellationToken).ConfigureAwait(false);
 
-        return new IdentifierPrimaryChanged(now, Key(address, now), address, IdentifierKind.Email)
-        {
-            Subject = invitee,
-        };
+        return
+        [
+            new IdentifierAdded(now, Key(address, now), address, IdentifierKind.Email)
+            {
+                Subject = invitee,
+            },
+            new IdentifierPrimaryChanged(now, Key(address, now), address, IdentifierKind.Email)
+            {
+                Subject = invitee,
+            },
+        ];
     }
 
     private async ValueTask<int> TellAsync(

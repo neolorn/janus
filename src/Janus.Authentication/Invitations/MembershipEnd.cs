@@ -25,7 +25,7 @@ namespace Janus.Authentication.Invitations;
 /// <param name="identifiers">Where the account's identifiers are read and the corporate address retired.</param>
 /// <param name="mailboxes">Where the mailbox the account holds is retired.</param>
 /// <param name="sending">What tells the security-notice set of the new primary.</param>
-/// <param name="events">Where the end and the new primary are announced.</param>
+/// <param name="events">Where the end, the corporate address removed and the new primary are announced.</param>
 /// <param name="configuration">Where the languages are read.</param>
 /// <param name="audit">Where the end is written down.</param>
 /// <param name="work">The one transaction the end runs in.</param>
@@ -126,7 +126,7 @@ internal sealed class MembershipEnd(
         if (standing.IsAdministrative
             && await mailboxes.HeldByAsync(member, cancellationToken).ConfigureAwait(false) is Mailbox mailbox)
         {
-            announced.Add(await RetiredAsync(member, mailbox, now, source, cancellationToken)
+            announced.AddRange(await RetiredAsync(member, mailbox, now, source, cancellationToken)
                 .ConfigureAwait(false));
         }
 
@@ -178,8 +178,9 @@ internal sealed class MembershipEnd(
     // email the membership kept becomes the primary in the same step; the mailbox is
     // retired, which leaves it owed disabled and ends every app password with it
     // (INT-MAIL-006a); and the set as it now stands hears of the new primary once
-    // (REG-IDENT-005).
-    private async ValueTask<DomainEvent> RetiredAsync(
+    // (REG-IDENT-005). The address that left and the new primary are both announced
+    // (entry 251 of D-166).
+    private async ValueTask<DomainEvent[]> RetiredAsync(
         SubjectId member,
         Mailbox mailbox,
         DateTimeOffset now,
@@ -187,6 +188,11 @@ internal sealed class MembershipEnd(
         CancellationToken cancellationToken)
     {
         HeldIdentifiers held = await identifiers.HeldAsync(member, cancellationToken).ConfigureAwait(false);
+        IdentifierId retired = held.OfKind(IdentifierKind.Email)
+                .FirstOrDefault(identifier =>
+                    string.Equals(identifier.Canonical, mailbox.Address.Value, StringComparison.Ordinal))
+                ?.Id
+            ?? throw new InvalidOperationException("A held mailbox's address is held by its holder.");
 
         IdentifierId primary = await identifiers
             .RetireCorporateAsync(member, mailbox.Address.Value, cancellationToken)
@@ -210,10 +216,17 @@ internal sealed class MembershipEnd(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        return new IdentifierPrimaryChanged(now, Key(primary, now), primary, IdentifierKind.Email)
-        {
-            Subject = member,
-        };
+        return
+        [
+            new IdentifierRemoved(now, Key(retired, now), retired, IdentifierKind.Email)
+            {
+                Subject = member,
+            },
+            new IdentifierPrimaryChanged(now, Key(primary, now), primary, IdentifierKind.Email)
+            {
+                Subject = member,
+            },
+        ];
     }
 
     private async ValueTask<int> TellAsync(
