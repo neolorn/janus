@@ -381,8 +381,120 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.Denied, refused.Match(_ => default, error => error.Code));
     }
 
+    /// <summary>
+    /// API-CONV-002 AC3, CONV-CODE-006 AC3: a detail that is blank, or longer than 1024
+    /// characters after trimming, is refused naming it by the service as by the
+    /// endpoint, and the queue takes nothing.
+    /// </summary>
+    /// <param name="character">What the detail is written of.</param>
+    /// <param name="length">How many of it.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("d", 0)]
+    [InlineData(" ", 3)]
+    [InlineData("d", 1025)]
+    public async Task API_CONV_002_ABlankOrOverlongDetailIsMalformedAsync(string character, int length)
+    {
+        Result<PrivacyRequestReceipt> refused = await Requests.SubmitAsync(
+            AccessContext.Of(Ahmed),
+            PrivacyRequestType.Restriction,
+            Written(character, length),
+            CancellationToken.None);
+
+        Assert.Equal(ErrorCodes.RequestMalformed, refused.Match(_ => default, error => error.Code));
+        Assert.Equal("detail", Member(refused));
+        Assert.Empty(_requests.Queue);
+    }
+
+    /// <summary>
+    /// API-CONV-002: a detail is held as it reads once trimmed, and one of 1024
+    /// characters inside its spaces is within the bound.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task API_CONV_002_ADetailIsHeldTrimmedAsync()
+    {
+        string longest = Written("d", 1024);
+
+        _ = await Requests.SubmitAsync(
+            AccessContext.Of(Ahmed),
+            PrivacyRequestType.Restriction,
+            "  " + longest + "  ",
+            CancellationToken.None);
+
+        Assert.Equal(longest, Assert.Single(_requests.Queue).Detail);
+    }
+
+    /// <summary>
+    /// API-CONV-002 AC3, CONV-CODE-006 AC3: an entry whose channel or identity
+    /// confirmation is blank, or longer than 1024 characters after trimming, is
+    /// refused naming the member, and the queue takes nothing.
+    /// </summary>
+    /// <param name="member">The member written wrongly.</param>
+    /// <param name="character">What it is written of.</param>
+    /// <param name="length">How many of it.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("channel", "c", 0)]
+    [InlineData("channel", " ", 2)]
+    [InlineData("channel", "c", 1025)]
+    [InlineData("identityConfirmation", "c", 0)]
+    [InlineData("identityConfirmation", " ", 1)]
+    [InlineData("identityConfirmation", "c", 1025)]
+    public async Task API_CONV_002_AnEntryWithABlankChannelOrConfirmationIsMalformedAsync(
+        string member,
+        string character,
+        int length)
+    {
+        PrivacyRequestEntry entry = Entry(PrivacyRequestType.Erasure, new DateOnly(2026, 9, 18));
+        string text = Written(character, length);
+
+        Result<PrivacyRequestReceipt> refused = await Requests.EnterAsync(
+            AccessContext.Of(Mona),
+            member == "channel" ? entry with { Channel = text } : entry with { IdentityConfirmation = text },
+            CancellationToken.None);
+
+        Assert.Equal(ErrorCodes.RequestMalformed, refused.Match(_ => default, error => error.Code));
+        Assert.Equal(member, Member(refused));
+        Assert.Empty(_requests.Queue);
+    }
+
+    /// <summary>
+    /// API-CONV-002 AC3: the reason a refusal records is free text, and one that is
+    /// blank or longer than 1024 characters after trimming decides nothing.
+    /// </summary>
+    /// <param name="character">What the reason is written of.</param>
+    /// <param name="length">How many of it.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("r", 0)]
+    [InlineData(" ", 2)]
+    [InlineData("r", 1025)]
+    public async Task API_CONV_002_ABlankOrOverlongRefusalReasonIsMalformedAsync(string character, int length)
+    {
+        PrivacyRequestReceipt receipt = await SubmittedAsync(PrivacyRequestType.Rectification);
+
+        Result refused = await Requests.RefuseAsync(
+            AccessContext.Of(Mona),
+            receipt.RequestId,
+            Written(character, length),
+            CancellationToken.None);
+
+        Assert.Equal(ErrorCodes.RequestMalformed, refused.Match(() => default, error => error.Code));
+        Assert.Equal(
+            "reason",
+            refused.Match(() => null, error => error.Details["member"].GetString()));
+        Assert.Equal(PrivacyRequestStatus.Open, Assert.Single(_requests.Queue).Status);
+    }
+
     private static PrivacyRequestEntry Entry(PrivacyRequestType type, DateOnly receivedAt) =>
         new(Ahmed, type, "please act on this", receivedAt, "letter", "national identity card seen");
+
+    private static string Written(string character, int length) =>
+        string.Concat(Enumerable.Repeat(character, length));
+
+    private static string? Member(Result<PrivacyRequestReceipt> refused) =>
+        refused.Match(_ => null, error => error.Details["member"].GetString());
 
     private async Task<PrivacyRequestReceipt> SubmittedAsync(PrivacyRequestType type)
     {

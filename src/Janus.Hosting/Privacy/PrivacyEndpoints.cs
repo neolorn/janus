@@ -197,7 +197,8 @@ internal static class PrivacyEndpoints
             return Answers.Malformed("type");
         }
 
-        if (body.Detail is not { Length: > 0 } detail)
+        // API-CONV-002: a free-text member is 1 to 1024 characters after trimming.
+        if (body.Detail?.Trim() is not { Length: > 0 and <= 1024 } detail)
         {
             return Answers.Malformed("detail");
         }
@@ -380,12 +381,12 @@ internal static class PrivacyEndpoints
             return Answers.Malformed("receivedAt");
         }
 
-        if (body.Channel is not { Length: > 0 } channel)
+        if (body.Channel?.Trim() is not { Length: > 0 and <= 1024 } channel)
         {
             return Answers.Malformed("channel");
         }
 
-        if (body.IdentityConfirmation is not { Length: > 0 } confirmation)
+        if (body.IdentityConfirmation?.Trim() is not { Length: > 0 and <= 1024 } confirmation)
         {
             return Answers.Malformed("identityConfirmation");
         }
@@ -435,7 +436,7 @@ internal static class PrivacyEndpoints
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(requests);
 
-        if (body.Reason is not { Length: > 0 } reason)
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
             return Answers.Malformed("reason");
         }

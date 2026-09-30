@@ -932,6 +932,11 @@ against the public contract of LIB-API-001.
   queue: 403 `authz.denied` without the permission, 404 `privacy.request.notfound` for
   an identifier naming no request, and 409 `privacy.request.decided` where a decision
   already stands.
+- A privacy request's `detail`, an out-of-band entry's `channel` and
+  `identityConfirmation`, and a refusal's `reason` are held trimmed, and one that is
+  blank or longer than 1024 characters after trimming is refused with 400
+  `api.request.malformed` naming it, at the endpoint and by `IPrivacyRequests` for an
+  in-process caller alike; a refusal's reason was an exception there before.
 - A host can bind one of its actions to the purpose it is done for, and where that
   purpose rests on consent the gate refuses the action until the data subject of the
   record being acted on has consented to it: missing, withdrawn, superseded or of the

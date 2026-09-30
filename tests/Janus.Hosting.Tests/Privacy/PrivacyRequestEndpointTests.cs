@@ -209,6 +209,88 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
         Assert.Empty(_deployment.Requests.Queue);
     }
 
+    /// <summary>
+    /// API-CONV-002 AC3, CONV-CODE-006 AC3: a detail longer than 1024 characters after
+    /// trimming is refused naming it before the service is reached.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_CONV_002_AnOverlongDetailIsRefusedBeforeTheServiceAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        Answer submitted = await browser.SendAsync(
+            "POST",
+            "/privacy/requests",
+            ("type", "restriction"),
+            ("detail", " " + new string('d', 1025) + " "));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, submitted.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), submitted.Text("code"));
+        Assert.Equal("detail", submitted.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Empty(_deployment.Requests.Queue);
+    }
+
+    /// <summary>
+    /// API-CONV-002 AC3, CONV-CODE-006 AC3: an entry whose channel or identity
+    /// confirmation is blank after trimming is refused naming the member before the
+    /// service is reached.
+    /// </summary>
+    /// <param name="member">The member written blank.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("channel")]
+    [InlineData("identityConfirmation")]
+    public async Task API_CONV_002_AnEntryWithABlankChannelOrConfirmationIsRefusedAsync(string member)
+    {
+        Browser browser = await AuthorisedAsync();
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+
+        Answer entered = await browser.SendAsync(
+            "POST",
+            "/admin/privacy/requests/",
+            ("subject", subject.Value.ToString()),
+            ("type", "erasure"),
+            ("detail", "a letter asking to be erased"),
+            ("receivedAt", "2026-02-27"),
+            ("channel", member == "channel" ? "   " : "letter"),
+            ("identityConfirmation", member == "identityConfirmation" ? "  " : "national identity card seen"));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, entered.Status);
+        Assert.Equal(member, entered.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Empty(_deployment.Requests.Queue);
+    }
+
+    /// <summary>
+    /// API-CONV-002 AC3: a refusal whose reason is blank after trimming is refused
+    /// naming it, and the request stays open.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_CONV_002_ARefusalWithABlankReasonIsRefusedAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+
+        Answer submitted = await browser.SendAsync(
+            "POST",
+            "/privacy/requests",
+            ("type", "rectification"),
+            ("detail", "the recorded total is wrong"));
+
+        Guid request = submitted.Json().GetProperty("requestId").GetGuid();
+
+        Answer refused = await browser.SendAsync(
+            "POST",
+            "/admin/privacy/requests/" + request.ToString() + "/refuse",
+            ("reason", "   "));
+
+        JsonElement held = Single(await browser.SendAsync("GET", "/admin/privacy/requests/"));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+        Assert.Equal("reason", refused.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal("open", held.GetProperty("status").GetString());
+    }
+
     private static JsonElement Single(Answer answer)
     {
         Assert.Equal(StatusCodes.Status200OK, answer.Status);
