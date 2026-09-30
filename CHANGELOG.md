@@ -717,6 +717,9 @@ against the public contract of LIB-API-001.
   that is not an `https` origin a registered browser client returns to, or an
   authentication origin that is not the sign-in address's, is refused with
   `model.startup.declarationinvalid` under the same key.
+- A recovery-code set whose every reminder was refused stays owed its reminder, where
+  it was closed as reminded; a set whose account holds no channel a reminder can reach
+  is closed as before.
 - A text-message template naming a place the library does not fill, `{token}` among
   them, stops startup with `model.startup.declarationinvalid` (`details.declaration` the
   message kind, `details.field` the place), where it was sent with the brace in it.

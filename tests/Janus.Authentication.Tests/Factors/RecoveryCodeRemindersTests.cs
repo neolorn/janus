@@ -131,8 +131,8 @@ public sealed class RecoveryCodeRemindersTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-FACT-008 AC5: a channel that refuses the reminder does not make it owed
-    /// again, and a pass reminds every set that is due however many there are.
+    /// AUTH-FACT-008 AC5: a pass reminds every set that is due however many there are,
+    /// and each once.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -145,12 +145,57 @@ public sealed class RecoveryCodeRemindersTests : IAsyncDisposable
             await IssuedAsync(subject);
         }
 
-        _notifications.Refusal = Error.From(ErrorCodes.Throttled);
         _clock.Advance(Year);
 
         Assert.Equal(250, await RemindedAsync());
         Assert.Equal(0, await RemindedAsync());
         Assert.Equal(250, _work.Committed);
+        Assert.Equal(500, _notifications.Sent.Count);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-008 AC5: a set whose every notice was refused is not closed as
+    /// reminded, so the reminder stays owed and the next pass that a channel takes it
+    /// on closes it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AC5_ASetWhoseEveryNoticeIsRefusedStaysOwedAsync()
+    {
+        SubjectId subject = Held();
+
+        await IssuedAsync(subject);
+
+        _notifications.Refusal = Error.From(ErrorCodes.Throttled);
+        _clock.Advance(Year);
+
+        Assert.Equal(0, await RemindedAsync());
+        Assert.Null((await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.RemindedAt);
+
+        _notifications.Refusal = null;
+
+        Assert.Equal(1, await RemindedAsync());
+        Assert.Equal(
+            _clock.GetUtcNow(),
+            (await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.RemindedAt);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-008 AC5: a set whose account holds no channel a reminder can reach is
+    /// closed as reminded, since no later pass could reach it either.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AC5_ASetNoChannelCanReachIsClosedAsync()
+    {
+        var subject = SubjectId.New(_randomness);
+
+        await IssuedAsync(subject);
+        _clock.Advance(Year);
+
+        Assert.Equal(1, await RemindedAsync());
+        Assert.Empty(_notifications.Sent);
+        Assert.NotNull((await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.RemindedAt);
     }
 
     private SubjectId Held()

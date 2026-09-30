@@ -21,8 +21,10 @@ namespace Janus.Authentication.Factors;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements AUTH-FACT-008 AC5 and INF-BG-001. A set is marked reminded in the
-/// transaction that writes its notices (D-022), so a pass that fails leaves the set
-/// owed its reminder and a pass that succeeds is never repeated for the same set.
+/// transaction that writes its notices (D-022), and only where a channel took the
+/// reminder or the account holds none a reminder can reach, so a pass that fails or
+/// whose every notice is refused leaves the set owed its reminder, and a pass that
+/// succeeds is never repeated for the same set.
 /// </remarks>
 internal sealed class RecoveryCodeReminders(
     IRecoveryCodeStore sets,
@@ -57,6 +59,9 @@ internal sealed class RecoveryCodeReminders(
         DateTimeOffset now = time.GetUtcNow();
         int reminded = 0;
 
+        // A set every channel refused stays owed, and is not asked again in this pass.
+        var tried = new HashSet<SubjectId>();
+
         while (true)
         {
             IReadOnlyList<SubjectId> due = await sets
@@ -67,7 +72,10 @@ internal sealed class RecoveryCodeReminders(
 
             foreach (SubjectId subject in due)
             {
-                page += await RemindedAsync(subject, now, after, cancellationToken).ConfigureAwait(false);
+                if (tried.Add(subject))
+                {
+                    page += await RemindedAsync(subject, now, after, cancellationToken).ConfigureAwait(false);
+                }
             }
 
             reminded += page;
@@ -114,23 +122,31 @@ internal sealed class RecoveryCodeReminders(
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
-        held.Reminded(now);
-        await sets.RecordAsync(held, cancellationToken).ConfigureAwait(false);
-        _ = await TellAsync(subject, cancellationToken).ConfigureAwait(false);
+        (int reached, int told) = await TellAsync(subject, cancellationToken).ConfigureAwait(false);
+        bool closed = told > 0 || reached == 0;
+
+        if (closed)
+        {
+            held.Reminded(now);
+            await sets.RecordAsync(held, cancellationToken).ConfigureAwait(false);
+        }
+
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
-        return 1;
+        return closed ? 1 : 0;
     }
 
     // Every channel of the security-notice set hears of it; a channel that refuses
-    // the notice does not hold back the others or the set's one reminder.
-    private async ValueTask<int> TellAsync(SubjectId subject, CancellationToken cancellationToken)
+    // the notice does not hold back the others. What is answered is how many channels
+    // a reminder could reach and how many took it.
+    private async ValueTask<(int Reached, int Told)> TellAsync(SubjectId subject, CancellationToken cancellationToken)
     {
         HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
         string? language = await LanguageAsync(subject, cancellationToken).ConfigureAwait(false);
+        int reached = 0;
         int told = 0;
 
         foreach (HeldIdentifier identifier in held.NoticeSet)
@@ -139,6 +155,8 @@ internal sealed class RecoveryCodeReminders(
             {
                 continue;
             }
+
+            reached++;
 
             Result<SendReference> sent = await sending
                 .SendAsync(
@@ -159,7 +177,7 @@ internal sealed class RecoveryCodeReminders(
             told += sent.Match(_ => 1, _ => 0);
         }
 
-        return told;
+        return (reached, told);
     }
 
     private async ValueTask<string?> LanguageAsync(
