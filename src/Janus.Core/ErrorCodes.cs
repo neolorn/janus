@@ -424,6 +424,14 @@ public static class ErrorCodes
     public static ErrorCode InvitationMailboxHeld { get; } = ErrorCode.Parse("identity.invitation.mailboxheld");
 
     /// <summary>
+    /// The corporate address is held by a member, or reserved by a standing invitation
+    /// that has not expired. Revoke that invitation first, or name another address. The
+    /// details name <c>corporateEmail</c>.
+    /// </summary>
+    /// <remarks>Implements REG-MAIL-001 and INT-MAIL-006, chapter 10 section 1.1.</remarks>
+    public static ErrorCode MailboxTaken { get; } = ErrorCode.Parse("identity.mailbox.taken");
+
+    /// <summary>
     /// The account holds no mailbox the mail server is told to enable, or the deployment
     /// has no mail server registered; the app passwords are not present for it. A member
     /// of the administrative organization is given a mailbox by invitation.

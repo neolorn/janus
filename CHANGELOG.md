@@ -1730,6 +1730,9 @@ against the public contract of LIB-API-001.
   `invitation:issue`.
 - An invitation naming a legal document the deployment never published is refused `422`
   `api.request.invalid` naming `documents`; a blank name stays `api.request.malformed`.
+- An invitation asserting a corporate address a member holds, or one a standing
+  invitation that has not expired reserves, is refused `409` `identity.mailbox.taken`
+  naming `corporateEmail`.
 - An audit trail. Every record names who acted, whose identity the action was taken
   under, the instant it occurred and the organization where one applies; an event about
   a principal holding no membership carries none, and the absence is the recorded fact.

@@ -116,6 +116,33 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-MAIL-001 and 09 section 8a: a corporate address a standing invitation reserves
+    /// is <c>409</c> <c>identity.mailbox.taken</c> naming <c>corporateEmail</c>, and
+    /// nothing more is issued.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_MAIL_001_AnAddressAlreadyTakenIsRefusedAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+
+        Answer first = await administrator.SendAsync(
+            "POST",
+            PathOf(Administration),
+            """{"email":"invited@elsewhere.test","corporateEmail":"invited@example.test"}""");
+        Answer taken = await administrator.SendAsync(
+            "POST",
+            PathOf(Administration),
+            """{"email":"other@elsewhere.test","corporateEmail":"invited@example.test"}""");
+
+        Assert.Equal(StatusCodes.Status201Created, first.Status);
+        Assert.Equal(StatusCodes.Status409Conflict, taken.Status);
+        Assert.Equal(ErrorCodes.MailboxTaken.ToString(), taken.Text("code"));
+        Assert.Equal("corporateEmail", taken.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Single(_deployment.Invitations.Held);
+    }
+
+    /// <summary>
     /// REG-INV-001 and 09 section 8a: an invitation naming a document never published is
     /// <c>422</c> <c>api.request.invalid</c> naming <c>documents</c>, and nothing is
     /// issued.

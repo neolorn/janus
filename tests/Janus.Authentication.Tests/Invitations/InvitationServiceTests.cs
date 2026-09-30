@@ -334,7 +334,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
     /// <summary>
     /// REG-MAIL-001: an address an open invitation already stands over, or one a
-    /// member holds, is not reserved a second time.
+    /// member holds, is not reserved a second time: it is taken, naming the member.
     /// </summary>
     [Fact]
     public async Task REG_MAIL_001_AnAddressAlreadyTakenIsRefusedAsync()
@@ -350,9 +350,9 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
         Error member = Failure(await IssueAsync(Staff, Request(email: Personal, corporate: "held@staff.test")));
 
-        Assert.Equal(ErrorCodes.RequestMalformed, open.Code);
+        Assert.Equal(ErrorCodes.MailboxTaken, open.Code);
         Assert.Equal("corporateEmail", Member(open));
-        Assert.Equal(ErrorCodes.RequestMalformed, member.Code);
+        Assert.Equal(ErrorCodes.MailboxTaken, member.Code);
         Assert.Equal("corporateEmail", Member(member));
         Assert.Single(_invitations.Held);
     }

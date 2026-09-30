@@ -34,6 +34,8 @@ public interface IInvitations
     /// address, <c>identity.identifier.mixedscript</c> naming the member where a word
     /// mixes scripts, <c>identity.identifier.domainnotallowed</c> where the
     /// organization's lock does not admit the address the member will sign in with,
+    /// <c>identity.mailbox.taken</c> naming <c>corporateEmail</c> where a member holds the
+    /// corporate address or a standing invitation reserves it,
     /// <c>api.request.malformed</c> naming the member that cannot be taken.
     /// </returns>
     ValueTask<Result<IssuedInvitation>> IssueAsync(

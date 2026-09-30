@@ -8482,6 +8482,8 @@ neither revoked nor acknowledged, holds it whatever a service does.
 *Chapter text that should change.* REG-MAIL-001 could say re-inviting revokes the
 expired invitation.
 
+**Superseded by D-166.**
+
 ---
 
 ## 232. Issuing says nothing about who holds an account

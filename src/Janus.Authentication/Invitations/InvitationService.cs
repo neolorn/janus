@@ -561,7 +561,7 @@ internal sealed class InvitationService(
 
         if (existing.IsHeld)
         {
-            return Result.Failure<Reservation>(Malformed("corporateEmail"));
+            return Result.Failure<Reservation>(Named(ErrorCodes.MailboxTaken, "corporateEmail"));
         }
 
         IReadOnlyList<Invitation> standing = await invitations
@@ -570,7 +570,7 @@ internal sealed class InvitationService(
 
         if (standing.Any(invitation => !invitation.HasExpired(now)))
         {
-            return Result.Failure<Reservation>(Malformed("corporateEmail"));
+            return Result.Failure<Reservation>(Named(ErrorCodes.MailboxTaken, "corporateEmail"));
         }
 
         if (!existing.WasHeld)
