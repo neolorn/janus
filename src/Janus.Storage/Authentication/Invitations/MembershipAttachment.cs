@@ -110,7 +110,13 @@ internal sealed class MembershipAttachment(
         await memberships.CreateAsync(membership, cancellationToken).ConfigureAwait(false);
 
         // The grants are written in the transaction and read back only once it commits,
-        // so a role named twice is granted once here rather than by the check below.
+        // so a role named twice is granted once here rather than by the check below. A
+        // role stands in for the invitation's only where the account holds it live
+        // across the organization with no expiry, as the invitation grants it.
+        IReadOnlyList<Grant> standing = await grants
+            .HeldByAsync([GrantSubject.Of(subject)], organization, at, cancellationToken)
+            .ConfigureAwait(false);
+
         foreach (RoleName role in roles.Distinct())
         {
             Grant grant = Grant
@@ -130,7 +136,11 @@ internal sealed class MembershipAttachment(
                     created => created,
                     error => throw new InvalidOperationException(error.Code.ToString()));
 
-            if (!await grants.ExistsAsync(grant, at, cancellationToken).ConfigureAwait(false))
+            if (!standing.Any(held => held.Subject == grant.Subject
+                && held.Role == role
+                && held.ResourceType is null
+                && !held.Deny
+                && held.ExpiresAt is null))
             {
                 await grants.CreateAsync(grant, cancellationToken).ConfigureAwait(false);
             }

@@ -9104,6 +9104,8 @@ of the issue explains the grant; the words are the frontend's (CONV-CONTENT-001)
 *Chapter text that should change.* REG-INV-001 could state the scope, the grantor and
 the reason of the grants an invitation attaches.
 
+**Superseded by D-166.**
+
 ---
 
 ## 248. What the corporate address does at the acknowledgement

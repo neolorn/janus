@@ -115,6 +115,36 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// REG-INV-001: a grant of the role that expires does not stand in for the
+    /// permanent one the invitation grants, so the permanent one is written beside it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_INV_001_AnExpiringGrantDoesNotStandInForThePermanentOneAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+
+        await RoleAsync();
+
+        GrantId expiring = await GrantedAsync(subject, organization, Noon.AddDays(30));
+
+        _ = await AttachAsync(subject, organization, [], [Clerk], subject, multiple: false);
+
+        await using StoreContext reading = database.Context();
+
+        IReadOnlyList<Grant> held = await new GrantStore(reading, new DataConnections(reading)).HeldByAsync(
+            [GrantSubject.Of(subject)],
+            organization,
+            Noon,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, held.Count);
+        Assert.Contains(held, grant => grant.Id == expiring);
+        Assert.Contains(held, grant => grant.Role == Clerk && grant.ExpiresAt is null && grant.Reason == "invitation:reason");
+    }
+
+    /// <summary>
     /// IDN-MEM-002: an account that may hold no further membership is refused with the
     /// code, and nothing is written.
     /// </summary>
@@ -319,7 +349,10 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
         return attached;
     }
 
-    private async Task<GrantId> GrantedAsync(SubjectId subject, OrganizationId organization)
+    private async Task<GrantId> GrantedAsync(
+        SubjectId subject,
+        OrganizationId organization,
+        DateTimeOffset? expiresAt = null)
     {
         Grant grant = Grant.Create(
                 GrantId.New(TimeProvider.System),
@@ -329,7 +362,7 @@ public sealed class MembershipAttachmentTests(DatabaseFixture database)
                 on: null,
                 deny: false,
                 GrantKind.Stored,
-                expiresAt: null,
+                expiresAt,
                 subject,
                 Noon.AddDays(-1),
                 "held before")
