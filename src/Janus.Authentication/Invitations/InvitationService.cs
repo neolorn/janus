@@ -36,7 +36,7 @@ namespace Janus.Authentication.Invitations;
 /// with where the deployment has one.
 /// </param>
 /// <param name="sending">What carries the link.</param>
-/// <param name="configuration">Where the lifetime, the phone setting and the languages are read.</param>
+/// <param name="configuration">Where the lifetime and the languages are read.</param>
 /// <param name="audit">Where every issue and revocation is written down.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
@@ -405,24 +405,6 @@ internal sealed class InvitationService(
         else if (corporate is not null)
         {
             return Result.Failure<Bound>(Malformed("corporateEmail"));
-        }
-
-        if (phone is not null)
-        {
-            AttributeRequirement collected = (await configuration
-                    .ReadAsync(Settings.RegistrationPhone, cancellationToken).ConfigureAwait(false))
-                .Match(value => value, error => Withheld<AttributeRequirement>(error, ref failure));
-
-            if (failure is not null)
-            {
-                return Result.Failure<Bound>(failure);
-            }
-
-            // A phone the deployment does not collect is a field no registration takes.
-            if (collected is AttributeRequirement.Off)
-            {
-                return Result.Failure<Bound>(Malformed("phone"));
-            }
         }
 
         if ((corporate ?? email)?.Address is EmailAddress member

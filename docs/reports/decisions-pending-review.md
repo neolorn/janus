@@ -8295,6 +8295,8 @@ none never would, so the membership step would be unreachable.
 *Chapter text that should change.* REG-INV-001 could say a phone is bound only where
 `registration.phone` is not `off`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 226. Where the link goes, and the token answered once where no email is bound

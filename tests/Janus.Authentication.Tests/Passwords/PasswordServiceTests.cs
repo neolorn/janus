@@ -174,7 +174,7 @@ public sealed class PasswordServiceTests : IAsyncDisposable
 
         _configuration.Set<IReadOnlySet<BlocklistRejectionSource>>(
             Settings.PasswordBlocklistSources,
-            new HashSet<BlocklistRejectionSource> { BlocklistRejectionSource.Context });
+            new HashSet<BlocklistRejectionSource> { BlocklistRejectionSource.Leaked, BlocklistRejectionSource.Context });
 
         PasswordVerification prompted = await VerifiedAsync(subject, Chosen, [Chosen]);
 

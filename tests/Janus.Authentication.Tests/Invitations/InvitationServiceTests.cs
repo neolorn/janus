@@ -91,7 +91,6 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         _organizations.Seed(Customer, name: "Northern branch");
 
         _configuration.Set(Settings.NotificationLanguages, English);
-        _configuration.Set(Settings.RegistrationPhone, AttributeRequirement.Optional);
 
         _inviter = SubjectId.New(_randomness);
         _passwords.Hold(_inviter, Noon);
@@ -415,20 +414,6 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Equal((ErrorCodes.IdentifierInvalid, "email"), (email.Code, Member(email)));
         Assert.Equal((ErrorCodes.IdentifierInvalid, "phone"), (phone.Code, Member(phone)));
         Assert.Equal((ErrorCodes.IdentifierMixedScript, "email"), (mixed.Code, Member(mixed)));
-    }
-
-    /// <summary>
-    /// REG-INV-001: a phone the deployment does not collect is not a phone a
-    /// registration could take, so it is not bound.
-    /// </summary>
-    [Fact]
-    public async Task REG_INV_001_APhoneIsNotBoundWhereTheDeploymentCollectsNoneAsync()
-    {
-        _configuration.Set(Settings.RegistrationPhone, AttributeRequirement.Off);
-
-        Error refused = Failure(await IssueAsync(Customer, Request(phone: Number)));
-
-        Assert.Equal((ErrorCodes.RequestMalformed, "phone"), (refused.Code, Member(refused)));
     }
 
     /// <summary>
