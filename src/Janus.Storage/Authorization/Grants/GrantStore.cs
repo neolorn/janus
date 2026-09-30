@@ -127,6 +127,21 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
             .ConfigureAwait(false);
 
     /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<Grant>> NamingAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        List<GrantRecord> records = await context.Grants
+            .Where(row => row.SubjectType == SubjectType.User && row.SubjectId == subject.Value)
+            .OrderBy(row => row.GrantedAt)
+            .ThenBy(row => row.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. records.Select(Read)];
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<Grant>> HeldByAsync(
         IReadOnlyList<GrantSubject> holders,
         OrganizationId organization,

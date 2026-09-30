@@ -881,7 +881,11 @@ against the public contract of LIB-API-001.
   verification state, the backup settings, the preferences in force, the live sessions
   with the locations resolved at sign-in and at last use, the enrolled credentials and
   the password by property and label, how the recovery code set stands, the browsers the
-  account is known at, its memberships, the roles it holds, the assurance it can reach,
+  account is known at, its memberships, the groups it is a member of itself (a
+  `group-memberships` section after `membership-acknowledgements`, each with its name
+  and organization), every grant naming it in every organization, live, expired or
+  revoked, with `revokedAt` on a revoked one and never who granted or revoked it or why,
+  the assurance it can reach,
   the terms version, notice version and affirmation the terms step recorded, and the
   consent and objection records. No secret material crosses. It is gated at the
   account's own reachable assurance, limited to `privacy.export.ratelimit` a rolling day

@@ -105,6 +105,16 @@ internal sealed class GroupsInMemory : IGroupStore
     }
 
     /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<Group>> HoldingAsync(SubjectId member, CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<Group>>(
+        [
+            .. _members
+                .Where(entry => entry.Value.Contains(GrantSubject.Of(member)))
+                .Select(entry => _groups[entry.Key])
+                .OrderBy(group => group.Name, StringComparer.Ordinal),
+        ]);
+
+    /// <inheritdoc/>
     public ValueTask<bool> ReachesAsync(
         GroupId group,
         GrantSubject member,

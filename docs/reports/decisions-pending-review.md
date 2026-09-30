@@ -5335,6 +5335,8 @@ every group of REG-ACCT-001 the person may see and the whole of the standing gro
 list the sections above, in place of the three it names now. The sentence entry 102
 asked for, that credentials are not among them, should not be written.
 
+**Superseded by D-166.**
+
 ---
 
 ## 151. The three rows the library makes true are applied; the rest of the register is offered
