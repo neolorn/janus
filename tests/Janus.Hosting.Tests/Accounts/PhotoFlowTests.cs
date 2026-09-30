@@ -51,7 +51,11 @@ public sealed class PhotoFlowTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status404NotFound, withoutPolicy.Status);
         Assert.Equal(StatusCodes.Status404NotFound, withoutPhoto.Status);
-        Assert.Equal(withoutPolicy.Body, withoutPhoto.Body);
+        Assert.Equal(ErrorCodes.PhotoNotFound.ToString(), withoutPhoto.Text("code"));
+        Assert.Equal(withoutPolicy.Text("code"), withoutPhoto.Text("code"));
+        Assert.Equal(
+            withoutPolicy.Json().GetProperty("details").GetRawText(),
+            withoutPhoto.Json().GetProperty("details").GetRawText());
     }
 
     /// <summary>

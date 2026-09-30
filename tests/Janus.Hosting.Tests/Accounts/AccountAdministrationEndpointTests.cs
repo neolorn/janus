@@ -77,26 +77,37 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// PRIV-RIGHT-004 AC2: the lift makes a restricted account active, and a second
-    /// finds no restriction to lift, which is a conflict with the state.
+    /// PRIV-RIGHT-004 AC2 (D-166): the lift is stepped up, so a session that has proved
+    /// itself makes a restricted account active, a second finds no restriction to lift,
+    /// which is a conflict with the state, and once the proof is no longer recent a
+    /// restricted account is refused with the step-up code and stays restricted.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task PRIV_RIGHT_004_AC2_ARestrictionIsLiftedAsync()
     {
         Session member = await MemberAsync();
+        Session later = await MemberAsync();
         Browser browser = await Flow.SignedInAsync(_deployment);
 
         _deployment.Accounts.Stands(member.Subject, AccountState.Restricted);
+        _deployment.Accounts.Stands(later.Subject, AccountState.Restricted);
         _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Administration, Permissions.AccountManage);
 
         Answer lifted = await browser.SendAsync("POST", PathOf(member.Subject, "restriction/lift"));
         Answer again = await browser.SendAsync("POST", PathOf(member.Subject, "restriction/lift"));
 
+        _deployment.Clock.Advance(Settings.SessionStepUpRecency.Default + TimeSpan.FromMinutes(1));
+
+        Answer stale = await browser.SendAsync("POST", PathOf(later.Subject, "restriction/lift"));
+
         Assert.Equal(StatusCodes.Status204NoContent, lifted.Status);
         Assert.Equal(AccountState.Active, await StateAsync(member.Subject));
         Assert.Equal(StatusCodes.Status409Conflict, again.Status);
         Assert.Equal("identity.account.stateconflict", again.Text("code"));
+        Assert.Equal(StatusCodes.Status403Forbidden, stale.Status);
+        Assert.Equal(ErrorCodes.StepUpRequired.ToString(), stale.Text("code"));
+        Assert.Equal(AccountState.Restricted, await StateAsync(later.Subject));
     }
 
     /// <summary>
@@ -154,6 +165,39 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
         Assert.Null(read.Header("ETag"));
         Assert.Equal("a-photo", read.Body);
         Assert.Equal(StatusCodes.Status404NotFound, none.Status);
+    }
+
+    /// <summary>
+    /// IDN-ATTR-003 AC3 (D-166): an account that shows no photo, and one whose
+    /// organization shows none, are answered alike with <c>identity.photo.notfound</c>
+    /// in the body every refusal carries.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ATTR_003_AC3_AnAccountWithoutAPhotoIsAnsweredWithTheCodeAsync()
+    {
+        Session bare = await MemberAsync();
+        Session withheld = await MemberAsync();
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        var showing = OrganizationId.New(_deployment.Clock);
+        var hiding = OrganizationId.New(_deployment.Clock);
+
+        _deployment.Memberships.Place(bare.Subject, showing);
+        _deployment.Memberships.Place(withheld.Subject, hiding);
+        _deployment.Configuration.Set(Settings.OrganizationPhoto, showing.ToString(), true);
+        _deployment.Configuration.Set(Settings.OrganizationPhoto, hiding.ToString(), false);
+        _deployment.Accounts.Shows(withheld.Subject, Encoding.ASCII.GetBytes("a-photo"));
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Administration, Permissions.AccountManage);
+
+        Answer none = await browser.SendAsync("GET", PathOf(bare.Subject, "photo"));
+        Answer policy = await browser.SendAsync("GET", PathOf(withheld.Subject, "photo"));
+
+        foreach (Answer answer in new[] { none, policy })
+        {
+            Assert.Equal(StatusCodes.Status404NotFound, answer.Status);
+            Assert.Equal(ErrorCodes.PhotoNotFound.ToString(), answer.Text("code"));
+            Assert.Empty(answer.Json().GetProperty("details").EnumerateObject());
+        }
     }
 
     private static string PathOf(SubjectId subject, string operation) =>

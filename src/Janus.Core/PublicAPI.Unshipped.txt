@@ -1178,8 +1178,8 @@ Janus.Core.IAccount.RemovePhotoAsync(Janus.Core.AccessContext! context, System.T
 Janus.Core.IAccount.SetPhotoAsync(Janus.Core.AccessContext! context, System.ReadOnlyMemory<byte> upload, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccount.SetPreferencesAsync(Janus.Core.AccessContext! context, string? language, string? timeZone, System.Collections.Generic.IReadOnlyDictionary<string!, string!>! declared, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccounts
-Janus.Core.IAccounts.CancelDeletionAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
-Janus.Core.IAccounts.LiftRestrictionAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IAccounts.CancelDeletionAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IAccounts.LiftRestrictionAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccounts.ReactivateAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccounts.ReadPhotoAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.ReadOnlyMemory<byte>>>
 Janus.Core.IAccounts.SuspendAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -2675,7 +2675,10 @@ Janus.Core.StartupException.StartupException(string! message, System.Exception! 
 Janus.Core.StepUpAction
 Janus.Core.StepUpAction.AccountDeactivate = 11 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.AccountDelete = 10 -> Janus.Core.StepUpAction
+Janus.Core.StepUpAction.AccountDeletionCancel = 31 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.AccountReactivate = 18 -> Janus.Core.StepUpAction
+Janus.Core.StepUpAction.AccountRestrictionLift = 30 -> Janus.Core.StepUpAction
+Janus.Core.StepUpAction.AccountSessionsRevoke = 32 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.AccountSuspend = 17 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.AccountTakedown = 19 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.AccountTakedownReverse = 20 -> Janus.Core.StepUpAction
@@ -2702,6 +2705,7 @@ Janus.Core.StepUpAction.RecoveryApprove = 14 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.RecoveryCodesGenerate = 6 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.RestrictionEdit = 26 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.RestrictionGrant = 27 -> Janus.Core.StepUpAction
+Janus.Core.StepUpAction.SessionRevokeAll = 33 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.UsernameChange = 3 -> Janus.Core.StepUpAction
 Janus.Core.SubjectEvent
 Janus.Core.SubjectEvent.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey) -> void
@@ -3869,6 +3873,7 @@ static Janus.Core.ErrorCodes.PasswordTooLong.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PasswordTooShort.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PhotoInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PhotoNotEnabled.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.PhotoNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PhotoTooLarge.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PolicyGraceExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PolicyUnregistered.get -> Janus.Core.ErrorCode

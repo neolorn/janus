@@ -235,6 +235,7 @@ internal sealed class AccountAdministration(
     /// <inheritdoc/>
     public async ValueTask<Result> LiftRestrictionAsync(
         AccessContext context,
+        SessionId session,
         SubjectId subject,
         CancellationToken cancellationToken)
     {
@@ -268,6 +269,14 @@ internal sealed class AccountAdministration(
                 break;
         }
 
+        if (await stepUp
+                .PassedAsync(acting, session, StepUpAction.AccountRestrictionLift, cancellationToken)
+                .ConfigureAwait(false)
+            is Error challenged)
+        {
+            return Result.Failure(challenged);
+        }
+
         DateTimeOffset now = time.GetUtcNow();
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -293,6 +302,7 @@ internal sealed class AccountAdministration(
     /// <inheritdoc/>
     public async ValueTask<Result> CancelDeletionAsync(
         AccessContext context,
+        SessionId session,
         SubjectId subject,
         CancellationToken cancellationToken)
     {
@@ -339,6 +349,14 @@ internal sealed class AccountAdministration(
         if (now >= deleting.Since + grace)
         {
             return Result.Failure(Error.From(ErrorCodes.DeletionWindowElapsed));
+        }
+
+        if (await stepUp
+                .PassedAsync(acting, session, StepUpAction.AccountDeletionCancel, cancellationToken)
+                .ConfigureAwait(false)
+            is Error challenged)
+        {
+            return Result.Failure(challenged);
         }
 
         // IDN-LIFE-003: the cancellation of a window an out-of-band request began is

@@ -229,7 +229,9 @@ public sealed class ProfilePhotosTests : IAsyncDisposable
         Assert.True(Succeeded(await Photos.RemoveAsync(Asking, Cancellation)));
 
         Assert.True((await ShownAsync()).IsEmpty);
-        Assert.True((await Photos.ReadAsync(Asking, Cancellation)).Match(read => read, _ => default).IsEmpty);
+        Assert.Equal(
+            ErrorCodes.PhotoNotFound,
+            (await Photos.ReadAsync(Asking, Cancellation)).Match(_ => default, error => error.Code));
     }
 
     /// <summary>
@@ -248,7 +250,9 @@ public sealed class ProfilePhotosTests : IAsyncDisposable
 
         _configuration.Set(Settings.OrganizationPhoto, _organization.ToString(), false);
 
-        Assert.True((await Photos.ReadAsync(Asking, Cancellation)).Match(read => read, _ => default).IsEmpty);
+        Assert.Equal(
+            ErrorCodes.PhotoNotFound,
+            (await Photos.ReadAsync(Asking, Cancellation)).Match(_ => default, error => error.Code));
         Assert.False((await ShownAsync()).IsEmpty);
 
         Assert.True(Succeeded(await Photos.RemoveAsync(Asking, Cancellation)));

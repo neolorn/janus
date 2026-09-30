@@ -497,6 +497,13 @@ public static class ErrorCodes
     public static ErrorCode PhotoNotEnabled { get; } = ErrorCode.Parse("identity.photo.notenabled");
 
     /// <summary>
+    /// The account shows no photo: none is set, or an organization it belongs to does
+    /// not show photos, answered alike. Set a photo, or read none.
+    /// </summary>
+    /// <remarks>Implements IDN-ATTR-002, IDN-ATTR-003, chapter 10 section 1.1.</remarks>
+    public static ErrorCode PhotoNotFound { get; } = ErrorCode.Parse("identity.photo.notfound");
+
+    /// <summary>
     /// A second username change fell inside <c>identifiers.username.changecooloff</c>.
     /// Repeat it after the end the details carry.
     /// </summary>

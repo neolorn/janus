@@ -73,6 +73,7 @@ internal static class ApiStatus
         [ErrorCodes.RequestNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.TakedownNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.AccountNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.PhotoNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.ErasureNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.InvitationNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.MailboxNotFound] = StatusCodes.Status404NotFound,

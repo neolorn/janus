@@ -219,4 +219,32 @@ public enum StepUpAction
     /// <remarks>Named <c>organization:delete</c>.</remarks>
     [JsonStringEnumMemberName("organization:delete")]
     OrganizationDelete = 29,
+
+    /// <summary>
+    /// Lift a processing restriction.
+    /// </summary>
+    /// <remarks>Named <c>account:restrictionlift</c>.</remarks>
+    [JsonStringEnumMemberName("account:restrictionlift")]
+    AccountRestrictionLift = 30,
+
+    /// <summary>
+    /// Cancel a deletion on the subject's behalf.
+    /// </summary>
+    /// <remarks>Named <c>account:deletioncancel</c>.</remarks>
+    [JsonStringEnumMemberName("account:deletioncancel")]
+    AccountDeletionCancel = 31,
+
+    /// <summary>
+    /// End another person's sessions.
+    /// </summary>
+    /// <remarks>Named <c>account:sessionsrevoke</c>.</remarks>
+    [JsonStringEnumMemberName("account:sessionsrevoke")]
+    AccountSessionsRevoke = 32,
+
+    /// <summary>
+    /// End every session.
+    /// </summary>
+    /// <remarks>Named <c>session:revokeall</c>.</remarks>
+    [JsonStringEnumMemberName("session:revokeall")]
+    SessionRevokeAll = 33,
 }

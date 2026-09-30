@@ -9542,6 +9542,8 @@ actions).
 answers and say whether its preamble's "touches another person's account" adds gates
 chapter 10 section 5a does not list; chapter 10 could hold the audit row below.
 
+**Superseded by D-166.**
+
 ---
 
 ## 259. Whether a restriction held away from the restricted state is lifted
@@ -9565,6 +9567,8 @@ The refusal is `authz.denied`, as for an account not restricted at all.
 
 *Chapter text that should change.* PRIV-RIGHT-004 could say that a restriction held
 while the account is suspended or deleting is lifted only once the account is back.
+
+**Superseded by D-166.**
 
 ---
 
@@ -9615,6 +9619,8 @@ request's status vocabulary has no value for it.
 answers and say which origins it cancels, and IDN-LIFE-003 could say that "recorded
 against the request" is the audit row naming it.
 
+**Superseded by D-166.**
+
 ---
 
 ## 261. What reading an account's photo as an administrator answers and whose policy withholds it
@@ -9657,6 +9663,8 @@ administrative organization never declared for anyone but its own members.
 
 *Chapter text that should change.* Chapter 09 section 8a could say that "the policy" is
 that of the account's organizations and give the endpoint its other answers.
+
+**Superseded by D-166.**
 
 ---
 

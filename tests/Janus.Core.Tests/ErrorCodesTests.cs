@@ -111,6 +111,7 @@ public sealed class ErrorCodesTests
         "identity.organization.protected",
         "identity.photo.invalid",
         "identity.photo.notenabled",
+        "identity.photo.notfound",
         "identity.photo.toolarge",
         "identity.preference.administratoronly",
         "identity.preference.toolarge",

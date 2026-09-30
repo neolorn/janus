@@ -31,10 +31,6 @@ internal static class AccountEndpoints
 
     private static readonly IResult Accepted = TypedResults.StatusCode(StatusCodes.Status202Accepted);
 
-    // 09 section 6: an account that shows no photo, and one whose policy shows none,
-    // answer alike and say nothing of which of the two they are.
-    private static readonly IResult NoPhoto = TypedResults.NotFound();
-
     // IDN-ATTR-004: what is stored is JPEG, whatever was uploaded.
     private const string StoredPhoto = "image/jpeg";
 
@@ -144,9 +140,7 @@ internal static class AccountEndpoints
 
         return Answers.Of(
             await accounts.ReadPhotoAsync(holder, cancellationToken).ConfigureAwait(false),
-            image => image.IsEmpty
-                ? NoPhoto
-                : TypedResults.Bytes(image, StoredPhoto));
+            image => TypedResults.Bytes(image, StoredPhoto));
     }
 
     private static async Task<IResult> SetPhotoAsync(

@@ -465,18 +465,20 @@ against the public contract of LIB-API-001.
   while the account is suspended or deleting is held for when it returns, with
   `RestrictionChanged` delivered to the subscribers when it is decided.
 - `POST /admin/accounts/{subject}/restriction/lift` lifts a processing restriction under
-  `account:manage` (204): the account is active again, `RestrictionChanged` is delivered
-  to every subject-event handler in the same transaction, and the audit trail records
+  `account:manage` and the `account:restrictionlift` step-up, judged after every other
+  refusal (204): the account is active again, `RestrictionChanged` is delivered to every
+  subject-event handler in the same transaction, and the audit trail records
   `privacy.restriction.lifted`. An account that is not restricted, including one holding
   a restriction while suspended or deleting, answers 409
   `identity.account.stateconflict`, and a subject no account bears 404
   `identity.account.notfound`. `IAccounts.LiftRestrictionAsync` is the same operation in
   process.
 - `POST /admin/accounts/{subject}/delete/cancel` cancels a deletion inside its grace
-  window on the subject's behalf under `account:manage` (204), whether the subject or an
-  out-of-band erasure request began it; the account comes back as it stood and the audit
-  trail records `identity.deletion.cancelled` naming the erasure request where one began
-  the window. A takedown answers 409 `identity.takedown.active`, a closed window 422
+  window on the subject's behalf under `account:manage` and the `account:deletioncancel`
+  step-up, judged after every other refusal (204), whether the subject or an out-of-band
+  erasure request began it; the account comes back as it stood and the audit trail
+  records `identity.deletion.cancelled` naming the erasure request where one began the
+  window. A takedown answers 409 `identity.takedown.active`, a closed window 422
   `identity.deletion.windowelapsed`, an account in no window 409
   `identity.account.stateconflict`, and a subject no account bears 404
   `identity.account.notfound`. `IAccounts.CancelDeletionAsync` is the same operation in
@@ -484,8 +486,9 @@ against the public contract of LIB-API-001.
 - `GET /admin/accounts/{subject}/photo` serves the photo an account shows to an
   administrator holding `account:manage`, as `image/jpeg` with
   `Cache-Control: no-store`. An account that shows none and one whose organizations
-  withhold photos both answer 404; a subject no account bears answers 404
-  `identity.account.notfound`. `IAccounts.ReadPhotoAsync` is the same read in process.
+  withhold photos both answer 404 `identity.photo.notfound`; a subject no account bears
+  answers 404 `identity.account.notfound`. `IAccounts.ReadPhotoAsync` is the same read in
+  process.
 - `GET`, `POST /account/mail/apppasswords` and `DELETE /account/mail/apppasswords/{id}`
   list, create and revoke the signed-in person's mail app passwords at the mail server.
   The library issues the person a token to the mail server's client from their session,
@@ -799,13 +802,13 @@ against the public contract of LIB-API-001.
   no address a cache could share. Availability is the organization's, held in the key
   `photo.enabled.<organization>` and off until an organization is given it; an account
   of no organization, and one whose organization shows none, is answered as an account
-  with no photo. The library reads no image itself: a deployment declares an
-  `ImageCodec`, which decides by content what an upload is, holds it to
-  `photo.maxdimension` and answers the JPEG that is stored. The photo is held in a table
-  and a port of its own, encrypted under the subject's own key like any other personal
-  field: nothing that reads an account reads image bytes, a dump yields no photograph,
-  and erasure of the key leaves the image unrecoverable. A deployment whose policy shows
-  photos and which declared no codec does not start.
+  with no photo, 404 `identity.photo.notfound`. The library reads no image itself: a
+  deployment declares an `ImageCodec`, which decides by content what an upload is, holds
+  it to `photo.maxdimension` and answers the JPEG that is stored. The photo is held in a
+  table and a port of its own, encrypted under the subject's own key like any other
+  personal field: nothing that reads an account reads image bytes, a dump yields no
+  photograph, and erasure of the key leaves the image unrecoverable. A deployment whose
+  policy shows photos and which declared no codec does not start.
 - Every runtime configuration change goes through one operation that classifies it,
   gates it and writes it down. A configuration key loosens the way its row states; where
   a row states nothing, a key with only a ceiling loosens upward, a key with only a

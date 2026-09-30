@@ -301,7 +301,7 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
 
     /// <summary>
     /// PRIV-RIGHT-004 AC2: lifting a restriction makes the account active again, tells
-    /// the subscribers, and is recorded as the administrator's act, with no step-up asked.
+    /// the subscribers, and is recorded as the administrator's act.
     /// </summary>
     [Fact]
     public async Task PRIV_RIGHT_004_AC2_LiftingARestrictionRestoresTheAccountAsync()
@@ -345,10 +345,34 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
             ErrorCodes.Denied,
             Refused(await Administration.LiftRestrictionAsync(
                 AccessContext.Of(stranger),
+                Opened(stranger, Noon),
                 restricted,
                 TestContext.Current.CancellationToken)));
         Assert.Equal(AccountState.Restricted, await StateAsync(restricted));
         Assert.Empty(_directory.Lifted);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-004 (D-166): lifting a restriction changes another person's account, so
+    /// it is the <c>account:restrictionlift</c> step-up action, judged after the state: a
+    /// session whose proof is not recent lifts nothing, and an account with no
+    /// restriction is answered as one before any proof is asked.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_004_LiftingARestrictionAsksForStepUpAsync()
+    {
+        _directory.Stands(_member, AccountState.Restricted);
+
+        var active = SubjectId.New(_randomness);
+
+        _directory.Stands(active, AccountState.Active);
+
+        Assert.Equal(ErrorCodes.AccountStateConflict, Refused(await LiftAsync(active, Stale)));
+        Assert.Equal(ErrorCodes.StepUpRequired, Refused(await LiftAsync(_member, Stale)));
+        Assert.Equal(AccountState.Restricted, await StateAsync(_member));
+        Assert.Empty(_directory.Lifted);
+        Assert.Empty(_audit.Administered);
+        Assert.Equal(0, _work.Opened);
     }
 
     /// <summary>
@@ -422,6 +446,29 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-003 (D-166): cancelling a deletion on the subject's behalf changes
+    /// another person's account, so it is the <c>account:deletioncancel</c> step-up
+    /// action, judged after every other refusal: a session whose proof is not recent
+    /// cancels nothing, and a closed window is answered as closed before any proof is
+    /// asked.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_003_ACancellationOnTheSubjectsBehalfAsksForStepUpAsync()
+    {
+        var closed = SubjectId.New(_randomness);
+
+        _directory.Deleting(_member, DeletionOrigin.Self, Noon.AddDays(-1));
+        _directory.Deleting(closed, DeletionOrigin.Self, Noon - Settings.AccountDeletionGrace.Default);
+
+        Assert.Equal(ErrorCodes.DeletionWindowElapsed, Refused(await CancelAsync(closed, Stale)));
+        Assert.Equal(ErrorCodes.StepUpRequired, Refused(await CancelAsync(_member, Stale)));
+        Assert.Equal(AccountState.Deleting, await StateAsync(_member));
+        Assert.Empty(_events.Published);
+        Assert.Empty(_audit.Administered);
+        Assert.Equal(0, _work.Opened);
+    }
+
+    /// <summary>
     /// IDN-ATTR-003 AC3: the photo an account shows is read through the gate, so an
     /// administrator reads it, an unknown subject is not found, and a person without the
     /// permission is refused it.
@@ -445,8 +492,9 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-ATTR-002: a photo is read for an administrator only where the account's own
-    /// organizations show photos, and an account that shows none answers alike.
+    /// IDN-ATTR-002, IDN-ATTR-003 (D-166): a photo is read for an administrator only
+    /// where the account's own organizations show photos, and an account that shows none
+    /// answers alike, with <c>identity.photo.notfound</c>.
     /// </summary>
     [Fact]
     public async Task IDN_ATTR_002_APhotoThePolicyWithholdsIsNotReadAsync()
@@ -460,11 +508,11 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
         _configuration.Set(Settings.OrganizationPhoto, organization.ToString(), false);
         _directory.Shows(_member, new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 });
 
-        Assert.True((await PhotoAsync(Acting, _member)).Match(read => read.IsEmpty, _ => false));
+        Assert.Equal(ErrorCodes.PhotoNotFound, Refused(await PhotoAsync(Acting, _member)));
 
         _configuration.Set(Settings.OrganizationPhoto, organization.ToString(), true);
 
-        Assert.True((await PhotoAsync(Acting, bare)).Match(read => read.IsEmpty, _ => false));
+        Assert.Equal(ErrorCodes.PhotoNotFound, Refused(await PhotoAsync(Acting, bare)));
     }
 
     private static DateTimeOffset Stale =>
@@ -505,11 +553,19 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
             subject,
             TestContext.Current.CancellationToken);
 
-    private async Task<Result> CancelAsync(SubjectId subject) =>
-        await Administration.CancelDeletionAsync(Acting, subject, TestContext.Current.CancellationToken);
+    private async Task<Result> CancelAsync(SubjectId subject, DateTimeOffset? proved = null) =>
+        await Administration.CancelDeletionAsync(
+            Acting,
+            Opened(_administrator, proved ?? Noon),
+            subject,
+            TestContext.Current.CancellationToken);
 
-    private async Task<Result> LiftAsync(SubjectId subject) =>
-        await Administration.LiftRestrictionAsync(Acting, subject, TestContext.Current.CancellationToken);
+    private async Task<Result> LiftAsync(SubjectId subject, DateTimeOffset? proved = null) =>
+        await Administration.LiftRestrictionAsync(
+            Acting,
+            Opened(_administrator, proved ?? Noon),
+            subject,
+            TestContext.Current.CancellationToken);
 
     private async Task<AccountState?> StateAsync(SubjectId subject) =>
         await _directory.StateAsync(subject, TestContext.Current.CancellationToken);
