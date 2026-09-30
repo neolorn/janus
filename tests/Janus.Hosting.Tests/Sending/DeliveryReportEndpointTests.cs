@@ -28,7 +28,7 @@ public sealed class DeliveryReportEndpointTests
         await using Deployment deployment = Prepared();
 
         string reference = await SentAsync(deployment);
-        var destination = new RestrictionKey("sms.destination", Flow.Number);
+        var destination = new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Flow.Number);
 
         Assert.Single(deployment.SendLedger.Sends(destination));
 
@@ -53,7 +53,7 @@ public sealed class DeliveryReportEndpointTests
 
         _ = await SentAsync(deployment);
         var machine = new Machine(deployment);
-        var destination = new RestrictionKey("sms.destination", Flow.Number);
+        var destination = new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Flow.Number);
 
         Answer forged = await machine.CallAsync("/callbacks/sms/dlr?reference=AAAAAAAAAAAAAAAAAAAAAA&status=failed");
         Answer unreadable = await machine.CallAsync("/callbacks/sms/dlr?reference=AAAAAAAAAAAAAAAAAAAAAA");
@@ -81,7 +81,7 @@ public sealed class DeliveryReportEndpointTests
             BrowserCookies.Session + "=stale");
 
         Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
-        Assert.Single(deployment.SendLedger.Sends(new RestrictionKey("sms.destination", Flow.Number)));
+        Assert.Single(deployment.SendLedger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Flow.Number)));
     }
 
     // A deployment whose messages carry the code, as the shipped templates do.

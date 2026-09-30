@@ -5,19 +5,19 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 namespace Janus.Storage.Authentication.Sending;
 
 /// <summary>
-/// How what a destination has been sent is stored.
+/// How what a key other than a destination has been counted is stored.
 /// </summary>
-/// <remarks>Implements AUTH-ABUSE-004.</remarks>
-internal sealed class SendCounterConfiguration : IEntityTypeConfiguration<SendCounterRecord>
+/// <remarks>Implements AUTH-ABUSE-004 and PRIV-RET-005.</remarks>
+internal sealed class SendKeyCounterConfiguration : IEntityTypeConfiguration<SendKeyCounterRecord>
 {
     /// <inheritdoc/>
-    public void Configure(EntityTypeBuilder<SendCounterRecord> builder)
+    public void Configure(EntityTypeBuilder<SendKeyCounterRecord> builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        builder.ToTable("send_counters");
+        builder.ToTable("send_key_counters");
 
-        builder.HasKey(counter => counter.Key).HasName("pk_send_counters");
+        builder.HasKey(counter => counter.Key).HasName("pk_send_key_counters");
 
         builder.Property(counter => counter.Key)
             .HasColumnName("key")

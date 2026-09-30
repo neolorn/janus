@@ -269,8 +269,9 @@ internal sealed class RestrictionAdministration(
             return Result.Failure(failure);
         }
 
-        if (credit <= 0
-            || !declared.Any(one => string.Equals(one.Name, name, StringComparison.Ordinal)))
+        Restriction? granted = declared.FirstOrDefault(one => string.Equals(one.Name, name, StringComparison.Ordinal));
+
+        if (credit <= 0 || granted is null)
         {
             return Result.Failure(
                 new Error(
@@ -290,7 +291,7 @@ internal sealed class RestrictionAdministration(
         }
 
         await ledger
-            .GrantAsync(new RestrictionKey(name, keyValue), credit, cancellationToken)
+            .GrantAsync(new RestrictionKey(name, granted.Key, keyValue), credit, cancellationToken)
             .ConfigureAwait(false);
 
         DateTimeOffset now = time.GetUtcNow();

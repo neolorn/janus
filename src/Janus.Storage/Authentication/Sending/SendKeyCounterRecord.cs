@@ -3,17 +3,17 @@ using System;
 namespace Janus.Storage.Authentication.Sending;
 
 /// <summary>
-/// The <c>send_counters</c> row: one destination and the times counted against it, and
-/// nothing else.
+/// The <c>send_key_counters</c> row: one account, source, global or host key and the
+/// times counted against it, and nothing else.
 /// </summary>
 /// <remarks>
-/// Implements AUTH-ABUSE-004. The plain address is never here: the key is an HMAC of
-/// the restriction name and the value, so a dump of the table yields no address. Nothing
-/// derived is held beside them: the row is deleted when its newest time is older than
-/// the longest interval any destination restriction now declares, so a tightened
-/// interval reaches the sends already counted (PRIV-RET-005).
+/// Implements AUTH-ABUSE-004 and PRIV-RET-005. A destination is kept apart, in
+/// <c>send_counters</c>, so that it is swept by the longest interval of the destination
+/// restrictions alone and never outlives them because a restriction on another key
+/// counts over a longer one. The key is an HMAC of the restriction name and the value,
+/// as it is there.
 /// </remarks>
-internal sealed class SendCounterRecord
+internal sealed class SendKeyCounterRecord
 {
     /// <summary>The <c>key</c> column, which is this table key.</summary>
     public byte[] Key { get; set; } = [];
@@ -26,7 +26,7 @@ internal sealed class SendCounterRecord
 
     /// <summary>
     /// The <c>sent_at</c> column, oldest first, so the last of them is when the key
-    /// was last sent to and what the sweep reads.
+    /// was last counted and what the sweep reads.
     /// </summary>
     public DateTimeOffset[] SentAt { get; set; } = [];
 }

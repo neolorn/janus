@@ -14,21 +14,32 @@ namespace Janus.Authentication.Sending;
 internal interface ISendLedger
 {
     /// <summary>
-    /// What stands against each key a send would count under. Every record whose
-    /// newest time is older than the given instant is deleted first, so a record that
-    /// decides nothing is never read and never stands in the table.
+    /// What stands against each key a send would count under. Every record that
+    /// decides nothing is deleted first, as <see cref="SweepAsync"/> deletes it, so such
+    /// a record is never read.
     /// </summary>
     /// <param name="keys">The keys.</param>
     /// <param name="stale">
-    /// The instant before which a time decides nothing: the clock less the longest
-    /// interval any restriction now declares.
+    /// The instants before which a time decides nothing, for the destinations and for
+    /// every other key.
     /// </param>
     /// <param name="cancellationToken">Abandons the read.</param>
     /// <returns>The counter of each key, absent where nothing has been counted.</returns>
     ValueTask<IReadOnlyDictionary<RestrictionKey, SendCounter>> CountersAsync(
         IReadOnlyCollection<RestrictionKey> keys,
-        DateTimeOffset stale,
+        CounterStaleness stale,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Deletes every destination record whose newest time is older than the
+    /// destinations' instant, and every other record whose newest time is older than
+    /// the keys' instant, so a record goes once it decides nothing whether or not the
+    /// key is sent to again (PRIV-RET-005 AC2).
+    /// </summary>
+    /// <param name="stale">The two instants.</param>
+    /// <param name="cancellationToken">Abandons the deletes.</param>
+    /// <returns>The work of deleting them.</returns>
+    ValueTask SweepAsync(CounterStaleness stale, CancellationToken cancellationToken);
 
     /// <summary>
     /// Counts one send that the transport took, so a delivery report can release it.

@@ -192,6 +192,7 @@ public static class HostingRegistration
             services.GetRequiredService<TimeProvider>()));
         services.AddScoped<ConfigurationAdministration>();
         services.AddScoped<RestrictionAdministration>();
+        services.AddScoped<SendCounterSweep>();
         services.AddScoped<IRestrictionSet, RestrictionSetService>();
         services.AddScoped<ThrottleService>();
         services.AddScoped<NonExistenceNotice>();

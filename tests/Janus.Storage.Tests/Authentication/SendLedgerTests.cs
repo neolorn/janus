@@ -29,10 +29,10 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
     private static readonly TimeSpan Day = TimeSpan.FromHours(24);
 
     /// <summary>
-    /// AUTH-ABUSE-004 AC6: the destination record is a keyed hash and times and
-    /// nothing else, so a dump of the table yields no address. The hash carries the
-    /// version of the key it is computed under (OPS-SEC-003 AC6, entry 318 of the
-    /// decisions pending review).
+    /// AUTH-ABUSE-004 AC6: the destination record, and the record of every other key,
+    /// is a keyed hash and times and nothing else, so a dump of either table yields no
+    /// address. The hash carries the version of the key it is computed under
+    /// (OPS-SEC-003 AC6, entry 318 of the decisions pending review).
     /// </summary>
     [Fact]
     public async Task AUTH_ABUSE_004_AC6_TheRecordHoldsAHashAndTimesAndNothingElseAsync()
@@ -41,15 +41,19 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
 
         await using NpgsqlConnection connection = await database.OpenAsync();
 
-        IEnumerable<string> columns = await connection.QueryAsync<string>(
-            """
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_schema = 'identity' AND table_name = 'send_counters'
-            ORDER BY column_name
-            """);
+        foreach (string table in (string[])["send_counters", "send_key_counters"])
+        {
+            IEnumerable<string> columns = await connection.QueryAsync<string>(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'identity' AND table_name = @table
+                ORDER BY column_name
+                """,
+                new { table });
 
-        Assert.Equal(["fingerprint_version", "key", "sent_at"], columns);
+            Assert.Equal(["fingerprint_version", "key", "sent_at"], columns);
+        }
 
         RestrictionKey destination = Destination(number);
 
@@ -71,7 +75,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
     public async Task AUTH_ABUSE_004_AC6_TheRecordIsGoneOnceItsBucketsAreEmptyAsync()
     {
         RestrictionKey destination = Destination("+201001234562");
-        var source = new RestrictionKey("sms.source", "198.51.100.2");
+        var source = new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.2");
 
         await RecordedAsync(Reference(2), [new SendCount(destination, TimeSpan.FromHours(1))], Noon);
         await RecordedAsync(Reference(3), [new SendCount(source, Day)], Noon + TimeSpan.FromHours(2));
@@ -81,7 +85,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
         _ = await CountedAsync(source, Noon + TimeSpan.FromHours(2));
 
         Assert.Null(await FindAsync(destination));
-        Assert.NotNull(await FindAsync(source));
+        Assert.NotNull(await FindKeyAsync(source));
     }
 
     /// <summary>
@@ -112,7 +116,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
     public async Task PRIV_RET_005_AC2_TheRecordLivesAtMostTheLongestBucketIntervalAsync()
     {
         RestrictionKey destination = Destination("+201001234567");
-        var other = new RestrictionKey("sms.source", "198.51.100.7");
+        var other = new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.7");
 
         TimeSpan longest = Restrictions.Retain(new Restriction(
             "sms.destination",
@@ -141,6 +145,54 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
         _ = await CountedAsync(other, Noon + longest + TimeSpan.FromSeconds(1) - longest);
 
         Assert.Null(await FindAsync(destination));
+    }
+
+    /// <summary>
+    /// PRIV-RET-005 AC2: a destination is counted apart from every other key, so a
+    /// source restriction counting over a day keeps no destination record past the
+    /// hour its own restriction counts over.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RET_005_AC2_ALongerSourceRestrictionKeepsNoDestinationRecordAsync()
+    {
+        RestrictionKey destination = Destination("+201001234569");
+        var source = new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.9");
+
+        Restriction[] declared =
+        [
+            new(
+                "sms.destination",
+                RestrictionKeyKind.Destination,
+                HostKeyName: null,
+                RestrictionPurpose.Any,
+                [new Bucket(3, TimeSpan.FromHours(1), BucketWindow.Sliding)]),
+            new(
+                "sms.source",
+                RestrictionKeyKind.Source,
+                HostKeyName: null,
+                RestrictionPurpose.Any,
+                [new Bucket(10, Day, BucketWindow.Sliding)]),
+        ];
+
+        await RecordedAsync(
+            Reference(13),
+            [new SendCount(destination, TimeSpan.FromHours(1)), new SendCount(source, Day)],
+            Noon);
+
+        Assert.NotNull(await FindAsync(destination));
+        Assert.NotNull(await FindKeyAsync(source));
+
+        await using (StoreContext reading = database.Context())
+        {
+            _ = await Ledger(reading).CountersAsync(
+                [source],
+                CounterStaleness.Of(declared, Noon + TimeSpan.FromHours(2)),
+                TestContext.Current.CancellationToken);
+        }
+
+        Assert.Null(await FindAsync(destination));
+        Assert.NotNull(await FindKeyAsync(source));
+        Assert.Null(await FindAsync(source));
     }
 
     /// <summary>
@@ -223,7 +275,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
         Assert.Equal(0, (await StandingAsync(destination, Noon - Day)).Credit);
     }
 
-    private static RestrictionKey Destination(string number) => new("sms.destination", number);
+    private static RestrictionKey Destination(string number) => new("sms.destination", RestrictionKeyKind.Destination, number);
 
     private static byte[] Reference(byte one) => [.. Enumerable.Repeat(one, Fingerprint.Length)];
 
@@ -256,18 +308,36 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
     {
         await using StoreContext reading = database.Context();
 
-        return await Ledger(reading).CountersAsync([key], stale, TestContext.Current.CancellationToken);
+        return await Ledger(reading).CountersAsync(
+            [key],
+            new CounterStaleness(stale, stale),
+            TestContext.Current.CancellationToken);
     }
 
-    private async Task<SendCounterRecord?> FindAsync(RestrictionKey key)
-    {
-        byte[] hashed = Fingerprint.Compute(
+    private static byte[] Hashed(RestrictionKey key) =>
+        Fingerprint.Compute(
             Encoding.UTF8.GetBytes(key.Restriction + "\u0000" + key.Value),
             Deployment.FingerprintKey);
+
+    // A destination's record, which is kept apart from every other key's.
+    private async Task<SendCounterRecord?> FindAsync(RestrictionKey key)
+    {
+        byte[] hashed = Hashed(key);
 
         await using StoreContext reading = database.Context();
 
         return await reading.SendCounters
+            .SingleOrDefaultAsync(counter => counter.Key == hashed, TestContext.Current.CancellationToken);
+    }
+
+    // The record of a key other than a destination.
+    private async Task<SendKeyCounterRecord?> FindKeyAsync(RestrictionKey key)
+    {
+        byte[] hashed = Hashed(key);
+
+        await using StoreContext reading = database.Context();
+
+        return await reading.SendKeyCounters
             .SingleOrDefaultAsync(counter => counter.Key == hashed, TestContext.Current.CancellationToken);
     }
 }

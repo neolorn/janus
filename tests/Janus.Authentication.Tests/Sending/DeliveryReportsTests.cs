@@ -66,7 +66,7 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
                 delivered: false,
                 TestContext.Current.CancellationToken)));
 
-        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)));
     }
 
     /// <summary>
@@ -80,7 +80,7 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
 
         await ReportedAsync(reference.Value, delivered: true);
 
-        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)));
         Assert.Empty(_events.Of<AlertRaised>());
     }
 
@@ -93,13 +93,13 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
     {
         SendReference reference = await SentAsync();
 
-        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
-        Assert.Single(_ledger.Sends(new RestrictionKey("sms.source", "198.51.100.7")));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.7")));
 
         await ReportedAsync(reference.Value, delivered: false);
 
-        Assert.Empty(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
-        Assert.Empty(_ledger.Sends(new RestrictionKey("sms.source", "198.51.100.7")));
+        Assert.Empty(_ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)));
+        Assert.Empty(_ledger.Sends(new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.7")));
     }
 
     /// <summary>
@@ -121,7 +121,7 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
                 delivered: false,
                 TestContext.Current.CancellationToken)));
 
-        Assert.Empty(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
+        Assert.Empty(_ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)));
     }
 
     /// <summary>
@@ -145,7 +145,7 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
                 delivered,
                 TestContext.Current.CancellationToken)));
 
-        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)));
     }
 
     /// <summary>
@@ -162,8 +162,8 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
         await ReportedAsync(reference.Value, delivered: true);
 
         Assert.Equal(announced, _events.Published.Count);
-        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
-        Assert.Single(_ledger.Sends(new RestrictionKey("sms.source", "198.51.100.7")));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.7")));
     }
 
     /// <summary>
@@ -186,8 +186,8 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)));
 
         Assert.Equal(announced, _events.Published.Count);
-        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
-        Assert.Single(_ledger.Sends(new RestrictionKey("sms.source", "198.51.100.7")));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.7")));
     }
 
     /// <summary>
@@ -326,8 +326,8 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
         await _ledger.RecordAsync(
             SendReferences.Of(reference),
             [
-                new SendCount(new RestrictionKey("sms.destination", Phone.Value), TimeSpan.FromHours(24)),
-                new SendCount(new RestrictionKey("sms.source", "198.51.100.7"), TimeSpan.FromHours(24)),
+                new SendCount(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value), TimeSpan.FromHours(24)),
+                new SendCount(new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.7"), TimeSpan.FromHours(24)),
             ],
             [],
             _clock.GetUtcNow(),

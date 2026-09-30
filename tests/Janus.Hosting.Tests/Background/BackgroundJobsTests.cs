@@ -44,7 +44,7 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
     {
         await ForgetEarlierRunsAsync();
 
-        await using ServiceProvider services = Deployed(Authorization.Deployment.Noon);
+        await using ServiceProvider services = Deployed(host, Authorization.Deployment.Noon);
 
         BackgroundWorker worker = services.GetServices<IHostedService>().OfType<BackgroundWorker>().Single();
 
@@ -76,12 +76,12 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
         SubjectId subject = await new Authorization.Deployment(host).AccountAsync(cancellationToken);
         byte[] holder = RandomNumberGenerator.GetBytes(32);
 
-        await using (ServiceProvider seeding = Deployed(Authorization.Deployment.Noon))
+        await using (ServiceProvider seeding = Deployed(host, Authorization.Deployment.Noon))
         {
             await LapsingAsync(seeding, subject, holder, cancellationToken);
         }
 
-        await using ServiceProvider services = Deployed(Authorization.Deployment.Noon.AddDays(40));
+        await using ServiceProvider services = Deployed(host, Authorization.Deployment.Noon.AddDays(40));
 
         _ = await services.GetServices<IHostedService>().OfType<BackgroundWorker>().Single()
             .RunDueAsync(cancellationToken);
@@ -122,7 +122,7 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
         PendingEvent waiting = Raised(noon, publishedAt: null, failedAt: null);
         PendingEvent failed = Raised(noon, publishedAt: null, failedAt: noon);
 
-        await using (ServiceProvider seeding = Deployed(noon))
+        await using (ServiceProvider seeding = Deployed(host, noon))
         {
             await using AsyncServiceScope scope = seeding.CreateAsyncScope();
             IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
@@ -138,7 +138,7 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
             await work.CommitAsync(cancellationToken);
         }
 
-        await using ServiceProvider services = Deployed(noon.AddDays(1));
+        await using ServiceProvider services = Deployed(host, noon.AddDays(1));
 
         _ = await services.GetServices<IHostedService>().OfType<BackgroundWorker>().Single()
             .RunDueAsync(cancellationToken);
@@ -187,7 +187,7 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
                 });
         }
 
-        await using ServiceProvider services = Deployed(noon);
+        await using ServiceProvider services = Deployed(host, noon);
 
         _ = await services.GetServices<IHostedService>().OfType<BackgroundWorker>().Single()
             .RunDueAsync(cancellationToken);
@@ -216,7 +216,7 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
 
         BackgroundJob poll = BackgroundJobs.All.Single(job => job.Name == "sms-balance");
 
-        await using ServiceProvider services = Deployed(Authorization.Deployment.Noon, sms: false);
+        await using ServiceProvider services = Deployed(host, Authorization.Deployment.Noon, sms: false);
         await using AsyncServiceScope scope = services.CreateAsyncScope();
 
         Error refusal = (await poll.RunAsync(scope.ServiceProvider, cancellationToken)).Match(
@@ -330,10 +330,16 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
         return Identifier.Email(IdentifierId.New(TimeProvider.System), subject, address, entered, Authorization.Deployment.Noon);
     }
 
-    // A deployment over the fixture's database at one instant, with what a host declares
-    // for itself: where the events go, the two transports (the text one only where the
-    // case keeps it), its sign-in screen and its client.
-    private ServiceProvider Deployed(DateTimeOffset now, bool sms = true)
+    /// <summary>
+    /// A deployment over the fixture's database at one instant, with what a host
+    /// declares for itself: where the events go, the two transports (the text one only
+    /// where the case keeps it), its sign-in screen and its client.
+    /// </summary>
+    /// <param name="host">The database.</param>
+    /// <param name="now">The instant.</param>
+    /// <param name="sms">Whether the text transport is registered.</param>
+    /// <returns>The deployment, its key ring filled.</returns>
+    internal static ServiceProvider Deployed(HostFixture host, DateTimeOffset now, bool sms = true)
     {
         var services = new ServiceCollection();
 

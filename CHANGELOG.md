@@ -710,6 +710,12 @@ against the public contract of LIB-API-001.
   asked for (a reminder, a repeated loss-report notice, a lapsed privacy request, an
   alert) carries no source, so no `source` restriction counts it. The new-device check
   code is counted under the source of the sign-in that asked for it.
+- What a destination has been sent is kept apart from what an account, a source, the
+  deployment or a host key has, each for the longest interval of the restrictions now
+  declared on its own kind of key, so a longer source restriction no longer keeps a
+  destination's record. A record past that interval is deleted before the next send's
+  counters are read and by the `expiry-sweep` job, whether or not its key is sent to
+  again.
 - `GET /admin/config/{key}` reads one runtime key under `config:read`: its value in
   force and its default in the key's own JSON type, whether it is protected, and which
   way it loosens (`increase`, `decrease` or `any-change`). `PUT /admin/config/{key}`

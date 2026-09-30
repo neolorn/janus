@@ -94,6 +94,7 @@ internal sealed class FingerprintRotationStore(
         "registration_sources",
         "send_counters",
         "send_grants",
+        "send_key_counters",
         "sends",
         "signin_challenges",
         "throttle_counters",

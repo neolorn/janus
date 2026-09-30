@@ -267,7 +267,7 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
     {
         var actor = SubjectId.New(_randomness);
 
-        _ledger.Given(new RestrictionKey("sms.destination", Phone.Value), Noon, Noon, Noon);
+        _ledger.Given(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value), Noon, Noon, Noon);
 
         (await Administration.GrantAsync(
             "sms.destination",

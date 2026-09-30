@@ -4040,6 +4040,8 @@ deleted and against what, and should say whether the interval is taken over the
 destination restrictions or over all of them. PRIV-RET-005 AC2 should say that the
 retention of a counter follows the declaration as it now stands.
 
+**Superseded by D-166.**
+
 ---
 
 ## 123. The library ships the words, and declaring no catalogue is not a refusal

@@ -754,14 +754,17 @@ public sealed class ModelTests
             "roles.name",
 
             // Not an account field: the sending counters of AUTH-ABUSE-004, an HMAC of the
-            // restriction key with the times counted against it, and the credit support
-            // kept apart from them.
+            // restriction key with the times counted against it, a destination's apart
+            // from every other key's, and the credit support kept apart from them.
             "send_counters.fingerprint_version",
             "send_counters.key",
             "send_counters.sent_at",
             "send_grants.credit",
             "send_grants.fingerprint_version",
             "send_grants.key",
+            "send_key_counters.fingerprint_version",
+            "send_key_counters.key",
+            "send_key_counters.sent_at",
 
             // The messages undertaken and not yet carried (D-022), each the whole of
             // what is to be sent under a key of the row's own, so that removing the row
