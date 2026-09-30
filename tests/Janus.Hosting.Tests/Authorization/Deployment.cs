@@ -52,18 +52,21 @@ internal sealed class Deployment(HostFixture fixture)
     {
         var role = RoleName.Parse("role" + Guid.NewGuid().ToString("n")[..8]);
 
+        string name = "Organization " + Organization.Value.ToString("n", CultureInfo.InvariantCulture);
+
         await using NpgsqlConnection connection = await fixture.OpenAsync();
 
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            INSERT INTO identity.organizations (id, name, created_at)
-            VALUES (@organization, @name, @at);
+            INSERT INTO identity.organizations (id, name, canonical_name, created_at)
+            VALUES (@organization, @name, @canonicalName, @at);
             INSERT INTO identity.roles (name) VALUES (@role);
             """,
             new
             {
                 organization = Organization.Value,
-                name = "Organization " + Organization.Value.ToString("n", CultureInfo.InvariantCulture),
+                name,
+                canonicalName = CanonicalForm.Of(name),
                 at = Noon,
                 role = role.ToString(),
             },
@@ -217,16 +220,18 @@ internal sealed class Deployment(HostFixture fixture)
         }
 
         var administration = Guid.NewGuid();
+        string name = "Administration " + administration.ToString("n", CultureInfo.InvariantCulture);
 
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            INSERT INTO identity.organizations (id, name, created_at, administrative)
-            VALUES (@organization, @name, @at, TRUE);
+            INSERT INTO identity.organizations (id, name, canonical_name, created_at, administrative)
+            VALUES (@organization, @name, @canonicalName, @at, TRUE);
             """,
             new
             {
                 organization = administration,
-                name = "Administration " + administration.ToString("n", CultureInfo.InvariantCulture),
+                name,
+                canonicalName = CanonicalForm.Of(name),
                 at = Noon,
             },
             cancellationToken: cancellationToken));

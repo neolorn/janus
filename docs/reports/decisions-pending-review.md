@@ -17133,6 +17133,8 @@ chapters do not say:
 - OPS-MIG-005 could name the contract step that makes `canonical_name` not null in a
   later release.
 
+**Superseded by D-166.**
+
 ---
 
 ## 414. A missing body member is refused at the endpoint by the code chapter 10 names for it, and three members stay optional

@@ -3163,6 +3163,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnName("id");
 
                 b.Property<string>("CanonicalName")
+                    .IsRequired()
                     .HasColumnType("text")
                     .HasColumnName("canonical_name");
 

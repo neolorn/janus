@@ -1232,9 +1232,10 @@ against the public contract of LIB-API-001.
   session for it, attaches the invitation its link carried to that account, and answers
   `identity.registration.signedin`.
 - An organization's name is judged on its comparison key, the `NFKC_Casefold` form every
-  identifier is compared under, stored beside it in `organizations.canonical_name`; a
-  name mixing scripts within a word is refused as `identity.identifier.mixedscript`, and
-  one the key reduces to nothing as `api.request.malformed`.
+  identifier is compared under, stored beside it in `organizations.canonical_name`, which
+  the database requires on every row; a name mixing scripts within a word is refused as
+  `identity.identifier.mixedscript`, and one the key reduces to nothing as
+  `api.request.malformed`.
 - A management or account request missing a member its body requires is refused before
   anything else is judged: a missing reason by its own code
   (`authz.grant.reasonrequired`, `config.change.reasonrequired`,
