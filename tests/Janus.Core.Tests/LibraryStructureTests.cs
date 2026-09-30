@@ -541,7 +541,9 @@ public sealed class LibraryStructureTests
 
     /// <summary>
     /// CONV-LAYOUT-002 AC1: the only grants of internal visibility are the ones the
-    /// item permits.
+    /// item permits, by a source project and by a test project alike: the test projects
+    /// of authentication, authorization and privacy open their fakes to
+    /// <c>Janus.Hosting.Tests</c>, and no other test project grants anything.
     /// </summary>
     [Fact]
     public void CONV_LAYOUT_002_AC1_InternalsAreVisibleOnlyWhereThePermittedGrantsSay()
@@ -550,6 +552,23 @@ public sealed class LibraryStructureTests
         {
             Assert.Equal(PermittedGrants(project), Grants(project));
         }
+
+        string[] tests =
+        [
+            .. Directory
+                .EnumerateFiles(Path.Combine(Repository.Root, "tests"), "*.csproj", SearchOption.AllDirectories)
+                .Where(file => !IsBuildOutput(file)),
+        ];
+
+        Assert.NotEmpty(tests);
+        Assert.All(tests, file =>
+        {
+            string project = Path.GetFileNameWithoutExtension(file);
+
+            Assert.Equal(
+                project + ": " + string.Join(", ", PermittedTestGrants(project)),
+                project + ": " + string.Join(", ", GrantsOf(file)));
+        });
     }
 
     /// <summary>
@@ -1657,9 +1676,11 @@ public sealed class LibraryStructureTests
             .Order(StringComparer.Ordinal)
             .ToArray();
 
-    private static string[] Grants(string project) =>
+    private static string[] Grants(string project) => GrantsOf(Project(project));
+
+    private static string[] GrantsOf(string file) =>
         XDocument
-            .Parse(File.ReadAllText(Project(project)))
+            .Parse(File.ReadAllText(file))
             .Descendants("InternalsVisibleTo")
             .Select(grant => grant.Attribute("Include")!.Value)
             .Order(StringComparer.Ordinal)
@@ -1721,4 +1742,11 @@ public sealed class LibraryStructureTests
 
         return [.. permitted.Order(StringComparer.Ordinal)];
     }
+
+    // CONV-LAYOUT-002 AC1: three test projects open their fakes to the test project that
+    // uses them at the browser boundary, and no test project grants anything else.
+    private static string[] PermittedTestGrants(string project) =>
+        project is "Janus.Authentication.Tests" or "Janus.Authorization.Tests" or "Janus.Privacy.Tests"
+            ? ["Janus.Hosting.Tests"]
+            : [];
 }
