@@ -1740,6 +1740,9 @@ against the public contract of LIB-API-001.
 - Acknowledging an invitation tells the membership limit and the email maximum before
   the organization's credential policy, so nobody is sent to enrol for a membership
   they cannot take.
+- Acknowledging an invitation judges the organization's domain lock as it then stands
+  on the address the member will sign in with, and refuses one outside it with
+  `identity.identifier.domainnotallowed`.
 - An audit trail. Every record names who acted, whose identity the action was taken
   under, the instant it occurred and the organization where one applies; an event about
   a principal holding no membership carries none, and the absence is the recorded fact.

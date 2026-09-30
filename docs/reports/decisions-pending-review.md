@@ -9034,6 +9034,8 @@ registration, and both are already enforced where they are used.
 *Chapter text that should change.* Chapter 09 section 6a could read "a bound identifier
 is not verified on the account accepting, or the corporate address is already held".
 
+**Superseded by D-166.**
+
 ---
 
 ## 246. How the credential policy is met before the membership attaches

@@ -28,6 +28,7 @@ namespace Janus.Authentication.Invitations;
 /// <param name="authenticators">Where the account's credentials are read.</param>
 /// <param name="passwords">Where the account's password is read.</param>
 /// <param name="policies">What resolves the policy the account holds once the membership attaches.</param>
+/// <param name="locks">What judges the address the member will sign in with against the organization's lock.</param>
 /// <param name="memberships">Where the membership and its grants are written.</param>
 /// <param name="mailboxes">Where the corporate mailbox is given to the person.</param>
 /// <param name="sending">What tells the security-notice set of the corporate address.</param>
@@ -37,8 +38,8 @@ namespace Janus.Authentication.Invitations;
 /// <param name="work">The one transaction the acknowledgement runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements REG-INV-001, REG-INV-002, REG-MAIL-001, IDN-LIFE-009a, IDN-LIFE-009b,
-/// IDN-MEM-002, INT-MAIL-006 and chapter 09 section 6a. Nothing of the organization is
+/// Implements REG-INV-001, REG-INV-002, REG-MAIL-001, REG-DOM-001, IDN-LIFE-009a,
+/// IDN-LIFE-009b, IDN-MEM-002, INT-MAIL-006 and chapter 09 section 6a. Nothing of the organization is
 /// granted until the account meets its credential policy counting only the factors that
 /// policy permits, which is also what makes every other factor stop signing in once the
 /// membership attaches (IDN-LIFE-009b). Everything is written in one transaction, and
@@ -51,6 +52,7 @@ internal sealed class InvitationAcknowledgement(
     IAuthenticatorStore authenticators,
     IPasswordStore passwords,
     PolicyResolution policies,
+    DomainLock locks,
     IMembershipAttachment memberships,
     IMailboxStore mailboxes,
     INotificationHandler sending,
@@ -112,6 +114,12 @@ internal sealed class InvitationAcknowledgement(
         if (await MismatchedAsync(bound, held, cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure(Error.From(ErrorCodes.InvitationIdentifierMismatch));
+        }
+
+        if (await OutsideLockAsync(invitation, bound, held, cancellationToken).ConfigureAwait(false)
+            is Error outside)
+        {
+            return Result.Failure(outside);
         }
 
         Error? failure = null;
@@ -265,6 +273,11 @@ internal sealed class InvitationAcknowledgement(
                 ? number.Value
                 : throw new InvalidOperationException("An invitation binds a well-formed number.");
 
+    private static EmailAddress Address(string value) =>
+        EmailAddress.TryParse(value, out EmailAddress address)
+            ? address
+            : throw new InvalidOperationException("An address bound or held is well-formed.");
+
     private static HeldIdentifier? Holding(HeldIdentifiers held, IdentifierKind kind, string value)
     {
         string canonical = Canonical(kind, value);
@@ -320,6 +333,44 @@ internal sealed class InvitationAcknowledgement(
                     .OwnerAsync(IdentifierKind.Email, Canonical(IdentifierKind.Email, corporate), cancellationToken)
                     .ConfigureAwait(false)
                 is not null;
+    }
+
+    // REG-DOM-001: the lock is judged as it now stands on the address the member will
+    // sign in with: the corporate address where one is taken on, else the bound email,
+    // else any verified email the account holds. An account holding no email signs in
+    // with none, so nothing of it is judged.
+    private async ValueTask<Error?> OutsideLockAsync(
+        Invitation invitation,
+        InvitedIdentifiers bound,
+        HeldIdentifiers held,
+        CancellationToken cancellationToken)
+    {
+        string? named = invitation.Mailbox is not null && bound.CorporateEmail is string corporate
+            ? corporate
+            : bound.Email;
+
+        if (named is not null)
+        {
+            return await locks
+                .RefusedInAsync(invitation.Organization, Address(named), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        Error? refused = null;
+
+        foreach (HeldIdentifier email in held.OfKind(IdentifierKind.Email).Where(identifier => identifier.IsVerified))
+        {
+            refused = await locks
+                .RefusedInAsync(invitation.Organization, Address(email.Canonical), cancellationToken)
+                .ConfigureAwait(false);
+
+            if (refused is null)
+            {
+                return null;
+            }
+        }
+
+        return refused;
     }
 
     // REG-INV-002 AC2: the account meets the organization's required assurance, and its

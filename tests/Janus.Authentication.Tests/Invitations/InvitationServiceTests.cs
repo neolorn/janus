@@ -407,6 +407,66 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-DOM-001: at acknowledgement the lock is judged as it then stands on the
+    /// address the member will sign in with: the corporate address where one is taken
+    /// on, else the bound email, else a verified email the account holds, of which one
+    /// the lock admits is enough. A refusal attaches nothing.
+    /// </summary>
+    [Fact]
+    public async Task REG_DOM_001_AnOpenInvitationIsAcknowledgedOnlyWithAnAddressTheLockAdmitsAsync()
+    {
+        const string Bound = "bound@elsewhere.test";
+
+        await LockedAsync(Staff, "staff.test");
+
+        _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+
+        string corporateToken = _notifications.Mail[^1].Values["token"];
+
+        _ = Accepted(await IssueAsync(Customer, Request(email: Bound)));
+
+        string boundToken = _notifications.Mail[^1].Values["token"];
+        string phoneToken = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+
+        SubjectId corporate = await OpenedAsync(IdentifierKind.Email, Personal, corporateToken);
+        SubjectId bound = await OpenedAsync(IdentifierKind.Email, Bound, boundToken);
+        SubjectId phoned = await OpenedAsync(IdentifierKind.Phone, Number, phoneToken);
+
+        _ = _identifiers.Verified(phoned, IdentifierKind.Email, "phoned@elsewhere.test");
+
+        await LockedAsync(Staff, "other.test");
+        await LockedAsync(Customer, "staff.test");
+
+        foreach (SubjectId holder in (SubjectId[])[corporate, bound, phoned])
+        {
+            Assert.Equal(
+                ErrorCodes.IdentifierDomainNotAllowed,
+                Failure(await AcknowledgeAsync(holder, Opened(holder))).Code);
+        }
+
+        Assert.Empty(_attachments.Attached);
+
+        _ = _identifiers.Verified(phoned, IdentifierKind.Email, "phoned@staff.test");
+
+        Accepted(await AcknowledgeAsync(phoned, Opened(phoned)));
+        Assert.Equal(Customer, Assert.Single(_attachments.Attached).Organization);
+
+        async Task<SubjectId> OpenedAsync(IdentifierKind kind, string value, string token)
+        {
+            SubjectId holder = Holder();
+
+            _ = _identifiers.Verified(holder, kind, value);
+            _authenticators.Hold(Passkey(holder));
+            Accepted(await OpenAsync(holder, token));
+
+            return holder;
+        }
+
+        InvitationId Opened(SubjectId holder) =>
+            _invitations.Held.Single(invitation => invitation.Invitee == holder).Id;
+    }
+
+    /// <summary>
     /// REG-INV-001: an identifier that does not read, or whose words mix scripts, is
     /// refused naming the member it was entered in.
     /// </summary>
@@ -1510,6 +1570,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 _authenticators,
                 _passwords,
                 policies,
+                new DomainLock(_memberships, _configuration, _domains),
                 _attachments,
                 _mailboxes,
                 _notifications,
