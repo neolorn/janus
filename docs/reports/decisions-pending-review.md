@@ -6332,6 +6332,8 @@ shows the delivery.
 *Chapter text that should change.* IDN-LIFE-003 could say that `TakedownExecuted` is
 the outbox record and `AccountSuspended` follows the commit.
 
+**Superseded by D-166.**
+
 ---
 
 ## 172. A reversal publishes `TakedownReversed` and nothing else

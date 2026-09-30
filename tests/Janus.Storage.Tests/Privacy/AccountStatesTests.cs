@@ -1,13 +1,16 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Janus.Authentication;
+using Janus.Authentication.Events;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Identity.Accounts;
 using Janus.Privacy.Requests;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Authentication.Events;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Privacy.Requests;
@@ -258,6 +261,56 @@ public sealed class AccountStatesTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// IDN-LIFE-003 AC4, CONV-DESIGN-002: <c>AccountSuspended</c> is an event row
+    /// written in the trigger's transaction, so a trigger that commits carries one row
+    /// and one that rolls back carries none and leaves the account as it stood.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_003_AC4_TheSuspensionRowCommitsWithTheTriggerAsync()
+    {
+        SubjectId abandoned = await _deployment.AccountAsync(Noon);
+        SubjectId committed = await _deployment.AccountAsync(Noon);
+
+        await using (StoreContext abandoning = database.Context())
+        {
+            await using var work = new UnitOfWork(abandoning);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+
+            Assert.True(await States(abandoning).TakeDownAsync(
+                abandoned,
+                Noon,
+                TestContext.Current.CancellationToken));
+            Assert.True(await SuspendedAsync(abandoning, work, abandoned));
+        }
+
+        await using (StoreContext committing = database.Context())
+        {
+            await using var work = new UnitOfWork(committing);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+
+            Assert.True(await States(committing).TakeDownAsync(
+                committed,
+                Noon,
+                TestContext.Current.CancellationToken));
+            Assert.True(await SuspendedAsync(committing, work, committed));
+
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        IReadOnlyList<PendingEvent> due = await new PendingEvents(reading).DueAsync(
+            Noon.AddDays(1),
+            100,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(committed, Assert.Single(due, pending => pending.Raised is AccountSuspended).Raised.Subject);
+        Assert.Equal(AccountState.Active, (await StandingAsync(abandoned)).State);
+    }
+
+    /// <summary>
     /// OPS-BOOT-002: the reserved account reads back as the reserved account, a
     /// takedown leaves it standing, and the database holds no second one.
     /// </summary>
@@ -304,6 +357,12 @@ public sealed class AccountStatesTests(DatabaseFixture database)
             "ux_accounts_emergency",
             Assert.IsType<PostgresException>(refusal.InnerException).ConstraintName);
     }
+
+    private static async Task<bool> SuspendedAsync(StoreContext context, UnitOfWork work, SubjectId subject) =>
+        (await new EventOutbox(new PendingEvents(context), work).PublishAsync(
+            new AccountSuspended(Noon, subject.ToString(), SuspensionOrigin.Administrator) { Subject = subject },
+            TestContext.Current.CancellationToken))
+            .Match(() => true, _ => false);
 
     private AccountStates States(StoreContext context) =>
         new(new AccountStore(context), Sessions(context));

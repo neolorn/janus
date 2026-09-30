@@ -46,9 +46,9 @@ public sealed class TakedownServiceTests : IAsyncDisposable
     private readonly SubscriberInMemory _records = new("records", required: true);
     private readonly SubscriberInMemory _newsletter = new("newsletter", required: false);
     private readonly PrivacyAuditInMemory _audit = new();
-    private readonly EventsInMemory _events = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly UnitOfWorkInMemory _work = new();
+    private readonly EventsInMemory _events;
     private readonly FixedClock _clock = new(Noon);
 
     /// <summary>
@@ -57,6 +57,7 @@ public sealed class TakedownServiceTests : IAsyncDisposable
     /// </summary>
     public TakedownServiceTests()
     {
+        _events = new EventsInMemory { Work = _work };
         _accounts.Hold(Ahmed, AccountState.Active);
         _accounts.Hold(Mona, AccountState.Active);
         _administrative.Organization = Company;
@@ -512,19 +513,93 @@ public sealed class TakedownServiceTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.TakedownNotFound, Refused(await ReadAsync(Mona)).Code);
 
     /// <summary>
-    /// CONV-DESIGN-002: the announcement follows the commit, so a consumer that will
-    /// not take it is answered to the caller and the takedown stands.
+    /// IDN-LIFE-003 AC4, CONV-DESIGN-002: <c>AccountSuspended</c> is written in the
+    /// trigger's transaction, before it commits, and never after.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_LIFE_003_AnUnannouncedTriggerStillStandsAsync()
+    public async Task IDN_LIFE_003_AC4_TheSuspensionIsWrittenInTheTriggerTransactionAsync()
+    {
+        _ = Held(await ExecutedAsync());
+
+        Assert.IsType<AccountSuspended>(Assert.Single(_events.PublishedInTransaction));
+        Assert.Equal((1, 1), (_work.Opened, _work.Committed));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002: a trigger whose announcement is refused fails with that refusal
+    /// and commits nothing, so the takedown and its delivery roll back with it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_ARefusedAnnouncementLeavesNothingAsync()
     {
         _events.Refusal = Error.From(ErrorCodes.SystemFault);
 
         Assert.Equal(ErrorCodes.SystemFault, Refused(await ExecutedAsync()).Code);
-        Assert.Equal(AccountState.Deleting, _accounts.Of(Ahmed));
-        Assert.Equal(1, _work.Committed);
-        Assert.Single(_outbox.Deliveries);
+        Assert.Equal((1, 0), (_work.Opened, _work.Committed));
+        Assert.Empty(_events.Published);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003 AC5, CONV-DESIGN-002: <c>TakedownReversed</c> is written in the
+    /// reversal's transaction, before it commits, and never after.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_AC5_TheReversalIsWrittenInItsTransactionAsync()
+    {
+        _ = Held(await ExecutedAsync());
+        _work.Reset();
+
+        Held(await ReversedAsync());
+
+        Assert.IsType<TakedownReversed>(_events.PublishedInTransaction[^1]);
+        Assert.Equal((1, 1), (_work.Opened, _work.Committed));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002: a reversal whose announcement is refused fails with that refusal
+    /// and commits nothing, so the account stays taken down.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_ARefusedReversalAnnouncementLeavesNothingAsync()
+    {
+        _ = Held(await ExecutedAsync());
+        _work.Reset();
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Assert.Equal(ErrorCodes.SystemFault, Refused(await ReversedAsync()).Code);
+        Assert.Equal((1, 0), (_work.Opened, _work.Committed));
+        Assert.Empty(_events.Of<TakedownReversed>());
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003 AC4 (D-166): <c>AccountSuspended</c> announces that access stopped,
+    /// so a trigger on an account already suspended, or already in its own deletion,
+    /// writes one as a trigger on an active account does.
+    /// </summary>
+    /// <param name="state">Where the account stood.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(AccountState.Suspended)]
+    [InlineData(AccountState.Deleting)]
+    public async Task IDN_LIFE_003_AC4_EveryTriggerAnnouncesTheSuspensionAsync(AccountState state)
+    {
+        if (state is AccountState.Deleting)
+        {
+            _accounts.Deletes(Ahmed, DeletionOrigin.Self, Noon - TimeSpan.FromDays(1));
+        }
+        else
+        {
+            _accounts.Hold(Ahmed, state);
+        }
+
+        _ = Held(await ExecutedAsync());
+
+        Assert.Equal(Ahmed, Assert.Single(_events.Of<AccountSuspended>()).Subject);
+        Assert.Single(_events.PublishedInTransaction);
     }
 
     private static TValue Held<TValue>(Result<TValue> outcome) =>

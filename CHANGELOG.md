@@ -739,18 +739,20 @@ against the public contract of LIB-API-001.
   own. A second takedown answers 409 `identity.takedown.active`, an erased account 409
   `identity.account.stateconflict`, and a subject no account bears 404
   `identity.account.notfound`. The answer carries `takedownId` and `erasureDue`.
-  `AccountSuspended` follows the commit; no deletion notice and no
-  `AccountDeletionRequested` do.
+  `AccountSuspended` is written in the trigger's transaction at every trigger, whatever
+  state the account held, and a refusal to write it fails the trigger; no deletion
+  notice and no `AccountDeletionRequested` is sent.
 - `GET /admin/accounts/{subject}/takedown` reads the latest takedown of an account: when
   it was triggered, when its erasure runs, whether it was reversed (`reversed`, with
   `erasureDue` null), and which registered subscriber has confirmed it and when. An
   account never taken down answers 404 `identity.takedown.notfound`.
 - `POST /admin/accounts/{subject}/takedown/reverse` restores a taken down account inside
-  its window to the state it held at the trigger, with a reason, and publishes
-  `TakedownReversed`: the deletion it was in, with its origin and start; else the
-  suspension it was in, with its origin; else restricted where a restriction is held;
-  else active. After the window it answers 422 `identity.takedown.windowelapsed`, and an
-  account holding no takedown 404 `identity.takedown.notfound`.
+  its window to the state it held at the trigger, with a reason, and writes
+  `TakedownReversed` in its transaction: the deletion it was in, with its origin and
+  start; else the suspension it was in, with its origin; else restricted where a
+  restriction is held; else active. After the window it answers 422
+  `identity.takedown.windowelapsed`, and an account holding no takedown 404
+  `identity.takedown.notfound`.
 - `MembershipChanged` announces a membership beginning or ending, naming the membership,
   its organization and whose it is. The erasure at the end of an organization's deletion
   window raises one for every membership it ends, alongside `OrganizationErased`.

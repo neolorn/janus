@@ -137,27 +137,30 @@ internal sealed class TakedownService(
                 cancellationToken)
             .ConfigureAwait(false);
 
+        // IDN-LIFE-003 and CONV-DESIGN-002: the suspension is announced at every trigger,
+        // whatever state the account held, in the transaction that makes it true; no
+        // deletion is, because the subject is sent nothing that would let them cancel it.
+        if ((await events
+                .PublishAsync(
+                    new AccountSuspended(now, Key(subject, now), SuspensionOrigin.Administrator)
+                    {
+                        Subject = subject,
+                        Actor = context.Acting,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error unpublished)
+        {
+            return Result.Failure<ExecutedTakedown>(unpublished);
+        }
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
             return Result.Failure<ExecutedTakedown>(notCommitted);
         }
 
-        // IDN-LIFE-003: the suspension is announced at the trigger, and no deletion is,
-        // because the subject is sent nothing that would let them cancel it.
-        Result published = await events
-            .PublishAsync(
-                new AccountSuspended(now, Key(subject, now), SuspensionOrigin.Administrator)
-                {
-                    Subject = subject,
-                    Actor = context.Acting,
-                },
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        return published.Match(
-            () => Result.Success(takedown),
-            Result.Failure<ExecutedTakedown>);
+        return Result.Success(takedown);
     }
 
     /// <inheritdoc/>
@@ -296,21 +299,28 @@ internal sealed class TakedownService(
                 cancellationToken)
             .ConfigureAwait(false);
 
+        // CONV-DESIGN-002: the reversal is announced in the transaction that makes it.
+        if ((await events
+                .PublishAsync(
+                    new TakedownReversed(now, Key(subject, now))
+                    {
+                        Subject = subject,
+                        Actor = context.Acting,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error unpublished)
+        {
+            return Result.Failure(unpublished);
+        }
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
             return Result.Failure(notCommitted);
         }
 
-        return await events
-            .PublishAsync(
-                new TakedownReversed(now, Key(subject, now))
-                {
-                    Subject = subject,
-                    Actor = context.Acting,
-                },
-                cancellationToken)
-            .ConfigureAwait(false);
+        return Result.Success();
     }
 
     private static string? Written(string reason) =>
