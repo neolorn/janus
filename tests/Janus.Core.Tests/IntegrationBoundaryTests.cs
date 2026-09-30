@@ -165,16 +165,25 @@ public sealed class IntegrationBoundaryTests
     }
 
     /// <summary>
-    /// INT-MAIL-008 AC1: no mail server is named anywhere in the library, so the one
-    /// hosting the staff mailboxes is a deployment's registration.
+    /// INT-MAIL-008 AC1: no mail server is named in the core namespace, so the one
+    /// hosting the staff mailboxes is a deployment's registration. The shipped adapter
+    /// in <c>Janus.Hosting</c> speaks the capability INT-MAIL-001 names, and is outside it.
     /// </summary>
     [Fact]
-    public void INT_MAIL_008_AC1_NoMailServerIsNamedInTheLibrary()
+    public void INT_MAIL_008_AC1_NoMailServerIsNamedInTheCoreNamespace()
     {
-        IEnumerable<string> naming = Sources()
+        string[] core =
+        [
+            .. Sources().Where(file => file.Contains(
+                Path.DirectorySeparatorChar + "Janus.Core" + Path.DirectorySeparatorChar,
+                StringComparison.Ordinal)),
+        ];
+
+        IEnumerable<string> naming = core
             .Where(file => MailServers.Any(server =>
                 File.ReadAllText(file).Contains(server, StringComparison.OrdinalIgnoreCase)));
 
+        Assert.NotEmpty(core);
         Assert.Empty(naming);
     }
 

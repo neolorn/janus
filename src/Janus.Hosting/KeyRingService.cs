@@ -1,11 +1,16 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Janus.Hosting.Credentials;
+using Janus.Hosting.Mailboxes;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 namespace Janus.Hosting;
@@ -17,13 +22,17 @@ namespace Janus.Hosting;
 /// </summary>
 /// <param name="ring">The key ring it fills and clears.</param>
 /// <param name="inUse">The mail server in use, which it chooses.</param>
+/// <param name="adapter">The library's mail-server adapter, chosen where the host registered no mail server and the endpoint is set.</param>
+/// <param name="scopes">Where the scope the endpoint is read in comes from.</param>
 /// <param name="providers">The social providers the deployment declares.</param>
 /// <param name="host">The host's own mail server, or nothing where it registered none.</param>
 /// <param name="source">The host's secret source, or nothing where it registered none.</param>
 /// <remarks>
 /// Implements CONV-DESIGN-007, CONV-CODE-007, IDN-LIFE-012, D-171 and D-176. The start
-/// fills the ring in steps: every secret as the start begins, ahead of every hosted
-/// service; then, in its own place among them, the choice of the mail server in use. It
+/// fills the ring in steps: every secret but the mail server's as the start begins, ahead
+/// of every hosted service; then, in its own place among them, once the settings table
+/// is readable, the choice of the mail server in use and, where the adapter is chosen,
+/// the mail server's key. It
 /// clears the ring once every hosted service has stopped, the background worker and the
 /// web server among them. A credential is judged usable here, where the deployment can
 /// still be stopped, and not at the first exchange that would present it. The host's mail
@@ -32,6 +41,8 @@ namespace Janus.Hosting;
 internal sealed class KeyRingService(
     KeyRing ring,
     MailServerInUse inUse,
+    JmapMailServer adapter,
+    IServiceScopeFactory scopes,
     IEnumerable<SocialProvider> providers,
     IMailServer? host = null,
     ISecretSource? source = null) : IHostedLifecycleService
@@ -65,13 +76,68 @@ internal sealed class KeyRingService(
     }
 
     /// <inheritdoc/>
-    public Task StartAsync(CancellationToken cancellationToken)
+    /// <exception cref="StartupException">
+    /// The adapter is chosen and the mail server's key cannot be read, or its endpoint is
+    /// not an absolute https address.
+    /// </exception>
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
-        // CONV-DESIGN-007 AC5: the host's mail server where it registered one; none
-        // otherwise.
-        inUse.Choose(host);
+        // CONV-DESIGN-007 AC5: the host's mail server where it registered one, the
+        // adapter's key then not read.
+        if (host is not null)
+        {
+            ring.Completed();
+            inUse.Choose(host);
 
-        return Task.CompletedTask;
+            return;
+        }
+
+        string endpoint;
+
+        await using (AsyncServiceScope scope = scopes.CreateAsyncScope())
+        {
+            endpoint = (await scope.ServiceProvider
+                    .GetRequiredService<IConfigurationStore>()
+                    .ReadAsync(Settings.IntegrationMailServerEndpoint, cancellationToken)
+                    .ConfigureAwait(false))
+                .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
+        }
+
+        if (endpoint.Length is 0)
+        {
+            ring.Completed();
+            inUse.Choose(server: null);
+
+            return;
+        }
+
+        // INT-GEN-001: the sending check refused a plaintext endpoint before this; one
+        // written since is refused here all the same.
+        if (!Uri.TryCreate(endpoint, UriKind.Absolute, out Uri? reached)
+            || !string.Equals(reached.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal))
+        {
+            throw new StartupException(
+                "The mail server's endpoint is not an absolute https address.",
+                Error.From(
+                    ErrorCodes.EndpointInsecure,
+                    "key",
+                    JsonSerializer.SerializeToElement(Settings.IntegrationMailServerEndpoint.Key.ToString())));
+        }
+
+        // LIB-HOST-001: the adapter's key, read where the adapter is chosen and nowhere
+        // else; one the source cannot answer, or answers empty, stops the start.
+        Error unavailable = KeyRing.Unavailable(KeyRing.MailServerSecret);
+        Result<ReadOnlyMemory<byte>> read = source is null
+            ? Result.Failure<ReadOnlyMemory<byte>>(unavailable)
+            : await source.ReadMailServerSecretAsync(cancellationToken).ConfigureAwait(false);
+
+        ring.HoldMailServerSecret(read.Match(
+            secret => secret.IsEmpty ? Unread(unavailable) : secret,
+            _ => Unread(unavailable)));
+        ring.Completed();
+
+        adapter.Reach(reached);
+        inUse.Choose(adapter);
     }
 
     /// <inheritdoc/>
@@ -90,6 +156,9 @@ internal sealed class KeyRingService(
 
         return Task.CompletedTask;
     }
+
+    private static ReadOnlyMemory<byte> Unread(Error failure) =>
+        throw new StartupException("The mail server's key cannot be read from the secret source.", failure);
 
     private static ProviderCredential Refused(Error failure) =>
         throw new StartupException(

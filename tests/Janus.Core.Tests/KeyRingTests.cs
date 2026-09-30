@@ -105,6 +105,54 @@ public sealed class KeyRingTests
         Assert.Throws<InvalidOperationException>(ring.Fill);
     }
 
+    /// <summary>
+    /// CONV-CODE-007 AC3, D-176: the mail server's key is read in the last step, so a
+    /// read of it once the other secrets are filled, before the start chose the mail
+    /// server in use, is a fault; once the ring is complete it is lent, and cleared with
+    /// the rest.
+    /// </summary>
+    [Fact]
+    public void CONV_CODE_007_AC3_TheMailServerKeyIsReadOnlyOnceItsStepIsDone()
+    {
+        byte[] answered = [.. Secret];
+        KeyRing ring = Filled();
+
+        ring.HoldMailServerSecret(answered);
+        Array.Clear(answered);
+
+        Assert.Throws<InvalidOperationException>(() => ring.BorrowMailServerSecret(secret => secret.Length));
+        Assert.Equal(3, ring.BorrowProviderCredential("google", credential => 3).Match(read => read, _ => 0));
+
+        ring.Completed();
+
+        Assert.Equal(Secret, ring.BorrowMailServerSecret(secret => secret.ToArray()).Match(read => read, _ => []));
+        Assert.Throws<InvalidOperationException>(() => ring.HoldMailServerSecret(Secret));
+
+        ring.Clear();
+
+        Assert.Equal(3, ring.Arrays.Count());
+        Assert.All(ring.Arrays, array => Assert.All(array, value => Assert.Equal(0, value)));
+        Assert.Throws<InvalidOperationException>(() => ring.BorrowMailServerSecret(secret => secret.Length));
+    }
+
+    /// <summary>
+    /// D-176: where the start did not choose the library's adapter the ring holds no mail
+    /// server key, and asked for one it answers that the secret is unavailable.
+    /// </summary>
+    [Fact]
+    public void CONV_CODE_007_AMailServerKeyNotHeldIsNamedUnavailable()
+    {
+        KeyRing ring = Filled();
+
+        ring.Completed();
+
+        Error? refused = ring.BorrowMailServerSecret(secret => secret.Length).Match(_ => (Error?)null, error => error);
+
+        Assert.Equal(ErrorCodes.StartupSecretUnavailable, refused?.Code);
+        Assert.Equal("mailServerSecret", refused?.Details["key"].GetString());
+        Assert.Throws<InvalidOperationException>(ring.Completed);
+    }
+
     private static KeyRing Filled()
     {
         var ring = new KeyRing();

@@ -46,6 +46,7 @@ using Janus.Hosting.Authentication;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
+using Janus.Hosting.Mailboxes;
 using Janus.Hosting.Oidc;
 using Janus.Hosting.Privacy;
 using Janus.Hosting.Recovery;
@@ -833,6 +834,8 @@ internal sealed class Deployment : IAsyncDisposable
         // secret source, and the mail server in use, the host's own.
         _ = services.AddSingleton<ISecretSource>(Secrets);
         _ = services.AddKeyRing();
+        _ = services.AddSingleton<JmapMailServer>();
+        _ = services.AddHttpClient(JmapMailServer.Channel);
         _ = services.AddSingleton<IHostedService, KeyRingService>();
 
         // IDN-LIFE-012a: what the host declared of each provider, whose documents are

@@ -9,8 +9,8 @@ namespace Janus.Hosting.Tests;
 
 /// <summary>
 /// The host's secret source as a test deployment supplies it: the credentials it holds
-/// by provider name, answering nothing for a provider it holds none for, and counting
-/// what it was asked.
+/// by provider name and the mail server's key where it holds one, answering nothing for
+/// what it holds none of, and counting what it was asked.
 /// </summary>
 /// <param name="credentials">What it answers, by the provider's name.</param>
 internal sealed class SecretSourceInMemory(IReadOnlyDictionary<string, ProviderCredential> credentials) : ISecretSource
@@ -18,9 +18,15 @@ internal sealed class SecretSourceInMemory(IReadOnlyDictionary<string, ProviderC
     private readonly List<string> _asked = [];
 
     /// <summary>
-    /// The providers whose credential was asked for, in the order asked.
+    /// The providers whose credential was asked for, and <c>mailServerSecret</c> where the
+    /// mail server's key was, in the order asked.
     /// </summary>
     public IReadOnlyList<string> Asked => _asked;
+
+    /// <summary>
+    /// The mail server's key it answers, or nothing where it holds none.
+    /// </summary>
+    public byte[]? MailServerSecret { get; init; }
 
     /// <inheritdoc/>
     public ValueTask<KeyEncryptionKeys> ReadKeyEncryptionKeysAsync(CancellationToken cancellationToken) =>
@@ -47,5 +53,18 @@ internal sealed class SecretSourceInMemory(IReadOnlyDictionary<string, ProviderC
                 ErrorCodes.StartupSecretUnavailable,
                 "key",
                 JsonSerializer.SerializeToElement("socialProvider." + provider))));
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<Result<ReadOnlyMemory<byte>>> ReadMailServerSecretAsync(CancellationToken cancellationToken)
+    {
+        _asked.Add("mailServerSecret");
+
+        return ValueTask.FromResult(MailServerSecret is byte[] secret
+            ? Result.Success<ReadOnlyMemory<byte>>(secret)
+            : Result.Failure<ReadOnlyMemory<byte>>(Error.From(
+                ErrorCodes.StartupSecretUnavailable,
+                "key",
+                JsonSerializer.SerializeToElement("mailServerSecret"))));
     }
 }

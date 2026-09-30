@@ -44,6 +44,7 @@ using Janus.Hosting.BreakGlass;
 using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
 using Janus.Hosting.Events;
+using Janus.Hosting.Mailboxes;
 using Janus.Hosting.Maintenance;
 using Janus.Hosting.Oidc;
 using Janus.Hosting.Organizations;
@@ -547,6 +548,12 @@ public static class HostingRegistration
             provider.GetRequiredService<IAlertChannels>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>()));
+
+        // INT-MAIL-001, CONV-DESIGN-007: the shipped adapter is registered as its own
+        // type, never as IMailServer; the start chooses it where the host registered no
+        // mail server and the endpoint is set.
+        services.AddSingleton<JmapMailServer>();
+        _ = services.AddHttpClient(JmapMailServer.Channel);
 
         // INT-MAIL-006, INT-MAIL-008: the mail server is optional, and a deployment
         // that registers none provisions nothing and reconciles nothing.

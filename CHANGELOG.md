@@ -535,6 +535,17 @@ against the public contract of LIB-API-001.
   `IMailServerInUse`: the host's own `IMailServer` where it registers one, and none
   otherwise, answered as `identity.mailbox.notfound`. Asking before the start has chosen
   is a fault.
+- The library ships a JMAP adapter for the mail server, used where the host registers
+  no `IMailServer` and `integration.mailserver.endpoint` is set when the application
+  starts; a change of the key takes effect at the next start. Each call is one JMAP
+  request to `<endpoint>/jmap` presenting the mail server's management key, read at the
+  start through the new `ISecretSource.ReadMailServerSecretAsync` into the key ring
+  (`IKeyRing.BorrowMailServerSecret`); a key that cannot be read stops the start with
+  `model.startup.secretunavailable` naming `mailServerSecret`. A mailbox is created as a
+  user account carrying the mailbox's identifier as its description, a push changes the
+  `authenticate` permission alone, an account the library did not create is answered
+  `integration.mailserver.conflict` and left as it is, and the app-password calls carry
+  the person's token.
 - Where Continue with Apple is among the system policy's `loginFactors` and
   `notification.email.sendingdomain` is not in `notification.email.relayregistered`, the
   deployment raises `relay-domain-unregistered` with the domain as it starts and

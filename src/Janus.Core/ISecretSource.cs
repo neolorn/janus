@@ -46,4 +46,12 @@ public interface ISecretSource
     /// <param name="cancellationToken">Abandons the read.</param>
     /// <returns>The credential, or the failure the source met reading it.</returns>
     ValueTask<Result<ProviderCredential>> ReadProviderCredentialAsync(string provider, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads the mail server's management key, which the library's mail-server adapter
+    /// presents, asked only where the start chooses that adapter.
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>The key, as its UTF-8 bytes, or the failure the source met reading it.</returns>
+    ValueTask<Result<ReadOnlyMemory<byte>>> ReadMailServerSecretAsync(CancellationToken cancellationToken);
 }
