@@ -3,6 +3,8 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication;
+using Janus.Authentication.Invitations;
 using Janus.Authorization.Grants;
 using Janus.Authorization.Roles;
 using Janus.Authorization.Tests.Roles;
@@ -214,6 +216,57 @@ public sealed class RoleEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-004 AC6 and REG-INV-001: a role an open invitation names grants at
+    /// the acknowledgement, so it is not removed while the invitation stands, and is
+    /// removed once the invitation is revoked.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_ARoleAnOpenInvitationNamesIsNotRemovedAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Permissions.RoleManage);
+
+        _ = await DefinedAsync(administrator, Reading);
+
+        Invitation invitation = await InvitedAsync(actor, Editor, _deployment.Clock.GetUtcNow());
+
+        Answer refused = await RemovedAsync(administrator, "editor");
+
+        Assert.Equal(StatusCodes.Status409Conflict, refused.Status);
+        Assert.Equal(ErrorCodes.RoleInUse.ToString(), refused.Text("code"));
+        Assert.NotNull(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
+
+        invitation.Revoke(_deployment.Clock.GetUtcNow());
+
+        Answer removed = await RemovedAsync(administrator, "editor");
+
+        Assert.Equal(StatusCodes.Status204NoContent, removed.Status);
+        Assert.Null(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-004 AC6: an invitation stands until it is acknowledged or revoked,
+    /// expired or not, so a role an expired one names is not removed either.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_004_ARoleAStandingInvitationNamesIsNotRemovedAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Permissions.RoleManage);
+
+        _ = await DefinedAsync(administrator, Reading);
+
+        Invitation invitation = await InvitedAsync(actor, Editor, _deployment.Clock.GetUtcNow().AddDays(-8));
+
+        Answer refused = await RemovedAsync(administrator, "editor");
+
+        Assert.True(invitation.HasExpired(_deployment.Clock.GetUtcNow()));
+        Assert.Equal(StatusCodes.Status409Conflict, refused.Status);
+        Assert.Equal(ErrorCodes.RoleInUse.ToString(), refused.Text("code"));
+        Assert.NotNull(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-004, D-166: a path naming a role the deployment does not hold is a
     /// record not found, answered after the permission and the reason are judged, and
     /// nothing is written down.
@@ -368,6 +421,27 @@ public sealed class RoleEndpointTests : IAsyncLifetime
 
     private static Task<Answer> RemovedAsync(Browser administrator, string name) =>
         administrator.SendAsync("DELETE", "/admin/roles/" + name, ("reason", "No longer used."));
+
+    // An invitation into the branch naming the role, standing, for seven days from
+    // when it was issued.
+    private async Task<Invitation> InvitedAsync(SubjectId inviter, RoleName role, DateTimeOffset issuedAt)
+    {
+        var invitation = Invitation.Issued(
+            InvitationId.New(_deployment.Clock),
+            Branch,
+            inviter,
+            new InvitedIdentifiers("invited@example.test", null, null),
+            [role],
+            [],
+            mailbox: null,
+            OpaqueToken.Of(Guid.NewGuid().ToString("N")).Fingerprint(),
+            issuedAt,
+            TimeSpan.FromDays(7));
+
+        await _deployment.Invitations.AddAsync(invitation, CancellationToken.None);
+
+        return invitation;
+    }
 
     // A grant of the role that has since been revoked, whose row still names it.
     private async Task RevokedGrantOfAsync(RoleName role, SubjectId actor)

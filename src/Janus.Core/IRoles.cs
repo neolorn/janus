@@ -56,8 +56,9 @@ public interface IRoles
     /// <param name="reason">Why.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Success, or the refusal: <c>authz.role.inuse</c> where a grant or a derivation
-    /// names it, <c>authz.role.notfound</c> where the deployment holds no such role.
+    /// Success, or the refusal: <c>authz.role.inuse</c> where a grant, a derivation or
+    /// a standing invitation names it, <c>authz.role.notfound</c> where the deployment
+    /// holds no such role.
     /// </returns>
     ValueTask<Result> RemoveAsync(
         AccessContext context,

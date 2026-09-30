@@ -17,7 +17,8 @@ namespace Janus.Authorization.Roles;
 /// <param name="scope">Whether the caller may manage roles, and holds system administration.</param>
 /// <param name="stepUp">What defining and removing ask of the caller's session.</param>
 /// <param name="roles">Where roles are read and written.</param>
-/// <param name="grants">Whether any grant names a role, and which the reserved account holds.</param>
+/// <param name="grants">Which grants the reserved account holds.</param>
+/// <param name="references">Whether any grant or standing invitation names a role.</param>
 /// <param name="administrative">Which organization administers the deployment.</param>
 /// <param name="emergency">Which account the break-glass session belongs to.</param>
 /// <param name="model">Which permissions exist, and which roles a derivation confers.</param>
@@ -36,6 +37,7 @@ internal sealed class RoleService(
     IStepUpGate stepUp,
     IRoleStore roles,
     IGrantStore grants,
+    IRoleReferences references,
     IAdministrativeOrganization administrative,
     IEmergencyAccount emergency,
     AuthorizationModel model,
@@ -203,9 +205,10 @@ internal sealed class RoleService(
             return await EndedAsync(administering, cancellationToken).ConfigureAwait(false);
         }
 
-        // AUTHZ-GRANT-003 AC3: a grant's history names its role, revoked or not, and a
-        // derivation confers it from the host's data; neither is left naming nothing.
-        if (Derived(role) || await grants.NamesAsync(role, cancellationToken).ConfigureAwait(false))
+        // AUTHZ-GRANT-003 AC3, REG-INV-001: a grant's history names its role, revoked or
+        // not, a derivation confers it from the host's data, and a standing invitation
+        // grants it at the acknowledgement; none is left naming nothing.
+        if (Derived(role) || await references.NamedAsync(role, cancellationToken).ConfigureAwait(false))
         {
             return await EndedAsync(Error.From(ErrorCodes.RoleInUse), cancellationToken).ConfigureAwait(false);
         }

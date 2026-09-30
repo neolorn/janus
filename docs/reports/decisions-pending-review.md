@@ -7013,6 +7013,8 @@ the others in 10 section 1.3.
 `authz.role.inuse`: "A grant or a derivation names the role, so it cannot be removed;
 409", and 09 section 8 could list it under `DELETE /admin/roles`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 190. What the group routes carry, and where `group:manage` is asked

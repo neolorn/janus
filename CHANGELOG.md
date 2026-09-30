@@ -673,7 +673,8 @@ against the public contract of LIB-API-001.
   `authz.denied`, as a caller without `group:manage` is.
 - `GET /admin/roles` reads every role with its permissions, `POST /admin/roles` creates
   a role or gives an existing one the permissions stated, and
-  `DELETE /admin/roles/{name}` removes one no grant or derivation names (409
+  `DELETE /admin/roles/{name}` removes one no grant, derivation or standing invitation
+  (neither acknowledged nor revoked, expired or not) names (409
   `authz.role.inuse` otherwise, 404 `authz.role.notfound` for a role the deployment
   does not hold). All ask `role:manage` in the administrative
   organization; changes need step-up and a reason, are recorded in the audit trail with

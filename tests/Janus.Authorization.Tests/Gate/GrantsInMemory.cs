@@ -85,9 +85,12 @@ internal sealed class GrantsInMemory : IGrantStore
             && held.IsLive(at)));
     }
 
-    /// <inheritdoc/>
-    public ValueTask<bool> NamesAsync(RoleName role, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_grants.Values.Any(grant => grant.Role == role));
+    /// <summary>
+    /// Whether any grant confers the role, live, expired or revoked, as the rows name it.
+    /// </summary>
+    /// <param name="role">Which role.</param>
+    /// <returns>Whether one does.</returns>
+    public bool Names(RoleName role) => _grants.Values.Any(grant => grant.Role == role);
 
     /// <inheritdoc/>
     public ValueTask<bool> NamesAsync(GrantSubject holder, CancellationToken cancellationToken) =>

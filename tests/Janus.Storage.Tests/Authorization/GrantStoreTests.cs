@@ -390,8 +390,12 @@ public sealed class GrantStoreTests(DatabaseFixture database)
 
         await using StoreContext reading = database.Context();
 
-        Assert.True(await Store(reading).NamesAsync(RoleName.Parse("editor"), TestContext.Current.CancellationToken));
-        Assert.False(await Store(reading).NamesAsync(RoleName.Parse("nobody-holds-this"), TestContext.Current.CancellationToken));
+        Assert.True(await new RoleReferences(reading).NamedAsync(
+            RoleName.Parse("editor"),
+            TestContext.Current.CancellationToken));
+        Assert.False(await new RoleReferences(reading).NamedAsync(
+            RoleName.Parse("nobody-holds-this"),
+            TestContext.Current.CancellationToken));
     }
 
     /// <summary>
