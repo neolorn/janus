@@ -15625,6 +15625,8 @@ exclusion, the range, the unset and the invalid variable, and the message.
 OPS-DEP-001 beside `ADD CONSTRAINT`, and say which `DROP` forms count. OPS-DEP-001
 could say what an unset variable means.
 
+**Superseded by D-166.**
+
 ---
 
 ## 379. The registration listener is the one connection besides the accessor, and each direct use is named by the comment above it
