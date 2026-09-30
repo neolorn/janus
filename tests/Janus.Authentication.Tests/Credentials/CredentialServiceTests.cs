@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Janus.Authentication.Credentials;
+using Janus.Authentication.Events;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
@@ -88,6 +89,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
+    private IEvents? _outbox;
 
     /// <summary>
     /// A deployment that can send the notice every enrolment carries, over origins the
@@ -139,6 +141,8 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     {
         (SubjectId subject, SessionId session) = await SignedInAsync();
 
+        _events.Published.Clear();
+
         EnrolledCredential enrolled = await ConfirmedAsync(subject, session);
 
         CredentialEnrolled announced = Assert.Single(_events.Of<CredentialEnrolled>());
@@ -148,6 +152,75 @@ public sealed class CredentialServiceTests : IAsyncDisposable
         Assert.Equal(subject, announced.Subject);
         Assert.Equal(subject, announced.Actor);
         Assert.Equal(Noon, announced.RaisedAt);
+    }
+
+    /// <summary>
+    /// AUTH-STEP-007, CONV-DESIGN-002: the enrolment's event row is written in the one
+    /// transaction the confirmation, the codes beside it and its record are written
+    /// in, so a row that cannot be written fails the enrolment before anything of it
+    /// commits, and no notice of an enrolment that does not stand goes out.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_STEP_007_AnEnrolmentWhoseEventRowFailsCommitsNothingAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+
+        GeneratorEnrolment begun = Value(await Service.BeginGeneratorAsync(
+            Authority(subject, session),
+            "Phone",
+            TestContext.Current.CancellationToken));
+
+        _outbox = new EventOutbox(new PendingEventsUnwritable(), _work);
+        _work.Reset();
+        _notifications.Sent.Clear();
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () => await Service.ConfirmGeneratorAsync(
+            Authority(subject, session),
+            begun.Credential,
+            Code(begun.Credential),
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Empty(_notifications.Sent);
+        Assert.DoesNotContain(_events.Of<CredentialEnrolled>(), each => each.Credential == begun.Credential);
+    }
+
+    /// <summary>
+    /// AUTH-STEP-007 AC4: a password set on an existing account, by the person in a
+    /// session or through the enrolment session an approved recovery opened, is
+    /// announced as an enrolment of the catalogue entry <c>password</c> with no
+    /// credential identifier.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_STEP_007_ASetPasswordIsAnnouncedAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        SubjectId recovering = await AccountAsync(password: false);
+        EnrolmentSession opened = await OpenedAsync(recovering);
+
+        _events.Published.Clear();
+
+        Assert.True(Succeeded(await Service.SetPasswordAsync(
+            Authority(subject, session),
+            Another,
+            Source,
+            TestContext.Current.CancellationToken)));
+        Assert.True(Succeeded(await Service.SetPasswordAsync(
+            CredentialAuthority.Of(opened.Id),
+            Another,
+            Source,
+            TestContext.Current.CancellationToken)));
+
+        IReadOnlyList<CredentialEnrolled> announced = _events.Of<CredentialEnrolled>();
+
+        Assert.Equal(2, announced.Count);
+        Assert.All(announced, each => Assert.Null(each.Credential));
+        Assert.All(announced, each => Assert.Equal(FactorCatalogue.Password, each.Kind));
+        Assert.Equal([subject, recovering], announced.Select(each => each.Subject));
+        Assert.Equal([subject, recovering], announced.Select(each => each.Actor));
     }
 
     /// <summary>
@@ -516,6 +589,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             recovered,
             [],
             AssuranceLevel.Aal1,
+            actor: null,
             TestContext.Current.CancellationToken);
 
         AuthenticatorId lost = _authenticators.All.Single().Id;
@@ -734,7 +808,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _live,
             _notifications,
             _credentials,
-            _events,
+            _outbox ?? _events,
             _configuration,
             _work,
             _clock);
@@ -825,6 +899,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _passwords,
             new PasswordScreening(_corpus, _words, _configuration, _screening, _events, _clock),
             new Argon2idHasher(_randomness),
+            _events,
             _configuration,
             _work,
             _clock);
@@ -1013,6 +1088,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
                 presented,
                 [],
                 AssuranceLevel.Aal1,
+                actor: null,
                 TestContext.Current.CancellationToken);
         }
 

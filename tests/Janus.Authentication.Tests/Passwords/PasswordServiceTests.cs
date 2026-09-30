@@ -37,6 +37,7 @@ public sealed class PasswordServiceTests : IAsyncDisposable
         _passwords,
         new PasswordScreening(_corpus, _words, _configuration, _log, _events, _clock),
         new Argon2idHasher(_randomness),
+        _events,
         _configuration,
         _work,
         _clock);
@@ -82,6 +83,7 @@ public sealed class PasswordServiceTests : IAsyncDisposable
                 Encoding.UTF8.GetBytes(Short),
                 [],
                 AssuranceLevel.Aal1,
+                actor: null,
                 TestContext.Current.CancellationToken)));
 
         Assert.Null(await _passwords.FindAsync(alone, TestContext.Current.CancellationToken));
@@ -111,6 +113,7 @@ public sealed class PasswordServiceTests : IAsyncDisposable
                 Encoding.UTF8.GetBytes(Chosen),
                 [],
                 AssuranceLevel.Aal1,
+                actor: null,
                 TestContext.Current.CancellationToken)));
 
         Assert.Null(await _passwords.FindAsync(subject, TestContext.Current.CancellationToken));
@@ -217,6 +220,7 @@ public sealed class PasswordServiceTests : IAsyncDisposable
             Encoding.UTF8.GetBytes(password),
             [],
             reachable,
+            actor: null,
             TestContext.Current.CancellationToken);
 
         set.Switch(

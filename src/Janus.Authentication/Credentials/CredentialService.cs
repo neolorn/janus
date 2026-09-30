@@ -264,6 +264,22 @@ internal sealed class CredentialService(
             return Result.Failure<EnrolledCredential>(Error.From(ErrorCodes.CredentialLabelInvalid));
         }
 
+        Policy policy = (await policies.ForAsync(acting.Subject, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Policy>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<EnrolledCredential>(failure);
+        }
+
+        // CONV-DESIGN-002: the key, the ceremony's end and everything the enrolment
+        // settles are one transaction, which the key's own write joins.
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<EnrolledCredential>(notBegun);
+        }
+
         AuthenticatorId enrolled = (await keys
                 .EnrolAsync(
                     acting.Subject,
@@ -278,24 +294,12 @@ internal sealed class CredentialService(
 
         if (failure is not null)
         {
-            return Result.Failure<EnrolledCredential>(failure);
-        }
-
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
-        {
-            return Result.Failure<EnrolledCredential>(notBegun);
+            return await RefusedAsync<EnrolledCredential>(failure, cancellationToken).ConfigureAwait(false);
         }
 
         await ceremonies.RemoveAsync(acting.Subject, cancellationToken).ConfigureAwait(false);
 
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure<EnrolledCredential>(notCommitted);
-        }
-
-        return await SettledAsync(acting, enrolled, ceremony.Kind, source, cancellationToken)
+        return await SettledAsync(acting, enrolled, ceremony.Kind, policy, source, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -396,6 +400,22 @@ internal sealed class CredentialService(
             return Result.Failure<EnrolledCredential>(failure);
         }
 
+        Policy policy = (await policies.ForAsync(acting.Subject, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Policy>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<EnrolledCredential>(failure);
+        }
+
+        // CONV-DESIGN-002: as for a key, the confirmation joins the one transaction the
+        // enrolment settles in.
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<EnrolledCredential>(notBegun);
+        }
+
         _ = (await generators
                 .ConfirmAsync(acting.Subject, credential, code, cancellationToken)
                 .ConfigureAwait(false))
@@ -403,13 +423,14 @@ internal sealed class CredentialService(
 
         if (failure is not null)
         {
-            return Result.Failure<EnrolledCredential>(failure);
+            return await RefusedAsync<EnrolledCredential>(failure, cancellationToken).ConfigureAwait(false);
         }
 
         return await SettledAsync(
                 acting,
                 credential,
                 FactorCatalogue.Generated,
+                policy,
                 source,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -507,7 +528,7 @@ internal sealed class CredentialService(
         // credential is refused at once and gone only once somebody has been told.
         if (Lowers(enrolled, going, password))
         {
-            return (await losses.SuspendAsync(going, source, cancellationToken).ConfigureAwait(false))
+            return (await losses.SuspendAsync(acting.Context, going, source, cancellationToken).ConfigureAwait(false))
                 .Match(
                     reported => Result.Failure(Error.From(
                         ErrorCodes.CredentialLastSecondFactor,
@@ -620,6 +641,21 @@ internal sealed class CredentialService(
             .RecordedAsync(Enrolled, acting.Subject, linked.Id, now, cancellationToken)
             .ConfigureAwait(false);
 
+        // CONV-DESIGN-002: the link is announced in the transaction that makes it.
+        if ((await events
+                .PublishAsync(
+                    new CredentialEnrolled(now, Announced + ":" + linked.Id, linked.Id, provider)
+                    {
+                        Subject = acting.Subject,
+                        Actor = acting.Subject,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error unannounced)
+        {
+            return Result.Failure(unannounced);
+        }
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
@@ -629,15 +665,7 @@ internal sealed class CredentialService(
         _ = await TellAsync(acting.Subject, MessageKind.CredentialEnrolled, source, cancellationToken)
             .ConfigureAwait(false);
 
-        return await events
-            .PublishAsync(
-                new CredentialEnrolled(now, Announced + ":" + linked.Id, linked.Id, provider)
-                {
-                    Subject = acting.Subject,
-                    Actor = acting.Subject,
-                },
-                cancellationToken)
-            .ConfigureAwait(false);
+        return Result.Success();
     }
 
     /// <inheritdoc/>
@@ -826,8 +854,8 @@ internal sealed class CredentialService(
                 return Result.Failure<Acting>(Error.From(ErrorCodes.EnrolmentTokenInvalid));
             }
 
-            acting = new Acting(enrolment.Subject, Session: null, opened);
             asking = AccessContext.Of(enrolment.Subject);
+            acting = new Acting(enrolment.Subject, Session: null, opened, asking);
         }
         else if (authority.Context is { Effective: SubjectId subject } held && authority.Session is SessionId live)
         {
@@ -836,7 +864,7 @@ internal sealed class CredentialService(
                 return Result.Failure<Acting>(withheld);
             }
 
-            acting = new Acting(subject, live, Enrolment: null);
+            acting = new Acting(subject, live, Enrolment: null, held);
             asking = held;
         }
         else
@@ -999,13 +1027,15 @@ internal sealed class CredentialService(
             shown.DisplayName?.Value ?? string.Empty);
     }
 
-    // What every completed enrolment does: the codes a second step beside a password
-    // brings with it, the prompt for a credential that would survive the device, the
-    // notice on every channel, and the end of an enrolment session.
+    // What every completed enrolment does in the transaction its caller opened: the
+    // codes a second step beside a password brings with it, the record and the event,
+    // and the commit; then the notice on every channel, the end of an enrolment session
+    // and the prompt for a credential that would survive the device.
     private async ValueTask<Result<EnrolledCredential>> SettledAsync(
         Acting acting,
         AuthenticatorId credential,
         Factor kind,
+        Policy policy,
         string source,
         CancellationToken cancellationToken)
     {
@@ -1028,22 +1058,38 @@ internal sealed class CredentialService(
             }
         }
 
-        Policy policy = (await policies.ForAsync(acting.Subject, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, error => Withheld<Policy>(error, ref failure));
-
-        if (failure is not null)
-        {
-            return Result.Failure<EnrolledCredential>(failure);
-        }
-
         IReadOnlyList<Authenticator> enrolled = await authenticators
             .OfAsync(acting.Subject, cancellationToken)
             .ConfigureAwait(false);
 
+        DateTimeOffset now = time.GetUtcNow();
+
         await audit
-            .RecordedAsync(Enrolled, acting.Subject, credential, time.GetUtcNow(), cancellationToken)
+            .RecordedAsync(Enrolled, acting.Subject, credential, now, cancellationToken)
             .ConfigureAwait(false);
+
+        // AUTH-STEP-007, chapter 10 section 5b: the authenticator reached active,
+        // which is the fact the event states, in the transaction that makes it so
+        // (CONV-DESIGN-002).
+        if ((await events
+                .PublishAsync(
+                    new CredentialEnrolled(now, Announced + ":" + credential, credential, kind)
+                    {
+                        Subject = acting.Subject,
+                        Actor = acting.Subject,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error unannounced)
+        {
+            return Result.Failure<EnrolledCredential>(unannounced);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<EnrolledCredential>(notCommitted);
+        }
 
         // AUTH-STEP-007 AC1: every recorded channel hears of it, and the enrolling
         // session is not one of them.
@@ -1052,32 +1098,20 @@ internal sealed class CredentialService(
 
         await CompletedAsync(acting, cancellationToken).ConfigureAwait(false);
 
-        // AUTH-STEP-007, chapter 10 section 5b: the authenticator reached active,
-        // which is the fact the event states.
-        Result published = await events
-            .PublishAsync(
-                new CredentialEnrolled(
-                    time.GetUtcNow(),
-                    Announced + ":" + credential,
-                    credential,
-                    kind)
-                {
-                    Subject = acting.Subject,
-                    Actor = acting.Subject,
-                },
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        if (published.Match(() => (Error?)null, error => error) is Error unpublished)
-        {
-            return Result.Failure<EnrolledCredential>(unpublished);
-        }
-
         return Result.Success(new EnrolledCredential(
             credential,
             Redundancy.Satisfied(enrolled) ? null : policy.CredentialRedundancy,
             generated));
     }
+
+    // CONV-DESIGN-003: a refusal from the write a transaction was opened for comes
+    // before that write, so the transaction commits with nothing in it and the unit of
+    // work is left clean for whatever the scope does next.
+    private async ValueTask<Result<TValue>> RefusedAsync<TValue>(
+        Error refusal,
+        CancellationToken cancellationToken) =>
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match(() => Result.Failure<TValue>(refusal), Result.Failure<TValue>);
 
     // D-148: completing the enrolment ends the enrolment session, and what was set is
     // used by signing in with it.
@@ -1120,6 +1154,7 @@ internal sealed class CredentialService(
                         presented,
                         words,
                         StepUp.Reachable(HeldFactors.Of(enrolled, password: true).Standing).Level,
+                        subject,
                         cancellationToken)
                     .ConfigureAwait(false))
                 .Match(_ => Result.Success(), Result.Failure);
@@ -1258,5 +1293,6 @@ internal sealed class CredentialService(
     private sealed record Acting(
         SubjectId Subject,
         SessionId? Session,
-        EnrolmentSessionId? Enrolment);
+        EnrolmentSessionId? Enrolment,
+        AccessContext Context);
 }

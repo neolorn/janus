@@ -594,6 +594,7 @@ internal sealed class RecoveryService(
                         presented,
                         words,
                         StepUp.Reachable(HeldFactors.Of(enrolled, password: true).Standing).Level,
+                        actor: null,
                         cancellationToken)
                     .ConfigureAwait(false))
                 .Match(_ => Result.Success(), Result.Failure);

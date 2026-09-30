@@ -156,6 +156,33 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-STEP-007 AC4: the password recovery set is announced as an enrolment of the
+    /// catalogue entry <c>password</c> with no credential identifier, naming the account
+    /// and nobody as its actor, since the link names nobody.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_STEP_007_ARecoveredPasswordIsAnnouncedAsync()
+    {
+        SubjectId subject = await AccountAsync(password: false);
+
+        _ = await Service.BeginAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+
+        Assert.True(Succeeded(await Service.CompleteAsync(
+            Sent(),
+            Secret,
+            Source,
+            TestContext.Current.CancellationToken)));
+
+        CredentialEnrolled announced = Assert.Single(_events.Of<CredentialEnrolled>());
+
+        Assert.Null(announced.Credential);
+        Assert.Equal(FactorCatalogue.Password, announced.Kind);
+        Assert.Equal(subject, announced.Subject);
+        Assert.Null(announced.Actor);
+    }
+
+    /// <summary>
     /// AUTH-RECOV-005 AC3: the password recovery set is enough on its own to report the
     /// passkey that was lost, which is the whole point of having set it.
     /// </summary>
@@ -856,6 +883,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             _passwords,
             new PasswordScreening(_corpus, _words, _configuration, _screening, _events, _clock),
             new Argon2idHasher(_randomness),
+            _events,
             _configuration,
             _work,
             _clock);
@@ -950,6 +978,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
                 presented,
                 [],
                 AssuranceLevel.Aal1,
+                actor: null,
                 TestContext.Current.CancellationToken);
         }
 

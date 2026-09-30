@@ -112,6 +112,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 _passwords,
                 new PasswordScreening(_corpus, _words, _configuration, _screening, _events, _clock),
                 new Argon2idHasher(_randomness),
+                _events,
                 _configuration,
                 _work,
                 _clock),

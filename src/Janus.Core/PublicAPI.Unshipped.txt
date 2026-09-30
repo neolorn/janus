@@ -564,10 +564,10 @@ Janus.Core.CredentialCeremony.RelyingPartyId.init -> void
 Janus.Core.CredentialCeremony.User.get -> Janus.Core.CeremonyUser!
 Janus.Core.CredentialCeremony.User.init -> void
 Janus.Core.CredentialEnrolled
-Janus.Core.CredentialEnrolled.Credential.get -> Janus.Core.AuthenticatorId
+Janus.Core.CredentialEnrolled.Credential.get -> Janus.Core.AuthenticatorId?
 Janus.Core.CredentialEnrolled.Credential.init -> void
-Janus.Core.CredentialEnrolled.CredentialEnrolled(System.DateTimeOffset RaisedAt, string! IdempotencyKey, Janus.Core.AuthenticatorId Credential, Janus.Core.Factor Kind) -> void
-Janus.Core.CredentialEnrolled.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.AuthenticatorId Credential, out Janus.Core.Factor Kind) -> void
+Janus.Core.CredentialEnrolled.CredentialEnrolled(System.DateTimeOffset RaisedAt, string! IdempotencyKey, Janus.Core.AuthenticatorId? Credential, Janus.Core.Factor Kind) -> void
+Janus.Core.CredentialEnrolled.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.AuthenticatorId? Credential, out Janus.Core.Factor Kind) -> void
 Janus.Core.CredentialEnrolled.Equals(Janus.Core.CredentialEnrolled? other) -> bool
 Janus.Core.CredentialEnrolled.Kind.get -> Janus.Core.Factor
 Janus.Core.CredentialEnrolled.Kind.init -> void

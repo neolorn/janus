@@ -195,6 +195,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             _passwords,
             new PasswordScreening(_corpus, _words, _configuration, _screening, _events, _clock),
             new Argon2idHasher(_randomness),
+            _events,
             _configuration,
             _work,
             _clock);
@@ -1646,6 +1647,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             password,
             [],
             AssuranceLevel.Aal1,
+            actor: null,
             TestContext.Current.CancellationToken);
 
         await _work.CommitAsync(TestContext.Current.CancellationToken);

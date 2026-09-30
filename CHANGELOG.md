@@ -1289,6 +1289,14 @@ against the public contract of LIB-API-001.
   recovery link by text and for the combinations a step-up offers: on `risk` nothing is
   texted, the step-up withholds the text factors, and `POST /auth/link` and
   `/recovery/begin` answer 202 as for any number instead of refusing.
+- The credential events are written in the transaction that makes them true, so an
+  event that cannot be written fails the operation and nothing of it stands: a report
+  or removal suspends nothing, and an enrolment enrols nothing. A password set on an
+  existing account, in a session, through an enrolment session or by recovery, raises
+  `CredentialEnrolled` with the kind `password` and no `Credential`, which is now
+  nullable. `CredentialSuspended` names who reported the loss or asked for the
+  removal as its `Actor`; `CredentialRestored` names the session's `Actor` and
+  `Effective`, and nobody when cancelled from the link.
 - A value the library reads from text under a rule, left unset (such as its `default`),
   throws `InvalidOperationException` where its text is read, so no such value reaches a
   row.
