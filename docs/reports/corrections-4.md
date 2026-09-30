@@ -1,12 +1,13 @@
 # Corrections 4: D-166 and D-167
 
-Status: stopped at open questions 18 and 19 (Tier 2). D-168 settled questions 1 and 2 of
-the first stop, D-169 question 3, D-170 questions 4 to 6, D-171 question 7, D-172
-questions 8 and 9, D-173 question 10, D-174 question 11, D-175 question 12, D-176
-question 13, D-177 question 14, D-178 questions 15 and 16 and D-179 question 17; all are
-applied. Of the rest of D-166, section D.8 is applied up to 340, with D-171 item 3,
-D-166 343 and 349 with D-175, 215, 221, 263 and 270 with D-176 to D-179; D-166 121 and
-336, which come next, stop the run at question 18 (section 2).
+Status: stopped at open question 20 (Tier 3). D-168 settled questions 1 and 2 of the
+first stop, D-169 question 3, D-170 questions 4 to 6, D-171 question 7, D-172 questions
+8 and 9, D-173 question 10, D-174 question 11, D-175 question 12, D-176 question 13,
+D-177 question 14, D-178 questions 15 and 16, D-179 question 17 and D-180 questions 18
+and 19; all are applied. Of the rest of D-166, section D.8 is applied up to 340 and 121
+and 336, with D-171 item 3, D-166 343 and 349 with D-175, 215, 221, 263 and 270 with
+D-176 to D-179; the signing credential of CONV-CODE-007 criterion 4, which completes the
+key ring of D-171, stops the run at question 20 (section 2).
 
 ## 1. Items implemented
 
@@ -141,6 +142,10 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 | D-179: from the break-glass session, or a session another application opened from it, each of the nine step-up actions of OPS-BOOT-002 is refused 403 `authz.denied` at the gate step, after the body is read and before any load (`StepUpGuard.RefusedInBreakGlass`), no longer within the step-up judgement | `8e570fd` | OPS-BOOT-002 AC9, AUTH-STEP-004, CONV-DESIGN-002 AC3 | `BreakGlassEndpointTests.OPS_BOOT_002_NoSignInMethodIsGivenToTheReservedAccountAsync` (every route of the nine actions, from both sessions: password, identifier add and replace, username, passkey and security-key begin, key completion, upgrade, TOTP begin and confirmation, recovery codes, app password, deactivation, deletion, provider link) |
 | D-166 D.6 263 with D-179: the app-password operations answer 404 `identity.mailbox.notfound` where the account is not `active` or `restricted`, holds no mailbox the server is told to enable, or no mail server is in use; `authz.denied` only for a context naming no account; a restricted account lists and revokes and creates none (`authz.restricted`); ledger line 263 | `a5a295e` | REG-MAIL-002 AC3, AC4, INT-MAIL-006, INT-MAIL-010, IDN-ACCT-007 | `AppPasswordsTests.INT_MAIL_006_WithoutAnEnabledMailboxThereAreNoAppPasswordsAsync`, `AppPasswordsTests.REG_MAIL_002_AC4_ARestrictedAccountListsAndRevokesAndCreatesNoneAsync`, `AppPasswordFlowTests.INT_MAIL_006_AnAccountWithoutAMailboxIsRefusedAsync`, `BreakGlassEndpointTests.REG_MAIL_002_AC3_TheBreakGlassSessionListsNoAppPasswordsAsync` |
 | D-166 D.6 270 with D-176: the mail server row of the records of processing applies where a mail server is in use, and no longer on `integration.mail.endpoint` alone; a start with no `IMailTransport` or no `ISmsTransport` is refused with `model.startup.declarationmissing`, `details.key` `mailTransport` or `smsTransport` | `de42f15` | PRIV-ROPA-002, LIB-EXT-001, INT-MAIL-008 AC3, INT-SMS-006 AC2 | `StartupValidationTests.INT_MAIL_008_AC3_ADeploymentWithNoMailTransportDoesNotStartAsync`, `StartupValidationTests.INT_SMS_006_AC2_ADeploymentWithNoSmsTransportDoesNotStartAsync`, `ProcessingRecordsEndpointTests.PRIV_ROPA_002_ARegisteredMailServerIsInTheRegisterAsync`, `ProcessingRecordsTests.PRIV_ROPA_002_TheRowsTheLibraryMakesTrueAreAppliedWithoutADeclarationAsync`, `ProcessingRecordsTests.PRIV_ROPA_002_AC2_AnEditedRowStandsInPlaceOfTheShippedDefaultAsync`, `ProcessingRecordsTests.PRIV_ROPA_002_AnUncalledProviderIsNotInTheRegisterAsync` |
+| The documentation of D-180 | `e9eb9ec` | none | none |
+| D-180 question 19: the transport side's registration, `SendingValidation`'s factory among it, in `Sending/DeliveryRegistration.cs`, which names that side only; `KeyRingService`'s factory in `KeyRingRegistration`; no constructor default stands for an absent declaration | `38933fe` | CONV-DESIGN-007 AC6, INT-MAIL-009 AC2, AUTHZ-MODEL-004 AC2 | `PublicSurfaceTests.CONV_DESIGN_007_AC6_AnAbsentDeclarationReachesItsUserThroughAFactory`, `StartupValidationTests.AUTHZ_MODEL_004_AC2_TheChecksStartBeforeEverythingElseRegistered` |
+| D-180 question 18: a start with no `ISecretSource` is refused with `model.startup.declarationmissing`, `details.key` `secretSource`, as the ring's start begins and before any secret is read | `d129edc` | LIB-HOST-001 AC2, OPS-SEC-001 AC2, AUTH-KEY-002 AC2 | `StartupValidationTests.LIB_HOST_001_AC2_ADeploymentWithNoSecretSourceDoesNotStartAsync` |
+| D-166 D.8 121 and 336 with D-171 and D-176: `AddJanus` takes no key; the key-encryption key, fingerprint key and maintenance credential are read through `ISecretSource` into the key ring at the start, in the steps of CONV-DESIGN-007, and lent from it at each use; every `ISecretSource` member returns a result and `NotOperationContracts` is removed; a `Janus.Cli` command fills a ring of its own from its key document and clears it when it ends; the audit partition job borrows the maintenance credential; ledger line 121 | `7b45d2b`, `1cb2827` | CONV-CODE-007 AC3, CONV-DESIGN-005 AC1, CONV-DESIGN-007, OPS-SEC-001 AC2, AUTH-KEY-002 AC2, OPS-MIG-003a | `KeyMaterialTests.AUTH_KEY_002_AC2_StartupFailsNamedWithoutTheKeyEncryptionKeyAsync`, `KeyMaterialTests.AUTH_KEY_002_AC2_StartupFailsNamedWithoutTheFingerprintKeyAsync`, `KeyMaterialTests.AUTH_KEY_002_AC2_StartupFailsNamedOnAFingerprintKeyShorterThanTheHashAsync`, `KeyMaterialTests.AUTH_KEY_002_AC2_StartupFailsNamedOnARetainedFingerprintKeyShorterThanTheHashAsync`, `KeyMaterialTests.OPS_MIG_003a_StartupFailsNamedWithoutTheMaintenanceCredentialAsync`, `KeyMaterialTests.CONV_CODE_007_AC3_NoServiceReceivesAKeyAtRegistration`, `KeyMaterialTests.CONV_CODE_007_AC3_AKeyIsLentOnlyFromTheStartUntilTheStopAsync`, `KeyMaterialTests.CONV_CODE_007_AC4_TheEncryptionCredentialIsMadeFromTheFilledRingAsync`, `StartupValidationTests.OPS_SEC_001_ASecretTheSourceCannotAnswerStopsTheStartNamingItAsync`, `StartupValidationTests.CONV_DESIGN_007_TheSecretsAreReadBeforeTheServerStartsAsync`, `KeyRingTests.CONV_CODE_007_AC3_TheKeysAreLentFromTheRingsOwnCopyUntilItIsCleared`, `KeyRingTests.CONV_CODE_007_AVersionTheRingDoesNotHoldIsNamedWithItsVersion`, `KeyRingTests.CONV_CODE_007_AKeyTheRingDoesNotHoldIsNamedUnavailable`, `KeyRingTests.CONV_CODE_007_EachKeyIsHeldOnce`, `CommandTests.CONV_CODE_007_AC3_AReadOfTheRingAfterTheCommandEndsThrowsAsync`, `ResultContractTests.CONV_DESIGN_005_AC1_EveryContractMethodReturnsAnOutcome` |
 | D-171 item 4: a session opened from the break-glass session carries its reason; one opened by an ordinary sign-in carries none (no code change) | `5ebabcd` | OPS-BOOT-002 AC10 | `BreakGlassEndpointTests.OPS_BOOT_002_AC10_ASessionOpenedFromTheBreakGlassSessionCarriesTheReasonAsync` |
 | D-166 D.8, 316: one data key of the deployment, a row of `subject_keys`, under which every value of no subject is held; the rotation re-wraps subject-key rows only, writing back only where the value read still stands; ledger line 316 | `ced2208` | OPS-SEC-003, OPS-MIG-003a AC4, AUTH-KEY-002, PRIV-RIGHT-005a | `KeyRotationTests.OPS_SEC_003_AC3_AfterRetirementEveryValueOfNoSubjectStillReadsAsync`, `KeyRotationTests.OPS_SEC_003_AC3_AProofKeyInFlightStillReadsAfterRetirementAsync`, `KeyRotationTests.OPS_SEC_003_ARotationTouchesNoTableButTheSubjectKeysAndItsProgressAsync`, `KeyRotationTests.OPS_SEC_003_ARotationDoesNotOverwriteAKeyRewrittenAtTheSameVersionAsync`, `DatabaseRoleTests.OPS_MIG_003a_AC4_TheMaintenanceRoleReachesNoValueBesideTheSubjectKeysAsync`, `OidcStoreTests.AUTH_KEY_002_ThePrivateHalfIsWrappedUnderTheDeploymentDataKeyAsync`, `SubjectEraserTests.PRIV_RIGHT_005a_ErasureNeverTouchesTheDeploymentDataKeyAsync`, `SerializedModelTests` (the maintenance grants) |
 
@@ -277,6 +282,13 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 - 270 takes no ledger line: section G does not list it.
 - The transport check of 270 sits in `SendingValidation` and not in `DeclarationCoverage`, which names the mail server's client: no source file may name both mailbox hosting and delivery (the gate of INT-MAIL-009 criterion 2). Question 19 is how its optional transports are resolved.
 
+**D-180, 121 and 336 (`38933fe` to `1cb2827`).**
+- The test of CONV-DESIGN-007 criterion 6 reads every type `AddJanus` registers from the shipped assemblies (a descriptor's implementation type, an instance's type, a factory's declared return type): no constructor of any has a parameter defaulting to null, and no type the container activates has a nullable reference parameter. It fails with either default put back.
+- The `nosource` case of `StartupValidationTests.IDN_LIFE_012a_ASocialProviderWithoutAUsableCredentialIsRefusedAsync` is removed: D-180 makes that start the refusal of LIB-HOST-001, which its own test now proves.
+- The mail server's secret keeps its later step, read only where the adapter is chosen, as D-176 gives it.
+- The encryption credential is made when the server's options are first read, after the ring is filled; the derived array is cleared once the credential has taken its copy. That the copy is zero when the making returns is shown indirectly: the credential holds the correctly derived key after the source bytes are cleared, and the clearing is a `finally` of `TokenProtection`.
+- `7b45d2b` wrote the ledger line under 336 as well as 121; section G lists 121 and not 336, so `1cb2827` takes the line under 336 off.
+
 **Criteria no test decides.**
 - D-166 319 (1), the signing algorithm: `token.signing.algorithm` admits only `ES256` at its reading, so `configure` refuses any other value before the check of `SigningKeys` is reached. The check stands in `CompleteAsync`; no value reaches its refusal. Verified by review.
 - D-170 item 1, the writers that take no reason (`CredentialAudit`, `OidcAudit.ReusedAsync`, `BotDefenceAudit`, `PhoneSignalAudit`, `SessionAudit.FailedAsync`): none writes a record a break-glass session can cause, since every credential action is refused in the session (OPS-BOOT-002 AC9) and the others are written where no session acts. Verified by review.
@@ -289,18 +301,18 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 
 | Item | Reason | Waits on |
 |---|---|---|
-| D-166 D.8 121 and 336 (the rest of the key ring of D-171) | Open question 18 | Question 18 |
-| `details.member` of an unreadable body member, named as API-CONV-002 criterion 4 now states (D-179) | Part of the section C sweep, X4 and X5 | Question 18 |
-| D-166 362, but for its point (5) | Not reached | Question 18 |
-| D-166 D.8, the paragraphs after 121 and 336: 317, 318, 341, 303 (and the audit's subject), 304 and 334 parts (1) and (2), 323, the audit action rows | Not reached: they follow 121 and 336 in the log's order | Question 18 |
-| D-166 section D.2, the entries after 114 (115, 129, 146, 152, 208, 328, 401, 402 and 422, 417, 419, 421, 326, and the preferred second step) | Not reached | Question 18 |
-| D-166 section C, rules X1 and X3 to X9 as sweeps (X2 is applied, under 116; X3 on the configuration routes, under 178) | Not reached | Question 18 |
-| D-166 sections D.1 to D.7 and D.9 to D.11 | Not reached | Question 18 |
-| D-166 section E, every item other than E.6 | Not reached | Question 18 |
-| D-166 section F, the rows of chapter 10 other than those applied under D.8 (the retired step-up and device verification codes, `model.startup.secretunavailable`, `config.change.reasonrequired`, the retired switches, `integration.mailserver.endpoint`, `breakglass-generated`) | Not reached. The three contract tests that failed at `aa7c5e9` now pass at `0dc0ae0` | Question 18 |
-| D-166 section G, the ledger lines of the entries not yet applied | Each goes in the commit that applies its entry | Question 18 |
-| Truth-table rows for D-166 entries 396 and 265 | They state the D-166 outcomes, so they belong with those fixes | Question 18 |
-| The full gate, the pull request for `corrections-4` | The run stopped before step 4 of the work order (section 5) | Question 18 |
+| CONV-CODE-007 criterion 4 with D-171, the signing credential: a credential a rotation replaces leaves the server's options when its overlap ends | Open question 20 | Question 20 |
+| `details.member` of an unreadable body member, named as API-CONV-002 criterion 4 now states (D-179) | Part of the section C sweep, X4 and X5 | Question 20 |
+| D-166 362, but for its point (5) | Not reached | Question 20 |
+| D-166 D.8, the paragraphs after 121 and 336: 317, 318, 341, 303 (and the audit's subject), 304 and 334 parts (1) and (2), 323, the audit action rows | Not reached: they follow the key ring in the log's order | Question 20 |
+| D-166 section D.2, the entries after 114 (115, 129, 146, 152, 208, 328, 401, 402 and 422, 417, 419, 421, 326, and the preferred second step) | Not reached | Question 20 |
+| D-166 section C, rules X1 and X3 to X9 as sweeps (X2 is applied, under 116; X3 on the configuration routes, under 178) | Not reached | Question 20 |
+| D-166 sections D.1 to D.7 and D.9 to D.11 | Not reached | Question 20 |
+| D-166 section E, every item other than E.6 | Not reached | Question 20 |
+| D-166 section F, the rows of chapter 10 other than those applied under D.8 (the retired step-up and device verification codes, `model.startup.secretunavailable`, `config.change.reasonrequired`, the retired switches, `integration.mailserver.endpoint`, `breakglass-generated`) | Not reached. The three contract tests that failed at `aa7c5e9` now pass at `0dc0ae0` | Question 20 |
+| D-166 section G, the ledger lines of the entries not yet applied | Each goes in the commit that applies its entry | Question 20 |
+| Truth-table rows for D-166 entries 396 and 265 | They state the D-166 outcomes, so they belong with those fixes | Question 20 |
+| The full gate, the pull request for `corrections-4` | The run stopped before step 4 of the work order (section 5) | Question 20 |
 
 ## 3. Resolved by rule
 
@@ -760,6 +772,7 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
      `10` row lists it.
   2. `ISecretSource`, the contract's own name. Smallest fix: the `10` row lists that.
 - The rest of 121 and 336 reads as settled; nothing of it is committed.
+- **Settled by D-180** (`secretSource`). Applied in `d129edc`.
 
 **19. Tier 2. CONV-DESIGN-007 and the gate of INT-MAIL-009 criterion 2: how an optional declaration reaches `KeyRingService` and `SendingValidation`.**
 
@@ -789,25 +802,52 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
   3. The factory form, with the two registrations in a file of their own that names one
      side, as `OidcRegistration` and `KeyRingRegistration` are. Smallest fix: the
      registrations, and the ordering test as in 2.
+- **Settled by D-180** (reading 3). Applied in `38933fe`.
+
+**20. Tier 3. CONV-CODE-007 criterion 4 and D-171 against AUTH-KEY-001: how a replaced signing credential leaves the server's options.**
+
+- **What the specification says.** CONV-CODE-007 and D-171 point 1: the only key
+  material outside the ring is the OIDC provider's credentials in its own server
+  options; a signing credential a rotation replaces stays for the overlap of AUTH-KEY-001
+  (`oidc.accesstoken.lifetime` plus 5 minutes) and leaves the options when the overlap
+  ends. D-162 items 58 and 59: the signing credentials come from the library's key store
+  through "a credential source the rotation job updates in process".
+- **What the code does.** `OidcRegistration` adds `SigningCredentialSource.Current` to
+  `OpenIddictServerOptions.SigningCredentials` once, when the options are first built,
+  and the options keep that credential for the life of the process. Each token is signed
+  with the credential `TokenSigning` reads from the source per request; validation and
+  the key set read the store. The source holds the replaced key until the next rotation,
+  not until the overlap ends. A rotation happens at the first read of the signing key
+  past the cadence (`SigningKeys`), not in a job, and the replaced key's end
+  (`RetiresAt`) is on the stored key and does not reach the source. The private key's
+  bytes are zero once each credential is made.
+- **What no chapter settles.** What makes the replaced credential leave when the overlap
+  ends (a later read of the key, the expiry sweep, or a timer, which nothing in the
+  library runs outside the worker); how the server's options are changed while requests
+  read them (the options are cached by the options system, `08` names only
+  `ValidateOnStart` for them, and a rebuild would also make the encryption credential
+  again, which D-171 says changes only at a restart); and when the replaced key object is
+  disposed while a signature begun with it may still run. Each touches the key
+  material's lifetime, so no proposal is made. Nothing of it is committed.
 
 ## 5. Gate result
 
-**`corrections-4`.** Not run. The run stopped at questions 18 and 19, before step 6 of the
-work order, so the full gate was not run and no pull request was opened. The branch is pushed so
+**`corrections-4`.** Not run. The run stopped at question 20, before step 4 of the work
+order, so the full gate was not run and no pull request was opened. The branch is pushed so
 its commits can be read.
-- At `de42f15`, the head of the code, in the repository's own checkout: build with
+- At `7b45d2b`, the head of the code, in the repository's own checkout: build with
   warnings as errors, format, and the unit and contract tests, Analyzers 20,
-  Authentication 832, Authorization 126, Cli 19, Conformance 2, Core 480, Hosting 759,
+  Authentication 832, Authorization 126, Cli 20, Conformance 2, Core 484, Hosting 763,
   Identity 89, Privacy 223, Storage 33, no failure; and the integration suites,
   `Janus.Storage.Tests` 425, `Janus.Cli.Tests` 66, `Janus.Conformance.Tests` 10,
-  `Janus.Hosting.Tests` 229, no failure. The migration applied twice and the pipeline's
-  own jobs were not run.
-- Secret scanning: the pinned scanner, run locally as the pipeline runs it, over the 867
-  commits of the history at `de42f15` before the push: no finding.
+  `Janus.Hosting.Tests` 233, no failure. The migration applied twice and the pipeline's
+  own jobs were not run. `1cb2827` changes the ledger only.
+- Secret scanning: the pinned scanner, run locally as the pipeline runs it, over the 873
+  commits of the history at `1cb2827` before the push: no finding.
 - Push runs on the reports of the earlier stops: 36558943751 on `40bd871`, 36566244433 on
   `927de12`, 36588064683 on `3e6b810`, 36597616186 on `f24e546`, 36610818396 on
   `870b325`, 36648263740 on `f0e149e`, 36651799340 on `87a6eb7`, 36658057913 on
-  `60f5917`, 36672744133 on `575e0f7` and 36680791826 on `9a0c482`, all green.
+  `60f5917`, 36672744133 on `575e0f7`, 36680791826 on `9a0c482` and 36702161811 on `c339c40`, all green.
 - Fast checks at `ced2208` (build with warnings as errors, format, the unit and contract
   tests), in a scratch checkout of that commit so the uncommitted 340 work took no part:
   Analyzers 20, Authentication 813, Authorization 126, Cli 19, Core 468, Hosting 723,
