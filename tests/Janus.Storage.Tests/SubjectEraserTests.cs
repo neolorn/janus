@@ -10,6 +10,8 @@ using Janus.Authentication.Factors;
 using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Sessions;
+using Janus.Authorization.Grants;
+using Janus.Authorization.Roles;
 using Janus.Core;
 using Janus.Identity.Accounts;
 using Janus.Identity.Audit;
@@ -23,6 +25,8 @@ using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Authentication.Sessions;
+using Janus.Storage.Authorization.Grants;
+using Janus.Storage.Authorization.Roles;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Audit;
 using Janus.Storage.Identity.Identifiers;
@@ -53,7 +57,8 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     private SubjectEraser Eraser(StoreContext context) => new(
         context,
         new SessionStore(context, _deployment.Ring, _deployment.Randomness),
-        new ConfigurationStore(context, new DataConnections(context)));
+        new ConfigurationStore(context, new DataConnections(context)),
+        new DataConnections(context));
 
     /// <summary>
     /// IDN-LIFE-003b AC4, PRIV-RIGHT-005a: the erasure commits as one thing. Afterwards
@@ -1311,6 +1316,102 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
                 new { subject = subject.Value, at = Noon }));
 
         Assert.Equal("23505", refusal.SqlState);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-014, IDN-PRIN-003 (D-166): the erasure revokes every grant the account
+    /// holds, by the nil subject at the erasure's instant and for the requirement, and
+    /// keeps every row; a grant already revoked keeps its own revocation, another
+    /// account's grant is untouched, and the account's counter goes up.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_014_TheAccountsGrantsReadRevokedAndEveryRowStandsAsync()
+    {
+        SubjectId subject = await DeletingAccountAsync();
+        SubjectId other = await _deployment.AccountAsync(Noon);
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        DateTimeOffset earlier = Noon.AddDays(-1);
+
+        GrantId live = await GrantedAsync(subject, organization, revokedAt: null);
+        GrantId revoked = await GrantedAsync(subject, organization, earlier);
+        GrantId others = await GrantedAsync(other, organization, revokedAt: null);
+        long before = await GrantVersionAsync(subject);
+
+        await EraseAsync(subject, ErasureReason.ErasureRequest);
+
+        await using StoreContext reading = database.Context();
+
+        GrantRecord erased = await reading.Grants
+            .SingleAsync(row => row.Id == live, TestContext.Current.CancellationToken);
+        GrantRecord kept = await reading.Grants
+            .SingleAsync(row => row.Id == revoked, TestContext.Current.CancellationToken);
+        GrantRecord untouched = await reading.Grants
+            .SingleAsync(row => row.Id == others, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            (Noon, new SubjectId(Guid.Empty), "IDN-LIFE-014"),
+            (erased.RevokedAt, erased.RevokedBy, erased.RevocationReason));
+        Assert.Equal(
+            (earlier, subject, "The reason the grant was revoked."),
+            (kept.RevokedAt, kept.RevokedBy, kept.RevocationReason));
+        Assert.Null(untouched.RevokedAt);
+        Assert.True(await GrantVersionAsync(subject) > before);
+    }
+
+    private async ValueTask<GrantId> GrantedAsync(
+        SubjectId holder,
+        OrganizationId organization,
+        DateTimeOffset? revokedAt)
+    {
+        var role = RoleName.Parse("editor");
+        var id = GrantId.New(TimeProvider.System);
+
+        await using StoreContext writing = database.Context();
+
+        if (!await writing.Roles.AnyAsync(row => row.Name == role, TestContext.Current.CancellationToken))
+        {
+            await new RoleStore(writing).CreateAsync(
+                Role.Of(role, [Permissions.GrantRead]),
+                TestContext.Current.CancellationToken);
+        }
+
+        Grant grant = Grant.Create(
+                id,
+                GrantSubject.Of(holder),
+                role,
+                organization,
+                on: null,
+                deny: false,
+                GrantKind.Stored,
+                expiresAt: null,
+                holder,
+                Noon.AddDays(-2),
+                "The reason the grant was written.")
+            .Match(
+                written => written,
+                error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+        if (revokedAt is DateTimeOffset at)
+        {
+            _ = grant.Revoke(holder, at, "The reason the grant was revoked.");
+        }
+
+        await using var work = new UnitOfWork(writing);
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+        await new GrantStore(writing, new DataConnections(writing))
+            .CreateAsync(grant, TestContext.Current.CancellationToken);
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+
+        return id;
+    }
+
+    private async ValueTask<long> GrantVersionAsync(SubjectId subject)
+    {
+        await using StoreContext reading = database.Context();
+
+        return await new GrantStore(reading, new DataConnections(reading))
+            .VersionAsync(subject, TestContext.Current.CancellationToken);
     }
 
     private static EmailAddress Parsed(string value)

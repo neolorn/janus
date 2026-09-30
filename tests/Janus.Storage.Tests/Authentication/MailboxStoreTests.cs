@@ -328,7 +328,8 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
             await new SubjectEraser(
                     erasing,
                     new SessionStore(erasing, _deployment.Ring, _deployment.Randomness),
-                    new ConfigurationStore(erasing, new DataConnections(erasing)))
+                    new ConfigurationStore(erasing, new DataConnections(erasing)),
+                    new DataConnections(erasing))
                 .EraseAsync(replaced.Holder!.Value, ErasureReason.ErasureRequest, Noon.AddDays(3), TestContext.Current.CancellationToken);
             await erasing.SaveChangesAsync(TestContext.Current.CancellationToken);
             await work.CommitAsync(TestContext.Current.CancellationToken);

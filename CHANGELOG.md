@@ -1739,7 +1739,9 @@ against the public contract of LIB-API-001.
   Every session the subject holds ends before the key their fields are under is
   destroyed, so no request survives on a session whose account is gone. The photo row
   stays where it is and its bytes stop being readable with everything else the key
-  covered. A transaction that does not commit leaves no row and erases nothing; there is
+  covered. Every grant the account holds is revoked in the same transaction, by the nil
+  subject at the erasure's instant with the reason `IDN-LIFE-014`, and every grant row
+  is kept. A transaction that does not commit leaves no row and erases nothing; there is
   no third state. Erasure progress is on that row and on no column of the account, and
   every outstanding erasure is read in one query.
 - The administrative organization is marked on its own row, set once when the deployment

@@ -546,7 +546,11 @@ public sealed class AccountStatesTests(DatabaseFixture database)
         new(new AccountStore(context), Sessions(context));
 
     private SubjectEraser Eraser(StoreContext context) =>
-        new(context, Sessions(context), new ConfigurationStore(context, new DataConnections(context)));
+        new(
+            context,
+            Sessions(context),
+            new ConfigurationStore(context, new DataConnections(context)),
+            new DataConnections(context));
 
     // The second transaction is waiting on the account row the first holds, as the
     // database itself reports it, so the case lets the first commit only then.
