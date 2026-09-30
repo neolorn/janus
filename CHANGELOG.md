@@ -758,6 +758,9 @@ against the public contract of LIB-API-001.
   events in its own transaction, so an event that cannot be written leaves the
   organization unerased, and its `identity.organization.erased` record is filed under
   the organization.
+- The organization erasure replaces every domain the organization listed with its
+  identifier, as it does the name, and marks each one still listed removed at the
+  erasure.
 - Startup verifies that the database carries the schema this build was compiled against,
   before any other check reads a table and before the host's web server starts. A
   database behind the model answers `model.startup.schemamismatch`, names every
