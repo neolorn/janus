@@ -26,6 +26,12 @@ internal sealed class MailboxStoreInMemory : IMailboxStore
     public HashSet<SubjectId> Standing { get; } = [];
 
     /// <summary>
+    /// The holders erased, whose mailboxes are no longer read, as the store leaves them
+    /// once their key is gone.
+    /// </summary>
+    public HashSet<SubjectId> Erased { get; } = [];
+
+    /// <summary>
     /// How many times a change was carried onto a row.
     /// </summary>
     public int Recorded { get; private set; }
@@ -35,12 +41,18 @@ internal sealed class MailboxStoreInMemory : IMailboxStore
     /// </summary>
     public List<Guid?> Keys { get; } = [];
 
+    // A mailbox whose holder was erased has nothing left that reads its address, and
+    // one whose removal the server confirmed is a mailbox no more.
+    private IEnumerable<Mailbox> Readable =>
+        Held
+            .Where(mailbox => mailbox.StandsForAddress || mailbox.Pushed is not MailboxState.Removed)
+            .Where(mailbox => mailbox.Holder is not SubjectId holder || !Erased.Contains(holder));
+
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<MailboxStanding>> AllAsync(CancellationToken cancellationToken) =>
         ValueTask.FromResult<IReadOnlyList<MailboxStanding>>(
         [
-            .. Held
-                .Where(mailbox => mailbox.ReleasedAt is null || mailbox.Pushed is not MailboxState.Removed)
+            .. Readable
                 .OrderBy(mailbox => mailbox.ReservedAt)
                 .Select(mailbox => new MailboxStanding(
                     mailbox,
@@ -49,22 +61,22 @@ internal sealed class MailboxStoreInMemory : IMailboxStore
 
     /// <inheritdoc/>
     public ValueTask<Mailbox?> FindAsync(EmailAddress address, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(Held.FirstOrDefault(mailbox => mailbox.Address == address));
+        ValueTask.FromResult(Readable.FirstOrDefault(mailbox => mailbox.Address == address && mailbox.StandsForAddress));
 
     /// <inheritdoc/>
     public ValueTask<Mailbox?> FindAsync(MailboxId id, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(Held.FirstOrDefault(mailbox => mailbox.Id == id));
+        ValueTask.FromResult(Readable.FirstOrDefault(mailbox => mailbox.Id == id));
 
     /// <inheritdoc/>
     public ValueTask<Mailbox?> HeldByAsync(SubjectId holder, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(Held.SingleOrDefault(mailbox => mailbox.IsHeld && mailbox.Holder == holder));
+        ValueTask.FromResult(Readable.SingleOrDefault(mailbox => mailbox.IsHeld && mailbox.Holder == holder));
 
     /// <inheritdoc/>
     public ValueTask AddAsync(Mailbox mailbox, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(mailbox);
 
-        if (Held.Any(held => held.Address == mailbox.Address))
+        if (Held.Any(held => held.Address == mailbox.Address && held.StandsForAddress))
         {
             throw new InvalidOperationException("The address already has a mailbox.");
         }

@@ -204,31 +204,35 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     /// <summary>
-    /// REG-MAIL-001: a mailbox is found by its address and by its identifier, whatever
-    /// state it is in.
+    /// REG-MAIL-001 and INT-MAIL-006 AC7, D-178: a mailbox is found by its address while
+    /// it stands for it and by its identifier whatever state it is in; a released one is
+    /// found by its identifier alone.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
     public async Task REG_MAIL_001_AMailboxIsFoundByItsAddressAsync()
     {
         var reserved = Mailbox.Reserved(Parsed("found@example.test"), Noon);
+        var released = Mailbox.Reserved(Parsed("given-up@example.test"), Noon);
 
-        reserved.Release(Noon.AddHours(1));
+        released.Release(Noon.AddHours(1));
 
         await using (StoreContext writing = database.Context())
         {
             await Mailboxes(writing).AddAsync(reserved, TestContext.Current.CancellationToken);
+            await Mailboxes(writing).AddAsync(released, TestContext.Current.CancellationToken);
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using StoreContext reading = database.Context();
 
         Mailbox? byAddress = await Mailboxes(reading).FindAsync(Parsed("found@example.test"), TestContext.Current.CancellationToken);
-        Mailbox? byId = await Mailboxes(reading).FindAsync(reserved.Id, TestContext.Current.CancellationToken);
+        Mailbox? byId = await Mailboxes(reading).FindAsync(released.Id, TestContext.Current.CancellationToken);
 
         Assert.Equal(reserved.Id, byAddress?.Id);
-        Assert.Equal(Noon.AddHours(1), byAddress?.ReleasedAt);
-        Assert.Equal("found@example.test", byId?.Address.Value);
+        Assert.Equal("given-up@example.test", byId?.Address.Value);
+        Assert.Equal(Noon.AddHours(1), byId?.RemovalOwedAt);
+        Assert.Null(await Mailboxes(reading).FindAsync(Parsed("given-up@example.test"), TestContext.Current.CancellationToken));
         Assert.Null(await Mailboxes(reading).FindAsync(Parsed("absent@example.test"), TestContext.Current.CancellationToken));
     }
 

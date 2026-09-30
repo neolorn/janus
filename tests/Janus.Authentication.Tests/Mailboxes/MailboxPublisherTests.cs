@@ -433,6 +433,136 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
     private MailboxPublisher Built(IMailServer? server) =>
         new(_mailboxes, new MailServerInUseInMemory(server), _configuration, _events, _work, _clock, _randomness);
 
+    /// <summary>
+    /// INT-MAIL-006 AC5, D-178: a mailbox replaced is owed <c>removed</c> though its
+    /// last holder still stands, and the removal is pushed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_006_AC5_AMailboxReplacedIsOwedRemovedWhateverItsHolderAsync()
+    {
+        (Mailbox replaced, _) = await ReplacedAsync();
+
+        Assert.Contains(_holder, _mailboxes.Standing);
+        Assert.Equal(MailboxState.Removed, replaced.Owed(stands: true));
+
+        _ = await PassAsync();
+
+        Assert.Equal(MailboxState.Removed, replaced.Pushed);
+        Assert.Contains(_server.Applied, push => push.Mailbox == replaced.Id && push.State == MailboxState.Removed);
+    }
+
+    /// <summary>
+    /// INT-MAIL-007 AC5, D-177: the new mailbox's push waits, neither attempted nor
+    /// counted, while the mailbox it replaced is owed a removal the server has not
+    /// confirmed, and is sent on the first pass after the confirmation.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_007_AC5_APushWaitsForTheRemovalAtItsAddressAsync()
+    {
+        (Mailbox replaced, Mailbox successor) = await ReplacedAsync();
+        int before = _server.Received.Count;
+
+        _server.Unreachable = true;
+        _ = await PassAsync();
+
+        Assert.Equal([replaced.Id], _server.Received.Skip(before).Select(push => push.Mailbox));
+        Assert.Equal(0, successor.Attempts);
+        Assert.False(successor.Attempted);
+
+        _server.Unreachable = false;
+        _clock.Advance(TimeSpan.FromHours(1));
+
+        Assert.Equal(1, await PassAsync());
+        Assert.Equal(MailboxState.Removed, replaced.Pushed);
+        Assert.DoesNotContain(_server.Received, push => push.Mailbox == successor.Id);
+
+        Assert.Equal(1, await PassAsync());
+        Assert.Equal(successor.Id, _server.Carried(Address));
+        Assert.False(_server.Hosts(Address));
+    }
+
+    /// <summary>
+    /// INT-MAIL-007 AC5, D-177: a removal never waits, so two mailboxes at one address
+    /// both owed <c>removed</c> are both sent in the one pass.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_007_AC5_TwoRemovalsAtOneAddressAreBothSentAsync()
+    {
+        var replaced = Mailbox.Existing(
+            MailboxId.Of(Noon.AddDays(-60)),
+            Parsed(Address),
+            Noon.AddDays(-60),
+            _holder,
+            retiredAt: Noon.AddDays(-30),
+            removalOwedAt: Noon.AddDays(-2),
+            MailboxState.Disabled,
+            pending: null,
+            pendingKey: null,
+            attempts: 0,
+            nextAttemptAt: null,
+            failedAt: null,
+            attempted: true);
+        var released = Mailbox.Existing(
+            MailboxId.Of(Noon.AddDays(-2)),
+            Parsed(Address),
+            Noon.AddDays(-2),
+            holder: null,
+            retiredAt: null,
+            removalOwedAt: Noon.AddDays(-1),
+            MailboxState.Disabled,
+            pending: null,
+            pendingKey: null,
+            attempts: 0,
+            nextAttemptAt: null,
+            failedAt: null,
+            attempted: true);
+
+        _mailboxes.Held.Add(replaced);
+        _mailboxes.Held.Add(released);
+        _server.Unreachable = true;
+
+        _ = await PassAsync();
+
+        Assert.Equal(
+            [(replaced.Id, MailboxState.Removed), (released.Id, MailboxState.Removed)],
+            _server.Received.Select(push => (push.Mailbox, push.State)));
+    }
+
+    /// <summary>
+    /// INT-MAIL-007 AC8 and REG-MAIL-003 AC7, D-178: where the replaced mailbox's last
+    /// holder is erased before its removal is confirmed, that push ends unsent; the new
+    /// mailbox's push is then sent and answered as a conflict while the old account
+    /// stands, and creates the new mailbox once the operator has erased that account.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_007_AC8_ARemovalOwedToAnErasedHolderEndsUnsentAsync()
+    {
+        (Mailbox replaced, Mailbox successor) = await ReplacedAsync();
+        int before = _server.Received.Count;
+
+        _ = _mailboxes.Erased.Add(_holder);
+        _ = await PassAsync();
+
+        MailboxPush sent = Assert.Single(_server.Received.Skip(before));
+        AlertRaised raised = Assert.Single(_events.Of<AlertRaised>());
+
+        Assert.Equal(successor.Id, sent.Mailbox);
+        Assert.Equal("degradation:mailbox.conflict:" + successor.Id, Alerts.Deduplication(raised.IdempotencyKey));
+        Assert.NotNull(successor.FailedAt);
+        Assert.Equal(replaced.Id, _server.Carried(Address));
+
+        _server.Set(Address, enabled: null);
+        _clock.Advance(TimeSpan.FromDays(1));
+
+        Assert.Equal(1, await PassAsync());
+        Assert.Equal(successor.Id, _server.Carried(Address));
+        Assert.DoesNotContain(_server.Received, push => push.Mailbox == replaced.Id && push.State == MailboxState.Removed);
+    }
+
     private async Task<int> PassAsync() =>
         (await Publisher.PublishAsync(TestContext.Current.CancellationToken))
             .Match(count => count, error => throw new InvalidOperationException(error.Code.ToString()));
@@ -458,6 +588,25 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
         _ = await PassAsync();
 
         return _mailboxes.Held.Single();
+    }
+
+    // A mailbox held, retired and replaced under replace, the server holding its
+    // account disabled, and the new reservation at its address, as an invitation
+    // naming replace leaves them.
+    private async Task<(Mailbox Replaced, Mailbox Successor)> ReplacedAsync()
+    {
+        Mailbox replaced = await HeldAsync();
+
+        replaced.Retire(_clock.GetUtcNow());
+        _ = await PassAsync();
+
+        var successor = Mailbox.Reserved(Parsed(Address), _clock.GetUtcNow());
+
+        replaced.Replace(_clock.GetUtcNow());
+        await _mailboxes.AddAsync(successor, TestContext.Current.CancellationToken);
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        return (replaced, successor);
     }
 
     private static EmailAddress Parsed(string value)

@@ -221,7 +221,7 @@ internal sealed class AppPasswords(
         }
 
         if (await mailboxes.HeldByAsync(subject, cancellationToken).ConfigureAwait(false)
-                is not { IsHeld: true, ReleasedAt: null }
+                is not { IsHeld: true, StandsForAddress: true }
             || await accounts.StateAsync(subject, cancellationToken).ConfigureAwait(false)
                 is not AccountState.Active)
         {

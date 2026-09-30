@@ -170,6 +170,38 @@ public sealed class MailboxReconciliationTests : IDisposable
     }
 
     /// <summary>
+    /// INT-MAIL-007 AC7, D-177 and D-178: after a <c>replace</c> the old mailbox and the
+    /// new one at the same address are each compared with the account carrying its own
+    /// identifier, so the old account standing is a difference for both, and once it is
+    /// gone and the new one is in its state owed there is none.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_007_AC7_AReplacedMailboxAndItsSuccessorAreComparedApartAsync()
+    {
+        Mailbox replaced = await HeldAsync(enabledOnServer: false);
+
+        replaced.Retire(Noon);
+
+        var successor = Mailbox.Reserved(Parsed(Address), Noon);
+
+        replaced.Replace(Noon);
+        await _mailboxes.AddAsync(successor, TestContext.Current.CancellationToken);
+
+        MailboxDrift standing = await ReconciledAsync();
+
+        Assert.Equal(2, standing.Mailboxes.Count);
+        Assert.Contains(replaced.Id, standing.Mailboxes);
+        Assert.Contains(successor.Id, standing.Mailboxes);
+        Assert.Equal(0, standing.Unknown);
+
+        _server.Set(Address, enabled: null);
+        _server.Set(Address, enabled: false, successor.Id);
+
+        Assert.True((await ReconciledAsync()).IsEmpty);
+    }
+
+    /// <summary>
     /// INT-MAIL-007 AC2: the server's address is compared in its canonical form, and one
     /// that does not read is no mailbox's address.
     /// </summary>

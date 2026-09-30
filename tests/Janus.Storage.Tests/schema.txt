@@ -555,7 +555,7 @@ table mailboxes
   column reserved_at timestamp with time zone not null
   column holder uuid
   column retired_at timestamp with time zone
-  column released_at timestamp with time zone
+  column removal_owed_at timestamp with time zone
   column pushed text
   column pending text
   column pending_key uuid
@@ -569,11 +569,11 @@ table mailboxes
   constraint ck_mailboxes_pending CHECK (((pending IS NULL) OR (pending = ANY (ARRAY['disabled'::text, 'enabled'::text, 'removed'::text]))))
   constraint ck_mailboxes_pending_key CHECK (((pending IS NULL) = (pending_key IS NULL)))
   constraint ck_mailboxes_pushed CHECK (((pushed IS NULL) OR (pushed = ANY (ARRAY['disabled'::text, 'enabled'::text, 'removed'::text]))))
-  constraint ck_mailboxes_released CHECK (((released_at IS NULL) OR ((holder IS NULL) AND (retired_at IS NULL))))
+  constraint ck_mailboxes_removal_owed CHECK (((removal_owed_at IS NULL) OR (holder IS NULL) OR (retired_at IS NOT NULL)))
   constraint fk_mailboxes_holder FOREIGN KEY (holder) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
   constraint pk_mailboxes PRIMARY KEY (id)
   index ix_mailboxes_holder using btree (holder)
-  index ux_mailboxes_fingerprint unique using btree (fingerprint) WHERE (fingerprint <> decode(repeat('00'::text, 32), 'hex'::text))
+  index ux_mailboxes_fingerprint unique using btree (fingerprint) WHERE ((fingerprint <> decode(repeat('00'::text, 32), 'hex'::text)) AND (removal_owed_at IS NULL))
 table maintenance_log
   column id uuid not null
   column task text not null

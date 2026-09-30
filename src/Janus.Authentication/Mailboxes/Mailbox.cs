@@ -9,17 +9,19 @@ namespace Janus.Authentication.Mailboxes;
 /// the state it is owed.
 /// </summary>
 /// <remarks>
-/// Implements INT-MAIL-006, INT-MAIL-006a, INT-MAIL-007 and REG-MAIL-003. One row per
-/// address, for good: a retired address reserved again for a later invitation is the
-/// same mailbox. The row is the retried outbox of its own pushes. The state it is owed
-/// is never stored: it follows from whether the reservation was given up, and from
-/// whether the holder is an active account with a current membership, so a suspension
-/// committed anywhere is what the next pass pushes, and the last state owed is the one
-/// the server ends in. Nothing here removes a mailbox anyone has held. A retired
-/// mailbox keeps its last holder until it is reserved again, so an erasure of that
-/// holder reaches the address it held. A push marked failed is begun again under the
-/// same key a day after it was last marked failed, for as long as its state is owed
-/// (D-177).
+/// Implements INT-MAIL-006, INT-MAIL-006a, INT-MAIL-007, REG-MAIL-001 and REG-MAIL-003.
+/// One row stands for an address at a time: a retired address reserved again for a
+/// later invitation under <c>transfer</c> is the same mailbox, while a mailbox replaced,
+/// or a reservation nobody took and whose invitation was revoked, is owed its removal
+/// from the instant its row records and no longer stands for its address, so a new one
+/// may (D-178). The row is the retried outbox of its own pushes. The state it is owed is
+/// never stored: it follows from that instant, and from whether the holder is an active
+/// account with a current membership, so a suspension committed anywhere is what the
+/// next pass pushes, and the last state owed is the one the server ends in. Nothing
+/// here removes a mailbox anyone has held but a replacement. A retired mailbox keeps its
+/// last holder until it is reserved again, so an erasure of that holder reaches the
+/// address it held. A push marked failed is begun again under the same key a day after
+/// it was last marked failed, for as long as its state is owed (D-177).
 /// </remarks>
 internal sealed class Mailbox
 {
@@ -62,15 +64,34 @@ internal sealed class Mailbox
     public DateTimeOffset? RetiredAt { get; private set; }
 
     /// <summary>
-    /// When the reservation was given up, where it was before anyone held it.
+    /// The instant from which the mailbox is owed its removal, where it was replaced or
+    /// its reservation released: from then it no longer stands for its address.
     /// </summary>
-    public DateTimeOffset? ReleasedAt { get; private set; }
+    public DateTimeOffset? RemovalOwedAt { get; private set; }
+
+    /// <summary>
+    /// Whether it is the mailbox that stands for its address: neither replaced nor
+    /// released.
+    /// </summary>
+    public bool StandsForAddress => RemovalOwedAt is null;
+
+    /// <summary>
+    /// Whether someone has held it and nobody holds it now, so the mail in it is a
+    /// former holder's and it passes to nobody without an administrator's choice.
+    /// </summary>
+    public bool WasHeld => RetiredAt is not null && StandsForAddress;
 
     /// <summary>
     /// Whether giving up its reservation removes it: nobody holds it and nobody ever
     /// has, so no mail anyone received is in it.
     /// </summary>
-    public bool IsRemovable => Holder is null && RetiredAt is null && ReleasedAt is null;
+    public bool IsRemovable => Holder is null && RetiredAt is null && StandsForAddress;
+
+    /// <summary>
+    /// Whether it is a reservation nobody ever took that was released, whose address
+    /// is forgotten once the server confirms its removal (PRIV-RIGHT-005a).
+    /// </summary>
+    public bool IsReleased => Holder is null && RetiredAt is null && !StandsForAddress;
 
     /// <summary>
     /// The state the server last confirmed, where it has confirmed one.
@@ -132,7 +153,7 @@ internal sealed class Mailbox
     /// <param name="reservedAt">When it was reserved.</param>
     /// <param name="holder">Whose it is or was, where anyone's.</param>
     /// <param name="retiredAt">When a holder's membership last ended, where one has.</param>
-    /// <param name="releasedAt">When the reservation was given up, where it was.</param>
+    /// <param name="removalOwedAt">The instant from which it is owed its removal, where it is.</param>
     /// <param name="pushed">The state last confirmed, where one was.</param>
     /// <param name="pending">The state being pushed, where one is.</param>
     /// <param name="pendingKey">What that push is recognised by.</param>
@@ -147,7 +168,7 @@ internal sealed class Mailbox
         DateTimeOffset reservedAt,
         SubjectId? holder,
         DateTimeOffset? retiredAt,
-        DateTimeOffset? releasedAt,
+        DateTimeOffset? removalOwedAt,
         MailboxState? pushed,
         MailboxState? pending,
         Guid? pendingKey,
@@ -159,7 +180,7 @@ internal sealed class Mailbox
         {
             Holder = holder,
             RetiredAt = retiredAt,
-            ReleasedAt = releasedAt,
+            RemovalOwedAt = removalOwedAt,
             Pushed = pushed,
             Pending = pending,
             PendingKey = pendingKey,
@@ -175,20 +196,20 @@ internal sealed class Mailbox
     public bool IsHeld => Holder is not null && RetiredAt is null;
 
     /// <summary>
-    /// Reserves the address again for a later invitation. A mailbox whose reservation
-    /// was given up is owed its creation again; a retired one stays disabled and is
-    /// no longer its last holder's.
+    /// Reserves the address again for a later invitation. A retired mailbox stays
+    /// disabled and is no longer its last holder's.
     /// </summary>
-    /// <exception cref="InvalidOperationException">An account holds it.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// An account holds it, or it no longer stands for its address.
+    /// </exception>
     public void Reserve()
     {
-        if (IsHeld)
+        if (IsHeld || !StandsForAddress)
         {
-            throw new InvalidOperationException("An account holds the mailbox.");
+            throw new InvalidOperationException("The mailbox is not one to reserve again.");
         }
 
         Holder = null;
-        ReleasedAt = null;
     }
 
     /// <summary>
@@ -201,7 +222,7 @@ internal sealed class Mailbox
     /// </exception>
     public void Hold(SubjectId holder)
     {
-        if (Holder is not null || ReleasedAt is not null)
+        if (Holder is not null || !StandsForAddress)
         {
             throw new InvalidOperationException("The mailbox is not reserved for anyone to take.");
         }
@@ -227,7 +248,8 @@ internal sealed class Mailbox
     }
 
     /// <summary>
-    /// Gives up a reservation nobody ever took, which removes the mailbox.
+    /// Gives up a reservation nobody ever took, which owes the mailbox its removal
+    /// (REG-MAIL-001, D-178).
     /// </summary>
     /// <param name="at">When.</param>
     /// <exception cref="InvalidOperationException">The mailbox is not removable.</exception>
@@ -238,7 +260,26 @@ internal sealed class Mailbox
             throw new InvalidOperationException("The mailbox is not a reservation to give up.");
         }
 
-        ReleasedAt = at;
+        RemovalOwedAt = at;
+    }
+
+    /// <summary>
+    /// Replaces a mailbox someone has held, under <c>replace</c>: it is owed its removal
+    /// whatever its holder's state, and a new mailbox stands for the address in its place
+    /// (REG-MAIL-003, D-178).
+    /// </summary>
+    /// <param name="at">When.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Nobody has held it, someone holds it now, or it was already replaced or released.
+    /// </exception>
+    public void Replace(DateTimeOffset at)
+    {
+        if (!WasHeld || IsHeld)
+        {
+            throw new InvalidOperationException("The mailbox is not a former holder's to replace.");
+        }
+
+        RemovalOwedAt = at;
     }
 
     /// <summary>
@@ -250,7 +291,7 @@ internal sealed class Mailbox
     /// </param>
     /// <returns>The state.</returns>
     public MailboxState Owed(bool stands) =>
-        ReleasedAt is not null ? MailboxState.Removed
+        RemovalOwedAt is not null ? MailboxState.Removed
         : IsHeld && stands ? MailboxState.Enabled
         : MailboxState.Disabled;
 

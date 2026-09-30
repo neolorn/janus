@@ -560,6 +560,14 @@ against the public contract of LIB-API-001.
   is the condition, that scope and the account or actor, so an alert under one scope
   never folds into one under another. The `raised_alerts` table gains `scope`, empty for
   every row written before this release.
+- A mailbox released with its revoked invitation, or replaced, is owed its removal from
+  the instant its row records and no longer stands for its address, so a new mailbox may
+  be reserved there; it keeps its fingerprint until its last holder is erased. A push
+  that creates or changes a mailbox waits, spending no attempt, while another mailbox at
+  its address is owed a removal the mail server has not confirmed; a removal never
+  waits. Once the mail server confirms the removal of a released reservation, its
+  address key is overwritten and its fingerprint neutralised, and the row remains. The
+  `mailboxes` column `released_at` is renamed `removal_owed_at`.
 - Where Continue with Apple is among the system policy's `loginFactors` and
   `notification.email.sendingdomain` is not in `notification.email.relayregistered`, the
   deployment raises `relay-domain-unregistered` with the domain as it starts and

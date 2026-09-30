@@ -461,7 +461,7 @@ public sealed class ModelTests
             "mailboxes.pending",
             "mailboxes.pending_key",
             "mailboxes.pushed",
-            "mailboxes.released_at",
+            "mailboxes.removal_owed_at",
             "mailboxes.reserved_at",
             "mailboxes.retired_at",
             "mailboxes.wrapped_key",

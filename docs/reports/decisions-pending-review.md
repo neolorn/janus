@@ -7934,6 +7934,8 @@ methods the adapter sends, and 07 LIB-HOST-001 the declaration (row below); the 
 phase 8 line could say "provisioning through the mail-server abstraction, the adapter
 in Milestone 2 step 5".
 
+**Superseded by D-166.**
+
 ---
 
 ## 216. Which organization's mail is integrated
@@ -8068,6 +8070,8 @@ are not the account's. A server that throws is a server that did not confirm.
 
 *Chapter text that should change.* INT-MAIL-007 could name the end of the budget; 10
 section 5.23 could give `degradation`'s details for a push.
+
+**Superseded by D-177.**
 
 ---
 

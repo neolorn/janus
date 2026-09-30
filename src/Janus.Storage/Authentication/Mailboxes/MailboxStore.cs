@@ -30,7 +30,12 @@ namespace Janus.Storage.Authentication.Mailboxes;
 /// is; while nobody holds the mailbox it is under a key of the row's own, wrapped under
 /// the deployment's data key. A row whose
 /// holder was erased is not read at all. An address is found under each version of the
-/// fingerprint key held (OPS-SEC-003).
+/// fingerprint key held (OPS-SEC-003), and only on the row that stands for it: a
+/// mailbox replaced or released keeps its fingerprint, so a push at its address can
+/// wait for its removal, but is found by its identifier alone (D-178). Once the server
+/// confirms the removal of a reservation nobody took, its key is overwritten and its
+/// fingerprint neutralised, and the row stays with nothing left of the address
+/// (PRIV-RIGHT-005a).
 /// </remarks>
 internal sealed class MailboxStore(
     StoreContext context,
@@ -56,7 +61,6 @@ internal sealed class MailboxStore(
     public async ValueTask<IReadOnlyList<MailboxStanding>> AllAsync(CancellationToken cancellationToken)
     {
         var rows = await Readable()
-            .Where(mailbox => mailbox.ReleasedAt == null || mailbox.Pushed != MailboxState.Removed)
             .OrderBy(mailbox => mailbox.ReservedAt)
             .Select(mailbox => new
             {
@@ -85,7 +89,9 @@ internal sealed class MailboxStore(
         foreach (byte[] fingerprint in Candidates(address))
         {
             MailboxRecord? record = await Readable()
-                .FirstOrDefaultAsync(mailbox => mailbox.Fingerprint == fingerprint, cancellationToken)
+                .FirstOrDefaultAsync(
+                    mailbox => mailbox.Fingerprint == fingerprint && mailbox.RemovalOwedAt == null,
+                    cancellationToken)
                 .ConfigureAwait(false);
 
             if (record is not null)
@@ -189,7 +195,7 @@ internal sealed class MailboxStore(
 
         record.Holder = mailbox.Holder;
         record.RetiredAt = mailbox.RetiredAt;
-        record.ReleasedAt = mailbox.ReleasedAt;
+        record.RemovalOwedAt = mailbox.RemovalOwedAt;
         record.Pushed = mailbox.Pushed;
         record.Pending = mailbox.Pending;
         record.PendingKey = mailbox.PendingKey;
@@ -197,6 +203,14 @@ internal sealed class MailboxStore(
         record.NextAttemptAt = mailbox.NextAttemptAt;
         record.FailedAt = mailbox.FailedAt;
         record.Attempted = mailbox.Attempted;
+
+        // PRIV-RIGHT-005a AC19, D-178: nothing about a person outlives an invitation that
+        // led nowhere, so the address of a released reservation goes with its removal.
+        if (mailbox is { IsReleased: true, Pushed: MailboxState.Removed, Pending: null })
+        {
+            record.WrappedKey = new byte[record.WrappedKey?.Length ?? 0];
+            record.Fingerprint = Janus.Storage.Fingerprint.Neutralised();
+        }
     }
 
     private async ValueTask<Mailbox> ReadAsync(MailboxRecord record, CancellationToken cancellationToken) =>
@@ -249,7 +263,7 @@ internal sealed class MailboxStore(
                 record.ReservedAt,
                 record.Holder,
                 record.RetiredAt,
-                record.ReleasedAt,
+                record.RemovalOwedAt,
                 record.Pushed,
                 record.Pending,
                 record.PendingKey,
@@ -274,9 +288,12 @@ internal sealed class MailboxStore(
         return PersonalFieldCipher.Unwrap(key.FormatMarker, key.KeyVersion, key.WrappedKey, keyEncryptionKeys);
     }
 
-    // A row whose holder was erased has nothing left that reads its address.
+    // A row whose holder was erased has nothing left that reads its address, and one
+    // whose removal the server confirmed is a mailbox no more; a released reservation's
+    // is forgotten then too.
     private IQueryable<MailboxRecord> Readable() =>
         context.Mailboxes
+            .Where(mailbox => mailbox.RemovalOwedAt == null || mailbox.Pushed != MailboxState.Removed)
             .Where(mailbox => mailbox.Holder == null
                 || context.SubjectKeys.Any(key =>
                     key.Id == EF.Property<SubjectKeyId?>(mailbox, nameof(MailboxRecord.Holder))

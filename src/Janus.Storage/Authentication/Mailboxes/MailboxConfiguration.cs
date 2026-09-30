@@ -40,9 +40,10 @@ internal sealed class MailboxConfiguration : IEntityTypeConfiguration<MailboxRec
             table.HasCheckConstraint(
                 "ck_mailboxes_pending_key",
                 "(pending IS NULL) = (pending_key IS NULL)");
+            // D-178: a mailbox someone holds now is neither replaced nor released.
             table.HasCheckConstraint(
-                "ck_mailboxes_released",
-                "released_at IS NULL OR (holder IS NULL AND retired_at IS NULL)");
+                "ck_mailboxes_removal_owed",
+                "removal_owed_at IS NULL OR holder IS NULL OR retired_at IS NOT NULL");
             table.HasCheckConstraint(
                 "ck_mailboxes_key",
                 "(holder IS NULL) = (wrapped_key IS NOT NULL)");
@@ -70,7 +71,7 @@ internal sealed class MailboxConfiguration : IEntityTypeConfiguration<MailboxRec
             .HasConversion(subject => subject!.Value.Value, value => new SubjectId(value));
 
         builder.Property(mailbox => mailbox.RetiredAt).HasColumnName("retired_at");
-        builder.Property(mailbox => mailbox.ReleasedAt).HasColumnName("released_at");
+        builder.Property(mailbox => mailbox.RemovalOwedAt).HasColumnName("removal_owed_at");
 
         builder.Property(mailbox => mailbox.Pushed)
             .HasColumnName("pushed")
@@ -87,11 +88,14 @@ internal sealed class MailboxConfiguration : IEntityTypeConfiguration<MailboxRec
         builder.Property(mailbox => mailbox.Attempted).HasColumnName("attempted");
 
         // PRIV-RIGHT-005c: a fingerprint erasure neutralised is nobody's address, and
-        // several may stand side by side.
+        // several may stand side by side. D-178: a mailbox replaced or released no
+        // longer stands for its address, so the one that took its place may.
         builder.HasIndex(mailbox => mailbox.Fingerprint)
             .HasDatabaseName("ux_mailboxes_fingerprint")
             .IsUnique()
-            .HasFilter("fingerprint <> decode(repeat('00', " + Janus.Storage.Fingerprint.Length + "), 'hex')");
+            .HasFilter(
+                "fingerprint <> decode(repeat('00', " + Janus.Storage.Fingerprint.Length + "), 'hex')"
+                + " AND removal_owed_at IS NULL");
 
         builder.HasIndex(mailbox => mailbox.Holder)
             .HasDatabaseName("ix_mailboxes_holder");

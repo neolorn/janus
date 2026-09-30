@@ -567,7 +567,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Null(retired.Holder);
         Accepted(await RevokeAsync(Staff, issued.Id));
 
-        Assert.Null(retired.ReleasedAt);
+        Assert.True(retired.StandsForAddress);
         Assert.Equal(MailboxState.Disabled, retired.Owed(stands: false));
     }
 

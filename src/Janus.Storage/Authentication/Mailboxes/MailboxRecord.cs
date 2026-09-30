@@ -63,9 +63,9 @@ internal sealed class MailboxRecord
     public DateTimeOffset? RetiredAt { get; set; }
 
     /// <summary>
-    /// The <c>released_at</c> column.
+    /// The <c>removal_owed_at</c> column.
     /// </summary>
-    public DateTimeOffset? ReleasedAt { get; set; }
+    public DateTimeOffset? RemovalOwedAt { get; set; }
 
     /// <summary>
     /// The <c>pushed</c> column.

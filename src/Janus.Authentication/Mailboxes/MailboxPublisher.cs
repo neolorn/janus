@@ -25,9 +25,11 @@ namespace Janus.Authentication.Mailboxes;
 /// <param name="randomness">Where the full jitter of each delay comes from.</param>
 /// <remarks>
 /// Implements INT-MAIL-001 AC4, INT-MAIL-006, INT-MAIL-006a AC1, INT-MAIL-007 AC1, AC3,
-/// AC6 and AC7, OPS-OBS-002 and D-177. A suspension or a membership end commits
+/// AC5 to AC8, OPS-OBS-002, D-177 and D-178. A suspension or a membership end commits
 /// wherever it happens, and the first pass after it pushes the disabled state. Each
-/// attempt is recorded, and committed, before it is made. A push that spends its budget,
+/// attempt is recorded, and committed, before it is made. A push that creates or
+/// changes a mailbox waits, spending nothing, while another mailbox at its address is
+/// owed a removal the server has not confirmed, as the one a <c>replace</c> left is. A push that spends its budget,
 /// or that the server answers with a conflict, is marked failed and raises
 /// <c>degradation</c>; it is begun again under its key a day later, for as long as its
 /// state is owed, and raises its alert again if that run fails too. What is resumed is
@@ -61,6 +63,7 @@ internal sealed class MailboxPublisher(
 
         Schedule? schedule = null;
         int confirmed = 0;
+        HashSet<string> removing = Removing(held);
 
         foreach (MailboxStanding standing in held)
         {
@@ -87,7 +90,11 @@ internal sealed class MailboxPublisher(
             Guid? outstanding = mailbox.PendingKey;
             MailboxPush? push = mailbox.Due(standing.Stands, now);
 
-            if (push is null)
+            // INT-MAIL-007 AC5, D-177: the account the old mailbox holds at the address
+            // would meet the new one's push, so that push waits for the removal; a
+            // removal never waits, so two at one address cannot hold each other.
+            if (push is null
+                || (push.State is not MailboxState.Removed && removing.Contains(mailbox.Address.Value)))
             {
                 // A change of the state owed is written down under its new key even
                 // when its first attempt is not yet due.
@@ -161,6 +168,25 @@ internal sealed class MailboxPublisher(
         }
 
         return Result.Success(confirmed);
+    }
+
+    // The canonical addresses at which a mailbox is owed a removal the server has not
+    // confirmed, as the pass reads them. A mailbox whose holder was erased is not read,
+    // so a push that waited for it waits no longer (D-178).
+    private static HashSet<string> Removing(IReadOnlyList<MailboxStanding> held)
+    {
+        var removing = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (MailboxStanding standing in held)
+        {
+            if (standing.Mailbox.Owed(standing.Stands) is MailboxState.Removed
+                && standing.Mailbox.Pushed is not MailboxState.Removed)
+            {
+                _ = removing.Add(standing.Mailbox.Address.Value);
+            }
+        }
+
+        return removing;
     }
 
     // A server that throws is a server that did not confirm. Letting the fault out

@@ -7,7 +7,11 @@ using Dapper;
 using Janus.Authentication.Mailboxes;
 using Janus.Core;
 using Janus.Storage.Authentication.Mailboxes;
+using Janus.Storage.Authentication.Sessions;
+using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Organizations;
+using Janus.Storage.Privacy.Erasures;
+using Janus.Storage.Settings;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -180,8 +184,8 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
-    /// INT-MAIL-006 and REG-MAIL-003: an address is one mailbox for good, which the
-    /// unique index holds whatever the service does.
+    /// INT-MAIL-006 and REG-MAIL-003: one mailbox stands for an address at a time, which
+    /// the unique index holds whatever the service does.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -268,6 +272,156 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
             SELECT column_default FROM information_schema.columns
             WHERE table_schema = 'identity' AND table_name = 'mailboxes' AND column_name = 'attempted'
             """));
+    }
+
+    /// <summary>
+    /// INT-MAIL-006 AC7 and REG-MAIL-003 AC7, D-178: under <c>replace</c> the old row
+    /// records the instant, is owed <c>removed</c> whatever its holder's state and keeps
+    /// its fingerprint, and the address finds the new row, which the unique index admits
+    /// beside it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_MAIL_006_AC7_AReplacedMailboxStandsAsideForItsSuccessorAsync()
+    {
+        (Mailbox replaced, Mailbox successor, byte[] kept) = await ReplacedAsync("replaced@example.test");
+
+        await using StoreContext reading = database.Context();
+
+        Mailbox? found = await Store(reading).FindAsync(Parsed("replaced@example.test"), TestContext.Current.CancellationToken);
+        Mailbox old = (await Store(reading).FindAsync(replaced.Id, TestContext.Current.CancellationToken))!;
+
+        Assert.Equal(successor.Id, found?.Id);
+        Assert.Equal(Noon.AddDays(2), old.RemovalOwedAt);
+        Assert.Equal(MailboxState.Removed, old.Owed(stands: true));
+        Assert.Equal(kept, await FingerprintAsync(replaced.Id));
+        Assert.Equal(
+            [replaced.Id, successor.Id],
+            (await Store(reading).AllAsync(TestContext.Current.CancellationToken)).Select(standing => standing.Mailbox.Id));
+    }
+
+    /// <summary>
+    /// REG-MAIL-003 AC7 and INT-MAIL-007 AC8, D-178: erasing the replaced mailbox's last
+    /// holder before its removal is confirmed neutralises its fingerprint, so it is read
+    /// no more and its push ends unsent, while the new mailbox still stands for the
+    /// address.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_MAIL_003_AC7_ErasingTheReplacedHolderEndsItsRemovalUnsentAsync()
+    {
+        (Mailbox replaced, Mailbox successor, _) = await ReplacedAsync("erased-holder@example.test");
+
+        await ChangedAsync(context => context.Accounts
+            .Where(account => account.Subject == replaced.Holder)
+            .ExecuteUpdateAsync(
+                account => account
+                    .SetProperty(row => row.State, AccountState.Deleting)
+                    .SetProperty(row => row.DeletingBy, DeletionOrigin.Self)
+                    .SetProperty(row => row.DeletingSince, Noon),
+                TestContext.Current.CancellationToken));
+
+        await using (StoreContext erasing = database.Context())
+        await using (var work = new UnitOfWork(erasing))
+        {
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            await new SubjectEraser(
+                    erasing,
+                    new SessionStore(erasing, _deployment.Keys, _deployment.Randomness),
+                    new ConfigurationStore(erasing, new DataConnections(erasing)))
+                .EraseAsync(replaced.Holder!.Value, ErasureReason.ErasureRequest, Noon.AddDays(3), TestContext.Current.CancellationToken);
+            await erasing.SaveChangesAsync(TestContext.Current.CancellationToken);
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        Assert.True(Janus.Storage.Fingerprint.IsNeutralised(await FingerprintAsync(replaced.Id)));
+        Assert.Null(await Store(reading).FindAsync(replaced.Id, TestContext.Current.CancellationToken));
+        Assert.Equal(
+            [successor.Id],
+            (await Store(reading).AllAsync(TestContext.Current.CancellationToken)).Select(standing => standing.Mailbox.Id));
+        Assert.Equal(
+            successor.Id,
+            (await Store(reading).FindAsync(Parsed("erased-holder@example.test"), TestContext.Current.CancellationToken))?.Id);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-005a AC19, D-178: a reservation nobody held, released with its
+    /// invitation, holds no readable address and no live fingerprint once the server has
+    /// confirmed its removal, and its row remains.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_AC19_AReleasedMailboxForgetsItsAddressOnceRemovedAsync()
+    {
+        var released = Mailbox.Reserved(Parsed("forgotten@example.test"), Noon);
+
+        await WrittenAsync(store => store.AddAsync(released, TestContext.Current.CancellationToken));
+
+        _ = released.Due(stands: false, Noon);
+        released.Attempting();
+        released.Confirmed();
+        released.Release(Noon.AddHours(1));
+        _ = released.Due(stands: false, Noon.AddHours(1));
+        released.Attempting();
+
+        await WrittenAsync(store => store.RecordAsync(released, TestContext.Current.CancellationToken));
+
+        byte[] live = await FingerprintAsync(released.Id);
+
+        Assert.False(Janus.Storage.Fingerprint.IsNeutralised(live));
+
+        released.Confirmed();
+        await WrittenAsync(store => store.RecordAsync(released, TestContext.Current.CancellationToken));
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        (byte[] Fingerprint, byte[] WrappedKey) row = await connection.QuerySingleAsync<(byte[], byte[])>(
+            "SELECT fingerprint, wrapped_key FROM identity.mailboxes WHERE id = @id",
+            new { id = released.Id.Value });
+
+        Assert.True(Janus.Storage.Fingerprint.IsNeutralised(row.Fingerprint));
+        Assert.NotEmpty(row.WrappedKey);
+        Assert.All(row.WrappedKey, value => Assert.Equal(0, value));
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Null(await Store(reading).FindAsync(released.Id, TestContext.Current.CancellationToken));
+        Assert.Empty(await Store(reading).AllAsync(TestContext.Current.CancellationToken));
+    }
+
+    // A mailbox held and retired, then replaced by a new reservation at its address, as
+    // an invitation naming replace leaves them, and the old row's fingerprint beforehand.
+    private async Task<(Mailbox Replaced, Mailbox Successor, byte[] Kept)> ReplacedAsync(string address)
+    {
+        SubjectId holder = await _deployment.AccountAsync(Noon);
+        var replaced = Mailbox.Reserved(Parsed(address), Noon);
+
+        replaced.Hold(holder);
+        replaced.Retire(Noon.AddDays(1));
+        await WrittenAsync(store => store.AddAsync(replaced, TestContext.Current.CancellationToken));
+
+        byte[] kept = await FingerprintAsync(replaced.Id);
+        var successor = Mailbox.Reserved(Parsed(address), Noon.AddDays(2));
+
+        replaced.Replace(Noon.AddDays(2));
+        await WrittenAsync(async store =>
+        {
+            await store.RecordAsync(replaced, TestContext.Current.CancellationToken);
+            await store.AddAsync(successor, TestContext.Current.CancellationToken);
+        });
+
+        return (replaced, successor, kept);
+    }
+
+    private async Task<byte[]> FingerprintAsync(MailboxId mailbox)
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        return await connection.QuerySingleAsync<byte[]>(
+            "SELECT fingerprint FROM identity.mailboxes WHERE id = @id",
+            new { id = mailbox.Value });
     }
 
     private static async Task MigrateAsync(string connectionString, string target)
