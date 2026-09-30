@@ -441,9 +441,15 @@ identifier or value exists (CONV-DESIGN-004) binds to that type at the edge thro
 **CONV-DESIGN-007** — Dependency injection SHALL use the built-in container only. Each
 project exposes exactly one `internal static` registration method
 (`AddIdentityArea(this IServiceCollection)`), called from the single public `AddJanus`
-entry point in `Janus.Hosting`. Lifetimes: services and ports scoped; stateless helpers
-singleton; the key ring of CONV-CODE-007 and the mail server in use (below) singleton;
-nothing transient without a recorded reason. Options SHALL be bound through
+entry point in `Janus.Hosting`; it MAY call registration code kept in other files of the
+project, each file naming one concern only. Lifetimes: services and ports scoped;
+stateless helpers singleton; the key ring of CONV-CODE-007 and the mail server in use
+(below) singleton; nothing transient without a recorded reason. A host declaration that
+can be absent and that the host registers as a service (an optional one of LIB-HOST-001,
+or one it requires only where a feature or a shipped default does not stand in for it, a
+transport among them) SHALL reach the type that uses it through a factory registration
+that asks the container for it (`GetService<T>()`), never through a constructor
+parameter whose default stands for its absence. Options SHALL be bound through
 `IOptions<T>` with `ValidateOnStart`; the runtime-changeable keys of `10` section 4 are
 read through the configuration store abstraction, never through `IOptions`. A stored
 value that does not read under its key is a fault: the read throws, and no read falls
@@ -479,7 +485,7 @@ secret where the adapter is chosen. A key is lent from the ring once the step th
 it is done, and a read of a key before that is the fault of CONV-CODE-007. A change of
 the key by `configure` (OPS-CFG-004) takes effect at the next start.
 
-*Source: OPS-CFG-001, OPS-CFG-008, D-149, D-166, D-171, D-176*
+*Source: OPS-CFG-001, OPS-CFG-008, D-149, D-166, D-171, D-176, D-180*
 
 **Acceptance criteria**
 1. A host calls one method to register the library.
@@ -494,6 +500,9 @@ the key by `configure` (OPS-CFG-004) takes effect at the next start.
    that secret is not read; with the key empty there is none and nothing is pushed; a
    change of the key after the start changes nothing until the next start; a read before
    the start filled it is a fault.
+6. No constructor of a type the library registers in the container has a parameter whose
+   default value stands for an absent declaration, and the type that uses such a
+   declaration is registered by a factory that asks the container for it.
 
 ---
 
@@ -844,11 +853,11 @@ handled meaningfully or rethrown. Empty catch blocks SHALL NOT exist.
 **CONV-TEST-001** — One test project per source project, mirroring its layout. A test
 project MAY reference another test project to use its fakes and helpers, and MAY
 reference a shipped project other than its own where a criterion reads it. A test that
-reads every shipped assembly (LIB-API-002 AC1, CONV-DESIGN-006 AC1) SHALL live in
-`Janus.Hosting.Tests`, which references every shipped project. The consumer sample of
-LIB-API-002 AC2 SHALL live in `Janus.Conformance.Tests`.
+reads every shipped assembly (LIB-API-002 AC1, CONV-DESIGN-002 AC1, CONV-DESIGN-006 AC1,
+CONV-DESIGN-007 AC6) SHALL live in `Janus.Hosting.Tests`, which references every shipped
+project. The consumer sample of LIB-API-002 AC2 SHALL live in `Janus.Conformance.Tests`.
 
-*Source: D-156, D-166*
+*Source: D-156, D-166, D-180*
 
 **Acceptance criteria**
 1. A test's location identifies what it covers without reading it.

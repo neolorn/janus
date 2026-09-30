@@ -12470,6 +12470,68 @@ criterion 3); `10` the `identity.mailbox.notfound`, `api.request.malformed` and
 
 ---
 
+## D-180 — Corrections-4 questions 18 and 19: how an absent secret source is named, and one way to reach an optional declaration
+
+**Date:** 2026-09-30 · **Status:** accepted · **Extends:** D-171 (the key ring's start), D-176 (CONV-DESIGN-007)
+
+**TL;DR.** A start without a secret source is refused with
+`model.startup.declarationmissing`, `details.key` `secretSource`, spelled as every other
+declaration is. And an optional host declaration reaches the service that uses it one way
+only: through a factory registration that asks the container for it. The two services
+that took one as a constructor parameter defaulting to null move to that form, in
+registration files that each name one side of INT-MAIL-009, and the start-order test
+reads a factory-registered service by the type it answers.
+
+**Question 18 (Tier 2).** Once every key comes only from the secret source (D-166 121 and
+336), a start without one must be refused, and the `10` row of
+`model.startup.declarationmissing` lists every declaration's `details.key` spelling but
+the secret source's. **Decision: `secretSource`**, the declaration's name in lower camel
+case, as `imageCodec`, `dnsResolver`, `mailTransport` and `smsTransport` are.
+*Rejected:* `ISecretSource` (a type name where every other spelling names the
+declaration).
+
+**Question 19 (Tier 2).** Every optional host declaration reaches its service through a
+factory registration that calls `GetService<T>()`, except in `KeyRingService` and
+`SendingValidation`, which take it as a constructor parameter defaulting to null. That
+is a second way of doing one thing (the working guide section 4). The factory form
+failed on the branch in two places: `SendingValidation`'s factory would name
+`IMailTransport` in `HostingRegistration.cs`, which already names the mail server's
+side, so the INT-MAIL-009 criterion 2 test (no file names both sides) fails; and the
+start-order test reads each hosted service's type from its registration's implementation
+type, which a factory registration does not carry.
+
+**Decision: reading 3.** The factory form everywhere. The transport-side registration,
+`SendingValidation`'s among it, moves to a registration file of its own that names only
+that side, as the provider's and the key ring's registrations already have files of their
+own, and the key ring service's factory joins the key ring's file; the project's one
+registration method (CONV-DESIGN-007) calls them. The start-order test reads a
+factory-registered hosted service by the type it answers, by resolving the hosted
+services in registration order, so it tests the order the application actually starts
+in. The INT-MAIL-009 test stays as it is: the mail server's side includes every type
+named for it, `IMailServerInUse` among them. CONV-DESIGN-007 now states the rule for every
+host declaration that can be absent and that the host registers as a service (an optional
+one, or one required only where a feature or a shipped default does not stand in for it,
+the transports among them), says the one registration method may call registration code
+kept in other files that each name one concern, and has the rule tested by its criterion
+6: no constructor of a type the library registers in the container has a parameter whose
+default stands for an absent declaration. *Rejected:* reading 1 (records a second way
+instead of removing it); reading 2 (loosens the INT-MAIL-009 test to whole words, so a
+file could again name `IMailServerInUse` beside a transport).
+
+- Tests carrying LIB-HOST-001 criterion 2 prove a start without a secret source is refused
+  with `details.key` `secretSource`; a test carrying CONV-DESIGN-007 criterion 6 proves by
+  reflection over the source assemblies that no service constructor has such a parameter;
+  the start-order and INT-MAIL-009 criterion 2 tests pass with the two services
+  factory-registered.
+
+**Propagated to:** `07` LIB-HOST-001 (the Secret source row); `10` the
+`model.startup.declarationmissing` row; `06` OPS-SEC-001 and `02` AUTH-KEY-002 (a start
+with no secret source is not `model.startup.secretunavailable`, their criterion 2); `08`
+CONV-DESIGN-007 (the rule, the registration files and criterion 6) and CONV-TEST-001 (where
+the reflection test lives).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -12659,6 +12721,7 @@ criterion 3); `10` the `identity.mailbox.notfound`, `api.request.malformed` and
 | Corrections-4 question 14: what a mailbox push carries, how a refusal to adopt is answered, and the order under `replace` | D-177 |
 | Corrections-4 questions 15 and 16: an erased holder's address, and how a replaced mailbox stands beside its successor | D-178 |
 | Corrections-4 question 17: an app password asked for from the break-glass session | D-179 |
+| Corrections-4 questions 18 and 19: how an absent secret source is named, and one way to reach an optional declaration | D-180 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

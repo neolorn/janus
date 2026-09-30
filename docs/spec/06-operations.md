@@ -1225,7 +1225,9 @@ social provider's credential by provider name. No secret is an argument of `AddJ
 A secret the source cannot supply stops startup with `model.startup.secretunavailable`,
 `details.key` naming it (`keyEncryptionKeys`, `fingerprintKeys`,
 `maintenanceCredential`, `mailServerSecret`, `socialProvider.<provider>`, or `input`
-for a command's document).
+for a command's document). A start with no secret source declared is not this refusal:
+it fails with `model.startup.declarationmissing`, `details.key` `secretSource`
+(LIB-HOST-001).
 
 A `Janus.Cli` command SHALL read its database connection and every key version it needs
 from one JSON document on standard input, the same document the secret source serves,
@@ -1234,14 +1236,16 @@ argument, a file or an environment variable, and SHALL clear every key when it e
 command the executable does not carry is refused with one JSON line
 `api.request.malformed` naming it on standard error, and exit code 1.
 
-*Source: D-026.3, D-069, D-103, D-105, D-166*
+*Source: D-026.3, D-069, D-103, D-105, D-166, D-180*
 
 **Acceptance criteria**
 1. No secret value appears in any repository file or image layer.
 2. Startup fails with `model.startup.secretunavailable`, `details.key` naming the
-   secret, where a secret the deployment needs cannot be read, or where any version of
-   the fingerprint key is shorter than 32 bytes; the server serves no request before
-   every secret is read.
+   secret, where a secret the deployment needs cannot be read from the declared secret
+   source, or where any version of the fingerprint key is shorter than 32 bytes; startup
+   with no secret source declared fails with `model.startup.declarationmissing`,
+   `details.key` `secretSource` (LIB-HOST-001); the server serves no request before every
+   secret is read.
 3. No secret other than the two bootstrap values is present on the host outside the
    secrets manager.
 4. A command whose standard input is a terminal, or whose document holds no usable

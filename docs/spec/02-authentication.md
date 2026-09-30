@@ -2541,8 +2541,10 @@ command reads the same values from one JSON document on standard input (OPS-SEC-
 secret that cannot be read stops startup with `model.startup.secretunavailable`,
 `details.key` naming the secret: `keyEncryptionKeys`, `fingerprintKeys`,
 `maintenanceCredential`, `mailServerSecret` or `socialProvider.<provider>`, and `input`
-where a `Janus.Cli` command cannot read its document. Every version of the fingerprint
-key SHALL be at least 32 bytes; a shorter one SHALL be refused, never padded.
+where a `Janus.Cli` command cannot read its document. A start with no secret source
+declared is not this refusal: it fails with `model.startup.declarationmissing`,
+`details.key` `secretSource` (LIB-HOST-001). Every version of the fingerprint key SHALL
+be at least 32 bytes; a shorter one SHALL be refused, never padded.
 
 The key the provider encrypts its authorization codes and refresh tokens under SHALL be
 derived from each held version of the key-encryption key by HKDF-SHA256 with the info
@@ -2550,14 +2552,16 @@ string `identity:oidc:token-protection:v1`, the current version encrypting; no k
 its own SHALL be created or stored. A code or refresh token encrypted under a version
 that has been retired (OPS-SEC-003) is refused.
 
-*Source: D-026.3, D-105, D-166, D-176*
+*Source: D-026.3, D-105, D-166, D-176, D-180*
 
 **Acceptance criteria**
 1. No secret value appears in any configuration file in the repository.
 2. Startup fails with `model.startup.secretunavailable`, `details.key` naming the
-   secret, where a secret the deployment needs cannot be read, or where any version of
-   the fingerprint key is shorter than 32 bytes; the server serves no request before
-   every secret is read.
+   secret, where a secret the deployment needs cannot be read from the declared secret
+   source, or where any version of the fingerprint key is shorter than 32 bytes; startup
+   with no secret source declared fails with `model.startup.declarationmissing`,
+   `details.key` `secretSource` (LIB-HOST-001); the server serves no request before every
+   secret is read.
 3. A refresh token issued before a rotation of the key-encryption key is honoured
    across restarts until the version it was encrypted under is retired.
 4. No secret is taken as an argument of `AddJanus`, and no value that belongs to no
