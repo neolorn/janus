@@ -209,6 +209,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `integration.callback.rejected` **(new)** | A callback refused. 429 with `Retry-After`, the error carrying `details.retryAt`, where `integration.callback.ratelimit` refused it; 422 with no `Retry-After` for every other cause: signature, window, event identifier, source range, reference, confirmation, an unreadable or unheld delivery report, a provider event its keys do not verify. The Google security-event route answers a Security Event Token that fails validation as RFC 8935 section 2.3 does (400 with `err` and `description`), not with this code | INT-GEN-003, BFF-MACH-002, BFF-MACH-003, IDN-LIFE-012a, D-166 |
 | `integration.callback.inprogress` | A delivery of an event whose earlier delivery is still being carried: its claim is unsettled and younger than `integration.callback.claimtimeout`. Not recorded as a rejection and not counted toward `alerting.callback.threshold`; 409 | BFF-MACH-002 AC3, D-166 |
 | `integration.endpoint.insecure` **(new)** | Startup, or a change by `configure` (OPS-CFG-004): a key naming an endpoint the library calls (`integration.mail.endpoint`, `integration.sms.endpoint`, `integration.mailserver.endpoint`, `password.blocklist.selfhosted.address`) holds a value that is not an absolute `https` address; `details.key` names the key | INT-GEN-001, INF-TLS-004, D-162, D-166 |
+| `integration.mailserver.conflict` **(new)** | A mail server's answer to a mailbox push, never a route's: the server holds an account at the mailbox's name that does not carry the mailbox's identifier, so the push adopts nothing and changes nothing there. The push is marked failed at that attempt and raises `degradation` scoped `mailbox.conflict:<mailbox id>` | INT-MAIL-001, INT-MAIL-007, LIB-HOST-001, REG-MAIL-003, D-177 |
 | `integration.sms.windowactive` | *Retired by D-146. See `auth.restriction.exceeded` (AUTH-ABUSE-004).* | |
 | `integration.sms.balancefloor` **(new)** | Gateway balance below the configured floor; 422 | INT-SMS-004, D-166 |
 
@@ -892,8 +893,9 @@ Recorded by the age screen when `registration.adultaffirmation` = `off`: `minor`
 
 ### 5.23 Alert conditions
 
-One identifier per OPS-ALERT-001 row, carried by `AlertRaised` and used as the
-deduplication key of OPS-ALERT-002: `auth-failures-sustained` · `recovery-clustering`
+One identifier per OPS-ALERT-001 row, carried by `AlertRaised` and the first part of
+the deduplication key of OPS-ALERT-002, which adds the scope (below) and the account or
+actor: `auth-failures-sustained` · `recovery-clustering`
 · `approver-volume` · `read-volume-anomaly` · `breakglass-used` ·
 `breakglass-generated` · `protected-setting-changed` · `alert-destination-changed` ·
 `stepup-policy-weakened` · `concurrent-sessions-implausible` · `denial-spike` ·
@@ -915,7 +917,8 @@ thing. The scopes the chapters name:
 
 | Condition | Scope | Raised when | Source |
 |---|---|---|---|
-| `degradation` | `mailbox.push:<mailbox id>` | A mailbox push spent `outbox.retry.maxattempts`; details `{ mailbox, state, attempts }`, the mailbox named by its identifier and never by its address | INT-MAIL-007 |
+| `degradation` | `mailbox.push:<mailbox id>` | A mailbox push spent `outbox.retry.maxattempts`; details `{ mailbox, state, attempts }`, the mailbox named by its identifier and never by its address; raised again each time the push, begun again, spends them | INT-MAIL-007, D-177 |
+| `degradation` | `mailbox.conflict:<mailbox id>` | A mailbox push met, at the mailbox's name, a server account that does not carry the mailbox's identifier (`integration.mailserver.conflict`); details `{ mailbox, state }`, the mailbox named by its identifier and never by its address; raised again each day the push, begun again, meets it | INT-MAIL-001, INT-MAIL-007, D-177 |
 | `degradation` | `mailbox.reconciliation` | Reconciliation found a difference, details `{ mailboxes, unknown }`, or could not have the listing, `{ listed: false }` | INT-MAIL-007 |
 | `degradation` | `send:<channel>` | A message spent `outbox.retry.maxattempts` (section 4.6) and was removed | AUTH-ABUSE-004, D-162 |
 | `degradation` | `password.blocklist.fallback` | Screening fell back to the offline list; `details.configured` and `details.used` (`offline`) | OPS-OBS-002, AUTH-PASS-004 |
@@ -925,12 +928,14 @@ thing. The scopes the chapters name:
 | `expiry-approaching` | `kek-cryptoperiod` | The key-encryption key's cryptoperiod ends within `maintenance.expiry.warninglead`; `details.version`, `details.rotatedAt`, `details.dueAt` | DR-009a |
 
 A lost registration channel raises `degradation` with `details.component`
-`registration-channel` (OPS-OBS-002, REG-SESS-003). A mail-server account the adapter
-will not adopt raises `degradation` at once, naming the mailbox by its identifier
-(INT-MAIL-001, REG-MAIL-003); a drift the drift check finds raises it naming the
-derivation (AUTHZ-DERIVE-005); a stale or absent location file raises it (INT-GEN-006).
+`registration-channel` (OPS-OBS-002, REG-SESS-003). A push the adapter will not apply to
+a mail-server account it did not create is answered `integration.mailserver.conflict`
+and raises `degradation` at once under `mailbox.conflict:<mailbox id>`, naming the
+mailbox by its identifier (INT-MAIL-001, INT-MAIL-007, REG-MAIL-003); a drift the drift
+check finds raises it naming the derivation (AUTHZ-DERIVE-005); a stale or absent
+location file raises it (INT-GEN-006).
 
-*Source: OPS-ALERT-001, OPS-ALERT-002, OPS-OBS-002, D-153, D-166*
+*Source: OPS-ALERT-001, OPS-ALERT-002, OPS-OBS-002, D-153, D-166, D-177*
 
 ### 5.24 Audit actions
 
@@ -1317,9 +1322,12 @@ about who the invitee is. Either value is stepped up with the issue, carries the
 and is recorded. No mailbox anyone has held passes to a holder without it, and the
 library removes such a mailbox only under `replace`. The mail-server adapter adopts an
 existing server account only where its description carries the library's mailbox
-identifier; a refusal to adopt raises `degradation` at once (section 5.23).
+identifier; a refusal to adopt is answered `integration.mailserver.conflict`, and the
+push that met the account is marked failed at once and raises `degradation` scoped
+`mailbox.conflict:<mailbox id>` (section 5.23). Under `replace` the push for the new
+mailbox waits until the server has confirmed the removal of the old one (INT-MAIL-007).
 
-*Source: REG-MAIL-001, REG-MAIL-003, INT-MAIL-001, INT-MAIL-006, D-166*
+*Source: REG-MAIL-001, REG-MAIL-003, INT-MAIL-001, INT-MAIL-006, INT-MAIL-007, D-166, D-177*
 
 ### 5.45 Mailbox states
 
@@ -1476,12 +1484,12 @@ IDN-LIFE-003a).
 | `CredentialEnrolled` | An authenticator reached `active`, or a password was set on an existing account, by the person, by recovery or by an invitation, with the enrolment notification to every other recorded channel (AUTH-STEP-007); carries the credential identifier (absent for the password), the catalogue entry and the subject | Host (optional) |
 | `CredentialSuspended` · `CredentialRestored` · `CredentialInvalidated` | A loss report started, by a report or by a removal that would lower reachable assurance, was cancelled, or completed after the window (AUTH-RECOV-007); each carries the credential identifier, the catalogue entry and the subject, and `CredentialSuspended` the instant the window ends | Host (optional) |
 | `NotificationRequested` | The library needs a message delivered — verification, recovery, deletion, change notifications, alerts | The notification transport (INT-MAIL-008); retried by the outbox |
-| `AlertRaised` | An OPS-ALERT-001 condition fires; carries the condition identifier (section 5.23), the severity and the structured details of the row. Written in the transaction that raised it, at every raise site; the alert channels carry it from that row after commit (OPS-ALERT-001) | Alert channels |
+| `AlertRaised` | An OPS-ALERT-001 condition fires; carries the condition identifier and, where the alert is raised under one, its scope (section 5.23), the severity and the structured details of the row. Written in the transaction that raised it, at every raise site; the alert channels carry it from that row after commit (OPS-ALERT-001) | Alert channels |
 
 Mail provisioning consumes no event: it reads the state these events announce
 (INT-MAIL-006).
 
-*Source: LIB-API-001, IDN-LIFE-003a, PRIV-RIGHT-005b, CONV-DESIGN-002, D-022, D-132, D-141, D-146, D-162, D-166, D-168*
+*Source: LIB-API-001, IDN-LIFE-003a, PRIV-RIGHT-005b, CONV-DESIGN-002, D-022, D-132, D-141, D-146, D-162, D-166, D-168, D-177*
 
 ## 6. Status code usage
 
@@ -1505,10 +1513,11 @@ of its own. The one exception is `integration.callback.rejected`: 429 where the 
 rate limit refused the request and the refusal carries `details.retryAt`, 422 otherwise.
 A code whose row names a fault, and a code no row names, SHALL be answered as
 `system.fault` with 500 (BFF-ERR-002). A `model.*` code is a startup or command refusal,
-and a conformance finding is a report of the suite (LIB-TEST-001); neither is answered by
-a request.
+a conformance finding is a report of the suite (LIB-TEST-001), and
+`integration.mailserver.conflict` is a mail server's answer to the provisioning job
+(INT-MAIL-007); none is answered by a request.
 
-*Source: API-CONV-003, D-162, D-166*
+*Source: API-CONV-003, D-162, D-166, D-177*
 
 ---
 
@@ -1518,7 +1527,7 @@ a request.
 kind or any other value this document catalogues SHALL update this document in the same
 change.
 
-*Source: LIB-API-001, CONV-NAME-003, D-162, D-166*
+*Source: LIB-API-001, CONV-NAME-003, D-162, D-166, D-177*
 
 **Acceptance criteria**
 1. A contract test fails when a code or key exists in source but not here.
@@ -1530,6 +1539,7 @@ change.
    changed entry without a major version, or an added entry with only a patch version,
    fails the gate, and so does a catalogue whose declarations and read entries do not
    number the same.
-3. A contract test fails when a code the library raises has no status in section 1.
+3. A contract test fails when a code a request can be answered with has no status in
+   section 1.
 4. A contract test fails when a permission the library declares is not a row of
    section 2.1.

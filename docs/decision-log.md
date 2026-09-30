@@ -8962,6 +8962,8 @@ section 7 · `19` · `20` · `docs/guide/janus-explained.md`,
 
 > **Amended.** 263 and 270: "no `IMailServer` registered", "`IMailServer` registered" and "`integration.mailserver.endpoint` set" read as the mail server in use, chosen once at the start (the host's `IMailServer`, or the adapter where the key was set then); no consumer resolves `IMailServer` itself (D-176).
 
+> **Amended.** 215 points 4 and 5, and entry 219 as INT-MAIL-007 states it, that a failed push waits for a change of the state owed: a push carries the mailbox's identifier; a refusal to adopt is answered `integration.mailserver.conflict` and raised under `mailbox.conflict:<mailbox id>`; a push marked failed is begun again each day while its state is owed; a push of `disabled` or `enabled` waits while another mailbox at its address is owed an unconfirmed removal; the listing reads `description` and reconciliation compares each mailbox with the account carrying its identifier. 209, 211, 212 and 220 item 4: a listed address that does not read counts as unknown only where its account carries no identifier of a mailbox the library holds (D-177).
+
 **Date:** 2026-09-25 · **Status:** accepted · **Amends:** D-161 (item 4, the working mode; item 2, where the drift check's rows come from), D-162 (item 22, where the governed send path lives; item 23, when the first attempt is made; item 26, the budget of a text message carrying a link; item 31, where destination records are kept and when they are swept; item 66, where a client secret comes from; C.55, where photo availability is held and what bootstrap writes; C.68 at `POST /auth/link`; C.103, the condition of the mail server row; E, the status of `identity.identifier.invalid`), D-153 (owner decision 2, the source a flood limit counts; owner decision 7, the word lists; the `backup.restoretest.interval` default; the address the bootstrap command prints), D-147 (the retirement of a key-encryption-key version; the name of the startup code for an unavailable secret), D-146 (item 17: a restriction's channel, the notices to a holder, a reason on every edit), D-143 (the policy object gains `photos`), D-129 (the break-glass page takes a reason), D-127 (a takedown reversal restores the state the takedown found), D-079a (a recognised device is exempt from the hold, not from the count), D-071 (three protected switches retired), D-060 (photos are off for the administrative organization until a codec is declared), D-057 (an authorization request's `redirect_uri` is refused at the push, not replaced), D-164 (item 3: the mail server verifies `aud` itself), D-165 (the developer recipient row is a declared example; the provider callback row and INT-GEN-003's sentence restored) · **Extends:** D-162, D-164, D-165
 
 **TL;DR.** The ledger entries 110 to 423 were audited entry by entry against the
@@ -12176,6 +12178,115 @@ CONV-LAYOUT-001 and CONV-LAYOUT-002; `10` the
 
 ---
 
+## D-177 — Corrections-4 question 14: what a mailbox push carries, how a refusal to adopt is answered, and the order under `replace`
+
+**Date:** 2026-09-30 · **Status:** accepted · **Amends:** D-166 (215 points 4 and 5; entry 219, which it kept, as INT-MAIL-007 states it: a failed push waits for a change of the state owed; 209, 211, 212 and 220 item 4: a listed address that does not read counts as unknown only where its account carries no identifier of a mailbox the library holds) · **Extends:** D-166 (221, the order under `replace`)
+
+**TL;DR.** A push carries the mailbox's identifier, so the adapter can write it on a
+create and check it before adopting. A mail server port answers a refusal to adopt with
+its own code, `integration.mailserver.conflict`, which marks the push failed at once and
+raises its own alert. A push that creates or changes a mailbox waits while another
+mailbox at the same address is still owed an unconfirmed removal. And a push marked
+failed is begun again each day while its state is still owed, so an outage or a resolved
+conflict never leaves a mailbox stuck.
+
+**The question (Tier 2).** Three things the adapter needs that no chapter gave it. (a)
+The `07` Mail server row gives a push only a key, the address and the state, and the key
+is the push's own idempotency key, new for each change; nothing carries the identifier
+the create writes as `description` and adoption checks. (b) `ProvisionAsync` answers a
+plain result and the publisher counts every failure as one attempt, so it cannot tell a
+refusal to adopt, which D-166 215 point 4 fails at once and without retry, since
+retrying cannot resolve a conflict (221), from a failure a retry may fix; `10` names no
+code for it. (c) Under `replace` (REG-MAIL-003) the old mailbox's removal and the new
+mailbox's create name one address; where the removal fails and the create goes in the
+same pass, the create meets the old account and, under (b), is marked failed and raises
+`mailbox.conflict` for an account the library itself created.
+
+**Decision.**
+
+- **(a) Reading 1.** A push carries the mailbox's identifier beside its key, the
+  canonical address and the state (`07` LIB-HOST-001, the Mail server row). *Rejected:*
+  looking the mailbox up by address, since after a `replace` two mailboxes stand at one
+  address.
+- **(b) Reading 2.** A new code, `integration.mailserver.conflict`, which any
+  `IMailServer` answers where a push meets, at the mailbox's name, an account that does
+  not carry the mailbox's identifier. It is never a route's answer. The publisher marks
+  such a push failed at that attempt and raises `degradation` scoped
+  `mailbox.conflict:<mailbox id>`, details `{ mailbox, state }`, in the same
+  transaction. The rule holds for every push that meets such an account, a removal
+  included: the library never destroys or changes an account it did not create. A
+  removal that finds no account under the mailbox's name is done. Every other failure
+  counts as one attempt, as before. The alert has its own scope because its cause and
+  its remedy differ from spent attempts: an account at the server that the library did
+  not create, which someone must identify and resolve at the mail server. `10` already
+  gives separate scopes to separate causes of one condition (the clock reference's
+  `absent` and `unread`). *Rejected:* reading 1, the conflict under
+  `mailbox.push:<mailbox id>` (one scope for two remedies, the operator left to infer
+  the cause from `attempts`).
+- **(c) Reading 1.** A push of `disabled` or `enabled` for a mailbox waits, neither
+  attempted nor counted, while another mailbox at the same canonical address is owed
+  `removed` and the server has not confirmed that removal; a push of `removed` never
+  waits, so two removals at one address cannot hold each other. A `replace` is a
+  designed operation, and a removal that fails once must not turn the new mailbox's
+  create into a failure, an alert and a day's delay that no person caused. *Rejected:*
+  reading 2 (the alert as the only signal of an ordering the library itself caused).
+- **Reconciliation compares by identifier.** With two mailboxes at one address after a
+  `replace`, comparing by address reads the old mailbox, owed `removed`, against the new
+  mailbox's account and raises a difference every day the new mailbox stands. The
+  listing therefore reads `description` too and answers, for each account, the mailbox
+  identifier it carries (none where it carries none), its address and whether it is
+  enabled (`07` LIB-HOST-001, the Mail server row). Reconciliation compares each mailbox
+  with the account listed under its identifier, counts a listed account that carries no
+  identifier of a mailbox the library holds, and reads an account under a mailbox's
+  identifier at another address as a difference. A push of `removed` for a mailbox no
+  push of which was ever attempted is confirmed without being sent, since the server
+  holds nothing of it; otherwise a `replace` reservation released before its push went
+  out would meet the old account and raise a false conflict. A test carrying
+  INT-MAIL-007 criterion 7 proves both.
+- **A push marked failed is begun again each day.** INT-MAIL-007 said, from entry 219
+  (kept by D-166), that a failed push was not attempted again until the state owed
+  changed. The waiting rule makes that untenable: a removal that failed for good would
+  hold the new mailbox forever. It was wrong on its own too, because a mail server
+  unreachable for longer than `outbox.retry.*` (about eight hours at the defaults) left
+  every change of that time undelivered for good, a departed employee's `disabled`
+  included, and no operation in the library could resume it. So a push marked failed is
+  begun again under the same key, with a fresh run of `outbox.retry.*`, a day after it
+  was last marked failed, for as long as its state is still owed; the provisioning job
+  carries it, so no job or principal is added. Each run that fails raises its alert
+  again. The "without retry" of 215 point 4 stands within a run, since a retry within
+  the run cannot resolve a conflict; it does not stand across days, since an operator
+  may resolve the account at the mail server in between. This is not auto-correction:
+  reconciliation still changes nothing (INT-MAIL-007), and what is resumed is the
+  library's own undelivered change, not a change made at the server by hand. D-090
+  refused to retry the erasure outbox daily without end, since a request that fails from
+  a defect fails alike at every interval and endless retry hides it. That reason does
+  not reach here: each failed run raises its alert again, so nothing is hidden, and what
+  a run resumes is the library's own change, which the mail server takes once the cause
+  is gone. *Rejected:* an operator's command to resume failed pushes (a server-side step
+  for what the library can do safely and visibly by itself).
+- Tests carrying INT-MAIL-001 criterion 4 prove the adapter answers
+  `integration.mailserver.conflict` and the publisher raises
+  `mailbox.conflict:<mailbox id>` on the first attempt; tests carrying INT-MAIL-007
+  criteria 5 and 6 prove that a push of `disabled` or `enabled` waits, spending no
+  attempt, while another mailbox at its address is owed an unconfirmed removal and is
+  sent once it is confirmed, that two removals at one address are both sent, and that a
+  push marked failed, for spent attempts and for a conflict, is begun again under its key
+  a day later, raises its alert again when that run fails, and reaches the server once
+  the cause is gone. A test carrying OPS-ALERT-002 criterion 3 proves two `degradation`
+  alerts under different scopes inside one window are both delivered.
+
+**Propagated to:** `07` LIB-HOST-001 (the Mail server row: the push's identifier, the
+conflict code, the listing); `05` INT-MAIL-001 (the values paragraph and criterion 4),
+INT-MAIL-006 and INT-MAIL-007 (its text, reconciliation by identifier, and criteria 5 to
+7); `06` OPS-ALERT-001 (what `AlertRaised` carries) and OPS-ALERT-002 (the scope joins
+the deduplication key, so one mailbox's alert never hides another's, and criterion 3);
+`10` the `integration.mailserver.conflict` row, section 5.23 (its opening, the
+`mailbox.push` and `mailbox.conflict` scope rows and its closing paragraph), section
+5.44, the `AlertRaised` row, section 6 and REF-001 criterion 3; `11` section 7.1; `13`
+R-M16 and R-M27; `20` REG-MAIL-003.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -12362,6 +12473,7 @@ CONV-LAYOUT-001 and CONV-LAYOUT-002; `10` the
 | Corrections-4 question 11: where the database refuses the deployment key's identifier | D-174 |
 | Corrections-4 question 12: how a malformed social provider declaration is named | D-175 |
 | Corrections-4 question 13: when the mail server in use is decided; what an `enabled` push does under `Replace` | D-176 |
+| Corrections-4 question 14: what a mailbox push carries, how a refusal to adopt is answered, and the order under `replace` | D-177 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

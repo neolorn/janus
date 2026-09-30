@@ -691,15 +691,16 @@ protected keys (OPS-CFG-005).
 | **`legal.governinglanguage` changed**, raised beside `protected-setting-changed` | Normal | PRIV-CONS-005, OPS-CFG-004, D-146 |
 | **Governing-language text missing**: a document version cannot publish, or a document that must be shown has no governing-language text | Normal | PRIV-CONS-006, D-146 |
 
-*Source: D-048, D-071, D-121, D-146, D-147, D-153, D-166*
+*Source: D-048, D-071, D-121, D-146, D-147, D-153, D-166, D-177*
 
-**Identifiers and thresholds (D-153).** Every row carries the identifier `10` section
-5.23 lists, in table order; `AlertRaised` carries it and OPS-ALERT-002 deduplicates on
-it. Where a row's condition is a rate, the number is a key in `10` section 4.5:
-sustained failures `alerting.authfailures.threshold`; recovery clustering
+**Identifiers and thresholds (D-153, D-177).** Every row carries the identifier `10`
+section 5.23 lists, in table order; `AlertRaised` carries it, with the scope where the
+alert has one (`10` section 5.23), and OPS-ALERT-002 deduplicates on both. Where a row's
+condition is a rate, the number is a key in `10` section 4.5: sustained failures
+`alerting.authfailures.threshold`; recovery clustering
 `alerting.recovery.accountthreshold`; approver volume
-`alerting.recovery.approverthreshold`; read volume `exfiltration.readvolume.factor`
-and `.minimum` (OPS-ALERT-005); implausible sessions `alerting.sessions.distance` and
+`alerting.recovery.approverthreshold`; read volume `exfiltration.readvolume.factor` and
+`.minimum` (OPS-ALERT-005); implausible sessions `alerting.sessions.distance` and
 `.window` (OPS-ALERT-007); denial spike `alerting.denials.threshold`, per actor;
 duplicate-identifier notices `alerting.nonexistent.threshold`; callback failures
 `alerting.callback.threshold`; balance drain `abuse.sms.drainfactor`; restore test
@@ -745,11 +746,14 @@ destinations as well (`alerting.owner.email`, `alerting.owner.sms`), regardless 
 
 **OPS-ALERT-002** — Alerts SHALL be **deduplicated per condition per window**.
 
-**Values (D-153).** "Sustained" is `alerting.authfailures.threshold` failures against
-one account inside `alerting.dedupe.window`; the deduplication key is the condition
-identifier of `10` section 5.23 plus the account or actor the row names.
+**Values (D-153, D-177).** "Sustained" is `alerting.authfailures.threshold` failures
+against one account inside `alerting.dedupe.window`; the deduplication key is the
+condition identifier of `10` section 5.23, plus the scope the alert is raised under
+where it has one (`10` section 5.23, Scopes), plus the account or actor the row names.
+An alert under one scope therefore folds only with another under the same scope: a
+`degradation` for one mailbox never hides one for another.
 
-*Source: D-048, D-166*
+*Source: D-048, D-166, D-177*
 
 One alert per sustained attack, never one per attempt. Without this an attacker
 triggers alerts to drain the prepaid SMS balance — turning the alerting into the
@@ -759,6 +763,8 @@ attack.
 1. A thousand failed attempts against one account produce one alert.
 2. Two overlapping passes of the alert channels that reach one condition inside one
    window deliver it once: the deduplication key is claimed by one conditional write.
+3. Two alerts of one condition under different scopes inside one window are both
+   delivered.
 
 ---
 

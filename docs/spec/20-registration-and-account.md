@@ -1032,17 +1032,20 @@ be sent nothing.
 
 A mailbox anyone has held SHALL never pass silently. An invitation for a corporate
 address whose mailbox has been held before, by anyone, the same person and an erased
-holder included, SHALL be refused with `identity.invitation.mailboxheld` unless it
-names `formerMailbox`: `transfer`, under which the invitee receives the mailbox and the
-mail in it, or `replace`, under which the old mailbox is removed and a new one
-reserved. Either SHALL pass the invitation's step-up, carry a reason and be recorded.
-No check of who the invitee is SHALL be made at issue, since issuing an invitation
-tells nothing about accounts. The library SHALL remove a mailbox anyone has held only
-under `replace`, and SHALL NOT adopt for a new reservation a mail-server account it did
-not create; that refusal raises `degradation` at once, naming the mailbox by its
-identifier (INT-MAIL-001).
+holder included, SHALL be refused with `identity.invitation.mailboxheld` unless it names
+`formerMailbox`: `transfer`, under which the invitee receives the mailbox and the mail
+in it, or `replace`, under which the old mailbox is removed and a new one reserved.
+Either SHALL pass the invitation's step-up, carry a reason and be recorded. No check of
+who the invitee is SHALL be made at issue, since issuing an invitation tells nothing
+about accounts. The library SHALL remove a mailbox anyone has held only under `replace`,
+and SHALL NOT adopt for a new reservation a mail-server account it did not create; the
+mail server answers that refusal `integration.mailserver.conflict`, and the push that
+met the account is marked failed at once and raises `degradation` scoped
+`mailbox.conflict:<mailbox id>`, naming the mailbox by its identifier (INT-MAIL-001,
+INT-MAIL-007). Under `replace` the push for the new mailbox waits, and spends no
+attempt, until the server has confirmed the removal of the old one (INT-MAIL-007).
 
-*Source: D-148; D-146, D-166, `16-offboarding-procedure`*
+*Source: D-148; D-146, D-166, D-177, `16-offboarding-procedure`*
 
 Every account into an integrated-mail organization is created with a verified personal
 email (REG-MAIL-001), so the account never holds zero verified emails (REG-IDENT-001) and

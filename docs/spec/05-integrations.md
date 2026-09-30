@@ -200,7 +200,7 @@ others.
 | App passwords | **Stored by Stalwart**, never by this system; managed for the person through the library's first-party OIDC client (INT-MAIL-010) |
 | Storage | Stalwart's own database, not co-located with business data |
 
-*Source: D-006, D-146, D-166, D-176*
+*Source: D-006, D-146, D-166, D-176, D-177*
 
 **Restated** (D-146): every management operation happens through JMAP objects, so
 "management API" means JMAP and nothing else. The four concerns are unchanged. Should the edition change,
@@ -221,21 +221,28 @@ A status other than 2xx, a timeout, an answer that does not read, a method error
 entry the server reports as not created, not updated or not destroyed is a failure;
 nothing is read as success by default. A mailbox is an `Account` of `@type` `User` named
 by the address's local part in the `Domain` of its domain, and is created with the
-library's identifier of the mailbox as its `description`. `disabled` is the account with
-the `authenticate` permission disabled, which overrides any grant of it, the account
-still receiving mail; `enabled` is the account with it not disabled and, where the
-account's own permissions replace the inherited ones (`Replace`), enabled. A push
-changes that one permission alone: every other permission, and whether the account
-inherits, merges or replaces its permissions, stays as it stands, except that an account
-that inherits them is changed to merge them when it is disabled, `authenticate` its only
-disabled one. `removed` is the account destroyed (`x:Account/set`). A create that meets
-an account the server already holds under that name adopts it only where its
-`description` carries the mailbox's identifier; otherwise the push fails and raises
-`degradation` at once, naming the mailbox by its identifier and never by its address,
-without waiting for `outbox.retry.maxattempts`, since retrying cannot resolve the
-conflict. The listing is `x:Account/query` with `x:Account/get` of `emailAddress` and
-`permissions`; an account is listed enabled exactly where `authenticate` is not disabled
-and, under `Replace`, is enabled. App passwords are `AppPassword` objects
+library's identifier of the mailbox, which every push carries (LIB-HOST-001), as its
+`description`. `disabled` is the account with the `authenticate` permission disabled,
+which overrides any grant of it, the account still receiving mail; `enabled` is the
+account with it not disabled and, where the account's own permissions replace the
+inherited ones (`Replace`), enabled. A push changes that one permission alone: every
+other permission, and whether the account inherits, merges or replaces its permissions,
+stays as it stands, except that an account that inherits them is changed to merge them
+when it is disabled, `authenticate` its only disabled one. `removed` is the account
+destroyed (`x:Account/set`); where the server holds no account under the mailbox's name,
+the removal is done. A push that meets an account the server already holds under the
+mailbox's name acts on it only where its `description` carries the mailbox's identifier
+(a create adopts it, a change of state alters it, a removal destroys it); otherwise the
+adapter changes nothing and answers `integration.mailserver.conflict`, and the push is
+marked failed at that attempt and raises `degradation` scoped
+`mailbox.conflict:<mailbox id>`, naming the mailbox by its identifier and never by its
+address, without waiting for `outbox.retry.maxattempts`, since retrying within the run
+of `outbox.retry.*` cannot resolve a conflict that someone must resolve at the mail
+server (INT-MAIL-007). The listing is `x:Account/query` with `x:Account/get` of
+`emailAddress`, `description` and `permissions`, and answers for each account the
+mailbox identifier its `description` carries (none where it carries none), its address
+and whether it is enabled; an account is listed enabled exactly where `authenticate` is
+not disabled and, under `Replace`, is enabled. App passwords are `AppPassword` objects
 (`x:AppPassword/get`, `x:AppPassword/set`) called with the person's token (INT-MAIL-010)
 and never with the management key.
 
@@ -244,10 +251,11 @@ and never with the management key.
 2. No app-password credential type exists in this system's schema.
 3. Every provisioning and app-password operation is a JMAP request; no other
    management interface of the mail server is called.
-4. A create that meets a server account whose `description` does not carry the
-   mailbox's identifier adopts nothing, changes nothing at the server, and raises
-   `degradation` on its first attempt; a push the library replays converges on the
-   account it created and creates nothing twice.
+4. A push that meets a server account whose `description` does not carry the mailbox's
+   identifier, a create included, adopts nothing, changes nothing at the server, is
+   answered `integration.mailserver.conflict` and raises `degradation` scoped
+   `mailbox.conflict:<mailbox id>` on its first attempt; a push the library replays
+   converges on the account it created and creates nothing twice.
 5. An `enabled` push to an account whose permissions are `Replace` and do not enable
    `authenticate` leaves `authenticate` enabled and not disabled, every other permission
    unchanged and the account still replacing its inherited permissions, and the listing
@@ -350,7 +358,7 @@ becomes of it (`formerMailbox`: `transfer` gives the invitee the mailbox and its
 `replace` removes it and reserves a new one; REG-MAIL-003); no mailbox passes to a
 holder without that choice, and the issue checks nothing about who the invitee is.
 
-*Source: D-148, D-166; D-006, D-074, D-144, D-146*
+*Source: D-148, D-166; D-006, D-074, D-144, D-146, D-177*
 
 **A mailbox is for a person.** The reserved `emergency` account (OPS-BOOT-002) is a
 member of the administrative organization but is not a person (it is a role a human
@@ -364,13 +372,14 @@ be a phishing target and a place for a warning to be missed.
 Bootstrap (OPS-BOOT-001) runs against the database on a fresh host, and the membership
 is effective at once. Where the deployment integrates the mail server, bootstrap is
 given the administrator's corporate address (`--mailbox`) and reserves the mailbox at
-it. The mailbox row is its own retried outbox: the state each mailbox is owed is read
-on every publisher run (`outbox.poll.interval`) from its holder's account state and
+it. The mailbox row is its own retried outbox: the state each mailbox is owed is read on
+every publisher run (`outbox.poll.interval`) from its holder's account state and
 memberships, and a state that differs from the one the server last confirmed is pushed
-under `outbox.retry.*`, so the mailbox is created the moment the mail server is
-reachable. Until then the administrator is reached at the personal address given at
-bootstrap; the enrolment link itself is printed by the command and sent nowhere
-(OPS-BOOT-001).
+under `outbox.retry.*`, so the mailbox is created once the mail server is reachable, at
+the next attempt of the run in progress or, where the push was marked failed, in the run
+begun for it a day later (INT-MAIL-007). Until then the administrator is reached at the
+personal address given at bootstrap; the enrolment link itself is printed by the command
+and sent nowhere (OPS-BOOT-001).
 
 **Scope is deliberate and was previously missing.** The mail server hosts the
 company's own mail: staff mailboxes. **Customers are not provisioned a mailbox**;
@@ -433,27 +442,49 @@ push of the state a mailbox is owed SHALL carry a **stable idempotency key**.
 Reconciliation SHALL run daily, comparing both sides and **flagging drift without
 auto-correcting**.
 
-A push SHALL be recorded with its key, and committed, before it is sent. A retry of the
-same state SHALL carry the same key until the server confirms it. A change of the state
-owed while a push is outstanding, a return to the state last confirmed included, SHALL
-begin a push under a new key. A push whose attempts reach `outbox.retry.maxattempts`
-SHALL be marked failed and SHALL raise `degradation` in the same transaction, scope
+A push SHALL be recorded with its key, and committed, before it is sent, and each
+attempt SHALL be recorded, and committed, before it is made. A retry of the same state
+SHALL carry the same key until the server confirms it. A change of the state owed while
+a push is outstanding, a return to the state last confirmed included, SHALL begin a push
+under a new key. A push whose attempts reach `outbox.retry.maxattempts` SHALL be marked
+failed and SHALL raise `degradation` in the same transaction, scope
 `mailbox.push:<mailbox id>`, details `{ mailbox, state, attempts }`, naming the mailbox
-by its identifier and never by its address; it SHALL NOT be attempted again until the
-state owed changes.
+by its identifier and never by its address. A push the mail server answers
+`integration.mailserver.conflict` (INT-MAIL-001) SHALL be marked failed at that attempt
+and SHALL raise `degradation` in the same transaction, scope
+`mailbox.conflict:<mailbox id>`, details `{ mailbox, state }`. A push marked failed
+SHALL be begun again by the provisioning job under the same key, with a fresh run of
+`outbox.retry.*`, a day after it was last marked failed, for as long as its state is
+still owed; each run that ends failed raises its alert again, and a change of the state
+owed begins a push under a new key at once, as above. Where the mail server was
+unreachable, or an account at the server that blocked the push has since been resolved
+there, the push reaches the server at the next attempt of its run or, once marked
+failed, in the run begun for it a day later, with no action in the library. A push of
+`disabled` or `enabled` for a mailbox SHALL wait, neither attempted nor counted, while
+another mailbox at the same canonical address is owed `removed` and the server has not
+confirmed that removal (the old mailbox of a `replace`, REG-MAIL-003); a push of
+`removed` never waits. A push of `removed` for a mailbox no push of which was ever
+attempted SHALL be confirmed without being sent, since the server holds nothing of that
+mailbox.
 
 Reconciliation SHALL compare every mailbox the library holds, one with a push
-outstanding included, with the server's listing: owed `enabled`, listed enabled; owed
-`disabled` (a reservation included), listed disabled; owed `removed`, absent. It SHALL
-count every address the server lists that the library holds no mailbox for. Addresses
-SHALL be compared in their canonical form (IDN-ACCT-004), the server's listed addresses
-canonicalised before the comparison, and a listed address that does not read counts as
-one the library does not hold. A difference SHALL raise `degradation`, scope
-`mailbox.reconciliation`, details `{ mailboxes, unknown }` (mailbox identifiers and a
-count, never an address); a listing that cannot be had SHALL raise it with
-`{ listed: false }`. Nothing SHALL be changed on either side.
+outstanding included, with the account the server lists under that mailbox's identifier
+(INT-MAIL-001): owed `enabled`, listed enabled; owed `disabled` (a reservation
+included), listed disabled; owed `removed`, no account listed under it. An account
+listed under a mailbox's identifier at another address than the mailbox's is a
+difference too. It SHALL count every account the server lists that carries no identifier
+of a mailbox the library holds. A mailbox whose holder was erased (PRIV-RIGHT-005) is
+not compared, and the account it left at the server is counted with them, since that
+account is outside the library (D-101) and only the operator can erase it there.
+Addresses SHALL be compared in their canonical form (IDN-ACCT-004), the server's listed
+addresses canonicalised before the comparison, and a listed address that does not read
+matches no mailbox. Comparing by identifier, not by address, keeps the two mailboxes a
+`replace` leaves at one address apart (REG-MAIL-003). A difference SHALL raise
+`degradation`, scope `mailbox.reconciliation`, details `{ mailboxes, unknown }` (mailbox
+identifiers and a count, never an address); a listing that cannot be had SHALL raise it
+with `{ listed: false }`. Nothing SHALL be changed on either side.
 
-*Source: D-006, D-041, D-166*
+*Source: D-006, D-041, D-166, D-177*
 
 A failed suspension leaves a person reading mail after offboarding. Silent
 auto-correction conceals a broken pipeline.
@@ -463,7 +494,21 @@ auto-correction conceals a broken pipeline.
 2. Reconciliation reports a discrepancy without changing either side.
 3. Propagation failures are visible in monitoring.
 4. A push the server applied whose answer was lost, followed by a change of the state
-   owed, ends with the server in the last state owed.
+   owed, a change to `removed` included, ends with the server in the last state owed.
+5. A push of `disabled` or `enabled` for a mailbox, while another mailbox at the same
+   canonical address is owed `removed` and the server has not confirmed that removal, is
+   not attempted and spends no attempt; it is sent on the first publisher run after the
+   confirmation. Where two mailboxes at one address are both owed `removed`, both pushes
+   are sent.
+6. A push marked failed, whether its attempts were spent or the server answered
+   `integration.mailserver.conflict`, is begun again under the same key a day after it
+   was last marked failed while its state is still owed; a run that ends failed raises
+   its alert again, and once the cause is gone the server reaches the state owed with no
+   action in the library.
+7. After a `replace`, reconciliation compares the old mailbox and the new one each with
+   the account carrying its own identifier, and reports no difference once the old
+   account is gone and the new one is in its state owed; a `removed` push for a mailbox
+   no push of which was attempted is confirmed without a call to the server.
 
 ---
 

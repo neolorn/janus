@@ -327,7 +327,15 @@ unaffected; they hold no mailbox here (INT-MAIL-006).
 reading mail after offboarding. Reconciliation runs daily and **flags drift without
 correcting it** (INT-MAIL-007) — read the report, then act deliberately.
 
-Auto-correction is deliberately absent: it would conceal a broken pipeline.
+Auto-correction is deliberately absent: it would conceal a broken pipeline. A push that
+failed is the library's own undelivered change, not a change made at the mail server by
+hand. It is begun again each day until the mail server takes it, so after an outage the
+mail server catches up with no action in the library; until it does, reconciliation
+lists that mailbox as a difference. A `mailbox.push` alert means a push spent its
+attempts, and it is raised again each time the push fails again. A `mailbox.conflict`
+alert means the mail server holds an account at that mailbox's name that the library did
+not create. Find out whose it is, resolve it at the mail server, and the daily retry
+that follows goes through (INT-MAIL-007).
 
 ### 7.2 SMS gateway
 

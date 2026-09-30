@@ -434,23 +434,23 @@ identifier or value exists (CONV-DESIGN-004) binds to that type at the edge thro
 ---
 
 **CONV-DESIGN-007** — Dependency injection SHALL use the built-in container only. Each
-project exposes exactly one `internal static` registration method (`AddIdentityArea(this
-IServiceCollection)`), called from the single public `AddJanus` entry point in
-`Janus.Hosting`. Lifetimes: services and ports scoped; stateless helpers singleton; the
-key ring of CONV-CODE-007 and the mail server in use (below) singleton; nothing
-transient without a recorded reason. Options SHALL be bound through `IOptions<T>` with
-`ValidateOnStart`; the runtime-changeable keys of `10` section 4 are read through the
-configuration store abstraction, never through `IOptions`. A stored value that does not
-read under its key is a fault: the read throws, and no read falls back to a default or a
-constant (OPS-CFG-008, CONV-ERR-001). Time comes from `TimeProvider`; randomness from
-`RandomNumberGenerator`; both injected, never static. Every secret the library needs
-(the members LIB-HOST-001 lists for the secret source) is read once, through the
-host-supplied `ISecretSource` of LIB-EXT-001, asynchronously, when the application
-starts and before the server serves a request, into the key ring of CONV-CODE-007; no
-secret is an argument of `AddJanus`. A `Janus.Cli` command reads the same values once,
-at its start, into the same key ring, from one JSON key document on standard input that
-the operator pipes from the secrets manager's own client (OPS-SEC-001). The library
-ships no secrets-manager client.
+project exposes exactly one `internal static` registration method
+(`AddIdentityArea(this IServiceCollection)`), called from the single public `AddJanus`
+entry point in `Janus.Hosting`. Lifetimes: services and ports scoped; stateless helpers
+singleton; the key ring of CONV-CODE-007 and the mail server in use (below) singleton;
+nothing transient without a recorded reason. Options SHALL be bound through
+`IOptions<T>` with `ValidateOnStart`; the runtime-changeable keys of `10` section 4 are
+read through the configuration store abstraction, never through `IOptions`. A stored
+value that does not read under its key is a fault: the read throws, and no read falls
+back to a default or a constant (OPS-CFG-008, CONV-ERR-001). Time comes from
+`TimeProvider`; randomness from `RandomNumberGenerator`; both injected, never static.
+Every secret the library needs (the members LIB-HOST-001 lists for the secret source) is
+read once, through the host-supplied `ISecretSource` of LIB-EXT-001, asynchronously,
+when the application starts and before the server serves a request, into the key ring of
+CONV-CODE-007; no secret is an argument of `AddJanus`. A `Janus.Cli` command reads the
+same values once, at its start, into the same key ring, from one JSON key document on
+standard input that the operator pipes from the secrets manager's own client
+(OPS-SEC-001). The library ships no secrets-manager client.
 
 **The mail server in use.** Every registration is made before a stored value can be
 read, so none depends on `integration.mailserver.endpoint`. `AddJanus` registers the

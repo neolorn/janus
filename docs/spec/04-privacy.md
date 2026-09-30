@@ -830,7 +830,7 @@ totals for a condition that is meant to be reversible.
 remains, and every personal field is rendered unrecoverable by **destroying the
 subject's key** (PRIV-RIGHT-005a). It SHALL NOT merely pseudonymise.
 
-*Source: D-148; D-026.1, D-037, D-068, D-117, D-147, D-166*
+*Source: D-148; D-026.1, D-037, D-068, D-117, D-147, D-166, D-177*
 
 **The distinction is decisive.** Pseudonymised data is still personal data, and
 controls preventing further processing combined with pseudonymisation are not
@@ -839,19 +839,19 @@ request no longer applies. A 2025 coordinated enforcement review of 764 controll
 found many techniques used as a substitute for deletion amounted to mere
 pseudonymisation.
 
-**Preferences and declared values go with the key.** Declared preferences
-(REG-PREF-001) and the declared profile values (legal name, date of birth,
-REG-PROF-001) are personal fields under the subject key and become unreadable with the
-rest. A username freed by erasure is **held** for `retention.consent` and released
-afterwards (REG-IDENT-009): it is public by nature and is not personal data under the
-key, and the hold stops an erased person being impersonated at once under their former
-name. The address of a corporate mailbox (INT-MAIL-006) is a personal field of the
-account that holds or last held it, under that account's key, and under a key of the
-mailbox's own (PRIV-RIGHT-005a) while nobody holds it. Erasure neutralises the
-fingerprint of every mailbox the subject holds or last held and leaves the row; the mail
-server's own account is outside the library (D-101), reconciliation reports it as an
-address the library does not hold, and no invitation gives the mailbox out again, to
-anyone, without an administrator's choice (`formerMailbox`, REG-MAIL-003).
+**Preferences and declared values go with the key.** Declared preferences (REG-PREF-001)
+and the declared profile values (legal name, date of birth, REG-PROF-001) are personal
+fields under the subject key and become unreadable with the rest. A username freed by
+erasure is **held** for `retention.consent` and released afterwards (REG-IDENT-009): it
+is public by nature and is not personal data under the key, and the hold stops an erased
+person being impersonated at once under their former name. The address of a corporate
+mailbox (INT-MAIL-006) is a personal field of the account that holds or last held it,
+under that account's key, and under a key of the mailbox's own (PRIV-RIGHT-005a) while
+nobody holds it. Erasure neutralises the fingerprint of every mailbox the subject holds
+or last held and leaves the row; the mail server's own account is outside the library
+(D-101), reconciliation counts it with the accounts the library holds no mailbox for
+(INT-MAIL-007), and no invitation gives the mailbox out again, to anyone, without an
+administrator's choice (`formerMailbox`, REG-MAIL-003).
 
 **The host's business records are outside the erasure right.** A record the host keeps
 under a declared lawful basis (a financial record, say: what was transacted, when and
