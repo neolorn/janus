@@ -415,7 +415,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     [Fact]
     public async Task REG_DOM_001_AnOpenInvitationIsAcknowledgedOnlyWithAnAddressTheLockAdmitsAsync()
     {
-        const string Bound = "bound@elsewhere.test";
+        const string boundEmail = "bound@elsewhere.test";
 
         await LockedAsync(Staff, "staff.test");
 
@@ -423,13 +423,13 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
         string corporateToken = _notifications.Mail[^1].Values["token"];
 
-        _ = Accepted(await IssueAsync(Customer, Request(email: Bound)));
+        _ = Accepted(await IssueAsync(Customer, Request(email: boundEmail)));
 
         string boundToken = _notifications.Mail[^1].Values["token"];
         string phoneToken = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
 
         SubjectId corporate = await OpenedAsync(IdentifierKind.Email, Personal, corporateToken);
-        SubjectId bound = await OpenedAsync(IdentifierKind.Email, Bound, boundToken);
+        SubjectId bound = await OpenedAsync(IdentifierKind.Email, boundEmail, boundToken);
         SubjectId phoned = await OpenedAsync(IdentifierKind.Phone, Number, phoneToken);
 
         _ = _identifiers.Verified(phoned, IdentifierKind.Email, "phoned@elsewhere.test");
