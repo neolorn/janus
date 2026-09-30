@@ -17,10 +17,16 @@ namespace Janus.Authentication.Mailboxes;
 /// committed anywhere is what the next pass pushes, and the last state owed is the one
 /// the server ends in. Nothing here removes a mailbox anyone has held. A retired
 /// mailbox keeps its last holder until it is reserved again, so an erasure of that
-/// holder reaches the address it held.
+/// holder reaches the address it held. A push marked failed is begun again under the
+/// same key a day after it was last marked failed, for as long as its state is owed
+/// (D-177).
 /// </remarks>
 internal sealed class Mailbox
 {
+    // INT-MAIL-007, D-177: how long a push marked failed waits before a fresh run of
+    // the retry schedule begins for it.
+    private static readonly TimeSpan Resumed = TimeSpan.FromDays(1);
+
     private Mailbox(MailboxId id, EmailAddress address, DateTimeOffset reservedAt)
     {
         Id = id;
@@ -92,9 +98,21 @@ internal sealed class Mailbox
     public DateTimeOffset? NextAttemptAt { get; private set; }
 
     /// <summary>
-    /// When the outstanding push spent its budget, where it has.
+    /// When the outstanding push was last marked failed, where it was.
     /// </summary>
     public DateTimeOffset? FailedAt { get; private set; }
+
+    /// <summary>
+    /// Whether any push of the mailbox was ever attempted, so the server may hold
+    /// something of it.
+    /// </summary>
+    public bool Attempted { get; private set; }
+
+    /// <summary>
+    /// Whether the push outstanding is a removal of a mailbox no push of which was ever
+    /// attempted, which the server holds nothing of and which is confirmed unsent.
+    /// </summary>
+    public bool IsUnsent => Pending is MailboxState.Removed && !Attempted;
 
     /// <summary>
     /// A mailbox reserved for an address, disabled until a membership attaches.
@@ -120,7 +138,8 @@ internal sealed class Mailbox
     /// <param name="pendingKey">What that push is recognised by.</param>
     /// <param name="attempts">How many attempts it has had.</param>
     /// <param name="nextAttemptAt">When it is next attempted.</param>
-    /// <param name="failedAt">When it spent its budget.</param>
+    /// <param name="failedAt">When it was last marked failed.</param>
+    /// <param name="attempted">Whether any push of it was ever attempted.</param>
     /// <returns>The mailbox.</returns>
     public static Mailbox Existing(
         MailboxId id,
@@ -134,7 +153,8 @@ internal sealed class Mailbox
         Guid? pendingKey,
         int attempts,
         DateTimeOffset? nextAttemptAt,
-        DateTimeOffset? failedAt) =>
+        DateTimeOffset? failedAt,
+        bool attempted) =>
         new(id, address, reservedAt)
         {
             Holder = holder,
@@ -146,6 +166,7 @@ internal sealed class Mailbox
             Attempts = attempts,
             NextAttemptAt = nextAttemptAt,
             FailedAt = failedAt,
+            Attempted = attempted,
         };
 
     /// <summary>
@@ -245,13 +266,14 @@ internal sealed class Mailbox
     /// its own under a new key and a fresh budget; the same state keeps its key. An
     /// outstanding push may have reached the server though its answer did not, so a
     /// return to the state last confirmed while one is outstanding is pushed again
-    /// under a key of its own, never assumed.
+    /// under a key of its own, never assumed. A push marked failed is begun again under
+    /// its key, with a fresh budget, a day after it was last marked failed.
     /// </summary>
     /// <param name="stands">Whether its holder stands.</param>
     /// <param name="now">The instant of the pass.</param>
     /// <returns>
     /// The push, or nothing where the server already holds the state, the next attempt
-    /// is not yet due, or the budget is spent.
+    /// is not yet due, or the push was marked failed less than a day ago.
     /// </returns>
     public MailboxPush? Due(bool stands, DateTimeOffset now)
     {
@@ -266,6 +288,13 @@ internal sealed class Mailbox
         {
             Pending = owed;
             PendingKey = Guid.CreateVersion7(now);
+            Attempts = 0;
+            NextAttemptAt = null;
+            FailedAt = null;
+        }
+
+        if (FailedAt is DateTimeOffset failed && failed + Resumed <= now)
+        {
             Attempts = 0;
             NextAttemptAt = null;
             FailedAt = null;
@@ -288,8 +317,41 @@ internal sealed class Mailbox
     }
 
     /// <summary>
-    /// Counts a failed attempt and schedules the next, the delay growing by the factor
-    /// per attempt with full jitter, until the budget is spent.
+    /// Counts an attempt of the outstanding push, as it is about to be made, and marks
+    /// the mailbox as one the server may hold something of.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No push is outstanding.</exception>
+    public void Attempting()
+    {
+        if (Pending is null)
+        {
+            throw new InvalidOperationException("No push is outstanding.");
+        }
+
+        Attempts++;
+        Attempted = true;
+    }
+
+    /// <summary>
+    /// Marks the outstanding push failed at this attempt, as a conflict retrying cannot
+    /// resolve does (D-177).
+    /// </summary>
+    /// <param name="at">When the attempt was made.</param>
+    /// <exception cref="InvalidOperationException">No push is outstanding.</exception>
+    public void Failed(DateTimeOffset at)
+    {
+        if (Pending is null)
+        {
+            throw new InvalidOperationException("No push is outstanding.");
+        }
+
+        NextAttemptAt = null;
+        FailedAt = at;
+    }
+
+    /// <summary>
+    /// Schedules the next attempt after a failed one, the delay growing by the factor
+    /// per attempt with full jitter, until the attempts counted spend the budget.
     /// </summary>
     /// <param name="at">When the attempt was made.</param>
     /// <param name="initial">The first retry delay.</param>
@@ -298,12 +360,16 @@ internal sealed class Mailbox
     /// <param name="jitter">A fraction of the computed delay, in [0, 1].</param>
     /// <returns>Whether this attempt spent the budget.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The jitter is outside its range.</exception>
+    /// <exception cref="InvalidOperationException">No attempt was counted.</exception>
     public bool Refused(DateTimeOffset at, TimeSpan initial, decimal factor, int maximum, double jitter)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(jitter);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(jitter, 1);
 
-        Attempts++;
+        if (Attempts is 0)
+        {
+            throw new InvalidOperationException("No attempt of the push was counted.");
+        }
 
         if (Attempts >= maximum)
         {

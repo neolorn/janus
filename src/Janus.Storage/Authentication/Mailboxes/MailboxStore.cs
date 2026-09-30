@@ -196,6 +196,7 @@ internal sealed class MailboxStore(
         record.Attempts = mailbox.Attempts;
         record.NextAttemptAt = mailbox.NextAttemptAt;
         record.FailedAt = mailbox.FailedAt;
+        record.Attempted = mailbox.Attempted;
     }
 
     private async ValueTask<Mailbox> ReadAsync(MailboxRecord record, CancellationToken cancellationToken) =>
@@ -254,7 +255,8 @@ internal sealed class MailboxStore(
                 record.PendingKey,
                 record.Attempts,
                 record.NextAttemptAt,
-                record.FailedAt);
+                record.FailedAt,
+                record.Attempted);
         }
         finally
         {

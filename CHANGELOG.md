@@ -546,6 +546,14 @@ against the public contract of LIB-API-001.
   `authenticate` permission alone, an account the library did not create is answered
   `integration.mailserver.conflict` and left as it is, and the app-password calls carry
   the person's token.
+- Each mailbox push attempt is counted and committed before it is made. A push the mail
+  server answers `integration.mailserver.conflict` is marked failed at once and raises
+  `degradation` scoped `mailbox.conflict:<mailbox id>` with `{ mailbox, state }`. A push
+  marked failed, for spent attempts or a conflict, is begun again under the same key a
+  day later for as long as its state is owed, and raises its alert again if that run
+  fails. A removal of a mailbox no push of which was ever attempted is confirmed
+  without being sent. The `mailboxes` table gains `attempted`, true for every row
+  written before this release.
 - Where Continue with Apple is among the system policy's `loginFactors` and
   `notification.email.sendingdomain` is not in `notification.email.relayregistered`, the
   deployment raises `relay-domain-unregistered` with the domain as it starts and

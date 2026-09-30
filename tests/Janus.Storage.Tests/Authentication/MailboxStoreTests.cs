@@ -9,6 +9,8 @@ using Janus.Core;
 using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Identity.Organizations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using Xunit;
 
@@ -154,6 +156,7 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
 
         MailboxPush push = mailbox.Due(stands: false, Noon)!;
 
+        mailbox.Attempting();
         _ = mailbox.Refused(Noon, TimeSpan.FromSeconds(30), 2.0m, maximum: 10, jitter: 1);
 
         await WrittenAsync(store => store.RecordAsync(mailbox, TestContext.Current.CancellationToken));
@@ -164,6 +167,7 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
         Assert.Equal(MailboxState.Disabled, read.Pending);
         Assert.Equal(1, read.Attempts);
         Assert.Equal(Noon.AddSeconds(30), read.NextAttemptAt);
+        Assert.True(read.Attempted);
 
         read.Confirmed();
         read.Release(Noon);
@@ -225,6 +229,51 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
             (await Store(reading).FindAsync(moved.Id, TestContext.Current.CancellationToken))?.Address);
         await Assert.ThrowsAnyAsync<CryptographicException>(async () =>
             await Store(reading).FindAsync(other.Id, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// INT-MAIL-007 AC7, D-177: whether a row written before the mark was ever pushed
+    /// cannot be told, so the migration counts every such row attempted and its removal
+    /// is sent; the column then takes no default, so a row written after carries what
+    /// the publisher records.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_MAIL_007_AC7_AMailboxWrittenBeforeTheMarkCountsAsAttemptedAsync()
+    {
+        string migrated = await database.CreateDatabaseAsync("mailbox_attempted");
+
+        await MigrateAsync(migrated, "20260929173000_HoldClientSecretsWrapped");
+
+        await using (var connection = new NpgsqlConnection(migrated))
+        {
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO identity.mailboxes
+                    (id, fingerprint, canonicalisation_version, enc_canonical, wrapped_key, reserved_at, attempts, fingerprint_version)
+                VALUES
+                    (gen_random_uuid(), '\x01', '16.0.0', '\x02', '\x03', now(), 0, 1);
+                """);
+        }
+
+        await MigrateAsync(migrated, "20260930043033_RecordWhetherAMailboxPushWasAttempted");
+
+        await using var reading = new NpgsqlConnection(migrated);
+        await reading.OpenAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal([true], await reading.QueryAsync<bool>("SELECT attempted FROM identity.mailboxes"));
+        Assert.Null(await reading.ExecuteScalarAsync<string?>(
+            """
+            SELECT column_default FROM information_schema.columns
+            WHERE table_schema = 'identity' AND table_name = 'mailboxes' AND column_name = 'attempted'
+            """));
+    }
+
+    private static async Task MigrateAsync(string connectionString, string target)
+    {
+        await using StoreContext context = DatabaseFixture.Context(connectionString);
+        await context.GetService<IMigrator>().MigrateAsync(target, TestContext.Current.CancellationToken);
     }
 
     private async Task<OrganizationId> AdministrativeAsync()

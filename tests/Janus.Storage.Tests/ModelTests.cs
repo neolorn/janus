@@ -448,6 +448,7 @@ public sealed class ModelTests
             // Not an account field: a staff mailbox the library provisions, its address
             // under its holder's key and found by its fingerprint, and the push it owes
             // the mail server (INT-MAIL-006, INT-MAIL-007).
+            "mailboxes.attempted",
             "mailboxes.attempts",
             "mailboxes.canonicalisation_version",
             "mailboxes.enc_canonical",

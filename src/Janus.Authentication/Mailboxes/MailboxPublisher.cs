@@ -19,17 +19,20 @@ namespace Janus.Authentication.Mailboxes;
 /// <param name="mailboxes">Where the mailboxes are.</param>
 /// <param name="inUse">The mail server in use, where the deployment has one.</param>
 /// <param name="configuration">Where the retry schedule is read.</param>
-/// <param name="alerts">Where a spent budget's alert goes.</param>
+/// <param name="alerts">Where the alert of a push marked failed goes.</param>
 /// <param name="work">The one transaction each mailbox's progress is recorded in.</param>
 /// <param name="time">The clock the schedule is computed against.</param>
 /// <param name="randomness">Where the full jitter of each delay comes from.</param>
 /// <remarks>
-/// Implements INT-MAIL-006, INT-MAIL-006a AC1, INT-MAIL-007 AC1 and AC3, and
-/// OPS-OBS-002. A suspension or a membership end commits wherever it happens, and the
-/// first pass after it pushes the disabled state. A push that spends its budget raises
-/// <c>degradation</c> and stays failed until the state owed changes again: nothing
-/// corrects the server behind the operator's back, and reconciliation goes on
-/// reporting the difference.
+/// Implements INT-MAIL-001 AC4, INT-MAIL-006, INT-MAIL-006a AC1, INT-MAIL-007 AC1, AC3,
+/// AC6 and AC7, OPS-OBS-002 and D-177. A suspension or a membership end commits
+/// wherever it happens, and the first pass after it pushes the disabled state. Each
+/// attempt is recorded, and committed, before it is made. A push that spends its budget,
+/// or that the server answers with a conflict, is marked failed and raises
+/// <c>degradation</c>; it is begun again under its key a day later, for as long as its
+/// state is owed, and raises its alert again if that run fails too. What is resumed is
+/// the library's own undelivered change: nothing corrects the server behind the
+/// operator's back, and reconciliation goes on reporting any difference.
 /// </remarks>
 internal sealed class MailboxPublisher(
     IMailboxStore mailboxes,
@@ -84,74 +87,76 @@ internal sealed class MailboxPublisher(
             Guid? outstanding = mailbox.PendingKey;
             MailboxPush? push = mailbox.Due(standing.Stands, now);
 
-            // INT-MAIL-007 AC1: a push is written down under its key before it leaves,
-            // so one the server applies while the process stops is still outstanding,
-            // under the same key, when the process returns.
-            if (mailbox.PendingKey != outstanding)
-            {
-                if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                    .Match<Error?>(() => null, error => error) is Error notBegunAgain)
-                {
-                    return Result.Failure<int>(notBegunAgain);
-                }
-
-                await mailboxes.RecordAsync(mailbox, cancellationToken).ConfigureAwait(false);
-
-                if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                    .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
-                {
-                    return Result.Failure<int>(notCommittedAgain);
-                }
-            }
-
             if (push is null)
             {
+                // A change of the state owed is written down under its new key even
+                // when its first attempt is not yet due.
+                if (mailbox.PendingKey != outstanding
+                    && await RecordedAsync(mailbox, alert: null, cancellationToken).ConfigureAwait(false)
+                        is Error unrecorded)
+                {
+                    return Result.Failure<int>(unrecorded);
+                }
+
                 continue;
             }
 
-            bool spent = false;
+            // INT-MAIL-007 AC7, D-177: the server holds nothing of a mailbox no push of
+            // which was ever attempted, so its removal is confirmed without being sent.
+            if (mailbox.IsUnsent)
+            {
+                mailbox.Confirmed();
 
-            if ((await ProvisionedAsync(server, push, cancellationToken).ConfigureAwait(false))
-                .Match(() => true, _ => false))
+                if (await RecordedAsync(mailbox, alert: null, cancellationToken).ConfigureAwait(false)
+                    is Error unconfirmed)
+                {
+                    return Result.Failure<int>(unconfirmed);
+                }
+
+                confirmed++;
+
+                continue;
+            }
+
+            // INT-MAIL-007 AC1: a push is written down under its key, and each attempt
+            // counted, before it leaves, so one the server applies while the process
+            // stops is still outstanding, under the same key and with the attempt
+            // spent, when the process returns.
+            mailbox.Attempting();
+
+            if (await RecordedAsync(mailbox, alert: null, cancellationToken).ConfigureAwait(false)
+                is Error unattempted)
+            {
+                return Result.Failure<int>(unattempted);
+            }
+
+            Error? refused = (await ProvisionedAsync(server, push, cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error);
+            AlertRaised? alert = null;
+
+            if (refused is null)
             {
                 mailbox.Confirmed();
                 confirmed++;
             }
-            else
+            else if (refused.Code == ErrorCodes.MailServerConflict)
             {
-                spent = mailbox.Refused(
-                    now,
-                    schedule.Initial,
-                    schedule.Factor,
-                    schedule.MaxAttempts,
-                    Jitter());
+                // INT-MAIL-001 AC4, D-177: retrying within the run cannot resolve an
+                // account someone must resolve at the mail server, so the push is marked
+                // failed at this attempt and raises its own alert.
+                mailbox.Failed(now);
+                alert = Alerts.Of(AlertCondition.Degradation, "mailbox.conflict:" + mailbox.Id, now, Conflicting(mailbox));
+            }
+            else if (mailbox.Refused(now, schedule.Initial, schedule.Factor, schedule.MaxAttempts, Jitter()))
+            {
+                // INT-MAIL-007 AC3: a push the server never took is visible the moment
+                // its budget is spent.
+                alert = Alerts.Of(AlertCondition.Degradation, "mailbox.push:" + mailbox.Id, now, Exhausted(mailbox));
             }
 
-            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notBegun)
+            if (await RecordedAsync(mailbox, alert, cancellationToken).ConfigureAwait(false) is Error unanswered)
             {
-                return Result.Failure<int>(notBegun);
-            }
-
-            await mailboxes.RecordAsync(mailbox, cancellationToken).ConfigureAwait(false);
-
-            // INT-MAIL-007 AC3: a push the server never took is visible the moment
-            // its budget is spent, and is recorded with the alert or not at all.
-            if (spent
-                && (await alerts
-                        .RaiseAsync(
-                            Alerts.Of(AlertCondition.Degradation, Scope(mailbox), now, Exhausted(mailbox)),
-                            cancellationToken)
-                        .ConfigureAwait(false))
-                    .Match(() => (Error?)null, error => error) is Error unalerted)
-            {
-                return Result.Failure<int>(unalerted);
-            }
-
-            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notCommitted)
-            {
-                return Result.Failure<int>(notCommitted);
+                return Result.Failure<int>(unanswered);
             }
         }
 
@@ -176,8 +181,6 @@ internal sealed class MailboxPublisher(
         }
     }
 
-    private static string Scope(Mailbox mailbox) => "mailbox.push:" + mailbox.Id;
-
     // The mailbox is named by its identifier: the address is personal data and an
     // alert travels to channels that are not the account's.
     private static Dictionary<string, JsonElement> Exhausted(Mailbox mailbox) =>
@@ -186,6 +189,14 @@ internal sealed class MailboxPublisher(
             ["mailbox"] = JsonSerializer.SerializeToElement(mailbox.Id.ToString()),
             ["state"] = JsonSerializer.SerializeToElement(WrittenName.Of(mailbox.Pending!.Value)),
             ["attempts"] = JsonSerializer.SerializeToElement(mailbox.Attempts),
+        };
+
+    // D-177: the conflict's alert names the mailbox and the state its push carried.
+    private static Dictionary<string, JsonElement> Conflicting(Mailbox mailbox) =>
+        new(capacity: 2, StringComparer.Ordinal)
+        {
+            ["mailbox"] = JsonSerializer.SerializeToElement(mailbox.Id.ToString()),
+            ["state"] = JsonSerializer.SerializeToElement(WrittenName.Of(mailbox.Pending!.Value)),
         };
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)
@@ -204,6 +215,32 @@ internal sealed class MailboxPublisher(
         randomness.GetBytes(bytes);
 
         return BinaryPrimitives.ReadUInt16LittleEndian(bytes) / (double)ushort.MaxValue;
+    }
+
+    // The mailbox's progress is written in one transaction, with the alert where one is
+    // raised, so a push marked failed is recorded with its alert or not at all.
+    private async ValueTask<Error?> RecordedAsync(
+        Mailbox mailbox,
+        AlertRaised? alert,
+        CancellationToken cancellationToken)
+    {
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return notBegun;
+        }
+
+        await mailboxes.RecordAsync(mailbox, cancellationToken).ConfigureAwait(false);
+
+        if (alert is not null
+            && (await alerts.RaiseAsync(alert, cancellationToken).ConfigureAwait(false))
+                .Match(() => (Error?)null, error => error) is Error unalerted)
+        {
+            return unalerted;
+        }
+
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error);
     }
 
     private async ValueTask<Result<Schedule>> ScheduleAsync(CancellationToken cancellationToken)

@@ -84,6 +84,7 @@ internal sealed class MailboxConfiguration : IEntityTypeConfiguration<MailboxRec
         builder.Property(mailbox => mailbox.Attempts).HasColumnName("attempts");
         builder.Property(mailbox => mailbox.NextAttemptAt).HasColumnName("next_attempt_at");
         builder.Property(mailbox => mailbox.FailedAt).HasColumnName("failed_at");
+        builder.Property(mailbox => mailbox.Attempted).HasColumnName("attempted");
 
         // PRIV-RIGHT-005c: a fingerprint erasure neutralised is nobody's address, and
         // several may stand side by side.

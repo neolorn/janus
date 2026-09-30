@@ -96,4 +96,9 @@ internal sealed class MailboxRecord
     /// The <c>failed_at</c> column.
     /// </summary>
     public DateTimeOffset? FailedAt { get; set; }
+
+    /// <summary>
+    /// The <c>attempted</c> column.
+    /// </summary>
+    public bool Attempted { get; set; }
 }
