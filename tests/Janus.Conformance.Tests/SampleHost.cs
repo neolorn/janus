@@ -350,11 +350,19 @@ public sealed class SampleHost : IAsyncLifetime
             provider.AbsoluteUri));
         builder.Services.AddSingleton(new SignOnClient(Application));
 
+        // LIB-HOST-001: where the deployment's secrets are read from.
+        var keyEncryptionKeys = new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = _encryption });
+        var fingerprintKeys = new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = _fingerprint });
+        byte[] maintenance = Encoding.UTF8.GetBytes(Maintenance());
+
+        builder.Services.AddSingleton<ISecretSource>(
+            new SecretSourceInMemory(keyEncryptionKeys, fingerprintKeys, maintenance));
+
         builder.Services.AddJanus(
             _database.ConnectionString,
-            new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = _encryption }),
-            new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = _fingerprint }),
-            Encoding.UTF8.GetBytes(Maintenance()),
+            keyEncryptionKeys,
+            fingerprintKeys,
+            maintenance,
             Declaration(),
             ApplicationKind.Public);
 

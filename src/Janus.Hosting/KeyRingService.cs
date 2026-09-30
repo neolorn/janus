@@ -28,8 +28,10 @@ namespace Janus.Hosting;
 /// <param name="host">The host's own mail server, or nothing where it registered none.</param>
 /// <param name="source">The host's secret source, or nothing where it registered none.</param>
 /// <remarks>
-/// Implements CONV-DESIGN-007, CONV-CODE-007, IDN-LIFE-012, D-171 and D-176. The start
-/// fills the ring in steps: every secret but the mail server's as the start begins, ahead
+/// Implements CONV-DESIGN-007, CONV-CODE-007, IDN-LIFE-012, LIB-HOST-001, D-171, D-176
+/// and D-180. Every secret is read through the host's secret source, so a start whose
+/// host declared none is refused by the declaration's name before any secret is read.
+/// The start fills the ring in steps: every secret but the mail server's as the start begins, ahead
 /// of every hosted service; then, in its own place among them, once the settings table
 /// is readable, the choice of the mail server in use and, where the adapter is chosen,
 /// the mail server's key. It
@@ -47,10 +49,17 @@ internal sealed class KeyRingService(
     IMailServer? host,
     ISecretSource? source) : IHostedLifecycleService
 {
+    // LIB-HOST-001, D-180: the secret source spelled as every other declaration is.
+    private const string SecretSource = "secretSource";
+
     /// <inheritdoc/>
-    /// <exception cref="StartupException">A secret cannot be read, or is unusable.</exception>
+    /// <exception cref="StartupException">
+    /// The host declared no secret source, or a secret cannot be read, or is unusable.
+    /// </exception>
     public async Task StartingAsync(CancellationToken cancellationToken)
     {
+        ISecretSource declared = Declared();
+
         // LIB-HOST-001: a declaration that is not a social provider, or one declared
         // twice, is refused by name after this; the credential read is the one of each
         // social provider declared.
@@ -61,9 +70,9 @@ internal sealed class KeyRingService(
         {
             string name = ProviderRoutes.NameOf(provider);
             Error unavailable = KeyRing.Unavailable(KeyRing.Named(name));
-            Result<ProviderCredential> read = source is null
-                ? Result.Failure<ProviderCredential>(unavailable)
-                : await source.ReadProviderCredentialAsync(name, cancellationToken).ConfigureAwait(false);
+            Result<ProviderCredential> read = await declared
+                .ReadProviderCredentialAsync(name, cancellationToken)
+                .ConfigureAwait(false);
 
             ProviderCredential credential = read.Match(
                 answered => Usable(answered, unavailable).Match(() => answered, error => Refused(error)),
@@ -127,9 +136,9 @@ internal sealed class KeyRingService(
         // LIB-HOST-001: the adapter's key, read where the adapter is chosen and nowhere
         // else; one the source cannot answer, or answers empty, stops the start.
         Error unavailable = KeyRing.Unavailable(KeyRing.MailServerSecret);
-        Result<ReadOnlyMemory<byte>> read = source is null
-            ? Result.Failure<ReadOnlyMemory<byte>>(unavailable)
-            : await source.ReadMailServerSecretAsync(cancellationToken).ConfigureAwait(false);
+        Result<ReadOnlyMemory<byte>> read = await Declared()
+            .ReadMailServerSecretAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         ring.HoldMailServerSecret(read.Match(
             secret => secret.IsEmpty ? Unread(unavailable) : secret,
@@ -202,4 +211,9 @@ internal sealed class KeyRingService(
             return Result.Failure(unavailable);
         }
     }
+
+    private ISecretSource Declared() =>
+        source ?? throw new StartupException(
+            "The deployment declares no secret source to read its secrets from.",
+            Error.From(ErrorCodes.StartupDeclarationMissing, "key", JsonSerializer.SerializeToElement(SecretSource)));
 }

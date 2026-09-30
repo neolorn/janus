@@ -349,6 +349,7 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
                 "https://accounts.example.test/signin",
                 "https://accounts.example.test"))
             .AddSingleton(new SignOnClient("this-application"))
+            .AddSingleton<ISecretSource>(new SecretSourceInMemory(new Dictionary<string, ProviderCredential>(StringComparer.Ordinal)))
             .AddJanus(
                 host.ConnectionString,
                 new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),

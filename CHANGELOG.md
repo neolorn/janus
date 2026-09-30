@@ -593,6 +593,9 @@ against the public contract of LIB-API-001.
   the refusal is `model.startup.declarationmissing` naming `mailTransport` or
   `smsTransport`. The register's mail server row applies where a mail server is
   registered; `integration.mail.endpoint` alone no longer makes it true.
+- A deployment that registers no `ISecretSource` does not start: the refusal is
+  `model.startup.declarationmissing`, `details.key` `secretSource`, made as the start
+  begins and before any secret is read, whether or not a social provider is declared.
 - Where Continue with Apple is among the system policy's `loginFactors` and
   `notification.email.sendingdomain` is not in `notification.email.relayregistered`, the
   deployment raises `relay-domain-unregistered` with the domain as it starts and

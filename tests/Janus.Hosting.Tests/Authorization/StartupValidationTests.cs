@@ -456,6 +456,38 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// LIB-HOST-001 AC2, OPS-SEC-001 AC2 and AUTH-KEY-002 AC2 (D-180): a deployment whose
+    /// host declares no secret source does not start, and the refusal names the
+    /// declaration, not a secret: it comes first in the start, before any secret is read,
+    /// so a declared social provider whose credential would have been read changes
+    /// nothing, and the web server never starts.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task LIB_HOST_001_AC2_ADeploymentWithNoSecretSourceDoesNotStartAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        foreach (IReadOnlyList<SocialProvider> providers in (IReadOnlyList<SocialProvider>[])[[], [Google]])
+        {
+            var served = new ServerStandIn();
+            using IHost deployment = new HostBuilder()
+                .ConfigureServices(services => Declared(
+                    services.AddSingleton<IHostedService>(served),
+                    providers: providers,
+                    secretSource: false))
+                .Build();
+
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await deployment.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+            Assert.Equal("secretSource", refused.Failure?.Details["key"].GetString());
+            Assert.False(served.Started);
+        }
+    }
+
+    /// <summary>
     /// IDN-LIFE-012a, IDN-LIFE-012, D-166: a declared provider's credential is read
     /// through the secret source as the deployment starts, and one the source cannot
     /// answer, answers empty, or answers as a signing credential with a blank issuer,
@@ -472,7 +504,6 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     [InlineData("keyId")]
     [InlineData("rsa")]
     [InlineData("p384")]
-    [InlineData("nosource")]
     public async Task IDN_LIFE_012a_ASocialProviderWithoutAUsableCredentialIsRefusedAsync(string fault)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -481,18 +512,16 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         using var rsa = RSA.Create(2048);
         ProviderCredential? credential = fault switch
         {
-            "unanswered" or "nosource" => null,
+            "unanswered" => null,
             "empty" => ProviderCredential.Secret(ReadOnlyMemory<byte>.Empty),
             "issuer" => ProviderCredential.Signed(" ", "KEY1", p256.ExportPkcs8PrivateKey()),
             "keyId" => ProviderCredential.Signed("TEAM1", "", p256.ExportPkcs8PrivateKey()),
             "rsa" => ProviderCredential.Signed("TEAM1", "KEY1", rsa.ExportPkcs8PrivateKey()),
             _ => ProviderCredential.Signed("TEAM1", "KEY1", p384.ExportPkcs8PrivateKey()),
         };
-        SecretSourceInMemory? secrets = fault is "nosource"
-            ? null
-            : new SecretSourceInMemory(credential is null
-                ? new Dictionary<string, ProviderCredential>(StringComparer.Ordinal)
-                : new Dictionary<string, ProviderCredential>(StringComparer.Ordinal) { ["google"] = credential });
+        var secrets = new SecretSourceInMemory(credential is null
+            ? new Dictionary<string, ProviderCredential>(StringComparer.Ordinal)
+            : new Dictionary<string, ProviderCredential>(StringComparer.Ordinal) { ["google"] = credential });
 
         using (IHost refusedHost = Deployed(providers: [Google], secrets: secrets))
         {
@@ -902,7 +931,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         IReadOnlyList<SocialProvider>? providers = null,
         ISecretSource? secrets = null,
         bool mailTransport = true,
-        bool smsTransport = true) =>
+        bool smsTransport = true,
+        bool secretSource = true) =>
         new HostBuilder()
             .ConfigureServices(services => Declared(
                 services,
@@ -917,7 +947,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
                 providers: providers,
                 secrets: secrets,
                 mailTransport: mailTransport,
-                smsTransport: smsTransport))
+                smsTransport: smsTransport,
+                secretSource: secretSource))
             .Build();
 
     // The library registered over this deployment, as the host's own code registers
@@ -936,7 +967,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         IReadOnlyList<SocialProvider>? providers = null,
         ISecretSource? secrets = null,
         bool mailTransport = true,
-        bool smsTransport = true)
+        bool smsTransport = true,
+        bool secretSource = true)
     {
         if (mailTransport)
         {
@@ -998,9 +1030,9 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
             services.AddSingleton(provider);
         }
 
-        if (secrets is not null)
+        if (secretSource)
         {
-            services.AddSingleton(secrets);
+            services.AddSingleton(secrets ?? new SecretSourceInMemory(new Dictionary<string, ProviderCredential>(StringComparer.Ordinal)));
         }
 
         return services.AddJanus(
