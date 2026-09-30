@@ -1454,6 +1454,9 @@ against the public contract of LIB-API-001.
   that the record is there. The browser profile answers such a refusal as `404
   authz.resource.notfound` carrying the identifier it was recorded under, whatever the
   endpoint wrote after it, and the answer is the same whether or not the record exists.
+- The refusal of a record the library holds no row for runs the same statements as the
+  refusal of a registered one, the reading of the host's rows included, so how long it
+  takes says nothing about whether the record exists.
 - Every refusal carries a correlation identifier, whatever the request was made under,
   background work included, which is the audit row it was recorded as. A refusal of work
   done under neither identity is recorded with neither named, which is the recorded fact

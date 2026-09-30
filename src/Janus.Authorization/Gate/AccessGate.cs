@@ -56,6 +56,11 @@ internal sealed class AccessGate(
 {
     private static readonly ResourceType OrganizationWide = ResourceType.Parse("organization");
 
+    // AUTHZ-CONCEAL-002 AC2, D-166: every organization identifier is a version 7 value,
+    // so the nil one names none, and a query scoped to it is the same statement as one
+    // scoped to an organization and matches no row.
+    private static readonly OrganizationId NoOrganization = new(Guid.Empty);
+
     private static readonly IReadOnlyDictionary<Permission, IReadOnlySet<CapabilityResidual>>
         NoResiduals = new Dictionary<Permission, IReadOnlySet<CapabilityResidual>>();
 
@@ -134,16 +139,18 @@ internal sealed class AccessGate(
 
         // AUTHZ-DERIVE-002 AC1: a deny defeats a derived grant as it defeats a stored
         // one, so the host's relations are read only where nothing has decided yet.
+        // AUTHZ-CONCEAL-002 AC2, D-166: a record the library holds no row for is read
+        // for as a registered one is, against no organization, and admits nothing.
         if (decided.Grant is null
-            && decided.Organization is OrganizationId owner
             && (await AdmittedAsync(
                 context,
                 [permission],
                 resource.Type,
-                owner,
+                decided.Organization ?? NoOrganization,
                 sources,
                 [resource.Id],
-                cancellationToken).ConfigureAwait(false)).Contains(resource.Id.ToString()))
+                cancellationToken).ConfigureAwait(false)).Contains(resource.Id.ToString())
+            && decided.Organization is not null)
         {
             return await AllowedAsync(context, permission, resource, decided, cancellationToken)
                 .ConfigureAwait(false);
@@ -1334,15 +1341,13 @@ internal sealed class AccessGate(
             .FindAsync(resource, cancellationToken)
             .ConfigureAwait(false);
 
-        if (registered is null)
-        {
-            return new Decision(Grant: null, Organization: null, Subject: null);
-        }
-
+        // AUTHZ-CONCEAL-002 AC2, BFF-ERR-003, D-166: a record the library holds no row
+        // for is evaluated as a registered one is, against no organization, and what the
+        // evaluation answers is set aside, so a refusal of either runs the same queries.
         var rule = new PermissionRule(
             [permission],
             resource.Type,
-            registered.Organization,
+            registered?.Organization ?? NoOrganization,
             await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false),
             time.GetUtcNow());
 
@@ -1350,10 +1355,12 @@ internal sealed class AccessGate(
             .CandidatesAsync(rule.ToCandidates(), resource.Id, cancellationToken)
             .ConfigureAwait(false);
 
-        return new Decision(
-            PermissionRule.Decides(candidates),
-            registered.Organization,
-            registered.Subject);
+        return registered is null
+            ? new Decision(Grant: null, Organization: null, Subject: null)
+            : new Decision(
+                PermissionRule.Decides(candidates),
+                registered.Organization,
+                registered.Subject);
     }
 
     // What an evaluation decided, and the organization it was scoped to, which is what

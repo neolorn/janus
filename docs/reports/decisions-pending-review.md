@@ -13896,6 +13896,8 @@ identifier and nothing the endpoint wrote. AUTHZ-CONCEAL-001 could say that a ho
 the gate before it looks the record up, since a record the library holds no row for is
 the genuine absence a concealed refusal is identical to.
 
+**Superseded by D-166.**
+
 ---
 
 ## 340. How a client enters the registry, and how its secret is rotated
