@@ -36,10 +36,12 @@ namespace Janus.Hosting;
 /// none.
 /// </param>
 /// <param name="providers">The social providers whose security events the deployment takes.</param>
+/// <param name="declaration">What the host declared about its own domain.</param>
+/// <param name="subscribers">The subject-event subscribers the host registered.</param>
 /// <param name="configuration">Where the organizations that show photos are read.</param>
 /// <remarks>
 /// Implements LIB-HOST-001, REG-PM-001, AUTH-SESS-012, BFF-SESS-006, IDN-ATTR-002,
-/// INT-MAIL-010 and IDN-LIFE-012a.
+/// INT-MAIL-010, IDN-LIFE-012a and INT-SMS-003.
 /// The library knows no route of the frontend, so it has none to fall back on: a
 /// deployment that declares none of these is stopped here rather than answering a
 /// password manager as a site that offers neither page, meeting an interactive
@@ -52,7 +54,10 @@ namespace Janus.Hosting;
 /// declared is declared whole: named once, as a social provider, with the HTTPS address
 /// of its document and at least one client, since a declaration short of that would
 /// verify none of the events it was declared for; one that is malformed is refused as
-/// invalid rather than missing, naming the provider and the member at fault (D-175).
+/// invalid rather than missing, naming the provider and the member at fault (D-175). A
+/// governing document's name and a subscriber's fill a message place measured at the
+/// width the name rule bounds, so one declared outside the rule is refused here rather
+/// than carried into a text longer than the width it was measured at.
 /// </remarks>
 internal sealed class DeclarationCoverage(
     PasskeyAddresses? addresses,
@@ -62,6 +67,8 @@ internal sealed class DeclarationCoverage(
     MailServerClient? mailClient,
     ImageCodec? codec,
     IEnumerable<SocialProvider> providers,
+    AuthorizationDeclaration declaration,
+    IEnumerable<ISubjectEventSubscriber> subscribers,
     IConfigurationStore configuration)
 {
     private const string Passkeys = "passkeyAddresses";
@@ -128,9 +135,14 @@ internal sealed class DeclarationCoverage(
             return Missing(MailClient);
         }
 
-        if (Malformed() is (string declaration, string field))
+        if (Malformed() is (string declared, string field))
         {
-            return Invalid(declaration, field);
+            return Invalid(declared, field);
+        }
+
+        if (Unruled() is (string named, string member))
+        {
+            return Invalid(named, member);
         }
 
         return await PhotographedAsync(cancellationToken).ConfigureAwait(false);
@@ -195,6 +207,30 @@ internal sealed class DeclarationCoverage(
                         StringComparison.Ordinal)))
             {
                 return (declaration, "return");
+            }
+        }
+
+        return null;
+    }
+
+    // INT-SMS-003: the governing document a purpose names, as the purpose it is
+    // declared on, and the subscriber whose name breaks the rule of a message place,
+    // as the name it is registered under, or nothing where every one keeps it.
+    private (string Declaration, string Field)? Unruled()
+    {
+        foreach (PurposeDeclaration purpose in declaration.ResourceTypes.SelectMany(type => type.Purposes))
+        {
+            if (purpose.Document is string document && !PlaceName.Holds(document))
+            {
+                return (purpose.Name, "document");
+            }
+        }
+
+        foreach (ISubjectEventSubscriber subscriber in subscribers)
+        {
+            if (!PlaceName.Holds(subscriber.Name))
+            {
+                return (subscriber.Name, "name");
             }
         }
 

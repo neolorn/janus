@@ -917,6 +917,11 @@ against the public contract of LIB-API-001.
   subscriber named `erasure-ledger`, with `model.startup.subscribername` naming it,
   since a confirmation is recorded under the name and a shared one would let an erasure
   close with a subscriber's work undone.
+- A subject-event subscriber's name, and the name of the governing document a purpose
+  names, is 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_`.
+  A deployment that registers or declares one outside that rule does not start: the
+  failure is `model.startup.declarationinvalid`, `details.declaration` naming the
+  subscriber or the purpose and `details.field` `name` or `document`.
 - A data subject request enters a queue with a statutory clock on it. A subject submits
   a restriction or a rectification for themselves at `POST /privacy/requests` and is
   answered with the request identifier, the receipt timestamp and the date the decision

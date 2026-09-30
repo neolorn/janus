@@ -350,6 +350,8 @@ public static class HostingRegistration
             provider.GetService<MailServerClient>(),
             provider.GetService<ImageCodec>(),
             provider.GetServices<SocialProvider>(),
+            provider.GetRequiredService<AuthorizationDeclaration>(),
+            provider.GetServices<ISubjectEventSubscriber>(),
             provider.GetRequiredService<IConfigurationStore>()));
 
         services.ConfigureHttpJsonOptions(ReadThroughContexts);

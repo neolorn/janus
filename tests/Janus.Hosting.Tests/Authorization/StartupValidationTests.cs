@@ -226,6 +226,72 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// INT-SMS-003 AC3: a subscriber's name fills the <c>outstanding</c> place, so one
+    /// registered under a name outside the rule stops the deployment as it starts,
+    /// naming it and its member; one inside the rule starts.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_SMS_003_AC3_ASubscriberNamedOutsideTheRuleIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using (IHost refusedHost = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<ISubjectEventSubscriber>(new Named("Host Events"));
+                Declared(services);
+            })
+            .Build())
+        {
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await refusedHost.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+            Assert.Equal("Host Events", refused.Failure?.Details["declaration"].GetString());
+            Assert.Equal("name", refused.Failure?.Details["field"].GetString());
+        }
+
+        using IHost started = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<ISubjectEventSubscriber>(new Named("host.events_2"));
+                Declared(services);
+            })
+            .Build();
+
+        await started.StartAsync(cancellationToken);
+        await started.StopAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// INT-SMS-003 AC3: a governing document's name fills the <c>document</c> place, so
+    /// a purpose that names one outside the rule stops the deployment as it starts,
+    /// naming the purpose and its member; one inside the rule starts.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_SMS_003_AC3_AGoverningDocumentNamedOutsideTheRuleIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using (IHost refusedHost = Deployed(document: "Recommendation Terms"))
+        {
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await refusedHost.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+            Assert.Equal("recommendations", refused.Failure?.Details["declaration"].GetString());
+            Assert.Equal("document", refused.Failure?.Details["field"].GetString());
+        }
+
+        using IHost started = Deployed(document: "recommendation-terms");
+
+        await started.StartAsync(cancellationToken);
+        await started.StopAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// LIB-HOST-001, REG-PM-001: the frontend's pages are a declaration with no
     /// default, so a deployment that registered none is stopped as it starts rather
     /// than answering a password manager as a site that offers neither page.
@@ -994,7 +1060,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         ISecretSource? secrets = null,
         bool mailTransport = true,
         bool smsTransport = true,
-        bool secretSource = true) =>
+        bool secretSource = true,
+        string? document = null) =>
         new HostBuilder()
             .ConfigureServices(services => Declared(
                 services,
@@ -1010,7 +1077,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
                 secrets: secrets,
                 mailTransport: mailTransport,
                 smsTransport: smsTransport,
-                secretSource: secretSource))
+                secretSource: secretSource,
+                document: document))
             .Build();
 
     // The library registered over this deployment, as the host's own code registers
@@ -1030,7 +1098,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         ISecretSource? secrets = null,
         bool mailTransport = true,
         bool smsTransport = true,
-        bool secretSource = true)
+        bool secretSource = true,
+        string? document = null)
     {
         if (mailTransport)
         {
@@ -1097,7 +1166,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
             services.AddSingleton<ISecretSource>(secrets ?? HostFixture.Secrets(host.MaintenanceConnectionString));
         }
 
-        return services.AddJanus(connection ?? host.ConnectionString, HostFixture.Declaration(), ApplicationKind.Public);
+        return services.AddJanus(connection ?? host.ConnectionString, HostFixture.Declaration(document: document), ApplicationKind.Public);
     }
 
     // IDN-ATTR-002: an organization shows photos by its key, which is a settings row
@@ -1152,6 +1221,19 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         await connection.ExecuteAsync(new CommandDefinition(
             statement,
             cancellationToken: cancellationToken));
+    }
+
+    // A subscriber of the host's own under the name given, covering nothing.
+    private sealed class Named(string name) : ISubjectEventSubscriber
+    {
+        public string Name => name;
+
+        public bool Required => false;
+
+        public IReadOnlyCollection<ResourceType> Covers { get; } = [];
+
+        public ValueTask<Result> HandleAsync(SubjectEvent raised, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(Result.Success());
     }
 
     // A subscriber of the host's that took the name the erasure ledger's confirmation
