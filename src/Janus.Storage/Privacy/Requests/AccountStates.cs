@@ -136,10 +136,22 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
     /// <inheritdoc/>
     public async ValueTask<bool> ReverseTakedownAsync(
         SubjectId subject,
+        DateTimeOffset now,
+        DeletionWindows windows,
         CancellationToken cancellationToken)
     {
-        if (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
-            is not { State: AccountState.Deleting, DeletingBy: DeletionOrigin.Takedown } account)
+        ArgumentNullException.ThrowIfNull(windows);
+
+        // IDN-LIFE-003: the window is judged again under the lock on the row, so of a
+        // reversal and the erasure at the window's end only one commits.
+        if (await accounts.HoldAsync(subject, cancellationToken).ConfigureAwait(false)
+                is not
+                {
+                    State: AccountState.Deleting,
+                    DeletingBy: DeletionOrigin.Takedown,
+                    DeletingSince: DateTimeOffset since,
+                } account
+            || now >= windows.ErasureDue(DeletionOrigin.Takedown, since, account.DeletionHeldSince))
         {
             return false;
         }

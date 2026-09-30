@@ -505,6 +505,59 @@ public sealed class TakedownServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// API-CONV-002 (D-166): a reason is free text of 1 to 1024 characters after
+    /// trimming, so a trigger or a reversal whose reason runs past that is malformed,
+    /// naming it, and changes nothing, while 1024 characters inside spaces are taken.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_CONV_002_AReasonPastTheLimitIsMalformedAsync()
+    {
+        string longest = new('r', 1024);
+        string past = new('r', 1025);
+
+        Error trigger = Refused(await ExecutedAsync(reason: past));
+
+        Assert.Equal((ErrorCodes.RequestMalformed, "reason"), (trigger.Code, trigger.Details["member"].GetString()));
+        Assert.Equal(AccountState.Active, _accounts.Of(Ahmed));
+
+        _ = Held(await ExecutedAsync(reason: $"  {longest}  "));
+
+        Error reversal = Refused(await ReversedAsync(reason: past));
+
+        Assert.Equal((ErrorCodes.RequestMalformed, "reason"), (reversal.Code, reversal.Details["member"].GetString()));
+        Assert.Equal(AccountState.Deleting, _accounts.Of(Ahmed));
+    }
+
+    /// <summary>
+    /// 09 section 8a (D-166): the session's proof is judged after every other refusal,
+    /// so a request refused on its reason, on its subject or on the takedown it names is
+    /// answered with that refusal and never asks the caller to step up.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_TheStepUpIsJudgedAfterEveryOtherRefusalAsync()
+    {
+        var nobody = new SubjectId(Guid.Parse("33333333-3333-4333-8333-333333333333"));
+
+        _stepUp.Closed = Error.From(ErrorCodes.StepUpRequired);
+
+        Assert.Equal(ErrorCodes.RequestMalformed, Refused(await ExecutedAsync(reason: " ")).Code);
+        Assert.Equal(ErrorCodes.RequestMalformed, Refused(await ReversedAsync(reason: " ")).Code);
+        Assert.Equal(ErrorCodes.TakedownNotFound, Refused(await ReversedAsync()).Code);
+        Assert.Equal(
+            ErrorCodes.AccountNotFound,
+            Refused(await Takedowns.ExecuteAsync(
+                AccessContext.Of(Mona),
+                Browser,
+                nobody,
+                TakedownTrigger.CustomerReport,
+                "a parent wrote in",
+                TestContext.Current.CancellationToken)).Code);
+        Assert.Empty(_stepUp.Asked);
+    }
+
+    /// <summary>
     /// 09 section 8a: an account that was never taken down has no progress to read.
     /// </summary>
     /// <returns>The work of the test.</returns>

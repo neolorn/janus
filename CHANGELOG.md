@@ -730,18 +730,19 @@ against the public contract of LIB-API-001.
   process and take no organization.
 - The minor takedown, as `ITakedowns` and `POST /admin/accounts/{subject}/takedown`:
   under `takedown:execute` and step-up, one transaction suspends the account into its
-  `takedown.grace` window, ends every session of it, records the trigger and the reason,
-  and writes the `TakedownExecuted` delivery on which the host stops its own processing
-  for the subject. An account `active`, `restricted`, `suspended`, or already deleting
-  by its own or an out-of-band request is taken down, holding the state it was in: the
-  accounts table carries `suspension_held`, `deletion_held` and `deletion_held_since`. A
-  takedown of a running deletion is erased at the earlier of that window's end and its
-  own. A second takedown answers 409 `identity.takedown.active`, an erased account 409
+  `takedown.grace` window, ends every session of it, records the trigger and the reason
+  (1 to 1024 characters after trimming, else 400 `api.request.malformed`), and writes
+  the `TakedownExecuted` delivery on which the host stops its own processing for the
+  subject. An account `active`, `restricted`, `suspended`, or already deleting by its
+  own or an out-of-band request is taken down, holding the state it was in: the accounts
+  table carries `suspension_held`, `deletion_held` and `deletion_held_since`. A takedown
+  of a running deletion is erased at the earlier of that window's end and its own. A
+  second takedown answers 409 `identity.takedown.active`, an erased account 409
   `identity.account.stateconflict`, and a subject no account bears 404
-  `identity.account.notfound`. The answer carries `takedownId` and `erasureDue`.
-  `AccountSuspended` is written in the trigger's transaction at every trigger, whatever
-  state the account held, and a refusal to write it fails the trigger; no deletion
-  notice and no `AccountDeletionRequested` is sent.
+  `identity.account.notfound`. Step-up is judged after every other refusal. The answer
+  carries `takedownId` and `erasureDue`. `AccountSuspended` is written in the trigger's
+  transaction at every trigger, whatever state the account held, and a refusal to write
+  it fails the trigger; no deletion notice and no `AccountDeletionRequested` is sent.
 - `GET /admin/accounts/{subject}/takedown` reads the latest takedown of an account: when
   it was triggered, when its erasure runs, whether it was reversed (`reversed`, with
   `erasureDue` null), and which registered subscriber has confirmed it and when. An
@@ -752,7 +753,8 @@ against the public contract of LIB-API-001.
   start; else the suspension it was in, with its origin; else restricted where a
   restriction is held; else active. After the window it answers 422
   `identity.takedown.windowelapsed`, and an account holding no takedown 404
-  `identity.takedown.notfound`.
+  `identity.takedown.notfound`. The reversal and the erasure at the window's end each
+  hold the account row, so of the two at the boundary the second waits and refuses.
 - `MembershipChanged` announces a membership beginning or ending, naming the membership,
   its organization and whose it is. The erasure at the end of an organization's deletion
   window raises one for every membership it ends, alongside `OrganizationErased`.

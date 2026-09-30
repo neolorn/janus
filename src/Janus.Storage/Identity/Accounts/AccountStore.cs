@@ -27,19 +27,58 @@ internal sealed class AccountStore(StoreContext context) : IAccountStore
     {
         AccountRecord? record = await FindAsync(subject, cancellationToken).ConfigureAwait(false);
 
-        return record is null ? null : Account.Existing(
-            record.Subject,
-            record.CreatedAt,
-            record.State,
-            record.SuspendedBy,
-            record.SuspensionHeld,
-            record.RestrictionHeld,
-            record.DeletingBy,
-            record.DeletingSince,
-            record.DeletionHeld,
-            record.DeletionHeldSince,
-            Registered(record),
-            record.IsEmergency);
+        return record is null ? null : Existing(record);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<Account?> HoldAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        AccountRecord? record = await HeldAsync(context, subject, cancellationToken).ConfigureAwait(false);
+
+        return record is null ? null : Existing(record);
+    }
+
+    /// <summary>
+    /// The <c>accounts</c> row, read under a lock held until the operation's transaction
+    /// ends. A row the context already tracks was read before the lock, so it is read
+    /// again: what the operation decides on is the row committed when the lock was taken.
+    /// </summary>
+    /// <param name="context">The context the operation's writes are tracked on.</param>
+    /// <param name="subject">Whose row.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The row, tracked, or nothing where the subject has none.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    /// <remarks>
+    /// Implements IDN-LIFE-003: of a takedown's reversal and the erasure at its window's
+    /// end, each reads the account here, so the second waits for the first and decides
+    /// on what it committed.
+    /// </remarks>
+    internal static async ValueTask<AccountRecord?> HeldAsync(
+        StoreContext context,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("An account row is held only inside the operation's transaction.");
+        }
+
+        bool tracked = context.Accounts.Local.Any(record => record.Subject == subject);
+
+        AccountRecord? held = (await context.Accounts
+                .FromSql($"SELECT * FROM identity.accounts WHERE subject = {subject.Value} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .SingleOrDefault();
+
+        if (held is not null && tracked)
+        {
+            await context.Entry(held).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return held;
     }
 
     /// <inheritdoc/>
@@ -103,23 +142,23 @@ internal sealed class AccountStore(StoreContext context) : IAccountStore
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return
-        [
-            .. records.Select(record => Account.Existing(
-                record.Subject,
-                record.CreatedAt,
-                record.State,
-                record.SuspendedBy,
-                record.SuspensionHeld,
-                record.RestrictionHeld,
-                record.DeletingBy,
-                record.DeletingSince,
-                record.DeletionHeld,
-                record.DeletionHeldSince,
-                Registered(record),
-                record.IsEmergency)),
-        ];
+        return [.. records.Select(Existing)];
     }
+
+    private static Account Existing(AccountRecord record) =>
+        Account.Existing(
+            record.Subject,
+            record.CreatedAt,
+            record.State,
+            record.SuspendedBy,
+            record.SuspensionHeld,
+            record.RestrictionHeld,
+            record.DeletingBy,
+            record.DeletingSince,
+            record.DeletionHeld,
+            record.DeletionHeldSince,
+            Registered(record),
+            record.IsEmergency);
 
     private static AccountRegistration? Registered(AccountRecord record) =>
         record.AnsweredAgeAt is DateTimeOffset answered

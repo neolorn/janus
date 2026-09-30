@@ -1,19 +1,24 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Authentication;
 using Janus.Authentication.Events;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Identity.Accounts;
+using Janus.Privacy.Erasures;
 using Janus.Privacy.Requests;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Events;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Identity.Accounts;
+using Janus.Storage.Privacy.Erasures;
 using Janus.Storage.Privacy.Requests;
+using Janus.Storage.Settings;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Xunit;
@@ -29,6 +34,9 @@ public sealed class AccountStatesTests(DatabaseFixture database)
     : IClassFixture<DatabaseFixture>, IDisposable
 {
     private static readonly DateTimeOffset Noon = new(2026, 9, 23, 12, 0, 0, TimeSpan.Zero);
+    private static readonly DeletionWindows Windows = new(TimeSpan.FromDays(30), TimeSpan.FromDays(30));
+    private static readonly DateTimeOffset Due = Noon + TimeSpan.FromDays(30);
+    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(30);
 
     private readonly Deployment _deployment = new(database);
 
@@ -118,25 +126,14 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
         await TakenDownAsync(subject);
 
-        await using (StoreContext reversing = database.Context())
-        {
-            Assert.True(await States(reversing).ReverseTakedownAsync(
-                subject,
-                TestContext.Current.CancellationToken));
-            await reversing.SaveChangesAsync(TestContext.Current.CancellationToken);
-        }
+        Assert.True(await ReversedAsync(subject));
 
         AccountStanding standing = await StandingAsync(subject);
 
         Assert.Equal(AccountState.Active, standing.State);
         Assert.Null(standing.DeletingBy);
         Assert.Null(standing.DeletingSince);
-
-        await using StoreContext again = database.Context();
-
-        Assert.False(await States(again).ReverseTakedownAsync(
-            subject,
-            TestContext.Current.CancellationToken));
+        Assert.False(await ReversedAsync(subject));
     }
 
     /// <summary>
@@ -163,11 +160,9 @@ public sealed class AccountStatesTests(DatabaseFixture database)
             Assert.False(await States(again).RestrictAsync(
                 subject,
                 TestContext.Current.CancellationToken));
-            Assert.True(await States(again).ReverseTakedownAsync(
-                subject,
-                TestContext.Current.CancellationToken));
-            await again.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
+
+        Assert.True(await ReversedAsync(subject));
 
         Assert.Equal(AccountState.Restricted, (await StandingAsync(subject)).State);
     }
@@ -206,11 +201,9 @@ public sealed class AccountStatesTests(DatabaseFixture database)
                 subject,
                 Noon,
                 TestContext.Current.CancellationToken));
-            Assert.True(await States(again).ReverseTakedownAsync(
-                subject,
-                TestContext.Current.CancellationToken));
-            await again.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
+
+        Assert.True(await ReversedAsync(subject));
 
         AccountStanding reversed = await StandingAsync(subject);
 
@@ -242,13 +235,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
         await TakenDownAsync(subject);
 
-        await using (StoreContext reversing = database.Context())
-        {
-            Assert.True(await States(reversing).ReverseTakedownAsync(
-                subject,
-                TestContext.Current.CancellationToken));
-            await reversing.SaveChangesAsync(TestContext.Current.CancellationToken);
-        }
+        Assert.True(await ReversedAsync(subject));
 
         await using StoreContext reading = database.Context();
 
@@ -258,6 +245,85 @@ public sealed class AccountStatesTests(DatabaseFixture database)
         Assert.Equal((AccountState.Suspended, SuspensionOrigin.Administrator), (read.State, read.SuspendedBy));
         Assert.Null(read.SuspensionHeld);
         Assert.Null(read.DeletingBy);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003: an erasure at the window's end holds the account's row, so a
+    /// reversal made in the window's last instant waits for it and then refuses, and
+    /// the account stays erased.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_003_AReversalAtTheBoundaryWaitsForTheErasureAndRefusesAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await TakenDownAsync(subject);
+
+        await using StoreContext erasing = database.Context();
+        await using var erasure = new UnitOfWork(erasing);
+        await using StoreContext reversing = database.Context();
+        await using var reversal = new UnitOfWork(reversing);
+
+        await erasure.BeginAsync(cancellationToken);
+        _ = await Eraser(erasing).EraseAsync(subject, ErasureReason.MinorTakedown, Due, cancellationToken);
+
+        await reversal.BeginAsync(cancellationToken);
+
+        Task<bool> reversed = States(reversing)
+            .ReverseTakedownAsync(subject, Due - TimeSpan.FromMilliseconds(1), Windows, cancellationToken)
+            .AsTask();
+
+        await BlockedAsync(cancellationToken);
+
+        Assert.False(reversed.IsCompleted);
+
+        await erasure.CommitAsync(cancellationToken);
+
+        Assert.False(await reversed.WaitAsync(Bound, cancellationToken));
+        Assert.Equal(AccountState.Deleted, (await StandingAsync(subject)).State);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003: a reversal in the window's last instant holds the account's row, so
+    /// the erasure at the window's end waits for it and then refuses the account the
+    /// reversal returned, and the account stays active.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_003_AnErasureAtTheBoundaryWaitsForTheReversalAndRefusesAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await TakenDownAsync(subject);
+
+        await using StoreContext reversing = database.Context();
+        await using var reversal = new UnitOfWork(reversing);
+        await using StoreContext erasing = database.Context();
+        await using var erasure = new UnitOfWork(erasing);
+
+        await reversal.BeginAsync(cancellationToken);
+
+        Assert.True(await States(reversing).ReverseTakedownAsync(
+            subject,
+            Due - TimeSpan.FromMilliseconds(1),
+            Windows,
+            cancellationToken));
+
+        await erasure.BeginAsync(cancellationToken);
+
+        Task<Erasure> erased = Eraser(erasing)
+            .EraseAsync(subject, ErasureReason.MinorTakedown, Due, cancellationToken)
+            .AsTask();
+
+        await BlockedAsync(cancellationToken);
+
+        Assert.False(erased.IsCompleted);
+
+        await reversal.CommitAsync(cancellationToken);
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(() => erased.WaitAsync(Bound, cancellationToken));
+        Assert.Equal(AccountState.Active, (await StandingAsync(subject)).State);
     }
 
     /// <summary>
@@ -366,6 +432,44 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
     private AccountStates States(StoreContext context) =>
         new(new AccountStore(context), Sessions(context));
+
+    private SubjectEraser Eraser(StoreContext context) =>
+        new(context, Sessions(context), new ConfigurationStore(context, new DataConnections(context)));
+
+    // The second transaction is waiting on the account row the first holds, as the
+    // database itself reports it, so the case lets the first commit only then.
+    private async Task BlockedAsync(CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        bounded.CancelAfter(Bound);
+
+        while (await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                   "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%identity.accounts%FOR UPDATE%'",
+                   cancellationToken: bounded.Token)) == 0)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(20), bounded.Token);
+        }
+    }
+
+    private async Task<bool> ReversedAsync(SubjectId subject)
+    {
+        await using StoreContext reversing = database.Context();
+        await using var work = new UnitOfWork(reversing);
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+
+        bool reversed = await States(reversing).ReverseTakedownAsync(
+            subject,
+            Noon + TimeSpan.FromHours(1),
+            Windows,
+            TestContext.Current.CancellationToken);
+
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+
+        return reversed;
+    }
 
     private SessionStore Sessions(StoreContext context) =>
         new(context, _deployment.Ring, _deployment.Randomness);

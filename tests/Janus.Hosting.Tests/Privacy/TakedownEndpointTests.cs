@@ -89,6 +89,35 @@ public sealed class TakedownEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// API-CONV-002 (D-166): a reason past 1024 characters after trimming is answered
+    /// 400 <c>api.request.malformed</c> naming <c>reason</c>, at the trigger and at the
+    /// reversal, and moves nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_CONV_002_AReasonPastTheLimitIsMalformedAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+        string past = new('r', 1025);
+
+        Answer trigger = await browser.SendAsync(
+            "POST",
+            Takedown,
+            ("trigger", "customer-report"),
+            ("reason", past));
+        Answer reversal = await browser.SendAsync("POST", $"{Takedown}/reverse", ("reason", past));
+
+        foreach (Answer refused in new[] { trigger, reversal })
+        {
+            Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+            Assert.Equal(ErrorCodes.RequestMalformed.ToString(), refused.Text("code"));
+            Assert.Equal("reason", refused.Json().GetProperty("details").GetProperty("member").GetString());
+        }
+
+        Assert.Equal(AccountState.Active, _deployment.AccountStates.Of(Ahmed));
+    }
+
+    /// <summary>
     /// 09 section 8a: the reversal inside the window is answered 204, and one after it
     /// 422 <c>identity.takedown.windowelapsed</c>.
     /// </summary>

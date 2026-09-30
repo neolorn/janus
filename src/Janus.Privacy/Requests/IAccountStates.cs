@@ -83,12 +83,20 @@ internal interface IAccountStates
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Reverses a takedown and restores the state the account held at the trigger.
+    /// Reverses a takedown and restores the state the account held at the trigger,
+    /// judging the window under a lock on the account.
     /// </summary>
     /// <param name="subject">Whose.</param>
+    /// <param name="now">The instant of the reversal.</param>
+    /// <param name="windows">The lengths the takedown's window is measured by.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Whether the state changed: only an account deleting by a takedown is reversed.
+    /// Whether the state changed: only an account deleting by a takedown whose window
+    /// is still open is reversed.
     /// </returns>
-    ValueTask<bool> ReverseTakedownAsync(SubjectId subject, CancellationToken cancellationToken);
+    ValueTask<bool> ReverseTakedownAsync(
+        SubjectId subject,
+        DateTimeOffset now,
+        DeletionWindows windows,
+        CancellationToken cancellationToken);
 }

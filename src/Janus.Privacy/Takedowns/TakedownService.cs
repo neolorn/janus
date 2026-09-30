@@ -68,11 +68,9 @@ internal sealed class TakedownService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(reason);
 
-        if (await RefusedAsync(context, session, StepUpAction.AccountTakedown, cancellationToken)
-                .ConfigureAwait(false)
-            is Error refused)
+        if (await DeniedAsync(context, cancellationToken).ConfigureAwait(false) is Error denied)
         {
-            return Result.Failure<ExecutedTakedown>(refused);
+            return Result.Failure<ExecutedTakedown>(denied);
         }
 
         if (Written(reason) is not string written)
@@ -108,6 +106,13 @@ internal sealed class TakedownService(
                 DeletionOrigin.Takedown,
                 now,
                 standing.State is AccountState.Deleting ? standing.DeletingSince : null));
+
+        if (await ChallengedAsync(context, session, StepUpAction.AccountTakedown, cancellationToken)
+                .ConfigureAwait(false)
+            is Error challenged)
+        {
+            return Result.Failure<ExecutedTakedown>(challenged);
+        }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
@@ -171,9 +176,7 @@ internal sealed class TakedownService(
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (await scope
-                .RefusedAsync(context, Permissions.TakedownExecute, cancellationToken)
-                .ConfigureAwait(false) is Error denied)
+        if (await DeniedAsync(context, cancellationToken).ConfigureAwait(false) is Error denied)
         {
             return Result.Failure<TakedownProgress>(denied);
         }
@@ -234,11 +237,9 @@ internal sealed class TakedownService(
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(reason);
 
-        if (await RefusedAsync(context, session, StepUpAction.AccountTakedownReverse, cancellationToken)
-                .ConfigureAwait(false)
-            is Error refused)
+        if (await DeniedAsync(context, cancellationToken).ConfigureAwait(false) is Error denied)
         {
-            return Result.Failure(refused);
+            return Result.Failure(denied);
         }
 
         if (Written(reason) is not string written)
@@ -277,15 +278,28 @@ internal sealed class TakedownService(
             return Result.Failure(Error.From(ErrorCodes.TakedownWindowElapsed));
         }
 
+        if (await ChallengedAsync(context, session, StepUpAction.AccountTakedownReverse, cancellationToken)
+                .ConfigureAwait(false)
+            is Error challenged)
+        {
+            return Result.Failure(challenged);
+        }
+
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
 
-        if (!await accounts.ReverseTakedownAsync(subject, cancellationToken).ConfigureAwait(false))
+        // IDN-LIFE-003: the window is judged again under the lock, and an erasure that
+        // committed first leaves the window closed.
+        if (!await accounts.ReverseTakedownAsync(subject, now, windows, cancellationToken).ConfigureAwait(false))
         {
-            return Result.Failure(Error.From(ErrorCodes.TakedownNotFound));
+            return Result.Failure(Error.From(
+                await accounts.StandingAsync(subject, cancellationToken).ConfigureAwait(false)
+                    is { DeletingBy: DeletionOrigin.Takedown }
+                    ? ErrorCodes.TakedownWindowElapsed
+                    : ErrorCodes.TakedownNotFound));
         }
 
         await audit
@@ -323,8 +337,9 @@ internal sealed class TakedownService(
         return Result.Success();
     }
 
+    // API-CONV-002: a free-text field is 1 to 1024 characters after trimming.
     private static string? Written(string reason) =>
-        reason.Trim() is { Length: > 0 } written ? written : null;
+        reason.Trim() is { Length: > 0 and <= 1024 } written ? written : null;
 
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
@@ -366,13 +381,9 @@ internal sealed class TakedownService(
     private static Error StateConflict(AccountState state) =>
         Error.From(ErrorCodes.AccountStateConflict, "state", JsonSerializer.SerializeToElement(state, Spelled));
 
-    // The gate before anything is read, then the session's proof: a caller without the
-    // permission learns nothing of the account, and one with it proves it is them.
-    private async ValueTask<Error?> RefusedAsync(
-        AccessContext context,
-        SessionId session,
-        StepUpAction action,
-        CancellationToken cancellationToken)
+    // The gate before anything is read: a caller without the permission learns nothing
+    // of the account, and a context in which no person acts is refused as one.
+    private async ValueTask<Error?> DeniedAsync(AccessContext context, CancellationToken cancellationToken)
     {
         if (await scope
                 .RefusedAsync(context, Permissions.TakedownExecute, cancellationToken)
@@ -381,9 +392,18 @@ internal sealed class TakedownService(
             return denied;
         }
 
-        return context.Acting is not SubjectId acting
+        return context.Acting is SubjectId ? null : Error.From(ErrorCodes.Denied);
+    }
+
+    // 09 section 8a: the session's proof is judged after every other refusal, so a
+    // request refused on what it says never asks the person to step up.
+    private async ValueTask<Error?> ChallengedAsync(
+        AccessContext context,
+        SessionId session,
+        StepUpAction action,
+        CancellationToken cancellationToken) =>
+        context.Acting is not SubjectId acting
             ? Error.From(ErrorCodes.Denied)
             : (await stepUp.RequireAsync(acting, session, action, cancellationToken).ConfigureAwait(false))
                 .Match(() => (Error?)null, error => error);
-    }
 }

@@ -99,8 +99,10 @@ internal sealed class SubjectEraser(
         Action<Account> erased,
         CancellationToken cancellationToken)
     {
-        AccountRecord record = await context.Accounts
-            .FindAsync([subject], cancellationToken)
+        // IDN-LIFE-003: the row is held before the transition is decided, so an erasure
+        // at a takedown's window's end waits for a reversal made at the same moment and
+        // refuses the account the reversal committed.
+        AccountRecord record = await AccountStore.HeldAsync(context, subject, cancellationToken)
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The subject has no account to erase.");
 

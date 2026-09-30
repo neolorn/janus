@@ -160,10 +160,15 @@ internal sealed class AccountStatesInMemory : IAccountStates
     }
 
     /// <inheritdoc/>
-    public ValueTask<bool> ReverseTakedownAsync(SubjectId subject, CancellationToken cancellationToken)
+    public ValueTask<bool> ReverseTakedownAsync(
+        SubjectId subject,
+        DateTimeOffset now,
+        DeletionWindows windows,
+        CancellationToken cancellationToken)
     {
         if (Of(subject) is not AccountState.Deleting
-            || _deletions.GetValueOrDefault(subject)?.By is not DeletionOrigin.Takedown)
+            || _deletions.GetValueOrDefault(subject) is not { By: DeletionOrigin.Takedown } taken
+            || now >= windows.ErasureDue(taken.By, taken.Since, taken.HeldSince))
         {
             return ValueTask.FromResult(false);
         }
