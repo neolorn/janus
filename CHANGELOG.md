@@ -1773,14 +1773,15 @@ against the public contract of LIB-API-001.
   deployment that cannot hear the channel loses promptness and never an event.
 - An account reads and changes itself: its identifiers, its credentials and their
   labels, its profile, its preferences and its sessions. An identifier can be added up
-  to the deployment's maximum, made primary, set as the backup destination, removed with
-  an undo the remaining addresses are sent, and, where only one of a kind is allowed,
-  replaced in one operation. A removed identifier stays out of reach of every other
-  account until its undo window closes. Once a replacement applies every other session
-  of the account ends, as a removal ends them, and the session that removes an
-  identifier or completes the verification of one is given a new secret, the one before
-  it answering nothing. The session list marks the one asking and says no more about
-  where each was used than the city.
+  to the deployment's maximum, made primary, set as the backup destination (an
+  unverified one is refused either with 409 `identity.identifier.unverified` and nothing
+  changes), removed with an undo the remaining addresses are sent, and, where only one
+  of a kind is allowed, replaced in one operation. A removed identifier stays out of
+  reach of every other account until its undo window closes. Once a replacement applies
+  every other session of the account ends, as a removal ends them, and the session that
+  removes an identifier or completes the verification of one is given a new secret, the
+  one before it answering nothing. The session list marks the one asking and says no
+  more about where each was used than the city.
 - A profile field the deployment has switched off is neither accepted from a request nor
   carried in an answer, and the date of birth is never the person's to change. A
   preference key the host never declared is refused and never returned. A username, once

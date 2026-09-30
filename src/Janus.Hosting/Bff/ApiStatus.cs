@@ -79,6 +79,7 @@ internal static class ApiStatus
         // A conflict with what is already there, or a precondition the state fails.
         [ErrorCodes.ChangePending] = StatusCodes.Status409Conflict,
         [ErrorCodes.IdentifierPrimary] = StatusCodes.Status409Conflict,
+        [ErrorCodes.IdentifierUnverified] = StatusCodes.Status409Conflict,
         [ErrorCodes.IdentifierLastOfKind] = StatusCodes.Status409Conflict,
         [ErrorCodes.IdentifierLocked] = StatusCodes.Status409Conflict,
         [ErrorCodes.IdentifierMaximum] = StatusCodes.Status409Conflict,

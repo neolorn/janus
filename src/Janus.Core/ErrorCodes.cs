@@ -326,6 +326,13 @@ public static class ErrorCodes
     public static ErrorCode IdentifierInvalid { get; } = ErrorCode.Parse("identity.identifier.invalid");
 
     /// <summary>
+    /// The identifier is not verified, so it is not made the primary of its kind or
+    /// named as its backup, and nothing changes. Verify it first.
+    /// </summary>
+    /// <remarks>Implements REG-IDENT-005, REG-IDENT-002, chapter 10 section 1.1.</remarks>
+    public static ErrorCode IdentifierUnverified { get; } = ErrorCode.Parse("identity.identifier.unverified");
+
+    /// <summary>
     /// The address's domain is outside the verified domains an organization the
     /// account belongs to locks its members to. Use an address in one of them.
     /// </summary>

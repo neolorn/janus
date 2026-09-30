@@ -452,9 +452,16 @@ internal sealed class IdentifierService(
         HeldIdentifiers held = await directory.HeldAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        if (held.Find(identifier) is not HeldIdentifier promoted || !promoted.IsVerified)
+        if (held.Find(identifier) is not HeldIdentifier promoted)
         {
             return Result.Failure(Error.From(ErrorCodes.IdentifierInvalid));
+        }
+
+        // REG-IDENT-005: an identifier the account holds but has not proved is a
+        // failed precondition, not a value the operation does not take.
+        if (!promoted.IsVerified)
+        {
+            return Result.Failure(Error.From(ErrorCodes.IdentifierUnverified));
         }
 
         // REG-MAIL-001: the personal email stays non-primary for the whole membership.
@@ -980,10 +987,14 @@ internal sealed class IdentifierService(
 
         if (named is not IdentifierId id
             || held.Find(id) is not HeldIdentifier backup
-            || backup.Kind != kind
-            || !backup.IsVerified)
+            || backup.Kind != kind)
         {
             return Error.From(ErrorCodes.IdentifierInvalid);
+        }
+
+        if (!backup.IsVerified)
+        {
+            return Error.From(ErrorCodes.IdentifierUnverified);
         }
 
         // REG-IDENT-002: the primary cannot be the backup, because a setting that

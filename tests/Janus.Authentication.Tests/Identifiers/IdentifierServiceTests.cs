@@ -201,7 +201,8 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
     /// <summary>
     /// REG-IDENT-005 AC2: an identifier the account has not proved does not become
-    /// the one everything is sent to.
+    /// the one everything is sent to; the refusal is a failed precondition and
+    /// nothing changes.
     /// </summary>
     [Fact]
     public async Task REG_IDENT_005_AC2_AnUnverifiedIdentifierIsNotMadePrimaryAsync()
@@ -210,13 +211,51 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         await AddedAsync(Second);
 
+        int told = _notifications.Mail.Count;
+
         Assert.Equal(
-            ErrorCodes.IdentifierInvalid,
+            ErrorCodes.IdentifierUnverified,
             Refused(await Service.MakePrimaryAsync(
                 Acting,
                 Named(await HeldAsync(), Second).Id,
                 Source,
                 TestContext.Current.CancellationToken)));
+
+        Assert.True(Named(await HeldAsync(), Primary).IsPrimary);
+        Assert.False(Named(await HeldAsync(), Second).IsPrimary);
+        Assert.Equal(told, _notifications.Mail.Count);
+        Assert.DoesNotContain(_events.Published, raised => raised is IdentifierPrimaryChanged);
+    }
+
+    /// <summary>
+    /// REG-IDENT-002, REG-IDENT-005 AC2: the backup setting names no identifier the
+    /// account has not proved; the refusal is a failed precondition and the set
+    /// stays as it was.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_002_AnUnverifiedIdentifierIsNotNamedTheBackupAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        await AddedAsync(Second);
+
+        IReadOnlyList<HeldIdentifier> before = await NoticeSetAsync();
+        int told = _notifications.Mail.Count;
+
+        Assert.Equal(
+            ErrorCodes.IdentifierUnverified,
+            Refused(await Service.SetBackupAsync(
+                Acting,
+                IdentifierKind.Email,
+                BackupChoice.Named,
+                Named(await HeldAsync(), Second).Id,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(
+            before.Select(identifier => identifier.Id),
+            (await NoticeSetAsync()).Select(identifier => identifier.Id));
+        Assert.Equal(told, _notifications.Mail.Count);
     }
 
     /// <summary>

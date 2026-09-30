@@ -3846,6 +3846,7 @@ static Janus.Core.ErrorCodes.IdentifierLocked.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierMaximum.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierMixedScript.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierPrimary.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.IdentifierUnverified.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.InvitationExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.InvitationIdentifierMismatch.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.InvitationMailboxHeld.get -> Janus.Core.ErrorCode
