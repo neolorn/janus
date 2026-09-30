@@ -950,7 +950,8 @@ against the public contract of LIB-API-001.
 - The terms step of registration records one consent per control the person ticked,
   naming the purpose, the version presented of the document that governs its consent and
   the registration mechanism. A control left unticked records nothing and holds nothing
-  up.
+  up. A terms step whose terms version or notice version is blank creates no account and
+  is refused with `identity.registration.incomplete`.
 - A subject can read and change their own consents and objections through a privacy
   dashboard: `GET /privacy/consents`, `POST /privacy/consents/{purpose}/grant` and
   `.../withdraw`, `GET /privacy/objections`, `POST /privacy/objections/{purpose}` and

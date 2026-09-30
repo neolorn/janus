@@ -921,8 +921,13 @@ internal sealed class RegistrationService(
             return Result.Failure<RegistrationOutcome>(failure);
         }
 
+        // REG-SESS-007: the account is never created without the terms version
+        // accepted and the notice version presented, so a step that carries either
+        // blank has not completed.
         if (live.Step is not RegistrationStep.Terms
-            || !SecurityStep.Complete(live, policy.LoginFactors))
+            || !SecurityStep.Complete(live, policy.LoginFactors)
+            || string.IsNullOrWhiteSpace(termsVersion)
+            || string.IsNullOrWhiteSpace(noticeVersion))
         {
             return Result.Failure<RegistrationOutcome>(
                 Error.From(ErrorCodes.RegistrationIncomplete));
@@ -959,7 +964,14 @@ internal sealed class RegistrationService(
         // it was begun under, so a later message finds a preference to go out in.
         await directory
             .CreateAsync(
-                Created(live, now, emails, phones, RecipientLanguage.Found(live.Language, languages)),
+                Created(
+                    live,
+                    termsVersion,
+                    noticeVersion,
+                    now,
+                    emails,
+                    phones,
+                    RecipientLanguage.Found(live.Language, languages)),
                 cancellationToken)
             .ConfigureAwait(false);
         await WriteCredentialsAsync(live, now, cancellationToken).ConfigureAwait(false);
@@ -1348,6 +1360,8 @@ internal sealed class RegistrationService(
 
     private static NewAccount Created(
         RegistrationSession session,
+        string termsVersion,
+        string noticeVersion,
         DateTimeOffset now,
         int emails,
         int phones,
@@ -1374,8 +1388,8 @@ internal sealed class RegistrationService(
             session.AdultAffirmed,
             session.Group,
             session.AnsweredAgeAt ?? now,
-            session.TermsVersion ?? string.Empty,
-            session.NoticeVersion ?? string.Empty,
+            termsVersion,
+            noticeVersion,
             emails,
             phones,
             language);

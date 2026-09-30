@@ -825,6 +825,46 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-SESS-007 AC2, AC5: a terms step that carries no terms version or no notice
+    /// version creates no account and is refused as incomplete; the session stays,
+    /// and the step with both completes it.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_007_AC2_AnAccountIsNeverCreatedWithoutItsDocumentVersionsAsync()
+    {
+        RegistrationSessionId session = await SecuredAsync();
+
+        Assert.Equal(
+            ErrorCodes.RegistrationIncomplete,
+            Refused(await Service.AcceptTermsAsync(
+                session,
+                string.Empty,
+                Notice,
+                Unticked,
+                Browser,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(
+            ErrorCodes.RegistrationIncomplete,
+            Refused(await Service.AcceptTermsAsync(
+                session,
+                Terms,
+                " ",
+                Unticked,
+                Browser,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Empty(_directory.Created);
+
+        _ = Ok(await AcceptedAsync(session));
+
+        NewAccount created = Assert.Single(_directory.Created);
+
+        Assert.Equal(Terms, created.TermsVersion);
+        Assert.Equal(Notice, created.NoticeVersion);
+    }
+
+    /// <summary>
     /// PRIV-CONS-008a AC2: what is recorded of the privacy notice is that a version
     /// was presented at a time. The account carries the version and the instant, and
     /// no field of what the step writes records an acceptance of it; the terms, which
