@@ -147,7 +147,6 @@ public sealed class LibraryStructureTests
         "Dapper",
         "Fido2",
         "Konscious.Security.Cryptography.Argon2",
-        "Microsoft.AspNetCore.Authentication.OpenIdConnect",
         "Microsoft.CodeAnalysis.Analyzers",
         "Microsoft.CodeAnalysis.CSharp",
         "Microsoft.CodeAnalysis.PublicApiAnalyzers",

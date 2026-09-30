@@ -28,7 +28,6 @@
     <PackageVersion Include="OpenIddict.AspNetCore" Version="7.7.1" />
     <PackageVersion Include="OpenIddict.Server" Version="7.7.1" />
     <PackageVersion Include="OpenIddict.Validation" Version="7.7.1" />
-    <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.12" />
   </ItemGroup>
 
   <ItemGroup Label="Build">
