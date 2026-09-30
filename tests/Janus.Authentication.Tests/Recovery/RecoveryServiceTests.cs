@@ -808,6 +808,8 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             Policies,
             _configuration,
             new AdministrativeScope(_gate, _administrative),
+            new StepUpGuard(_live, _authenticators, _passwords, Policies, _clock),
+            _accounts,
             _locations,
             new ConcurrentSessions(_live, _configuration, _events),
             _work,

@@ -735,6 +735,8 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             Policies,
             _configuration,
             new AdministrativeScope(_gate, _administrative),
+            Guard,
+            _accounts,
             _locations,
             new ConcurrentSessions(_live, _configuration, _events),
             _work,

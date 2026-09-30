@@ -728,9 +728,12 @@ against the public contract of LIB-API-001.
 - `POST /admin/accounts/{subject}/sessions/revoke` ends every session of one account
   under `session:revoke-account`, and `POST /admin/sessions/revoke-all` ends every
   session in the deployment under `session:revoke`, the caller's own included, each
-  permission held in the administrative organization. Both answer 204.
-  `ISessions.RevokeAccountAsync` and `ISessions.RevokeEveryAsync` are the same in
-  process and take no organization.
+  permission held in the administrative organization. Both answer 204. They are the
+  `account:sessionsrevoke` and `session:revokeall` step-up actions, judged after every
+  other refusal (403 `auth.stepup.required`), and a subject no account bears answers 404
+  `identity.account.notfound`. `ISessions.RevokeAccountAsync` and
+  `ISessions.RevokeEveryAsync` are the same in process, take the caller's session and no
+  organization.
 - The minor takedown, as `ITakedowns` and `POST /admin/accounts/{subject}/takedown`:
   under `takedown:execute` and step-up, one transaction suspends the account into its
   `takedown.grace` window, ends every session of it, records the trigger and the reason

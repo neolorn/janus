@@ -13,6 +13,7 @@ using Janus.Authentication.Policies;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Invitations;
 using Janus.Authentication.Tests.Oidc;
@@ -137,6 +138,8 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 new PolicyResolution(_memberships, _configuration, _raises),
                 _configuration,
                 new AdministrativeScope(_gate, _administrative),
+                new StepUpGuard(_live, _authenticators, _passwords, new PolicyResolution(_memberships, _configuration, _raises), _clock),
+                new AccountDirectoryInMemory(PreferenceDeclarations.None),
                 _locations,
                 new ConcurrentSessions(_live, _configuration, _events),
                 _work,

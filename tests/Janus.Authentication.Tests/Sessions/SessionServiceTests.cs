@@ -8,7 +8,9 @@ using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Factors;
+using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -48,6 +50,8 @@ public sealed class SessionServiceTests : IAsyncDisposable
     private readonly LocationResolverInMemory _locations = new();
     private readonly EventsInMemory _alerts = new();
     private readonly UnitOfWorkInMemory _work = new();
+    private readonly PasswordStoreInMemory _passwords = new();
+    private readonly AccountDirectoryInMemory _accounts = new(PreferenceDeclarations.None);
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
@@ -60,6 +64,8 @@ public sealed class SessionServiceTests : IAsyncDisposable
             new PolicyResolution(_memberships, _configuration, _raises),
             _configuration,
             new AdministrativeScope(_gate, _administrative),
+            new StepUpGuard(_sessions, _authenticators, _passwords, new PolicyResolution(_memberships, _configuration, _raises), _clock),
+            _accounts,
             _locations,
             new ConcurrentSessions(_sessions, _configuration, _alerts),
             _work,
@@ -908,15 +914,56 @@ public sealed class SessionServiceTests : IAsyncDisposable
 
         _administrative.Organization = organization;
         _gate.Grant(administrator, organization, Permissions.SessionRevokeAccount);
+        _accounts.Stands(leaving, AccountState.Active);
 
         Result revoked = await Service.RevokeAccountAsync(
             AccessContext.Of(administrator),
+            (await AdministeringAsync(administrator)).Id,
             leaving,
             TestContext.Current.CancellationToken);
 
         Assert.Null(Refusal(revoked));
         Assert.Equal(ErrorCodes.SessionExpired, await RefusalAsync(theirs.Secret));
         Assert.Null(await RefusalAsync(others.Secret));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-011 (D-166): ending another person's sessions is the
+    /// <c>account:sessionsrevoke</c> step-up action, judged after every other refusal: a
+    /// subject no account bears is not found before any proof is asked, and a session
+    /// whose proof is not recent ends nothing.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_011_RevokingOneAccountAsksForStepUpAsync()
+    {
+        SubjectId leaving = Subject();
+        var organization = OrganizationId.New(_clock);
+        SubjectId administrator = Subject();
+        IssuedSession theirs = await BegunAsync(leaving, [Factor.Password]);
+
+        _administrative.Organization = organization;
+        _gate.Grant(administrator, organization, Permissions.SessionRevokeAccount);
+        _accounts.Stands(leaving, AccountState.Active);
+
+        IssuedSession mine = await AdministeringAsync(administrator);
+
+        _clock.Advance(Settings.SessionStepUpRecency.Default + TimeSpan.FromMinutes(1));
+
+        Assert.Equal(
+            ErrorCodes.AccountNotFound,
+            Refusal(await Service.RevokeAccountAsync(
+                AccessContext.Of(administrator),
+                mine.Id,
+                Subject(),
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.StepUpRequired,
+            Refusal(await Service.RevokeAccountAsync(
+                AccessContext.Of(administrator),
+                mine.Id,
+                leaving,
+                TestContext.Current.CancellationToken)));
+        Assert.Null((await _sessions.FindAsync(theirs.Id, TestContext.Current.CancellationToken))?.EndedAt);
     }
 
     /// <summary>
@@ -931,8 +978,11 @@ public sealed class SessionServiceTests : IAsyncDisposable
 
         _administrative.Organization = OrganizationId.New(_clock);
 
+        SubjectId stranger = Subject();
+
         Result revoked = await Service.RevokeAccountAsync(
-            AccessContext.Of(Subject()),
+            AccessContext.Of(stranger),
+            (await AdministeringAsync(stranger)).Id,
             leaving,
             TestContext.Current.CancellationToken);
 
@@ -956,11 +1006,40 @@ public sealed class SessionServiceTests : IAsyncDisposable
 
         Result revoked = await Service.RevokeEveryAsync(
             AccessContext.Of(administrator),
+            (await AdministeringAsync(administrator)).Id,
             TestContext.Current.CancellationToken);
 
         Assert.Null(Refusal(revoked));
         Assert.Equal(ErrorCodes.SessionExpired, await RefusalAsync(first.Secret));
         Assert.Equal(ErrorCodes.SessionExpired, await RefusalAsync(second.Secret));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-009 (D-166): ending every session is the <c>session:revokeall</c>
+    /// step-up action, so a session whose proof is not recent ends nothing.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_009_TheExplicitRevocationAsksForStepUpAsync()
+    {
+        var organization = OrganizationId.New(_clock);
+        SubjectId administrator = Subject();
+        IssuedSession other = await BegunAsync(Subject(), [Factor.Password]);
+
+        _administrative.Organization = organization;
+        _gate.Grant(administrator, organization, Permissions.SessionRevoke);
+
+        IssuedSession mine = await AdministeringAsync(administrator);
+
+        _clock.Advance(Settings.SessionStepUpRecency.Default + TimeSpan.FromMinutes(1));
+
+        Assert.Equal(
+            ErrorCodes.StepUpRequired,
+            Refusal(await Service.RevokeEveryAsync(
+                AccessContext.Of(administrator),
+                mine.Id,
+                TestContext.Current.CancellationToken)));
+        Assert.Null((await _sessions.FindAsync(other.Id, TestContext.Current.CancellationToken))?.EndedAt);
+        Assert.Null((await _sessions.FindAsync(mine.Id, TestContext.Current.CancellationToken))?.EndedAt);
     }
 
     /// <summary>
@@ -1367,6 +1446,16 @@ public sealed class SessionServiceTests : IAsyncDisposable
             [Factor.Password],
             From(address),
             TestContext.Current.CancellationToken));
+    }
+
+    // The administrator's own session, begun with a password the account holds, which
+    // proves the step-up for as long as it is recent.
+    private async ValueTask<IssuedSession> AdministeringAsync(SubjectId administrator)
+    {
+        _passwords.Hold(administrator, _clock.GetUtcNow());
+        _accounts.Stands(administrator, AccountState.Active);
+
+        return await BegunAsync(administrator, [Factor.Password]);
     }
 
     private async ValueTask<IssuedSession> BegunAsync(SubjectId subject, Factor[] presented)
