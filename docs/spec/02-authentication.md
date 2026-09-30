@@ -2491,32 +2491,122 @@ it to its audience, which convention alone does not.
 
 ## 9. Keys and secrets
 
-**AUTH-KEY-001** — Signing keys SHALL rotate on schedule with an overlap window: the
-new key begins signing, the previous remains published in JWKS until outstanding
-tokens expire, then is retired. No human step SHALL be involved. The cadence SHALL be
-`token.signing.rotation` (`10` section 4.9; default 90 days); the overlap SHALL be the
-access-token lifetime (`oidc.accesstoken.lifetime`) plus 5 minutes. The algorithm
-SHALL be `token.signing.algorithm` (default ES256, protected). The secret of every
-client in the registry rotates on the same cadence with the same overlap (AUTH-OIDC-001,
-OPS-SEC-002).
+**AUTH-KEY-001** — Signing keys SHALL rotate on schedule with an overlap window: the new
+key is published in JWKS 5 minutes before it begins signing, the previous remains
+published until outstanding access tokens expire, then is retired. No human step SHALL
+be involved. The cadence SHALL be `token.signing.rotation` (`10` section 4.9; default 90
+days); the overlap SHALL be the longest access-token lifetime
+(`oidc.accesstoken.lifetime`) under which the previous key signed, plus 5 minutes. The
+algorithm SHALL be `token.signing.algorithm` (protected), whose one admitted value is
+`ES256`, the one verified against the mail server; any other value is refused with
+`config.value.notallowed`. The secret of every client in the registry rotates on the
+same cadence, with an overlap of `oidc.accesstoken.lifetime` plus 5 minutes
+(AUTH-OIDC-001, OPS-SEC-002).
 
-*Source: D-148; D-007, D-147, D-166*
+**How the rotation runs (D-181).** No timer or job runs it. The library's credential
+source holds the signing keys as one set that each change replaces whole and never edits
+in place: the next key, once made, which signs nothing yet; the current key, which alone
+signs; each replaced key within its overlap; and each retired key whose public key is
+still kept (below). A set that replaces another, whether this process made the change or
+read it from the stored keys, carries the object already made for each key it keeps, and
+disposes the private key object of a key it holds without its private key, or no longer
+holds. JWKS publishes the public keys of the next key, the current key and each replaced
+key within its overlap. The provider's validation of a token presented to it accepts an
+access token signed by a key JWKS publishes, and a code, a refresh token or any other
+token it issued signed by any key in the set. Signing, JWKS and validation each read the
+set the source holds when they run, through the provider's own event model
+(CONV-CODE-007), so every token issued, every request for the key set and every
+validation is a read of the signing keys. No step of the provider takes a signing
+credential or a signing key from its options: its own steps that would (the choice of
+the signing credential, the key set, and the signing keys its validation takes from the
+options when they are built) are replaced through its event model by steps that read the
+source. The decryption keys its validation takes from the encryption credential in its
+options stay as they are (CONV-CODE-007).
+
+**When a key changes (D-181).** The first read after `token.signing.rotation` less 5
+minutes has passed since the current key began signing makes the next key, and the first
+read once the cadence has passed and the next key has been published for 5 minutes makes
+it current, as the first read of an old client secret replaces it (OPS-SEC-002). Where
+the database holds no signing key, the first read makes one current at once; at the
+application's start that read is made once the key ring is filled, before the provider's
+options are built. Whether a change is due is judged from the times the set carries,
+which come from the stored keys. The read that finds one due reads the stored keys and
+makes the change in one transaction of its own, never joined to a unit of work its
+caller holds open, whose write is conditional on the stored keys it read; the stored
+keys admit one next key and one current key by constraints; and the process replaces its
+set only once that transaction commits. So of two processes acting together, two
+starting on an empty database included, one makes the change and the other, finding it
+made or refused by a constraint, replaces its set with the stored keys (D-166 X3).
+
+**What a replaced key keeps (D-181).** A replaced key signs nothing after the rotation.
+The current key carries the longest `oidc.accesstoken.lifetime` under which it has
+signed an access token: before it signs one under a longer lifetime than its set
+carries, the longer is stored with it by one update in a transaction of its own, never
+joined to a unit of work its caller holds open, which never lowers the stored value and
+is conditional on the key being current in the stored keys; the token is signed only
+once that transaction commits, and where it finds the key replaced, the process replaces
+its set with the stored keys and signs with the current key. When it is replaced, two
+times are stored with it, which no later change of a setting moves: the end of its
+overlap, that moment plus that lifetime plus 5 minutes, and the end of its keeping, that
+moment plus the longest a session can last (the ceiling of `session.default.absolute`,
+`10` section 4). The first read after the end of its overlap retires it: it leaves JWKS,
+its private key object is disposed and its private key is removed from the database. Its
+public key is held apart from its private key object, so the disposal breaks no
+validation, and the overlap is far longer than a signature takes, so no signature begun
+with it before the rotation can still be running. The provider also signs its own
+authorization codes and refresh tokens with the current key and checks that signature
+when they come back, and a refresh token can live as long as its session
+(AUTH-OIDC-003), so a retired key's public key stays in the set, unpublished, until the
+end of its keeping: a refresh token it signed is still accepted while its session lives,
+and a consumed one presented again still revokes its family, in each case while the
+key-encryption key version the token was encrypted under is held (AUTH-KEY-002). The
+first read after the end of its keeping removes the key from the set and the database.
+
+*Source: D-148; D-007, D-147, D-166, D-181*
 
 ES256 was verified against the mail server's source, which accepts P-256 keys from a
 JWKS as ES256 and refuses symmetric keys: the file
-`crates/directory/src/backend/oidc/lookup.rs` of the mail server's repository,
-inspected 2026-09-18 (D-147, D-148). The overlap covers the longest
-token any key may have signed, plus a margin for clock skew and JWKS caching.
+`crates/directory/src/backend/oidc/lookup.rs` of the mail server's repository, inspected
+2026-09-18 (D-147, D-148). The overlap covers the longest access token any key may have
+signed, plus a margin for clock skew and JWKS caching. The next key is published 5
+minutes ahead for the same caching: the mail server refuses a key identifier its cached
+key set lacks while that set is under 300 seconds old, and fetches the set again only
+after (the same file, inspected 2026-09-30, D-181).
 
 **Acceptance criteria**
-1. Rotation completes without restart or manual action, at the interval
-   `token.signing.rotation`.
-2. Tokens signed by the previous key validate throughout the overlap, which lasts
-   `oidc.accesstoken.lifetime` plus 5 minutes from the moment the new key begins
-   signing.
-3. The previous key leaves JWKS after the overlap.
-4. Every published key and every issued token uses `token.signing.algorithm`;
-   changing the key takes effect only after a restart (protected).
+1. Rotation completes without restart, manual action, timer or job: the first read of
+   the signing keys once `token.signing.rotation` has passed since the current key began
+   signing, and the next key has been published for 5 minutes, makes the next key
+   current.
+2. Tokens signed by the previous key validate throughout the overlap, which lasts, from
+   the moment the new key begins signing, the longest `oidc.accesstoken.lifetime` under
+   which the previous key signed an access token, plus 5 minutes; no change of the
+   lifetime, before or after the rotation, shortens it.
+3. The previous key leaves JWKS after the overlap, the one the provider's options hold
+   from the start included, and no request for the key set reads a disposed key object;
+   after the overlap the provider's validation refuses an access token that key signed.
+4. Every published key and every issued token uses `token.signing.algorithm`, which
+   admits `ES256` alone; `configure` refuses any other value with
+   `config.value.notallowed` (protected).
+5. A replaced key signs no token after the rotation; the first read of the signing keys
+   after its overlap ends retires it, disposing its private key object and removing its
+   private key from the database, and from then no object in the process holds its
+   private key undisposed, the provider's options included, which can hold only that
+   same object, disposed.
+6. Until the longest a session can last has passed since a key was replaced, the
+   provider accepts a refresh token that key signed for a session still live, and a
+   consumed one presented again revokes its family (AUTH-OIDC-003), in each case while
+   the key-encryption key version the token was encrypted under is held (AUTH-KEY-002);
+   the first read after that removes the key from the set and the database.
+7. Where the database holds no signing key, the application's start makes one current
+   before the provider's options are built; of two processes that together find the
+   database without a key, or the same change due, one makes the change, and both then
+   hold the set the stored keys give; a change, or a longer lifetime stored, during a
+   request whose own unit of work rolls back stays made; and a longer lifetime stored
+   against a key another process has just replaced is refused and the token is signed by
+   the current key.
+8. Every key but the first key of an empty database is published in JWKS for at least 5
+   minutes before it signs its first token.
 
 ---
 

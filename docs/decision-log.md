@@ -7721,6 +7721,8 @@ parameters).
 
 > **Amended.** A retired key-encryption-key version stays in the secrets manager and the envelope until every backup under it has expired; `model.startup.kekunavailable` is renamed `model.startup.secretunavailable` (D-166).
 
+> **Amended.** Item 3: a signing key's overlap is the longest access-token lifetime it signed under plus five minutes, and its public key stays, unpublished, for the provider's own validation until the longest a session can last has passed since it was replaced; the next key is published five minutes before it signs; `token.signing.algorithm` admits ES256 alone (D-181).
+
 **Date:** 2026-09-18 · **Status:** accepted · **Extends:** D-007, D-129, D-138, D-144, D-146 · **Resolves:** review-4 M-4, M-7, M-8, M-9, M-10, L-1 to L-22; the question parked in D-144
 
 **TL;DR.** The last review-4 findings that needed a decision, plus the mechanical
@@ -8488,6 +8490,8 @@ the working guide sections 3 and 6.
 
 > **Amended.** The whole-history search of section A skips the third-party data files D-169 names; a name inside one is not a trace (D-169).
 
+> **Amended.** 58 and 59: no job updates the credential source; the first read of the signing keys five minutes before the cadence makes the next key, the first read once the cadence has passed and that key has been published for five minutes makes it current, and the first read after an overlap ends retires the replaced key (D-181).
+
 **Date:** 2026-09-22 · **Status:** accepted · **Amends:** D-149, D-153, D-155, D-160, D-161 and the items named below · **Extends:** D-161
 
 **TL;DR.** The ledger of decisions taken in the owner's absence (phases 2 to 7, entries 1
@@ -8967,6 +8971,8 @@ section 7 · `19` · `20` · `docs/guide/janus-explained.md`,
 > **Amended.** 221: an erased holder's address is not recognised at issue, since erasure leaves nothing that may match it, and the adapter's refusal to adopt an account that does not carry the new mailbox's identifier is what keeps that person's mail from the next holder; under `replace` the old row records the instant it was replaced, is owed `removed` and keeps its fingerprint until its last holder is erased; "held before" is read from the mailbox that stands for the address (D-178).
 
 > **Amended.** 263 and D.8 break-glass part (3): a creation of an app password from the break-glass session, or a session opened from it, is refused `authz.denied` at the gate step, before the holder is read, as every listed step-up action is, the refusal `StepUpGuard.Unavailable` names being made there and not with the step-up judged after the other refusals; every other account without an enabled mailbox answers `identity.mailbox.notfound` (D-179).
+
+> **Amended.** 319: the algorithm check `configure` runs is the one admitted value of `token.signing.algorithm`, `ES256`, any other refused with `config.value.notallowed` (D-181).
 
 **Date:** 2026-09-25 · **Status:** accepted · **Amends:** D-161 (item 4, the working mode; item 2, where the drift check's rows come from), D-162 (item 22, where the governed send path lives; item 23, when the first attempt is made; item 26, the budget of a text message carrying a link; item 31, where destination records are kept and when they are swept; item 66, where a client secret comes from; C.55, where photo availability is held and what bootstrap writes; C.68 at `POST /auth/link`; C.103, the condition of the mail server row; E, the status of `identity.identifier.invalid`), D-153 (owner decision 2, the source a flood limit counts; owner decision 7, the word lists; the `backup.restoretest.interval` default; the address the bootstrap command prints), D-147 (the retirement of a key-encryption-key version; the name of the startup code for an unavailable secret), D-146 (item 17: a restriction's channel, the notices to a holder, a reason on every edit), D-143 (the policy object gains `photos`), D-129 (the break-glass page takes a reason), D-127 (a takedown reversal restores the state the takedown found), D-079a (a recognised device is exempt from the hold, not from the count), D-071 (three protected switches retired), D-060 (photos are off for the administrative organization until a codec is declared), D-057 (an authorization request's `redirect_uri` is refused at the push, not replaced), D-164 (item 3: the mail server verifies `aud` itself), D-165 (the developer recipient row is a declared example; the provider callback row and INT-GEN-003's sentence restored) · **Extends:** D-162, D-164, D-165
 
@@ -11768,6 +11774,8 @@ section 5.24.
 
 > **Amended.** Item 1: the start fills the ring in steps, the mail server's secret last, once the settings table can be read and the mail server in use is chosen; a read of a secret before the step that reads it is done is the fault (D-176).
 
+> **Amended.** Item 1: the signing credentials are held in the library's credential source and read through the provider's event model; the options are never rebuilt and hold only what the provider needs to start; a replaced signing credential signs nothing after the rotation and its private key object is disposed at the first read after its overlap ends (D-181).
+
 **Date:** 2026-09-29 · **Status:** accepted · **Amends:** D-170 (item 1, which sessions keep the reason), D-166 (215, the mail server's secret is borrowed from the ring, not read and cleared at each use) · **Extends:** D-166 (121 and 336, X9)
 
 **TL;DR.** D-166 has every secret read once through the host's secret source at startup,
@@ -12532,6 +12540,206 @@ the reflection test lives).
 
 ---
 
+## D-181 — Corrections-4 question 20: how a replaced signing credential leaves the provider
+
+**Date:** 2026-09-30 · **Status:** accepted · **Amends:** D-147 (item 3, the overlap and the algorithm), D-162 (58 and 59, the rotation job), D-166 (319, the algorithm check), D-171 (item 1, the replaced signing credential)
+
+**TL;DR.** No timer and no job: as a client secret is already replaced, the first read of
+the signing keys 5 minutes before the cadence makes the next key, published for relying
+parties that cache the key set, and the first read once the cadence has passed and that
+key has been published for 5 minutes makes it current; of two processes acting together
+one makes each change, in a transaction of its own (X3). The first read after a replaced
+key's overlap, which covers the longest access-token lifetime it signed under, retires it:
+it leaves JWKS, and its private key object and stored private key go. Its public key, held
+apart, stays unpublished for the provider's own validation of the codes and refresh tokens
+it signed, until the longest a session can last has passed. The signing credentials live
+in the library's credential source, a singleton in the `Oidc` feature of
+`Janus.Authentication`, as one set each change replaces whole, which the provider's
+signing, key set and validation read through its own event model and never from its
+options; the options are built once and never rebuilt. `token.signing.algorithm` admits
+`ES256` alone.
+
+**The question (Tier 3).** CONV-CODE-007 criterion 4 and D-171 say a replaced signing
+credential stays for the AUTH-KEY-001 overlap and leaves the server's options when the
+overlap ends; D-162 58 and 59 speak of a credential source "the rotation job updates in
+process". The code puts the credential in the options once, at the start; signs each
+token with the current key read per request; has validation and the key set read the
+store; rotates at the first read after the cadence, not in a job; and keeps the replaced
+key in the source until the next rotation. No chapter says what removes the replaced
+credential when the overlap ends, how the options change while requests read them
+(rebuilding them would remake the encryption credential, which D-171 changes only at a
+restart), or when the replaced key object may be disposed while a signature begun with it
+may still run.
+
+**Decision.**
+
+- **What removes it: the first read after the overlap.** The library runs no timer outside
+  the worker, and none is needed. Every token issued, every key-set request and every
+  validation is a read of the signing keys. The first read once `token.signing.rotation`
+  has passed since the current key began signing, and the next key has been published for
+  5 minutes (below), makes that key current (the code already rotates at the first read
+  after the cadence, and OPS-SEC-002 replaces a client secret at its first read in the
+  same way). The current key carries the longest `oidc.accesstoken.lifetime` under which
+  it has signed an access token: before it signs one under a longer lifetime than its set
+  carries, the longer is stored with it by one update in a transaction of its own, which
+  never lowers the stored value and is conditional on the key still being current,
+  committed before the token is signed; where it finds the key replaced, the process takes
+  the stored keys as its set and signs with the current key. When it is replaced, the end
+  of its overlap, that moment plus that lifetime plus 5 minutes, is stored with it, as
+  `previous_secret_until` is for a client secret (D-166 340), so no change of the
+  lifetime, before or after, cuts short an access token it signed. The first read after
+  that end retires the key: it leaves JWKS, its private key object is disposed and its
+  private key is removed from the database. Since every use is a read, no request finds
+  the key published, or its private key object held, past its overlap. There is no
+  rotation job; D-162's words are corrected.
+- **What the provider's own tokens need: the public key, kept longer.** The provider signs
+  its own authorization codes and refresh tokens with the current signing key and checks
+  that signature when they come back, a stored refresh token's payload included (checked
+  in the provider's source on 2026-09-30: every token but the identity token takes the
+  first signing credential, and a reference token's stored payload is validated against
+  the signing keys; the implementer confirms it in the pinned version's source). A refresh
+  token can live as long as its session (AUTH-OIDC-003). So a retired key's public key
+  stays in the set, unpublished, until the longest a session can last (the ceiling of
+  `session.default.absolute`) has passed since the key was replaced, a time stored with it
+  at the replacement; until then a refresh token it signed is accepted while its session
+  lives, and a consumed one presented again revokes its family, in each case while the
+  key-encryption key version it was encrypted under is held (AUTH-KEY-002). The first read
+  after that time removes the key from the set and the database. The public key is no
+  secret and signs nothing. JWKS never publishes it past the overlap, and the provider's
+  own validation takes an access token only under a key JWKS publishes, so past the
+  overlap the key serves codes, refresh tokens and the provider's other own tokens alone.
+  A relying party that caches the key set may hold it longer (the mail server keeps a
+  fetched set until a token names a key the set lacks), which only a token made with the
+  retired private key could exploit, and that key is disposed and gone from the database
+  at retirement.
+- **When a new key begins: published 5 minutes ahead.** A relying party caches the key
+  set: the mail server refuses a key identifier its cached set lacks while that set is
+  under 300 seconds old, and fetches the set again only after (its file
+  `crates/directory/src/backend/oidc/lookup.rs`, main branch, inspected 2026-09-30). A key
+  that signed as soon as it was made would have its first tokens refused there for up to 5
+  minutes. So the first read after `token.signing.rotation` less 5 minutes has passed
+  since the current key began signing makes the next key, published in JWKS and signing
+  nothing, and the first read once the cadence has passed and the next key has been
+  published for 5 minutes makes it current. Where the database holds no signing key, no
+  party can have cached a set, and the first key is current at once.
+- **Two processes, and the first key.** Whether a change is due is judged from the times
+  the set carries, which come from the stored keys, so every process judges alike. The
+  read that finds one due reads the stored keys and makes the change in one transaction of
+  its own, never joined to a unit of work its caller holds open (a read at signing can run
+  inside the token endpoint's own work, whose rollback must not undo a key another process
+  may already use), whose write is conditional on the stored keys it read, as client
+  secret rotation already is (D-166 340); the stored keys admit one next key and one
+  current key by constraints; and the process replaces its set only once that transaction
+  commits. Of two processes acting together, as during a rollout (OPS-MIG-005) or two
+  starts on an empty database, one makes the change and the other, finding it made or
+  refused by a constraint, replaces its set with the stored keys (X3). CONV-DESIGN-003 now
+  names the conditional write X3 already allows. A set that replaces another carries the
+  object already made for each key it keeps and disposes the private key object of a key
+  it holds without its private key, or no longer holds, so a process that reads a change
+  another made disposes what it must and makes nothing twice. Where the database holds no
+  signing key, the first read makes one current; at the application's start that read is
+  made once the key ring is filled, and the start then builds the provider's options, so
+  the provider never starts without a key; those options are the one exception to
+  `ValidateOnStart` (CONV-DESIGN-007).
+- **How the provider reads it: one set, replaced whole, read through the provider's
+  events.** The library's credential source holds the signing keys as one set, which each
+  change replaces whole, never edits in place: the next key once made; the current key,
+  which alone signs; each replaced key within its overlap; and each retired key whose
+  public key is still kept. It is a singleton, internal to the `Oidc` feature of
+  `Janus.Authentication` beside `SigningKeys`, since only the provider reads it, and it
+  writes each change in a scope and a unit of work of its own. The provider's signing, its
+  key set (JWKS), which publishes the next key, the current key and each replaced key
+  within its overlap, and its validation, which accepts an access token signed by a key
+  the key set publishes and any other token it issued signed by any key in the set, read
+  the set the source holds when they run, through the provider's own event model. The
+  provider's own steps that take keys from its options (in its source: the choice of the
+  signing credential, the key set, and the signing keys its validation parameters take
+  when the options are built; the decryption keys they take from the encryption credential
+  stay) are replaced through that model by steps that read the source, so the key the
+  options hold from the start is published, signs and validates only while the set says
+  so, and a request for the key set never reads a disposed object. That keeps the
+  provider's own cryptography and token handling, so it is not the hand-written key path
+  CONV-DESIGN-008 rejects. The provider's options are built once, at the start, and never
+  rebuilt, so the encryption credential changes only at a restart, as D-171 says. Of the
+  signing credentials the options hold only what the provider requires to start (in its
+  source, one asymmetric signing credential), as the same object the source holds, so once
+  that key is retired the options can hold only a disposed object and no private key. The
+  implementer confirms those steps and that requirement in the pinned version's source; if
+  that version requires no signing credential, the options hold none.
+- **When the key object is disposed: at retirement.** A replaced key signs nothing after
+  the rotation. Its public key is held apart from its private key object and is no secret,
+  so disposing the private object cannot break a validation. The private object is
+  disposed when the key is retired: the overlap lasts, from the moment the new key begins
+  signing, the longest access-token lifetime the key signed under plus 5 minutes, far
+  longer than a signature takes, so no signature begun with it before the rotation can
+  still be running. The private key bytes are already zero once each credential is made
+  (D-171).
+- **The algorithm: one admitted value.** `token.signing.algorithm` stays protected
+  configuration (D-147), but `ES256` is the only value verified against the mail server
+  (D-148), and a change under stored keys would leave a replaced key of the old algorithm
+  published beside the new. So the key admits `ES256` alone in this version: `configure`
+  refuses any other value with `config.value.notallowed`, which is the algorithm check
+  OPS-CFG-004 names, and the stored keys always hold `ES256`. Admitting another value is a
+  later decision, taken with that value verified against every relying party.
+- *Rejected:* rebuilding the provider's options on each change (it remakes the encryption
+  credential and leaves copies of its key bytes that cannot be cleared); editing the
+  options' credential list in place (it is read concurrently and is not safe to change
+  under readers); leaving the provider's own steps to read keys from the options (the
+  start key would stay published and trusted for the life of the process); a timer or a
+  job (a second mechanism where the first read already serves); a new key that signs as
+  soon as it is made (the mail server would refuse its first tokens for up to 5 minutes);
+  the overlap's end worked out at each read, or from the lifetime in force only at the
+  replacement (a change of the lifetime would move it, and a shortening just before the
+  rotation would cut short access tokens signed under the longer); retiring the public key
+  with the private key at the end of the overlap (a refresh token issued before a rotation
+  would be refused once the overlap ended, and a consumed one presented again would no
+  longer revoke its family); keeping a retired key's private key, in memory or in the
+  database (nothing signs with it again); publishing a kept public key past the overlap
+  (no token it signed for a relying party is still valid then, and a party validating
+  offline would accept for a year a token made with its private key, should that ever
+  leak); bounding the keeping by the sessions live at the replacement (a session made in
+  the same instant, its token signed by the replaced key, could be missed; the ceiling
+  cannot be); the change joined to the caller's unit of work (a rollback there would undo
+  a key the process already signs with); a change of algorithm made as a rotation at the
+  next start (no second value is verified against the mail server).
+- Tests carrying AUTH-KEY-001 criteria 1 to 8 and CONV-CODE-007 criterion 4 prove, with
+  the clock advanced, that the next key is published 5 minutes before the cadence and
+  signs nothing until it is current, and that a first read after the cadence with the next
+  key published for less than 5 minutes leaves the current key signing; that the first
+  read once both have passed makes the next key current and the replaced one signs nothing
+  more; that access tokens signed by the replaced key validate, and its public key is
+  published, until the stored end of its overlap, and that after it the key is not
+  published and the provider refuses an access token it signed, a shortening of the
+  lifetime just before the rotation or a change after it moving nothing; that two
+  processes signing under different lifetimes leave the longer stored, and that a longer
+  lifetime stored against a key another process has just replaced is refused and the token
+  is signed by the current key; that the first read after the overlap disposes its private
+  key object, removes its private key from the database and leaves no undisposed private
+  key object for that key in the source or the options, and that the start key, once
+  retired, is not published and the key set answers without fault; that after the overlap
+  a refresh token the retired key signed is accepted while its session lives and a
+  consumed one presented again revokes its family, while the key-encryption key version it
+  was encrypted under is held, until the end of the key's keeping, after which the key is
+  gone from the set and the database; that the options are the same instance before and
+  after a rotation and a retirement; that a start over a database holding no signing key
+  makes one current before the options are built; that two credential sources over one
+  database, starting together over an empty one or finding the same change due, make one
+  key and then hold the same set, the one that read the other's change keeping its own
+  objects and disposing those it must; that a change, or a longer lifetime stored, during
+  a request whose unit of work rolls back stays made; and that `configure` refuses an
+  algorithm other than `ES256` with `config.value.notallowed`.
+
+**Propagated to:** `02` AUTH-KEY-001 (the rotation, the overlap and the algorithm; how the
+rotation runs, when a key changes, what a replaced key keeps; criteria 1 to 8); `06`
+OPS-CFG-004 (criterion 3), OPS-SEC-002 (the overlap, criterion 2); `08` CONV-LAYOUT-001
+(where the credential source lives), CONV-DESIGN-003 (the conditional write),
+CONV-DESIGN-007 (its lifetime, `ValidateOnStart`, the provider's start), CONV-CODE-007
+(the provider's credentials, criterion 4); `09` section 9 (`GET /oidc/jwks`, the source
+line); `10` section 1 (`config.value.notallowed`), section 4 (`token.signing.algorithm`,
+`token.signing.rotation`, `session.default.absolute`).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -12722,6 +12930,7 @@ the reflection test lives).
 | Corrections-4 questions 15 and 16: an erased holder's address, and how a replaced mailbox stands beside its successor | D-178 |
 | Corrections-4 question 17: an app password asked for from the break-glass session | D-179 |
 | Corrections-4 questions 18 and 19: how an absent secret source is named, and one way to reach an optional declaration | D-180 |
+| Corrections-4 question 20: how a replaced signing credential leaves the provider | D-181 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

@@ -500,7 +500,7 @@ break-glass session (AUTH-STEP-004).
 This list and `10` section 4.8 are the same list; a key marked protected in `10`
 appears in both or in neither (D-152).
 
-*Source: D-148; D-010, D-020.1, D-045, D-146, D-152, D-166, D-176*
+*Source: D-148; D-010, D-020.1, D-045, D-146, D-152, D-166, D-176, D-181*
 
 The selection test is not "how sensitive is this setting" but **"does turning this
 off blind us to the person turning it off."** The governing language is protected on a
@@ -519,10 +519,11 @@ section 4.8 are one (D-152).
    only, each as `--<key> <value>`, and a non-empty `--reason` (a change without one is
    refused with `config.change.reasonrequired`); it asks no step-up; each change is
    recorded under the system principal `configure` (reason `OPS-CFG-004`) and raises
-   `protected-setting-changed` per key; a change that the start's own checks would
-   refuse (the relying-party rule, the endpoint rule of INT-GEN-001, the signing
-   algorithm the signing keys hold, the client registry) is refused with their code and
-   nothing of it is written.
+   `protected-setting-changed` per key; a value its key does not admit is refused with
+   `config.value.notallowed` (`token.signing.algorithm` admits `ES256` alone,
+   AUTH-KEY-001); a change that the start's own checks would refuse (the relying-party
+   rule, the endpoint rule of INT-GEN-001, the client registry) is refused with their
+   code; nothing of a refused change is written.
 
 ---
 
@@ -1259,12 +1260,14 @@ command the executable does not carry is refused with one JSON line
 one lifecycle with automated rotation and overlap windows. No human step SHALL be
 required.
 
-**The key-encryption key and the backup key are rotated separately** (DR-009a,
-DR-010): annually, and immediately on suspicion of exposure. They require a human
-step because the escrowed copies must be replaced, which is why they belong to the
-maintenance exceptions rather than to this automated lifecycle. The key-encryption
-key's rotation is the command-line operation OPS-SEC-003 (D-147). Signing-key
-cadence, overlap and algorithm are the keys of `10` section 4.9 (AUTH-KEY-001).
+**The key-encryption key and the backup key are rotated separately** (DR-009a, DR-010):
+annually, and immediately on suspicion of exposure. They require a human step because
+the escrowed copies must be replaced, which is why they belong to the maintenance
+exceptions rather than to this automated lifecycle. The key-encryption key's rotation is
+the command-line operation OPS-SEC-003 (D-147). Signing-key cadence and algorithm are
+the keys of `10` section 4.9; a signing key's overlap follows from the longest
+access-token lifetime it signed under, and how long its public key is kept after it from
+the ceiling of `session.default.absolute` (AUTH-KEY-001).
 
 **Client secrets (D-166).** The library generates the secret of every client in the
 registry when the client is registered (32 random bytes, base64url), holds it wrapped
@@ -1279,12 +1282,13 @@ under (OPS-SEC-003). A provider credential that expires is renewed by the librar
 where the provider lets the client sign it (IDN-LIFE-012); no calendar renewal is a
 maintenance task.
 
-*Source: D-148; D-007, D-026.3, D-103, D-147, D-166, D-172*
+*Source: D-148; D-007, D-026.3, D-103, D-147, D-166, D-172, D-181*
 
 **Acceptance criteria**
 1. Rotation completes without restart or manual action.
-2. Credentials signed or issued under the previous key remain valid through the
-   overlap.
+2. A token signed under the previous signing key validates throughout its overlap, and a
+   refresh token it signed is still accepted after the overlap while its session lives,
+   until the end of the key's keeping (AUTH-KEY-001 criteria 2 and 6).
 3. A client secret older than `token.signing.rotation` is replaced at its next use with
    no restart and no command, and the secret it replaced authenticates the client until
    `oidc.accesstoken.lifetime` plus 5 minutes have passed.

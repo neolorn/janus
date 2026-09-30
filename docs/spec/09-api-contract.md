@@ -2204,7 +2204,7 @@ Standard endpoints for first-party, manually registered clients.
 | Endpoint | Purpose |
 |---|---|
 | `GET /.well-known/openid-configuration` | Discovery |
-| `GET /oidc/jwks` | Signing keys |
+| `GET /oidc/jwks` | The public keys of the next signing key, the current one and each replaced one within its overlap (AUTH-KEY-001); a retired key's kept public key is never published |
 | `POST /oidc/par` | Pushed Authorization Request (RFC 9126): the client posts the authorization parameters over the back channel and receives a single-use `request_uri` valid for 60 seconds; required for every client (AUTH-OIDC-006, D-164); a `redirect_uri` that is not exactly the client's registered destination is refused with `invalid_request` and no `request_uri` is issued (RFC 9126 section 2.1), and an absent one takes the registered destination; a browser application's request asking for `offline_access` is refused with `invalid_request` (AUTH-OIDC-002) |
 | `GET /oidc/authorize` | Authorization code with PKCE, by `request_uri` from `/oidc/par` only; direct parameters are refused with `invalid_request` — **redirects to the authentication application; never renders a page**. Honours `prompt=none` for silent sign-on (AUTH-SESS-012) |
 | `POST /oidc/token` | Token issuance and refresh — machine profile (BFF-MACH-001) |
@@ -2223,7 +2223,7 @@ answered to the browser in the API-CONV-002 body (LIB-API-003, D-166).
 than rendering a sign-in page. A conventional OIDC provider renders one; this one does
 not, because the library never renders user-facing text (D-054).
 
-*Source: AUTH-OIDC-001, D-041, D-166*
+*Source: AUTH-OIDC-001, AUTH-KEY-001, D-041, D-166, D-181*
 
 **Two kinds of client share the registry.** Protocol clients (Stalwart, future native
 clients) receive access and refresh tokens (AUTH-OIDC-003, AUTH-OIDC-004). **Each

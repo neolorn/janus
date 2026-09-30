@@ -42,9 +42,10 @@ area**, published as a single package.
 Dependencies point **inward toward Core**. Nothing points outward. Storage is the one
 project that depends on the four area projects: it implements their persistence ports
 (CONV-DESIGN-003), and no area depends on Storage. The OIDC provider (`02` section 8) is
-the `Oidc` feature of `Janus.Authentication` with its stores in `Janus.Storage`.
+the `Oidc` feature of `Janus.Authentication`, which holds the credential source of
+AUTH-KEY-001, with its stores in `Janus.Storage`.
 
-*Source: LIB-PKG-001, LIB-PKG-002, D-147, D-149, D-162, D-166, D-172, D-176*
+*Source: LIB-PKG-001, LIB-PKG-002, D-147, D-149, D-162, D-166, D-172, D-176, D-181*
 
 Separate projects make the boundaries a compiler concern rather than a review
 concern. Under a single project with folders, LIB-PKG-001's acceptance criteria
@@ -339,7 +340,8 @@ returns none (background work, a hosted service) throws it as a fault naming the
 `Error` carries, as a configuration read throws naming its key (OPS-CFG-008). No
 signature gains a result only to carry theirs (D-171). A read, decide and write on a row whose value decides a security
 or state outcome SHALL take a row lock (`SELECT ... FOR UPDATE`) inside the transaction,
-or a constraint SHALL make the race impossible.
+or SHALL write through one update conditional on the value read, or a constraint SHALL
+make the race impossible.
 Hand-written SQL (OPS-DATA-001) lives in `Janus.Storage` beside the port implementation
 it serves, never at a call site. Migrations are EF Core migrations in `Janus.Storage`,
 applied in the pipeline as an **EF Core migration bundle** built from the same commit
@@ -352,7 +354,7 @@ added `NOT NULL` without a default; which of them stop a deploy is OPS-DEP-001's
 serialized model of AUTHZ-MODEL-005 is JSON written by `System.Text.Json` source
 generation to `artifacts/model.json`.
 
-*Source: OPS-DATA-001 to 003, OPS-MIG-001, OPS-DEP-002, LIB-PKG-002, D-149, D-166, D-171, D-173*
+*Source: OPS-DATA-001 to 003, OPS-MIG-001, OPS-DEP-002, LIB-PKG-002, D-149, D-166, D-171, D-173, D-181*
 
 **Acceptance criteria**
 1. No area project references EF Core or Npgsql.
@@ -443,25 +445,28 @@ project exposes exactly one `internal static` registration method
 (`AddIdentityArea(this IServiceCollection)`), called from the single public `AddJanus`
 entry point in `Janus.Hosting`; it MAY call registration code kept in other files of the
 project, each file naming one concern only. Lifetimes: services and ports scoped;
-stateless helpers singleton; the key ring of CONV-CODE-007 and the mail server in use
-(below) singleton; nothing transient without a recorded reason. A host declaration that
-can be absent and that the host registers as a service (an optional one of LIB-HOST-001,
-or one it requires only where a feature or a shipped default does not stand in for it, a
-transport among them) SHALL reach the type that uses it through a factory registration
-that asks the container for it (`GetService<T>()`), never through a constructor
-parameter whose default stands for its absence. Options SHALL be bound through
-`IOptions<T>` with `ValidateOnStart`; the runtime-changeable keys of `10` section 4 are
-read through the configuration store abstraction, never through `IOptions`. A stored
-value that does not read under its key is a fault: the read throws, and no read falls
-back to a default or a constant (OPS-CFG-008, CONV-ERR-001). Time comes from
-`TimeProvider`; randomness from `RandomNumberGenerator`; both injected, never static.
-Every secret the library needs (the members LIB-HOST-001 lists for the secret source) is
-read once, through the host-supplied `ISecretSource` of LIB-EXT-001, asynchronously,
-when the application starts and before the server serves a request, into the key ring of
-CONV-CODE-007; no secret is an argument of `AddJanus`. A `Janus.Cli` command reads the
-same values once, at its start, into the same key ring, from one JSON key document on
-standard input that the operator pipes from the secrets manager's own client
-(OPS-SEC-001). The library ships no secrets-manager client.
+stateless helpers singleton; the key ring of CONV-CODE-007, the credential source of
+AUTH-KEY-001, which writes each change in a scope and a unit of work of its own, and the
+mail server in use (below) singleton; nothing transient without a recorded reason. A
+host declaration that can be absent and that the host registers as a service (an
+optional one of LIB-HOST-001, or one it requires only where a feature or a shipped
+default does not stand in for it, a transport among them) SHALL reach the type that uses
+it through a factory registration that asks the container for it (`GetService<T>()`),
+never through a constructor parameter whose default stands for its absence. Options
+SHALL be bound through `IOptions<T>` with `ValidateOnStart`, except the OIDC provider's,
+which the start builds once the credential source is filled (below); the
+runtime-changeable keys of `10` section 4 are read through the configuration store
+abstraction, never through `IOptions`. A stored value that does not read under its key
+is a fault: the read throws, and no read falls back to a default or a constant
+(OPS-CFG-008, CONV-ERR-001). Time comes from `TimeProvider`; randomness from
+`RandomNumberGenerator`; both injected, never static. Every secret the library needs
+(the members LIB-HOST-001 lists for the secret source) is read once, through the
+host-supplied `ISecretSource` of LIB-EXT-001, asynchronously, when the application
+starts and before the server serves a request, into the key ring of CONV-CODE-007; no
+secret is an argument of `AddJanus`. A `Janus.Cli` command reads the same values once,
+at its start, into the same key ring, from one JSON key document on standard input that
+the operator pipes from the secrets manager's own client (OPS-SEC-001). The library
+ships no secrets-manager client.
 
 **The mail server in use.** Every registration is made before a stored value can be
 read, so none depends on `integration.mailserver.endpoint`. `AddJanus` registers the
@@ -485,7 +490,12 @@ secret where the adapter is chosen. A key is lent from the ring once the step th
 it is done, and a read of a key before that is the fault of CONV-CODE-007. A change of
 the key by `configure` (OPS-CFG-004) takes effect at the next start.
 
-*Source: OPS-CFG-001, OPS-CFG-008, D-149, D-166, D-171, D-176, D-180*
+**The provider's start.** At the application's start, once the ring is filled, the start
+reads the signing keys into the credential source of AUTH-KEY-001, making one current
+where the database holds none, and then builds the OIDC provider's options, which take
+no `ValidateOnStart` (CONV-CODE-007).
+
+*Source: OPS-CFG-001, OPS-CFG-008, D-149, D-166, D-171, D-176, D-180, D-181*
 
 **Acceptance criteria**
 1. A host calls one method to register the library.
@@ -717,7 +727,7 @@ is API-CONV-003's.
 they cross a port, and be cleared after use; nothing SHALL derive its own primitive
 where the base class library or a permitted package provides one (CONV-DESIGN-008).
 
-*Source: AUTH-PASS-007, AUTH-KEY-002, D-149, D-166, D-171, D-176*
+*Source: AUTH-PASS-007, AUTH-KEY-002, D-149, D-166, D-171, D-176, D-181*
 
 **The key ring.** The secrets read once at startup (CONV-DESIGN-007) are needed for the
 life of the process, so they are the first exception to "inside a method" and to
@@ -742,14 +752,26 @@ What a use derives from a key follows the rule above: inside the method, cleared
 use. The second exception is the OIDC provider's credentials: its signing credentials,
 made from the signing keys the database holds wrapped (AUTH-KEY-001), and its encryption
 credential, derived from each held key-encryption key version (AUTH-KEY-002). The
-maintained provider takes its keys as credential objects in its own server options, and
-replacing that with a hand-written key path is the risk CONV-DESIGN-008 rejects, so they
-are held there, made after the ring is filled, with the library's own copy of the bytes
-they were made from cleared at once. A signing credential a rotation replaces stays for
-the overlap of AUTH-KEY-001 and leaves the options when the overlap ends; the encryption
-credential changes only at a restart, since a key-encryption key version leaves only then
-(OPS-SEC-003). Nothing else holds key material outside the ring, and no other options
-object holds key bytes (D-171).
+maintained provider takes its keys as credential objects, and replacing that with a
+hand-written key path is the risk CONV-DESIGN-008 rejects, so they are held as such
+objects, made after the ring is filled, with the library's own copy of the bytes they
+were made from cleared at once. The encryption credential is held in the provider's
+server options and changes only at a restart, since a key-encryption key version leaves
+only then (OPS-SEC-003). The signing credentials are held in the library's credential
+source (AUTH-KEY-001), which the application's start fills from the stored keys once the
+ring is filled and before the provider's options are built; the provider's signing, its
+key set and its validation read them from it each time they run, through the provider's
+own event model, and no step of the provider takes one from its options (AUTH-KEY-001).
+The provider's options are built once, at the start, and never rebuilt; of the signing
+credentials they hold only what the provider requires to start, as the same object the
+source holds. A signing credential a rotation replaces signs nothing after it. Its
+public key, which JWKS publishes during the overlap and validation uses for as long as
+AUTH-KEY-001 keeps it, is held apart from its private key object and is no secret; the
+source disposes the private key object at the first read of the signing keys after the
+overlap ends (AUTH-KEY-001), and from then nothing holds its private key undisposed, the
+options included, which can hold only that same object, disposed. Nothing else holds
+secret key material outside the ring, and no other options object holds key bytes
+(D-171).
 
 **Acceptance criteria**
 1. No equality or ordering comparison other than `CryptographicOperations.FixedTimeEquals`
@@ -763,10 +785,12 @@ object holds key bytes (D-171).
 3. No service receives a key at registration or construction; a read of a secret before
    the start has read it into the ring throws; the ring's clearing leaves every array
    zero; after the application stops or the command ends, a read throws.
-4. The only key material outside the key ring is the OIDC provider's signing and
-   encryption credentials in its own server options; the library's copy of the bytes each
-   was made from is zero when the making returns, and a signing credential a rotation
-   replaces leaves the options when its overlap ends.
+4. The only secret key material outside the key ring is the OIDC provider's signing and
+   encryption credentials; the library's copy of the bytes each was made from is zero
+   when the making returns; the provider's options are never rebuilt after the start;
+   and a signing credential a rotation replaces signs nothing after it, has its public
+   key held apart from its private key object, and has the private key object disposed
+   at the first read of the signing keys after its overlap ends.
 
 ---
 
