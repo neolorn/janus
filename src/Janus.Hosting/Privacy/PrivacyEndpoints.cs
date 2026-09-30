@@ -519,6 +519,7 @@ internal static class PrivacyEndpoints
             [
                 .. records.Select(record => new ConsentView(
                     record.Purpose,
+                    record.Document,
                     record.NoticeVersion,
                     record.Mechanism,
                     record.GrantedAt,
@@ -535,6 +536,7 @@ internal static class PrivacyEndpoints
             [
                 .. records.Select(record => new ObjectionView(
                     record.Purpose,
+                    record.Document,
                     record.NoticeVersion,
                     record.Mechanism,
                     record.RecordedAt,

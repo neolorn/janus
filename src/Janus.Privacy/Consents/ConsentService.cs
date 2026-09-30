@@ -118,6 +118,7 @@ internal sealed class ConsentService(
 
         var granted = new ConsentRecord(
             purpose,
+            declared.Document ?? Notice,
             version,
             mechanism,
             kind,
@@ -260,7 +261,7 @@ internal sealed class ConsentService(
         }
 
         DateTimeOffset now = time.GetUtcNow();
-        var objection = new ObjectionRecord(purpose, version, mechanism, now, WithdrawnAt: null);
+        var objection = new ObjectionRecord(purpose, Notice, version, mechanism, now, WithdrawnAt: null);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)

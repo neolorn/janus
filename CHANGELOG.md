@@ -990,22 +990,24 @@ against the public contract of LIB-API-001.
 - A subject can read and change their own consents and objections through a privacy
   dashboard: `GET /privacy/consents`, `POST /privacy/consents/{purpose}/grant` and
   `.../withdraw`, `GET /privacy/objections`, `POST /privacy/objections/{purpose}` and
-  `DELETE /privacy/objections/{purpose}`. Each record names the purpose, the version of
-  the document that was shown, where the decision was made and when. A grant made on the
-  subject's own pages records `dashboard`, and one answering the prompt a material
-  revision raised, over a consent the revision ended and the subject never took back,
-  records `reconsent`. `IConsents.GrantAsync` applies the same rule, judged inside the
-  grant's transaction, to a grant named `dashboard`, so a host granting through the
-  contract is answered as the endpoint is; any other mechanism is recorded as named.
-  Withdrawal takes the one request granting took and nothing stands in its way. A
-  purpose that rests on a basis other than consent takes no consent record, and one
-  whose basis carries no right to object refuses the objection by name. A purpose
-  declaration names the legal document that governs its consent, and the privacy notice
-  governs the purposes that name none. A consent is recorded against the version of that
-  document, and publishing a material revision of it ends the live consents of the
-  purposes that name it and of no others, so the subject is asked again, and leaves the
-  records standing as evidence. A purpose declared on two types against two documents
-  fails startup.
+  `DELETE /privacy/objections/{purpose}`. Each record names the purpose, the document it
+  was given against (`document`, the privacy notice for an objection and for a purpose
+  naming none) and the version of it that was shown, where the decision was made and
+  when; a record written before the document was named reads as given against the
+  privacy notice. A grant made on the subject's own pages records `dashboard`, and one
+  answering the prompt a material revision raised, over a consent the revision ended and
+  the subject never took back, records `reconsent`. `IConsents.GrantAsync` applies the
+  same rule, judged inside the grant's transaction, to a grant named `dashboard`, so a
+  host granting through the contract is answered as the endpoint is; any other mechanism
+  is recorded as named. Withdrawal takes the one request granting took and nothing
+  stands in its way. A purpose that rests on a basis other than consent takes no consent
+  record, and one whose basis carries no right to object refuses the objection by name.
+  A purpose declaration names the legal document that governs its consent, and the
+  privacy notice governs the purposes that name none. A consent is recorded against that
+  document and its version, and publishing a material revision of it ends the live
+  consents of the purposes that name it, and of no others, given against another version
+  or another document, so the subject is asked again, and leaves the records standing as
+  evidence. A purpose declared on two types against two documents fails startup.
 - The privacy notice and every other legal document a deployment publishes are served
   over `GET /privacy/notice` and `GET /privacy/documents/{document}`, public and without
   a sign-in, each answer carrying the governing language, the text that binds and every

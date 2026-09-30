@@ -524,8 +524,10 @@ Janus.Core.ConsentMechanism.Reconsent = 2 -> Janus.Core.ConsentMechanism
 Janus.Core.ConsentMechanism.Registration = 0 -> Janus.Core.ConsentMechanism
 Janus.Core.ConsentRecord
 Janus.Core.ConsentRecord.<Clone>$() -> Janus.Core.ConsentRecord!
-Janus.Core.ConsentRecord.ConsentRecord(string! Purpose, string! NoticeVersion, Janus.Core.ConsentMechanism Mechanism, Janus.Core.ConsentKind Kind, System.DateTimeOffset GrantedAt, System.DateTimeOffset? WithdrawnAt, System.DateTimeOffset? SupersededAt) -> void
-Janus.Core.ConsentRecord.Deconstruct(out string! Purpose, out string! NoticeVersion, out Janus.Core.ConsentMechanism Mechanism, out Janus.Core.ConsentKind Kind, out System.DateTimeOffset GrantedAt, out System.DateTimeOffset? WithdrawnAt, out System.DateTimeOffset? SupersededAt) -> void
+Janus.Core.ConsentRecord.ConsentRecord(string! Purpose, string! Document, string! NoticeVersion, Janus.Core.ConsentMechanism Mechanism, Janus.Core.ConsentKind Kind, System.DateTimeOffset GrantedAt, System.DateTimeOffset? WithdrawnAt, System.DateTimeOffset? SupersededAt) -> void
+Janus.Core.ConsentRecord.Deconstruct(out string! Purpose, out string! Document, out string! NoticeVersion, out Janus.Core.ConsentMechanism Mechanism, out Janus.Core.ConsentKind Kind, out System.DateTimeOffset GrantedAt, out System.DateTimeOffset? WithdrawnAt, out System.DateTimeOffset? SupersededAt) -> void
+Janus.Core.ConsentRecord.Document.get -> string!
+Janus.Core.ConsentRecord.Document.init -> void
 Janus.Core.ConsentRecord.Equals(Janus.Core.ConsentRecord? other) -> bool
 Janus.Core.ConsentRecord.GrantedAt.get -> System.DateTimeOffset
 Janus.Core.ConsentRecord.GrantedAt.init -> void
@@ -1741,13 +1743,15 @@ Janus.Core.ObjectionChanged.Purpose.get -> string!
 Janus.Core.ObjectionChanged.Purpose.init -> void
 Janus.Core.ObjectionRecord
 Janus.Core.ObjectionRecord.<Clone>$() -> Janus.Core.ObjectionRecord!
-Janus.Core.ObjectionRecord.Deconstruct(out string! Purpose, out string! NoticeVersion, out Janus.Core.ConsentMechanism Mechanism, out System.DateTimeOffset RecordedAt, out System.DateTimeOffset? WithdrawnAt) -> void
+Janus.Core.ObjectionRecord.Deconstruct(out string! Purpose, out string! Document, out string! NoticeVersion, out Janus.Core.ConsentMechanism Mechanism, out System.DateTimeOffset RecordedAt, out System.DateTimeOffset? WithdrawnAt) -> void
+Janus.Core.ObjectionRecord.Document.get -> string!
+Janus.Core.ObjectionRecord.Document.init -> void
 Janus.Core.ObjectionRecord.Equals(Janus.Core.ObjectionRecord? other) -> bool
 Janus.Core.ObjectionRecord.Mechanism.get -> Janus.Core.ConsentMechanism
 Janus.Core.ObjectionRecord.Mechanism.init -> void
 Janus.Core.ObjectionRecord.NoticeVersion.get -> string!
 Janus.Core.ObjectionRecord.NoticeVersion.init -> void
-Janus.Core.ObjectionRecord.ObjectionRecord(string! Purpose, string! NoticeVersion, Janus.Core.ConsentMechanism Mechanism, System.DateTimeOffset RecordedAt, System.DateTimeOffset? WithdrawnAt) -> void
+Janus.Core.ObjectionRecord.ObjectionRecord(string! Purpose, string! Document, string! NoticeVersion, Janus.Core.ConsentMechanism Mechanism, System.DateTimeOffset RecordedAt, System.DateTimeOffset? WithdrawnAt) -> void
 Janus.Core.ObjectionRecord.Purpose.get -> string!
 Janus.Core.ObjectionRecord.Purpose.init -> void
 Janus.Core.ObjectionRecord.RecordedAt.get -> System.DateTimeOffset

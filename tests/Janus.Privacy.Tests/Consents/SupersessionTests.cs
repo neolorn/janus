@@ -307,6 +307,53 @@ public sealed class SupersessionTests : IAsyncDisposable
         Assert.Empty(await HeldAsync(Ahmed));
     }
 
+    /// <summary>
+    /// PRIV-CONS-001 AC2: a consent names the document it was given against and the
+    /// version of that document, the privacy notice where its purpose names none and
+    /// the purpose's own document where it names one.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AC2_AConsentNamesTheDocumentAndVersionItWasGivenAgainstAsync()
+    {
+        Holds(Declaration.Newsletter, "7");
+
+        await GrantAsync(Ahmed, Recommendations);
+        await GrantAsync(Ahmed, Newsletter);
+
+        IReadOnlyList<ConsentRecord> held = await HeldAsync(Ahmed);
+        ConsentRecord notice = Assert.Single(held, record => record.Purpose == Recommendations);
+        ConsentRecord own = Assert.Single(held, record => record.Purpose == Newsletter);
+
+        Assert.Equal((ConsentService.Notice, "1"), (notice.Document, notice.NoticeVersion));
+        Assert.Equal((Declaration.Newsletter, "7"), (own.Document, own.NoticeVersion));
+    }
+
+    /// <summary>
+    /// PRIV-CONS-007: a material revision of a document ends a live consent of a
+    /// purpose naming it that was given against another document, although the version
+    /// that consent names is the one just published.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_007_AC1_AConsentGivenAgainstAnotherDocumentIsEndedByARevisionAsync()
+    {
+        Holds(Declaration.Newsletter, "1");
+
+        await GrantAsync(Ahmed, Newsletter);
+
+        ConsentRecord given = Assert.Single(await HeldAsync(Ahmed));
+
+        await _consents.RecordAsync(
+            Ahmed,
+            given with { Document = ConsentService.Notice, NoticeVersion = "2" },
+            CancellationToken.None);
+
+        await PublishAsync(Declaration.Newsletter, material: true);
+
+        Assert.False(Assert.Single(await HeldAsync(Ahmed)).Live);
+    }
+
     private void Holds(string document, string version) =>
         _documents.Hold(new DocumentVersion(document, version, "ar", "النص", [], Noon));
 

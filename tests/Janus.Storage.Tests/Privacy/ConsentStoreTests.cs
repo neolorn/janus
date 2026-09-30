@@ -21,6 +21,8 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
 {
     private const string Recommendations = "recommendations";
 
+    private const string Notice = "privacy-notice";
+
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 
     /// <summary>
@@ -37,6 +39,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
             subject,
             new ConsentRecord(
                 Recommendations,
+                "newsletter-terms",
                 "3",
                 ConsentMechanism.Dashboard,
                 ConsentKind.Written,
@@ -52,6 +55,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
                 .ConsentsAsync(subject, TestContext.Current.CancellationToken));
 
         Assert.Equal(Recommendations, held.Purpose);
+        Assert.Equal("newsletter-terms", held.Document);
         Assert.Equal("3", held.NoticeVersion);
         Assert.Equal(ConsentMechanism.Dashboard, held.Mechanism);
         Assert.Equal(ConsentKind.Written, held.Kind);
@@ -116,11 +120,45 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
         await using StoreContext reading = database.Context();
 
         IReadOnlyList<HeldConsent> held = await new ConsentStore(reading)
-            .LiveAgainstAnotherAsync([Recommendations], "2", TestContext.Current.CancellationToken);
+            .LiveAgainstAnotherAsync([Recommendations], Notice, "2", TestContext.Current.CancellationToken);
 
         SubjectId[] mine = [asked, current, withdrawn];
 
         Assert.Equal([asked], held.Select(one => one.Subject).Where(mine.Contains));
+    }
+
+    /// <summary>
+    /// PRIV-CONS-001, PRIV-CONS-007: a live consent is found by the document and the
+    /// version it was given against, so one given against another document is found
+    /// although its version is the one just published.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_007_AC1_ALiveConsentAgainstAnotherDocumentIsFoundAsync()
+    {
+        SubjectId elsewhere = await RegisteredAsync();
+        SubjectId current = await RegisteredAsync();
+
+        await WritingAsync(async store => await store.RecordAsync(
+            elsewhere,
+            Granted(Recommendations, "2"),
+            TestContext.Current.CancellationToken));
+        await WritingAsync(async store => await store.RecordAsync(
+            current,
+            Granted(Recommendations, "2") with { Document = "newsletter-terms" },
+            TestContext.Current.CancellationToken));
+
+        await using StoreContext reading = database.Context();
+
+        IReadOnlyList<HeldConsent> held = await new ConsentStore(reading).LiveAgainstAnotherAsync(
+            [Recommendations],
+            "newsletter-terms",
+            "2",
+            TestContext.Current.CancellationToken);
+
+        SubjectId[] mine = [elsewhere, current];
+
+        Assert.Equal([elsewhere], held.Select(one => one.Subject).Where(mine.Contains));
     }
 
     /// <summary>
@@ -134,6 +172,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
         SubjectId subject = await RegisteredAsync();
         var objection = new ObjectionRecord(
             "security",
+            Notice,
             "1",
             ConsentMechanism.Dashboard,
             Noon,
@@ -155,6 +194,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
                 .ObjectionsAsync(subject, TestContext.Current.CancellationToken));
 
         Assert.Equal("security", held.Purpose);
+        Assert.Equal(Notice, held.Document);
         Assert.Equal(Noon, held.RecordedAt);
         Assert.Equal(Noon.AddDays(2), held.WithdrawnAt);
         Assert.False(held.Standing);
@@ -163,6 +203,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
     private static ConsentRecord Granted(string purpose, string noticeVersion) =>
         new(
             purpose,
+            Notice,
             noticeVersion,
             ConsentMechanism.Dashboard,
             ConsentKind.Ordinary,

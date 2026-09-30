@@ -388,6 +388,7 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
     private static ConsentRecord Held(ConsentKind kind) =>
         new(
             Recommendations,
+            "privacy-notice",
             "1",
             ConsentMechanism.Dashboard,
             kind,

@@ -80,6 +80,7 @@ internal sealed class ConsentsInMemory : IConsents
 
         _held[(subject, purpose)] = new ConsentRecord(
             purpose,
+            "privacy-notice",
             "1",
             mechanism,
             ConsentKind.Ordinary,
