@@ -1789,9 +1789,10 @@ against the public contract of LIB-API-001.
 - The library serves `/.well-known/change-password`, `/.well-known/passkey-endpoints`
   and `/.well-known/webauthn` at the site root, mounted with `MapIdentityWellKnown`. The
   addresses of the frontend's password and passkey pages behind the first two are a
-  declaration with no default: a deployment that registers none does not start, naming
-  the declaration it left out, so both documents always answer. The third is the
-  deployment's own related-origin allowlist.
+  declaration with no default: a deployment that registers none, or leaves one of them
+  or a sign-in address empty or blank, does not start, naming the declaration or the
+  field it left out, so both documents always answer. The third is the deployment's own
+  related-origin allowlist.
 - Where an account replaces its only address of a kind and holds no other channel at
   all, the address being displaced is asked to confirm the change, so a catalogue a
   deployment registers carries a template for `identifier-change-confirm` in every
