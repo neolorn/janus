@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Invitations;
@@ -22,6 +23,15 @@ internal sealed class MembershipEndingInMemory(MembershipLookupInMemory lookup) 
     /// Every membership ended, oldest first.
     /// </summary>
     public List<EndedMembership> Ended { get; } = [];
+
+    /// <inheritdoc/>
+    public async ValueTask<MembershipId?> FindAsync(
+        SubjectId subject,
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        (await lookup.OfAsync(subject, cancellationToken).ConfigureAwait(false)).Contains(organization)
+            ? new MembershipId(Guid.CreateVersion7())
+            : null;
 
     /// <inheritdoc/>
     public ValueTask<MembershipId?> EndAsync(

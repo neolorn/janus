@@ -1568,6 +1568,55 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-MEM-001 and X9 of D-166: an account holding no current membership of the
+    /// organization is not found, a second end included, with no transaction begun, so a
+    /// later operation in the same scope begins and commits its own.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_AnAccountHoldingNoMembershipThereIsNotFoundAsync()
+    {
+        SubjectId holder = Holder();
+
+        _memberships.Place(holder, Customer);
+        Accepted(await EndAsync(Customer, holder));
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.MembershipNotFound, Failure(await EndAsync(Customer, holder)).Code);
+        Assert.Equal(ErrorCodes.MembershipNotFound, Failure(await EndAsync(Customer, Holder())).Code);
+        Assert.Single(_ending.Ended);
+        Assert.Equal((0, 0), (_work.Opened, _work.Committed));
+
+        _memberships.Place(holder, Customer);
+        Accepted(await EndAsync(Customer, holder));
+
+        Assert.Equal((1, 1), (_work.Opened, _work.Committed));
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 and REG-MAIL-003: ending a membership changes another person's
+    /// account, so it is the <c>membership:end</c> step-up action; a session whose proof
+    /// is stale ends nothing and begins no transaction.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_EndingAMembershipAsksForStepUpAsync()
+    {
+        SubjectId holder = Holder();
+
+        _memberships.Place(holder, Customer);
+        _work.Reset();
+
+        Error challenged = Failure(await EndAsync(Customer, holder, Stale()));
+
+        Assert.Equal(ErrorCodes.StepUpRequired, challenged.Code);
+        Assert.Empty(_ending.Ended);
+        Assert.Equal(0, _work.Opened);
+
+        Accepted(await EndAsync(Customer, holder, Stepped()));
+
+        Assert.Single(_ending.Ended);
+    }
+
+    /// <summary>
     /// IDN-MEM-001: ending a membership asks <c>membership:manage</c> in the
     /// organization and a person to ask it, and only a current membership is ended;
     /// anything else is refused with nothing written.
@@ -1584,6 +1633,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             ErrorCodes.Denied,
             Failure(await Service.EndMembershipAsync(
                 AccessContext.Of(stranger),
+                Stepped(),
                 Customer,
                 holder,
                 Source,
@@ -1592,18 +1642,19 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             ErrorCodes.Denied,
             Failure(await Service.EndMembershipAsync(
                 AccessContext.Of(SystemPrincipal.ForOrganization("sweep", "expiry", Customer)),
+                Stepped(),
                 Customer,
                 holder,
                 Source,
                 TestContext.Current.CancellationToken)).Code);
-        Assert.Equal((ErrorCodes.RequestMalformed, "subject"), Coded(Failure(await EndAsync(Staff, holder))));
-        Assert.Equal((ErrorCodes.RequestMalformed, "subject"), Coded(Failure(await EndAsync(Customer, stranger))));
+        Assert.Equal(ErrorCodes.MembershipNotFound, Failure(await EndAsync(Staff, holder)).Code);
+        Assert.Equal(ErrorCodes.MembershipNotFound, Failure(await EndAsync(Customer, stranger)).Code);
         Assert.Empty(_ending.Ended);
         Assert.Equal(0, _work.Committed);
 
         Accepted(await EndAsync(Customer, holder));
 
-        Assert.Equal((ErrorCodes.RequestMalformed, "subject"), Coded(Failure(await EndAsync(Customer, holder))));
+        Assert.Equal(ErrorCodes.MembershipNotFound, Failure(await EndAsync(Customer, holder)).Code);
         Assert.Single(_ending.Ended);
         Assert.Single(_audit.Changes);
     }
@@ -1650,11 +1701,12 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private InvitationService Serving(IMailServer? server)
     {
         PolicyResolution policies = Policies;
+        var stepUp = new StepUpGuard(_sessions, _authenticators, _passwords, policies, _clock);
 
         return new(
             _gate,
             new AdministrativeScope(_gate, _administrative),
-            new StepUpGuard(_sessions, _authenticators, _passwords, policies, _clock),
+            stepUp,
             _organizations,
             _roles,
             _documents,
@@ -1683,6 +1735,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 _clock),
             new MembershipEnd(
                 _gate,
+                stepUp,
                 _organizations,
                 _ending,
                 _identifiers,
@@ -1760,8 +1813,12 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken);
 
     private ValueTask<Result> EndAsync(OrganizationId organization, SubjectId member) =>
+        EndAsync(organization, member, Stepped());
+
+    private ValueTask<Result> EndAsync(OrganizationId organization, SubjectId member, SessionId session) =>
         Service.EndMembershipAsync(
             AccessContext.Of(_inviter),
+            session,
             organization,
             member,
             Source,

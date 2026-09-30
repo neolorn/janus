@@ -1270,7 +1270,7 @@ Janus.Core.IIdentifiers.VerifyAsync(Janus.Core.EnrolmentSessionId enrolment, Jan
 Janus.Core.IInvitations
 Janus.Core.IInvitations.AcknowledgeAsync(Janus.Core.AccessContext! context, Janus.Core.InvitationId invitation, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IInvitations.AttachedAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AttachedInvitation!>>
-Janus.Core.IInvitations.EndMembershipAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, Janus.Core.SubjectId member, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IInvitations.EndMembershipAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.SubjectId member, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IInvitations.IssueAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.InvitationRequest! request, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.IssuedInvitation!>>
 Janus.Core.IInvitations.RevokeAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, Janus.Core.InvitationId invitation, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IKeyRing
@@ -2691,6 +2691,7 @@ Janus.Core.StepUpAction.IdentifierRemove = 2 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.InvitationIssue = 15 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.MailCredentialCreate = 7 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.MailCredentialRevoke = 8 -> Janus.Core.StepUpAction
+Janus.Core.StepUpAction.MembershipEnd = 30 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.OrganizationDelete = 29 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.PasswordSet = 0 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.PolicyChange = 24 -> Janus.Core.StepUpAction
@@ -3857,6 +3858,7 @@ static Janus.Core.ErrorCodes.MailServerConflict.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.MailboxNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.MailboxTaken.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.MembershipLimitReached.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.MembershipNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.NoticeGoverningTextMissing.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.NoticeUnpublished.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.DomainNotFound.get -> Janus.Core.ErrorCode

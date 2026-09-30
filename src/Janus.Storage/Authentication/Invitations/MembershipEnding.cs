@@ -20,17 +20,20 @@ namespace Janus.Storage.Authentication.Invitations;
 internal sealed class MembershipEnding(IMembershipStore memberships) : IMembershipEnding
 {
     /// <inheritdoc/>
+    public async ValueTask<MembershipId?> FindAsync(
+        SubjectId subject,
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        (await CurrentAsync(subject, organization, cancellationToken).ConfigureAwait(false))?.Id;
+
+    /// <inheritdoc/>
     public async ValueTask<MembershipId?> EndAsync(
         SubjectId subject,
         OrganizationId organization,
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        IReadOnlyList<Membership> held = await memberships
-            .FindBySubjectAsync(subject, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (held.SingleOrDefault(membership => membership.IsCurrent && membership.Organization == organization)
+        if (await CurrentAsync(subject, organization, cancellationToken).ConfigureAwait(false)
             is not Membership current)
         {
             return null;
@@ -42,4 +45,11 @@ internal sealed class MembershipEnding(IMembershipStore memberships) : IMembersh
 
         return current.Id;
     }
+
+    private async ValueTask<Membership?> CurrentAsync(
+        SubjectId subject,
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        (await memberships.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false))
+            .SingleOrDefault(membership => membership.IsCurrent && membership.Organization == organization);
 }

@@ -1754,6 +1754,10 @@ against the public contract of LIB-API-001.
 - Taking the corporate address on at an acknowledgement publishes `IdentifierAdded`,
   and retiring it at the end of the membership publishes `IdentifierRemoved`, each in
   the transaction that makes the change.
+- Ending a membership is the `membership:end` step-up action, and `EndMembershipAsync`
+  takes the session it is judged on. An account holding no current membership of the
+  organization, a second end included, answers `404` `identity.membership.notfound`
+  before any step-up is asked.
 - An audit trail. Every record names who acted, whose identity the action was taken
   under, the instant it occurred and the organization where one applies; an event about
   a principal holding no membership carries none, and the absence is the recorded fact.

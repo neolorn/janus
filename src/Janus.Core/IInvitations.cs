@@ -118,17 +118,22 @@ public interface IInvitations
     /// in the same operation (REG-MAIL-003).
     /// </summary>
     /// <param name="context">Who is ending it.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
     /// <param name="organization">Of which organization.</param>
     /// <param name="member">Whose membership.</param>
     /// <param name="source">The address the request came from, which a notice counts against.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Success, or the refusal: <c>identity.organization.notfound</c> where the
-    /// deployment holds no such organization, <c>api.request.malformed</c> naming
-    /// <c>subject</c> where the account holds no current membership of the organization.
+    /// deployment holds no such organization, <c>authz.denied</c> where no person asks
+    /// or the person may not manage its memberships, <c>identity.membership.notfound</c>
+    /// where the account holds no current membership of the organization,
+    /// <c>auth.stepup.required</c> where the session does not meet the
+    /// <c>membership:end</c> gate.
     /// </returns>
     ValueTask<Result> EndMembershipAsync(
         AccessContext context,
+        SessionId session,
         OrganizationId organization,
         SubjectId member,
         string source,
