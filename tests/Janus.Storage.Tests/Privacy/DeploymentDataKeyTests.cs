@@ -7,8 +7,6 @@ using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
 using Janus.Privacy.SubjectKeys;
-using Janus.Storage.Identity.Accounts;
-using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -135,7 +133,7 @@ public sealed class DeploymentDataKeyTests(DatabaseFixture database)
                 VALUES (@nil, 1, 1, @wrapped);
                 """,
                 new { nil = Guid.Empty, wrapped = RandomNumberGenerator.GetBytes(40) });
-            await BoundTheOldWayAsync(refusing, connection, table);
+            await BoundTheOldWayAsync(connection, table);
         }
 
         PostgresException refusal = await Assert.ThrowsAsync<PostgresException>(
@@ -158,12 +156,12 @@ public sealed class DeploymentDataKeyTests(DatabaseFixture database)
     // A row whose value the field cipher bound to the nil subject, or, for a registration
     // session, to its provisional subject. What the value is does not matter: the
     // database cannot tell how it was bound, only that it stands.
-    private static async Task BoundTheOldWayAsync(string connectionString, NpgsqlConnection connection, string table)
+    private static async Task BoundTheOldWayAsync(NpgsqlConnection connection, string table)
     {
         switch (table)
         {
             case "invitations":
-                (SubjectId inviter, OrganizationId organization) = await InviterAsync(connectionString);
+                (SubjectId inviter, OrganizationId organization) = await InviterAsync(connection);
                 await connection.ExecuteAsync(
                     """
                     INSERT INTO identity.invitations
@@ -202,28 +200,27 @@ public sealed class DeploymentDataKeyTests(DatabaseFixture database)
         }
     }
 
-    private static async Task<(SubjectId Inviter, OrganizationId Organization)> InviterAsync(string connectionString)
+    // The database stands at a migration before today's model, so the rows are written
+    // in the columns that migration has rather than through the model.
+    private static async Task<(SubjectId Inviter, OrganizationId Organization)> InviterAsync(NpgsqlConnection connection)
     {
         SubjectId inviter = Subjects.New();
         var organization = new OrganizationId(Guid.CreateVersion7());
 
-        await using StoreContext context = DatabaseFixture.Context(connectionString);
-
-        context.Accounts.Add(new AccountRecord
-        {
-            Subject = inviter,
-            CreatedAt = DateTimeOffset.UnixEpoch,
-            State = AccountState.Active,
-        });
-
-        context.Organizations.Add(new OrganizationRecord
-        {
-            Id = organization,
-            Name = "Organization " + organization.Value.ToString("n", CultureInfo.InvariantCulture),
-            CreatedAt = DateTimeOffset.UnixEpoch,
-        });
-
-        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO identity.accounts (subject, state, created_at)
+            VALUES (@inviter, 'active', @at);
+            INSERT INTO identity.organizations (id, name, created_at)
+            VALUES (@organization, @name, @at);
+            """,
+            new
+            {
+                inviter = inviter.Value,
+                organization = organization.Value,
+                name = "Organization " + organization.Value.ToString("n", CultureInfo.InvariantCulture),
+                at = DateTimeOffset.UnixEpoch,
+            });
 
         return (inviter, organization);
     }
