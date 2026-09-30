@@ -274,7 +274,7 @@ internal sealed class PermissionRule
             string named = relationship.Name;
 
             IQueryable<AdmittedRecord> one = Admits(sources, ancestry, type, page, relationship)
-                .Select(entry => new AdmittedRecord(entry.ResourceId, entry.AncestorId, named));
+                .Select(entry => new AdmittedRecord(entry.ResourceId, entry.AncestorId, named, entry.Depth));
 
             admitted = admitted is null ? one : admitted.Concat(one);
         }

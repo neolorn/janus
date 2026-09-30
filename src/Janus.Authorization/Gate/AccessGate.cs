@@ -1120,12 +1120,12 @@ internal sealed class AccessGate(
         IReadOnlyList<AdmittedRecord> admitted = await RowsAsync(
             rule.ToAdmittedRecords(sources, [resource.Id]), cancellationToken).ConfigureAwait(false);
 
-        if (admitted.Count == 0)
+        // D-166: the container named is the nearest that admits the record, as for a
+        // stored grant, and never whichever row the query answered first.
+        if (AdmittedRecord.Nearest(admitted) is not AdmittedRecord first)
         {
             return null;
         }
-
-        AdmittedRecord first = admitted[0];
 
         ConferredDerivation deciding = conferring.First(one =>
             string.Equals(one.Relationship.Name, first.Relationship, StringComparison.Ordinal));

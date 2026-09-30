@@ -1441,8 +1441,8 @@ against the public contract of LIB-API-001.
   it was inherited from, and the principal it was decided for, or states that no grant
   matched. An explanation can be asked with the host's own rows, and on a type a
   derivation reaches it names the grant the fact produced: no identifier, the derived
-  kind, the role the derivation confers, and the container it was inherited from. The
-  identifier an explained grant carries is optional for that reason: a derived grant is
+  kind, the role the derivation confers, and the container it was inherited from, the
+  nearest where several admit the record. The identifier an explained grant carries is optional for that reason: a derived grant is
   a fact being true and no row holds it. A page of capabilities costs one query over the
   host's own rows however many permissions it asks for: every derivation reaching the
   type is evaluated in that one query, and what the role each confers allows is read
