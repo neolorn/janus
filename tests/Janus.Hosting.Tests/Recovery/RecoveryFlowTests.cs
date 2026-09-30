@@ -48,6 +48,32 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
     public async ValueTask DisposeAsync() => await _deployment.DisposeAsync();
 
     /// <summary>
+    /// AUTH-ABUSE-004: a recovery link is asked for by a person, so it is counted under
+    /// the purpose a sign-in link is and by no <c>notification</c> restriction, which
+    /// counts notices alone.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_ARecoveryLinkIsCountedByNoNotificationRestrictionAsync()
+    {
+        _ = await RegisteredAsync();
+
+        var notified = new RestrictionKey("notification.destination", RestrictionKeyKind.Destination, Flow.Address);
+        var mailed = new RestrictionKey("email.destination", RestrictionKeyKind.Destination, Flow.Address);
+        int notices = _deployment.SendLedger.Sends(notified).Count;
+        int mails = _deployment.SendLedger.Sends(mailed).Count;
+
+        Browser browser = await ArrivedAsync();
+
+        Assert.Equal(
+            StatusCodes.Status202Accepted,
+            (await browser.SendAsync("POST", "/recovery/begin", ("identifier", Flow.Address))).Status);
+
+        Assert.Equal(notices, _deployment.SendLedger.Sends(notified).Count);
+        Assert.Equal(mails + 1, _deployment.SendLedger.Sends(mailed).Count);
+    }
+
+    /// <summary>
     /// AUTH-RECOV-005 AC2: the link the address received sets the password, and the
     /// new password signs the account in.
     /// </summary>

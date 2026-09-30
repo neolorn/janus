@@ -717,6 +717,9 @@ against the public contract of LIB-API-001.
   that is not an `https` origin a registered browser client returns to, or an
   authentication origin that is not the sign-in address's, is refused with
   `model.startup.declarationinvalid` under the same key.
+- A recovery link and an invitation link are sent and drawn under the `signin` purpose,
+  as a sign-in link is, and answer to the restrictions it answers to; no `notification`
+  restriction counts them, so `notification.destination` counts notices alone.
 - A recovery-code set whose every reminder was refused stays owed its reminder, where
   it was closed as reminded; a set whose account holds no channel a reminder can reach
   is closed as before.

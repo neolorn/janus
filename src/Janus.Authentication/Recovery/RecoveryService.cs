@@ -443,7 +443,7 @@ internal sealed class RecoveryService(
         nonExistence.AnswerAsync(
             channel.Destination,
             MessageKind.RecoveryLink,
-            RestrictionPurpose.Notification,
+            RestrictionPurpose.SignIn,
             source,
             language,
             unheld,
@@ -486,12 +486,14 @@ internal sealed class RecoveryService(
         var token = OpaqueToken.Draw(randomness);
         string? recipient = await LanguageAsync(subject, language, cancellationToken).ConfigureAwait(false);
 
+        // AUTH-ABUSE-004: a link a person asked for answers to the restrictions a
+        // sign-in link answers to, and no notification restriction counts it.
         _ = (await sending
                 .SendAsync(
                     new SendRequest(
                         channel.Destination,
                         MessageKind.RecoveryLink,
-                        RestrictionPurpose.Notification,
+                        RestrictionPurpose.SignIn,
                         source,
                         recipient)
                     {

@@ -738,7 +738,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             [Address, Elsewhere],
             _restrictions.Drawn.Select(drawn => drawn.Destination.Canonical));
         Assert.All(_restrictions.Drawn, drawn => Assert.Equal(MessageKind.RecoveryLink, drawn.Message));
-        Assert.All(_restrictions.Drawn, drawn => Assert.Equal(RestrictionPurpose.Notification, drawn.Purpose));
+        Assert.All(_restrictions.Drawn, drawn => Assert.Equal(RestrictionPurpose.SignIn, drawn.Purpose));
         Assert.Equal(MessageKind.NoAccount, Assert.Single(_notifications.Mail).Message);
 
         var refusal = Error.From(ErrorCodes.RestrictionExceeded);

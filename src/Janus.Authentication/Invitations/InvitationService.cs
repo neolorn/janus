@@ -718,13 +718,15 @@ internal sealed class InvitationService(
     {
         // IDN-ATTR-001: the person holds no account whose language is known, and the
         // request is the administrator's, so the link goes out in every language the
-        // deployment declares.
+        // deployment declares. AUTH-ABUSE-004: a link an administrator asked for answers
+        // to the restrictions a sign-in link answers to, and no notification restriction
+        // counts it.
         return (await sending
                 .SendAsync(
                     new SendRequest(
                         SendDestination.Of(linked),
                         MessageKind.InvitationLink,
-                        RestrictionPurpose.Notification,
+                        RestrictionPurpose.SignIn,
                         source,
                         Language: null)
                     {
