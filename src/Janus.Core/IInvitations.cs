@@ -57,9 +57,9 @@ public interface IInvitations
     /// <returns>
     /// Success, which a revoked invitation answers again, or the refusal:
     /// <c>identity.organization.notfound</c> where the deployment holds no such
-    /// organization, <c>api.request.malformed</c> naming <c>invitationId</c> where the
-    /// organization issued no such invitation, <c>identity.invitation.expired</c> where
-    /// it has been acknowledged and is used.
+    /// organization, <c>identity.invitation.notfound</c> where the organization issued no
+    /// such invitation, <c>identity.invitation.expired</c> where it has been acknowledged
+    /// and is used.
     /// </returns>
     ValueTask<Result> RevokeAsync(
         AccessContext context,

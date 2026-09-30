@@ -280,7 +280,7 @@ internal sealed class InvitationService(
                 is not Invitation held
             || held.Organization != organization)
         {
-            return Result.Failure(Malformed("invitationId"));
+            return Result.Failure(Error.From(ErrorCodes.InvitationNotFound));
         }
 
         if (held.IsAcknowledged)

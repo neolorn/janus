@@ -8541,6 +8541,8 @@ where nobody ever held it (entry 221).
 *Chapter text that should change.* 09 section 8a could define unused as not yet
 acknowledged, and give the `204` and the refusals.
 
+**Superseded by D-166.**
+
 ---
 
 ## 234. What an invitation row keeps, and for how long

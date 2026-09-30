@@ -316,7 +316,7 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
 
     /// <summary>
     /// 09 section 8a: revoking an unused invitation answers <c>204</c>, and again;
-    /// one the organization never issued is a <c>400</c> naming it.
+    /// one the organization never issued is <c>404</c> <c>identity.invitation.notfound</c>.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -332,7 +332,8 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, revoked.Status);
         Assert.Equal(StatusCodes.Status204NoContent, again.Status);
-        Assert.Equal("invitationId", Member(unknown));
+        Assert.Equal(StatusCodes.Status404NotFound, unknown.Status);
+        Assert.Equal(ErrorCodes.InvitationNotFound.ToString(), unknown.Text("code"));
         Assert.True(Assert.Single(_deployment.Invitations.Held).IsRevoked);
         Assert.Equal(
             [AuditActions.InvitationIssued, AuditActions.InvitationRevoked],

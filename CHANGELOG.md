@@ -1733,6 +1733,8 @@ against the public contract of LIB-API-001.
 - An invitation asserting a corporate address a member holds, or one a standing
   invitation that has not expired reserves, is refused `409` `identity.mailbox.taken`
   naming `corporateEmail`.
+- Revoking an invitation the organization did not issue, or none, answers `404`
+  `identity.invitation.notfound`.
 - An audit trail. Every record names who acted, whose identity the action was taken
   under, the instant it occurred and the organization where one applies; an event about
   a principal holding no membership carries none, and the absence is the recorded fact.

@@ -613,8 +613,8 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-009a: an invitation the organization did not issue is not one it can
-    /// revoke, and an acknowledged one is used.
+    /// IDN-LIFE-009a: an invitation the organization did not issue, or none, is not
+    /// found, naming nothing, and an acknowledged one is used.
     /// </summary>
     [Fact]
     public async Task IDN_LIFE_009a_OnlyAnUnacknowledgedInvitationOfTheOrganizationIsRevokedAsync()
@@ -639,10 +639,10 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             revokedAt: null));
 
         Assert.Equal(
-            (ErrorCodes.RequestMalformed, "invitationId"),
+            (ErrorCodes.InvitationNotFound, null),
             Coded(Failure(await RevokeAsync(Staff, issued.Id))));
         Assert.Equal(
-            (ErrorCodes.RequestMalformed, "invitationId"),
+            (ErrorCodes.InvitationNotFound, null),
             Coded(Failure(await RevokeAsync(Customer, InvitationId.New(_clock)))));
         Assert.Equal(
             ErrorCodes.InvitationExpired,
