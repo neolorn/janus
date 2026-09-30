@@ -99,6 +99,7 @@ public sealed class ExportServiceTests : IAsyncDisposable
             Ahmed,
             new ConsentRecord(
                 "recommendations",
+                "privacy-notice",
                 "2026-09-01",
                 ConsentMechanism.Dashboard,
                 ConsentKind.Ordinary,
@@ -111,6 +112,7 @@ public sealed class ExportServiceTests : IAsyncDisposable
             Ahmed,
             new ObjectionRecord(
                 "marketing",
+                "privacy-notice",
                 "2026-09-01",
                 ConsentMechanism.Dashboard,
                 Noon,

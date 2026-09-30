@@ -56,6 +56,7 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, granted.Status);
         Assert.Equal(Marketing, held.GetProperty("purpose").GetString());
+        Assert.Equal("privacy-notice", held.GetProperty("document").GetString());
         Assert.Equal("1", held.GetProperty("noticeVersion").GetString());
         Assert.Equal("dashboard", held.GetProperty("mechanism").GetString());
         Assert.NotEqual(default, held.GetProperty("grantedAt").GetDateTimeOffset());
@@ -148,6 +149,7 @@ public sealed class ConsentEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, objected.Status);
         Assert.Equal(Security, standing.GetProperty("purpose").GetString());
+        Assert.Equal("privacy-notice", standing.GetProperty("document").GetString());
         Assert.Equal("1", standing.GetProperty("noticeVersion").GetString());
         Assert.Equal(JsonValueKind.Null, standing.GetProperty("withdrawnAt").ValueKind);
 

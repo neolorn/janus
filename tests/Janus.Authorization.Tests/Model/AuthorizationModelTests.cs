@@ -80,7 +80,8 @@ public sealed class AuthorizationModelTests
         Assert.Equal(
             new EncryptedFieldDeclaration(
                 nameof(HostDomain.Article.Body),
-                nameof(HostDomain.Article.Author)),
+                nameof(HostDomain.Article.Author),
+                "content"),
             article.EncryptedFields.Single());
         Assert.Equal(
             nameof(HostDomain.Folder.Reviewer),
@@ -173,9 +174,10 @@ public sealed class AuthorizationModelTests
 
     /// <summary>
     /// INT-HOST-002 AC1: a purpose for the hosting or its transfer declared on a
-    /// consent basis stops the deployment, naming the type and the purpose, so no
-    /// consent record can ever reference it. The same purpose on another basis builds,
-    /// and so does another purpose on consent, so the refusal is about the two
+    /// consent basis stops the deployment with <c>model.purpose.hostingconsent</c>,
+    /// naming the type and the purpose, however it is spaced, cased or punctuated, so
+    /// no consent record can ever reference it. The same purpose on another basis
+    /// builds, and so does another purpose on consent, so the refusal is about the two
     /// together.
     /// </summary>
     /// <param name="purpose">The purpose the deployment declares.</param>
@@ -185,12 +187,14 @@ public sealed class AuthorizationModelTests
     [InlineData("transfer")]
     [InlineData("hosting-transfer")]
     [InlineData("cross-border-transfer")]
+    [InlineData("Cross Border Transfer")]
+    [InlineData("hosting_transfer")]
     public void INT_HOST_002_AC1_AConsentPurposeForTheHostingFailsStartup(string purpose)
     {
         StartupException refused = Assert.Throws<StartupException>(
             () => AuthorizationModel.Of(Declaring(purpose, "consent")));
 
-        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal(ErrorCodes.StartupHostingConsent, refused.Failure?.Code);
         Assert.Equal("article." + purpose, refused.Failure!.Details["key"].GetString());
 
         Assert.NotNull(AuthorizationModel.Of(Declaring(purpose, "contract")));
@@ -205,7 +209,7 @@ public sealed class AuthorizationModelTests
     public void PRIV_RIGHT_005a_AC1_AnEncryptedFieldNamingNoSubjectColumnFailsStartup()
     {
         StartupException refused = Assert.Throws<StartupException>(
-            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", ""))));
+            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "", "identity"))));
 
         Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
     }
@@ -222,9 +226,27 @@ public sealed class AuthorizationModelTests
     public void PRIV_RIGHT_005a_AC2_ASubjectColumnNamingNoSubjectFailsStartup(string column)
     {
         Assert.Throws<StartupException>(
-            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", column))));
+            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", column, "identity"))));
 
-        Assert.NotNull(AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author"))));
+        Assert.NotNull(AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author", "identity"))));
+    }
+
+    /// <summary>
+    /// PRIV-PRIN-001 AC2: an encrypted field holds a data category a purpose on its type
+    /// names, so one holding a category no purpose there names stops the deployment
+    /// with <c>model.startup.declarationinvalid</c>, naming the type and the field, and
+    /// one whose category a purpose names starts.
+    /// </summary>
+    [Fact]
+    public void PRIV_PRIN_001_AC2_AnEncryptedFieldWhoseCategoryNoPurposeNamesFailsStartup()
+    {
+        StartupException refused = Assert.Throws<StartupException>(
+            () => AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author", "health"))));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("article", refused.Failure?.Details["declaration"].GetString());
+        Assert.Equal("Body", refused.Failure?.Details["field"].GetString());
+        Assert.NotNull(AuthorizationModel.Of(Encrypting(new EncryptedFieldDeclaration("Body", "Author", "identity"))));
     }
 
     /// <summary>
@@ -479,7 +501,7 @@ public sealed class AuthorizationModelTests
             .Resource<HostDomain.Article>("article", article => article
                 .BelongsToOrganization()
                 .Purpose(purpose, basis, data: ["identity"])
-                .Encrypted(item => item.Body, item => item.Author))
+                .Encrypted(item => item.Body, item => item.Author, "identity"))
             .Build();
 
     private static AuthorizationDeclaration Malformed(int index) => index switch

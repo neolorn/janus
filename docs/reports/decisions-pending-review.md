@@ -4430,6 +4430,8 @@ carries.
 **Rows for chapter 10**. `09` section 7 should carry the three statuses on the consent
 and document endpoints.
 
+**Superseded by D-166.**
+
 ---
 
 ## 131. The administrative routes conceal nothing from the staff who work them
@@ -5248,6 +5250,8 @@ records `reconsent` where the subject holds a superseded, unwithdrawn consent fo
 purpose and `dashboard` otherwise, and that a host calling the contract names its own
 mechanism. `10` section 5.21's `reconsent` row should say the library writes it.
 
+**Superseded by D-166.**
+
 ---
 
 ## 149. Reactivation's body is `linkToken`, as it was built
@@ -5330,6 +5334,8 @@ stored flag, so the export and the account page agree on which one is offered fi
 every group of REG-ACCT-001 the person may see and the whole of the standing group, and
 list the sections above, in place of the three it names now. The sentence entry 102
 asked for, that credentials are not among them, should not be written.
+
+**Superseded by D-166.**
 
 ---
 
@@ -9844,6 +9850,8 @@ the same widening for the listing). Under this:
 refusals; IDN-LIFE-003a could say whether a takedown's or a restriction's failed
 delivery has a manual path; chapter 10 could hold the rows below.
 
+**Superseded by D-166.**
+
 ---
 
 ## 265. What the "who can access this?" view reads, whom it answers, and what it answers over HTTP
@@ -13393,6 +13401,8 @@ never vouches for it, and could show its illustration to the second with one spa
 IDN-LIFE-003a could say that subscriber names are distinct and that `erasure-ledger` is
 the library's. `10` section 1.5 could add `model.startup.subscribername`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 333. What the replay of the erasure ledger does to a restored database
@@ -16769,6 +16779,8 @@ could name these as failed authentication.
 `PrivacyContractTests.PRIV_CONS_010_AC1_NoLibrarySourceNamesATransferPurpose`.
 
 *Chapter text that should change.* INT-HOST-002 AC1 could say that startup refuses a consent-based purpose named for the hosting or its transfer. Chapter 10's AUTHZ-MODEL-003 startup refusals could carry the row proposed above.
+
+**Superseded by D-166.**
 
 ---
 

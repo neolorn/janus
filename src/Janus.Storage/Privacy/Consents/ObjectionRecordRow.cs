@@ -24,6 +24,11 @@ internal sealed class ObjectionRecordRow
     public string Purpose { get; set; } = string.Empty;
 
     /// <summary>
+    /// The <c>document</c> column: the legal document it was recorded against.
+    /// </summary>
+    public string Document { get; set; } = string.Empty;
+
+    /// <summary>
     /// The <c>notice_version</c> column: the version displayed when it was recorded.
     /// </summary>
     public string NoticeVersion { get; set; } = string.Empty;

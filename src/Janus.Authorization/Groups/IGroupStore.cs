@@ -100,6 +100,15 @@ internal interface IGroupStore
     ValueTask<IReadOnlyList<GroupId>> GroupsOfAsync(GrantSubject subject, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Every group whose membership names an account directly, which is what the
+    /// account's export carries (PRIV-RIGHT-003, REG-ACCT-001).
+    /// </summary>
+    /// <param name="member">The account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The groups, by name.</returns>
+    ValueTask<IReadOnlyList<Group>> HoldingAsync(SubjectId member, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Whether a group already reaches a subject, at any depth, which is what makes
     /// adding it a cycle.
     /// </summary>

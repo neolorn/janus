@@ -144,7 +144,7 @@ internal sealed class DeletionSweep(
         ErasureReason reason) =>
         new(capacity: 3, StringComparer.Ordinal)
         {
-            ["reason"] = JsonSerializer.SerializeToElement(reason.ToString()),
+            ["reason"] = JsonSerializer.SerializeToElement(ErasureLedgerLine.Spelling(reason)),
             ["deletingBy"] = JsonSerializer.SerializeToElement(deletion.By.ToString()),
             ["deletingSince"] = JsonSerializer.SerializeToElement(deletion.Since),
         };

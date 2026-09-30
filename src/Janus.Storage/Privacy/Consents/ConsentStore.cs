@@ -65,6 +65,7 @@ internal sealed class ConsentStore(StoreContext context) : IConsentStore
             {
                 Subject = subject,
                 Purpose = consent.Purpose,
+                Document = consent.Document,
                 NoticeVersion = consent.NoticeVersion,
                 Mechanism = consent.Mechanism,
                 Kind = consent.Kind,
@@ -76,6 +77,7 @@ internal sealed class ConsentStore(StoreContext context) : IConsentStore
             return;
         }
 
+        held.Document = consent.Document;
         held.NoticeVersion = consent.NoticeVersion;
         held.Mechanism = consent.Mechanism;
         held.Kind = consent.Kind;
@@ -102,6 +104,7 @@ internal sealed class ConsentStore(StoreContext context) : IConsentStore
             {
                 Subject = subject,
                 Purpose = objection.Purpose,
+                Document = objection.Document,
                 NoticeVersion = objection.NoticeVersion,
                 Mechanism = objection.Mechanism,
                 RecordedAt = objection.RecordedAt,
@@ -111,6 +114,7 @@ internal sealed class ConsentStore(StoreContext context) : IConsentStore
             return;
         }
 
+        held.Document = objection.Document;
         held.NoticeVersion = objection.NoticeVersion;
         held.Mechanism = objection.Mechanism;
         held.RecordedAt = objection.RecordedAt;
@@ -120,6 +124,7 @@ internal sealed class ConsentStore(StoreContext context) : IConsentStore
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<HeldConsent>> LiveAgainstAnotherAsync(
         IReadOnlyCollection<string> purposes,
+        string document,
         string version,
         CancellationToken cancellationToken)
     {
@@ -133,7 +138,7 @@ internal sealed class ConsentStore(StoreContext context) : IConsentStore
                     .Where(consent => consent.WithdrawnAt == null
                         && consent.SupersededAt == null
                         && named.Contains(consent.Purpose)
-                        && consent.NoticeVersion != version)
+                        && (consent.Document != document || consent.NoticeVersion != version))
                     .OrderBy(consent => consent.GrantedAt)
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false))
@@ -144,6 +149,7 @@ internal sealed class ConsentStore(StoreContext context) : IConsentStore
     private static ConsentRecord Read(ConsentRecordRow row) =>
         new(
             row.Purpose,
+            row.Document,
             row.NoticeVersion,
             row.Mechanism,
             row.Kind,
@@ -152,5 +158,5 @@ internal sealed class ConsentStore(StoreContext context) : IConsentStore
             row.SupersededAt);
 
     private static ObjectionRecord Read(ObjectionRecordRow row) =>
-        new(row.Purpose, row.NoticeVersion, row.Mechanism, row.RecordedAt, row.WithdrawnAt);
+        new(row.Purpose, row.Document, row.NoticeVersion, row.Mechanism, row.RecordedAt, row.WithdrawnAt);
 }

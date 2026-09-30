@@ -43,6 +43,7 @@ internal sealed class ConsentConfiguration : IEntityTypeConfiguration<ConsentRec
             .HasConversion(subject => subject.Value, value => new SubjectId(value));
 
         builder.Property(consent => consent.Purpose).HasColumnName("purpose");
+        builder.Property(consent => consent.Document).HasColumnName("document");
         builder.Property(consent => consent.NoticeVersion).HasColumnName("notice_version");
 
         builder.Property(consent => consent.Mechanism)

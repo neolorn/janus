@@ -224,6 +224,7 @@ table consents
   column granted_at timestamp with time zone not null
   column withdrawn_at timestamp with time zone
   column superseded_at timestamp with time zone
+  column document text not null
   constraint ck_consents_kind CHECK ((kind = ANY (ARRAY['ordinary'::text, 'written'::text])))
   constraint ck_consents_mechanism CHECK ((mechanism = ANY (ARRAY['administrator'::text, 'dashboard'::text, 'reconsent'::text, 'registration'::text])))
   constraint ck_consents_purpose CHECK ((length(TRIM(BOTH FROM purpose)) > 0))
@@ -612,6 +613,7 @@ table objections
   column mechanism text not null
   column recorded_at timestamp with time zone not null
   column withdrawn_at timestamp with time zone
+  column document text not null
   constraint ck_objections_mechanism CHECK ((mechanism = ANY (ARRAY['administrator'::text, 'dashboard'::text, 'reconsent'::text, 'registration'::text])))
   constraint ck_objections_purpose CHECK ((length(TRIM(BOTH FROM purpose)) > 0))
   constraint ck_objections_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))

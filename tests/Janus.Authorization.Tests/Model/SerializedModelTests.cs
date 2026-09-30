@@ -112,7 +112,7 @@ public sealed class SerializedModelTests
             .Resource<HostDomain.Article>("article", article => article
                 .ContainedIn("folder")
                 .Purpose("collaboration", "contract", data: ["content", "identity"], subjects: ["members"])
-                .Encrypted(item => item.Body, item => item.Author))
+                .Encrypted(item => item.Body, item => item.Author, "content"))
             .Resource<HostDomain.Folder>("folder", folder => folder
                 .ContainedIn("workspace")
                 .Derivation("reviewer", "reader")

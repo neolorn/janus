@@ -86,6 +86,15 @@ internal interface IGrantStore
     ValueTask<bool> NamesAsync(GrantSubject holder, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Every grant given to an account itself, in every organization, live, expired
+    /// or revoked, which is what the account's export carries (PRIV-RIGHT-003).
+    /// </summary>
+    /// <param name="subject">The account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The grants, by the instant each was given.</returns>
+    ValueTask<IReadOnlyList<Grant>> NamingAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
     /// The live grants a principal holds, its own and those of every group it belongs
     /// to, within one organization.
     /// </summary>

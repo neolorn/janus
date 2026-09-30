@@ -24,6 +24,11 @@ internal sealed class ConsentRecordRow
     public string Purpose { get; set; } = string.Empty;
 
     /// <summary>
+    /// The <c>document</c> column: the legal document it was given against.
+    /// </summary>
+    public string Document { get; set; } = string.Empty;
+
+    /// <summary>
     /// The <c>notice_version</c> column: the version displayed when it was given.
     /// </summary>
     public string NoticeVersion { get; set; } = string.Empty;

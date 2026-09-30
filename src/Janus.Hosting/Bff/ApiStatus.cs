@@ -34,6 +34,7 @@ internal static class ApiStatus
         [ErrorCodes.StartupUnindexedDerivation] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupNoOrganizationPath] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupMissingAssessment] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.StartupHostingConsent] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupUndeclaredTypeReference] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupUndeclaredPermission] = StatusCodes.Status500InternalServerError,
         [ErrorCodes.StartupUndeclaredDerivationReference] = StatusCodes.Status500InternalServerError,

@@ -101,7 +101,7 @@ internal sealed class ErasureReplay(
     private static Dictionary<string, JsonElement> Named(ErasureLedgerLine line) =>
         new(capacity: 2, StringComparer.Ordinal)
         {
-            ["reason"] = JsonSerializer.SerializeToElement(line.Reason.ToString()),
+            ["reason"] = JsonSerializer.SerializeToElement(ErasureLedgerLine.Spelling(line.Reason)),
             ["erasedAt"] = JsonSerializer.SerializeToElement(line.ErasedAt),
         };
 

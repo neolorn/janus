@@ -9,6 +9,7 @@ using Janus.Authentication.Factors;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Sessions;
 using Janus.Authorization.Grants;
+using Janus.Authorization.Groups;
 using Janus.Authorization.Roles;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -22,6 +23,7 @@ using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Authentication.Passwords;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Authorization.Grants;
+using Janus.Storage.Authorization.Groups;
 using Janus.Storage.Authorization.Roles;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Identifiers;
@@ -313,6 +315,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
                 "preferences",
                 "memberships",
                 "membership-acknowledgements",
+                "group-memberships",
                 "grants",
                 "assurance",
                 "sessions",
@@ -335,6 +338,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
         Assert.Empty(named["devices"].Records);
         Assert.Empty(named["memberships"].Records);
         Assert.Empty(named["membership-acknowledgements"].Records);
+        Assert.Empty(named["group-memberships"].Records);
         Assert.Empty(named["grants"].Records);
         Assert.Empty(named["sessions"].Records);
 
@@ -421,6 +425,81 @@ public sealed class ExportSourceTests(DatabaseFixture database)
         Assert.Equal("Africa/Cairo", exported["timeZone"]);
     }
 
+    /// <summary>
+    /// PRIV-RIGHT-003 AC4: the export carries every grant naming the account, one in an
+    /// organization it holds no membership of and one that was revoked included, the
+    /// revoked one with the instant it stopped; who granted or revoked a grant, and
+    /// why, does not cross.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_003_TheExportCarriesEveryGrantNamingTheAccountAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        OrganizationId joined = await _deployment.OrganizationAsync(Noon);
+        OrganizationId elsewhere = await _deployment.OrganizationAsync(Noon);
+
+        _ = await PlacedAsync(subject, joined, until: Noon.AddHours(2));
+        GrantId standing = await ConferredAsync(subject, elsewhere);
+        GrantId revoked = await ConferredAsync(subject, joined);
+
+        await RevokedAsync(revoked, subject, Noon.AddHours(1));
+
+        IReadOnlyList<ExportRecord> grants = (await SectionsAsync(subject))["grants"].Records;
+
+        Assert.Equal(
+            [standing.Value.ToString(), revoked.Value.ToString()],
+            grants.Select(record => record.Values["grant"]));
+
+        IReadOnlyDictionary<string, string> ended =
+            Assert.Single(grants, record => record.Values["grant"] == revoked.Value.ToString()).Values;
+        IReadOnlyDictionary<string, string> held =
+            Assert.Single(grants, record => record.Values["grant"] == standing.Value.ToString()).Values;
+
+        Assert.Equal(Noon.AddHours(1), DateTimeOffset.Parse(ended["revokedAt"], null));
+        Assert.Equal(elsewhere.Value.ToString(), held["organization"]);
+        Assert.False(held.ContainsKey("revokedAt"));
+        Assert.All(
+            grants,
+            record => Assert.Empty(record.Values.Keys.Intersect(
+                ["grantedBy", "revokedBy", "reason", "revocationReason"],
+                StringComparer.Ordinal)));
+    }
+
+    /// <summary>
+    /// REG-ACCT-001, PRIV-RIGHT-003 AC4: the export carries each group whose
+    /// membership names the account, with its name and organization, after the
+    /// membership acknowledgements; a group the account reaches only through another
+    /// group is that group's membership and is not carried.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_ACCT_001_TheExportCarriesTheGroupsTheAccountBelongsToAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+
+        _ = await PlacedAsync(subject, organization, until: null);
+        GroupId team = await GroupAsync(organization, "Team");
+        GroupId department = await GroupAsync(organization, "Department");
+
+        await JoinedAsync(team, GrantSubject.Of(subject));
+        await JoinedAsync(department, GrantSubject.Of(team));
+
+        IReadOnlyList<ExportSection> sections = await AssembledAsync(subject);
+
+        Assert.Equal(
+            ["membership-acknowledgements", "group-memberships", "grants"],
+            sections.Select(section => section.Name).SkipWhile(name => name != "membership-acknowledgements").Take(3));
+
+        IReadOnlyDictionary<string, string> group = Assert.Single(
+            sections.Single(section => section.Name == "group-memberships").Records).Values;
+
+        Assert.Equal(team.Value.ToString(), group["group"]);
+        Assert.Equal("Team", group["name"]);
+        Assert.Equal(organization.Value.ToString(), group["organization"]);
+    }
+
     private static string Fresh(string person) =>
         person + "." + Guid.NewGuid().ToString("N") + "@Example.COM";
 
@@ -455,6 +534,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
             new DeviceStore(reading),
             new MembershipStore(reading),
             new GrantStore(reading, new DataConnections(reading)),
+            new GroupStore(reading, new DataConnections(reading)),
             Sessions(reading),
             Declared,
             new FixedTime(Noon));
@@ -683,6 +763,49 @@ public sealed class ExportSourceTests(DatabaseFixture database)
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         return id;
+    }
+
+    private async Task RevokedAsync(GrantId grant, SubjectId by, DateTimeOffset at)
+    {
+        await using StoreContext writing = database.Context();
+
+        var store = new GrantStore(writing, new DataConnections(writing));
+        Grant held = await store.FindAsync(grant, TestContext.Current.CancellationToken)
+            ?? throw new Xunit.Sdk.XunitException("The grant was written.");
+
+        held.Revoke(by, at, "The reason the grant was revoked.")
+            .Switch(() => { }, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+        await store.RecordAsync(held, TestContext.Current.CancellationToken);
+        await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    private async Task<GroupId> GroupAsync(OrganizationId organization, string name)
+    {
+        var id = GroupId.New(TimeProvider.System);
+
+        await using StoreContext writing = database.Context();
+        await using var transaction = new UnitOfWork(writing);
+        await transaction.BeginAsync(TestContext.Current.CancellationToken);
+
+        await new GroupStore(writing, new DataConnections(writing)).CreateAsync(
+            Group.Create(id, organization, name),
+            TestContext.Current.CancellationToken);
+
+        await transaction.CommitAsync(TestContext.Current.CancellationToken);
+
+        return id;
+    }
+
+    private async Task JoinedAsync(GroupId group, GrantSubject member)
+    {
+        await using StoreContext writing = database.Context();
+        await using var transaction = new UnitOfWork(writing);
+        await transaction.BeginAsync(TestContext.Current.CancellationToken);
+
+        await new GroupStore(writing, new DataConnections(writing))
+            .AddMemberAsync(group, member, TestContext.Current.CancellationToken);
+        await transaction.CommitAsync(TestContext.Current.CancellationToken);
     }
 
     private async Task<Session> SignedInAsync(SubjectId subject)

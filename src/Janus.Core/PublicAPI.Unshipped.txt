@@ -524,8 +524,10 @@ Janus.Core.ConsentMechanism.Reconsent = 2 -> Janus.Core.ConsentMechanism
 Janus.Core.ConsentMechanism.Registration = 0 -> Janus.Core.ConsentMechanism
 Janus.Core.ConsentRecord
 Janus.Core.ConsentRecord.<Clone>$() -> Janus.Core.ConsentRecord!
-Janus.Core.ConsentRecord.ConsentRecord(string! Purpose, string! NoticeVersion, Janus.Core.ConsentMechanism Mechanism, Janus.Core.ConsentKind Kind, System.DateTimeOffset GrantedAt, System.DateTimeOffset? WithdrawnAt, System.DateTimeOffset? SupersededAt) -> void
-Janus.Core.ConsentRecord.Deconstruct(out string! Purpose, out string! NoticeVersion, out Janus.Core.ConsentMechanism Mechanism, out Janus.Core.ConsentKind Kind, out System.DateTimeOffset GrantedAt, out System.DateTimeOffset? WithdrawnAt, out System.DateTimeOffset? SupersededAt) -> void
+Janus.Core.ConsentRecord.ConsentRecord(string! Purpose, string! Document, string! NoticeVersion, Janus.Core.ConsentMechanism Mechanism, Janus.Core.ConsentKind Kind, System.DateTimeOffset GrantedAt, System.DateTimeOffset? WithdrawnAt, System.DateTimeOffset? SupersededAt) -> void
+Janus.Core.ConsentRecord.Deconstruct(out string! Purpose, out string! Document, out string! NoticeVersion, out Janus.Core.ConsentMechanism Mechanism, out Janus.Core.ConsentKind Kind, out System.DateTimeOffset GrantedAt, out System.DateTimeOffset? WithdrawnAt, out System.DateTimeOffset? SupersededAt) -> void
+Janus.Core.ConsentRecord.Document.get -> string!
+Janus.Core.ConsentRecord.Document.init -> void
 Janus.Core.ConsentRecord.Equals(Janus.Core.ConsentRecord? other) -> bool
 Janus.Core.ConsentRecord.GrantedAt.get -> System.DateTimeOffset
 Janus.Core.ConsentRecord.GrantedAt.init -> void
@@ -836,8 +838,10 @@ Janus.Core.EmailAddress.Equals(Janus.Core.EmailAddress other) -> bool
 Janus.Core.EmailAddress.Value.get -> string!
 Janus.Core.EncryptedFieldDeclaration
 Janus.Core.EncryptedFieldDeclaration.<Clone>$() -> Janus.Core.EncryptedFieldDeclaration!
-Janus.Core.EncryptedFieldDeclaration.Deconstruct(out string! Field, out string! SubjectColumn) -> void
-Janus.Core.EncryptedFieldDeclaration.EncryptedFieldDeclaration(string! Field, string! SubjectColumn) -> void
+Janus.Core.EncryptedFieldDeclaration.Category.get -> string!
+Janus.Core.EncryptedFieldDeclaration.Category.init -> void
+Janus.Core.EncryptedFieldDeclaration.Deconstruct(out string! Field, out string! SubjectColumn, out string! Category) -> void
+Janus.Core.EncryptedFieldDeclaration.EncryptedFieldDeclaration(string! Field, string! SubjectColumn, string! Category) -> void
 Janus.Core.EncryptedFieldDeclaration.Equals(Janus.Core.EncryptedFieldDeclaration? other) -> bool
 Janus.Core.EncryptedFieldDeclaration.Field.get -> string!
 Janus.Core.EncryptedFieldDeclaration.Field.init -> void
@@ -1322,7 +1326,7 @@ Janus.Core.IOrganizations.ReplacePolicyAsync(Janus.Core.AccessContext! context, 
 Janus.Core.IOrganizations.RequestDeletionAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IPrivacyRequests
 Janus.Core.IPrivacyRequests.EnterAsync(Janus.Core.AccessContext! context, Janus.Core.PrivacyRequestEntry! entry, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.PrivacyRequestReceipt!>>
-Janus.Core.IPrivacyRequests.FulfilAsync(Janus.Core.AccessContext! context, Janus.Core.PrivacyRequestId request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IPrivacyRequests.FulfilAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.PrivacyRequestId request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IPrivacyRequests.QueueAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.PrivacyRequest!>!>>
 Janus.Core.IPrivacyRequests.RefuseAsync(Janus.Core.AccessContext! context, Janus.Core.PrivacyRequestId request, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IPrivacyRequests.SubmitAsync(Janus.Core.AccessContext! context, Janus.Core.PrivacyRequestType type, string! detail, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.PrivacyRequestReceipt!>>
@@ -1739,13 +1743,15 @@ Janus.Core.ObjectionChanged.Purpose.get -> string!
 Janus.Core.ObjectionChanged.Purpose.init -> void
 Janus.Core.ObjectionRecord
 Janus.Core.ObjectionRecord.<Clone>$() -> Janus.Core.ObjectionRecord!
-Janus.Core.ObjectionRecord.Deconstruct(out string! Purpose, out string! NoticeVersion, out Janus.Core.ConsentMechanism Mechanism, out System.DateTimeOffset RecordedAt, out System.DateTimeOffset? WithdrawnAt) -> void
+Janus.Core.ObjectionRecord.Deconstruct(out string! Purpose, out string! Document, out string! NoticeVersion, out Janus.Core.ConsentMechanism Mechanism, out System.DateTimeOffset RecordedAt, out System.DateTimeOffset? WithdrawnAt) -> void
+Janus.Core.ObjectionRecord.Document.get -> string!
+Janus.Core.ObjectionRecord.Document.init -> void
 Janus.Core.ObjectionRecord.Equals(Janus.Core.ObjectionRecord? other) -> bool
 Janus.Core.ObjectionRecord.Mechanism.get -> Janus.Core.ConsentMechanism
 Janus.Core.ObjectionRecord.Mechanism.init -> void
 Janus.Core.ObjectionRecord.NoticeVersion.get -> string!
 Janus.Core.ObjectionRecord.NoticeVersion.init -> void
-Janus.Core.ObjectionRecord.ObjectionRecord(string! Purpose, string! NoticeVersion, Janus.Core.ConsentMechanism Mechanism, System.DateTimeOffset RecordedAt, System.DateTimeOffset? WithdrawnAt) -> void
+Janus.Core.ObjectionRecord.ObjectionRecord(string! Purpose, string! Document, string! NoticeVersion, Janus.Core.ConsentMechanism Mechanism, System.DateTimeOffset RecordedAt, System.DateTimeOffset? WithdrawnAt) -> void
 Janus.Core.ObjectionRecord.Purpose.get -> string!
 Janus.Core.ObjectionRecord.Purpose.init -> void
 Janus.Core.ObjectionRecord.RecordedAt.get -> System.DateTimeOffset
@@ -2369,7 +2375,7 @@ Janus.Core.ResourceTypeDeclarationBuilder<TResource>.BelongsToOrganization() -> 
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.ContainedIn(string! container) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Derivation(string! relationship, string! role, bool materialised = false) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Discloses() -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
-Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Encrypted(System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! field, System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! subject) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
+Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Encrypted(System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! field, System.Linq.Expressions.Expression<System.Func<TResource, object?>!>! subject, string! category) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Purpose(string! name, string! basis, string? assessment = null, System.Collections.Generic.IReadOnlyList<string!>? data = null, System.Collections.Generic.IReadOnlyList<string!>? subjects = null, Janus.Core.ConsentKind? consent = null, string? document = null) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.ResourceTypeDeclarationBuilder<TResource>.Sensitive(string! category) -> Janus.Core.ResourceTypeDeclarationBuilder<TResource>!
 Janus.Core.Restriction
@@ -2696,6 +2702,7 @@ Janus.Core.StepUpAction.OrganizationDelete = 29 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.PasswordSet = 0 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.PolicyChange = 24 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.PrivacyExport = 9 -> Janus.Core.StepUpAction
+Janus.Core.StepUpAction.PrivacyRequestFulfil = 30 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.ProviderLink = 12 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.ProviderUnlink = 13 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.RecoveryApprove = 14 -> Janus.Core.StepUpAction
@@ -3905,6 +3912,7 @@ static Janus.Core.ErrorCodes.StartupDeclarationInvalid.get -> Janus.Core.ErrorCo
 static Janus.Core.ErrorCodes.StartupDeclarationMissing.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupGoverningLanguage.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupLabelLimit.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.StartupHostingConsent.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupMissingAssessment.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupNoOrganizationPath.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.StartupPreferenceDeclaration.get -> Janus.Core.ErrorCode

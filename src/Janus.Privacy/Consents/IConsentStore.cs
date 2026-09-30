@@ -63,15 +63,17 @@ internal interface IConsentStore
 
     /// <summary>
     /// Every subject holding a live consent on one of the purposes named, recorded
-    /// against a version other than the one named, which is the version just
-    /// published and which nobody has been shown yet.
+    /// against another document or another version than the ones named, which are the
+    /// document and version just published and which nobody has been shown yet.
     /// </summary>
     /// <param name="purposes">The purposes the published document governs.</param>
+    /// <param name="document">The document just published.</param>
     /// <param name="version">The version just published.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The consents and their holders, oldest first.</returns>
     ValueTask<IReadOnlyList<HeldConsent>> LiveAgainstAnotherAsync(
         IReadOnlyCollection<string> purposes,
+        string document,
         string version,
         CancellationToken cancellationToken);
 }

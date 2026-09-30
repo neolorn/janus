@@ -143,7 +143,7 @@ internal static class HostDomain
             .Resource<Article>("article", article => article
                 .ContainedIn("folder")
                 .Purpose("collaboration", "contract", data: ["identity", "content"], subjects: ["members"])
-                .Encrypted(item => item.Body, item => item.Author));
+                .Encrypted(item => item.Body, item => item.Author, "content"));
 
     // A record is named by the host's own text, whatever the host makes that of.
     private static string Named() => Guid.CreateVersion7().ToString();

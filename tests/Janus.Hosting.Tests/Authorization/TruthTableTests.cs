@@ -690,6 +690,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             subject,
             new ConsentRecord(
                 "recommendations",
+                "privacy-notice",
                 "1",
                 ConsentMechanism.Dashboard,
                 ConsentKind.Written,

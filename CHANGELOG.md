@@ -126,7 +126,14 @@ against the public contract of LIB-API-001.
   a required confirmation named `erasure-ledger`, retried and raised as any required
   subscriber is and listed first at `GET /admin/erasures/{id}`, and the manual
   completion appends it itself and answers `system.fault` while the ledger refuses it. A
-  deployment that registers no ledger completes its erasures without one.
+  deployment that registers no ledger completes its erasures without one. Once a ledger
+  is registered, the outbox worker appends, once and oldest first, the line of every
+  erasure completed before it was, a manual completion included, without changing the
+  erasure's status, attempts or erasures row; a line the ledger refuses is tried again
+  on the next pass.
+- The `privacy.erasure.executed` audit record, whether the deletion sweep or
+  `replay-erasures` writes it, carries `details.reason` by its written name
+  (`erasure-request`, `minor-takedown`), as the ledger line and the erasures table do.
 - `no-emergency-credential` is raised by the hourly `emergency-credential` job for as
   long as no break-glass credential stands, including after one is spent, and stops only
   when one is generated.
@@ -509,12 +516,15 @@ against the public contract of LIB-API-001.
 - `GET /admin/erasures` lists every erasure whose host-side work is outstanding, oldest
   first, and `GET /admin/erasures/{id}` reads one, each with its subject, reason,
   status, attempts and every registered subscriber with when it confirmed.
-  `POST /admin/erasures/{id}/complete` closes an erasure whose retries were spent, asks
-  the `erasure:complete` step-up, and is audited as `privacy.erasure.completed` with the
-  required subscribers that had not confirmed; one not yet failed is 409
+  `POST /admin/erasures/{id}/complete` closes an erasure, a takedown (by its
+  `takedownId`) or a restriction delivery whose retries were spent, an erasure's ledger
+  line and erasures row with it, asks the `erasure:complete` step-up after every other
+  refusal, and is audited as `privacy.erasure.completed` with the delivery's `kind` and
+  the required subscribers that had not confirmed; one not yet failed is 409
   `privacy.erasure.notfailed`. An erasure's `id` is the identifier of its delivery; an
-  identifier naming no erasure is 404 `privacy.erasure.notfound`. All three need
-  `privacyrequest:manage`. `IErasures` is the same operations in process.
+  identifier naming no delivery of the three kinds is 404 `privacy.erasure.notfound`,
+  and the two reads stay erasures only. All three need `privacyrequest:manage`.
+  `IErasures` is the same operations in process.
 - `GET /admin/access?resourceType=...&resourceId=...` answers who can access a record:
   every live grant on it, on what contains it and on the whole organization, nearest
   first, each with its kind, holder, role, whether it denies and the container it sits
@@ -849,6 +859,11 @@ against the public contract of LIB-API-001.
   the declared type does not hold, or one holding something that is not a subject.
   Ciphertext an erasure could not reach stops the deployment instead of reaching
   production.
+- An encrypted field names the data category it holds: `EncryptedFieldDeclaration`
+  gains `Category` and the builder's `Encrypted` takes it. Startup refuses a field whose
+  category no purpose declared on its type names, with
+  `model.startup.declarationinvalid`, `details.declaration` the type and
+  `details.field` the field.
 - A host declares a retention floor for each data category its purposes are over, with
   `RetentionFloor` on the declaration builder, and `retention.<category>` defaults to
   it, so a deployment starts without a stored period for each category. Building the
@@ -896,7 +911,11 @@ against the public contract of LIB-API-001.
   verification state, the backup settings, the preferences in force, the live sessions
   with the locations resolved at sign-in and at last use, the enrolled credentials and
   the password by property and label, how the recovery code set stands, the browsers the
-  account is known at, its memberships, the roles it holds, the assurance it can reach,
+  account is known at, its memberships, the groups it is a member of itself (a
+  `group-memberships` section after `membership-acknowledgements`, each with its name
+  and organization), every grant naming it in every organization, live, expired or
+  revoked, with `revokedAt` on a revoked one and never who granted or revoked it or why,
+  the assurance it can reach,
   the terms version, notice version and affirmation the terms step recorded, and the
   consent and objection records. No secret material crosses. It is gated at the
   account's own reachable assurance, limited to `privacy.export.ratelimit` a rolling day
@@ -957,6 +976,23 @@ against the public contract of LIB-API-001.
   queue: 403 `authz.denied` without the permission, 404 `privacy.request.notfound` for
   an identifier naming no request, and 409 `privacy.request.decided` where a decision
   already stands.
+- A privacy request's `detail`, an out-of-band entry's `channel` and
+  `identityConfirmation`, and a refusal's `reason` are held trimmed, and one that is
+  blank or longer than 1024 characters after trimming is refused with 400
+  `api.request.malformed` naming it, at the endpoint and by `IPrivacyRequests` for an
+  in-process caller alike; a refusal's reason was an exception there before.
+- Fulfilling a privacy request, of any type, is the step-up action
+  `privacyrequest:fulfil` (`StepUpAction.PrivacyRequestFulfil`), in the policy's
+  `gates` like every other action: `IPrivacyRequests.FulfilAsync` takes the session it is
+  judged on and asks it after every other refusal, and a session that has not proved it
+  is answered 403 `auth.stepup.required` with nothing changed. Refusing a request is not
+  gated.
+- Withdrawing a consent the subject never gave, or an objection the subject never made,
+  is answered as the withdrawal (204) and records, announces and audits nothing, where it
+  was 403 `authz.denied`; withdrawing an objection for a purpose on a basis that takes
+  none is 422 `privacy.purpose.notobjectable`. An objection made before any version of
+  the privacy notice is published is 409 `privacy.notice.unpublished`, where it was 403
+  `authz.denied`.
 - A host can bind one of its actions to the purpose it is done for, and where that
   purpose rests on consent the gate refuses the action until the data subject of the
   record being acted on has consented to it: missing, withdrawn, superseded or of the
@@ -979,20 +1015,24 @@ against the public contract of LIB-API-001.
 - A subject can read and change their own consents and objections through a privacy
   dashboard: `GET /privacy/consents`, `POST /privacy/consents/{purpose}/grant` and
   `.../withdraw`, `GET /privacy/objections`, `POST /privacy/objections/{purpose}` and
-  `DELETE /privacy/objections/{purpose}`. Each record names the purpose, the version of
-  the document that was shown, where the decision was made and when. A grant made on the
-  subject's own pages records `dashboard`, and one answering the prompt a material
-  revision raised, over a consent the revision ended and the subject never took back,
-  records `reconsent`; a host granting through the contract names its own mechanism.
-  Withdrawal takes the one request granting took and nothing stands in its way. A
-  purpose that rests on a basis other than consent takes no consent record, and one
-  whose basis carries no right to object refuses the objection by name. A purpose
-  declaration names the legal document that governs its consent, and the privacy notice
-  governs the purposes that name none. A consent is recorded against the version of that
-  document, and publishing a material revision of it ends the live consents of the
-  purposes that name it and of no others, so the subject is asked again, and leaves the
-  records standing as evidence. A purpose declared on two types against two documents
-  fails startup.
+  `DELETE /privacy/objections/{purpose}`. Each record names the purpose, the document it
+  was given against (`document`, the privacy notice for an objection and for a purpose
+  naming none) and the version of it that was shown, where the decision was made and
+  when; a record written before the document was named reads as given against the
+  privacy notice. A grant made on the subject's own pages records `dashboard`, and one
+  answering the prompt a material revision raised, over a consent the revision ended and
+  the subject never took back, records `reconsent`. `IConsents.GrantAsync` applies the
+  same rule, judged inside the grant's transaction, to a grant named `dashboard`, so a
+  host granting through the contract is answered as the endpoint is; any other mechanism
+  is recorded as named. Withdrawal takes the one request granting took and nothing
+  stands in its way. A purpose that rests on a basis other than consent takes no consent
+  record, and one whose basis carries no right to object refuses the objection by name.
+  A purpose declaration names the legal document that governs its consent, and the
+  privacy notice governs the purposes that name none. A consent is recorded against that
+  document and its version, and publishing a material revision of it ends the live
+  consents of the purposes that name it, and of no others, given against another version
+  or another document, so the subject is asked again, and leaves the records standing as
+  evidence. A purpose declared on two types against two documents fails startup.
 - The privacy notice and every other legal document a deployment publishes are served
   over `GET /privacy/notice` and `GET /privacy/documents/{document}`, public and without
   a sign-in, each answer carrying the governing language, the text that binds and every
@@ -1237,8 +1277,11 @@ against the public contract of LIB-API-001.
   against the sending restrictions as its message would be, so it is answered as a sent
   one is, whether or not an account holds the address.
 - Startup refuses a purpose named for the hosting or its cross-border transfer
-  (`hosting`, `transfer`, `hosting-transfer`, `cross-border-transfer`) that rests on a
-  consent basis, with `model.startup.declarationmissing`.
+  (`hosting`, `transfer`, `hosting-transfer`, `cross-border-transfer`, compared ignoring
+  case and every character other than a letter or a digit, so `Cross Border Transfer`
+  and `hosting_transfer` are among them) that rests on a consent basis, with the new
+  code `model.purpose.hostingconsent` (`ErrorCodes.StartupHostingConsent`),
+  `details.key` naming `<type>.<purpose>`.
 - A runtime setting changed in process is refused without a reason,
   `config.change.reasonrequired` naming the key, whichever way it moves, as over HTTP;
   an edit of the named restriction set, a tightening included, is refused the same way,

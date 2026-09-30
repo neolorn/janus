@@ -219,4 +219,13 @@ public enum StepUpAction
     /// <remarks>Named <c>organization:delete</c>.</remarks>
     [JsonStringEnumMemberName("organization:delete")]
     OrganizationDelete = 29,
+
+    /// <summary>
+    /// Fulfil a privacy request of any type: an erasure's fulfilment starts a grace
+    /// window and a restriction's restricts another person's account. Refusing one is
+    /// not gated.
+    /// </summary>
+    /// <remarks>Named <c>privacyrequest:fulfil</c>.</remarks>
+    [JsonStringEnumMemberName("privacyrequest:fulfil")]
+    PrivacyRequestFulfil = 30,
 }

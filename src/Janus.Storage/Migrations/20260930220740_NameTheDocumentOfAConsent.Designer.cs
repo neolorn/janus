@@ -3,6 +3,7 @@ using System;
 using Janus.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Janus.Storage.Migrations;
 
 [DbContext(typeof(StoreContext))]
-partial class StoreContextModelSnapshot : ModelSnapshot
+[Migration("20260930220740_NameTheDocumentOfAConsent")]
+partial class NameTheDocumentOfAConsent
 {
-    protected override void BuildModel(ModelBuilder modelBuilder)
+    /// <inheritdoc />
+    protected override void BuildTargetModel(ModelBuilder modelBuilder)
     {
 #pragma warning disable 612, 618
         modelBuilder
@@ -1361,27 +1364,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("created_at");
 
-                b.Property<bool>("IsCurrent")
-                    .ValueGeneratedOnAddOrUpdate()
-                    .HasColumnType("boolean")
-                    .HasColumnName("is_current")
-                    .HasComputedColumnSql("signing_from IS NOT NULL AND superseded_at IS NULL", true);
-
-                b.Property<bool>("IsNext")
-                    .ValueGeneratedOnAddOrUpdate()
-                    .HasColumnType("boolean")
-                    .HasColumnName("is_next")
-                    .HasComputedColumnSql("signing_from IS NULL", true);
-
-                b.Property<DateTimeOffset?>("KeptUntil")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("kept_until");
-
-                b.Property<TimeSpan>("LongestLifetime")
-                    .HasColumnType("interval")
-                    .HasColumnName("longest_lifetime");
-
                 b.Property<byte[]>("PrivateKey")
+                    .IsRequired()
                     .HasColumnType("bytea")
                     .HasColumnName("private_key");
 
@@ -1394,10 +1378,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("retires_at");
 
-                b.Property<DateTimeOffset?>("SigningFrom")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("signing_from");
-
                 b.Property<DateTimeOffset?>("SupersededAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("superseded_at");
@@ -1405,24 +1385,12 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasKey("KeyId")
                     .HasName("pk_signing_keys");
 
-                b.HasIndex("IsCurrent")
-                    .IsUnique()
-                    .HasDatabaseName("ux_signing_keys_current")
-                    .HasFilter("is_current");
-
-                b.HasIndex("IsNext")
-                    .IsUnique()
-                    .HasDatabaseName("ux_signing_keys_next")
-                    .HasFilter("is_next");
-
                 b.HasIndex("RetiresAt")
                     .HasDatabaseName("ix_signing_keys_retires_at");
 
                 b.ToTable("signing_keys", "identity", t =>
                     {
-                        t.HasCheckConstraint("ck_signing_keys_private_key", "private_key IS NOT NULL OR retires_at IS NOT NULL");
-
-                        t.HasCheckConstraint("ck_signing_keys_stage", "(signing_from IS NULL AND longest_lifetime = interval '0' AND superseded_at IS NULL AND retires_at IS NULL AND kept_until IS NULL) OR (signing_from >= created_at AND superseded_at IS NULL AND retires_at IS NULL AND kept_until IS NULL) OR (signing_from >= created_at AND superseded_at >= signing_from AND retires_at > superseded_at AND kept_until >= retires_at)");
+                        t.HasCheckConstraint("ck_signing_keys_retirement", "(superseded_at IS NULL AND retires_at IS NULL) OR (superseded_at IS NOT NULL AND retires_at > superseded_at)");
                     });
             });
 

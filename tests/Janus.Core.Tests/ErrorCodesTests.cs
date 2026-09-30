@@ -133,6 +133,7 @@ public sealed class ErrorCodesTests
         "model.containment.cycle",
         "model.derivation.undeclaredreference",
         "model.derivation.unindexed",
+        "model.purpose.hostingconsent",
         "model.purpose.missingassessment",
         "model.role.undeclaredpermission",
         "model.rotation.notready",

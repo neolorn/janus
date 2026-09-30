@@ -36,9 +36,11 @@ internal sealed class AuthorizationModel
 
     // INT-HOST-002, PRIV-CONS-010: the hosting and its transfer outside the country
     // rest on the regulator's permit, since a withdrawal would leave data that cannot
-    // lawfully be hosted, so no purpose by these names may rest on consent.
+    // lawfully be hosted, so no purpose by these names may rest on consent. A name is
+    // compared lowered and with every character that is not a letter or a digit taken
+    // out, so no spacing, case or punctuation carries one of them past the refusal.
     private static readonly string[] Hosting =
-        ["hosting", "transfer", "hosting-transfer", "cross-border-transfer"];
+        ["hosting", "transfer", "hostingtransfer", "crossbordertransfer"];
 
     private readonly Dictionary<string, LawfulBasisDeclaration> _bases;
     private readonly Dictionary<Type, ResourceTypeDeclaration> _entities;
@@ -554,8 +556,14 @@ internal sealed class AuthorizationModel
     // PRIV-RIGHT-005a: the subject column is how erasure reaches ciphertext sitting in
     // a host's own table. One naming nothing, or naming something that is not a
     // subject, leaves fields nothing can erase, so the deployment stops here.
+    // PRIV-PRIN-001: a field is held for a purpose, so the category it holds is one a
+    // purpose on its type names, or nothing accounts for holding it.
     private static void CheckEncryptedFields(ResourceTypeDeclaration type)
     {
+        var held = new HashSet<string>(
+            type.Purposes.SelectMany(purpose => purpose.DataCategories),
+            StringComparer.Ordinal);
+
         foreach (EncryptedFieldDeclaration field in type.EncryptedFields)
         {
             if (string.IsNullOrWhiteSpace(field.SubjectColumn))
@@ -575,6 +583,20 @@ internal sealed class AuthorizationModel
                 throw Malformed(
                     "the type " + type.Name + " holds " + field.Field + " under "
                     + field.SubjectColumn + ", which names no subject");
+            }
+
+            if (!held.Contains(field.Category))
+            {
+                throw new StartupException(
+                    "The authorization model is refused: " + type.Name + "." + field.Field
+                    + ", because it holds " + field.Category + ", which no purpose on its type names.",
+                    new Error(
+                        ErrorCodes.StartupDeclarationInvalid,
+                        new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+                        {
+                            ["declaration"] = JsonSerializer.SerializeToElement(type.Name.ToString()),
+                            ["field"] = JsonSerializer.SerializeToElement(field.Field),
+                        }));
             }
         }
     }
@@ -675,10 +697,10 @@ internal sealed class AuthorizationModel
                     + ", which the model does not declare as a lawful basis");
             }
 
-            if (basis.IsConsent && Hosting.Contains(purpose.Name, StringComparer.OrdinalIgnoreCase))
+            if (basis.IsConsent && Hosting.Contains(Compared(purpose.Name), StringComparer.Ordinal))
             {
                 throw Refused(
-                    ErrorCodes.StartupDeclarationMissing,
+                    ErrorCodes.StartupHostingConsent,
                     "key",
                     type.Name + "." + purpose.Name,
                     "the hosting and its transfer rest on the regulator's permit and never "
@@ -734,6 +756,9 @@ internal sealed class AuthorizationModel
             }
         }
     }
+
+    private static string Compared(string name) =>
+        string.Concat(name.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant));
 
     // PRIV-RIGHT-005a: one record has one data subject, so the encrypted fields of a
     // type name one column between them; a type naming two names no data subject the

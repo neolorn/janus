@@ -137,9 +137,10 @@ internal sealed class ExportService(
 
     private static Dictionary<string, string> Held(ConsentRecord record)
     {
-        var values = new Dictionary<string, string>(capacity: 6, StringComparer.Ordinal)
+        var values = new Dictionary<string, string>(capacity: 7, StringComparer.Ordinal)
         {
             ["purpose"] = record.Purpose,
+            ["document"] = record.Document,
             ["noticeVersion"] = record.NoticeVersion,
             ["mechanism"] = record.Mechanism.ToString(),
             ["grantedAt"] = Moment(record.GrantedAt),
@@ -160,9 +161,10 @@ internal sealed class ExportService(
 
     private static Dictionary<string, string> Standing(ObjectionRecord record)
     {
-        var values = new Dictionary<string, string>(capacity: 5, StringComparer.Ordinal)
+        var values = new Dictionary<string, string>(capacity: 6, StringComparer.Ordinal)
         {
             ["purpose"] = record.Purpose,
+            ["document"] = record.Document,
             ["noticeVersion"] = record.NoticeVersion,
             ["mechanism"] = record.Mechanism.ToString(),
             ["recordedAt"] = Moment(record.RecordedAt),

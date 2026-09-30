@@ -61,7 +61,7 @@ internal sealed class Supersession(
         }
 
         IReadOnlyList<HeldConsent> held = await consents
-            .LiveAgainstAnotherAsync(purposes, version, cancellationToken)
+            .LiveAgainstAnotherAsync(purposes, document, version, cancellationToken)
             .ConfigureAwait(false);
 
         foreach (HeldConsent one in held)

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
+using Janus.Privacy.Erasures;
 using Janus.Privacy.Outbox;
 using Microsoft.EntityFrameworkCore;
 
@@ -152,6 +153,27 @@ internal sealed class OutboxStore(StoreContext context, TimeProvider time) : IOu
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false))
             .Select(Progress),
+    ];
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<Delivery>> UnledgeredAsync(
+        int skip,
+        int take,
+        CancellationToken cancellationToken) =>
+    [
+        .. (await context.Outbox
+                .Include(row => row.Confirmations)
+                .Where(row => row.Kind == SubjectEventKind.ErasureRequested
+                    && row.Status == Core.ErasureStatus.Complete
+                    && !row.Confirmations.Any(confirmation =>
+                        confirmation.Subscriber == ErasureLedgerSubscriber.Called))
+                .OrderBy(row => row.RaisedAt)
+                .ThenBy(row => row.Id)
+                .Skip(skip)
+                .Take(take)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .Select(Read),
     ];
 
     private static DeliveryProgress Progress(DeliveryRecord held) =>

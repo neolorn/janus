@@ -6,6 +6,7 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Privacy.Policies;
 using Janus.Privacy.Requests;
+using Janus.Privacy.Tests.Exports;
 using Janus.Privacy.Tests.Outbox;
 using Xunit;
 using Xunit.Sdk;
@@ -61,6 +62,7 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
             _requests,
             new WorkingCalendar(_configuration),
             new AdministrativeScope(_gate, _administrative),
+            new StepUpGateInMemory(),
             _accounts,
             new RestrictionGrant(_accounts, _outbox),
             _notices,

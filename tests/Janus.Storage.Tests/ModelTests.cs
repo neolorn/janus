@@ -225,9 +225,10 @@ public sealed class ModelTests
             "compliance_records.organisational_measures",
             "compliance_records.updated_at",
 
-            // Not an account field: what the subject consented to, against which version
-            // of the notice and where they said it (PRIV-CONS-001). Nothing here is
+            // Not an account field: what the subject consented to, against which document
+            // and version and where they said it (PRIV-CONS-001). Nothing here is
             // deleted: a withdrawal is a timestamp, because the record is the evidence.
+            "consents.document",
             "consents.granted_at",
             "consents.kind",
             "consents.mechanism",
@@ -493,6 +494,7 @@ public sealed class ModelTests
 
             // Not an account field: the purposes on an objectable basis the subject has
             // objected to (PRIV-RIGHT-001a).
+            "objections.document",
             "objections.mechanism",
             "objections.notice_version",
             "objections.purpose",

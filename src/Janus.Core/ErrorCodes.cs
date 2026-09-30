@@ -124,6 +124,14 @@ public static class ErrorCodes
     public static ErrorCode StartupMissingAssessment { get; } = ErrorCode.Parse("model.purpose.missingassessment");
 
     /// <summary>
+    /// Startup: a purpose named for the hosting or its cross-border transfer rests on
+    /// consent. Rest it on the regulator's permit's basis, never on consent;
+    /// <c>details.key</c> names the type and the purpose.
+    /// </summary>
+    /// <remarks>Implements INT-HOST-002, PRIV-CONS-010, chapter 10 section 1.5.</remarks>
+    public static ErrorCode StartupHostingConsent { get; } = ErrorCode.Parse("model.purpose.hostingconsent");
+
+    /// <summary>
     /// Startup: a resource type references a type the model does not declare. Declare
     /// the referenced type or drop the reference.
     /// </summary>

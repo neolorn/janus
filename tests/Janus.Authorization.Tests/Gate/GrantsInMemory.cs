@@ -94,6 +94,15 @@ internal sealed class GrantsInMemory : IGrantStore
         ValueTask.FromResult(_grants.Values.Any(grant => grant.Subject == holder));
 
     /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<Grant>> NamingAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<Grant>>(
+        [
+            .. _grants.Values
+                .Where(grant => grant.Subject == GrantSubject.Of(subject))
+                .OrderBy(grant => grant.GrantedAt),
+        ]);
+
+    /// <inheritdoc/>
     public ValueTask<IReadOnlyList<Grant>> HeldByAsync(
         IReadOnlyList<GrantSubject> holders,
         OrganizationId organization,

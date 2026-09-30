@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
+using Janus.Privacy.Erasures;
 using Janus.Privacy.Outbox;
 
 namespace Janus.Privacy.Tests.Outbox;
@@ -103,6 +104,22 @@ internal sealed class OutboxStoreInMemory : IOutboxStore
                     && delivery.Status is not Core.ErasureStatus.Complete)
                 .OrderBy(delivery => delivery.RaisedAt)
                 .Select(Progress),
+        ]);
+
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<Delivery>> UnledgeredAsync(
+        int skip,
+        int take,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<IReadOnlyList<Delivery>>(
+        [
+            .. _deliveries
+                .Where(delivery => delivery.Kind is SubjectEventKind.ErasureRequested
+                    && delivery.Status is Core.ErasureStatus.Complete
+                    && !delivery.Confirmed.Contains(ErasureLedgerSubscriber.Called))
+                .OrderBy(delivery => delivery.RaisedAt)
+                .Skip(skip)
+                .Take(take),
         ]);
 
     private DeliveryProgress Progress(Delivery delivery) =>

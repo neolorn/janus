@@ -7,7 +7,11 @@ namespace Janus.Hosting.Privacy;
 /// One consent record as chapter 09 section 7 gives it.
 /// </summary>
 /// <param name="Purpose">Which purpose.</param>
-/// <param name="NoticeVersion">The version displayed when it was given.</param>
+/// <param name="Document">
+/// The legal document it was given against, the privacy notice where the purpose
+/// names none.
+/// </param>
+/// <param name="NoticeVersion">The version of that document displayed when it was given.</param>
 /// <param name="Mechanism">Where it was given.</param>
 /// <param name="GrantedAt">When it was given.</param>
 /// <param name="WithdrawnAt">When it was taken back, where it was.</param>
@@ -19,6 +23,7 @@ namespace Janus.Hosting.Privacy;
 /// <remarks>Implements PRIV-CONS-001, PRIV-CONS-007 and PRIV-CONS-011.</remarks>
 internal sealed record ConsentView(
     string Purpose,
+    string Document,
     string NoticeVersion,
     ConsentMechanism Mechanism,
     DateTimeOffset GrantedAt,

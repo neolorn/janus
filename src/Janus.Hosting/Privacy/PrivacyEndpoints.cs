@@ -89,34 +89,15 @@ internal static class PrivacyEndpoints
     {
         ArgumentNullException.ThrowIfNull(consents);
 
-        AccessContext holder = Asking(browser);
-
         // PRIV-CONS-001, PRIV-CONS-007: this one endpoint serves both the grant a
-        // subject makes on their own pages and the prompt a material revision raised,
-        // and what tells them apart is the record the subject already holds: one the
-        // revision ended and the subject never took back.
-        ConsentMechanism mechanism = Reasked(
-            await consents.ReadAsync(holder, cancellationToken).ConfigureAwait(false),
-            purpose);
-
+        // subject makes on their own pages and the prompt a material revision raised;
+        // the service tells them apart.
         return Answers.Of(
             await consents
-                .GrantAsync(holder, purpose, mechanism, cancellationToken)
+                .GrantAsync(Asking(browser), purpose, ConsentMechanism.Dashboard, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }
-
-    private static ConsentMechanism Reasked(
-        Result<IReadOnlyList<ConsentRecord>> held,
-        string purpose) =>
-        held.Match(
-            records => records.Any(record =>
-                string.Equals(record.Purpose, purpose, StringComparison.Ordinal)
-                && record.SupersededAt is not null
-                && record.WithdrawnAt is null)
-                ? ConsentMechanism.Reconsent
-                : ConsentMechanism.Dashboard,
-            _ => ConsentMechanism.Dashboard);
 
     private static async Task<IResult> WithdrawAsync(
         IConsents consents,
@@ -197,7 +178,8 @@ internal static class PrivacyEndpoints
             return Answers.Malformed("type");
         }
 
-        if (body.Detail is not { Length: > 0 } detail)
+        // API-CONV-002: a free-text member is 1 to 1024 characters after trimming.
+        if (body.Detail?.Trim() is not { Length: > 0 and <= 1024 } detail)
         {
             return Answers.Malformed("detail");
         }
@@ -380,12 +362,12 @@ internal static class PrivacyEndpoints
             return Answers.Malformed("receivedAt");
         }
 
-        if (body.Channel is not { Length: > 0 } channel)
+        if (body.Channel?.Trim() is not { Length: > 0 and <= 1024 } channel)
         {
             return Answers.Malformed("channel");
         }
 
-        if (body.IdentityConfirmation is not { Length: > 0 } confirmation)
+        if (body.IdentityConfirmation?.Trim() is not { Length: > 0 and <= 1024 } confirmation)
         {
             return Answers.Malformed("identityConfirmation");
         }
@@ -420,7 +402,11 @@ internal static class PrivacyEndpoints
 
         return Answers.Of(
             await requests
-                .FulfilAsync(holder, new PrivacyRequestId(request), cancellationToken)
+                .FulfilAsync(
+                    holder,
+                    browser.Required.Id,
+                    new PrivacyRequestId(request),
+                    cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }
@@ -435,7 +421,7 @@ internal static class PrivacyEndpoints
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(requests);
 
-        if (body.Reason is not { Length: > 0 } reason)
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
             return Answers.Malformed("reason");
         }
@@ -533,6 +519,7 @@ internal static class PrivacyEndpoints
             [
                 .. records.Select(record => new ConsentView(
                     record.Purpose,
+                    record.Document,
                     record.NoticeVersion,
                     record.Mechanism,
                     record.GrantedAt,
@@ -549,6 +536,7 @@ internal static class PrivacyEndpoints
             [
                 .. records.Select(record => new ObjectionView(
                     record.Purpose,
+                    record.Document,
                     record.NoticeVersion,
                     record.Mechanism,
                     record.RecordedAt,

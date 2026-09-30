@@ -29,6 +29,7 @@ internal sealed class RecordedConsents(StoreContext context) : IRecordedConsents
             .Where(consent => consent.Subject == subject && consent.Purpose == purpose)
             .Select(consent => new ConsentRecord(
                 consent.Purpose,
+                consent.Document,
                 consent.NoticeVersion,
                 consent.Mechanism,
                 consent.Kind,
@@ -52,6 +53,7 @@ internal sealed class RecordedConsents(StoreContext context) : IRecordedConsents
                 consent.Subject,
                 Record = new ConsentRecord(
                     consent.Purpose,
+                    consent.Document,
                     consent.NoticeVersion,
                     consent.Mechanism,
                     consent.Kind,

@@ -41,6 +41,7 @@ internal sealed class ObjectionConfiguration : IEntityTypeConfiguration<Objectio
             .HasConversion(subject => subject.Value, value => new SubjectId(value));
 
         builder.Property(objection => objection.Purpose).HasColumnName("purpose");
+        builder.Property(objection => objection.Document).HasColumnName("document");
         builder.Property(objection => objection.NoticeVersion).HasColumnName("notice_version");
 
         builder.Property(objection => objection.Mechanism)

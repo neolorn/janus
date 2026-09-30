@@ -17,6 +17,7 @@ namespace Janus.Privacy.Requests;
 /// <param name="requests">Where the queue is.</param>
 /// <param name="calendar">The deployment's working week, holidays and zone.</param>
 /// <param name="scope">Whether the caller may work the queue.</param>
+/// <param name="stepUp">What a fulfilment asks of the caller's session.</param>
 /// <param name="accounts">Where an account enters the restricted or deleting state.</param>
 /// <param name="restrictions">Where an account is restricted and the subscribers told.</param>
 /// <param name="notices">Where the automatic receipt goes.</param>
@@ -33,6 +34,7 @@ internal sealed class PrivacyRequestService(
     IPrivacyRequestStore requests,
     WorkingCalendar calendar,
     AdministrativeScope scope,
+    IStepUpGate stepUp,
     IAccountStates accounts,
     RestrictionGrant restrictions,
     ISubjectNotices notices,
@@ -71,6 +73,11 @@ internal sealed class PrivacyRequestService(
             return Result.Failure<PrivacyRequestReceipt>(Error.From(ErrorCodes.Denied));
         }
 
+        if (Stated(detail) is not string stated)
+        {
+            return Result.Failure<PrivacyRequestReceipt>(Malformed("detail"));
+        }
+
         if (await requests.OpenAsync(subject, type, cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure<PrivacyRequestReceipt>(
@@ -94,7 +101,7 @@ internal sealed class PrivacyRequestService(
         return failure is not null
             ? Result.Failure<PrivacyRequestReceipt>(failure)
             : await QueuedAsync(
-                    QueuedRequest.Submitted(subject, type, detail ?? string.Empty, today, now, deadline),
+                    QueuedRequest.Submitted(subject, type, stated, today, now, deadline),
                     Submitted,
                     context,
                     now,
@@ -116,6 +123,16 @@ internal sealed class PrivacyRequestService(
                 .ConfigureAwait(false) is Error denied)
         {
             return Result.Failure<PrivacyRequestReceipt>(denied);
+        }
+
+        if (Stated(entry.Channel) is not string channel)
+        {
+            return Result.Failure<PrivacyRequestReceipt>(Malformed("channel"));
+        }
+
+        if (Stated(entry.IdentityConfirmation) is not string confirmation)
+        {
+            return Result.Failure<PrivacyRequestReceipt>(Malformed("identityConfirmation"));
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -152,7 +169,10 @@ internal sealed class PrivacyRequestService(
         return failure is not null
             ? Result.Failure<PrivacyRequestReceipt>(failure)
             : await QueuedAsync(
-                    QueuedRequest.Entered(entry, now, deadline),
+                    QueuedRequest.Entered(
+                        entry with { Channel = channel, IdentityConfirmation = confirmation },
+                        now,
+                        deadline),
                     Entered,
                     context,
                     now,
@@ -181,20 +201,44 @@ internal sealed class PrivacyRequestService(
     /// <inheritdoc/>
     public async ValueTask<Result> FulfilAsync(
         AccessContext context,
+        SessionId session,
         PrivacyRequestId request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        if (await scope
+                .RefusedAsync(context, Permissions.PrivacyRequestManage, cancellationToken)
+                .ConfigureAwait(false) is Error denied)
+        {
+            return Result.Failure(denied);
+        }
+
         Error? failure = null;
 
-        QueuedRequest held = (await DecidableAsync(context, request, cancellationToken)
+        QueuedRequest held = (await DecidableAsync(request, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Held<QueuedRequest>(error, ref failure));
 
         if (failure is not null)
         {
             return Result.Failure(failure);
+        }
+
+        // 09 section 8a, D-166 X8: a fulfilment acts on another person's data or
+        // account, so the session proves it is the caller, and it is asked last so that
+        // every other refusal is told as itself.
+        if (context.Acting is not SubjectId acting)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        if ((await stepUp
+                .RequireAsync(acting, session, StepUpAction.PrivacyRequestFulfil, cancellationToken)
+                .ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error challenged)
+        {
+            return Result.Failure(challenged);
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -237,11 +281,22 @@ internal sealed class PrivacyRequestService(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+
+        if (await scope
+                .RefusedAsync(context, Permissions.PrivacyRequestManage, cancellationToken)
+                .ConfigureAwait(false) is Error denied)
+        {
+            return Result.Failure(denied);
+        }
+
+        if (Stated(reason) is not string stated)
+        {
+            return Result.Failure(Malformed("reason"));
+        }
 
         Error? failure = null;
 
-        QueuedRequest held = (await DecidableAsync(context, request, cancellationToken)
+        QueuedRequest held = (await DecidableAsync(request, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Held<QueuedRequest>(error, ref failure));
 
@@ -252,7 +307,7 @@ internal sealed class PrivacyRequestService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        held.Refuse(now, reason);
+        held.Refuse(now, stated);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
@@ -288,6 +343,13 @@ internal sealed class PrivacyRequestService(
         return default!;
     }
 
+    // API-CONV-002: a free-text field is 1 to 1024 characters after trimming.
+    private static string? Stated(string? text) =>
+        text?.Trim() is { Length: > 0 and <= 1024 } stated ? stated : null;
+
+    private static Error Malformed(string member) =>
+        Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
+
     private static Dictionary<string, JsonElement> Named(QueuedRequest request) =>
         new Dictionary<string, JsonElement>(capacity: 3, StringComparer.Ordinal)
         {
@@ -296,25 +358,14 @@ internal sealed class PrivacyRequestService(
             ["status"] = JsonSerializer.SerializeToElement(request.Status.ToString()),
         };
 
-    // PRIV-RIGHT-001 AC3, AUTHZ-CONCEAL-005: a request the caller may not work, one
-    // that does not exist, and one already decided are one answer, because telling
-    // them apart would answer a question the caller has no permission to ask.
     // AUTHZ-CONCEAL-005 governs what a caller with no business here is told; a member
     // of staff working the queue under `privacyrequest:manage` has that business, so
     // what they are told apart is the permission, the identifier and the decision that
     // already stands (PRIV-RIGHT-001).
     private async ValueTask<Result<QueuedRequest>> DecidableAsync(
-        AccessContext context,
         PrivacyRequestId request,
         CancellationToken cancellationToken)
     {
-        if (await scope
-                .RefusedAsync(context, Permissions.PrivacyRequestManage, cancellationToken)
-                .ConfigureAwait(false) is Error refused)
-        {
-            return Result.Failure<QueuedRequest>(refused);
-        }
-
         QueuedRequest? held = await requests.FindAsync(request, cancellationToken)
             .ConfigureAwait(false);
 
