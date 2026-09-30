@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -35,6 +36,11 @@ internal sealed class DeadlineSweep(
     TimeProvider time)
 {
     private static readonly AuditAction Lapsed = AuditActions.RequestLapsed;
+
+    // INT-SMS-003, 10 section 5.12c: the alert names the type and the status in the
+    // spelling the chapter gives them, which is the name on the member.
+    private static readonly JsonSerializerOptions Spelled =
+        new() { Converters = { new JsonStringEnumConverter() } };
 
     /// <summary>
     /// Runs one pass.
@@ -76,8 +82,8 @@ internal sealed class DeadlineSweep(
         new(capacity: 4, StringComparer.Ordinal)
         {
             ["request"] = JsonSerializer.SerializeToElement(request.Id.ToString()),
-            ["type"] = JsonSerializer.SerializeToElement(request.Type.ToString()),
-            ["status"] = JsonSerializer.SerializeToElement(request.Status.ToString()),
+            ["type"] = JsonSerializer.SerializeToElement(request.Type, Spelled),
+            ["status"] = JsonSerializer.SerializeToElement(request.Status, Spelled),
             ["decisionDue"] = JsonSerializer.SerializeToElement(request.DecisionDue),
         };
 

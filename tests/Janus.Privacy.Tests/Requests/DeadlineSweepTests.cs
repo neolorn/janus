@@ -124,6 +124,27 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// INT-SMS-003: the alert names the request's type and status as chapter 10 section
+    /// 5.12c spells them, which is what the operator's message is measured and filled
+    /// with.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_SMS_003_AnAlertCarriesTheTypeAndStatusAsTheChapterSpellsThemAsync()
+    {
+        _ = await EnteredAsync(PrivacyRequestType.Rectification);
+
+        _clock.Advance(new DateTimeOffset(2026, 9, 23, 22, 0, 0, TimeSpan.Zero) - Noon);
+
+        _ = await Sweep.SweepAsync(Sweeper, CancellationToken.None);
+
+        PrivacyAlertRaised raised = Assert.Single(_alerts.Raised);
+
+        Assert.Equal("rectification", raised.Details["type"].GetString());
+        Assert.Equal("open", raised.Details["status"].GetString());
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-002 AC2: the alert is raised once, however often the sweep runs.
     /// </summary>
     /// <returns>The work of running it.</returns>

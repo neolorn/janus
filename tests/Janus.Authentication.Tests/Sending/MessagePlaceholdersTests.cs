@@ -123,4 +123,16 @@ public sealed class MessagePlaceholdersTests
             type.Name.Length <= Places.Widths["kind"],
             $"The event {type.Name} is wider than its place."));
     }
+
+    /// <summary>
+    /// INT-SMS-003: the <c>type</c> and <c>status</c> places are measured at the
+    /// spellings chapter 10 section 5.12c gives, which are the ones a send fills them
+    /// with, and not at the names of the members.
+    /// </summary>
+    [Fact]
+    public void INT_SMS_003_TypeAndStatusAreMeasuredAtTheirWrittenSpellings()
+    {
+        Assert.Equal("rectification".Length, Places.Widths["type"]);
+        Assert.Equal("deemed-refused-by-lapse".Length, Places.Widths["status"]);
+    }
 }

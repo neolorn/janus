@@ -43,9 +43,9 @@ internal sealed class MessagePlaceholders
 
     private static readonly int Condition = Widest(Enum.GetValues<AlertCondition>().Select(WrittenName.Of));
 
-    private static readonly int RequestType = Widest(Enum.GetNames<PrivacyRequestType>());
+    private static readonly int RequestType = Widest(Enum.GetValues<PrivacyRequestType>().Select(WrittenName.Of));
 
-    private static readonly int RequestStatus = Widest(Enum.GetNames<PrivacyRequestStatus>());
+    private static readonly int RequestStatus = Widest(Enum.GetValues<PrivacyRequestStatus>().Select(WrittenName.Of));
 
     // What a name a deployment or a host chooses is measured at: a restriction's and a
     // governing document's are held where they are written or declared to the rule of

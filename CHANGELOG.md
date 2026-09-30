@@ -717,6 +717,9 @@ against the public contract of LIB-API-001.
   that is not an `https` origin a registered browser client returns to, or an
   authentication origin that is not the sign-in address's, is refused with
   `model.startup.declarationinvalid` under the same key.
+- A privacy-deadline alert names the request's `type` and `status` as chapter 10 spells
+  them (`rectification`, `deemed-refused-by-lapse`), and a text message naming either
+  place is measured at those spellings.
 - Every link the library sends is a whole address, `<origin>/link#<kind>.<token>`, on
   the declared landing origin of the application its kind belongs to, with the token in
   the fragment. Templates fill it with the new `{link}` place; the `{token}` place is
