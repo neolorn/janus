@@ -134,6 +134,54 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// AUTH-FACT-001 AC5, OPS-DB-001: the same label in other capitals is the same
+    /// label, and the database refuses it too.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_001_AC5_ALabelHeldInOtherCapitalsIsRefusedByTheDatabaseAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+
+        await WrittenAsync(Authenticator.EnrollingTotp(
+            AuthenticatorId.New(TimeProvider.System),
+            subject,
+            Label("this phone"),
+            Secret(),
+            Noon));
+
+        _ = await Assert.ThrowsAsync<DbUpdateException>(async () => await WrittenAsync(
+            Authenticator.EnrollingTotp(
+                AuthenticatorId.New(TimeProvider.System),
+                subject,
+                Label("This PHONE"),
+                Secret(),
+                Noon)));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-001 AC5: a label is found held in other capitals, for the kind it is
+    /// held for only, and not by the credential that holds it.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_001_AC5_ALabelIsFoundHeldWithoutRegardToCaseAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        var id = AuthenticatorId.New(TimeProvider.System);
+
+        await WrittenAsync(Authenticator.EnrollingTotp(id, subject, Label("this phone"), Secret(), Noon));
+
+        await using StoreContext reading = database.Context();
+        AuthenticatorStore store = Store(reading);
+
+        Assert.True(await store.LabelHeldAsync(
+            subject, Factor.Totp, Label("THIS Phone"), except: null, TestContext.Current.CancellationToken));
+        Assert.False(await store.LabelHeldAsync(
+            subject, Factor.Passkey, Label("THIS Phone"), except: null, TestContext.Current.CancellationToken));
+        Assert.False(await store.LabelHeldAsync(
+            subject, Factor.Totp, Label("THIS Phone"), except: id, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// AUTH-FACT-001 AC4: the instant of last use advances on the row, and the state
     /// a loss report put the credential in is carried with it.
     /// </summary>

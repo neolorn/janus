@@ -1254,6 +1254,10 @@ against the public contract of LIB-API-001.
   canary record no answer.
 - Finding who holds access to a record reads the live grants on its ancestors through
   their index, and `organization_domains.domain` carries the `identity_ci` collation.
+- `groups.name` and `authenticators.label` carry the `identity_ci` collation, so an
+  organization's groups sort without regard to case and a credential label held in
+  other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
+  a rename and at an enrolment alike, exactly where the unique index would refuse it.
 - A value the library reads from text under a rule, left unset (such as its `default`),
   throws `InvalidOperationException` where its text is read, so no such value reaches a
   row.

@@ -442,6 +442,32 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-001 AC5: an enrolment under a label the account already holds for that
+    /// kind, in other capitals, is refused and enrols nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_001_AC5_AnEnrolmentUnderALabelHeldInOtherCapitalsIsRefusedAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+
+        EnrolledCredential confirmed = await ConfirmedAsync(subject, session);
+        await PresentedAsync(subject, session);
+
+        Assert.Equal(
+            ErrorCodes.CredentialLabelInvalid,
+            Refused(await Service.BeginGeneratorAsync(
+                Authority(subject, session),
+                "PHONE",
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(
+            [confirmed.Credential],
+            (await _authenticators.OfAsync(subject, TestContext.Current.CancellationToken))
+                .Select(credential => credential.Id));
+    }
+
+    /// <summary>
     /// AUTH-RECOV-007 AC5 and D-092: removing the credential the account's assurance
     /// rests on runs the notified window rather than taking it away at once.
     /// </summary>
@@ -873,7 +899,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
         return Value(await Service.CompleteKeyAsync(
             Authority(subject, session),
             Attestation(ceremony.Challenge, synced),
-            "This phone",
+            "This laptop",
             Source,
             TestContext.Current.CancellationToken));
     }

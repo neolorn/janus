@@ -17318,6 +17318,8 @@ description:
   the other.
 - AUTH-FACT-001 AC5 could say whether a label is unique regardless of case.
 
+**Superseded by D-166.**
+
 ---
 
 ## 418. A default instance of a value with rules gives no text, and fails where it is first read

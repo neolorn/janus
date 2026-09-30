@@ -255,6 +255,15 @@ internal sealed class CredentialService(
             return Result.Failure<EnrolledCredential>(gate);
         }
 
+        // AUTH-FACT-001 AC5: a label is held once per kind per account, compared as the
+        // database compares it.
+        if (await authenticators
+            .LabelHeldAsync(acting.Subject, ceremony.Kind, named, except: null, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            return Result.Failure<EnrolledCredential>(Error.From(ErrorCodes.CredentialLabelInvalid));
+        }
+
         AuthenticatorId enrolled = (await keys
                 .EnrolAsync(
                     acting.Subject,
@@ -326,6 +335,14 @@ internal sealed class CredentialService(
             is Error gate)
         {
             return Result.Failure<GeneratorEnrolment>(gate);
+        }
+
+        // AUTH-FACT-001 AC5: as for a key, a generator's label is held once per account.
+        if (await authenticators
+            .LabelHeldAsync(acting.Subject, generated, named, except: null, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            return Result.Failure<GeneratorEnrolment>(Error.From(ErrorCodes.CredentialLabelInvalid));
         }
 
         TotpEnrolment begun = (await generators

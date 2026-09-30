@@ -528,6 +528,45 @@ public sealed class AccountServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-001 AC5: a label is held once per kind per account without regard to
+    /// case, as the database's index holds it; a credential keeps its own label in other
+    /// capitals, and a credential of another kind may carry the same one.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_001_AC5_ALabelHeldInOtherCapitalsIsRefusedAsync()
+    {
+        Authenticator older = SecondStepKey("The old one", Noon);
+        Authenticator newer = SecondStepKey("The new one", Noon.AddDays(1));
+        Authenticator passkey = Passkey();
+
+        _authenticators.Hold(older);
+        _authenticators.Hold(newer);
+        _authenticators.Hold(passkey);
+
+        Assert.Equal(
+            ErrorCodes.CredentialLabelInvalid,
+            Refused(await Service.LabelCredentialAsync(
+                Acting,
+                newer.Id,
+                "THE OLD ONE",
+                TestContext.Current.CancellationToken)));
+
+        Accepted(await Service.LabelCredentialAsync(
+            Acting,
+            older.Id,
+            "the OLD one",
+            TestContext.Current.CancellationToken));
+        Accepted(await Service.LabelCredentialAsync(
+            Acting,
+            newer.Id,
+            "this LAPTOP",
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(Labelled("the OLD one"), older.Label);
+        Assert.Equal(Labelled("this LAPTOP"), newer.Label);
+    }
+
+    /// <summary>
     /// IDN-ATTR-008 AC3: the mark goes with the credential it was on, so the
     /// preference falls to the latest of what remains and to nothing where nothing
     /// remains.

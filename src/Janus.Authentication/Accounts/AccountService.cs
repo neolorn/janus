@@ -398,16 +398,13 @@ internal sealed class AccountService(
             return Result.Failure(Error.From(ErrorCodes.CredentialNotFound));
         }
 
-        // AUTH-FACT-001 AC5: a label is held once per kind per account. The database
-        // holds it too, but a refusal the person can read beats a failed commit.
-        foreach (Authenticator candidate in enrolled)
+        // AUTH-FACT-001 AC5: a label is held once per kind per account, compared as the
+        // database compares it, so the refusal falls exactly where its index would.
+        if (await authenticators
+            .LabelHeldAsync(subject, held.Factor, named, credential, cancellationToken)
+            .ConfigureAwait(false))
         {
-            if (candidate.Id != credential
-                && candidate.Factor == held.Factor
-                && candidate.Label == named)
-            {
-                return Result.Failure(Error.From(ErrorCodes.CredentialLabelInvalid));
-            }
+            return Result.Failure(Error.From(ErrorCodes.CredentialLabelInvalid));
         }
 
         DateTimeOffset now = time.GetUtcNow();
