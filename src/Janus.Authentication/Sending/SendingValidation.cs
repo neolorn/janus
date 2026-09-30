@@ -19,6 +19,9 @@ namespace Janus.Authentication.Sending;
 /// The catalogue in force, the deployment's own or the one the library ships.
 /// </param>
 /// <param name="suppliers">The host-registered key suppliers.</param>
+/// <param name="places">
+/// The widths a text message's places are measured at for this deployment.
+/// </param>
 /// <param name="mailTransport">
 /// What the deployment's mail leaves through, or nothing where it registered none.
 /// </param>
@@ -40,6 +43,7 @@ internal sealed class SendingValidation(
     IConfigurationStore configuration,
     IMessageTemplates templates,
     RestrictionKeySuppliers suppliers,
+    MessagePlaceholders places,
     IMailTransport? mailTransport,
     ISmsTransport? smsTransport)
 {
@@ -209,7 +213,7 @@ internal sealed class SendingValidation(
                     // a non-Latin language is seventy characters in (AUTH-ABUSE-005).
                     // The template is measured with every place it names at its widest,
                     // because nothing is measured at the moment of a send.
-                    string widest = MessagePlaceholders.Widest(template.Text);
+                    string widest = places.Widest(template.Text);
 
                     if (MessageBudget.Exceeds(widest))
                     {

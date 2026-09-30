@@ -27,6 +27,8 @@ public sealed class DefaultMessageTemplatesTests
 
     private static readonly DefaultMessageTemplates Shipped = new();
 
+    private static readonly MessagePlaceholders Measured = new([], []);
+
     /// <summary>
     /// LIB-EXT-001: every message the library sends has words on every channel it goes
     /// out on, in every language the library carries, so a deployment that declares
@@ -61,7 +63,7 @@ public sealed class DefaultMessageTemplatesTests
     public void AUTH_ABUSE_005_EveryShippedTextMessageFitsOneMessageAtItsWidest() =>
         Assert.All(
             Every().Where(held => held.Kind is SendKind.Sms),
-            held => Assert.False(MessageBudget.Exceeds(MessagePlaceholders.Widest(Found(held).Text))));
+            held => Assert.False(MessageBudget.Exceeds(Measured.Widest(Found(held).Text))));
 
     /// <summary>
     /// CONV-CONTENT-001: a shipped text leaves a place only for a value the library
@@ -77,7 +79,7 @@ public sealed class DefaultMessageTemplatesTests
 
                 Assert.All(
                     Places((template.Subject ?? string.Empty) + " " + template.Text),
-                    place => Assert.Contains(place, MessagePlaceholders.Widths.Keys));
+                    place => Assert.Contains(place, Measured.Widths.Keys));
             });
 
     /// <summary>
@@ -174,6 +176,7 @@ public sealed class DefaultMessageTemplatesTests
                 configuration,
                 Shipped,
                 RestrictionKeySuppliers.None,
+                Measured,
                 new MailTransportInMemory(),
                 new SmsTransportInMemory())
             .ValidateAsync(TestContext.Current.CancellationToken);

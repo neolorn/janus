@@ -1,7 +1,9 @@
 using System;
+using System.Linq;
 using Janus.Authentication.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Privacy.Erasures;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -55,9 +57,21 @@ internal static class DeliveryRegistration
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IMessageTemplates>(),
             provider.GetRequiredService<RestrictionKeySuppliers>(),
+            Measured(provider),
             provider.GetService<IMailTransport>(),
             provider.GetService<ISmsTransport>()));
 
         return services;
     }
+
+    // INT-SMS-003: the subscribers an erasure waits for, the erasure ledger among them
+    // where one is registered, and the categories the host declared, as this deployment
+    // registered and declared them.
+    private static MessagePlaceholders Measured(IServiceProvider provider) =>
+        new(
+            ErasureLedgerSubscriber
+                .Joined(provider.GetServices<ISubjectEventSubscriber>(), provider.GetService<IErasureLedger>())
+                .Where(subscriber => subscriber.Required)
+                .Select(subscriber => subscriber.Name),
+            provider.GetRequiredService<AuthorizationDeclaration>().RetentionFloors.Keys);
 }

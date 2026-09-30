@@ -814,6 +814,11 @@ against the public contract of LIB-API-001.
   every send. Nothing is measured at the moment of a send. The notice sent when someone
   tries to register an address already held, or to change another account to it, points
   its holder to sign-in and to recovery.
+- A text-message template naming `{outstanding}` is measured at the width of every
+  registered required subject-event subscriber's name as the alert carries them, and
+  one naming `{key}` at the widest key a change can name, an organization's key at the
+  width of its identifier and a category's retention key at the longest category the
+  host declared.
 - Publishing an event answers for itself. An operation records its event inside the
   transaction that made it true and commits nothing it could not publish, so a change
   never reaches the database without its event reaching a consumer. Every method of the
