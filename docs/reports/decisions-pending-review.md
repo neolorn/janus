@@ -8425,6 +8425,8 @@ after it. A document never published, or a blank name, is
 *Chapter text that should change.* 09 section 8a could name `documents` and say the
 version is fixed at issue.
 
+**Superseded by D-166.**
+
 ---
 
 ## 230. An organization on its way out takes no invitation

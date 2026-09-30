@@ -116,6 +116,28 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-INV-001 and 09 section 8a: an invitation naming a document never published is
+    /// <c>422</c> <c>api.request.invalid</c> naming <c>documents</c>, and nothing is
+    /// issued.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_INV_001_AnUnpublishedDocumentIsRefusedAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+
+        Answer refused = await administrator.SendAsync(
+            "POST",
+            PathOf(Branch),
+            """{"email":"invited@elsewhere.test","documents":["unwritten"]}""");
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.RequestInvalid.ToString(), refused.Text("code"));
+        Assert.Equal("documents", refused.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Empty(_deployment.Invitations.Held);
+    }
+
+    /// <summary>
     /// REG-MAIL-001 AC1: an integrated-mail invitation reserves the corporate mailbox
     /// and sends the link to the personal email alone.
     /// </summary>

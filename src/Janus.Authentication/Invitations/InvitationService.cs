@@ -526,9 +526,12 @@ internal sealed class InvitationService(
                     .ConfigureAwait(false))
                 .Match(value => value, error => Withheld<DocumentVersion>(error, ref failure));
 
+            // API-CONV-003: a document never published is well formed and names nothing
+            // the deployment can show; any other refusal is the store's own.
             if (failure is not null)
             {
-                return Result.Failure<IReadOnlyList<InvitationDocument>>(Malformed("documents"));
+                return Result.Failure<IReadOnlyList<InvitationDocument>>(
+                    failure.Code == ErrorCodes.DocumentNotFound ? Named(ErrorCodes.RequestInvalid, "documents") : failure);
             }
 
             shown.Add(new InvitationDocument(current.DocumentName, current.Version));

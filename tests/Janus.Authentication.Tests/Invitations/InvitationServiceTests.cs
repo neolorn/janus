@@ -475,14 +475,19 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-INV-001: a document the deployment never published cannot be shown.
+    /// REG-INV-001 and API-CONV-003: a document the deployment never published cannot be
+    /// shown, which is a request refused on its meaning; a blank name is one that does
+    /// not read. Nothing is issued.
     /// </summary>
     [Fact]
     public async Task REG_INV_001_AnUnpublishedDocumentIsRefusedAsync()
     {
         Error refused = Failure(await IssueAsync(Customer, Request(email: Personal, documents: ["unwritten"])));
+        Error blank = Failure(await IssueAsync(Customer, Request(email: Personal, documents: [" "])));
 
-        Assert.Equal((ErrorCodes.RequestMalformed, "documents"), (refused.Code, Member(refused)));
+        Assert.Equal((ErrorCodes.RequestInvalid, "documents"), (refused.Code, Member(refused)));
+        Assert.Equal((ErrorCodes.RequestMalformed, "documents"), (blank.Code, Member(blank)));
+        Assert.Empty(_invitations.Held);
     }
 
     /// <summary>

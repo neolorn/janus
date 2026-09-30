@@ -1728,6 +1728,8 @@ against the public contract of LIB-API-001.
   not collect.
 - An invitation naming a role is also the `grant:manage` step-up action, judged after
   `invitation:issue`.
+- An invitation naming a legal document the deployment never published is refused `422`
+  `api.request.invalid` naming `documents`; a blank name stays `api.request.malformed`.
 - An audit trail. Every record names who acted, whose identity the action was taken
   under, the instant it occurred and the organization where one applies; an event about
   a principal holding no membership carries none, and the absence is the recorded fact.
