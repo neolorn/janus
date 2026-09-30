@@ -968,8 +968,10 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.StepUpRequired, held.Code);
         Assert.Equal("enrol", held.Details["outcome"].GetString());
-        Assert.Equal("requiredAssurance", held.Details["field"].GetString());
-        Assert.Equal("aal2", held.Details["value"].GetString());
+        Assert.Equal("requiredAssurance", held.Details["policyRequirement"].GetProperty("field").GetString());
+        Assert.Equal("aal2", held.Details["policyRequirement"].GetProperty("value").GetString());
+        Assert.False(held.Details.ContainsKey("field"));
+        Assert.False(held.Details["policyRequirement"].TryGetProperty("deadline", out _));
         Assert.Empty(_attachments.Attached);
         Assert.Null(invitation.AcknowledgedAt);
 
@@ -1004,8 +1006,9 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Error held = Failure(await AcknowledgeAsync(holder, _invitations.Held[0].Id));
 
         Assert.Equal(ErrorCodes.StepUpRequired, held.Code);
-        Assert.Equal("credentialRedundancy", held.Details["field"].GetString());
-        Assert.Equal("enforced", held.Details["value"].GetString());
+        Assert.Equal("credentialRedundancy", held.Details["policyRequirement"].GetProperty("field").GetString());
+        Assert.Equal("enforced", held.Details["policyRequirement"].GetProperty("value").GetString());
+        Assert.False(held.Details["policyRequirement"].TryGetProperty("deadline", out _));
         Assert.Empty(_attachments.Attached);
     }
 

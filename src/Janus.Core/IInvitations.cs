@@ -97,10 +97,13 @@ public interface IInvitations
     /// Success, or the refusal: <c>identity.invitation.notfound</c> where no such
     /// invitation is attached to the account; <c>identity.invitation.expired</c> where it
     /// no longer stands; <c>identity.invitation.identifiermismatch</c> where an
-    /// identifier it binds is not verified on the account; <c>auth.stepup.required</c>
-    /// with outcome <c>enrol</c> where the account does not meet the organization's
-    /// credential policy; <c>identity.membership.limitreached</c> or
-    /// <c>identity.identifier.maximum</c> where the account can take no more.
+    /// identifier it binds is not verified on the account;
+    /// <c>identity.identifier.domainnotallowed</c> where the organization's lock refuses
+    /// the address the member will sign in with; <c>identity.membership.limitreached</c>
+    /// or <c>identity.identifier.maximum</c> where the account can take no more, told
+    /// before the credential policy; <c>auth.stepup.required</c> with outcome
+    /// <c>enrol</c> and the <c>policyRequirement</c> unmet where the account does not
+    /// meet the organization's credential policy.
     /// </returns>
     ValueTask<Result> AcknowledgeAsync(
         AccessContext context,
