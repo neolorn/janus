@@ -75,7 +75,7 @@ internal sealed class OidcAudit(IAuditStore records, TimeProvider time) : IOidcA
                     AuditActions.ClientRegistered,
                     at,
                     principal,
-                    effectiveSubject: null,
+                    subject: null,
                     organization: null,
                     new Dictionary<string, JsonElement>(capacity: 3, StringComparer.Ordinal)
                     {

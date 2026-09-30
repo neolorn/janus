@@ -29,7 +29,7 @@ internal interface IAuditStore
     /// <summary>
     /// Reads the records of one subject, most recent first.
     /// </summary>
-    /// <param name="subject">Whose records to read, as the effective identity.</param>
+    /// <param name="subject">Whose records to read, as the data subject they concern.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The records.</returns>
     ValueTask<IReadOnlyList<AuditRecord>> FindBySubjectAsync(
@@ -37,8 +37,8 @@ internal interface IAuditStore
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Reads every record naming one subject, as the acting or the effective identity,
-    /// most recent first.
+    /// Reads every record naming one subject, as the acting identity or as the data
+    /// subject it concerns, most recent first (PRIV-BREACH-002, D-166).
     /// </summary>
     /// <param name="subject">Whose records to read.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>

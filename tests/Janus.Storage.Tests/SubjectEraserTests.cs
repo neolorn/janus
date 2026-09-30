@@ -622,7 +622,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         Assert.Equal(
             deactivated.ToString(),
             await connection.ExecuteScalarAsync<string>(
-                "SELECT action FROM identity.audit_records WHERE effective_subject = @subject",
+                "SELECT action FROM identity.audit_records WHERE subject = @subject",
                 new { subject = subject.Value }));
     }
 
@@ -1276,11 +1276,11 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         string? action = await connection.ExecuteScalarAsync<string>(
-            "SELECT action FROM identity.audit_records WHERE effective_subject = @subject",
+            "SELECT action FROM identity.audit_records WHERE subject = @subject",
             new { subject = subject.Value });
 
         DateTime at = await connection.ExecuteScalarAsync<DateTime>(
-            "SELECT occurred_at FROM identity.audit_records WHERE effective_subject = @subject",
+            "SELECT occurred_at FROM identity.audit_records WHERE subject = @subject",
             new { subject = subject.Value });
 
         Assert.Equal(suspended.ToString(), action);

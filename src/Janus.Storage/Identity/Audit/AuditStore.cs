@@ -38,10 +38,10 @@ internal sealed class AuditStore(
     private const string Append =
         """
         INSERT INTO identity.audit_records
-            (id, category, occurred_at, action, acting_subject, effective_subject,
+            (id, category, occurred_at, action, acting_subject, effective_subject, subject,
              organization, details, enc_details, principal, principal_reason,
              breakglass_reason)
-        VALUES (@id, @category, @at, @action, @acting, @effective, @organization,
+        VALUES (@id, @category, @at, @action, @acting, @effective, @subject, @organization,
                 CAST(@details AS jsonb), @personal, @principal, @reason, @breakGlassReason);
         """;
 
@@ -67,6 +67,7 @@ internal sealed class AuditStore(
                     action = record.Action.ToString(),
                     acting = record.ActingSubject.Value,
                     effective = record.EffectiveSubject.Value,
+                    subject = record.Subject?.Value,
                     organization = record.Organization?.Value,
                     details = Written(record.Details),
                     personal,
@@ -85,7 +86,7 @@ internal sealed class AuditStore(
         CancellationToken cancellationToken)
     {
         List<AuditRowRecord> rows = await context.AuditRecords
-            .Where(row => row.EffectiveSubject == subject)
+            .Where(row => row.Subject == subject)
             .OrderByDescending(row => row.OccurredAt)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -138,7 +139,7 @@ internal sealed class AuditStore(
         CancellationToken cancellationToken)
     {
         List<AuditRowRecord> rows = await context.AuditRecords
-            .Where(row => row.EffectiveSubject == subject || row.ActingSubject == subject)
+            .Where(row => row.Subject == subject || row.ActingSubject == subject)
             .OrderByDescending(row => row.OccurredAt)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -154,13 +155,14 @@ internal sealed class AuditStore(
             row.OccurredAt,
             row.ActingSubject,
             row.EffectiveSubject,
+            row.Subject,
             row.Organization,
             Fields(Encoding.UTF8.GetBytes(row.Details)),
-            row.PersonalDetails is null || dataKey is null
+            row.PersonalDetails is null || dataKey is null || row.Subject is not SubjectId concerned
                 ? new Dictionary<string, JsonElement>(capacity: 0, StringComparer.Ordinal)
                 : Fields(PersonalFieldCipher.Decrypt(
                     dataKey,
-                    Located(row.EffectiveSubject),
+                    Located(concerned),
                     row.PersonalDetails)),
             row.Principal,
             row.PrincipalReason,
@@ -170,14 +172,19 @@ internal sealed class AuditStore(
         AuditRecord record,
         CancellationToken cancellationToken)
     {
-        byte[] dataKey = await DataKeyAsync(record.EffectiveSubject, cancellationToken)
+        // IDN-AUD-001 (D-166): what a record holds under a key is held under the key of
+        // the data subject it concerns.
+        SubjectId concerned = record.Subject
+            ?? throw new InvalidOperationException("A record that holds attributes under a key names the subject it concerns.");
+
+        byte[] dataKey = await DataKeyAsync(concerned, cancellationToken)
             .ConfigureAwait(false);
 
         try
         {
             return PersonalFieldCipher.Encrypt(
                 dataKey,
-                Located(record.EffectiveSubject),
+                Located(concerned),
                 Encoding.UTF8.GetBytes(Written(record.PersonalDetails)),
                 randomness);
         }

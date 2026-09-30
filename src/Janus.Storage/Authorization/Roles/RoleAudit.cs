@@ -58,7 +58,7 @@ internal sealed class RoleAudit(IAuditStore records, TimeProvider time) : IRoleA
                     Defined,
                     at,
                     principal,
-                    effectiveSubject: null,
+                    subject: null,
                     organization: null,
                     Details(role, before: null, after, principal.Reason)),
                 cancellationToken)

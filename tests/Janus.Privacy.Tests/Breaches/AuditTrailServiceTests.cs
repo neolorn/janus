@@ -113,5 +113,7 @@ public sealed class AuditTrailServiceTests
         subject,
         Organization: null,
         new Dictionary<string, JsonElement>(StringComparer.Ordinal),
-        BreakGlassReason: null);
+        BreakGlassReason: null,
+        Principal: null,
+        PrincipalReason: null);
 }

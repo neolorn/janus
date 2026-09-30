@@ -13,9 +13,10 @@ namespace Janus.Storage.Privacy.Breaches;
 /// </summary>
 /// <param name="records">Where the trail is read.</param>
 /// <remarks>
-/// Implements PRIV-BREACH-002 and CONV-DESIGN-003. The trail is every record naming the
-/// subject, what it did as well as what was done to it (entry 267), and what a record
-/// holds under a subject's key is not read for it.
+/// Implements PRIV-BREACH-002, IDN-AUD-001 and CONV-DESIGN-003. The trail is every record
+/// naming the subject, what it did as well as what was done to it (entry 267, D-166), with
+/// the principal and the reason of background work, and what a record holds under a
+/// subject's key is not read for it.
 /// </remarks>
 internal sealed class AuditTrailStore(IAuditStore records) : IAuditTrailStore
 {
@@ -34,6 +35,8 @@ internal sealed class AuditTrailStore(IAuditStore records) : IAuditTrailStore
                     record.EffectiveSubject,
                     record.Organization,
                     record.Details,
-                    record.BreakGlassReason)),
+                    record.BreakGlassReason,
+                    record.Principal,
+                    record.Reason)),
         ];
 }

@@ -134,6 +134,13 @@ against the public contract of LIB-API-001.
 - The `privacy.erasure.executed` audit record, whether the deletion sweep or
   `replay-erasures` writes it, carries `details.reason` by its written name
   (`erasure-request`, `minor-takedown`), as the ledger line and the erasures table do.
+- Every audit record names the account an action was taken on as its `subject`, apart
+  from both identities, and records whoever acted as its acting and its effective
+  identity, a break-glass session included, and the nil subject for both under a system
+  principal. The trail read by subject returns the records naming the subject as acting
+  identity or as `subject`, with the principal and the reason of background work
+  (`AuditEntry.Principal`, `AuditEntry.PrincipalReason`). A record written before names
+  the account as its effective identity and no `subject`.
 - `no-emergency-credential` is raised by the hourly `emergency-credential` job for as
   long as no break-glass credential stands, including after one is spent, and stops only
   when one is generated.

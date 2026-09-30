@@ -47,7 +47,9 @@ public sealed class AuditTrailEndpointTests : IAsyncDisposable
             {
                 ["reason"] = JsonSerializer.SerializeToElement("policy"),
             },
-            BreakGlassReason: null));
+            BreakGlassReason: null,
+            Principal: null,
+            PrincipalReason: null));
         _deployment.Trail.Hold(new AuditEntry(
             new AuditRecordId(Guid.CreateVersion7()),
             AuditCategory.Security,
@@ -57,7 +59,9 @@ public sealed class AuditTrailEndpointTests : IAsyncDisposable
             Emergency,
             Organization: null,
             new Dictionary<string, JsonElement>(StringComparer.Ordinal),
-            "The operator cannot be reached."));
+            "The operator cannot be reached.",
+            Principal: null,
+            PrincipalReason: null));
     }
 
     /// <inheritdoc/>
@@ -83,6 +87,8 @@ public sealed class AuditTrailEndpointTests : IAsyncDisposable
         Assert.Equal("security", entry.GetProperty("category").GetString());
         Assert.Equal(Ahmed.Value, entry.GetProperty("effective").GetGuid());
         Assert.Equal("policy", entry.GetProperty("details").GetProperty("reason").GetString());
+        Assert.Equal(JsonValueKind.Null, entry.GetProperty("principal").ValueKind);
+        Assert.Equal(JsonValueKind.Null, entry.GetProperty("principalReason").ValueKind);
     }
 
     /// <summary>

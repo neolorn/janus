@@ -20,8 +20,15 @@ namespace Janus.Core;
 /// The reason given at the use of the break-glass credential, where the record was
 /// written in the session it opened (OPS-BOOT-002), or nothing.
 /// </param>
+/// <param name="Principal">
+/// The name of the system principal that took the action, or nothing where a person
+/// took it.
+/// </param>
+/// <param name="PrincipalReason">
+/// The reason that principal stated, or nothing where a person took the action.
+/// </param>
 /// <remarks>
-/// Implements PRIV-BREACH-002 and IDN-AUD-001. What a record holds under the subject's
+/// Implements PRIV-BREACH-002 and IDN-AUD-001 (D-166, 303). What a record holds under the subject's
 /// key is not part of the entry, so an entry reads the same before and after erasure
 /// and a reader of the trail is handed no personal value.
 /// </remarks>
@@ -34,4 +41,6 @@ public sealed record AuditEntry(
     SubjectId Effective,
     OrganizationId? Organization,
     IReadOnlyDictionary<string, JsonElement> Details,
-    string? BreakGlassReason);
+    string? BreakGlassReason,
+    string? Principal,
+    string? PrincipalReason);

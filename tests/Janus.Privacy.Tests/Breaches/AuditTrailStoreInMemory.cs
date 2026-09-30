@@ -10,7 +10,7 @@ namespace Janus.Privacy.Tests.Breaches;
 
 /// <summary>
 /// The audit trail as a privacy test needs it: the records a test holds, read back by
-/// effective subject, most recent first.
+/// acting subject, most recent first.
 /// </summary>
 internal sealed class AuditTrailStoreInMemory : IAuditTrailStore
 {
@@ -34,7 +34,7 @@ internal sealed class AuditTrailStoreInMemory : IAuditTrailStore
         ValueTask.FromResult<IReadOnlyList<AuditEntry>>(
         [
             .. _entries
-                .Where(entry => entry.Effective == subject)
+                .Where(entry => entry.Acting == subject)
                 .OrderByDescending(entry => entry.OccurredAt),
         ]);
 }

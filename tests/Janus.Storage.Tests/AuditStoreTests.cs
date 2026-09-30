@@ -33,8 +33,9 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
     private readonly Deployment _deployment = new(database);
 
     /// <summary>
-    /// IDN-AUD-001 AC1: both identity fields are on the record, and an event about a
-    /// principal that holds a membership carries its organization.
+    /// IDN-AUD-001 AC1 and AC4: both identity fields are on the record and name the
+    /// administrator who acted, the account acted on is its subject, and an event about
+    /// a principal that holds a membership carries its organization.
     /// </summary>
     [Fact]
     public async Task IDN_AUD_001_AC1_BothIdentityFieldsArePopulatedAsync()
@@ -56,7 +57,8 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
         AuditRecord read = await OneAsync(subject);
 
         Assert.Equal(administrator, read.ActingSubject);
-        Assert.Equal(subject, read.EffectiveSubject);
+        Assert.Equal(administrator, read.EffectiveSubject);
+        Assert.Equal(subject, read.Subject);
         Assert.Equal(organization, read.Organization);
     }
 
@@ -195,7 +197,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
 
     /// <summary>
     /// PRIV-RET-002 AC2: an attribute an event has to record is not in the row in
-    /// plain. It is held under the effective subject's own key.
+    /// plain. It is held under the data subject's own key.
     /// </summary>
     [Fact]
     public async Task PRIV_RET_002_AC2_NoAttributeIsInTheRowInPlainAsync()
@@ -215,7 +217,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
 
         await using NpgsqlConnection connection = await database.OpenAsync();
         (string details, byte[] sealed_) = await connection.QuerySingleAsync<(string, byte[])>(
-            "SELECT details, enc_details FROM identity.audit_records WHERE effective_subject = @subject",
+            "SELECT details, enc_details FROM identity.audit_records WHERE subject = @subject",
             new { subject = subject.Value });
 
         Assert.DoesNotContain("ahmed@example.com", details, StringComparison.Ordinal);
@@ -258,7 +260,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
 
         await using NpgsqlConnection connection = await database.OpenAsync();
         (string action, DateTime at) = await connection.QuerySingleAsync<(string, DateTime)>(
-            "SELECT action, occurred_at FROM identity.audit_records WHERE effective_subject = @subject",
+            "SELECT action, occurred_at FROM identity.audit_records WHERE subject = @subject",
             new { subject = subject.Value });
 
         Assert.Equal("identity.identifier.added", action);
@@ -291,21 +293,21 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
         // rows every plan is a scan and the question the item asks cannot be put.
         _ = await connection.ExecuteAsync(
             "INSERT INTO identity.audit_records "
-                + "(id, category, occurred_at, action, acting_subject, effective_subject, details) "
+                + "(id, category, occurred_at, action, acting_subject, effective_subject, subject, details) "
                 + "SELECT gen_random_uuid(), 'security', now(), 'identity.account.read', "
-                + "gen_random_uuid(), gen_random_uuid(), '{}'::jsonb "
+                + "gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), '{}'::jsonb "
                 + "FROM generate_series(1, 20000)");
 
         _ = await connection.ExecuteAsync("ANALYZE identity.audit_records");
 
         IEnumerable<string> plan = await connection.QueryAsync<string>(
             "EXPLAIN SELECT id, action, occurred_at FROM identity.audit_records "
-                + "WHERE effective_subject = @subject ORDER BY occurred_at DESC",
+                + "WHERE subject = @subject ORDER BY occurred_at DESC",
             new { subject = subject.Value });
 
         string leaf = (await connection.QuerySingleAsync<string>(
             "SELECT tableoid::regclass::text FROM identity.audit_records "
-                + "WHERE effective_subject = @subject",
+                + "WHERE subject = @subject",
             new { subject = subject.Value }))["identity.".Length..];
 
         // The empty months cost nothing to walk; what the item asks is that the
@@ -444,8 +446,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
         IReadOnlyList<AuditEntry> trail = await TrailAsync(approver);
 
         Assert.Equal([approved, Suspended], trail.Select(entry => entry.Action));
-        Assert.Equal(approver, trail[0].Acting);
-        Assert.Equal(recovered, trail[0].Effective);
+        Assert.Equal((approver, approver), (trail[0].Acting, trail[0].Effective));
         Assert.Equal("in-person", trail[0].Details["channel"].GetString());
         Assert.False(trail[0].Details.ContainsKey("reason"));
         Assert.Equal([approved], (await TrailAsync(recovered)).Select(entry => entry.Action));
@@ -475,16 +476,16 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
 
         _ = await connection.ExecuteAsync(
             "INSERT INTO identity.audit_records "
-                + "(id, category, occurred_at, action, acting_subject, effective_subject, details) "
+                + "(id, category, occurred_at, action, acting_subject, effective_subject, subject, details) "
                 + "SELECT gen_random_uuid(), 'security', now(), 'identity.account.read', "
-                + "gen_random_uuid(), gen_random_uuid(), '{}'::jsonb "
+                + "gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), '{}'::jsonb "
                 + "FROM generate_series(1, 20000)");
 
         _ = await connection.ExecuteAsync("ANALYZE identity.audit_records");
 
         IEnumerable<string> plan = await connection.QueryAsync<string>(
             "EXPLAIN SELECT id, action, occurred_at FROM identity.audit_records "
-                + "WHERE effective_subject = @subject OR acting_subject = @subject "
+                + "WHERE subject = @subject OR acting_subject = @subject "
                 + "ORDER BY occurred_at DESC",
             new { subject = subject.Value });
 
@@ -526,7 +527,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
         await using NpgsqlConnection connection = await database.OpenAsync();
         string leaf = await connection.QuerySingleAsync<string>(
             "SELECT tableoid::regclass::text FROM identity.audit_records "
-                + "WHERE effective_subject = @subject",
+                + "WHERE subject = @subject",
             new { subject = subject.Value });
 
         Assert.StartsWith("identity.audit_records_routine_", leaf, StringComparison.Ordinal);
@@ -683,7 +684,63 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
         Assert.Equal("expiry-sweep", read.Principal);
         Assert.Equal("OPS-OBS-003", read.Reason);
         Assert.Equal(default, read.ActingSubject);
-        Assert.Equal(subject, read.EffectiveSubject);
+        Assert.Equal(default, read.EffectiveSubject);
+        Assert.Equal(subject, read.Subject);
+    }
+
+    /// <summary>
+    /// IDN-PRIN-001 AC4, PRIV-BREACH-002: the trail read by subject names the principal of
+    /// the background work that acted on the account and the reason it stated.
+    /// </summary>
+    [Fact]
+    public async Task IDN_PRIN_001_AC4_TheTrailNamesTheBackgroundPrincipalAndItsReasonAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Now());
+        var principal = SystemPrincipal.ForDeployment("account-deletion", "IDN-LIFE-014", SystemOperation.ExpirySweep);
+
+        await AppendAsync(AuditRecord.Of(
+            NewId(),
+            AuditCategory.Security,
+            AuditActions.ErasureExecuted,
+            Now(),
+            principal,
+            subject,
+            organization: null));
+
+        AuditEntry entry = Assert.Single(await TrailAsync(subject));
+
+        Assert.Equal(AuditActions.ErasureExecuted, entry.Action);
+        Assert.Equal(("account-deletion", "IDN-LIFE-014"), (entry.Principal, entry.PrincipalReason));
+        Assert.Equal((default(SubjectId), default(SubjectId)), (entry.Acting, entry.Effective));
+    }
+
+    /// <summary>
+    /// AUTHZ-IMP-001 AC4, OPS-BOOT-002: an action a break-glass session takes on another
+    /// account records the emergency account as acting and effective identity and the
+    /// other account as the record's subject, and both trails read it.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC4_ABreakGlassActionOnAnotherAccountNamesItAsTheSubjectAsync()
+    {
+        SubjectId emergency = await _deployment.AccountAsync(Now());
+        SubjectId other = await _deployment.AccountAsync(Now());
+        AuditRecordId id = NewId();
+
+        await AppendAsync(AuditRecord.Of(
+            id,
+            AuditCategory.Security,
+            Suspended,
+            Now(),
+            emergency,
+            other,
+            "The operator cannot be reached.",
+            organization: null));
+
+        AuditRecord read = await OneAsync(other);
+
+        Assert.Equal((emergency, emergency, other), (read.ActingSubject, read.EffectiveSubject, read.Subject));
+        Assert.Equal(id, Assert.Single(await TrailAsync(emergency)).Id);
+        Assert.Equal(id, Assert.Single(await TrailAsync(other)).Id);
     }
 
     /// <summary>
@@ -780,7 +837,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
         Guid[] subjects) =>
         [.. await connection.QueryAsync<(string, long)>(
             "SELECT category, count(*) FROM identity.audit_records "
-                + "WHERE effective_subject = ANY(@subjects) GROUP BY category ORDER BY category",
+                + "WHERE subject = ANY(@subjects) GROUP BY category ORDER BY category",
             new { subjects })];
 
     // One row written straight to the table, naming neither identity: what the
@@ -800,7 +857,7 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
 
     // One row written straight to the table under a principal: what the constraint
     // admits is read from the database and not from the store.
-    private async Task<int> WritePrincipalAsync(Guid acting, Guid effective, string principal, string? reason)
+    private async Task<int> WritePrincipalAsync(Guid acting, Guid subject, string principal, string? reason)
     {
         await using NpgsqlConnection connection = await database.OpenAsync();
 
@@ -808,11 +865,11 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
             """
             INSERT INTO identity.audit_records
                 (id, category, occurred_at, action, acting_subject, effective_subject,
-                 details, principal, principal_reason)
-            VALUES (@id, 'security', @at, 'privacy.erasure.executed', @acting, @effective,
-                    '{}'::jsonb, @principal, @reason);
+                 subject, details, principal, principal_reason)
+            VALUES (@id, 'security', @at, 'privacy.erasure.executed', @acting, @acting,
+                    @subject, '{}'::jsonb, @principal, @reason);
             """,
-            new { id = Guid.CreateVersion7(), at = Now(), acting, effective, principal, reason });
+            new { id = Guid.CreateVersion7(), at = Now(), acting, subject, principal, reason });
     }
 
     // One row written straight to the table with a break-glass reason: what the

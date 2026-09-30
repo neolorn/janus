@@ -184,6 +184,7 @@ public sealed class SchemaContractTests(DatabaseFixture database) : IClassFixtur
 
         Assert.Contains(("audit_records", "acting_subject"), columns);
         Assert.Contains(("audit_records", "effective_subject"), columns);
+        Assert.Contains(("audit_records", "subject"), columns);
         Assert.Contains(("grants", "subject_id"), columns);
         Assert.Contains(("group_members", "member_id"), columns);
         Assert.Contains(("group_closure", "member_id"), columns);

@@ -78,7 +78,7 @@ internal sealed class ConfigurationAudit(
                     Changed,
                     at,
                     principal,
-                    effectiveSubject: null,
+                    subject: null,
                     organization: null,
                     Details(key, before, after, loosening, reason)),
                 cancellationToken)

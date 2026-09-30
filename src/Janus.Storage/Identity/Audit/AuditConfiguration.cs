@@ -62,6 +62,12 @@ internal sealed class AuditConfiguration : IEntityTypeConfiguration<AuditRowReco
             .HasColumnName("effective_subject")
             .HasConversion(subject => subject.Value, value => new SubjectId(value));
 
+        builder.Property(record => record.Subject)
+            .HasColumnName("subject")
+            .HasConversion(
+                subject => subject!.Value.Value,
+                value => new SubjectId(value));
+
         builder.Property(record => record.Organization)
             .HasColumnName("organization")
             .HasConversion(
@@ -82,9 +88,10 @@ internal sealed class AuditConfiguration : IEntityTypeConfiguration<AuditRowReco
         // identities of a person's action; background work carries none.
         builder.Property(record => record.BreakGlassReason).HasColumnName("breakglass_reason");
 
-        // PRIV-BREACH-002: every record of one subject, without a full scan.
-        builder.HasIndex(record => new { record.EffectiveSubject, record.OccurredAt })
-            .HasDatabaseName("ix_audit_records_effective_subject");
+        // PRIV-BREACH-002 (D-166, 303): every record concerning one subject, without a
+        // full scan.
+        builder.HasIndex(record => new { record.Subject, record.OccurredAt })
+            .HasDatabaseName("ix_audit_records_subject");
 
         // OPS-CFG-005 AC2, PRIV-BREACH-002: every record by one actor, and with the index
         // above every record naming a subject either way, without a full scan (entry

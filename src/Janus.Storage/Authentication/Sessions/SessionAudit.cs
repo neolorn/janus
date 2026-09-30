@@ -66,9 +66,9 @@ internal sealed class SessionAudit(IAuditStore records, TimeProvider time) : ISe
 
     /// <inheritdoc/>
     /// <remarks>
-    /// No actor was established, so the acting subject is the nil subject; the
-    /// effective subject is the account the attempt was made against, or the nil
-    /// subject where there was none, which is the recorded fact.
+    /// No actor was established, so the acting and effective identities are the nil
+    /// subject; the record's subject is the account the attempt was made against, or
+    /// nothing where there was none, which is the recorded fact (IDN-AUD-001, D-166).
     /// </remarks>
     public ValueTask FailedAsync(
         SubjectId? subject,
@@ -82,7 +82,7 @@ internal sealed class SessionAudit(IAuditStore records, TimeProvider time) : ISe
                 Failed,
                 at,
                 actingSubject: default,
-                subject ?? default,
+                subject,
                 breakGlassReason: null,
                 organization: null,
                 new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)

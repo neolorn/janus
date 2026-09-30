@@ -159,8 +159,8 @@ public sealed class AccountDirectoryTests(DatabaseFixture database)
                 .FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
 
         Assert.Equal(
-            (AuditCategory.Security, AuditActions.DeletionCancelled, administrator, subject),
-            (read.Category, read.Action, read.ActingSubject, read.EffectiveSubject));
+            (AuditCategory.Security, AuditActions.DeletionCancelled, administrator, administrator, subject),
+            (read.Category, read.Action, read.ActingSubject, read.EffectiveSubject, read.Subject));
         Assert.Equal(request.ToString(), read.Details["request"].GetString());
     }
 

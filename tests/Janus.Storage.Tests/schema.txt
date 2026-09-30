@@ -64,16 +64,18 @@ table audit_records partitioned by LIST (category)
   column principal text
   column principal_reason text
   column breakglass_reason text
+  column subject uuid
   constraint ck_audit_records_acting_subject_not_max_uuid CHECK ((acting_subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_audit_records_breakglass_reason CHECK (((breakglass_reason IS NULL) OR ((principal IS NULL) AND ((length(btrim(breakglass_reason)) >= 1) AND (length(btrim(breakglass_reason)) <= 1024)))))
   constraint ck_audit_records_effective_subject_not_max_uuid CHECK ((effective_subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_audit_records_identities CHECK (((action = 'authz.access.denied'::text) OR ((acting_subject IS NOT NULL) AND (effective_subject IS NOT NULL))))
   constraint ck_audit_records_principal CHECK ((((principal IS NULL) AND (principal_reason IS NULL)) OR ((principal IS NOT NULL) AND (principal_reason IS NOT NULL) AND (acting_subject = '00000000-0000-0000-0000-000000000000'::uuid))))
+  constraint ck_audit_records_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint pk_audit_records PRIMARY KEY (category, occurred_at, id)
   index ix_audit_records_acting_subject using btree (acting_subject, occurred_at)
   index ix_audit_records_configuration_key using gin (details jsonb_path_ops) WHERE (action = 'ops.configuration.changed'::text)
-  index ix_audit_records_effective_subject using btree (effective_subject, occurred_at)
   index ix_audit_records_id using btree (id)
+  index ix_audit_records_subject using btree (subject, occurred_at)
 table audit_records_routine partition of audit_records FOR VALUES IN ('routine') partitioned by RANGE (occurred_at)
   column id uuid not null
   column category text not null
@@ -87,16 +89,18 @@ table audit_records_routine partition of audit_records FOR VALUES IN ('routine')
   column principal text
   column principal_reason text
   column breakglass_reason text
+  column subject uuid
   constraint audit_records_routine_pkey PRIMARY KEY (category, occurred_at, id)
   constraint ck_audit_records_acting_subject_not_max_uuid CHECK ((acting_subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_audit_records_breakglass_reason CHECK (((breakglass_reason IS NULL) OR ((principal IS NULL) AND ((length(btrim(breakglass_reason)) >= 1) AND (length(btrim(breakglass_reason)) <= 1024)))))
   constraint ck_audit_records_effective_subject_not_max_uuid CHECK ((effective_subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_audit_records_identities CHECK (((action = 'authz.access.denied'::text) OR ((acting_subject IS NOT NULL) AND (effective_subject IS NOT NULL))))
   constraint ck_audit_records_principal CHECK ((((principal IS NULL) AND (principal_reason IS NULL)) OR ((principal IS NOT NULL) AND (principal_reason IS NOT NULL) AND (acting_subject = '00000000-0000-0000-0000-000000000000'::uuid))))
+  constraint ck_audit_records_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   index audit_records_routine_acting_subject_occurred_at_idx using btree (acting_subject, occurred_at)
   index audit_records_routine_details_idx using gin (details jsonb_path_ops) WHERE (action = 'ops.configuration.changed'::text)
-  index audit_records_routine_effective_subject_occurred_at_idx using btree (effective_subject, occurred_at)
   index audit_records_routine_id_idx using btree (id)
+  index audit_records_routine_subject_occurred_at_idx using btree (subject, occurred_at)
 table audit_records_security partition of audit_records FOR VALUES IN ('security') partitioned by RANGE (occurred_at)
   column id uuid not null
   column category text not null
@@ -110,16 +114,18 @@ table audit_records_security partition of audit_records FOR VALUES IN ('security
   column principal text
   column principal_reason text
   column breakglass_reason text
+  column subject uuid
   constraint audit_records_security_pkey PRIMARY KEY (category, occurred_at, id)
   constraint ck_audit_records_acting_subject_not_max_uuid CHECK ((acting_subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_audit_records_breakglass_reason CHECK (((breakglass_reason IS NULL) OR ((principal IS NULL) AND ((length(btrim(breakglass_reason)) >= 1) AND (length(btrim(breakglass_reason)) <= 1024)))))
   constraint ck_audit_records_effective_subject_not_max_uuid CHECK ((effective_subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_audit_records_identities CHECK (((action = 'authz.access.denied'::text) OR ((acting_subject IS NOT NULL) AND (effective_subject IS NOT NULL))))
   constraint ck_audit_records_principal CHECK ((((principal IS NULL) AND (principal_reason IS NULL)) OR ((principal IS NOT NULL) AND (principal_reason IS NOT NULL) AND (acting_subject = '00000000-0000-0000-0000-000000000000'::uuid))))
+  constraint ck_audit_records_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   index audit_records_security_acting_subject_occurred_at_idx using btree (acting_subject, occurred_at)
   index audit_records_security_details_idx using gin (details jsonb_path_ops) WHERE (action = 'ops.configuration.changed'::text)
-  index audit_records_security_effective_subject_occurred_at_idx using btree (effective_subject, occurred_at)
   index audit_records_security_id_idx using btree (id)
+  index audit_records_security_subject_occurred_at_idx using btree (subject, occurred_at)
 table authenticators
   column id uuid not null
   column subject uuid not null

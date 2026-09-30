@@ -87,7 +87,7 @@ public sealed class ErasureReplayTests(DatabaseFixture database) : IClassFixture
             await connection.QueryAsync<(string, string)>(
                 """
                 SELECT principal, principal_reason FROM identity.audit_records
-                WHERE action = 'privacy.erasure.executed' AND effective_subject = ANY(@subjects)
+                WHERE action = 'privacy.erasure.executed' AND subject = ANY(@subjects)
                 """,
                 new { subjects = new[] { requested, takenDown } }));
         Assert.Equal(
@@ -119,7 +119,7 @@ public sealed class ErasureReplayTests(DatabaseFixture database) : IClassFixture
             await connection.ExecuteScalarAsync<string>(
                 """
                 SELECT details->>'reason' FROM identity.audit_records
-                WHERE action = 'privacy.erasure.executed' AND effective_subject = @takenDown
+                WHERE action = 'privacy.erasure.executed' AND subject = @takenDown
                 """,
                 new { takenDown }));
     }

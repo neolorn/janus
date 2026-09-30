@@ -30,8 +30,9 @@ public sealed class AuditRecordTests
         new(Guid.Parse("22222222-2222-4222-8222-222222222222"));
 
     /// <summary>
-    /// IDN-AUD-001 AC1: the record names who acted and whose identity the action was
-    /// taken under, which are two fields and not one.
+    /// IDN-AUD-001 AC1, AUTHZ-IMP-001 AC2: the record names who acted and whose identity
+    /// the action was taken under, two fields and not one, and the effective identity is
+    /// the acting one on every record written.
     /// </summary>
     [Fact]
     public void IDN_AUD_001_AC1_TheRecordNamesBothIdentities()
@@ -47,7 +48,39 @@ public sealed class AuditRecordTests
             organization: null);
 
         Assert.Equal(Mona, record.ActingSubject);
-        Assert.Equal(Ahmed, record.EffectiveSubject);
+        Assert.Equal(Mona, record.EffectiveSubject);
+    }
+
+    /// <summary>
+    /// IDN-AUD-001 AC4, AUTHZ-IMP-001 AC4 (D-166, 303): an administrator's suspension of
+    /// another account names the administrator as acting and effective identity and the
+    /// account as the record's subject, never as its effective identity; background work
+    /// names the nil subject for both identities and the account as the subject.
+    /// </summary>
+    [Fact]
+    public void IDN_AUD_001_AC4_TheAccountActedOnIsTheSubjectAndNeverTheEffectiveIdentity()
+    {
+        var suspended = AuditRecord.Of(
+            Id,
+            AuditCategory.Security,
+            AuditAction.Parse("identity.account.suspended"),
+            Noon,
+            Mona,
+            Ahmed,
+            breakGlassReason: null,
+            organization: null);
+        var erased = AuditRecord.Of(
+            Id,
+            AuditCategory.Security,
+            AuditAction.Parse("privacy.erasure.executed"),
+            Noon,
+            SystemPrincipal.ForDeployment("account-deletion", "IDN-LIFE-014", [SystemOperation.ExpirySweep]),
+            Ahmed,
+            organization: null);
+
+        Assert.Equal((Mona, Mona, Ahmed), (suspended.ActingSubject, suspended.EffectiveSubject, suspended.Subject));
+        Assert.Equal((default(SubjectId), default(SubjectId), Ahmed), (erased.ActingSubject, erased.EffectiveSubject, erased.Subject));
+        Assert.Equal(("account-deletion", "IDN-LIFE-014"), (erased.Principal, erased.Reason));
     }
 
     /// <summary>

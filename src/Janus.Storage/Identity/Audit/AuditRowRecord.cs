@@ -46,6 +46,12 @@ internal sealed class AuditRowRecord
     public SubjectId EffectiveSubject { get; set; }
 
     /// <summary>
+    /// The <c>subject</c> column: the data subject the record concerns, absent where it
+    /// concerns none or was written before the column existed.
+    /// </summary>
+    public SubjectId? Subject { get; set; }
+
+    /// <summary>
     /// The <c>organization</c> column, absent where the event belongs to no
     /// organization.
     /// </summary>

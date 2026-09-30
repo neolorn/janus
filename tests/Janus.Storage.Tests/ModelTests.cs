@@ -124,7 +124,8 @@ public sealed class ModelTests
 
             // Standing: the event record of IDN-AUD-001, with the attribute column
             // PRIV-RET-002 puts an event's personal field in and the principal and
-            // reason IDN-PRIN-001 records an action of background work under.
+            // reason IDN-PRIN-001 records an action of background work under, and the
+            // data subject a record concerns (IDN-AUD-001, D-166).
             "audit_records.acting_subject",
             "audit_records.action",
             "audit_records.breakglass_reason",
@@ -137,6 +138,7 @@ public sealed class ModelTests
             "audit_records.organization",
             "audit_records.principal",
             "audit_records.principal_reason",
+            "audit_records.subject",
 
             // Credentials: the enrolled authenticator of AUTH-FACT-001, the shared secret
             // of AUTH-FACT-006 under the key, the WebAuthn columns AUTH-FACT-011 and

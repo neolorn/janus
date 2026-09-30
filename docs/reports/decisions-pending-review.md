@@ -11686,6 +11686,8 @@ as its actor and no reason.
 *Chapter text that should change.* IDN-AUD-001 could name the two columns beside the
 acting and effective subjects.
 
+**Superseded by D-166.**
+
 ---
 
 ## 304. Which pool-wide operations the scheduled jobs run as

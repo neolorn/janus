@@ -69,7 +69,7 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
                     action,
                     at,
                     principal,
-                    effectiveSubject: null,
+                    subject: null,
                     organization),
                 cancellationToken)
             .ConfigureAwait(false);

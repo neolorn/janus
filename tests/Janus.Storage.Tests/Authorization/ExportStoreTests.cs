@@ -165,6 +165,6 @@ public sealed class ExportStoreTests(DatabaseFixture database)
         await using StoreContext reading = database.Context();
 
         return await new AuditStore(reading, new DataConnections(reading), _deployment.Ring, _deployment.Randomness)
-            .FindBySubjectAsync(actor, TestContext.Current.CancellationToken);
+            .FindNamingAsync(actor, TestContext.Current.CancellationToken);
     }
 }
