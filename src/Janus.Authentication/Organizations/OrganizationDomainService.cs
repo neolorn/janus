@@ -69,7 +69,7 @@ internal sealed class OrganizationDomainService(
 
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false) is null)
         {
-            return Result.Failure<IReadOnlyList<OrganizationDomain>>(Malformed("id"));
+            return Result.Failure<IReadOnlyList<OrganizationDomain>>(Error.From(ErrorCodes.OrganizationNotFound));
         }
 
         IReadOnlyList<LockedDomain> held = await domains.OfAsync(organization, cancellationToken)
@@ -416,7 +416,7 @@ internal sealed class OrganizationDomainService(
 
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false) is null)
         {
-            return Change.Refused(acting, Malformed("id"));
+            return Change.Refused(acting, Error.From(ErrorCodes.OrganizationNotFound));
         }
 
         if (holding)

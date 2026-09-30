@@ -1703,6 +1703,10 @@ against the public contract of LIB-API-001.
   other, under a lock on the account's row, so they never leave more memberships than
   the setting allows; the database also refuses a second current membership of one
   organization for an account (`ux_memberships_current`).
+- A route under `/admin/organizations/{id}` whose `{id}` names no organization the
+  deployment holds answers `404` `identity.organization.notfound` and writes nothing,
+  whichever organization its permission is asked in; issuing an invitation into an
+  organization whose deletion was requested answers `authz.denied`.
 - An audit trail. Every record names who acted, whose identity the action was taken
   under, the instant it occurred and the organization where one applies; an event about
   a principal holding no membership carries none, and the absence is the recorded fact.

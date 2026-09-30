@@ -329,9 +329,9 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
 
     /// <summary>
     /// Chapter 10 section 4.1a and API-CONV-002: a replacement names only the fields of
-    /// the policy object, never the domain lock, with values the object takes, a reason
-    /// and an organization the deployment holds; anything else is refused, naming the
-    /// member where it is the request that is malformed.
+    /// the policy object, never the domain lock, with values the object takes and a
+    /// reason; anything else is refused, naming the member where it is the request that
+    /// is malformed.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -352,8 +352,6 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
             "PUT",
             PathOf(Branch),
             """{"requiredAssurance":"aal2","reason":7}""");
-        Answer unheld = await administrator.SendAsync("PUT", PathOf(new OrganizationId(Guid.NewGuid())), Tightened);
-        Answer unknown = await administrator.SendAsync("GET", PathOf(new OrganizationId(Guid.NewGuid())));
         Answer listed = await administrator.SendAsync("PUT", PathOf(Branch), "[]");
         Answer unreadable = await administrator.SendAsync(
             "PUT",
@@ -364,12 +362,32 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
         Assert.Equal("emailDomains", Member(locked));
         Assert.Equal("reason", Member(unreasoned));
         Assert.Equal("reason", Member(numbered));
-        Assert.Equal("id", Member(unheld));
-        Assert.Equal("id", Member(unknown));
         Assert.Equal(StatusCodes.Status400BadRequest, listed.Status);
         Assert.Equal(ErrorCodes.RequestMalformed.ToString(), listed.Text("code"));
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, unreadable.Status);
         Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed.ToString(), unreadable.Text("code"));
+        Assert.Empty(_deployment.Changes.Written);
+    }
+
+    /// <summary>
+    /// IDN-ORG-003 and 09 section 8a: reading or replacing the policy of an organization
+    /// the deployment does not hold is <c>404</c> <c>identity.organization.notfound</c>,
+    /// and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_ThePolicyOfAnOrganizationTheDeploymentDoesNotHoldIsNotFoundAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+        var unheld = new OrganizationId(Guid.NewGuid());
+
+        Answer read = await administrator.SendAsync("GET", PathOf(unheld));
+        Answer replaced = await administrator.SendAsync("PUT", PathOf(unheld), Tightened);
+
+        Assert.Equal(StatusCodes.Status404NotFound, read.Status);
+        Assert.Equal(ErrorCodes.OrganizationNotFound.ToString(), read.Text("code"));
+        Assert.Equal(StatusCodes.Status404NotFound, replaced.Status);
+        Assert.Equal(ErrorCodes.OrganizationNotFound.ToString(), replaced.Text("code"));
         Assert.Empty(_deployment.Changes.Written);
     }
 

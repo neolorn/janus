@@ -213,6 +213,15 @@ public static class ErrorCodes
     public static ErrorCode OrganizationProtected { get; } = ErrorCode.Parse("identity.organization.protected");
 
     /// <summary>
+    /// The path names no organization the deployment holds. Name an organization the
+    /// deployment holds.
+    /// </summary>
+    /// <remarks>
+    /// Implements IDN-ORG-003, IDN-MEM-001 and API-CONV-003, chapter 10 section 1.1.
+    /// </remarks>
+    public static ErrorCode OrganizationNotFound { get; } = ErrorCode.Parse("identity.organization.notfound");
+
+    /// <summary>
     /// The username fails the PRECIS UsernameCaseMapped profile, its length bounds, or
     /// holds no letter. Choose one the profile admits that is not all digits.
     /// </summary>

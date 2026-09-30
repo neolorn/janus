@@ -80,6 +80,14 @@ internal sealed class MembershipEnd(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
+        // IDN-MEM-001, 09 section 8: a path naming no organization is answered for the
+        // organization, whichever organization the permission is asked in.
+        if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
+            is not OrganizationStanding standing)
+        {
+            return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
+        }
+
         if ((await gate
                     .RequireAsync(context, Permissions.MembershipManage, organization, cancellationToken)
                     .ConfigureAwait(false))
@@ -115,8 +123,7 @@ internal sealed class MembershipEnd(
 
         // The mailboxes are the administrative organization's, so only the end of that
         // membership takes one back; another the account ends leaves it in place.
-        if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
-                is { IsAdministrative: true }
+        if (standing.IsAdministrative
             && await mailboxes.HeldByAsync(member, cancellationToken).ConfigureAwait(false) is Mailbox mailbox)
         {
             announced.Add(await RetiredAsync(member, mailbox, now, source, cancellationToken)

@@ -26,11 +26,13 @@ public interface IInvitations
     /// <param name="source">The address the request came from, which the send counts against.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The invitation, or the refusal: <c>identity.identifier.invalid</c> naming the
-    /// member where an identifier is malformed or one the organization's mail requires
-    /// is absent, <c>identity.identifier.mixedscript</c> naming the member where a word
-    /// mixes scripts, <c>identity.identifier.domainnotallowed</c> where the
-    /// organization's lock does not admit the address the member will sign in with,
+    /// The invitation, or the refusal: <c>identity.organization.notfound</c> where the
+    /// deployment holds no such organization, <c>authz.denied</c> where its deletion was
+    /// requested, <c>identity.identifier.invalid</c> naming the member where an
+    /// identifier is malformed or one the organization's mail requires is absent,
+    /// <c>identity.identifier.mixedscript</c> naming the member where a word mixes
+    /// scripts, <c>identity.identifier.domainnotallowed</c> where the organization's lock
+    /// does not admit the address the member will sign in with,
     /// <c>api.request.malformed</c> naming the member that cannot be taken.
     /// </returns>
     ValueTask<Result<IssuedInvitation>> IssueAsync(
@@ -51,9 +53,10 @@ public interface IInvitations
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Success, which a revoked invitation answers again, or the refusal:
-    /// <c>api.request.malformed</c> naming <c>invitationId</c> where the organization
-    /// issued no such invitation, <c>identity.invitation.expired</c> where it has been
-    /// acknowledged and is used.
+    /// <c>identity.organization.notfound</c> where the deployment holds no such
+    /// organization, <c>api.request.malformed</c> naming <c>invitationId</c> where the
+    /// organization issued no such invitation, <c>identity.invitation.expired</c> where
+    /// it has been acknowledged and is used.
     /// </returns>
     ValueTask<Result> RevokeAsync(
         AccessContext context,
@@ -114,8 +117,9 @@ public interface IInvitations
     /// <param name="source">The address the request came from, which a notice counts against.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Success, or the refusal: <c>api.request.malformed</c> naming <c>subject</c> where
-    /// the account holds no current membership of the organization.
+    /// Success, or the refusal: <c>identity.organization.notfound</c> where the
+    /// deployment holds no such organization, <c>api.request.malformed</c> naming
+    /// <c>subject</c> where the account holds no current membership of the organization.
     /// </returns>
     ValueTask<Result> EndMembershipAsync(
         AccessContext context,

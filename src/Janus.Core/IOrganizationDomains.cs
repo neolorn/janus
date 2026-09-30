@@ -27,7 +27,7 @@ public interface IOrganizationDomains
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The domains in the order they were listed, or the refusal:
-    /// <c>api.request.malformed</c> naming <c>id</c> where the deployment holds no such
+    /// <c>identity.organization.notfound</c> where the deployment holds no such
     /// organization.
     /// </returns>
     ValueTask<Result<IReadOnlyList<OrganizationDomain>>> DomainsAsync(
@@ -47,8 +47,10 @@ public interface IOrganizationDomains
     /// <param name="reason">Why.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The domain and the record to publish, or the refusal: <c>api.request.malformed</c>
-    /// naming <c>id</c>, <c>domain</c> or <c>reason</c>.
+    /// The domain and the record to publish, or the refusal:
+    /// <c>identity.organization.notfound</c> where the deployment holds no such
+    /// organization, <c>api.request.malformed</c> naming <c>domain</c> or
+    /// <c>reason</c>.
     /// </returns>
     ValueTask<Result<OrganizationDomain>> AddDomainAsync(
         AccessContext context,
@@ -72,7 +74,9 @@ public interface IOrganizationDomains
     /// <returns>
     /// The domain as it now stands, or the refusal: <c>identity.domain.unverified</c>
     /// where no record carries the token or none could be read,
-    /// <c>api.request.malformed</c> naming <c>id</c>, <c>domain</c> or <c>reason</c>.
+    /// <c>identity.organization.notfound</c> where the deployment holds no such
+    /// organization, <c>api.request.malformed</c> naming <c>domain</c> or
+    /// <c>reason</c>.
     /// </returns>
     ValueTask<Result<OrganizationDomain>> VerifyDomainAsync(
         AccessContext context,
@@ -94,7 +98,8 @@ public interface IOrganizationDomains
     /// <param name="reason">Why.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Success, or the refusal: <c>api.request.malformed</c> naming <c>id</c>,
+    /// Success, or the refusal: <c>identity.organization.notfound</c> where the
+    /// deployment holds no such organization, <c>api.request.malformed</c> naming
     /// <c>domain</c> or <c>reason</c>.
     /// </returns>
     ValueTask<Result> RemoveDomainAsync(

@@ -475,9 +475,9 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-009a: issuing is <c>membership:manage</c> in the organization and the
-    /// <c>invitation:issue</c> step-up action, and an organization on its way out
-    /// takes no invitation.
+    /// IDN-LIFE-009a and IDN-ORG-003 AC12: issuing is <c>membership:manage</c> in the
+    /// organization and the <c>invitation:issue</c> step-up action, and an organization
+    /// on its way out takes no invitation, refused as the gate refuses.
     /// </summary>
     [Fact]
     public async Task IDN_LIFE_009a_IssuingIsGatedAndSteppedUpAsync()
@@ -490,9 +490,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         _gate.Grant(_inviter, closing, Permissions.MembershipManage);
 
         Assert.Equal(ErrorCodes.Denied, Failure(await IssueAsync(elsewhere, Request(email: Personal))).Code);
-        Assert.Equal(
-            (ErrorCodes.RequestMalformed, "id"),
-            Coded(Failure(await IssueAsync(closing, Request(email: Personal)))));
+        Assert.Equal(ErrorCodes.Denied, Failure(await IssueAsync(closing, Request(email: Personal))).Code);
         Assert.Equal(
             ErrorCodes.StepUpRequired,
             Failure(await Service.IssueAsync(
@@ -504,6 +502,31 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)).Code);
         Assert.Empty(_invitations.Held);
         Assert.Empty(_notifications.Sent);
+    }
+
+    /// <summary>
+    /// REG-INV-001, IDN-MEM-001 and 09 section 8: issuing, revoking and ending a
+    /// membership under an organization the deployment does not hold is refused with
+    /// <c>identity.organization.notfound</c> before the permission is asked, which no
+    /// grant could meet there, and nothing is written.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_001_AnOrganizationTheDeploymentDoesNotHoldIsNotFoundAsync()
+    {
+        var unheld = new OrganizationId(Guid.NewGuid());
+        SubjectId holder = Holder();
+
+        IssuedInvitation issued = Accepted(await IssueAsync(Customer, Request(email: Personal)));
+
+        Assert.Equal(
+            ErrorCodes.OrganizationNotFound,
+            Failure(await IssueAsync(unheld, Request(email: Personal))).Code);
+        Assert.Equal(ErrorCodes.OrganizationNotFound, Failure(await RevokeAsync(unheld, issued.Id)).Code);
+        Assert.Equal(ErrorCodes.OrganizationNotFound, Failure(await EndAsync(unheld, holder)).Code);
+        Assert.True(Assert.Single(_invitations.Held).Stands);
+        Assert.Empty(_ending.Ended);
+        Assert.Single(_audit.Changes);
+        Assert.Equal(1, _work.Committed);
     }
 
     /// <summary>
@@ -608,7 +631,9 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Equal(
             ErrorCodes.InvitationExpired,
             Failure(await RevokeAsync(Customer, _invitations.Held[1].Id)).Code);
-        Assert.Equal(ErrorCodes.Denied, Failure(await RevokeAsync(new OrganizationId(Guid.NewGuid()), issued.Id)).Code);
+        Assert.Equal(
+            ErrorCodes.OrganizationNotFound,
+            Failure(await RevokeAsync(new OrganizationId(Guid.NewGuid()), issued.Id)).Code);
         Assert.True(_invitations.Held[0].Stands);
     }
 

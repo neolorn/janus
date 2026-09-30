@@ -91,6 +91,14 @@ internal sealed class InvitationService(
             return Result.Failure<IssuedInvitation>(Error.From(ErrorCodes.Denied));
         }
 
+        // 09 section 8: a path naming no organization is answered for the organization,
+        // whichever organization the permission is asked in.
+        if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
+            is not OrganizationStanding standing)
+        {
+            return Result.Failure<IssuedInvitation>(Error.From(ErrorCodes.OrganizationNotFound));
+        }
+
         if (await RefusedAsync(context, Permissions.MembershipManage, organization, cancellationToken)
                 .ConfigureAwait(false)
             is Error refused)
@@ -98,11 +106,11 @@ internal sealed class InvitationService(
             return Result.Failure<IssuedInvitation>(refused);
         }
 
-        // An organization on its way out takes no new members.
-        if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
-            is not { DeletionRequestedAt: null } standing)
+        // IDN-ORG-003 AC12: an organization on its way out takes no new members, since
+        // its grants confer nothing, so the issue is refused as the gate refuses.
+        if (standing.DeletionRequestedAt is not null)
         {
-            return Result.Failure<IssuedInvitation>(Malformed("id"));
+            return Result.Failure<IssuedInvitation>(Error.From(ErrorCodes.Denied));
         }
 
         bool integrated = standing.IsAdministrative && inUse.Chosen().Match(_ => true, _ => false);
@@ -241,6 +249,13 @@ internal sealed class InvitationService(
         if (context.Acting is not SubjectId acting)
         {
             return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        // 09 section 8: a path naming no organization is answered for the organization,
+        // whichever organization the permission is asked in.
+        if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false) is null)
+        {
+            return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
         }
 
         if (await RefusedAsync(context, Permissions.MembershipManage, organization, cancellationToken)

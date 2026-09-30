@@ -452,9 +452,8 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
     /// <summary>
     /// API-CONV-002 and IDN-ORG-006: a domain is read in its canonical ASCII form, so
     /// the Unicode and the ASCII forms of one domain are one; what is not a domain of
-    /// two labels, a missing reason, an unlisted domain and an organization the
-    /// deployment does not hold are refused naming the member; listing a domain twice
-    /// changes nothing.
+    /// two labels, a missing reason and an unlisted domain are refused naming the
+    /// member; listing a domain twice changes nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -474,7 +473,6 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
         Answer spaced = await administrator.SendAsync("POST", PathOf(Branch), """{"domain":"not a domain.test","reason":"Why not."}""");
         Answer unreasoned = await administrator.SendAsync("POST", PathOf(Branch), """{"domain":"example.test"}""");
         Answer unlisted = await administrator.SendAsync("POST", PathOf(Branch) + "/other.test/verify", Reasoned);
-        Answer unheld = await administrator.SendAsync("POST", PathOf(new OrganizationId(Guid.NewGuid())), Listed);
         Answer absent = await administrator.SendAsync("DELETE", PathOf(Branch) + "/other.test", Reasoned);
 
         Assert.Equal(StatusCodes.Status201Created, unicode.Status);
@@ -485,8 +483,34 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
         Assert.Equal("domain", Member(spaced));
         Assert.Equal("reason", Member(unreasoned));
         Assert.Equal("domain", Member(unlisted));
-        Assert.Equal("id", Member(unheld));
         Assert.Equal(StatusCodes.Status204NoContent, absent.Status);
+    }
+
+    /// <summary>
+    /// REG-DOM-001 and 09 section 8a: listing, adding, verifying and removing a domain
+    /// of an organization the deployment does not hold is <c>404</c>
+    /// <c>identity.organization.notfound</c>, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_DOM_001_AnOrganizationTheDeploymentDoesNotHoldIsNotFoundAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync();
+        string unheld = PathOf(new OrganizationId(Guid.NewGuid()));
+
+        Answer[] answers =
+        [
+            await administrator.SendAsync("GET", unheld),
+            await administrator.SendAsync("POST", unheld, Listed),
+            await administrator.SendAsync("POST", unheld + "/" + Domain + "/verify", Reasoned),
+            await administrator.SendAsync("DELETE", unheld + "/" + Domain, Reasoned),
+        ];
+
+        Assert.All(answers, answer => Assert.Equal(StatusCodes.Status404NotFound, answer.Status));
+        Assert.All(answers, answer => Assert.Equal(ErrorCodes.OrganizationNotFound.ToString(), answer.Text("code")));
+        Assert.Empty(_deployment.Domains.Held);
+        Assert.Empty(_deployment.OrganizationChanges.Changes);
+        Assert.Empty(_deployment.Changes.Written);
     }
 
     /// <summary>

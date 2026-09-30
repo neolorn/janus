@@ -166,7 +166,7 @@ internal sealed class OrganizationService(
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
             is not OrganizationStanding standing)
         {
-            return Result.Failure(Malformed("id"));
+            return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
         }
 
         // IDN-ORG-004: the refusal is the domain's, answered before anything else is
@@ -252,7 +252,7 @@ internal sealed class OrganizationService(
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
             is not OrganizationStanding standing)
         {
-            return Result.Failure(Malformed("id"));
+            return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
         }
 
         if (standing.DeletionRequestedAt is not DateTimeOffset requestedAt)
@@ -319,7 +319,7 @@ internal sealed class OrganizationService(
 
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false) is null)
         {
-            return Result.Failure<OrganizationPolicy>(Malformed("id"));
+            return Result.Failure<OrganizationPolicy>(Error.From(ErrorCodes.OrganizationNotFound));
         }
 
         Error? failure = null;
@@ -380,7 +380,7 @@ internal sealed class OrganizationService(
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
             is not OrganizationStanding standing)
         {
-            return Result.Failure(Malformed("id"));
+            return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
         }
 
         // OPS-CFG-002 AC6, X3: the direction, the system's floor and the lock the change

@@ -306,6 +306,38 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
         Assert.Equal(AuditActions.MembershipEnded, Assert.Single(_deployment.OrganizationChanges.Changes).Action);
     }
 
+    /// <summary>
+    /// REG-INV-001, IDN-MEM-001 and 09 section 8a: issuing, revoking and ending a
+    /// membership under an organization the deployment does not hold is <c>404</c>
+    /// <c>identity.organization.notfound</c>, whichever organization the permission is
+    /// asked in, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_INV_001_AnOrganizationTheDeploymentDoesNotHoldIsNotFoundAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+        var unheld = new OrganizationId(Guid.NewGuid());
+        var member = new SubjectId(Guid.NewGuid());
+
+        string id = (await administrator.SendAsync("POST", PathOf(Branch), Personal)).Text("id");
+
+        _deployment.Memberships.Place(member, Branch);
+
+        Answer[] answers =
+        [
+            await administrator.SendAsync("POST", PathOf(unheld), Personal),
+            await administrator.SendAsync("DELETE", PathOf(unheld) + "/" + id),
+            await administrator.SendAsync("DELETE", MembershipOf(unheld, member)),
+        ];
+
+        Assert.All(answers, answer => Assert.Equal(StatusCodes.Status404NotFound, answer.Status));
+        Assert.All(answers, answer => Assert.Equal(ErrorCodes.OrganizationNotFound.ToString(), answer.Text("code")));
+        Assert.False(Assert.Single(_deployment.Invitations.Held).IsRevoked);
+        Assert.Empty(_deployment.Endings.Ended);
+        Assert.Equal(AuditActions.InvitationIssued, Assert.Single(_deployment.OrganizationChanges.Changes).Action);
+    }
+
     private static EmailAddress Parsed(string value)
     {
         Assert.True(EmailAddress.TryParse(value, out EmailAddress address));
