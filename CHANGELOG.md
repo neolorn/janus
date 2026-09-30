@@ -193,7 +193,8 @@ against the public contract of LIB-API-001.
   `maintenance.expiry.warninglead`, a lapsed one included. The maintenance log is read
   and appended at `/admin/compliance/maintenance`, each entry carrying the person who
   recorded it; no route changes or removes an entry and the database role cannot. Both
-  answer to `compliance:manage`.
+  answer to `compliance:manage`. Two licences under one identifier and an entry dated
+  after now answer 422 `api.request.invalid` naming `licences` or `performedAt`.
 - A message no transport took is carried again. The `sends` job retries it under
   `outbox.retry.*` in the languages still owed, judged by the restrictions and held by
   the gateway floor as any send is, and counts it only once a transport takes it. Once
