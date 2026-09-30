@@ -14087,6 +14087,8 @@ channel filter (`sms` · `email` · `any`) beside the purpose, with the shipped 
 filtered by the channel their names give, or say that a restriction applies across
 channels and that the shipped names are names only.
 
+**Superseded by D-166.**
+
 ---
 
 ## 343. The client a social sign-in is carried by

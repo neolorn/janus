@@ -30,9 +30,9 @@ public sealed class RestrictionSetSetting : Setting<IReadOnlyList<Restriction>>
     /// <returns>Whether the change is a loosening.</returns>
     /// <remarks>
     /// Implements AUTH-ABUSE-004 and OPS-CFG-002. A deleted restriction, a widened key
-    /// or purpose, a higher maximum, a shorter interval and a dropped bucket all let
-    /// more through; a restriction that is new lets through nothing that was not
-    /// already getting through.
+    /// or purpose, a channel narrowed or moved, a higher maximum, a shorter interval and
+    /// a dropped bucket all let more through; a restriction that is new lets through
+    /// nothing that was not already getting through.
     /// </remarks>
     public static bool Loosens(Restriction? before, Restriction? after)
     {
@@ -48,7 +48,8 @@ public sealed class RestrictionSetSetting : Setting<IReadOnlyList<Restriction>>
 
         if (after.Key != before.Key
             || after.HostKeyName != before.HostKeyName
-            || (after.Purpose is not RestrictionPurpose.Any && after.Purpose != before.Purpose))
+            || (after.Purpose is not RestrictionPurpose.Any && after.Purpose != before.Purpose)
+            || (after.Channel is not RestrictionChannel.Any && after.Channel != before.Channel))
         {
             return true;
         }
@@ -109,6 +110,7 @@ public sealed class RestrictionSetSetting : Setting<IReadOnlyList<Restriction>>
                 ? HostPrefix + restriction.HostKeyName
                 : SettingText.Of(restriction.Key),
             SettingText.Of(restriction.Purpose),
+            SettingText.Of(restriction.Channel),
             [.. restriction.Buckets.Select(
                 bucket => new WrittenBucket(
                     bucket.Maximum,
@@ -127,7 +129,8 @@ public sealed class RestrictionSetSetting : Setting<IReadOnlyList<Restriction>>
                 || restriction.Purpose is null
                 || restriction.Buckets is null
                 || !KeyKind(restriction.Key, out RestrictionKeyKind kind, out string? hostKeyName)
-                || !SettingText.TryRead(restriction.Purpose, out RestrictionPurpose purpose))
+                || !SettingText.TryRead(restriction.Purpose, out RestrictionPurpose purpose)
+                || !Channeled(restriction.Channel, out RestrictionChannel channel))
             {
                 return Result.Failure<IReadOnlyList<Restriction>>(Malformed());
             }
@@ -148,10 +151,22 @@ public sealed class RestrictionSetSetting : Setting<IReadOnlyList<Restriction>>
                 buckets.Add(new Bucket(bucket.Max, interval, window));
             }
 
-            read.Add(new Restriction(name, kind, hostKeyName, purpose, buckets));
+            read.Add(new Restriction(name, kind, hostKeyName, purpose, buckets) { Channel = channel });
         }
 
         return Result.Success<IReadOnlyList<Restriction>>(read);
+    }
+
+    // A restriction stored before it could name a channel governs either (section 5.15a).
+    private static bool Channeled(string? written, out RestrictionChannel channel)
+    {
+        if (written is null)
+        {
+            channel = RestrictionChannel.Any;
+            return true;
+        }
+
+        return SettingText.TryRead(written, out channel);
     }
 
     private static bool KeyKind(string? written, out RestrictionKeyKind kind, out string? hostKeyName)
@@ -182,7 +197,12 @@ public sealed class RestrictionSetSetting : Setting<IReadOnlyList<Restriction>>
 
     // The shape chapter 09 gives the restriction endpoints, which is what the settings
     // table holds and what the management application reads back.
-    private sealed record Written(string? Name, string? Key, string? Purpose, WrittenBucket[]? Buckets);
+    private sealed record Written(
+        string? Name,
+        string? Key,
+        string? Purpose,
+        string? Channel,
+        WrittenBucket[]? Buckets);
 
     private sealed record WrittenBucket(int Max, string? Interval, string? Window);
 }

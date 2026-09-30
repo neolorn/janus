@@ -70,10 +70,6 @@ internal sealed class LossReports(
 
     private const string Completed = "credential-invalidated";
 
-    // The notices the window carries are asked for by no request, so they count
-    // against the deployment itself and not against a person's address.
-    private const string Origin = "recovery";
-
     /// <summary>
     /// Reports a credential lost.
     /// </summary>
@@ -415,8 +411,10 @@ internal sealed class LossReports(
     {
         // Every notice carries the same link: a fresh token would strand the one
         // already in somebody's inbox, which is the one they are most likely to open.
+        // The notices the window carries are asked for by no request, so they carry
+        // no source and no source restriction counts them (section 5.14).
         report.Notified(
-            await TellAsync(report, Origin, cancellationToken).ConfigureAwait(false),
+            await TellAsync(report, source: null, cancellationToken).ConfigureAwait(false),
             now);
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -513,7 +511,7 @@ internal sealed class LossReports(
     // that ends it (AUTH-RECOV-007).
     private async ValueTask<bool> TellAsync(
         LossReport report,
-        string source,
+        string? source,
         CancellationToken cancellationToken)
     {
         HeldIdentifiers held = await identifiers.HeldAsync(report.Subject, cancellationToken)

@@ -930,6 +930,23 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-004 and chapter 10 section 5.14: the new-device check code is asked for
+    /// by the request that presented the password, so it is sent under that request's
+    /// source and never under the address it goes to (D-166, 342).
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_TheCheckCodeIsSentUnderTheSourceThatAskedAsync()
+    {
+        await AccountAsync();
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = Reached(await PresentAsync(began.Challenge, Factor.Password, Secret));
+
+        Assert.Equal(Source, Assert.Single(_notifications.Mail).Source);
+    }
+
+    /// <summary>
     /// AUTH-FACT-016 AC2: the code sent to the primary address completes the held
     /// sign-in, and the session it begins records AAL1.
     /// </summary>

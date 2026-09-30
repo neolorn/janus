@@ -554,7 +554,9 @@ internal sealed class SendingService(
             case RestrictionKeyKind.Destination:
                 return Result.Success<string?>(request.Destination.Canonical);
             case RestrictionKeyKind.Source:
-                return Result.Success<string?>(request.Source);
+                // A send no request asked for carries no source, and no source
+                // restriction counts it (chapter 10 section 5.14).
+                return Result.Success(request.Source);
             case RestrictionKeyKind.Global:
                 return Result.Success<string?>(restriction.Name);
             case RestrictionKeyKind.Account:

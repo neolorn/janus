@@ -34,11 +34,6 @@ internal sealed class DeadlineSweep(
     IUnitOfWork work,
     TimeProvider time)
 {
-    /// <summary>
-    /// What the send ledger records a lapse message under.
-    /// </summary>
-    internal const string Source = "privacy.request.lapse";
-
     private static readonly AuditAction Lapsed = AuditActions.RequestLapsed;
 
     /// <summary>
@@ -152,11 +147,12 @@ internal sealed class DeadlineSweep(
         {
             // Erasure cannot run without a human confirming identity, so the system
             // never erases on its own: the record persists and the subject is told
-            // honestly that the deadline passed.
+            // honestly that the deadline passed. No request asked for the message, so
+            // it carries no source (AUTH-ABUSE-004, chapter 10 section 5.14).
             request.DeemRefusedByLapse(now);
 
             _ = await notices
-                .TellAsync(request.Subject, MessageKind.PrivacyRequestLapsed, Source, cancellationToken)
+                .TellAsync(request.Subject, MessageKind.PrivacyRequestLapsed, source: null, cancellationToken)
                 .ConfigureAwait(false);
         }
 

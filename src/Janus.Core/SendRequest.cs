@@ -7,7 +7,10 @@ namespace Janus.Core;
 /// <param name="Destination">Where it goes.</param>
 /// <param name="Message">What it is for.</param>
 /// <param name="Purpose">Which restrictions it answers to.</param>
-/// <param name="Source">The address the send was asked for from.</param>
+/// <param name="Source">
+/// The address of the request that asked for the send, or nothing where no request
+/// asked for it: a background job's send or an alert (chapter 10 section 5.14).
+/// </param>
 /// <param name="Language">
 /// The recipient's language, resolved before the send, or nothing where no language
 /// of theirs is known, in which case the message goes out in every language the
@@ -21,7 +24,7 @@ public sealed record SendRequest(
     SendDestination Destination,
     MessageKind Message,
     RestrictionPurpose Purpose,
-    string Source,
+    string? Source,
     string? Language)
 {
     private static readonly IReadOnlyDictionary<string, string> Nothing =

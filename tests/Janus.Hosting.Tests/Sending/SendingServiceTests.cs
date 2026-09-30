@@ -168,28 +168,71 @@ public sealed class SendingServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-004: a restriction names no channel, so it governs every send its key
-    /// and purpose match: a mail answers to <c>sms.destination</c> once that bucket is
-    /// spent, and a text message to <c>email.destination</c> (entry 342).
+    /// AUTH-ABUSE-004: a restriction governs only the sends on its channel, so a mail
+    /// passes a spent <c>sms.destination</c> and a text message a spent
+    /// <c>email.destination</c>, and each is counted under its own channel's restriction
+    /// alone (D-166, 342).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_ABUSE_004_ARestrictionGovernsEverySendWhateverItsNameAsync()
+    public async Task AUTH_ABUSE_004_ARestrictionGovernsOnlyItsChannelAsync()
     {
-        _ledger.Given(new RestrictionKey("sms.destination", Mailbox.Value), Noon, Noon, Noon);
-        _ledger.Given(new RestrictionKey("email.destination", Phone.Value), Noon);
+        var textedMailbox = new RestrictionKey("sms.destination", Mailbox.Value);
+        var mailedPhone = new RestrictionKey("email.destination", Phone.Value);
+
+        _ledger.Given(textedMailbox, Noon, Noon, Noon);
+        _ledger.Given(mailedPhone, Noon);
 
         _clock.Advance(TimeSpan.FromSeconds(10));
 
-        Result<SendReference> mailed = await Service.SendAsync(Mailed(), TestContext.Current.CancellationToken);
-        Result<SendReference> texted = await Service.SendAsync(Texted(), TestContext.Current.CancellationToken);
+        _ = await SentAsync(Mailed());
+        _ = await SentAsync(Texted());
 
-        Assert.Equal(ErrorCodes.RestrictionExceeded, Refusal(mailed));
-        Assert.Equal(Noon + TimeSpan.FromHours(24), RetryAt(mailed));
-        Assert.Equal(ErrorCodes.RestrictionExceeded, Refusal(texted));
-        Assert.Equal(Noon + TimeSpan.FromSeconds(60), RetryAt(texted));
-        Assert.Empty(_mail.Taken);
-        Assert.Empty(_sms.Taken);
+        Assert.Single(_mail.Taken);
+        Assert.Single(_sms.Taken);
+        Assert.Equal(3, _ledger.Sends(textedMailbox).Count);
+        Assert.Single(_ledger.Sends(mailedPhone));
+        Assert.Single(_ledger.Sends(new RestrictionKey("email.destination", Mailbox.Value)));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", Phone.Value)));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.source", "198.51.100.7")));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC5: a security notice to a number its owner holds answers to the
+    /// restrictions whose purpose is <c>notification</c> alone, so a spent
+    /// <c>sms.source</c> neither refuses it nor counts it (D-166, 342).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC5_ANoticeToAHolderIsNotCountedBySmsSourceAsync()
+    {
+        var subject = SubjectId.New(_randomness);
+        var source = new RestrictionKey("sms.source", "198.51.100.7");
+        DateTimeOffset[] spent = [.. Enumerable.Repeat(Noon, 10)];
+
+        _ledger.Given(source, spent);
+
+        _ = await SentAsync(TextedNotice(subject));
+
+        Assert.Single(_sms.Taken);
+        Assert.Equal(10, _ledger.Sends(source).Count);
+        Assert.Single(_ledger.Sends(new RestrictionKey("notification.destination", Phone.Value)));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 and chapter 10 section 5.14: a send no request asked for carries
+    /// no source, and no <c>source</c> restriction counts it, however full a source's
+    /// bucket stands (D-166, 342).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_ASendNoRequestAskedForIsCountedUnderNoSourceAsync()
+    {
+        _ = await SentAsync(Texted() with { Source = null });
+
+        Assert.Single(_sms.Taken);
+        Assert.DoesNotContain(_ledger.Keys, key => key.Restriction == "sms.source");
+        Assert.Equal([new RestrictionKey("sms.destination", Phone.Value)], _ledger.Keys);
     }
 
     /// <summary>
@@ -740,7 +783,7 @@ public sealed class SendingServiceTests : IAsyncDisposable
             SendDestination.Of(Phone),
             MessageKind.Alert,
             RestrictionPurpose.Notification,
-            "operator",
+            Source: null,
             "en"));
 
         Assert.Single(_sms.Taken);
@@ -759,10 +802,62 @@ public sealed class SendingServiceTests : IAsyncDisposable
             SendDestination.Of(Phone),
             MessageKind.Alert,
             RestrictionPurpose.Notification,
-            "operator",
+            Source: null,
             "en"));
 
         Assert.Single(_sms.Taken);
+    }
+
+    /// <summary>
+    /// OPS-ALERT-003 and AUTH-ABUSE-004: an alert is outside every restriction, so it is
+    /// carried with every bucket of every restriction that could count it full, and
+    /// counts under none (D-166, 342).
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_003_AnAlertIsCarriedWithEveryRestrictionsBucketFullAsync()
+    {
+        _configuration.Set(
+            Settings.Restrictions,
+            [
+                .. Settings.Restrictions.Default,
+                new Restriction(
+                    "every.send",
+                    RestrictionKeyKind.Global,
+                    null,
+                    RestrictionPurpose.Any,
+                    [new Bucket(1, TimeSpan.FromHours(24), BucketWindow.Sliding)]),
+                new Restriction(
+                    "every.notice",
+                    RestrictionKeyKind.Global,
+                    null,
+                    RestrictionPurpose.Notification,
+                    [new Bucket(1, TimeSpan.FromHours(24), BucketWindow.Sliding)]),
+            ]);
+
+        foreach (RestrictionKey full in new RestrictionKey[]
+        {
+            new("sms.destination", Phone.Value),
+            new("notification.destination", Phone.Value),
+            new("every.send", "every.send"),
+            new("every.notice", "every.notice"),
+        })
+        {
+            _ledger.Given(full, Noon, Noon, Noon, Noon, Noon);
+        }
+
+        IReadOnlyCollection<RestrictionKey> before = [.. _ledger.Keys];
+
+        _ = await SentAsync(new SendRequest(
+            SendDestination.Of(Phone),
+            MessageKind.Alert,
+            RestrictionPurpose.Notification,
+            Source: null,
+            "en"));
+
+        Assert.Single(_sms.Taken);
+        Assert.Equal(before, _ledger.Keys);
+        Assert.All(_ledger.Keys, key => Assert.Equal(5, _ledger.Sends(key).Count));
     }
 
     /// <summary>

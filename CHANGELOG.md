@@ -700,6 +700,16 @@ against the public contract of LIB-API-001.
   `.`, `-` or `_`. `PUT /admin/restrictions/{name}` with a name outside that rule is
   refused with `config.value.notallowed` before anything is written, and a stored set
   holding one does not read.
+- A restriction names the channel it governs, `sms`, `email` or `any` (the default, and
+  what a stored restriction without one reads as), and counts and refuses only the sends
+  on that channel: `sms.destination` and `sms.source` ship as `sms`, `email.destination`
+  as `email` and `notification.destination` as `any`. `/admin/restrictions` reads and
+  writes `channel`, and changing it to anything but `any` is a loosening. A security
+  notice to an address or number its owner holds answers only to restrictions whose
+  purpose is `notification`, an alert answers to no restriction, and a send no request
+  asked for (a reminder, a repeated loss-report notice, a lapsed privacy request, an
+  alert) carries no source, so no `source` restriction counts it. The new-device check
+  code is counted under the source of the sign-in that asked for it.
 - `GET /admin/config/{key}` reads one runtime key under `config:read`: its value in
   force and its default in the key's own JSON type, whether it is protected, and which
   way it loosens (`increase`, `decrease` or `any-change`). `PUT /admin/config/{key}`

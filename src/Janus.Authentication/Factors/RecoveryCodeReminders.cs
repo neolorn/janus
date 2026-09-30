@@ -35,10 +35,6 @@ internal sealed class RecoveryCodeReminders(
     // A pass never holds more than this many accounts in memory at once.
     private const int Batch = 100;
 
-    // The reminder is asked for by no request, so it counts against the deployment
-    // itself and not against a person's address.
-    private const string Origin = "recovery.codes.reminder";
-
     /// <summary>
     /// Reminds the owner of every set that is owed its reminder.
     /// </summary>
@@ -150,7 +146,9 @@ internal sealed class RecoveryCodeReminders(
                         destination,
                         MessageKind.RecoveryCodesReminder,
                         RestrictionPurpose.Notification,
-                        Origin,
+                        // The reminder is asked for by no request, so it carries no
+                        // source and no source restriction counts it (section 5.14).
+                        Source: null,
                         language)
                     {
                         Subject = subject,
