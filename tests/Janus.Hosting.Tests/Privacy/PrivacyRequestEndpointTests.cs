@@ -291,6 +291,41 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
         Assert.Equal("open", held.GetProperty("status").GetString());
     }
 
+    /// <summary>
+    /// PRIV-RIGHT-001 AC5, 09 section 8a: a fulfilment on a session whose proof is no
+    /// longer recent is refused 403 <c>auth.stepup.required</c> and the request stays
+    /// open; refusing one on the same session is not gated.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001_AC5_AFulfilmentWithoutStepUpIsRefusedAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+
+        Answer submitted = await browser.SendAsync(
+            "POST",
+            "/privacy/requests",
+            ("type", "restriction"),
+            ("detail", "the recorded address is disputed"));
+        Guid request = submitted.Json().GetProperty("requestId").GetGuid();
+
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(16));
+
+        Answer fulfilled = await browser.SendAsync(
+            "POST",
+            "/admin/privacy/requests/" + request.ToString() + "/fulfil");
+        JsonElement open = Single(await browser.SendAsync("GET", "/admin/privacy/requests/"));
+        Answer refused = await browser.SendAsync(
+            "POST",
+            "/admin/privacy/requests/" + request.ToString() + "/refuse",
+            ("reason", "the address is the one the customer gave"));
+
+        Assert.Equal(StatusCodes.Status403Forbidden, fulfilled.Status);
+        Assert.Equal(ErrorCodes.StepUpRequired.ToString(), fulfilled.Text("code"));
+        Assert.Equal("open", open.GetProperty("status").GetString());
+        Assert.Equal(StatusCodes.Status204NoContent, refused.Status);
+    }
+
     private static JsonElement Single(Answer answer)
     {
         Assert.Equal(StatusCodes.Status200OK, answer.Status);

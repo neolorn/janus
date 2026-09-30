@@ -421,7 +421,11 @@ internal static class PrivacyEndpoints
 
         return Answers.Of(
             await requests
-                .FulfilAsync(holder, new PrivacyRequestId(request), cancellationToken)
+                .FulfilAsync(
+                    holder,
+                    browser.Required.Id,
+                    new PrivacyRequestId(request),
+                    cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }

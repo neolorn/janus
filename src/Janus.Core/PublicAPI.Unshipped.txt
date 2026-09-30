@@ -1322,7 +1322,7 @@ Janus.Core.IOrganizations.ReplacePolicyAsync(Janus.Core.AccessContext! context, 
 Janus.Core.IOrganizations.RequestDeletionAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IPrivacyRequests
 Janus.Core.IPrivacyRequests.EnterAsync(Janus.Core.AccessContext! context, Janus.Core.PrivacyRequestEntry! entry, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.PrivacyRequestReceipt!>>
-Janus.Core.IPrivacyRequests.FulfilAsync(Janus.Core.AccessContext! context, Janus.Core.PrivacyRequestId request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IPrivacyRequests.FulfilAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.PrivacyRequestId request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IPrivacyRequests.QueueAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.PrivacyRequest!>!>>
 Janus.Core.IPrivacyRequests.RefuseAsync(Janus.Core.AccessContext! context, Janus.Core.PrivacyRequestId request, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IPrivacyRequests.SubmitAsync(Janus.Core.AccessContext! context, Janus.Core.PrivacyRequestType type, string! detail, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.PrivacyRequestReceipt!>>
@@ -2696,6 +2696,7 @@ Janus.Core.StepUpAction.OrganizationDelete = 29 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.PasswordSet = 0 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.PolicyChange = 24 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.PrivacyExport = 9 -> Janus.Core.StepUpAction
+Janus.Core.StepUpAction.PrivacyRequestFulfil = 30 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.ProviderLink = 12 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.ProviderUnlink = 13 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.RecoveryApprove = 14 -> Janus.Core.StepUpAction

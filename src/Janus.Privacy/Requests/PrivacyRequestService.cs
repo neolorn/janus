@@ -17,6 +17,7 @@ namespace Janus.Privacy.Requests;
 /// <param name="requests">Where the queue is.</param>
 /// <param name="calendar">The deployment's working week, holidays and zone.</param>
 /// <param name="scope">Whether the caller may work the queue.</param>
+/// <param name="stepUp">What a fulfilment asks of the caller's session.</param>
 /// <param name="accounts">Where an account enters the restricted or deleting state.</param>
 /// <param name="restrictions">Where an account is restricted and the subscribers told.</param>
 /// <param name="notices">Where the automatic receipt goes.</param>
@@ -33,6 +34,7 @@ internal sealed class PrivacyRequestService(
     IPrivacyRequestStore requests,
     WorkingCalendar calendar,
     AdministrativeScope scope,
+    IStepUpGate stepUp,
     IAccountStates accounts,
     RestrictionGrant restrictions,
     ISubjectNotices notices,
@@ -199,6 +201,7 @@ internal sealed class PrivacyRequestService(
     /// <inheritdoc/>
     public async ValueTask<Result> FulfilAsync(
         AccessContext context,
+        SessionId session,
         PrivacyRequestId request,
         CancellationToken cancellationToken)
     {
@@ -220,6 +223,22 @@ internal sealed class PrivacyRequestService(
         if (failure is not null)
         {
             return Result.Failure(failure);
+        }
+
+        // 09 section 8a, D-166 X8: a fulfilment acts on another person's data or
+        // account, so the session proves it is the caller, and it is asked last so that
+        // every other refusal is told as itself.
+        if (context.Acting is not SubjectId acting)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        if ((await stepUp
+                .RequireAsync(acting, session, StepUpAction.PrivacyRequestFulfil, cancellationToken)
+                .ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error challenged)
+        {
+            return Result.Failure(challenged);
         }
 
         DateTimeOffset now = time.GetUtcNow();

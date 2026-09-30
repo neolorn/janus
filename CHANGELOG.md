@@ -937,6 +937,12 @@ against the public contract of LIB-API-001.
   blank or longer than 1024 characters after trimming is refused with 400
   `api.request.malformed` naming it, at the endpoint and by `IPrivacyRequests` for an
   in-process caller alike; a refusal's reason was an exception there before.
+- Fulfilling a privacy request, of any type, is the step-up action
+  `privacyrequest:fulfil` (`StepUpAction.PrivacyRequestFulfil`), in the policy's
+  `gates` like every other action: `IPrivacyRequests.FulfilAsync` takes the session it is
+  judged on and asks it after every other refusal, and a session that has not proved it
+  is answered 403 `auth.stepup.required` with nothing changed. Refusing a request is not
+  gated.
 - A host can bind one of its actions to the purpose it is done for, and where that
   purpose rests on consent the gate refuses the action until the data subject of the
   record being acted on has consented to it: missing, withdrawn, superseded or of the

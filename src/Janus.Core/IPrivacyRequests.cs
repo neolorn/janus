@@ -63,14 +63,20 @@ public interface IPrivacyRequests
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Decides to do what was asked.
+    /// Decides to do what was asked. Every fulfilment, whatever the request's type, is
+    /// the <c>privacyrequest:fulfil</c> step-up action.
     /// </summary>
     /// <param name="context">Who is deciding.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
     /// <param name="request">Which request.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Success, or the refusal.</returns>
+    /// <returns>
+    /// Success, or the refusal: <c>auth.stepup.required</c> where the session has not
+    /// proved it recently enough, judged after every other refusal.
+    /// </returns>
     ValueTask<Result> FulfilAsync(
         AccessContext context,
+        SessionId session,
         PrivacyRequestId request,
         CancellationToken cancellationToken);
 
