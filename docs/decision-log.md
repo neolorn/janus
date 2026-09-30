@@ -8956,6 +8956,8 @@ section 7 · `19` · `20` · `docs/guide/janus-explained.md`,
 
 > **Amended.** Paragraph 215: the mail server's management key is read once at startup into the key ring and borrowed for each call, not read from the source and cleared at each use (D-171).
 
+> **Amended.** 343: a malformed social provider declaration is named by `details.declaration` `socialProvider.<provider>` and `details.field`, not `details.key` (D-175).
+
 **Date:** 2026-09-25 · **Status:** accepted · **Amends:** D-161 (item 4, the working mode; item 2, where the drift check's rows come from), D-162 (item 22, where the governed send path lives; item 23, when the first attempt is made; item 26, the budget of a text message carrying a link; item 31, where destination records are kept and when they are swept; item 66, where a client secret comes from; C.55, where photo availability is held and what bootstrap writes; C.68 at `POST /auth/link`; C.103, the condition of the mail server row; E, the status of `identity.identifier.invalid`), D-153 (owner decision 2, the source a flood limit counts; owner decision 7, the word lists; the `backup.restoretest.interval` default; the address the bootstrap command prints), D-147 (the retirement of a key-encryption-key version; the name of the startup code for an unavailable secret), D-146 (item 17: a restriction's channel, the notices to a holder, a reason on every edit), D-143 (the policy object gains `photos`), D-129 (the break-glass page takes a reason), D-127 (a takedown reversal restores the state the takedown found), D-079a (a recognised device is exempt from the hold, not from the count), D-071 (three protected switches retired), D-060 (photos are off for the administrative organization until a codec is declared), D-057 (an authorization request's `redirect_uri` is refused at the push, not replaced), D-164 (item 3: the mail server verifies `aud` itself), D-165 (the developer recipient row is a declared example; the provider callback row and INT-GEN-003's sentence restored) · **Extends:** D-162, D-164, D-165
 
 **TL;DR.** The ledger entries 110 to 423 were audited entry by entry against the
@@ -12025,6 +12027,41 @@ CONV-DESIGN-004.
 
 ---
 
+## D-175 — Corrections-4 question 12: how a malformed social provider declaration is named
+
+**Date:** 2026-09-30 · **Status:** accepted · **Amends:** D-166 (343, the details of `model.startup.declarationinvalid`)
+
+**TL;DR.** D-166 343 named the malformed member of a social provider declaration with
+`details.key`, while LIB-HOST-001 criterion 2 and chapter `10`, which is authoritative for
+shapes, give every malformed declaration `details.declaration` and `details.field`. The
+chapters stand. `details.declaration` is `socialProvider.<provider>`, the name
+`model.startup.secretunavailable` gives the provider's credential, and `details.field` the
+member.
+
+**The question.** 343 refuses a social provider declared twice, one naming a factor that is
+not a social provider, an address that is not absolute `https`, a `return` whose path does
+not end as it must, and a missing or empty client, with `model.startup.declarationinvalid`
+and `details.key` naming the member. LIB-HOST-001 criterion 2 and the `10` row name any
+malformed declaration by `details.declaration` and `details.field`, and say what the first
+holds for a template (the message kind) and an encrypted field (the type), but nothing for
+a social provider. The one exception the chapters make, `details.key` for a landing origin,
+is a single configured value, not a declaration with members.
+
+**Decision.** The shape the chapters give every other malformed declaration. `details.declaration`
+names the declaration instance, as the message kind and the type do: for a social provider
+`socialProvider.<provider>` (for example `socialProvider.apple`), the same name
+`model.startup.secretunavailable` gives the provider's credential, so one provider is named
+one way in both refusals. `details.field` is the member at fault (`metadata`, `configuration`, `return`,
+`clientIds`), and `provider` where the provider is declared twice or names a factor that is
+not a social provider. *Rejected:* `details.key` (a second shape for one code, against the
+chapter that fixes shapes); `details.declaration` `socialProvider` alone (it would not say
+which of two declared providers is at fault). A test carrying LIB-HOST-001 criterion 2
+proves each of the five refusals with its two details.
+
+**Propagated to:** `10` the `model.startup.declarationinvalid` row.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -12209,6 +12246,7 @@ CONV-DESIGN-004.
 | Corrections-4 questions 8 and 9: the conformance suite's client, the deployment key's identifier | D-172 |
 | Corrections-4 question 10: which values under the deployment key are bound to their row, and the migration that moves the key | D-173 |
 | Corrections-4 question 11: where the database refuses the deployment key's identifier | D-174 |
+| Corrections-4 question 12: how a malformed social provider declaration is named | D-175 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
