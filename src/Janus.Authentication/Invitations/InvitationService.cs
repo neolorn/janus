@@ -180,6 +180,17 @@ internal sealed class InvitationService(
             return Result.Failure<IssuedInvitation>(challenged);
         }
 
+        // REG-INV-001: a role named is granted when the membership attaches, so the
+        // issue is also the step-up a grant is, judged after the issue's own.
+        if (attached.Count > 0
+            && await stepUp
+                .PassedAsync(acting, session, StepUpAction.GrantManage, cancellationToken)
+                .ConfigureAwait(false)
+            is Error ungranted)
+        {
+            return Result.Failure<IssuedInvitation>(ungranted);
+        }
+
         var token = OpaqueToken.Draw(randomness);
         var invitation = Invitation.Issued(
             InvitationId.New(time),

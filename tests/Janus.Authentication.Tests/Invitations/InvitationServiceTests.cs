@@ -449,6 +449,32 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-INV-001: an invitation naming a role is also the <c>grant:manage</c> step-up
+    /// action, judged after <c>invitation:issue</c>, so a session that meets the issue's
+    /// gate and not the grant's issues nothing; one naming no role asks only the issue's.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_001_ARoleAsksTheGrantGateAsWellAsync()
+    {
+        RoleName clerk = _roles.Define("clerk", Permissions.MembershipManage);
+        var gates = Core.Policies.SystemDefault.Gates.ToDictionary();
+
+        gates[StepUpAction.GrantManage] = new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5));
+        _configuration.Set(Settings.PolicyDefault, Core.Policies.SystemDefault with { Gates = gates });
+        _gate.Grant(_inviter, Customer, Permissions.GrantManage);
+
+        Error challenged = Failure(await IssueAsync(Customer, Request(email: Personal, roles: [clerk])));
+
+        Assert.Equal(ErrorCodes.StepUpRequired, challenged.Code);
+        Assert.Empty(_invitations.Held);
+        Assert.Empty(_notifications.Sent);
+
+        _ = Accepted(await IssueAsync(Customer, Request(email: Personal)));
+
+        Assert.Empty(Assert.Single(_invitations.Held).Roles);
+    }
+
+    /// <summary>
     /// REG-INV-001: a document the deployment never published cannot be shown.
     /// </summary>
     [Fact]

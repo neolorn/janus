@@ -8394,6 +8394,8 @@ the store implements over the roles tables.
 *Chapter text that should change.* 09 section 8a could name `roles` and say that
 naming one asks `grant:manage`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 229. The documents an invitation attaches, at the version current when it is issued

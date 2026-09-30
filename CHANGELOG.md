@@ -1726,6 +1726,8 @@ against the public contract of LIB-API-001.
 - An invitation binds the phone it names without reading `registration.phone`, which
   takes `required` or `optional` only, so no deployment refuses a phone as one it does
   not collect.
+- An invitation naming a role is also the `grant:manage` step-up action, judged after
+  `invitation:issue`.
 - An audit trail. Every record names who acted, whose identity the action was taken
   under, the instant it occurred and the organization where one applies; an event about
   a principal holding no membership carries none, and the absence is the recorded fact.
