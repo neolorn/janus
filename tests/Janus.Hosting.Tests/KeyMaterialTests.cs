@@ -27,6 +27,10 @@ public sealed class KeyMaterialTests
 {
     private const string Connection = "Host=nowhere;Database=identity";
 
+    // The head every library assembly's name carries, read from the core's
+    // namespace so no string spells the product name (CONV-NAME-001).
+    private static readonly string Library = typeof(Result).Namespace!.Split('.')[0] + ".";
+
     /// <summary>
     /// AUTH-KEY-002 AC2: without the key-encryption key the library does not start,
     /// and what stops it names why.
@@ -127,7 +131,7 @@ public sealed class KeyMaterialTests
             services
                 .Select(Made)
                 .OfType<Type>()
-                .Where(type => type.Assembly.GetName().Name?.StartsWith("Janus.", StringComparison.Ordinal) is true)
+                .Where(type => type.Assembly.GetName().Name?.StartsWith(Library, StringComparison.Ordinal) is true)
                 .SelectMany(type => type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
                 .SelectMany(constructor => constructor.GetParameters()),
             parameter => parameter.ParameterType == typeof(KeyEncryptionKeys)

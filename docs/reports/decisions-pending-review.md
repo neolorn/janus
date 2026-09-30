@@ -6172,6 +6172,8 @@ requires, is unchanged); and the double-migration gate's worktree folder, now
 reads, and that the solution file and the lock files' lower-case identifiers count as
 project and package identifiers.
 
+**Superseded by D-166.**
+
 ---
 
 ## 168. A takedown is identified by the outbox record its trigger writes
