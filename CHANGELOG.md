@@ -710,6 +710,13 @@ against the public contract of LIB-API-001.
   asked for (a reminder, a repeated loss-report notice, a lapsed privacy request, an
   alert) carries no source, so no `source` restriction counts it. The new-device check
   code is counted under the source of the sign-in that asked for it.
+- A deployment declares `LandingOrigins`, the origin of the authentication application
+  and of the account application, where every link the library sends lands. Without
+  it the deployment does not start (`model.startup.declarationmissing`,
+  `details.key` `landingOrigins.authentication` or `landingOrigins.account`); an origin
+  that is not an `https` origin a registered browser client returns to, or an
+  authentication origin that is not the sign-in address's, is refused with
+  `model.startup.declarationinvalid` under the same key.
 - What a destination has been sent is kept apart from what an account, a source, the
   deployment or a host key has, each for the longest interval of the restrictions now
   declared on its own kind of key, so a longer source restriction no longer keeps a

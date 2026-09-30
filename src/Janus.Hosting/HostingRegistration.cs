@@ -346,6 +346,7 @@ public static class HostingRegistration
         services.AddScoped(provider => new DeclarationCoverage(
             provider.GetService<PasskeyAddresses>(),
             provider.GetService<AuthenticationAddresses>(),
+            provider.GetService<LandingOrigins>(),
             provider.GetService<SignOnClient>(),
             provider.GetRequiredService<IMailServerInUse>(),
             provider.GetService<MailServerClient>(),
@@ -353,6 +354,7 @@ public static class HostingRegistration
             provider.GetServices<SocialProvider>(),
             provider.GetRequiredService<AuthorizationDeclaration>(),
             provider.GetServices<ISubjectEventSubscriber>(),
+            provider.GetRequiredService<IOidcClientStore>(),
             provider.GetRequiredService<IConfigurationStore>()));
 
         services.ConfigureHttpJsonOptions(ReadThroughContexts);
