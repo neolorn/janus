@@ -21,16 +21,18 @@ namespace Janus.Privacy.Requests;
 internal interface IAccountStates
 {
     /// <summary>
-    /// Restricts one account; one suspended or in its deletion window holds the
-    /// restriction and comes back restricted.
+    /// Restricts one account and ends every session of it in the same transaction; one
+    /// suspended or in its deletion window holds the restriction, comes back restricted
+    /// and ends nothing, having no session to end.
     /// </summary>
     /// <param name="subject">Whose.</param>
+    /// <param name="at">When, which is when its sessions end.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Whether the restriction is new: one already restricted or held needs nothing,
     /// and an erased account cannot be restricted.
     /// </returns>
-    ValueTask<bool> RestrictAsync(SubjectId subject, CancellationToken cancellationToken);
+    ValueTask<bool> RestrictAsync(SubjectId subject, DateTimeOffset at, CancellationToken cancellationToken);
 
     /// <summary>
     /// Starts the deletion grace window on an account, for an erasure request a human

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Mailboxes;
@@ -22,6 +23,7 @@ namespace Janus.Authentication.Invitations;
 /// granted, and where the organization's mail is integrated the corporate address
 /// becomes the primary email and its mailbox the person's.
 /// </summary>
+/// <param name="restriction">Whether the account's processing is restricted, as the gate answers it.</param>
 /// <param name="invitations">Where the invitation is read and its acknowledgement recorded.</param>
 /// <param name="directory">Where the organization's standing is read.</param>
 /// <param name="identifiers">Where the account's identifiers are read and the corporate address taken on.</param>
@@ -45,6 +47,7 @@ namespace Janus.Authentication.Invitations;
 /// the invitation forgets what it bound in it.
 /// </remarks>
 internal sealed class InvitationAcknowledgement(
+    ISettingsRestriction restriction,
     IInvitationStore invitations,
     IOrganizationDirectory directory,
     IIdentifierDirectory identifiers,
@@ -84,6 +87,13 @@ internal sealed class InvitationAcknowledgement(
         if (context.Effective is not SubjectId invitee)
         {
             return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        // IDN-ACCT-007 AC2: a membership changes the account, so a restricted account is
+        // refused before anything is read or written.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false) is Error restricted)
+        {
+            return Result.Failure(restricted);
         }
 
         // An invitation attached to another account is answered as one that does not

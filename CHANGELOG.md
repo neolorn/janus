@@ -1774,7 +1774,12 @@ against the public contract of LIB-API-001.
   name, a host declares which of its own actions are reading, and everything else
   modifies. Its own settings are held the same way: an edit of its profile, its photo or
   its preferences, and a change to one of its identifiers, its credentials or its
-  preferred second step, is refused with `authz.restricted`.
+  preferred second step, is refused with `authz.restricted`, and so is acknowledging an
+  invitation. A restricted account signs in, as an active one does, with its factors,
+  its provider, its sign-in link and the mail server's sign-on, and recovers its
+  password; the enrolment an approved recovery opens is not refused. The restriction
+  ends every session of the account in the transaction that makes it, and a restricted
+  account's sign-in is offered no trusted browser and records none.
 - Registration is served end to end. A browser that reaches the library is given a
   pre-authentication session, and the registration it starts is bound to that session
   and reachable from no other browser: the age screen, the email and phone steps, the

@@ -798,41 +798,33 @@ internal sealed class CredentialService(
     {
         ArgumentNullException.ThrowIfNull(authority);
 
-        Acting acting;
-        AccessContext asking;
-
         if (authority.Enrolment is EnrolmentSessionId opened)
         {
-            if (await enrolments.FindAsync(opened, cancellationToken).ConfigureAwait(false)
-                is not EnrolmentSession enrolment)
-            {
-                return Result.Failure<Acting>(Error.From(ErrorCodes.EnrolmentTokenInvalid));
-            }
-
-            acting = new Acting(enrolment.Subject, Session: null, opened);
-            asking = AccessContext.Of(enrolment.Subject);
+            // IDN-ACCT-007: the enrolment an approved recovery opened, and the one a
+            // policy hold stops a sign-in at, are how a restricted account gets back in,
+            // so neither is asked about the restriction.
+            return await enrolments.FindAsync(opened, cancellationToken).ConfigureAwait(false)
+                is EnrolmentSession enrolment
+                ? Result.Success(new Acting(enrolment.Subject, Session: null, opened))
+                : Result.Failure<Acting>(Error.From(ErrorCodes.EnrolmentTokenInvalid));
         }
-        else if (authority.Context is { Effective: SubjectId subject } held && authority.Session is SessionId live)
-        {
-            if (StepUpGuard.RefusedInBreakGlass(held, action) is Error withheld)
-            {
-                return Result.Failure<Acting>(withheld);
-            }
 
-            acting = new Acting(subject, live, Enrolment: null);
-            asking = held;
-        }
-        else
+        if (authority.Context is not { Effective: SubjectId subject } held || authority.Session is not SessionId live)
         {
             return Result.Failure<Acting>(Error.From(ErrorCodes.Denied));
         }
 
-        // IDN-ACCT-007 AC2: a restricted account changes none of its credentials, and
-        // every operation here changes one.
-        return await restriction.RefusedAsync(asking, cancellationToken)
+        if (StepUpGuard.RefusedInBreakGlass(held, action) is Error withheld)
+        {
+            return Result.Failure<Acting>(withheld);
+        }
+
+        // IDN-ACCT-007 AC2: a restricted account changes none of its credentials from a
+        // session, and every operation here changes one.
+        return await restriction.RefusedAsync(held, cancellationToken)
                 .ConfigureAwait(false) is Error restricted
             ? Result.Failure<Acting>(restricted)
-            : Result.Success(acting);
+            : Result.Success(new Acting(subject, live, Enrolment: null));
     }
 
     // AUTH-STEP-007: the gate applies to a session and is stated as the lower of what

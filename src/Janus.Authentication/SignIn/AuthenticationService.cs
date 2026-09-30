@@ -325,9 +325,10 @@ internal sealed class AuthenticationService(
             return Result.Failure<SignInOutcome>(held);
         }
 
+        // IDN-ACCT-007: a restricted account signs in and reads, as an active one does.
         if (linked is not { IsUsable: true }
             || await accounts.StateAsync(linked.Subject, cancellationToken).ConfigureAwait(false)
-                is not AccountState.Active)
+                is not (AccountState.Active or AccountState.Restricted))
         {
             return Result.Failure<SignInOutcome>(
                 await CountedAsync(attempt, provider, linked?.Subject, null, cancellationToken).ConfigureAwait(false)
@@ -448,7 +449,7 @@ internal sealed class AuthenticationService(
         // is (CONV-LOG-005).
         if (open?.Subject is not SubjectId subject
             || await accounts.StateAsync(subject, cancellationToken).ConfigureAwait(false)
-                is not AccountState.Active)
+                is not (AccountState.Active or AccountState.Restricted))
         {
             return Result.Failure<SignInOutcome>(
                 await CountedAsync(attempt, presented.Factor, null, null, cancellationToken).ConfigureAwait(false)
@@ -1491,10 +1492,15 @@ internal sealed class AuthenticationService(
 
         Assurance reached = Assurance.Reached(Properties(presented))
             ?? new Assurance(AssuranceLevel.Aal1, PhishingResistant: false);
+
+        // IDN-ACCT-007: trusting a device writes to the account, so a restricted
+        // account's sign-in is offered none and records none.
         bool offered = DeviceService.MayTrust(
-            policy,
-            reached,
-            await MeetsSingleFactorFloorAsync(subject, cancellationToken).ConfigureAwait(false));
+                policy,
+                reached,
+                await MeetsSingleFactorFloorAsync(subject, cancellationToken).ConfigureAwait(false))
+            && await accounts.StateAsync(subject, cancellationToken).ConfigureAwait(false)
+                is not AccountState.Restricted;
 
         OpaqueToken? trust = null;
 

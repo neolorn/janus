@@ -93,6 +93,51 @@ public sealed class AccountStatesTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// AUTH-SESS-010, IDN-ACCT-007 (D-166): the restriction and the end of every session
+    /// are one transaction, so a restriction that does not commit leaves the account
+    /// active and its sessions live, and one that does leaves it restricted with none.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_010_RestrictingAnAccountEndsItsSessionsAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+
+        await SessionsAsync(subject, 2);
+
+        await using (StoreContext abandoning = database.Context())
+        {
+            await using var work = new UnitOfWork(abandoning);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+
+            Assert.True(await States(abandoning).RestrictAsync(
+                subject,
+                Noon + TimeSpan.FromHours(1),
+                TestContext.Current.CancellationToken));
+        }
+
+        Assert.Equal(AccountState.Active, (await StandingAsync(subject)).State);
+        Assert.Equal(2, await LiveAsync(subject));
+
+        await using (StoreContext restricting = database.Context())
+        {
+            await using var work = new UnitOfWork(restricting);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+
+            Assert.True(await States(restricting).RestrictAsync(
+                subject,
+                Noon + TimeSpan.FromHours(1),
+                TestContext.Current.CancellationToken));
+
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal(AccountState.Restricted, (await StandingAsync(subject)).State);
+        Assert.Equal(0, await LiveAsync(subject));
+    }
+
+    /// <summary>
     /// IDN-LIFE-003 AC4: at the trigger no personal field is destroyed and no erasures
     /// row is written, so the subject's key is as it was.
     /// </summary>
@@ -151,6 +196,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
         {
             Assert.True(await States(restricting).RestrictAsync(
                 subject,
+                Noon,
                 TestContext.Current.CancellationToken));
             await restricting.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
@@ -159,6 +205,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
         {
             Assert.False(await States(again).RestrictAsync(
                 subject,
+                Noon,
                 TestContext.Current.CancellationToken));
         }
 

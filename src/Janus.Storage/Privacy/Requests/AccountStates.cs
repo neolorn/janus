@@ -27,6 +27,7 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
     /// <inheritdoc/>
     public async ValueTask<bool> RestrictAsync(
         SubjectId subject,
+        DateTimeOffset at,
         CancellationToken cancellationToken)
     {
         Account? account = await accounts.FindBySubjectAsync(subject, cancellationToken)
@@ -34,8 +35,12 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
 
         switch (account)
         {
+            // AUTH-SESS-010, IDN-ACCT-007: the sessions end in the transaction that
+            // restricts, so what the account signs in with afterwards is a session of the
+            // restricted account.
             case { State: AccountState.Active }:
                 account.Restrict();
+                await sessions.EndAccountAsync(subject, at, cancellationToken).ConfigureAwait(false);
 
                 break;
 

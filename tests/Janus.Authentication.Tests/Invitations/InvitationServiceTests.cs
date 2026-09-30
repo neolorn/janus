@@ -63,6 +63,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private readonly DomainStoreInMemory _domains = new();
     private readonly InvitationStoreInMemory _invitations = new();
     private readonly AccountDirectoryInMemory _accounts = new(PreferenceDeclarations.None);
+    private readonly SettingsRestrictionInMemory _restriction = new();
     private readonly MailboxStoreInMemory _mailboxes = new();
     private readonly MailServerInMemory _server = new();
     private readonly NotificationHandlerInMemory _notifications = new();
@@ -687,6 +688,33 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Equal(
             ErrorCodes.InvitationNotFound,
             Failure(await AttachedAsync(SubjectId.New(_randomness))).Code);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 AC2 (D-166): a membership changes the account, so a restricted
+    /// account acknowledges no invitation: it is refused <c>authz.restricted</c>, and
+    /// nothing attaches, is announced or is written down, and the invitation stands.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedAccountAcknowledgesNoInvitationAsync()
+    {
+        string token = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+        SubjectId holder = Holder();
+        Invitation invitation = _invitations.Held[0];
+
+        _ = _identifiers.Verified(holder, IdentifierKind.Phone, Number);
+        Accepted(await OpenAsync(holder, token));
+
+        int written = _audit.Changes.Count;
+
+        _restriction.Restrict(holder);
+
+        Assert.Equal(ErrorCodes.Restricted, Failure(await AcknowledgeAsync(holder, invitation.Id)).Code);
+        Assert.Empty(_attachments.Attached);
+        Assert.Empty(_events.Of<MembershipChanged>());
+        Assert.Equal(written, _audit.Changes.Count);
+        Assert.Null(invitation.AcknowledgedAt);
+        Assert.NotNull(invitation.Identifiers);
     }
 
     /// <summary>
@@ -1379,6 +1407,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             _invitations,
             _accounts,
             new InvitationAcknowledgement(
+                _restriction,
                 _invitations,
                 _organizations,
                 _identifiers,

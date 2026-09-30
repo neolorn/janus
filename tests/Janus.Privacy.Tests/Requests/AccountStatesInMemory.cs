@@ -36,6 +36,12 @@ internal sealed class AccountStatesInMemory : IAccountStates
         _states.TryGetValue(subject, out AccountState state) ? state : null;
 
     /// <summary>
+    /// Where a restriction from active is carried as well, as the one accounts table
+    /// of a deployment carries it to every area that reads the account.
+    /// </summary>
+    public Func<SubjectId, DateTimeOffset, ValueTask>? Restricted { get; set; }
+
+    /// <summary>
     /// Whether the account holds a restriction while it is away from active.
     /// </summary>
     /// <param name="subject">Whose.</param>
@@ -43,9 +49,26 @@ internal sealed class AccountStatesInMemory : IAccountStates
     public bool Holds(SubjectId subject) => _held.Contains(subject);
 
     /// <inheritdoc/>
-    public ValueTask<bool> RestrictAsync(SubjectId subject, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(Moved(subject, AccountState.Active, AccountState.Restricted)
-            || (Of(subject) is AccountState.Suspended or AccountState.Deleting && _held.Add(subject)));
+    public async ValueTask<bool> RestrictAsync(
+        SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        if (!Moved(subject, AccountState.Active, AccountState.Restricted))
+        {
+            return Of(subject) is AccountState.Suspended or AccountState.Deleting && _held.Add(subject);
+        }
+
+        // AUTH-SESS-010: the move from active ends every session of the account.
+        _sessionsEnded[subject] = at;
+
+        if (Restricted is not null)
+        {
+            await Restricted(subject, at);
+        }
+
+        return true;
+    }
 
     /// <inheritdoc/>
     public ValueTask<bool> BeginDeletionAsync(

@@ -156,6 +156,16 @@ internal sealed class Deployment : IAsyncDisposable
 
         Declared = preferences ?? PreferenceDeclarations.None;
         Accounts = new AccountDirectoryInMemory(Declared);
+
+        // One table holds an account's state in a deployment; here the privacy area
+        // keeps its own, so a restriction it decides is carried to the areas that sign
+        // the account in and gate its changes, with the sessions it ends.
+        AccountStates.Restricted = async (subject, at) =>
+        {
+            Accounts.Stands(subject, AccountState.Restricted);
+            Restriction.Restrict(subject);
+            await Sessions.EndAccountAsync(subject, at, CancellationToken.None);
+        };
         SocialProviders = new SocialProvidersInMemory(Clock);
         Secrets = new SecretSourceInMemory(SocialProviders.Credentials);
 

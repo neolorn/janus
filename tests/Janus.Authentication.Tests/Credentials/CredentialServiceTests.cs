@@ -577,6 +577,35 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-ACCT-007 AC2 (D-166): the enrolment session an approved recovery opened is how
+    /// a restricted account gets back in, so it sets the password it enrols, while the
+    /// account's own session is still refused the same change.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_AnApprovedRecoveryEnrolsForARestrictedAccountAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+
+        _restriction.Restrict(subject);
+
+        EnrolmentSession opened = await OpenedAsync(subject);
+
+        Assert.True(Succeeded(await Service.SetPasswordAsync(
+            CredentialAuthority.Of(opened.Id),
+            Another,
+            Source,
+            TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.Restricted,
+            Refused(await Service.SetPasswordAsync(
+                Authority(subject, session),
+                Another,
+                Source,
+                TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
     /// D-148: the enrolment session reaches the account it was opened for and nothing
     /// else, so one that has lapsed reaches nothing at all.
     /// </summary>

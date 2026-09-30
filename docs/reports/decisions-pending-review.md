@@ -15006,6 +15006,8 @@ a session it already held or out of band (PRIV-RIGHT-001 to PRIV-RIGHT-004).
 covers and say that the refusal is `authz.restricted`, and say whether the sign-in
 paths admit a restricted account, since the table and the code disagree.
 
+**Superseded by D-166.**
+
 ---
 
 ## 363. A replacement ends the other sessions when it applies, and the session that completes an identifier change rotates

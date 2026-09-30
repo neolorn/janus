@@ -246,6 +246,35 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-ACCT-007 AC2 (D-166): a restricted account signs in, so it recovers its
+    /// password as an active one does and stays restricted.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedAccountRecoversItsPasswordAsync()
+    {
+        SubjectId subject = await AccountAsync(password: false);
+
+        _accounts.Stands(subject, AccountState.Restricted);
+
+        Assert.True(Succeeded(await Service.BeginAsync(
+            Address,
+            Language,
+            Source,
+            TestContext.Current.CancellationToken)));
+        Assert.True(Succeeded(await Service.CompleteAsync(
+            Sent(),
+            Secret,
+            Source,
+            TestContext.Current.CancellationToken)));
+
+        Assert.NotNull(await _passwords.FindAsync(subject, TestContext.Current.CancellationToken));
+        Assert.Equal(
+            AccountState.Restricted,
+            await _accounts.StateAsync(subject, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// AUTH-RECOV-004 AC1: an account whose policy closes self-service recovery is
     /// offered no email or text route, and the caller cannot tell that from an
     /// identifier no account holds.
