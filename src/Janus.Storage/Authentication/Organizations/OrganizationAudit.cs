@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication;
+using Janus.Authentication.Invitations;
 using Janus.Authentication.Organizations;
 using Janus.Core;
 using Janus.Identity.Audit;
@@ -106,10 +108,25 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
         AuditAction action,
         OrganizationId organization,
         InvitationId invitation,
+        MailboxTakeover? takeover,
         SubjectId actor,
         string? breakGlassReason,
         DateTimeOffset at,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken)
+    {
+        var details = new Dictionary<string, JsonElement>(capacity: 3, StringComparer.Ordinal)
+        {
+            ["invitation"] = JsonSerializer.SerializeToElement(invitation.Value),
+        };
+
+        // Chapter 10 section 5.24: the former mailbox's choice and its reason, where the
+        // invitation names one (REG-MAIL-003).
+        if (takeover is not null)
+        {
+            details["formerMailbox"] = JsonSerializer.SerializeToElement(WrittenName.Of(takeover.Choice));
+            details["reason"] = JsonSerializer.SerializeToElement(takeover.Reason);
+        }
+
         await records
             .AppendAsync(
                 AuditRecord.Of(
@@ -121,12 +138,10 @@ internal sealed class OrganizationAudit(IAuditStore records, TimeProvider time) 
                     actor,
                     breakGlassReason,
                     organization,
-                    new Dictionary<string, JsonElement>(capacity: 1, StringComparer.Ordinal)
-                    {
-                        ["invitation"] = JsonSerializer.SerializeToElement(invitation.Value),
-                    }),
+                    details),
                 cancellationToken)
             .ConfigureAwait(false);
+    }
 
     /// <inheritdoc/>
     public async ValueTask MembershipEndedAsync(

@@ -684,6 +684,7 @@ public static class HostingRegistration
         options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<Factor>());
         options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<TakedownTrigger>());
         options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<SubjectType>());
+        options.SerializerOptions.Converters.Add(new JsonStringEnumConverter<FormerMailbox>());
         options.SerializerOptions.TypeInfoResolverChain.Clear();
         options.SerializerOptions.TypeInfoResolverChain.Add(RegistrationJson.Default);
         options.SerializerOptions.TypeInfoResolverChain.Add(AuthenticationJson.Default);

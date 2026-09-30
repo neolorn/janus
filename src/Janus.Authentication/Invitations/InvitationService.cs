@@ -42,10 +42,12 @@ namespace Janus.Authentication.Invitations;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where the link's token is drawn from.</param>
 /// <remarks>
-/// Implements LIB-API-005, IDN-LIFE-009a, REG-INV-001, REG-MAIL-001, INT-MAIL-006 and
-/// chapter 09 section 8a. The mailboxes are the administrative organization's, so its
-/// mail is integrated exactly where it is the organization invited into and the
-/// deployment registered a mail server. The link goes out before anything is written,
+/// Implements LIB-API-005, IDN-LIFE-009a, REG-INV-001, REG-MAIL-001, REG-MAIL-003,
+/// INT-MAIL-006 and chapter 09 section 8a. The mailboxes are the administrative
+/// organization's, so its mail is integrated exactly where it is the organization
+/// invited into and the deployment registered a mail server. A mailbox someone has held
+/// passes to nobody without the administrator's choice: the invitation names it, with
+/// a reason, and the issue's step-up and audit record carry it (D-166, D-178). The link goes out before anything is written,
 /// so an invitation whose link could not be sent is never issued; one whose writing
 /// fails leaves a link that opens nothing.
 /// </remarks>
@@ -115,6 +117,14 @@ internal sealed class InvitationService(
             return Result.Failure<IssuedInvitation>(failure);
         }
 
+        MailboxTakeover? takeover = Takeover(request)
+            .Match(value => value, error => Withheld<MailboxTakeover?>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<IssuedInvitation>(failure);
+        }
+
         IReadOnlyList<RoleName> attached = (await RolesAsync(context, organization, request.Roles, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<IReadOnlyList<RoleName>>(error, ref failure));
@@ -139,13 +149,19 @@ internal sealed class InvitationService(
 
         if (bound.Corporate is EmailAddress corporate)
         {
-            reservation = (await ReservedAsync(corporate, now, cancellationToken).ConfigureAwait(false))
+            reservation = (await ReservedAsync(corporate, takeover, now, cancellationToken).ConfigureAwait(false))
                 .Match(value => value, error => Withheld<Reservation>(error, ref failure));
 
             if (failure is not null)
             {
                 return Result.Failure<IssuedInvitation>(failure);
             }
+        }
+        else if (takeover is not null)
+        {
+            // REG-MAIL-003, D-178: with no corporate address no held mailbox stands for
+            // one, so there is nothing for the choice to act on.
+            return Result.Failure<IssuedInvitation>(Named(ErrorCodes.RequestInvalid, "formerMailbox"));
         }
 
         if (await stepUp
@@ -192,6 +208,7 @@ internal sealed class InvitationService(
                 AuditActions.InvitationIssued,
                 organization,
                 invitation.Id,
+                takeover,
                 acting,
                 context.BreakGlassReason,
                 now,
@@ -403,6 +420,23 @@ internal sealed class InvitationService(
             corporate?.Address));
     }
 
+    // REG-MAIL-003 and chapter 09 section 8a: a former mailbox is named with a reason,
+    // free text of 1 to 1024 characters after trimming (API-CONV-002), and a reason is
+    // part of that pair, so one without it is not the shape the endpoint takes.
+    private static Result<MailboxTakeover?> Takeover(InvitationRequest request)
+    {
+        if (request.FormerMailbox is not FormerMailbox choice)
+        {
+            return request.Reason is null
+                ? Result.Success<MailboxTakeover?>(null)
+                : Result.Failure<MailboxTakeover?>(Malformed("reason"));
+        }
+
+        return request.Reason?.Trim() is { Length: > 0 and <= 1024 } stated
+            ? Result.Success<MailboxTakeover?>(new MailboxTakeover(choice, stated))
+            : Result.Failure<MailboxTakeover?>(Malformed("reason"));
+    }
+
     // REG-INV-001: the roles attach across the organization with the membership, so
     // naming one is granting it: it asks what a grant asks, including the permission to
     // administer the deployment for a role that carries it (OPS-CFG-007).
@@ -492,17 +526,23 @@ internal sealed class InvitationService(
         return Result.Success<IReadOnlyList<InvitationDocument>>(shown);
     }
 
-    // REG-MAIL-001: one mailbox per address, and one invitation standing over it. A
+    // REG-MAIL-001: one mailbox stands for an address, and one invitation over it. A
     // mailbox an account holds is taken; an invitation still open over it is taken
     // too, until it is revoked; one that expired unacknowledged is replaced.
+    // REG-MAIL-003, D-178: a mailbox someone has held passes on only under the choice
+    // the invitation names; an address whose last holder was erased is found no more,
+    // so it is one never held, and a choice where no held mailbox stands is refused.
     private async ValueTask<Result<Reservation>> ReservedAsync(
         EmailAddress corporate,
+        MailboxTakeover? takeover,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         if (await mailboxes.FindAsync(corporate, cancellationToken).ConfigureAwait(false) is not Mailbox existing)
         {
-            return Result.Success(new Reservation(Mailbox.Reserved(corporate, now), IsNew: true, []));
+            return takeover is null
+                ? Result.Success(new Reservation(Mailbox.Reserved(corporate, now), IsNew: true, [], Former: null))
+                : Result.Failure<Reservation>(Named(ErrorCodes.RequestInvalid, "formerMailbox"));
         }
 
         if (existing.IsHeld)
@@ -519,7 +559,19 @@ internal sealed class InvitationService(
             return Result.Failure<Reservation>(Malformed("corporateEmail"));
         }
 
-        return Result.Success(new Reservation(existing, IsNew: false, standing));
+        if (!existing.WasHeld)
+        {
+            return takeover is null
+                ? Result.Success(new Reservation(existing, IsNew: false, standing, Former: null))
+                : Result.Failure<Reservation>(Named(ErrorCodes.RequestInvalid, "formerMailbox"));
+        }
+
+        return takeover?.Choice switch
+        {
+            null => Result.Failure<Reservation>(Error.From(ErrorCodes.InvitationMailboxHeld)),
+            FormerMailbox.Transfer => Result.Success(new Reservation(existing, IsNew: false, standing, Former: null)),
+            _ => Result.Success(new Reservation(Mailbox.Reserved(corporate, now), IsNew: true, standing, Former: existing)),
+        };
     }
 
     private async ValueTask ReserveAsync(
@@ -532,6 +584,15 @@ internal sealed class InvitationService(
         foreach (Invitation replaced in reservation.Replaced)
         {
             await WithdrawnAsync(replaced, acting, breakGlassReason, now, cancellationToken).ConfigureAwait(false);
+        }
+
+        // REG-MAIL-003, D-178: the old mailbox stands aside, owed its removal, before
+        // the new one takes the address.
+        if (reservation.Former is Mailbox former)
+        {
+            former.Replace(now);
+
+            await mailboxes.RecordAsync(former, cancellationToken).ConfigureAwait(false);
         }
 
         if (reservation.IsNew)
@@ -638,6 +699,7 @@ internal sealed class InvitationService(
                 AuditActions.InvitationRevoked,
                 invitation.Organization,
                 invitation.Id,
+                takeover: null,
                 acting,
                 breakGlassReason,
                 now,
@@ -687,5 +749,5 @@ internal sealed class InvitationService(
 
     private sealed record Bound(InvitedIdentifiers Identifiers, EmailAddress? Linked, EmailAddress? Corporate);
 
-    private sealed record Reservation(Mailbox Mailbox, bool IsNew, IReadOnlyList<Invitation> Replaced);
+    private sealed record Reservation(Mailbox Mailbox, bool IsNew, IReadOnlyList<Invitation> Replaced, Mailbox? Former);
 }

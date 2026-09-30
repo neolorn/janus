@@ -8146,6 +8146,8 @@ revoke and re-invite tests land with the invitation endpoints.
 *Chapter text that should change.* REG-MAIL-003 could say the retired mailbox is
 reserved again rather than recreated.
 
+**Superseded by D-166.**
+
 ---
 
 ## 222. The mailbox address is its holder's personal field

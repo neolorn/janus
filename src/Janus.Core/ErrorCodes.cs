@@ -392,6 +392,14 @@ public static class ErrorCodes
     public static ErrorCode InvitationNotFound { get; } = ErrorCode.Parse("identity.invitation.notfound");
 
     /// <summary>
+    /// The corporate address names a mailbox someone has held, and the invitation does
+    /// not say what becomes of it. Name <c>formerMailbox</c>, <c>transfer</c> or
+    /// <c>replace</c>, with a reason.
+    /// </summary>
+    /// <remarks>Implements REG-MAIL-001, REG-MAIL-003 and INT-MAIL-006, chapter 10 section 1.1.</remarks>
+    public static ErrorCode InvitationMailboxHeld { get; } = ErrorCode.Parse("identity.invitation.mailboxheld");
+
+    /// <summary>
     /// The account holds no mailbox the mail server is told to enable, or the deployment
     /// has no mail server registered; the app passwords are not present for it. A member
     /// of the administrative organization is given a mailbox by invitation.
@@ -1007,6 +1015,14 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements API-CONV-002, chapter 10 sections 1.5 and 6.</remarks>
     public static ErrorCode RequestMalformed { get; } = ErrorCode.Parse("api.request.malformed");
+
+    /// <summary>
+    /// The request is well formed and refused on its meaning, where no more specific
+    /// code exists: it names something that does not exist or cannot be acted on.
+    /// <c>details.member</c> names the member.
+    /// </summary>
+    /// <remarks>Implements API-CONV-003, chapter 10 section 1.5.</remarks>
+    public static ErrorCode RequestInvalid { get; } = ErrorCode.Parse("api.request.invalid");
 
     /// <summary>
     /// An unhandled fault. The body carries the correlation identifier and nothing

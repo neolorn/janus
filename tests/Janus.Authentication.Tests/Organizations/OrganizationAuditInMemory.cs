@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Invitations;
 using Janus.Authentication.Organizations;
 using Janus.Core;
 
@@ -82,6 +83,7 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
         AuditAction action,
         OrganizationId organization,
         InvitationId invitation,
+        MailboxTakeover? takeover,
         SubjectId actor,
         string? breakGlassReason,
         DateTimeOffset at,
@@ -90,6 +92,7 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
         _changes.Add(new OrganizationChange(action, organization, string.Empty, actor, at)
         {
             Invitation = invitation,
+            Takeover = takeover,
             BreakGlassReason = breakGlassReason,
         });
 
@@ -140,6 +143,11 @@ internal sealed class OrganizationAuditInMemory : IOrganizationAudit
         /// Which invitation was issued or revoked, where one was.
         /// </summary>
         public InvitationId? Invitation { get; init; }
+
+        /// <summary>
+        /// What an invitation chose for a former mailbox, where it named one.
+        /// </summary>
+        public MailboxTakeover? Takeover { get; init; }
 
         /// <summary>
         /// Which membership ended, where one did.

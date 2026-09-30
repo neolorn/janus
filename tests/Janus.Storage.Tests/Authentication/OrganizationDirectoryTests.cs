@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Janus.Authentication.Invitations;
 using Janus.Authentication.Organizations;
 using Janus.Core;
 using Janus.Identity.Audit;
@@ -15,7 +16,7 @@ namespace Janus.Storage.Tests.Authentication;
 
 /// <summary>
 /// An organization's lifecycle as the database keeps it, its current members, and what
-/// a change leaves in the trail (IDN-ORG-002 to IDN-ORG-004, IDN-AUD-001).
+/// a change leaves in the trail (IDN-ORG-002 to IDN-ORG-004, IDN-AUD-001, REG-MAIL-003).
 /// </summary>
 /// <remarks>
 /// The port implementations are tested against the real database (D-156). One database
@@ -150,6 +151,54 @@ public sealed class OrganizationDirectoryTests(DatabaseFixture database)
         Assert.Equal(organization, read.Organization);
         Assert.Equal(["reason"], read.Details.Keys.ToArray());
         Assert.Equal("Closing the branch.", read.Details["reason"].GetString());
+    }
+
+    /// <summary>
+    /// REG-MAIL-003 AC6 and chapter 10 section 5.24: an issue that takes over a former
+    /// mailbox is recorded with the invitation, the choice and its reason; one that
+    /// names none carries the invitation alone.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_MAIL_003_AC6_ATakeoverIsRecordedWithTheIssueAsync()
+    {
+        SubjectId actor = await _deployment.AccountAsync(Noon);
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        var replaced = new InvitationId(Guid.CreateVersion7());
+        var plain = new InvitationId(Guid.CreateVersion7());
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Audit(writing).InvitationChangedAsync(
+                AuditActions.InvitationIssued,
+                organization,
+                replaced,
+                new MailboxTakeover(FormerMailbox.Replace, "The team keeps the correspondence."),
+                actor,
+                breakGlassReason: null,
+                Noon,
+                TestContext.Current.CancellationToken);
+            await Audit(writing).InvitationChangedAsync(
+                AuditActions.InvitationIssued,
+                organization,
+                plain,
+                takeover: null,
+                actor,
+                breakGlassReason: null,
+                Noon.AddMinutes(1),
+                TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        IReadOnlyList<AuditRecord> read = await RecordsAsync(actor);
+        AuditRecord taken = Assert.Single(read, record => record.Details["invitation"].GetGuid() == replaced.Value);
+        AuditRecord issued = Assert.Single(read, record => record.Details["invitation"].GetGuid() == plain.Value);
+
+        Assert.Equal(["formerMailbox", "invitation", "reason"], taken.Details.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal("replace", taken.Details["formerMailbox"].GetString());
+        Assert.Equal("The team keeps the correspondence.", taken.Details["reason"].GetString());
+        Assert.Equal(organization, taken.Organization);
+        Assert.Equal(["invitation"], issued.Details.Keys.ToArray());
     }
 
     private static OrganizationDirectory Directory(StoreContext context) =>

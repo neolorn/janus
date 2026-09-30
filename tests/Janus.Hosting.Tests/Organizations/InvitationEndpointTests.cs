@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Invitations;
+using Janus.Authentication.Mailboxes;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
@@ -14,7 +15,7 @@ namespace Janus.Hosting.Tests.Organizations;
 /// The invitations over <c>/admin/organizations/{id}/invitations</c> of chapter 09
 /// section 8a: issuing a time-boxed link and revoking an unused one, and the end of a
 /// membership over <c>/admin/organizations/{id}/memberships</c> (IDN-LIFE-009a,
-/// IDN-MEM-001, REG-INV-001, REG-MAIL-001).
+/// IDN-MEM-001, REG-INV-001, REG-MAIL-001, REG-MAIL-003).
 /// </summary>
 [Trait("kind", "unit")]
 public sealed class InvitationEndpointTests : IAsyncDisposable
@@ -205,6 +206,54 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-MAIL-003 AC6 and AC7 and 09 section 8a: a corporate address whose mailbox
+    /// was held before answers <c>409</c> <c>identity.invitation.mailboxheld</c> until
+    /// the body names <c>formerMailbox</c> with a reason; a value the member does not
+    /// take is a <c>400</c>, and a <c>formerMailbox</c> where no held mailbox
+    /// stands is a <c>422</c> <c>api.request.invalid</c> naming it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_MAIL_003_AC6_AMailboxSomeoneHeldPassesOnlyUnderAFormerMailboxAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+        var retired = Mailbox.Reserved(Parsed("invited@example.test"), _deployment.Clock.GetUtcNow().AddYears(-1));
+
+        retired.Hold(new SubjectId(Guid.NewGuid()));
+        retired.Retire(_deployment.Clock.GetUtcNow().AddMonths(-1));
+        _deployment.Mailboxes.Held.Add(retired);
+
+        Answer held = await administrator.SendAsync(
+            "POST",
+            PathOf(Administration),
+            """{"email":"invited@elsewhere.test","corporateEmail":"invited@example.test"}""");
+        Answer unreadable = await administrator.SendAsync(
+            "POST",
+            PathOf(Administration),
+            """{"email":"invited@elsewhere.test","corporateEmail":"invited@example.test","formerMailbox":"keep","reason":"Kept."}""");
+        Answer invalid = await administrator.SendAsync(
+            "POST",
+            PathOf(Administration),
+            """{"email":"other@elsewhere.test","corporateEmail":"other@example.test","formerMailbox":"transfer","reason":"Kept."}""");
+        Answer replaced = await administrator.SendAsync(
+            "POST",
+            PathOf(Administration),
+            """{"email":"invited@elsewhere.test","corporateEmail":"invited@example.test","formerMailbox":"replace","reason":"Kept."}""");
+
+        Assert.Equal(StatusCodes.Status409Conflict, held.Status);
+        Assert.Equal(ErrorCodes.InvitationMailboxHeld.ToString(), held.Text("code"));
+        Assert.Equal(StatusCodes.Status400BadRequest, unreadable.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), unreadable.Text("code"));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, invalid.Status);
+        Assert.Equal(ErrorCodes.RequestInvalid.ToString(), invalid.Text("code"));
+        Assert.Equal("formerMailbox", invalid.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal(StatusCodes.Status201Created, replaced.Status);
+        Assert.Equal(2, _deployment.Mailboxes.Held.Count);
+        Assert.NotNull(retired.RemovalOwedAt);
+        Assert.Single(_deployment.Invitations.Held);
+    }
+
+    /// <summary>
     /// 09 section 8a: revoking an unused invitation answers <c>204</c>, and again;
     /// one the organization never issued is a <c>400</c> naming it.
     /// </summary>
@@ -255,6 +304,13 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
         Assert.Equal("subject", Member(again));
         Assert.Equal((member, Branch), (Assert.Single(_deployment.Endings.Ended).Subject, _deployment.Endings.Ended[0].Organization));
         Assert.Equal(AuditActions.MembershipEnded, Assert.Single(_deployment.OrganizationChanges.Changes).Action);
+    }
+
+    private static EmailAddress Parsed(string value)
+    {
+        Assert.True(EmailAddress.TryParse(value, out EmailAddress address));
+
+        return address;
     }
 
     private static string MembershipOf(OrganizationId organization, SubjectId member) =>

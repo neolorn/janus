@@ -76,7 +76,7 @@ internal sealed class MailboxStoreInMemory : IMailboxStore
     {
         ArgumentNullException.ThrowIfNull(mailbox);
 
-        if (Held.Any(held => held.Address == mailbox.Address && held.StandsForAddress))
+        if (Readable.Any(held => held.Address == mailbox.Address && held.StandsForAddress))
         {
             throw new InvalidOperationException("The address already has a mailbox.");
         }

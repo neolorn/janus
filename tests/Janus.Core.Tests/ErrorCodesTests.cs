@@ -25,6 +25,7 @@ public sealed class ErrorCodesTests
 
     private static readonly string[] Catalogue =
     [
+        "api.request.invalid",
         "api.request.malformed",
         "auth.breakglass.consumed",
         "auth.breakglass.invalid",
@@ -99,6 +100,7 @@ public sealed class ErrorCodesTests
         "identity.identifier.primary",
         "identity.invitation.expired",
         "identity.invitation.identifiermismatch",
+        "identity.invitation.mailboxheld",
         "identity.invitation.notfound",
         "identity.link.lastcredential",
         "identity.mailbox.notfound",

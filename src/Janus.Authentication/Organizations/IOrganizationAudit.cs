@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Invitations;
 using Janus.Core;
 
 namespace Janus.Authentication.Organizations;
@@ -84,11 +85,13 @@ internal interface IOrganizationAudit
     /// <summary>
     /// Records an invitation issued into an organization, or one revoked. What the
     /// invitation binds is someone's personal data before any account of theirs exists,
-    /// so the record names the invitation and nothing it binds.
+    /// so the record names the invitation and nothing it binds, and, where it takes over
+    /// a mailbox someone has held, what becomes of that mailbox and why.
     /// </summary>
     /// <param name="action">What changed.</param>
     /// <param name="organization">Which organization.</param>
     /// <param name="invitation">Which invitation.</param>
+    /// <param name="takeover">What the invitation chose for a former mailbox, or nothing.</param>
     /// <param name="actor">Who made the change.</param>
     /// <param name="breakGlassReason">
     /// The reason given at the use of the break-glass credential, where the action was
@@ -101,6 +104,7 @@ internal interface IOrganizationAudit
         AuditAction action,
         OrganizationId organization,
         InvitationId invitation,
+        MailboxTakeover? takeover,
         SubjectId actor,
         string? breakGlassReason,
         DateTimeOffset at,

@@ -39,6 +39,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private const string Personal = "person@elsewhere.test";
     private const string Corporate = "person@staff.test";
     private const string Number = "+441632960011";
+    private const string Why = "The team keeps the correspondence.";
 
     private static readonly string[] English = ["en"];
 
@@ -550,11 +551,12 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-MAIL-001: a mailbox someone has held is never removed by revoking the
-    /// invitation that reserved it again; it stays, disabled.
+    /// REG-MAIL-001 and INT-MAIL-006 AC7: a mailbox someone has held is never removed by
+    /// revoking the invitation that took it over under <c>transfer</c>; the revocation
+    /// marks nothing and the mailbox stays, disabled.
     /// </summary>
     [Fact]
-    public async Task REG_MAIL_001_RevokingKeepsAMailboxSomeoneHeldAsync()
+    public async Task INT_MAIL_006_AC7_RevokingKeepsAMailboxSomeoneHeldAsync()
     {
         var retired = Mailbox.Reserved(Parsed(Corporate), Noon.AddYears(-1));
 
@@ -562,7 +564,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         retired.Retire(Noon.AddMonths(-1));
         _mailboxes.Held.Add(retired);
 
-        IssuedInvitation issued = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+        IssuedInvitation issued = Accepted(await IssueAsync(Staff, Taking(FormerMailbox.Transfer)));
 
         Assert.Null(retired.Holder);
         Accepted(await RevokeAsync(Staff, issued.Id));
@@ -1011,7 +1013,8 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     /// makes the personal email the primary in the same transaction, retires the mailbox,
     /// which is then owed disabled whatever the account's standing, tells the set as it
     /// now stands once, announces both changes and writes the end down against the
-    /// member; the address is free for a later invitation.
+    /// member; the address is free for a later invitation that names what becomes of
+    /// the mailbox.
     /// </summary>
     [Fact]
     public async Task REG_MAIL_003_AC2_EndingTheMembershipRetiresTheCorporateAddressAsync()
@@ -1051,10 +1054,199 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Equal((Staff, _inviter, holder, ended.Id), (recorded.Organization, recorded.Actor, recorded.Member, recorded.Membership));
         Assert.Equal((1, 1), (_work.Opened, _work.Committed));
 
-        _ = Accepted(await IssueAsync(Staff, Request(email: "another@elsewhere.test", corporate: Corporate)));
+        _ = Accepted(await IssueAsync(Staff, Taking(FormerMailbox.Transfer)));
 
         Assert.Same(mailbox, Assert.Single(_mailboxes.Held));
         Assert.Null(mailbox.Holder);
+    }
+
+    /// <summary>
+    /// REG-MAIL-003 AC6 and INT-MAIL-006 AC6: an invitation of an address whose standing
+    /// mailbox was held before, naming no <c>formerMailbox</c>, is refused and changes
+    /// nothing, whoever it invites, the last holder included.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_003_AC6_AMailboxSomeoneHeldIsRefusedWithoutAFormerMailboxAsync()
+    {
+        (SubjectId holder, Mailbox mailbox) = await RetiredAsync();
+        int changes = _audit.Changes.Count;
+        int mail = _notifications.Mail.Count;
+        int recorded = _mailboxes.Recorded;
+
+        Error another = Failure(await IssueAsync(Staff, Request(email: "another@elsewhere.test", corporate: Corporate)));
+        Error same = Failure(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+
+        Assert.Equal(ErrorCodes.InvitationMailboxHeld, another.Code);
+        Assert.Empty(another.Details);
+        Assert.Equal(ErrorCodes.InvitationMailboxHeld, same.Code);
+        Assert.Empty(same.Details);
+        Assert.Same(mailbox, Assert.Single(_mailboxes.Held));
+        Assert.True(mailbox is { WasHeld: true, IsHeld: false });
+        Assert.Equal(holder, mailbox.Holder);
+        Assert.Equal(recorded, _mailboxes.Recorded);
+        Assert.Single(_invitations.Held);
+        Assert.Equal(changes, _audit.Changes.Count);
+        Assert.Equal(mail, _notifications.Mail.Count);
+    }
+
+    /// <summary>
+    /// REG-MAIL-003 AC6: under <c>transfer</c> the invitee is reserved the old mailbox,
+    /// whose account and mail the server keeps, and the issue records the choice and its
+    /// reason.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_003_AC6_UnderTransferTheInviteeReceivesTheOldMailboxAsync()
+    {
+        (_, Mailbox mailbox) = await RetiredAsync();
+        int applied = _server.Applied.Count;
+
+        _ = Accepted(await IssueAsync(Staff, Taking(FormerMailbox.Transfer, "  " + Why + " ")));
+        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+
+        OrganizationAuditInMemory.OrganizationChange recorded = _audit.Changes[^1];
+
+        Assert.Same(mailbox, Assert.Single(_mailboxes.Held));
+        Assert.True(mailbox is { Holder: null, StandsForAddress: true });
+        Assert.Equal(mailbox.Id, _invitations.Held[^1].Mailbox);
+        Assert.Equal(mailbox.Id, _server.Carried(Corporate));
+        Assert.Equal(applied, _server.Applied.Count);
+        Assert.Equal(AuditActions.InvitationIssued, recorded.Action);
+        Assert.Equal(new MailboxTakeover(FormerMailbox.Transfer, Why), recorded.Takeover);
+    }
+
+    /// <summary>
+    /// REG-MAIL-003 AC6 and AC7, INT-MAIL-006 AC5 and AC7: under <c>replace</c> the old
+    /// mailbox's row records the instant it was replaced and is owed <c>removed</c>, a
+    /// new mailbox is reserved and is the one the address finds, and its creation waits
+    /// until the server has removed the old one.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_003_AC6_UnderReplaceTheOldMailboxIsRemovedAndANewOneReservedAsync()
+    {
+        (_, Mailbox former) = await RetiredAsync();
+
+        _clock.Advance(TimeSpan.FromDays(1));
+
+        _ = Accepted(await IssueAsync(Staff, Taking(FormerMailbox.Replace)));
+
+        Mailbox reserved = _mailboxes.Held[^1];
+        DateTimeOffset now = _clock.GetUtcNow();
+
+        Assert.Equal(2, _mailboxes.Held.Count);
+        Assert.Equal(now, former.RemovalOwedAt);
+        Assert.False(former.StandsForAddress);
+        Assert.Equal(MailboxState.Removed, former.Owed(stands: false));
+        Assert.Same(reserved, await _mailboxes.FindAsync(Parsed(Corporate), TestContext.Current.CancellationToken));
+        Assert.Equal(reserved.Id, _invitations.Held[^1].Mailbox);
+        Assert.Equal(new MailboxTakeover(FormerMailbox.Replace, Why), _audit.Changes[^1].Takeover);
+
+        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal((former.Id, MailboxState.Removed), (_server.Applied[^1].Mailbox, _server.Applied[^1].State));
+        Assert.Null(_server.Hosts(Corporate));
+        Assert.DoesNotContain(_server.Received, push => push.Mailbox == reserved.Id);
+
+        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(reserved.Id, _server.Carried(Corporate));
+        Assert.False(_server.Hosts(Corporate));
+    }
+
+    /// <summary>
+    /// REG-MAIL-003 AC7 and INT-MAIL-006 AC6: an invitation naming
+    /// <c>formerMailbox</c> where no held mailbox stands for the address is refused
+    /// <c>api.request.invalid</c> naming the member, and changes no mailbox: an address
+    /// with no mailbox, a reservation nobody took, an erased holder's address, and an
+    /// invitation with no corporate address at all.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_003_AC7_AFormerMailboxWhereNoHeldMailboxStandsIsInvalidAsync()
+    {
+        (ErrorCode, string?) invalid = (ErrorCodes.RequestInvalid, "formerMailbox");
+
+        Assert.Equal(invalid, Coded(Failure(await IssueAsync(Staff, Taking(FormerMailbox.Transfer)))));
+        Assert.Empty(_mailboxes.Held);
+
+        _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+        _clock.Advance(Settings.LinkInvitationLifetime.Default + TimeSpan.FromMinutes(1));
+
+        Mailbox reserved = Assert.Single(_mailboxes.Held);
+
+        Assert.Equal(invalid, Coded(Failure(await IssueAsync(Staff, Taking(FormerMailbox.Replace)))));
+        Assert.True(reserved is { IsRemovable: true, StandsForAddress: true });
+
+        var erased = Mailbox.Reserved(Parsed("erased@staff.test"), Noon.AddYears(-1));
+        var holder = SubjectId.New(_randomness);
+
+        erased.Hold(holder);
+        erased.Retire(Noon.AddMonths(-1));
+        _mailboxes.Held.Add(erased);
+        _ = _mailboxes.Erased.Add(holder);
+
+        Assert.Equal(
+            invalid,
+            Coded(Failure(await IssueAsync(Staff, Taking(FormerMailbox.Replace) with { CorporateEmail = "erased@staff.test" }))));
+        Assert.Equal(
+            invalid,
+            Coded(Failure(await IssueAsync(Customer, Request(email: Personal) with { FormerMailbox = FormerMailbox.Transfer, Reason = Why }))));
+        Assert.Null(erased.RemovalOwedAt);
+        Assert.Equal(2, _mailboxes.Held.Count);
+        Assert.Single(_invitations.Held);
+    }
+
+    /// <summary>
+    /// REG-MAIL-003 AC8 and INT-MAIL-006 AC6: an address whose last holder was erased is
+    /// invited without <c>formerMailbox</c>; the new mailbox adopts nothing while the
+    /// erased holder's account stands at the server, and the attempt after the operator
+    /// has erased that account creates it.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_003_AC8_AnErasedHoldersAddressIsInvitedAsNeverHeldAsync()
+    {
+        (SubjectId holder, Mailbox former) = await RetiredAsync();
+
+        _ = _mailboxes.Erased.Add(holder);
+
+        _ = Accepted(await IssueAsync(Staff, Request(email: "another@elsewhere.test", corporate: Corporate)));
+
+        Mailbox reserved = _mailboxes.Held[^1];
+
+        Assert.NotSame(former, reserved);
+        Assert.Null(_audit.Changes[^1].Takeover);
+
+        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal((reserved.Id, MailboxState.Disabled), (_server.Received[^1].Mailbox, _server.Received[^1].State));
+        Assert.NotNull(reserved.FailedAt);
+        Assert.Equal(former.Id, _server.Carried(Corporate));
+
+        _server.Set(Corporate, enabled: null);
+        _clock.Advance(TimeSpan.FromDays(1));
+        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(reserved.Id, _server.Carried(Corporate));
+        Assert.DoesNotContain(_server.Received, push => push.Mailbox == former.Id && push.State == MailboxState.Removed);
+    }
+
+    /// <summary>
+    /// REG-MAIL-003 and chapter 09 section 8a: a former mailbox is named with a reason of
+    /// 1 to 1024 characters after trimming, and a reason comes only with one.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_003_AFormerMailboxCarriesAReasonAsync()
+    {
+        (_, Mailbox mailbox) = await RetiredAsync();
+        (ErrorCode, string?) malformed = (ErrorCodes.RequestMalformed, "reason");
+
+        Assert.Equal(malformed, Coded(Failure(await IssueAsync(Staff, Taking(FormerMailbox.Replace) with { Reason = null }))));
+        Assert.Equal(malformed, Coded(Failure(await IssueAsync(Staff, Taking(FormerMailbox.Replace, " ")))));
+        Assert.Equal(malformed, Coded(Failure(await IssueAsync(Staff, Taking(FormerMailbox.Replace, new string('r', 1025))))));
+        Assert.Equal(malformed, Coded(Failure(await IssueAsync(Staff, Taking(FormerMailbox.Replace) with { FormerMailbox = null }))));
+        Assert.Same(mailbox, Assert.Single(_mailboxes.Held));
+
+        _ = Accepted(await IssueAsync(Staff, Taking(FormerMailbox.Replace, new string('r', 1024))));
+
+        Assert.Equal(2, _mailboxes.Held.Count);
     }
 
     /// <summary>
@@ -1147,6 +1339,11 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         IReadOnlyList<RoleName>? roles = null,
         IReadOnlyList<string>? documents = null) =>
         new(email, phone, corporate, roles ?? [], documents ?? []);
+
+    // An invitation of the corporate address that names what becomes of its former
+    // mailbox.
+    private static InvitationRequest Taking(FormerMailbox choice, string reason = Why) =>
+        Request(email: "another@elsewhere.test", corporate: Corporate) with { FormerMailbox = choice, Reason = reason };
 
     private static string? Member(Error error) =>
         error.Details.TryGetValue("member", out JsonElement member) ? member.GetString() : null;
@@ -1297,6 +1494,18 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Accepted(await AcknowledgeAsync(holder, _invitations.Held[^1].Id));
 
         return (holder, personal);
+    }
+
+    // A staff member's corporate mailbox, held until the membership ended, the server
+    // holding its account disabled.
+    private async Task<(SubjectId Holder, Mailbox Mailbox)> RetiredAsync()
+    {
+        (SubjectId holder, _) = await StaffMemberAsync();
+
+        Accepted(await EndAsync(Staff, holder));
+        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+
+        return (holder, Assert.Single(_mailboxes.Held));
     }
 
     private ValueTask<Result> RevokeAsync(OrganizationId organization, InvitationId invitation) =>

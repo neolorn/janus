@@ -568,6 +568,15 @@ against the public contract of LIB-API-001.
   waits. Once the mail server confirms the removal of a released reservation, its
   address key is overwritten and its fingerprint neutralised, and the row remains. The
   `mailboxes` column `released_at` is renamed `removal_owed_at`.
+- An invitation of a corporate address whose mailbox someone has held, the person
+  invited included, is refused `409` `identity.invitation.mailboxheld` unless its body
+  names `formerMailbox`, `transfer` (the invitee is reserved the old mailbox and its
+  mail) or `replace` (the old mailbox is owed its removal and a new one is reserved),
+  with a `reason` of 1 to 1024 characters; the issue's audit record carries both. An
+  address whose last holder was erased is invited as one never held. A `formerMailbox`
+  where no held mailbox stands for the address answers `422` `api.request.invalid`
+  naming `formerMailbox`. `InvitationRequest` gains `FormerMailbox` and `Reason`, and
+  `ErrorCodes` gains `InvitationMailboxHeld` and `RequestInvalid`.
 - Where Continue with Apple is among the system policy's `loginFactors` and
   `notification.email.sendingdomain` is not in `notification.email.relayregistered`, the
   deployment raises `relay-domain-unregistered` with the domain as it starts and

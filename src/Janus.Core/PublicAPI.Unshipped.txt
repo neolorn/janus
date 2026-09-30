@@ -1485,9 +1485,13 @@ Janus.Core.InvitationRequest.Documents.init -> void
 Janus.Core.InvitationRequest.Email.get -> string?
 Janus.Core.InvitationRequest.Email.init -> void
 Janus.Core.InvitationRequest.Equals(Janus.Core.InvitationRequest? other) -> bool
+Janus.Core.InvitationRequest.FormerMailbox.get -> Janus.Core.FormerMailbox?
+Janus.Core.InvitationRequest.FormerMailbox.init -> void
 Janus.Core.InvitationRequest.InvitationRequest(string? Email, string? Phone, string? CorporateEmail, System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>! Roles, System.Collections.Generic.IReadOnlyList<string!>! Documents) -> void
 Janus.Core.InvitationRequest.Phone.get -> string?
 Janus.Core.InvitationRequest.Phone.init -> void
+Janus.Core.InvitationRequest.Reason.get -> string?
+Janus.Core.InvitationRequest.Reason.init -> void
 Janus.Core.InvitationRequest.Roles.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>!
 Janus.Core.InvitationRequest.Roles.init -> void
 Janus.Core.IssuedAppPassword
@@ -1625,6 +1629,9 @@ Janus.Core.MailboxPush.Mailbox.init -> void
 Janus.Core.MailboxPush.MailboxPush(Janus.Core.MailboxId Mailbox, System.Guid Key, string! Address, Janus.Core.MailboxState State) -> void
 Janus.Core.MailboxPush.State.get -> Janus.Core.MailboxState
 Janus.Core.MailboxPush.State.init -> void
+Janus.Core.FormerMailbox
+Janus.Core.FormerMailbox.Replace = 1 -> Janus.Core.FormerMailbox
+Janus.Core.FormerMailbox.Transfer = 0 -> Janus.Core.FormerMailbox
 Janus.Core.MailboxState
 Janus.Core.MailboxState.Disabled = 0 -> Janus.Core.MailboxState
 Janus.Core.MailboxState.Enabled = 1 -> Janus.Core.MailboxState
@@ -3837,6 +3844,7 @@ static Janus.Core.ErrorCodes.IdentifierMixedScript.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierPrimary.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.InvitationExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.InvitationIdentifierMismatch.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.InvitationMailboxHeld.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.InvitationNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.LinkLastCredential.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.LossReportNotPermitted.get -> Janus.Core.ErrorCode
@@ -3875,6 +3883,7 @@ static Janus.Core.ErrorCodes.RegistrationIncomplete.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RegistrationSignedIn.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestDecided.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestDuplicate.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.RequestInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestMalformed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.RequestReceivedFuture.get -> Janus.Core.ErrorCode

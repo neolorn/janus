@@ -17,13 +17,23 @@ namespace Janus.Hosting.Organizations;
 /// </param>
 /// <param name="Roles">The roles granted across the organization with the membership; none where absent.</param>
 /// <param name="Documents">The documents shown at the membership step; none where absent.</param>
-/// <remarks>Implements chapter 09 section 8a, IDN-LIFE-009a, REG-INV-001 and REG-MAIL-001.</remarks>
+/// <param name="FormerMailbox">
+/// What becomes of a mailbox someone has held at the corporate address; absent where
+/// none stands for it.
+/// </param>
+/// <param name="Reason">Why, where a former mailbox is named.</param>
+/// <remarks>
+/// Implements chapter 09 section 8a, IDN-LIFE-009a, REG-INV-001, REG-MAIL-001 and
+/// REG-MAIL-003.
+/// </remarks>
 internal sealed record InvitationBody(
     string? Email,
     string? Phone,
     string? CorporateEmail,
     IReadOnlyList<string>? Roles,
-    IReadOnlyList<string>? Documents)
+    IReadOnlyList<string>? Documents,
+    FormerMailbox? FormerMailbox,
+    string? Reason)
 {
     /// <summary>
     /// The invitation the body describes, or the member it cannot be read at.
@@ -43,6 +53,12 @@ internal sealed record InvitationBody(
             roles.Add(role);
         }
 
-        return (new InvitationRequest(Email, Phone, CorporateEmail, roles, Documents ?? []), string.Empty);
+        return (
+            new InvitationRequest(Email, Phone, CorporateEmail, roles, Documents ?? [])
+            {
+                FormerMailbox = FormerMailbox,
+                Reason = Reason,
+            },
+            string.Empty);
     }
 }

@@ -210,6 +210,7 @@ internal sealed class InvitationAcknowledgement(
                 AuditActions.InvitationAcknowledged,
                 invitation.Organization,
                 invitation.Id,
+                takeover: null,
                 invitee,
                 context.BreakGlassReason,
                 now,
