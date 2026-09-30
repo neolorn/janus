@@ -624,7 +624,9 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     /// the database, and among them the key ring's choice of the mail server in use,
     /// stand at the head of the collection and no request is served before them; the key
     /// ring's reading of the secrets comes before them all, as the start begins (D-160,
-    /// CONV-DESIGN-007, D-176).
+    /// CONV-DESIGN-007, D-176). The hosted services are read as the host starts them,
+    /// resolved in the order they were registered, so one a factory makes is read by the
+    /// type it answers (D-180).
     /// </summary>
     [Fact]
     public void AUTHZ_MODEL_004_AC2_TheChecksStartBeforeEverythingElseRegistered()
@@ -634,6 +636,9 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         services.AddSingleton<IHostedService>(new ServerStandIn());
 
         Declared(services);
+        services.AddLogging();
+
+        using ServiceProvider provider = services.BuildServiceProvider();
 
         ServiceDescriptor[] hosted = [.. services.Where(service => service.ServiceType == typeof(IHostedService))];
         Type[] leading =
@@ -651,7 +656,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
             typeof(RelayValidationService),
         ];
 
-        Assert.Equal(leading, hosted.Take(leading.Length).Select(service => service.ImplementationType));
+        Assert.Equal(leading, provider.GetServices<IHostedService>().Take(leading.Length).Select(service => service.GetType()));
         Assert.Equal(Enumerable.Range(0, leading.Length), hosted.Take(leading.Length).Select(services.IndexOf));
         Assert.True(typeof(IHostedLifecycleService).IsAssignableFrom(typeof(KeyRingService)));
     }

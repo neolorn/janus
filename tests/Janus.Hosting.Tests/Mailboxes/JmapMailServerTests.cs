@@ -597,7 +597,7 @@ public sealed class JmapMailServerTests : IDisposable
         services.AddKeyRing();
         services.AddSingleton<JmapMailServer>();
         _ = services.AddHttpClient(JmapMailServer.Channel).ConfigurePrimaryHttpMessageHandler(() => _server);
-        services.AddSingleton<KeyRingService>();
+        services.AddSingleton(KeyRingRegistration.Service);
 
         if (host is not null)
         {

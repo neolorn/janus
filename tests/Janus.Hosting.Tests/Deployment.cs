@@ -836,7 +836,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddKeyRing();
         _ = services.AddSingleton<JmapMailServer>();
         _ = services.AddHttpClient(JmapMailServer.Channel);
-        _ = services.AddSingleton<IHostedService, KeyRingService>();
+        services.Add(KeyRingRegistration.HostedService());
 
         // IDN-LIFE-012a: what the host declared of each provider, whose documents are
         // read from the fake that signs its events.

@@ -203,28 +203,13 @@ public static class HostingRegistration
         // read a declaration find nothing to read.
         services.TryAddSingleton(RestrictionKeySuppliers.None);
 
-        // AUTH-ABUSE-004, OPS-ALERT-001: the one path every message takes, and what
-        // decides whether it goes.
-        services.AddScoped<SmsBalance>();
-        services.AddScoped<RelayRegistration>();
-        services.AddScoped<SendingService>();
-        services.AddScoped<ISendingRestrictions>(provider => provider.GetRequiredService<SendingService>());
-
-        // LIB-EXT-001: the shipped handler carries email and SMS; a deployment that
-        // registers its own before this runs keeps it.
-        services.TryAddScoped<INotificationHandler>(
-            provider => provider.GetRequiredService<SendingService>());
-
-        // LIB-EXT-001: the shipped catalogue words every message in the languages the
-        // library carries, and is likewise kept only where the deployment registered
-        // none of its own. A deployment that registers neither still starts.
-        services.TryAddSingleton<IMessageTemplates, DefaultMessageTemplates>();
+        // INT-MAIL-009: outbound delivery is registered apart from mailbox hosting.
+        services.AddOutboundDelivery();
         services.AddScoped(services => new PhoneSignals(
             services.GetService<PhoneSignalProvider>(),
             services.GetRequiredService<IPhoneSignalAudit>(),
             services.GetRequiredService<IUnitOfWork>(),
             services.GetRequiredService<TimeProvider>()));
-        services.AddScoped<SendingValidation>();
         services.AddScoped<ConfigurationAdministration>();
         services.AddScoped<RestrictionAdministration>();
         services.AddScoped<IRestrictionSet, RestrictionSetService>();
@@ -640,7 +625,7 @@ public static class HostingRegistration
         // stopped, the worker and the server included. It chooses the mail server in use
         // here, once the stored values have been checked and an endpoint that is not
         // https refused, and before any check that asks which mail server is in use.
-        services.Insert(4, ServiceDescriptor.Singleton<IHostedService, KeyRingService>());
+        services.Insert(4, KeyRingRegistration.HostedService());
         services.Insert(5, ServiceDescriptor.Singleton<IHostedService, HandlerValidationService>());
         services.Insert(6, ServiceDescriptor.Singleton<IHostedService, ConfigurationValidationService>());
         services.Insert(7, ServiceDescriptor.Singleton<IHostedService, DeclarationValidationService>());

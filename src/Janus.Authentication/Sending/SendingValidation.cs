@@ -31,17 +31,17 @@ namespace Janus.Authentication.Sending;
 /// INT-GEN-001, INF-TLS-004, LIB-EXT-001 and LIB-HOST-001. Every deployment sends mail
 /// and text messages, alerts among them, and the library ships no transport of its own
 /// yet, so a deployment that registered none for a channel is refused here rather than
-/// at its first send (D-166, 270). A recipient is never resolved to a language the catalogue cannot
-/// answer in, because startup refuses that deployment. Declaring no catalogue is not
-/// itself a refusal: the library ships one, and what is checked is the catalogue in
-/// force, whichever it is (LIB-EXT-001).
+/// at its first send (D-166, 270). A recipient is never resolved to a language the
+/// catalogue cannot answer in, because startup refuses that deployment. Declaring no
+/// catalogue is not itself a refusal: the library ships one, and what is checked is the
+/// catalogue in force, whichever it is (LIB-EXT-001).
 /// </remarks>
 internal sealed class SendingValidation(
     IConfigurationStore configuration,
     IMessageTemplates templates,
     RestrictionKeySuppliers suppliers,
-    IMailTransport? mailTransport = null,
-    ISmsTransport? smsTransport = null)
+    IMailTransport? mailTransport,
+    ISmsTransport? smsTransport)
 {
     private const string MailTransport = "mailTransport";
 

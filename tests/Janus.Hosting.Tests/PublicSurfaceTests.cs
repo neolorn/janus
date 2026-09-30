@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Callbacks;
+using Janus.Hosting.Tests.Authorization;
 using Janus.Hosting.Tests.Bff;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
@@ -325,7 +326,82 @@ public sealed class PublicSurfaceTests
         Assert.Equal([typeof(HostingRegistration).FullName + "." + nameof(HostingRegistration.AddJanus)], registrations);
     }
 
+    /// <summary>
+    /// CONV-DESIGN-007 AC6 (D-180): no constructor of a type the library registers has a
+    /// parameter whose default stands for an absent declaration, read as any parameter
+    /// whose default value is null, whatever its type; and a type whose constructor takes
+    /// a declaration that may be absent, read as a parameter of a nullable reference type,
+    /// is made by a factory that asks the container for it and is never activated from its
+    /// constructor. The registered types are read from the collection the entry point
+    /// fills: the type a registration names, the instance it holds, or the type its
+    /// factory is declared to answer.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_007_AC6_AnAbsentDeclarationReachesItsUserThroughAFactory()
+    {
+        ServiceDescriptor[] registrations = [.. Registered()];
+        Type[] registered =
+        [
+            .. registrations
+                .Select(Made)
+                .OfType<Type>()
+                .Where(Ships)
+                .Distinct(),
+        ];
+        var nullability = new NullabilityInfoContext();
+
+        IEnumerable<string> defaulted = registered
+            .SelectMany(type => type
+                .GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                .SelectMany(constructor => constructor.GetParameters())
+                .Where(parameter => parameter.HasDefaultValue && parameter.DefaultValue is null)
+                .Select(parameter => type.FullName + " " + parameter.Name));
+        IEnumerable<string> activated = registrations
+            .Select(Activated)
+            .OfType<Type>()
+            .Where(Ships)
+            .Where(type => type
+                .GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                .SelectMany(constructor => constructor.GetParameters())
+                .Any(parameter => !parameter.ParameterType.IsValueType
+                    && nullability.Create(parameter).WriteState is NullabilityState.Nullable))
+            .Select(type => type.FullName!);
+
+        Assert.Contains(typeof(KeyRingService), registered);
+        Assert.Contains(typeof(Janus.Authentication.Sending.SendingValidation), registered);
+        Assert.Empty(defaulted);
+        Assert.Empty(activated);
+    }
+
     private static Assembly Load(string name) => Assembly.Load(new AssemblyName(name));
+
+    // CONV-DESIGN-007 AC6: what the entry point registers for a deployment that declares
+    // what the host fixture declares.
+    private static IServiceCollection Registered() =>
+        new ServiceCollection().AddJanus(
+            "Host=nowhere;Database=identity",
+            new KeyEncryptionKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
+            new FingerprintKeys(1, new Dictionary<int, ReadOnlyMemory<byte>> { [1] = new byte[32] }),
+            new byte[32],
+            HostFixture.Declaration(),
+            ApplicationKind.Public);
+
+    // The type a registration makes: the one it names, the instance it holds, or what its
+    // factory is declared to answer.
+    private static Type? Made(ServiceDescriptor service) =>
+        service.IsKeyedService
+            ? service.KeyedImplementationType
+                ?? service.KeyedImplementationInstance?.GetType()
+                ?? service.KeyedImplementationFactory?.Method.ReturnType
+            : service.ImplementationType
+                ?? service.ImplementationInstance?.GetType()
+                ?? service.ImplementationFactory?.Method.ReturnType;
+
+    private static bool Ships(Type type) => Shipped.Contains(type.Assembly.GetName().Name, StringComparer.Ordinal);
+
+    // The type the container makes from its constructor, where a registration names one.
+    private static Type? Activated(ServiceDescriptor service) =>
+        service.IsKeyedService ? service.KeyedImplementationType : service.ImplementationType;
 
     // CONV-DESIGN-002 AC1: every public interface of the core but those the host
     // implements.

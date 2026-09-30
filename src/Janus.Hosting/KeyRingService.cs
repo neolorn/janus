@@ -44,8 +44,8 @@ internal sealed class KeyRingService(
     JmapMailServer adapter,
     IServiceScopeFactory scopes,
     IEnumerable<SocialProvider> providers,
-    IMailServer? host = null,
-    ISecretSource? source = null) : IHostedLifecycleService
+    IMailServer? host,
+    ISecretSource? source) : IHostedLifecycleService
 {
     /// <inheritdoc/>
     /// <exception cref="StartupException">A secret cannot be read, or is unusable.</exception>
