@@ -90,6 +90,7 @@ public sealed class ErrorCodesTests
         "identity.change.pending",
         "identity.change.windowelapsed",
         "identity.deletion.windowelapsed",
+        "identity.domain.notfound",
         "identity.domain.unverified",
         "identity.identifier.domainnotallowed",
         "identity.identifier.invalid",

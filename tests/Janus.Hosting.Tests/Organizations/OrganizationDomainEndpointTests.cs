@@ -453,10 +453,10 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
     /// <summary>
     /// API-CONV-002, IDN-ORG-006 and 09 section 8a: a domain is read in its canonical
     /// ASCII form, so the Unicode and the ASCII forms of one domain are one; what is not
-    /// a domain of two labels and an unlisted domain are refused naming the member, a
-    /// missing or blank reason as a configuration change without one is, naming the
-    /// organization's policy key, with nothing written; listing a domain twice changes
-    /// nothing.
+    /// a domain of two labels is refused naming the member, a domain the organization
+    /// does not list, never listed or removed, is not found, a missing or blank reason
+    /// is refused as a configuration change without one is, naming the organization's
+    /// policy key, with nothing written; listing a domain twice changes nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -498,8 +498,50 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
         Assert.Equal(PolicyKey(Branch), Unreasoned(unverified));
         Assert.Equal(PolicyKey(Branch), Unreasoned(unremoved));
         Assert.Single(_deployment.OrganizationChanges.Changes);
-        Assert.Equal("domain", Member(unlisted));
+        Assert.Equal(StatusCodes.Status404NotFound, unlisted.Status);
+        Assert.Equal(ErrorCodes.DomainNotFound.ToString(), unlisted.Text("code"));
         Assert.Equal(StatusCodes.Status204NoContent, absent.Status);
+
+        Answer removed = await administrator.SendAsync("DELETE", PathOf(Branch) + "/xn--bcher-kva.example", Reasoned);
+        Answer gone = await administrator.SendAsync("POST", PathOf(Branch) + "/xn--bcher-kva.example/verify", Reasoned);
+
+        Assert.Equal(StatusCodes.Status204NoContent, removed.Status);
+        Assert.Equal(StatusCodes.Status404NotFound, gone.Status);
+        Assert.Equal(ErrorCodes.DomainNotFound.ToString(), gone.Text("code"));
+    }
+
+    /// <summary>
+    /// REG-DOM-001 AC12 and X6 of D-166: a domain is verified by its TXT record, so a
+    /// deployment that registered no DNS resolver lists none; the addition is refused
+    /// naming the field and the declaration it requires, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_DOM_001_AC12_ADomainIsNotListedWithoutAResolverAsync()
+    {
+        await using var unresolved = new Janus.Hosting.Tests.Deployment(resolver: false);
+
+        Flow.Prepare(unresolved);
+        unresolved.Administers(Administration);
+        unresolved.Organizations.Seed(Branch);
+
+        Browser administrator = await Flow.SignedInAsync(unresolved);
+        SubjectId subject = unresolved.Directory.Created[^1].Subject;
+
+        unresolved.Gate.Grant(subject, Administration, Permissions.DomainManage);
+        unresolved.Gate.Grant(subject, Administration, Permissions.SystemAdminister);
+        unresolved.Clock.Advance(TimeSpan.FromMinutes(5));
+
+        Answer refused = await administrator.SendAsync("POST", PathOf(Branch), Listed);
+        JsonElement details = refused.Json().GetProperty("details");
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed.ToString(), refused.Text("code"));
+        Assert.Equal("emailDomains", details.GetProperty("field").GetString());
+        Assert.Equal("dnsResolver", details.GetProperty("requires").GetString());
+        Assert.Empty(unresolved.Domains.Held);
+        Assert.Empty(unresolved.OrganizationChanges.Changes);
+        Assert.Empty(unresolved.Changes.Written);
     }
 
     /// <summary>

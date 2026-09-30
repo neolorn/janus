@@ -3857,6 +3857,7 @@ static Janus.Core.ErrorCodes.MailboxNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.MembershipLimitReached.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.NoticeGoverningTextMissing.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.NoticeUnpublished.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.DomainNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.OrganizationNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.OrganizationProtected.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PasswordBlocklisted.get -> Janus.Core.ErrorCode

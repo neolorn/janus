@@ -1712,6 +1712,13 @@ against the public contract of LIB-API-001.
   `policy.<organization>`, at the endpoint before any permission is asked and in the
   service alike; a policy replacement naming `emailDomains` is refused `400` naming it
   before any permission is asked.
+- Verifying a domain the organization does not list, never listed or removed, answers
+  `404` `identity.domain.notfound`.
+- A deployment that registers no `IDnsResolver` lists no domain: adding one is refused
+  `422` `config.value.notallowed` with `details.field` `emailDomains` and
+  `details.requires` `dnsResolver`, and a deployment whose stored lock lists a domain
+  does not start without a resolver (`model.startup.declarationmissing`, `details.key`
+  `dnsResolver`).
 - An audit trail. Every record names who acted, whose identity the action was taken
   under, the instant it occurred and the organization where one applies; an event about
   a principal holding no membership carries none, and the absence is the recorded fact.

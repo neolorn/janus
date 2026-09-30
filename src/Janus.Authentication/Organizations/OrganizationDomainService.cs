@@ -114,6 +114,20 @@ internal sealed class OrganizationDomainService(
             return Result.Success(listed.Answered());
         }
 
+        // REG-DOM-001, X6 of D-166: a listed domain is verified and re-verified by its
+        // TXT record, which the library reads through the resolver the deployment
+        // declares, so without one no domain is listed.
+        if (dns is null)
+        {
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+            {
+                return Result.Failure<OrganizationDomain>(notCommittedAgain);
+            }
+
+            return Result.Failure<OrganizationDomain>(Unresolvable);
+        }
+
         // 10 section 4.1a: adding a domain is a loosening, which also asks the
         // permission to loosen the deployment (OPS-CFG-002, entry 201).
         if (await RefusedAsync(context, session, read.Acting, loosening: true, cancellationToken)
@@ -187,9 +201,11 @@ internal sealed class OrganizationDomainService(
             return Result.Failure<OrganizationDomain>(refused);
         }
 
+        // API-CONV-003: a domain never listed, or removed, is a record the organization
+        // does not hold.
         if (read.Listed is not LockedDomain listed)
         {
-            return Result.Failure<OrganizationDomain>(Malformed("domain"));
+            return Result.Failure<OrganizationDomain>(Error.From(ErrorCodes.DomainNotFound));
         }
 
         if (listed.VerifiedAt is not null)
@@ -363,6 +379,14 @@ internal sealed class OrganizationDomainService(
             ["organization"] = JsonSerializer.SerializeToElement(organization.Value),
             ["domain"] = JsonSerializer.SerializeToElement(domain),
         };
+
+    private static Error Unresolvable { get; } = new(
+        ErrorCodes.ConfigurationValueNotAllowed,
+        new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+        {
+            ["field"] = JsonSerializer.SerializeToElement("emailDomains"),
+            ["requires"] = JsonSerializer.SerializeToElement("dnsResolver"),
+        });
 
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));

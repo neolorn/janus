@@ -7738,6 +7738,8 @@ failure is about the domain's proof.
 *Chapter text that should change.* 10 section 1.1 needs the row for
 `identity.domain.unverified` (below, under the rows for chapter 10).
 
+**Superseded by D-166.**
+
 ---
 
 ## 210. A failed scheduled check keeps the domain verified; only verified domains are re-checked

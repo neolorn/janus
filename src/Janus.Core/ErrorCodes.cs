@@ -222,6 +222,13 @@ public static class ErrorCodes
     public static ErrorCode OrganizationNotFound { get; } = ErrorCode.Parse("identity.organization.notfound");
 
     /// <summary>
+    /// The organization does not list the domain: it was never listed, or it was
+    /// removed. List the domain first.
+    /// </summary>
+    /// <remarks>Implements REG-DOM-001 and API-CONV-003, chapter 10 section 1.1.</remarks>
+    public static ErrorCode DomainNotFound { get; } = ErrorCode.Parse("identity.domain.notfound");
+
+    /// <summary>
     /// The username fails the PRECIS UsernameCaseMapped profile, its length bounds, or
     /// holds no letter. Choose one the profile admits that is not all digits.
     /// </summary>

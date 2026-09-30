@@ -48,10 +48,12 @@ public interface IOrganizationDomains
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The domain and the record to publish, or the refusal:
-    /// <c>identity.organization.notfound</c> where the deployment holds no such
-    /// organization, <c>config.change.reasonrequired</c> naming the organization's policy
-    /// key where the reason is blank, <c>api.request.malformed</c> naming <c>domain</c>,
-    /// or <c>reason</c> where it is longer than 1024 characters.
+    /// <c>config.value.notallowed</c> naming the field <c>emailDomains</c> and requiring
+    /// <c>dnsResolver</c> where the deployment registered no DNS resolver, which
+    /// verification needs, <c>identity.organization.notfound</c> where the deployment
+    /// holds no such organization, <c>config.change.reasonrequired</c> naming the
+    /// organization's policy key where the reason is blank, <c>api.request.malformed</c>
+    /// naming <c>domain</c>, or <c>reason</c> where it is longer than 1024 characters.
     /// </returns>
     ValueTask<Result<OrganizationDomain>> AddDomainAsync(
         AccessContext context,
@@ -75,6 +77,8 @@ public interface IOrganizationDomains
     /// <returns>
     /// The domain as it now stands, or the refusal: <c>identity.domain.unverified</c>
     /// where no record carries the token or none could be read,
+    /// <c>identity.domain.notfound</c> where the organization does not list the domain,
+    /// never having listed it or having removed it,
     /// <c>identity.organization.notfound</c> where the deployment holds no such
     /// organization, <c>config.change.reasonrequired</c> naming the organization's policy
     /// key where the reason is blank, <c>api.request.malformed</c> naming <c>domain</c>,

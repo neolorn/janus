@@ -35,24 +35,32 @@ namespace Janus.Hosting;
 /// What the deployment reads uploaded images with, or nothing where it registered
 /// none.
 /// </param>
+/// <param name="dns">
+/// Where a listed domain's TXT record is read, or nothing where the deployment
+/// registered no resolver.
+/// </param>
 /// <param name="providers">The social providers whose security events the deployment takes.</param>
-/// <param name="configuration">Where the organizations that show photos are read.</param>
+/// <param name="configuration">
+/// Where the organizations that show photos, and the domains each lists, are read.
+/// </param>
 /// <remarks>
 /// Implements LIB-HOST-001, REG-PM-001, AUTH-SESS-012, BFF-SESS-006, IDN-ATTR-002,
-/// INT-MAIL-010 and IDN-LIFE-012a.
+/// INT-MAIL-010, IDN-LIFE-012a and REG-DOM-001.
 /// The library knows no route of the frontend, so it has none to fall back on: a
 /// deployment that declares none of these is stopped here rather than answering a
 /// password manager as a site that offers neither page, meeting an interactive
 /// authorization request with nowhere to send it, or reaching the first person who
 /// arrives holding nothing without knowing what to call itself at the provider. The
 /// codec is optional until a policy shows photos, and required from then on, because
-/// the library reads no image itself. The mail server's client is optional until a mail
-/// server is registered, and required from then on, because which protocol client the
-/// server trusts is the deployment's to say. A social provider is optional, and one
-/// declared is declared whole: named once, as a social provider, with the HTTPS address
-/// of its document and at least one client, since a declaration short of that would
-/// verify none of the events it was declared for; one that is malformed is refused as
-/// invalid rather than missing, naming the provider and the member at fault (D-175).
+/// the library reads no image itself; the DNS resolver likewise until a lock lists a
+/// domain, because the library looks up no record itself. The mail server's client is
+/// optional until a mail server is registered, and required from then on, because which
+/// protocol client the server trusts is the deployment's to say. A social provider is
+/// optional, and one declared is declared whole: named once, as a social provider, with
+/// the HTTPS address of its document and at least one client, since a declaration short
+/// of that would verify none of the events it was declared for; one that is malformed is
+/// refused as invalid rather than missing, naming the provider and the member at fault
+/// (D-175).
 /// </remarks>
 internal sealed class DeclarationCoverage(
     PasskeyAddresses? addresses,
@@ -61,6 +69,7 @@ internal sealed class DeclarationCoverage(
     IMailServerInUse mail,
     MailServerClient? mailClient,
     ImageCodec? codec,
+    IDnsResolver? dns,
     IEnumerable<SocialProvider> providers,
     IConfigurationStore configuration)
 {
@@ -71,6 +80,8 @@ internal sealed class DeclarationCoverage(
     private const string Client = "signOnClient.clientId";
 
     private const string Codec = "imageCodec";
+
+    private const string Resolver = "dnsResolver";
 
     private const string MailClient = "mailServerClient.clientId";
 
@@ -133,7 +144,13 @@ internal sealed class DeclarationCoverage(
             return Invalid(declaration, field);
         }
 
-        return await PhotographedAsync(cancellationToken).ConfigureAwait(false);
+        if ((await PhotographedAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error unphotographed)
+        {
+            return Result.Failure(unphotographed);
+        }
+
+        return await ResolvedAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static Result Missing(string key) =>
@@ -226,5 +243,32 @@ internal sealed class DeclarationCoverage(
         }
 
         return shown ? Missing(Codec) : Result.Success();
+    }
+
+    // REG-DOM-001, X6 of D-166: a listed domain is verified and re-verified by its TXT
+    // record, and the library reads none unless the deployment declared a resolver.
+    private async ValueTask<Result> ResolvedAsync(CancellationToken cancellationToken)
+    {
+        if (dns is not null)
+        {
+            return Result.Success();
+        }
+
+        Error? failure = null;
+        bool listed = false;
+
+        (await configuration
+                .ReadWrittenAsync(Settings.OrganizationPolicy, cancellationToken)
+                .ConfigureAwait(false))
+            .Switch(
+                written => listed = written.Values.Any(policy => policy.EmailDomains is { Count: > 0 }),
+                error => failure = error);
+
+        if (failure is Error unreadable)
+        {
+            return Result.Failure(unreadable);
+        }
+
+        return listed ? Missing(Resolver) : Result.Success();
     }
 }

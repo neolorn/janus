@@ -35,6 +35,12 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     private static readonly string Forgotten =
         "DELETE FROM identity.settings WHERE key = '" + Showing + "';";
 
+    private static readonly string Locked =
+        Settings.OrganizationPolicy.For("2f8d4c1e-0000-7000-8000-000000000002").ToString();
+
+    private static readonly string Unlocked =
+        "DELETE FROM identity.settings WHERE key = '" + Locked + "';";
+
     private static readonly string Defaulting =
         "INSERT INTO identity.settings (key, value) VALUES ('"
         + Settings.RedirectDefaultClient.Key
@@ -337,6 +343,44 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         finally
         {
             await WriteAsync(Forgotten, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// REG-DOM-001 AC12 and X6 of D-166: a listed domain is verified and re-verified by
+    /// its TXT record, so a deployment whose stored lock lists a domain and which
+    /// registered no DNS resolver is stopped as it starts, and the same deployment
+    /// starts once it registers one.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_DOM_001_AC12_ADeploymentWhoseLockListsADomainNeedsAResolverAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await WriteAsync(
+            "INSERT INTO identity.settings (key, value) VALUES ('" + Locked + "', '{\"emailDomains\":[\"example.test\"]}');",
+            cancellationToken);
+
+        try
+        {
+            using (IHost unresolved = Deployed())
+            {
+                StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                    async () => await unresolved.StartAsync(cancellationToken));
+
+                Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+                Assert.Equal("dnsResolver", refused.Failure?.Details["key"].GetString());
+            }
+
+            using IHost resolved = Deployed(resolver: true);
+
+            await resolved.StartAsync(cancellationToken);
+            await resolved.StopAsync(cancellationToken);
+        }
+        finally
+        {
+            await WriteAsync(Unlocked, cancellationToken);
         }
     }
 
@@ -994,7 +1038,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         ISecretSource? secrets = null,
         bool mailTransport = true,
         bool smsTransport = true,
-        bool secretSource = true) =>
+        bool secretSource = true,
+        bool resolver = false) =>
         new HostBuilder()
             .ConfigureServices(services => Declared(
                 services,
@@ -1010,7 +1055,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
                 secrets: secrets,
                 mailTransport: mailTransport,
                 smsTransport: smsTransport,
-                secretSource: secretSource))
+                secretSource: secretSource,
+                resolver: resolver))
             .Build();
 
     // The library registered over this deployment, as the host's own code registers
@@ -1030,7 +1076,8 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         ISecretSource? secrets = null,
         bool mailTransport = true,
         bool smsTransport = true,
-        bool secretSource = true)
+        bool secretSource = true,
+        bool resolver = false)
     {
         if (mailTransport)
         {
@@ -1045,6 +1092,11 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         if (codec)
         {
             services.AddSingleton(new ImageCodecInMemory().Declared);
+        }
+
+        if (resolver)
+        {
+            services.AddSingleton<IDnsResolver>(new Janus.Authentication.Tests.Organizations.DnsResolverInMemory());
         }
 
         if (mail)
