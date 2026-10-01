@@ -484,36 +484,43 @@ against the public contract of LIB-API-001.
   it stood, so one suspended while restricted is restricted again. An account its owner
   deactivated becomes the administrator's to reactivate and its owner's link does not
   stand it up. Reactivation applies only to an administrator's suspension, and an
-  account being deleted is not suspended (403 `authz.denied`); an unknown subject
-  answers 400 `api.request.malformed` naming `subject`. The audit trail records
-  `identity.account.suspended` and `identity.account.reactivated` in the security
-  category. `IAccounts` is the same pair of operations in process. The accounts table
-  carries `restriction_held` for the restriction held while the account is suspended or
-  deleting.
+  account being deleted or erased is not suspended: each answers 409
+  `identity.account.stateconflict` with `details.state` and, for a suspended account,
+  `details.suspendedBy`. A subject no account bears answers 404
+  `identity.account.notfound`. The audit trail records `identity.account.suspended` and
+  `identity.account.reactivated` in the security category. `IAccounts` is the same pair
+  of operations in process. The accounts table carries `restriction_held` for the
+  restriction held while the account is suspended or deleting.
 - A processing restriction is kept while the account passes through a deletion window, a
   takedown or a suspension: cancelling the deletion, reversing the takedown and
   reactivating the account each bring it back restricted, and a restriction decided
   while the account is suspended or deleting is held for when it returns, with
   `RestrictionChanged` delivered to the subscribers when it is decided.
 - `POST /admin/accounts/{subject}/restriction/lift` lifts a processing restriction under
-  `account:manage` (204): the account is active again, `RestrictionChanged` is delivered
-  to every subject-event handler in the same transaction, and the audit trail records
+  `account:manage` and the `account:restrictionlift` step-up, judged after every other
+  refusal (204): the account is active again, `RestrictionChanged` is delivered to every
+  subject-event handler in the same transaction, and the audit trail records
   `privacy.restriction.lifted`. An account that is not restricted, including one holding
-  a restriction while suspended or deleting, answers 403 `authz.denied`.
-  `IAccounts.LiftRestrictionAsync` is the same operation in process.
+  a restriction while suspended or deleting, answers 409
+  `identity.account.stateconflict`, and a subject no account bears 404
+  `identity.account.notfound`. `IAccounts.LiftRestrictionAsync` is the same operation in
+  process.
 - `POST /admin/accounts/{subject}/delete/cancel` cancels a deletion inside its grace
-  window on the subject's behalf under `account:manage` (204), whether the subject or an
-  out-of-band erasure request began it; the account comes back as it stood and the audit
-  trail records `identity.deletion.cancelled` naming the erasure request where one began
-  the window. A takedown answers 409 `identity.takedown.active`, a closed window 422
-  `identity.deletion.windowelapsed`, and an account in no window 403 `authz.denied`.
-  `IAccounts.CancelDeletionAsync` is the same operation in process.
+  window on the subject's behalf under `account:manage` and the `account:deletioncancel`
+  step-up, judged after every other refusal (204), whether the subject or an out-of-band
+  erasure request began it; the account comes back as it stood and the audit trail
+  records `identity.deletion.cancelled` naming the erasure request where one began the
+  window. A takedown answers 409 `identity.takedown.active`, a closed window 422
+  `identity.deletion.windowelapsed`, an account in no window 409
+  `identity.account.stateconflict`, and a subject no account bears 404
+  `identity.account.notfound`. `IAccounts.CancelDeletionAsync` is the same operation in
+  process.
 - `GET /admin/accounts/{subject}/photo` serves the photo an account shows to an
   administrator holding `account:manage`, as `image/jpeg` with
   `Cache-Control: no-store`. An account that shows none and one whose organizations
-  withhold photos both answer 404; an unknown subject answers 400
-  `api.request.malformed` naming `subject`. `IAccounts.ReadPhotoAsync` is the same read
-  in process.
+  withhold photos both answer 404 `identity.photo.notfound`; a subject no account bears
+  answers 404 `identity.account.notfound`. `IAccounts.ReadPhotoAsync` is the same read in
+  process.
 - `GET`, `POST /account/mail/apppasswords` and `DELETE /account/mail/apppasswords/{id}`
   list, create and revoke the signed-in person's mail app passwords at the mail server.
   The library issues the person a token to the mail server's client from their session,
@@ -833,21 +840,39 @@ against the public contract of LIB-API-001.
 - `POST /admin/accounts/{subject}/sessions/revoke` ends every session of one account
   under `session:revoke-account`, and `POST /admin/sessions/revoke-all` ends every
   session in the deployment under `session:revoke`, the caller's own included, each
-  permission held in the administrative organization. Both answer 204.
-  `ISessions.RevokeAccountAsync` and `ISessions.RevokeEveryAsync` are the same in
-  process and take no organization.
+  permission held in the administrative organization. Both answer 204. They are the
+  `account:sessionsrevoke` and `session:revokeall` step-up actions, judged after every
+  other refusal (403 `auth.stepup.required`), and a subject no account bears answers 404
+  `identity.account.notfound`. `ISessions.RevokeAccountAsync` and
+  `ISessions.RevokeEveryAsync` are the same in process, take the caller's session and no
+  organization.
 - The minor takedown, as `ITakedowns` and `POST /admin/accounts/{subject}/takedown`:
   under `takedown:execute` and step-up, one transaction suspends the account into its
-  `takedown.grace` window, ends every session of it, records the trigger and the reason,
-  and writes the `TakedownExecuted` delivery on which the host stops its own processing
-  for the subject. The answer carries `takedownId` and `erasureDue`. `AccountSuspended`
-  follows the commit; no deletion notice and no `AccountDeletionRequested` do.
+  `takedown.grace` window, ends every session of it, records the trigger and the reason
+  (1 to 1024 characters after trimming, else 400 `api.request.malformed`), and writes
+  the `TakedownExecuted` delivery on which the host stops its own processing for the
+  subject. An account `active`, `restricted`, `suspended`, or already deleting by its
+  own or an out-of-band request is taken down, holding the state it was in: the accounts
+  table carries `suspension_held`, `deletion_held` and `deletion_held_since`. A takedown
+  of a running deletion is erased at the earlier of that window's end and its own. A
+  second takedown answers 409 `identity.takedown.active`, an erased account 409
+  `identity.account.stateconflict`, and a subject no account bears 404
+  `identity.account.notfound`. Step-up is judged after every other refusal. The answer
+  carries `takedownId` and `erasureDue`. `AccountSuspended` is written in the trigger's
+  transaction at every trigger, whatever state the account held, and a refusal to write
+  it fails the trigger; no deletion notice and no `AccountDeletionRequested` is sent.
 - `GET /admin/accounts/{subject}/takedown` reads the latest takedown of an account: when
-  it was triggered, when its erasure runs, and which registered subscriber has confirmed
-  it and when. An account never taken down answers 404 `identity.takedown.notfound`.
-- `POST /admin/accounts/{subject}/takedown/reverse` restores a taken down account to
-  active inside its window, with a reason, and publishes `TakedownReversed`. After the
-  window it answers 422 `identity.takedown.windowelapsed`.
+  it was triggered, when its erasure runs, whether it was reversed (`reversed`, with
+  `erasureDue` null), and which registered subscriber has confirmed it and when. An
+  account never taken down answers 404 `identity.takedown.notfound`.
+- `POST /admin/accounts/{subject}/takedown/reverse` restores a taken down account inside
+  its window to the state it held at the trigger, with a reason, and writes
+  `TakedownReversed` in its transaction: the deletion it was in, with its origin and
+  start; else the suspension it was in, with its origin; else restricted where a
+  restriction is held; else active. After the window it answers 422
+  `identity.takedown.windowelapsed`, and an account holding no takedown 404
+  `identity.takedown.notfound`. The reversal and the erasure at the window's end each
+  hold the account row, so of the two at the boundary the second waits and refuses.
 - `MembershipChanged` announces a membership beginning or ending, naming the membership,
   its organization and whose it is. The erasure at the end of an organization's deletion
   window raises one for every membership it ends, alongside `OrganizationErased`.
@@ -902,13 +927,13 @@ against the public contract of LIB-API-001.
   no address a cache could share. Availability is the organization's, held in the key
   `photo.enabled.<organization>` and off until an organization is given it; an account
   of no organization, and one whose organization shows none, is answered as an account
-  with no photo. The library reads no image itself: a deployment declares an
-  `ImageCodec`, which decides by content what an upload is, holds it to
-  `photo.maxdimension` and answers the JPEG that is stored. The photo is held in a table
-  and a port of its own, encrypted under the subject's own key like any other personal
-  field: nothing that reads an account reads image bytes, a dump yields no photograph,
-  and erasure of the key leaves the image unrecoverable. A deployment whose policy shows
-  photos and which declared no codec does not start.
+  with no photo, 404 `identity.photo.notfound`. The library reads no image itself: a
+  deployment declares an `ImageCodec`, which decides by content what an upload is, holds
+  it to `photo.maxdimension` and answers the JPEG that is stored. The photo is held in a
+  table and a port of its own, encrypted under the subject's own key like any other
+  personal field: nothing that reads an account reads image bytes, a dump yields no
+  photograph, and erasure of the key leaves the image unrecoverable. A deployment whose
+  policy shows photos and which declared no codec does not start.
 - Every runtime configuration change goes through one operation that classifies it,
   gates it and writes it down. A configuration key loosens the way its row states; where
   a row states nothing, a key with only a ceiling loosens upward, a key with only a
@@ -1057,9 +1082,9 @@ against the public contract of LIB-API-001.
 - A data subject request enters a queue with a statutory clock on it. A subject submits
   a restriction or a rectification for themselves at `POST /privacy/requests` and is
   answered with the request identifier, the receipt timestamp and the date the decision
-  is due by; an authorised human enters a request that arrived out of band at
-  `POST /admin/privacy/requests`, recording how it arrived, what confirmed the requester
-  is the subject, and the date it reached the company. The deadline is six working days
+  is due by; an authorised human enters a request that arrived out of band at `POST
+  /admin/privacy/requests`, recording how it arrived, what confirmed the requester is
+  the subject, and the date it reached the company. The deadline is six working days
   counted on the deployment's own week (`privacy.workingdays`), its holidays as
   currently listed (`privacy.holidays`) and its zone (`privacy.calendar.timezone`),
   never on a Monday to Friday assumption. Undecided requests raise a Normal alert
@@ -1068,10 +1093,14 @@ against the public contract of LIB-API-001.
   is granted and the account is restricted, and a request the system cannot grant by
   itself is recorded as deemed refused by lapse, with the subject told honestly and the
   record kept. Fulfilling a restriction restricts the account and tells the registered
-  subscribers; fulfilling an out-of-band erasure starts the deletion grace window.
-  Deciding a request tells its three refusals apart for the member of staff working the
-  queue: 403 `authz.denied` without the permission, 404 `privacy.request.notfound` for
-  an identifier naming no request, and 409 `privacy.request.decided` where a decision
+  subscribers; fulfilling an out-of-band erasure follows the account's state: an active
+  or restricted account starts the deletion grace window, a suspended one starts it
+  holding the suspension, which a cancellation returns, an account already in its window
+  keeps the window running with its start, an erased one changes nothing, and a window
+  that cannot start fails the fulfilment and leaves the request open. Deciding a request
+  tells its three refusals apart for the member of staff working the queue: 403
+  `authz.denied` without the permission, 404 `privacy.request.notfound` for an
+  identifier naming no request, and 409 `privacy.request.decided` where a decision
   already stands.
 - A privacy request's `detail`, an out-of-band entry's `channel` and
   `identityConfirmation`, and a refusal's `reason` are held trimmed, and one that is
@@ -1108,7 +1137,8 @@ against the public contract of LIB-API-001.
 - The terms step of registration records one consent per control the person ticked,
   naming the purpose, the version presented of the document that governs its consent and
   the registration mechanism. A control left unticked records nothing and holds nothing
-  up.
+  up. A terms step whose terms version or notice version is blank creates no account and
+  is refused with `identity.registration.incomplete`.
 - A subject can read and change their own consents and objections through a privacy
   dashboard: `GET /privacy/consents`, `POST /privacy/consents/{purpose}/grant` and
   `.../withdraw`, `GET /privacy/objections`, `POST /privacy/objections/{purpose}` and
@@ -2004,7 +2034,9 @@ against the public contract of LIB-API-001.
   Every session the subject holds ends before the key their fields are under is
   destroyed, so no request survives on a session whose account is gone. The photo row
   stays where it is and its bytes stop being readable with everything else the key
-  covered. A transaction that does not commit leaves no row and erases nothing; there is
+  covered. Every grant the account holds is revoked in the same transaction, by the nil
+  subject at the erasure's instant with the reason `IDN-LIFE-014`, and every grant row
+  is kept. A transaction that does not commit leaves no row and erases nothing; there is
   no third state. Erasure progress is on that row and on no column of the account, and
   every outstanding erasure is read in one query.
 - The administrative organization is marked on its own row, set once when the deployment
@@ -2045,15 +2077,26 @@ against the public contract of LIB-API-001.
   name, a host declares which of its own actions are reading, and everything else
   modifies. Its own settings are held the same way: an edit of its profile, its photo or
   its preferences, and a change to one of its identifiers, its credentials or its
-  preferred second step, is refused with `authz.restricted`.
+  preferred second step, is refused with `authz.restricted`, and so is acknowledging an
+  invitation. A restricted account signs in, as an active one does, with its factors,
+  its provider, its sign-in link and the mail server's sign-on, and recovers its
+  password; the enrolment an approved recovery opens is not refused. The restriction
+  ends every session of the account in the transaction that makes it, and a restricted
+  account's sign-in is offered no trusted browser and records none. Its mailbox stays
+  owed enabled and its app passwords keep working.
 - Registration is served end to end. A browser that reaches the library is given a
   pre-authentication session, and the registration it starts is bound to that session
   and reachable from no other browser: the age screen, the email and phone steps, the
   confirm screen, the security step and the terms step, each refusing to run before the
-  one before it has finished. An address or a number that already belongs to somebody
-  else is answered exactly as a fresh one is, and its holder is told once that somebody
-  tried. A registration that is abandoned leaves nothing behind. A browser that already
-  holds a session and asks to register is refused with 409
+  one before it has finished with 409 `identity.registration.incomplete`, a confirmation
+  while a staged identifier is unverified included. An address or a number that already
+  belongs to somebody else is answered exactly as a fresh one is, and its holder is told
+  once that somebody tried. An address held out of reach for its owner's undo is
+  answered the same, with nothing sent and nobody told, is not vouched for by a
+  provider, is refused as a held one where an invitation binds it, and one taken or
+  reserved since it was staged ends the registration at the terms step with no account
+  created. A registration that is abandoned leaves nothing behind. A browser that
+  already holds a session and asks to register is refused with 409
   `identity.registration.signedin`; nothing is staged for it, and the frontend navigates
   to the account application.
 - An identifier is verified by the code in the message or by pressing the link. The
@@ -2069,15 +2112,17 @@ against the public contract of LIB-API-001.
   deployment that cannot hear the channel loses promptness and never an event.
 - An account reads and changes itself: its identifiers, its credentials and their
   labels, its profile, its preferences and its sessions. An identifier can be added up
-  to the deployment's maximum, made primary, set as the backup destination, removed with
-  an undo the remaining addresses are sent, and, where only one of a kind is allowed,
-  replaced in one operation. A removed identifier stays out of reach of every other
-  account until its undo window closes. Once a replacement applies every other session
-  of the account ends, as a removal ends them, and the session that removes an
-  identifier or completes the verification of one is given a new secret, the one before
-  it answering nothing. The session list marks the one asking and says no more about
-  where each was used than the city. A credential given a label or renamed is audited
-  as `auth.credential.labelled`.
+  to the deployment's maximum, made primary, set as the backup destination (an
+  unverified one is refused either with 409 `identity.identifier.unverified` and nothing
+  changes), removed with an undo the remaining addresses are sent, and, where only one
+  of a kind is allowed, replaced in one operation. A removed identifier stays out of
+  reach of every other account until its undo window closes. Once a replacement applies
+  every session of the account but the one it completed under ends, the one that staged
+  it included, and a replacement the displaced address's link completes ends them all.
+  The session that removes an identifier or completes the verification of one is given a
+  new secret, the one before it answering nothing. The session list marks the one asking
+  and says no more about where each was used than the city. A credential given a label
+  or renamed is audited as `auth.credential.labelled`.
 - `PUT /account/secondstep/preferred` takes the member `method`, the identifier of a
   second factor enrolled on the account; a method the account has not enrolled, or one
   that is no active second step, is 422 `api.request.invalid` naming `method` and leaves
@@ -2091,9 +2136,10 @@ against the public contract of LIB-API-001.
 - The library serves `/.well-known/change-password`, `/.well-known/passkey-endpoints`
   and `/.well-known/webauthn` at the site root, mounted with `MapIdentityWellKnown`. The
   addresses of the frontend's password and passkey pages behind the first two are a
-  declaration with no default: a deployment that registers none does not start, naming
-  the declaration it left out, so both documents always answer. The third is the
-  deployment's own related-origin allowlist.
+  declaration with no default: a deployment that registers none, or leaves one of them
+  or a sign-in address empty or blank, does not start, naming the declaration or the
+  field it left out, so both documents always answer. The third is the deployment's own
+  related-origin allowlist.
 - Where an account replaces its only address of a kind and holds no other channel at
   all, the address being displaced is asked to confirm the change, so a catalogue a
   deployment registers carries a template for `identifier-change-confirm` in every

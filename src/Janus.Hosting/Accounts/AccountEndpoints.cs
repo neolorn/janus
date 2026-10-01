@@ -31,10 +31,6 @@ internal static class AccountEndpoints
 
     private static readonly IResult Accepted = TypedResults.StatusCode(StatusCodes.Status202Accepted);
 
-    // 09 section 6: an account that shows no photo, and one whose policy shows none,
-    // answer alike and say nothing of which of the two they are.
-    private static readonly IResult NoPhoto = TypedResults.NotFound();
-
     // IDN-ATTR-004: what is stored is JPEG, whatever was uploaded.
     private const string StoredPhoto = "image/jpeg";
 
@@ -144,9 +140,7 @@ internal static class AccountEndpoints
 
         return Answers.Of(
             await accounts.ReadPhotoAsync(holder, cancellationToken).ConfigureAwait(false),
-            image => image.IsEmpty
-                ? NoPhoto
-                : TypedResults.Bytes(image, StoredPhoto));
+            image => TypedResults.Bytes(image, StoredPhoto));
     }
 
     private static async Task<IResult> SetPhotoAsync(
@@ -318,14 +312,18 @@ internal static class AccountEndpoints
         string source = RequestOrigin.Source(context.Request);
 
         // API-LAND-001: a link merely opened, or opened somewhere else, changes
-        // nothing and is answered with the code to type instead.
+        // nothing and is answered with the code to type instead. IDN-LIFE-008: only a
+        // press from the browser that staged the change completes it under a session,
+        // so only that session is kept and rotated; the displaced address's press keeps
+        // none.
         if (request.LinkToken is { Length: > 0 } token)
         {
             Result<LinkLanding> landed = await identifiers
                 .LandAsync(browser.Live?.Id, token, request.Press, source, cancellationToken)
                 .ConfigureAwait(false);
 
-            return browser.Live is Session pressing && landed.Match(landing => landing.Verified, _ => false)
+            return browser.Live is Session pressing
+                && landed.Match(landing => landing.Verified && landing.SameBrowser, _ => false)
                 ? await RotatedAsync(sessions, cookies, pressing, context, Answers.Of(landed, Landed), cancellationToken)
                     .ConfigureAwait(false)
                 : Answers.Of(landed, Landed);
@@ -336,7 +334,7 @@ internal static class AccountEndpoints
             return Answers.Malformed("code");
         }
 
-        if (browser.Context is not AccessContext holder)
+        if (browser.Live is not Session typing)
         {
             return Opened(browser) is not EnrolmentSessionId enrolment
                 ? Nobody()
@@ -348,10 +346,10 @@ internal static class AccountEndpoints
         }
 
         Result verified = await identifiers
-            .VerifyAsync(holder, new IdentifierId(id), code, source, cancellationToken)
+            .VerifyAsync(browser.Asking, typing.Id, new IdentifierId(id), code, source, cancellationToken)
             .ConfigureAwait(false);
 
-        return browser.Live is Session typing && verified.Match(() => true, _ => false)
+        return verified.Match(() => true, _ => false)
             ? await RotatedAsync(sessions, cookies, typing, context, Nothing, cancellationToken)
                 .ConfigureAwait(false)
             : Answers.Of(verified, Nothing);

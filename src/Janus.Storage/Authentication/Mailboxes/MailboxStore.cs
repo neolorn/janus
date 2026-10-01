@@ -63,9 +63,12 @@ internal sealed class MailboxStore(
             .Select(mailbox => new
             {
                 Row = mailbox,
+                // IDN-ACCT-007, INT-MAIL-006a: a restriction the person asked for does
+                // not cut them off from their mail, so a restricted holder stands.
                 Stands = mailbox.Holder != null
                     && context.Accounts.Any(account =>
-                        account.Subject == mailbox.Holder && account.State == AccountState.Active)
+                        account.Subject == mailbox.Holder
+                        && (account.State == AccountState.Active || account.State == AccountState.Restricted))
                     && context.Memberships.Any(membership =>
                         membership.Subject == mailbox.Holder
                         && membership.EndedAt == null

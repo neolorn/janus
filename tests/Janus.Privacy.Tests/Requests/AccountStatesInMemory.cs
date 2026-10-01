@@ -16,6 +16,7 @@ internal sealed class AccountStatesInMemory : IAccountStates
 {
     private readonly Dictionary<SubjectId, AccountState> _states = [];
     private readonly Dictionary<SubjectId, PendingDeletion> _deletions = [];
+    private readonly Dictionary<SubjectId, (AccountState State, PendingDeletion? Deletion)> _found = [];
     private readonly Dictionary<SubjectId, DateTimeOffset> _sessionsEnded = [];
     private readonly HashSet<SubjectId> _held = [];
 
@@ -27,12 +28,24 @@ internal sealed class AccountStatesInMemory : IAccountStates
     public void Hold(SubjectId subject, AccountState state) => _states[subject] = state;
 
     /// <summary>
+    /// Holds no account for the subject, as where none was ever created.
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    public void Forget(SubjectId subject) => _ = _states.Remove(subject);
+
+    /// <summary>
     /// What state the account is in.
     /// </summary>
     /// <param name="subject">Whose.</param>
     /// <returns>The state, or nothing where no account is held.</returns>
     public AccountState? Of(SubjectId subject) =>
         _states.TryGetValue(subject, out AccountState state) ? state : null;
+
+    /// <summary>
+    /// Where a restriction from active is carried as well, as the one accounts table
+    /// of a deployment carries it to every area that reads the account.
+    /// </summary>
+    public Func<SubjectId, DateTimeOffset, ValueTask>? Restricted { get; set; }
 
     /// <summary>
     /// Whether the account holds a restriction while it is away from active.
@@ -42,9 +55,26 @@ internal sealed class AccountStatesInMemory : IAccountStates
     public bool Holds(SubjectId subject) => _held.Contains(subject);
 
     /// <inheritdoc/>
-    public ValueTask<bool> RestrictAsync(SubjectId subject, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(Moved(subject, AccountState.Active, AccountState.Restricted)
-            || (Of(subject) is AccountState.Suspended or AccountState.Deleting && _held.Add(subject)));
+    public async ValueTask<bool> RestrictAsync(
+        SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        if (!Moved(subject, AccountState.Active, AccountState.Restricted))
+        {
+            return Of(subject) is AccountState.Suspended or AccountState.Deleting && _held.Add(subject);
+        }
+
+        // AUTH-SESS-010: the move from active ends every session of the account.
+        _sessionsEnded[subject] = at;
+
+        if (Restricted is not null)
+        {
+            await Restricted(subject, at);
+        }
+
+        return true;
+    }
 
     /// <inheritdoc/>
     public ValueTask<bool> BeginDeletionAsync(
@@ -53,13 +83,23 @@ internal sealed class AccountStatesInMemory : IAccountStates
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        bool moved = Moved(subject, AccountState.Active, AccountState.Deleting)
+        // IDN-LIFE-003: a suspended account enters the window only on a request that
+        // arrived out of band, holding the suspension for a cancellation to return.
+        bool suspended = origin is DeletionOrigin.OutOfBandRequest
+            && Moved(subject, AccountState.Suspended, AccountState.Deleting);
+        bool moved = suspended
+            || Moved(subject, AccountState.Active, AccountState.Deleting)
             || Moved(subject, AccountState.Restricted, AccountState.Deleting);
+
+        if (suspended)
+        {
+            _found[subject] = (AccountState.Suspended, null);
+        }
 
         if (moved)
         {
             Deleting = origin;
-            _deletions[subject] = new PendingDeletion(subject, origin, at);
+            _deletions[subject] = new PendingDeletion(subject, origin, at, HeldSince: null);
         }
 
         return ValueTask.FromResult(moved);
@@ -72,7 +112,7 @@ internal sealed class AccountStatesInMemory : IAccountStates
         ValueTask.FromResult<IReadOnlyList<PendingDeletion>>(
         [
             .. _deletions.Values
-                .Where(deletion => deletion.Since <= before
+                .Where(deletion => (deletion.Since <= before || deletion.HeldSince <= before)
                     && Of(deletion.Subject) is AccountState.Deleting)
                 .OrderBy(deletion => deletion.Since),
         ]);
@@ -87,16 +127,19 @@ internal sealed class AccountStatesInMemory : IAccountStates
     public void Deletes(SubjectId subject, DeletionOrigin origin, DateTimeOffset since)
     {
         _states[subject] = AccountState.Deleting;
-        _deletions[subject] = new PendingDeletion(subject, origin, since);
+        _deletions[subject] = new PendingDeletion(subject, origin, since, HeldSince: null);
     }
 
     /// <summary>
-    /// Takes an account out of the deletion window, as the subject's cancellation does.
+    /// Takes an account out of the deletion window, as the subject's cancellation does:
+    /// a suspension the window holds comes back, and otherwise the account is active.
     /// </summary>
     /// <param name="subject">Whose.</param>
     public void Cancels(SubjectId subject)
     {
-        _states[subject] = AccountState.Active;
+        _states[subject] = _found.Remove(subject, out (AccountState State, PendingDeletion? Deletion) held)
+            ? held.State
+            : AccountState.Active;
         _ = _deletions.Remove(subject);
     }
 
@@ -127,7 +170,7 @@ internal sealed class AccountStatesInMemory : IAccountStates
         PendingDeletion? deletion = _deletions.GetValueOrDefault(subject);
 
         return ValueTask.FromResult<AccountStanding?>(
-            new AccountStanding(state, deletion?.By, deletion?.Since));
+            new AccountStanding(state, deletion?.By, deletion?.Since, deletion?.HeldSince));
     }
 
     /// <inheritdoc/>
@@ -136,12 +179,22 @@ internal sealed class AccountStatesInMemory : IAccountStates
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        if (Of(subject) is not (AccountState.Active or AccountState.Restricted or AccountState.Suspended))
+        PendingDeletion? running = _deletions.GetValueOrDefault(subject);
+
+        if (Of(subject) is not AccountState found
+            || found is AccountState.Deleted
+            || (found is AccountState.Deleting && running?.By is DeletionOrigin.Takedown))
         {
             return ValueTask.FromResult(false);
         }
 
-        Deletes(subject, DeletionOrigin.Takedown, at);
+        // IDN-LIFE-003: the takedown holds what it found, a running deletion with its
+        // clock, and the reversal restores it.
+        PendingDeletion? held = found is AccountState.Deleting ? running : null;
+
+        _found[subject] = (found, held);
+        _states[subject] = AccountState.Deleting;
+        _deletions[subject] = new PendingDeletion(subject, DeletionOrigin.Takedown, at, held?.Since);
         Deleting = DeletionOrigin.Takedown;
         _sessionsEnded[subject] = at;
 
@@ -149,15 +202,32 @@ internal sealed class AccountStatesInMemory : IAccountStates
     }
 
     /// <inheritdoc/>
-    public ValueTask<bool> ReverseTakedownAsync(SubjectId subject, CancellationToken cancellationToken)
+    public ValueTask<bool> ReverseTakedownAsync(
+        SubjectId subject,
+        DateTimeOffset now,
+        DeletionWindows windows,
+        CancellationToken cancellationToken)
     {
         if (Of(subject) is not AccountState.Deleting
-            || _deletions.GetValueOrDefault(subject)?.By is not DeletionOrigin.Takedown)
+            || _deletions.GetValueOrDefault(subject) is not { By: DeletionOrigin.Takedown } taken
+            || now >= windows.ErasureDue(taken.By, taken.Since, taken.HeldSince))
         {
             return ValueTask.FromResult(false);
         }
 
-        Cancels(subject);
+        (AccountState found, PendingDeletion? held) = _found[subject];
+
+        _ = _found.Remove(subject);
+        _states[subject] = found;
+
+        if (held is null)
+        {
+            _ = _deletions.Remove(subject);
+        }
+        else
+        {
+            _deletions[subject] = held;
+        }
 
         return ValueTask.FromResult(true);
     }

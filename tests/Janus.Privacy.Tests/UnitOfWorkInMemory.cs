@@ -22,6 +22,11 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
     public int Committed { get; private set; }
 
     /// <summary>
+    /// Whether a transaction is open: begun and not yet committed.
+    /// </summary>
+    public bool Open => Opened > Committed;
+
+    /// <summary>
     /// The failure the next opening answers, where a test sets one.
     /// </summary>
     public Error? RefusesBegin { get; set; }

@@ -71,7 +71,7 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
         ArgumentNullException.ThrowIfNull(grant);
 
         await context.Grants.AddAsync(Write(grant), cancellationToken).ConfigureAwait(false);
-        await RaiseAsync(grant.Subject, cancellationToken).ConfigureAwait(false);
+        await RaiseAsync(connections, grant.Subject, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -88,7 +88,7 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
         record.RevokedAt = grant.RevokedAt;
         record.RevocationReason = grant.RevocationReason;
 
-        await RaiseAsync(grant.Subject, cancellationToken).ConfigureAwait(false);
+        await RaiseAsync(connections, grant.Subject, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -270,7 +270,18 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
         record.RevokedAt,
         record.RevocationReason);
 
-    private async ValueTask RaiseAsync(GrantSubject subject, CancellationToken cancellationToken)
+    /// <summary>
+    /// Raises the counter of every account a change to the grants of a subject reaches,
+    /// in the ambient transaction.
+    /// </summary>
+    /// <param name="connections">Where the statement takes its connection from.</param>
+    /// <param name="subject">Whose grants changed.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of raising it.</returns>
+    internal static async ValueTask RaiseAsync(
+        DataConnections connections,
+        GrantSubject subject,
+        CancellationToken cancellationToken)
     {
         // The counter is raised from the statement rather than through the tracker,
         // because a group's grant reaches as many accounts as the closure holds and

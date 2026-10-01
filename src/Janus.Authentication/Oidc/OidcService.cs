@@ -119,8 +119,10 @@ internal sealed class OidcService(
     {
         ArgumentNullException.ThrowIfNull(scope);
 
+        // IDN-ACCT-007: a restricted account signs on and reads its mail, as an active
+        // one does.
         if (await accounts.StateAsync(subject, cancellationToken).ConfigureAwait(false)
-            is not AccountState.Active)
+            is not (AccountState.Active or AccountState.Restricted))
         {
             return Result.Failure<OidcClaims>(Error.From(ErrorCodes.Denied));
         }

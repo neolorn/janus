@@ -10,8 +10,12 @@ namespace Janus.Privacy.Requests;
 /// <param name="State">Its state.</param>
 /// <param name="DeletingBy">What started the window, where one was started.</param>
 /// <param name="DeletingSince">When the window began, where one was started.</param>
+/// <param name="DeletionHeldSince">
+/// When the deletion a takedown found running began, where it found one.
+/// </param>
 /// <remarks>Implements IDN-ACCT-007 and IDN-LIFE-003.</remarks>
 internal sealed record AccountStanding(
     AccountState State,
     DeletionOrigin? DeletingBy,
-    DateTimeOffset? DeletingSince);
+    DateTimeOffset? DeletingSince,
+    DateTimeOffset? DeletionHeldSince);

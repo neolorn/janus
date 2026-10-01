@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Sessions;
+using Janus.Authorization.Grants;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Identity.Accounts;
@@ -12,6 +13,7 @@ using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Invitations;
 using Janus.Storage.Authentication.Mailboxes;
+using Janus.Storage.Authorization.Grants;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Privacy.SubjectKeys;
@@ -25,6 +27,7 @@ namespace Janus.Storage.Privacy.Erasures;
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <param name="sessions">Where the subject's sessions are held.</param>
 /// <param name="configuration">Where the username hold's length is read.</param>
+/// <param name="connections">Where the grant counter statement takes its connection from.</param>
 /// <remarks>
 /// Implements PRIV-RIGHT-005, PRIV-RIGHT-005a, PRIV-RIGHT-005c, IDN-LIFE-003b,
 /// IDN-LIFE-014, IDN-ACCT-002, IDN-PRIN-003 and DR-016. Every write here is made on one
@@ -38,8 +41,15 @@ namespace Janus.Storage.Privacy.Erasures;
 internal sealed class SubjectEraser(
     StoreContext context,
     ISessionStore sessions,
-    IConfigurationStore configuration) : ISubjectEraser
+    IConfigurationStore configuration,
+    DataConnections connections) : ISubjectEraser
 {
+    // IDN-LIFE-014: no person revokes an erased account's grants, so the nil subject
+    // stands as the revoker, and the requirement is the reason.
+    private const string GrantRevocation = "IDN-LIFE-014";
+
+    private static readonly SubjectId Nil = new(Guid.Empty);
+
     /// <inheritdoc/>
     public ValueTask<Erasure> EraseAsync(
         SubjectId subject,
@@ -72,6 +82,7 @@ internal sealed class SubjectEraser(
 
         await sessions.EndAccountAsync(subject, at, cancellationToken).ConfigureAwait(false);
         await MarkErasedAsync(subject, erased, cancellationToken).ConfigureAwait(false);
+        await RevokeGrantsAsync(subject, at, cancellationToken).ConfigureAwait(false);
         await DestroyKeyAsync(subject, cancellationToken).ConfigureAwait(false);
         await HoldUsernameAsync(subject, at, cancellationToken).ConfigureAwait(false);
         await NeutraliseFingerprintsAsync(subject, cancellationToken).ConfigureAwait(false);
@@ -99,8 +110,10 @@ internal sealed class SubjectEraser(
         Action<Account> erased,
         CancellationToken cancellationToken)
     {
-        AccountRecord record = await context.Accounts
-            .FindAsync([subject], cancellationToken)
+        // IDN-LIFE-003: the row is held before the transition is decided, so an erasure
+        // at a takedown's window's end waits for a reversal made at the same moment and
+        // refuses the account the reversal committed.
+        AccountRecord record = await AccountStore.HeldAsync(context, subject, cancellationToken)
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The subject has no account to erase.");
 
@@ -109,9 +122,12 @@ internal sealed class SubjectEraser(
             record.CreatedAt,
             record.State,
             record.SuspendedBy,
+            record.SuspensionHeld,
             record.RestrictionHeld,
             record.DeletingBy,
             record.DeletingSince,
+            record.DeletionHeld,
+            record.DeletionHeldSince,
             registration: null,
             record.IsEmergency);
 
@@ -120,7 +136,41 @@ internal sealed class SubjectEraser(
         record.State = account.State;
         record.DeletingBy = account.DeletingBy;
         record.DeletingSince = account.DeletingSince;
+        record.SuspensionHeld = account.SuspensionHeld;
         record.RestrictionHeld = account.RestrictionHeld;
+        record.DeletionHeld = account.DeletionHeld;
+        record.DeletionHeldSince = account.DeletionHeldSince;
+    }
+
+    // IDN-LIFE-014, IDN-PRIN-003: every grant the account holds is revoked and its row
+    // kept, so what it was allowed and until when still reads; the counter goes up in
+    // the same transaction, as for any grant change (AUTHZ-CACHE-001).
+    private async ValueTask RevokeGrantsAsync(
+        SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        List<GrantRecord> held = await context.Grants
+            .Where(grant => grant.SubjectType == SubjectType.User
+                && grant.SubjectId == subject.Value
+                && grant.RevokedAt == null)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (held.Count is 0)
+        {
+            return;
+        }
+
+        foreach (GrantRecord grant in held)
+        {
+            grant.RevokedAt = at;
+            grant.RevokedBy = Nil;
+            grant.RevocationReason = GrantRevocation;
+        }
+
+        await GrantStore.RaiseAsync(connections, GrantSubject.Of(subject), cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private async ValueTask DestroyKeyAsync(SubjectId subject, CancellationToken cancellationToken)

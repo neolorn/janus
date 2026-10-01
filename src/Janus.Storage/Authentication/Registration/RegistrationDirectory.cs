@@ -44,6 +44,14 @@ internal sealed class RegistrationDirectory(
         identifiers.FindOwnerAsync(kind, canonical, cancellationToken);
 
     /// <inheritdoc/>
+    public ValueTask<bool> IsReservedAsync(
+        IdentifierKind kind,
+        string canonical,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) =>
+        identifiers.IsReservedAsync(kind, canonical, now, cancellationToken);
+
+    /// <inheritdoc/>
     public async ValueTask<string?> LanguageAsync(
         SubjectId subject,
         CancellationToken cancellationToken) =>

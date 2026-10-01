@@ -1198,8 +1198,8 @@ Janus.Core.IAccount.RemovePhotoAsync(Janus.Core.AccessContext! context, System.T
 Janus.Core.IAccount.SetPhotoAsync(Janus.Core.AccessContext! context, System.ReadOnlyMemory<byte> upload, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccount.SetPreferencesAsync(Janus.Core.AccessContext! context, string? language, string? timeZone, System.Collections.Generic.IReadOnlyDictionary<string!, string!>! declared, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccounts
-Janus.Core.IAccounts.CancelDeletionAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
-Janus.Core.IAccounts.LiftRestrictionAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IAccounts.CancelDeletionAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IAccounts.LiftRestrictionAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccounts.ReactivateAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAccounts.ReadPhotoAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.ReadOnlyMemory<byte>>>
 Janus.Core.IAccounts.SuspendAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -1285,7 +1285,7 @@ Janus.Core.IIdentifiers.ReplaceAsync(Janus.Core.AccessContext! context, Janus.Co
 Janus.Core.IIdentifiers.ReplaceAsync(Janus.Core.EnrolmentSessionId enrolment, Janus.Core.IdentifierId identifier, string! value, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IIdentifiers.SetBackupAsync(Janus.Core.AccessContext! context, Janus.Core.IdentifierKind kind, Janus.Core.BackupChoice choice, Janus.Core.IdentifierId? named, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IIdentifiers.UndoAsync(string! linkToken, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
-Janus.Core.IIdentifiers.VerifyAsync(Janus.Core.AccessContext! context, Janus.Core.IdentifierId identifier, string! code, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IIdentifiers.VerifyAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.IdentifierId identifier, string! code, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IIdentifiers.VerifyAsync(Janus.Core.EnrolmentSessionId enrolment, Janus.Core.IdentifierId identifier, string! code, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IInvitations
 Janus.Core.IInvitations.AcknowledgeAsync(Janus.Core.AccessContext! context, Janus.Core.InvitationId invitation, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -1404,8 +1404,8 @@ Janus.Core.ISessions.EndAsync(Janus.Core.AccessContext! context, Janus.Core.Sess
 Janus.Core.ISessions.EndEverywhereAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.ISessions.ListAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId current, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.SessionSummary!>!>>
 Janus.Core.ISessions.ReadAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.SessionDetail!>>
-Janus.Core.ISessions.RevokeAccountAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
-Janus.Core.ISessions.RevokeEveryAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.ISessions.RevokeAccountAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.ISessions.RevokeEveryAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.ISmsTransport
 Janus.Core.ISmsTransport.BalanceAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<decimal>>
 Janus.Core.ISmsTransport.ReadReport(System.Collections.Generic.IReadOnlyDictionary<string!, string!>! parameters) -> Janus.Core.Result<Janus.Core.SmsDeliveryReport!>
@@ -2712,7 +2712,10 @@ Janus.Core.StartupException.StartupException(string! message, System.Exception! 
 Janus.Core.StepUpAction
 Janus.Core.StepUpAction.AccountDeactivate = 11 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.AccountDelete = 10 -> Janus.Core.StepUpAction
+Janus.Core.StepUpAction.AccountDeletionCancel = 33 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.AccountReactivate = 18 -> Janus.Core.StepUpAction
+Janus.Core.StepUpAction.AccountRestrictionLift = 32 -> Janus.Core.StepUpAction
+Janus.Core.StepUpAction.AccountSessionsRevoke = 34 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.AccountSuspend = 17 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.AccountTakedown = 19 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.AccountTakedownReverse = 20 -> Janus.Core.StepUpAction
@@ -2741,6 +2744,7 @@ Janus.Core.StepUpAction.RecoveryApprove = 14 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.RecoveryCodesGenerate = 6 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.RestrictionEdit = 26 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.RestrictionGrant = 27 -> Janus.Core.StepUpAction
+Janus.Core.StepUpAction.SessionRevokeAll = 35 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.UsernameChange = 3 -> Janus.Core.StepUpAction
 Janus.Core.SubjectEvent
 Janus.Core.SubjectEvent.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey) -> void
@@ -2813,19 +2817,21 @@ Janus.Core.TakedownProgress
 Janus.Core.TakedownProgress.<Clone>$() -> Janus.Core.TakedownProgress!
 Janus.Core.TakedownProgress.Attempts.get -> int
 Janus.Core.TakedownProgress.Attempts.init -> void
-Janus.Core.TakedownProgress.Deconstruct(out Janus.Core.TakedownId Id, out Janus.Core.SubjectId Subject, out System.DateTimeOffset TriggeredAt, out System.DateTimeOffset ErasureDue, out Janus.Core.ErasureStatus Status, out int Attempts, out System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>! Subscribers) -> void
+Janus.Core.TakedownProgress.Deconstruct(out Janus.Core.TakedownId Id, out Janus.Core.SubjectId Subject, out System.DateTimeOffset TriggeredAt, out System.DateTimeOffset? ErasureDue, out bool Reversed, out Janus.Core.ErasureStatus Status, out int Attempts, out System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>! Subscribers) -> void
 Janus.Core.TakedownProgress.Equals(Janus.Core.TakedownProgress? other) -> bool
-Janus.Core.TakedownProgress.ErasureDue.get -> System.DateTimeOffset
+Janus.Core.TakedownProgress.ErasureDue.get -> System.DateTimeOffset?
 Janus.Core.TakedownProgress.ErasureDue.init -> void
 Janus.Core.TakedownProgress.Id.get -> Janus.Core.TakedownId
 Janus.Core.TakedownProgress.Id.init -> void
+Janus.Core.TakedownProgress.Reversed.get -> bool
+Janus.Core.TakedownProgress.Reversed.init -> void
 Janus.Core.TakedownProgress.Status.get -> Janus.Core.ErasureStatus
 Janus.Core.TakedownProgress.Status.init -> void
 Janus.Core.TakedownProgress.Subject.get -> Janus.Core.SubjectId
 Janus.Core.TakedownProgress.Subject.init -> void
 Janus.Core.TakedownProgress.Subscribers.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>!
 Janus.Core.TakedownProgress.Subscribers.init -> void
-Janus.Core.TakedownProgress.TakedownProgress(Janus.Core.TakedownId Id, Janus.Core.SubjectId Subject, System.DateTimeOffset TriggeredAt, System.DateTimeOffset ErasureDue, Janus.Core.ErasureStatus Status, int Attempts, System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>! Subscribers) -> void
+Janus.Core.TakedownProgress.TakedownProgress(Janus.Core.TakedownId Id, Janus.Core.SubjectId Subject, System.DateTimeOffset TriggeredAt, System.DateTimeOffset? ErasureDue, bool Reversed, Janus.Core.ErasureStatus Status, int Attempts, System.Collections.Generic.IReadOnlyList<Janus.Core.SubscriberConfirmation!>! Subscribers) -> void
 Janus.Core.TakedownProgress.TriggeredAt.get -> System.DateTimeOffset
 Janus.Core.TakedownProgress.TriggeredAt.init -> void
 Janus.Core.TakedownReversed
@@ -3846,6 +3852,8 @@ static Janus.Core.ErrorCode.Parse(string! value) -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCode.operator !=(Janus.Core.ErrorCode left, Janus.Core.ErrorCode right) -> bool
 static Janus.Core.ErrorCode.operator ==(Janus.Core.ErrorCode left, Janus.Core.ErrorCode right) -> bool
 static Janus.Core.ErrorCodes.AccountAdministrativelySuspended.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.AccountNotFound.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.AccountStateConflict.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.AffirmationRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.BreakGlassConsumed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.BreakGlassInvalid.get -> Janus.Core.ErrorCode
@@ -3897,6 +3905,7 @@ static Janus.Core.ErrorCodes.IdentifierLocked.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierMaximum.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierMixedScript.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierPrimary.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.IdentifierUnverified.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.InvitationExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.InvitationAddressRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.InvitationIdentifierMismatch.get -> Janus.Core.ErrorCode
@@ -3920,6 +3929,7 @@ static Janus.Core.ErrorCodes.PasswordTooLong.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PasswordTooShort.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PhotoInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PhotoNotEnabled.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.PhotoNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PhotoTooLarge.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PolicyGraceExpired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PolicyUnregistered.get -> Janus.Core.ErrorCode

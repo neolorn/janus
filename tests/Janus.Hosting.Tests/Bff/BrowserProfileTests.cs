@@ -8,13 +8,21 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Janus.Authentication;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Identifiers;
+using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests;
+using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Factors;
+using Janus.Authentication.Tests.Identifiers;
+using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
+using Janus.Authentication.Tests.Sending;
 using Janus.Authentication.Tests.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -1142,6 +1150,16 @@ public sealed class BrowserProfileTests : IDisposable
         services.AddScoped<AdministrativeScope>();
         services.AddSingleton<IAlertChannels, EventsInMemory>();
         services.AddScoped<ConcurrentSessions>();
+        services.AddSingleton<IPasswordStore, PasswordStoreInMemory>();
+        services.AddSingleton<IAccountDirectory>(new AccountDirectoryInMemory(PreferenceDeclarations.None));
+        services.AddSingleton<IIdentifierDirectory, IdentifierDirectoryInMemory>();
+        services.AddSingleton<IPhoneSignalAudit, PhoneSignalAuditInMemory>();
+        services.AddScoped(provider => new PhoneSignals(
+            provider.GetService<PhoneSignalProvider>(),
+            provider.GetRequiredService<IPhoneSignalAudit>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>()));
+        services.AddScoped<StepUpGuard>();
         services.AddScoped<SessionService>();
         services.AddScoped<PreAuthenticationService>();
         services.AddScoped<SynchronizerTokens>();
