@@ -784,6 +784,24 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-002 AC4, AUTH-ABUSE-004: the enrolment link an approver asks for is
+    /// sent under the purpose a sign-in link is, never as a notice.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_002_AC4_TheEnrolmentLinkIsSentUnderSignInAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId approver, SessionId session) = await ApproverAsync();
+
+        _ = await Approving(approver, session, subject, Reason);
+
+        SendRequest link = Assert.Single(_notifications.Sent, sent => sent.Message is MessageKind.EnrolmentLink);
+
+        Assert.Equal(RestrictionPurpose.SignIn, link.Purpose);
+    }
+
+    /// <summary>
     /// AUTH-RECOV-002a AC2: an approval an interface could find nothing wrong with,
     /// carrying a live session that passed the gate, a recorded channel and a written
     /// reason, is still refused because the approver is the subject.

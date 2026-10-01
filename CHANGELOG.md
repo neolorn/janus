@@ -802,8 +802,8 @@ against the public contract of LIB-API-001.
   `alert-dispatch` pass removes a carried condition afterwards, so no alert transport
   is called while a transaction is open. A delivery that fails after the claim is not
   repeated inside the same window.
-- A recovery link and an invitation link are sent and drawn under the `signin` purpose,
-  as a sign-in link is, and answer to the restrictions it answers to; no `notification`
+- A recovery link, the enrolment link an approver sends and an invitation link are sent
+  and drawn under the `signin` purpose, as a sign-in link is, and answer to the restrictions it answers to; no `notification`
   restriction counts them, so `notification.destination` counts notices alone.
 - A recovery-code set whose every reminder was refused stays owed its reminder, where
   it was closed as reminded; a set whose account holds no channel a reminder can reach

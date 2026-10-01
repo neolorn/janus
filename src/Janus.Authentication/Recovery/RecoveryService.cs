@@ -822,7 +822,7 @@ internal sealed class RecoveryService(
                     new SendRequest(
                         channel.Destination,
                         MessageKind.EnrolmentLink,
-                        RestrictionPurpose.Notification,
+                        RestrictionPurpose.SignIn,
                         source,
                         language)
                     {
