@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Identity.Accounts;
@@ -155,6 +156,36 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
             TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// PRIV-RIGHT-002 AC5, CONV-DESIGN-003 AC6: two decisions on one request at once are
+    /// each made under the lock on its row, so the second finds the first and one
+    /// decision stands.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_002_AC5_TwoDecisionsAtOnceDecideOnceAsync()
+    {
+        SubjectId subject = await RegisteredAsync();
+        QueuedRequest written = Entered(subject, PrivacyRequestType.Erasure);
+
+        await WritingAsync(async store => await store.AddAsync(
+            written,
+            TestContext.Current.CancellationToken));
+
+        bool[] decided = await Task.WhenAll(
+            DecidedOnceAsync(written.Id, request => request.Fulfil(Noon.AddDays(1))),
+            DecidedOnceAsync(written.Id, request => request.DeemRefusedByLapse(Noon.AddDays(9))));
+
+        await using StoreContext reading = database.Context();
+
+        QueuedRequest after = Assert.IsType<QueuedRequest>(
+            await new PrivacyRequestStore(reading)
+                .FindAsync(written.Id, TestContext.Current.CancellationToken));
+
+        Assert.Equal(1, decided.Count(answer => answer));
+        Assert.False(after.Open);
+    }
+
     private static QueuedRequest Entered(SubjectId subject, PrivacyRequestType type) =>
         QueuedRequest.Entered(
             new PrivacyRequestEntry(
@@ -178,6 +209,34 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         return subject;
+    }
+
+    // A decision as the service makes one: the request read before, then again under
+    // its row's lock, and decided only where it still stands open.
+    private async Task<bool> DecidedOnceAsync(PrivacyRequestId request, Action<QueuedRequest> decide)
+    {
+        await using StoreContext writing = database.Context();
+        await using var work = new UnitOfWork(writing);
+        var store = new PrivacyRequestStore(writing);
+
+        _ = await store.FindAsync(request, TestContext.Current.CancellationToken);
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        QueuedRequest held = Assert.IsType<QueuedRequest>(
+            await store.FindForUpdateAsync(request, TestContext.Current.CancellationToken));
+
+        bool open = held.Open;
+
+        if (open)
+        {
+            decide(held);
+
+            await store.RecordAsync(held, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return open;
     }
 
     private async Task WritingAsync(Func<PrivacyRequestStore, Task> write)

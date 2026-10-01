@@ -89,7 +89,7 @@ internal sealed class DeadlineSweep(
 
     private async ValueTask<bool> ReachedAsync(
         SystemPrincipal principal,
-        QueuedRequest request,
+        QueuedRequest reached,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -97,6 +97,17 @@ internal sealed class DeadlineSweep(
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        // D-166 X3: the request is carried under its row's lock, so one fulfilled or
+        // refused while the pass read the queue is left as decided, not lapsed.
+        if (await requests.FindForUpdateAsync(reached.Id, cancellationToken).ConfigureAwait(false)
+            is not { Open: true } request)
+        {
+            (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+
+            return false;
+        }
 
         if (request.WarnedAt is null && now >= request.WarnAt)
         {

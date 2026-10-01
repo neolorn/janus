@@ -216,7 +216,7 @@ internal sealed class PrivacyRequestService(
 
         Error? failure = null;
 
-        QueuedRequest held = (await DecidableAsync(request, cancellationToken)
+        _ = (await DecidableAsync(request, held: false, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Held<QueuedRequest>(error, ref failure));
 
@@ -247,6 +247,18 @@ internal sealed class PrivacyRequestService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: the request is decided under its row's lock, so a refusal or the
+        // deadline's lapse at the same moment is decided before or after it, never both.
+        QueuedRequest held = (await DecidableAsync(request, held: true, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<QueuedRequest>(error, ref failure));
+
+        if (failure is Error undecidable)
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Failure(undecidable), Result.Failure);
         }
 
         // IDN-LIFE-003: what the fulfilment could not do leaves the request open.
@@ -314,7 +326,7 @@ internal sealed class PrivacyRequestService(
 
         Error? failure = null;
 
-        QueuedRequest held = (await DecidableAsync(request, cancellationToken)
+        _ = (await DecidableAsync(request, held: false, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Held<QueuedRequest>(error, ref failure));
 
@@ -325,13 +337,24 @@ internal sealed class PrivacyRequestService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        held.Refuse(now, stated);
-
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
+
+        // D-166 X3: decided under the row's lock, as a fulfilment is.
+        QueuedRequest held = (await DecidableAsync(request, held: true, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<QueuedRequest>(error, ref failure));
+
+        if (failure is Error undecidable)
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Failure(undecidable), Result.Failure);
+        }
+
+        held.Refuse(now, stated);
 
         await requests.RecordAsync(held, cancellationToken).ConfigureAwait(false);
         await audit
@@ -382,18 +405,20 @@ internal sealed class PrivacyRequestService(
     // already stands (PRIV-RIGHT-001).
     private async ValueTask<Result<QueuedRequest>> DecidableAsync(
         PrivacyRequestId request,
+        bool held,
         CancellationToken cancellationToken)
     {
-        QueuedRequest? held = await requests.FindAsync(request, cancellationToken)
-            .ConfigureAwait(false);
+        QueuedRequest? found = held
+            ? await requests.FindForUpdateAsync(request, cancellationToken).ConfigureAwait(false)
+            : await requests.FindAsync(request, cancellationToken).ConfigureAwait(false);
 
-        if (held is null)
+        if (found is not QueuedRequest decidable)
         {
             return Result.Failure<QueuedRequest>(Error.From(ErrorCodes.RequestNotFound));
         }
 
-        return held.Open
-            ? Result.Success(held)
+        return decidable.Open
+            ? Result.Success(decidable)
             : Result.Failure<QueuedRequest>(Error.From(ErrorCodes.RequestDecided));
     }
 

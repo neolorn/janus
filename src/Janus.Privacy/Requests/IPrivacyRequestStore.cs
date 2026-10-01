@@ -21,6 +21,18 @@ internal interface IPrivacyRequestStore
     ValueTask AddAsync(QueuedRequest request, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads one request under a lock on its row held until the operation's transaction
+    /// ends, so a decision on it cannot race another (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="request">Which one.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The request as committed when the lock was taken, or nothing where no such row exists.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask<QueuedRequest?> FindForUpdateAsync(
+        PrivacyRequestId request,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reads one request.
     /// </summary>
     /// <param name="request">Which one.</param>

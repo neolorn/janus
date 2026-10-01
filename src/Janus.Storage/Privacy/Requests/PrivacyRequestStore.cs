@@ -55,6 +55,35 @@ internal sealed class PrivacyRequestStore(StoreContext context) : IPrivacyReques
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<QueuedRequest?> FindForUpdateAsync(
+        PrivacyRequestId request,
+        CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A request's row is held only inside the operation's transaction.");
+        }
+
+        bool tracked = context.PrivacyRequests.Local.Any(row => row.Id == request);
+
+        PrivacyRequestRecord? held = (await context.PrivacyRequests
+                .FromSql($"SELECT * FROM identity.privacy_requests WHERE id = {request.Value} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .SingleOrDefault();
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the decision is made on is the row as it stood when the lock was taken.
+        if (held is not null && tracked)
+        {
+            await context.Entry(held).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return held is null ? null : Read(held);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<QueuedRequest>> AllAsync(
         CancellationToken cancellationToken) =>
     [

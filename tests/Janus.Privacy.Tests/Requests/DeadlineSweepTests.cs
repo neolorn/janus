@@ -292,6 +292,31 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-RIGHT-002 AC5, CONV-DESIGN-003: a request fulfilled while the pass waited
+    /// for its row is left as decided: it does not lapse and the subject is not told
+    /// it was refused.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_002_AC5_ARequestDecidedMeanwhileDoesNotLapseAsync()
+    {
+        _ = await EnteredAsync(PrivacyRequestType.Erasure);
+
+        _clock.Advance(new DateTimeOffset(2026, 9, 29, 1, 0, 0, TimeSpan.FromHours(3)) - Noon);
+
+        _requests.Locking = request =>
+        {
+            _requests.Locking = null;
+            request.Fulfil(_clock.GetUtcNow());
+        };
+
+        Assert.Equal(0, await Sweep.SweepAsync(Sweeper, CancellationToken.None));
+        Assert.Equal(PrivacyRequestStatus.Fulfilled, Assert.Single(_requests.Queue).Status);
+        Assert.DoesNotContain(_notices.Told, told => told.Message is MessageKind.PrivacyRequestLapsed);
+        Assert.Empty(_alerts.Raised);
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-001 AC3: the lapse is a decision, so it is audited like one.
     /// </summary>
     /// <returns>The work of running it.</returns>

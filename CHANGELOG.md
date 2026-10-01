@@ -1478,6 +1478,9 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- A privacy request is fulfilled, refused or carried by the deadline sweep under a
+  lock on its row, so two decisions at once never both stand and a request decided
+  while the sweep ran is not lapsed.
 - An edit of one sending restriction is made on the set read again under its row's
   lock, so an edit of another restriction at the same moment is never written over.
 - A refresh of a materialised derivation is made with the organization's tree of

@@ -493,6 +493,32 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-RIGHT-002 AC5, CONV-DESIGN-003: an erasure refused while its fulfilment
+    /// waited for the request's row stays refused, and the account does not enter the
+    /// deletion window.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_002_AC5_AnErasureRefusedMeanwhileBeginsNoDeletionAsync()
+    {
+        PrivacyRequestReceipt receipt =
+            await EnteredAsync(PrivacyRequestType.Erasure, new DateOnly(2026, 9, 18));
+
+        _requests.Locking = request =>
+        {
+            _requests.Locking = null;
+            request.Refuse(_clock.GetUtcNow(), "the caller could not be identified");
+        };
+
+        Result fulfilled = await Requests
+            .FulfilAsync(AccessContext.Of(Mona), Browser, receipt.RequestId, CancellationToken.None);
+
+        Assert.Equal(ErrorCodes.RequestDecided, fulfilled.Match(() => default, error => error.Code));
+        Assert.Equal(PrivacyRequestStatus.Refused, Assert.Single(_requests.Queue).Status);
+        Assert.Equal(AccountState.Active, _accounts.Of(Ahmed));
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-001: the three ways a decision is refused are told apart for the
     /// member of staff working the queue: no permission, no such request, and a
     /// decision that already stands. Nothing under the administrative routes is
