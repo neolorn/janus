@@ -34,6 +34,9 @@ public sealed class AccountApplicationTests : IAsyncDisposable
 
     private static readonly SessionLocation Somewhere = new("Cairo", "EG");
 
+    private static readonly OrganizationId Company =
+        new(Guid.Parse("33333333-3333-4333-8333-333333333333"));
+
     private static readonly PreferenceDeclarations Declared = PreferenceDeclarations.Of(
     [
         new PreferenceDeclaration("theme", PreferenceKind.String, "system"),
@@ -53,6 +56,74 @@ public sealed class AccountApplicationTests : IAsyncDisposable
         await _deployment.DisposeAsync();
 
         _randomness.Dispose();
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 AC2 (D-166), end to end: a restriction fulfilled through the queue
+    /// ends the account's session; the account then signs in with its password, reads
+    /// itself as restricted, is refused a change to its profile with
+    /// <c>authz.restricted</c>, still exercises its rights with a request, and exports
+    /// its data from the session it has just proved.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedAccountSignsInReadsAndIsRefusedAChangeAsync()
+    {
+        // The new-device check would hold the sign-in for a code (AUTH-FACT-016), which
+        // is not what this test is about.
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+        _deployment.Configuration.Set(Settings.PrivacyCalendarTimeZone, "Africa/Cairo");
+
+        Browser before = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+
+        _deployment.AccountStates.Hold(subject, AccountState.Active);
+        _deployment.Administers(Company);
+        _deployment.Gate.Grant(subject, Company, Permissions.PrivacyRequestManage);
+
+        Answer asked = await before.SendAsync(
+            "POST",
+            "/privacy/requests",
+            ("type", "restriction"),
+            ("detail", "the recorded date of birth is disputed"));
+
+        Assert.Equal(StatusCodes.Status202Accepted, asked.Status);
+
+        Answer fulfilled = await before.SendAsync(
+            "POST",
+            "/admin/privacy/requests/" + asked.Json().GetProperty("requestId").GetGuid() + "/fulfil");
+        Answer ended = await before.SendAsync("GET", "/account");
+
+        var after = new Browser(_deployment);
+
+        _ = await after.SendAsync("GET", "/auth/session");
+
+        Answer began = await after.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
+        Answer signedIn = await after.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", began.Text("challengeId")),
+            ("factor", "password"),
+            ("value", Flow.Password));
+        Answer read = await after.SendAsync("GET", "/account");
+        Answer changed = await after.SendAsync("PUT", "/account/profile", ("displayName", "Someone Else"));
+        Answer rectification = await after.SendAsync(
+            "POST",
+            "/privacy/requests",
+            ("type", "rectification"),
+            ("detail", "the recorded total is wrong"));
+        Answer exported = await after.SendAsync("GET", "/privacy/export?format=machine");
+
+        Assert.Equal(StatusCodes.Status202Accepted, asked.Status);
+        Assert.Equal(StatusCodes.Status204NoContent, fulfilled.Status);
+        Assert.Equal(StatusCodes.Status401Unauthorized, ended.Status);
+        Assert.Equal("complete", signedIn.Text("status"));
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+        Assert.Equal("restricted", read.Text("state"));
+        Assert.Equal(StatusCodes.Status403Forbidden, changed.Status);
+        Assert.Equal(ErrorCodes.Restricted.ToString(), changed.Text("code"));
+        Assert.Equal(StatusCodes.Status202Accepted, rectification.Status);
+        Assert.Equal(StatusCodes.Status200OK, exported.Status);
     }
 
     /// <summary>
@@ -221,6 +292,69 @@ public sealed class AccountApplicationTests : IAsyncDisposable
             OpaqueToken.Of(before).Fingerprint(),
             TestContext.Current.CancellationToken));
         Assert.Equal(StatusCodes.Status200OK, (await browser.SendAsync("GET", "/account")).Status);
+    }
+
+    /// <summary>
+    /// BFF-SESS-004 AC2, IDN-LIFE-008 AC1: a replacement staged in one session and
+    /// completed by the code typed in another keeps the completing session, which
+    /// answers to a new secret from then on, and ends the staging one.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_SESS_004_AC2_TheSessionThatCompletesAReplacementAnswersToItsNewSecretAsync()
+    {
+        const string replaced = "replaced@example.test";
+
+        _deployment.Configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        Browser staging = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = Registered();
+        Guid changing = (await _deployment.Identifiers.HeldAsync(subject, TestContext.Current.CancellationToken))
+            .All
+            .Single(held => held.Kind is IdentifierKind.Email)
+            .Id
+            .Value;
+
+        Assert.Equal(
+            StatusCodes.Status202Accepted,
+            (await staging.SendAsync(
+                "PUT",
+                "/account/identifiers/" + changing + "/replace",
+                ("value", replaced))).Status);
+
+        var secret = OpaqueToken.Draw(_randomness);
+        var token = OpaqueToken.Draw(_randomness);
+        var completing = new Browser(_deployment);
+
+        await _deployment.Sessions.AddAsync(
+            Session.Begin(
+                SessionId.New(_deployment.Clock),
+                subject,
+                new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
+                new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")) { Location = Somewhere },
+                _deployment.Clock.GetUtcNow(),
+                TimeSpan.FromDays(1),
+                TimeSpan.FromDays(30),
+                breakGlassReason: null),
+            secret.Fingerprint(),
+            token.Fingerprint(),
+            TestContext.Current.CancellationToken);
+
+        completing.Hold(BrowserCookies.Session, secret.Value);
+        completing.Hold(BrowserCookies.Csrf, token.Value);
+
+        Answer verified = await completing.SendAsync(
+            "POST",
+            "/account/identifiers/" + changing + "/verify",
+            ("code", Flow.Code(_deployment, IdentifierKind.Email)));
+
+        Assert.Equal(StatusCodes.Status204NoContent, verified.Status);
+        Assert.NotEqual(secret.Value, completing.Cookies[BrowserCookies.Session]);
+        Assert.Null(await _deployment.Sessions.FindByFingerprintAsync(
+            secret.Fingerprint(),
+            TestContext.Current.CancellationToken));
+        Assert.Equal(StatusCodes.Status200OK, (await completing.SendAsync("GET", "/account")).Status);
+        Assert.Equal(StatusCodes.Status401Unauthorized, (await staging.SendAsync("GET", "/account")).Status);
     }
 
     /// <summary>

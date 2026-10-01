@@ -49,8 +49,8 @@ public interface IAccount
     /// <param name="context">Who is asking.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The stored JPEG, empty where the account shows none and where no organization
-    /// it belongs to shows photos at all.
+    /// The stored JPEG, or the refusal: <c>identity.photo.notfound</c> where the account
+    /// shows none and where no organization it belongs to shows photos at all, alike.
     /// </returns>
     ValueTask<Result<ReadOnlyMemory<byte>>> ReadPhotoAsync(
         AccessContext context,

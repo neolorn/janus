@@ -10,9 +10,16 @@ namespace Janus.Privacy.Erasures;
 /// <param name="Subject">Whose account it is.</param>
 /// <param name="By">What began the deletion.</param>
 /// <param name="Since">When the window began.</param>
+/// <param name="HeldSince">
+/// When the deletion a takedown found running began, where it found one.
+/// </param>
 /// <remarks>
 /// Implements IDN-LIFE-014 and IDN-LIFE-003. What began the deletion decides the
 /// reason the erasure carries to the subscribers, so the sweep reads it here rather
 /// than assuming every window was the subject's own doing.
 /// </remarks>
-internal sealed record PendingDeletion(SubjectId Subject, DeletionOrigin By, DateTimeOffset Since);
+internal sealed record PendingDeletion(
+    SubjectId Subject,
+    DeletionOrigin By,
+    DateTimeOffset Since,
+    DateTimeOffset? HeldSince);

@@ -302,6 +302,127 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-RIGHT-001, IDN-LIFE-003 (D-166): an active or restricted account the
+    /// fulfilled erasure finds enters its window by <c>oob-request</c> from now.
+    /// </summary>
+    /// <param name="state">Where the account stands.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(AccountState.Active)]
+    [InlineData(AccountState.Restricted)]
+    public async Task PRIV_RIGHT_001_IDN_LIFE_003_AnActiveOrRestrictedAccountEntersTheWindowAsync(
+        AccountState state)
+    {
+        _accounts.Hold(Ahmed, state);
+
+        Result fulfilled = await ErasedAsync();
+
+        AccountStanding? standing = await _accounts.StandingAsync(Ahmed, CancellationToken.None);
+
+        Assert.Null(fulfilled.Match(() => (Error?)null, error => error));
+        Assert.Equal(AccountState.Deleting, standing?.State);
+        Assert.Equal(DeletionOrigin.OutOfBandRequest, standing?.DeletingBy);
+        Assert.Equal(Noon, standing?.DeletingSince);
+        Assert.Equal(PrivacyRequestStatus.Fulfilled, Assert.Single(_requests.Queue).Status);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001, IDN-LIFE-003 (D-166): a suspended account the fulfilled erasure
+    /// finds enters its window by <c>oob-request</c> holding the suspension, and a
+    /// cancellation returns it suspended.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001_IDN_LIFE_003_ASuspendedAccountEntersTheWindowAndComesBackSuspendedAsync()
+    {
+        _accounts.Hold(Ahmed, AccountState.Suspended);
+
+        Result fulfilled = await ErasedAsync();
+
+        AccountStanding? standing = await _accounts.StandingAsync(Ahmed, CancellationToken.None);
+
+        _accounts.Cancels(Ahmed);
+
+        Assert.Null(fulfilled.Match(() => (Error?)null, error => error));
+        Assert.Equal(AccountState.Deleting, standing?.State);
+        Assert.Equal(DeletionOrigin.OutOfBandRequest, standing?.DeletingBy);
+        Assert.Equal(Noon, standing?.DeletingSince);
+        Assert.Equal(AccountState.Suspended, _accounts.Of(Ahmed));
+        Assert.Equal(PrivacyRequestStatus.Fulfilled, Assert.Single(_requests.Queue).Status);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001, IDN-LIFE-003 (D-166): an account already in its window, by any
+    /// origin, has the erasure recorded fulfilled against the window running, which
+    /// keeps its origin and its start.
+    /// </summary>
+    /// <param name="origin">What began the running window.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(DeletionOrigin.Self)]
+    [InlineData(DeletionOrigin.OutOfBandRequest)]
+    [InlineData(DeletionOrigin.Takedown)]
+    public async Task PRIV_RIGHT_001_IDN_LIFE_003_ADeletingAccountKeepsItsRunningWindowAsync(
+        DeletionOrigin origin)
+    {
+        DateTimeOffset began = Noon - TimeSpan.FromDays(3);
+
+        _accounts.Deletes(Ahmed, origin, began);
+
+        Result fulfilled = await ErasedAsync();
+
+        AccountStanding? standing = await _accounts.StandingAsync(Ahmed, CancellationToken.None);
+
+        Assert.Null(fulfilled.Match(() => (Error?)null, error => error));
+        Assert.Equal(AccountState.Deleting, standing?.State);
+        Assert.Equal(origin, standing?.DeletingBy);
+        Assert.Equal(began, standing?.DeletingSince);
+        Assert.Equal(PrivacyRequestStatus.Fulfilled, Assert.Single(_requests.Queue).Status);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001, IDN-LIFE-003 (D-166): an account already erased has the erasure
+    /// recorded fulfilled, and nothing further happens to it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001_IDN_LIFE_003_ADeletedAccountChangesNothingAsync()
+    {
+        _accounts.Erases(Ahmed);
+
+        Result fulfilled = await ErasedAsync();
+
+        AccountStanding? standing = await _accounts.StandingAsync(Ahmed, CancellationToken.None);
+
+        Assert.Null(fulfilled.Match(() => (Error?)null, error => error));
+        Assert.Equal(AccountState.Deleted, standing?.State);
+        Assert.Null(standing?.DeletingBy);
+        Assert.Null(_accounts.Deleting);
+        Assert.Equal(PrivacyRequestStatus.Fulfilled, Assert.Single(_requests.Queue).Status);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001, IDN-LIFE-003 (D-166): an erasure whose window cannot begin fails
+    /// the fulfilment, which leaves the request open and records no decision.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001_IDN_LIFE_003_AnErasureThatCannotBeginFailsTheFulfilmentAsync()
+    {
+        PrivacyRequestReceipt receipt =
+            await EnteredAsync(PrivacyRequestType.Erasure, new DateOnly(2026, 9, 18));
+
+        _accounts.Forget(Ahmed);
+
+        Result fulfilled = await Requests
+            .FulfilAsync(AccessContext.Of(Mona), Browser, receipt.RequestId, CancellationToken.None);
+
+        Assert.Equal(ErrorCodes.AccountNotFound, fulfilled.Match(() => default, error => error.Code));
+        Assert.Equal(PrivacyRequestStatus.Open, Assert.Single(_requests.Queue).Status);
+        Assert.Null(_accounts.Deleting);
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-001 AC3: every exercise is audited, the decision with it.
     /// </summary>
     /// <returns>The work of running it.</returns>
@@ -578,6 +699,16 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
         return submitted.Match(
             receipt => receipt,
             error => throw new XunitException(error.Code.ToString()));
+    }
+
+    // An erasure entered out of band and fulfilled by the member of staff.
+    private async Task<Result> ErasedAsync()
+    {
+        PrivacyRequestReceipt receipt =
+            await EnteredAsync(PrivacyRequestType.Erasure, new DateOnly(2026, 9, 18));
+
+        return await Requests
+            .FulfilAsync(AccessContext.Of(Mona), Browser, receipt.RequestId, CancellationToken.None);
     }
 
     private async Task<PrivacyRequestReceipt> EnteredAsync(

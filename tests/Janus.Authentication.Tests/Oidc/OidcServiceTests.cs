@@ -222,6 +222,24 @@ public sealed class OidcServiceTests : IAsyncDisposable
         Assert.True(withEmail.EmailVerified);
     }
 
+    /// <summary>
+    /// IDN-ACCT-007 AC2 (D-166): a restricted account signs on to the mail server as an
+    /// active one does, so its claims are answered, while a suspended account's are not.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedAccountsClaimsAreAnsweredAsync()
+    {
+        SubjectId restricted = await AccountAsync();
+        SubjectId suspended = await AccountAsync();
+
+        _accounts.Stands(restricted, AccountState.Restricted);
+        _accounts.Stands(suspended, AccountState.Suspended);
+
+        Assert.Equal(Address, Value(await Service.ClaimsAsync(restricted, "openid email", Cancellation))!.Email);
+        Assert.Equal(ErrorCodes.Denied, Refused(await Service.ClaimsAsync(suspended, "openid email", Cancellation)));
+    }
+
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
     private static ErrorCode Refused<TValue>(Result<TValue> result) =>

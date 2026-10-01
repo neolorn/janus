@@ -333,6 +333,43 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// REG-PM-001 AC3, LIB-HOST-001: a page declared as white space is no page, so a
+    /// field left blank stops the deployment as it starts, named, as an empty one does.
+    /// </summary>
+    /// <param name="field">The field left blank, as the refusal names it.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("passkeyAddresses.changePassword")]
+    [InlineData("passkeyAddresses.enrol")]
+    [InlineData("passkeyAddresses.manage")]
+    [InlineData("authenticationAddresses.signIn")]
+    [InlineData("authenticationAddresses.provider")]
+    public async Task REG_PM_001_AC3_ABlankFieldIsRefusedAsync(string field)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using IHost deployment = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton(new PasskeyAddresses(
+                    field is "passkeyAddresses.changePassword" ? " \t" : "https://accounts.example.test/password",
+                    field is "passkeyAddresses.enrol" ? " \t" : "https://accounts.example.test/passkeys/new",
+                    field is "passkeyAddresses.manage" ? " \t" : "https://accounts.example.test/passkeys"));
+                services.AddSingleton(new AuthenticationAddresses(
+                    field is "authenticationAddresses.signIn" ? " \t" : "https://accounts.example.test/signin",
+                    field is "authenticationAddresses.provider" ? " \t" : "https://accounts.example.test"));
+                Declared(services, addresses: false, signIn: false);
+            })
+            .Build();
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal(field, refused.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
     /// LIB-HOST-001, AUTH-SESS-012 AC3: where a browser holding no session is sent is
     /// likewise a declaration with no default, so a deployment that registered none is
     /// stopped as it starts rather than meeting an interactive authorization request

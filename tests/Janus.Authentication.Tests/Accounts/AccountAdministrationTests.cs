@@ -199,7 +199,8 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
     /// <summary>
     /// IDN-LIFE-013: only an administrator's suspension is reversed here; what its owner
     /// deactivated is theirs to stand back up, and an account in no suspension has
-    /// nothing to reverse.
+    /// nothing to reverse. Each is a conflict with the state, named with who suspended
+    /// it where it is suspended.
     /// </summary>
     [Fact]
     public async Task IDN_LIFE_013_OnlyAnAdministratorsSuspensionIsReactivatedAsync()
@@ -208,8 +209,15 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
 
         _directory.Suspended(deactivated, SuspensionOrigin.Self);
 
-        Assert.Equal(ErrorCodes.Denied, Refused(await ReactivateAsync(deactivated)));
-        Assert.Equal(ErrorCodes.Denied, Refused(await ReactivateAsync(_member)));
+        Error owners = Refusal(await ReactivateAsync(deactivated));
+        Error active = Refusal(await ReactivateAsync(_member));
+
+        Assert.Equal(ErrorCodes.AccountStateConflict, owners.Code);
+        Assert.Equal("suspended", owners.Details["state"].GetString());
+        Assert.Equal("self", owners.Details["suspendedBy"].GetString());
+        Assert.Equal(ErrorCodes.AccountStateConflict, active.Code);
+        Assert.Equal("active", active.Details["state"].GetString());
+        Assert.False(active.Details.ContainsKey("suspendedBy"));
         Assert.Equal(AccountState.Suspended, await StateAsync(deactivated));
         Assert.Equal(
             SuspensionOrigin.Self,
@@ -219,17 +227,20 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-013: an account in its deletion window or erased is past suspending, and
-    /// an unknown subject is named as the part of the request that is wrong.
+    /// IDN-LIFE-013: an account in its deletion window or erased is past suspending,
+    /// which is a conflict with its state, and a subject no account bears is not found.
     /// </summary>
     [Fact]
     public async Task IDN_LIFE_013_AnAccountBeingDeletedOrUnknownIsNotSuspendedAsync()
     {
         _directory.Deleting(_member, DeletionOrigin.Self, Noon);
 
-        Assert.Equal(ErrorCodes.Denied, Refused(await SuspendAsync(_member)));
-        Assert.Equal(ErrorCodes.RequestMalformed, Refused(await SuspendAsync(SubjectId.New(_randomness))));
-        Assert.Equal(ErrorCodes.RequestMalformed, Refused(await ReactivateAsync(SubjectId.New(_randomness))));
+        Error deleting = Refusal(await SuspendAsync(_member));
+
+        Assert.Equal(ErrorCodes.AccountStateConflict, deleting.Code);
+        Assert.Equal("deleting", deleting.Details["state"].GetString());
+        Assert.Equal(ErrorCodes.AccountNotFound, Refused(await SuspendAsync(SubjectId.New(_randomness))));
+        Assert.Equal(ErrorCodes.AccountNotFound, Refused(await ReactivateAsync(SubjectId.New(_randomness))));
         Assert.Equal(AccountState.Deleting, await StateAsync(_member));
         Assert.Empty(_audit.Administered);
     }
@@ -295,7 +306,7 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
 
     /// <summary>
     /// PRIV-RIGHT-004 AC2: lifting a restriction makes the account active again, tells
-    /// the subscribers, and is recorded as the administrator's act, with no step-up asked.
+    /// the subscribers, and is recorded as the administrator's act.
     /// </summary>
     [Fact]
     public async Task PRIV_RIGHT_004_AC2_LiftingARestrictionRestoresTheAccountAsync()
@@ -328,17 +339,45 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
         _directory.Stands(restricted, AccountState.Restricted);
         Accepted(await SuspendAsync(held));
 
-        Assert.Equal(ErrorCodes.Denied, Refused(await LiftAsync(held)));
-        Assert.Equal(ErrorCodes.Denied, Refused(await LiftAsync(_member)));
-        Assert.Equal(ErrorCodes.RequestMalformed, Refused(await LiftAsync(SubjectId.New(_randomness))));
+        Error suspended = Refusal(await LiftAsync(held));
+
+        Assert.Equal(ErrorCodes.AccountStateConflict, suspended.Code);
+        Assert.Equal("suspended", suspended.Details["state"].GetString());
+        Assert.Equal("administrator", suspended.Details["suspendedBy"].GetString());
+        Assert.Equal(ErrorCodes.AccountStateConflict, Refused(await LiftAsync(_member)));
+        Assert.Equal(ErrorCodes.AccountNotFound, Refused(await LiftAsync(SubjectId.New(_randomness))));
         Assert.Equal(
             ErrorCodes.Denied,
             Refused(await Administration.LiftRestrictionAsync(
                 AccessContext.Of(stranger),
+                Opened(stranger, Noon),
                 restricted,
                 TestContext.Current.CancellationToken)));
         Assert.Equal(AccountState.Restricted, await StateAsync(restricted));
         Assert.Empty(_directory.Lifted);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-004 (D-166): lifting a restriction changes another person's account, so
+    /// it is the <c>account:restrictionlift</c> step-up action, judged after the state: a
+    /// session whose proof is not recent lifts nothing, and an account with no
+    /// restriction is answered as one before any proof is asked.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_004_LiftingARestrictionAsksForStepUpAsync()
+    {
+        _directory.Stands(_member, AccountState.Restricted);
+
+        var active = SubjectId.New(_randomness);
+
+        _directory.Stands(active, AccountState.Active);
+
+        Assert.Equal(ErrorCodes.AccountStateConflict, Refused(await LiftAsync(active, Stale)));
+        Assert.Equal(ErrorCodes.StepUpRequired, Refused(await LiftAsync(_member, Stale)));
+        Assert.Equal(AccountState.Restricted, await StateAsync(_member));
+        Assert.Empty(_directory.Lifted);
+        Assert.Empty(_audit.Administered);
+        Assert.Equal(0, _work.Opened);
     }
 
     /// <summary>
@@ -391,7 +430,7 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
     /// <summary>
     /// IDN-LIFE-003: a takedown is refused as one, a window that has closed is refused as
     /// closed, an account in no window has nothing to cancel, and an unknown subject is
-    /// named; none changes anything.
+    /// not found; none changes anything.
     /// </summary>
     [Fact]
     public async Task IDN_LIFE_003_ATakedownOrAClosedWindowIsNotCancelledAsync()
@@ -404,16 +443,39 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.TakedownActive, Refused(await CancelAsync(takenDown)));
         Assert.Equal(ErrorCodes.DeletionWindowElapsed, Refused(await CancelAsync(closed)));
-        Assert.Equal(ErrorCodes.Denied, Refused(await CancelAsync(_member)));
-        Assert.Equal(ErrorCodes.RequestMalformed, Refused(await CancelAsync(SubjectId.New(_randomness))));
+        Assert.Equal(ErrorCodes.AccountStateConflict, Refused(await CancelAsync(_member)));
+        Assert.Equal(ErrorCodes.AccountNotFound, Refused(await CancelAsync(SubjectId.New(_randomness))));
         Assert.Equal(AccountState.Deleting, await StateAsync(takenDown));
         Assert.Equal(AccountState.Deleting, await StateAsync(closed));
         Assert.Empty(_audit.Administered);
     }
 
     /// <summary>
+    /// IDN-LIFE-003 (D-166): cancelling a deletion on the subject's behalf changes
+    /// another person's account, so it is the <c>account:deletioncancel</c> step-up
+    /// action, judged after every other refusal: a session whose proof is not recent
+    /// cancels nothing, and a closed window is answered as closed before any proof is
+    /// asked.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_003_ACancellationOnTheSubjectsBehalfAsksForStepUpAsync()
+    {
+        var closed = SubjectId.New(_randomness);
+
+        _directory.Deleting(_member, DeletionOrigin.Self, Noon.AddDays(-1));
+        _directory.Deleting(closed, DeletionOrigin.Self, Noon - Settings.AccountDeletionGrace.Default);
+
+        Assert.Equal(ErrorCodes.DeletionWindowElapsed, Refused(await CancelAsync(closed, Stale)));
+        Assert.Equal(ErrorCodes.StepUpRequired, Refused(await CancelAsync(_member, Stale)));
+        Assert.Equal(AccountState.Deleting, await StateAsync(_member));
+        Assert.Empty(_events.Published);
+        Assert.Empty(_audit.Administered);
+        Assert.Equal(0, _work.Opened);
+    }
+
+    /// <summary>
     /// IDN-ATTR-003 AC3: the photo an account shows is read through the gate, so an
-    /// administrator reads it, an unknown subject is named, and a person without the
+    /// administrator reads it, an unknown subject is not found, and a person without the
     /// permission is refused it.
     /// </summary>
     [Fact]
@@ -428,15 +490,16 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
 
         Assert.Equal(image, (await PhotoAsync(Acting, _member)).Match(read => read.ToArray(), _ => []));
         Assert.Equal(
-            ErrorCodes.RequestMalformed,
+            ErrorCodes.AccountNotFound,
             Refused(await PhotoAsync(Acting, SubjectId.New(_randomness))));
         Assert.Equal(ErrorCodes.Denied, Refused(await PhotoAsync(AccessContext.Of(_member), _member)));
         Assert.Empty(_audit.Administered);
     }
 
     /// <summary>
-    /// IDN-ATTR-002: a photo is read for an administrator only where the account's own
-    /// organizations show photos, and an account that shows none answers alike.
+    /// IDN-ATTR-002, IDN-ATTR-003 (D-166): a photo is read for an administrator only
+    /// where the account's own organizations show photos, and an account that shows none
+    /// answers alike, with <c>identity.photo.notfound</c>.
     /// </summary>
     [Fact]
     public async Task IDN_ATTR_002_APhotoThePolicyWithholdsIsNotReadAsync()
@@ -450,11 +513,11 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
         _configuration.Set(Settings.OrganizationPhoto, organization.ToString(), false);
         _directory.Shows(_member, new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 });
 
-        Assert.True((await PhotoAsync(Acting, _member)).Match(read => read.IsEmpty, _ => false));
+        Assert.Equal(ErrorCodes.PhotoNotFound, Refused(await PhotoAsync(Acting, _member)));
 
         _configuration.Set(Settings.OrganizationPhoto, organization.ToString(), true);
 
-        Assert.True((await PhotoAsync(Acting, bare)).Match(read => read.IsEmpty, _ => false));
+        Assert.Equal(ErrorCodes.PhotoNotFound, Refused(await PhotoAsync(Acting, bare)));
     }
 
     private static DateTimeOffset Stale =>
@@ -473,6 +536,11 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
             _ => throw new Xunit.Sdk.XunitException("The operation was admitted."),
             error => error.Code);
 
+    private static Error Refusal(Result outcome) =>
+        outcome.Match(
+            () => throw new Xunit.Sdk.XunitException("The operation was admitted."),
+            error => error);
+
     private async Task<Result<ReadOnlyMemory<byte>>> PhotoAsync(AccessContext context, SubjectId subject) =>
         await Administration.ReadPhotoAsync(context, subject, TestContext.Current.CancellationToken);
 
@@ -490,11 +558,19 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
             subject,
             TestContext.Current.CancellationToken);
 
-    private async Task<Result> CancelAsync(SubjectId subject) =>
-        await Administration.CancelDeletionAsync(Acting, subject, TestContext.Current.CancellationToken);
+    private async Task<Result> CancelAsync(SubjectId subject, DateTimeOffset? proved = null) =>
+        await Administration.CancelDeletionAsync(
+            Acting,
+            Opened(_administrator, proved ?? Noon),
+            subject,
+            TestContext.Current.CancellationToken);
 
-    private async Task<Result> LiftAsync(SubjectId subject) =>
-        await Administration.LiftRestrictionAsync(Acting, subject, TestContext.Current.CancellationToken);
+    private async Task<Result> LiftAsync(SubjectId subject, DateTimeOffset? proved = null) =>
+        await Administration.LiftRestrictionAsync(
+            Acting,
+            Opened(_administrator, proved ?? Noon),
+            subject,
+            TestContext.Current.CancellationToken);
 
     private async Task<AccountState?> StateAsync(SubjectId subject) =>
         await _directory.StateAsync(subject, TestContext.Current.CancellationToken);

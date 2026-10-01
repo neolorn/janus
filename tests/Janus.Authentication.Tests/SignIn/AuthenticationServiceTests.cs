@@ -22,6 +22,7 @@ using Janus.Authentication.Tests.Sending;
 using Janus.Authentication.Tests.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
+using OtpNet;
 using Xunit;
 
 namespace Janus.Authentication.Tests.SignIn;
@@ -182,6 +183,8 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Policies,
             _configuration,
             new AdministrativeScope(_gate, _administrative),
+            new StepUpGuard(_live, _authenticators, _passwords, Policies, _identifiers, Signals, _clock),
+            _accounts,
             _locations,
             new ConcurrentSessions(_live, _configuration, _events),
             _work,
@@ -206,6 +209,128 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     {
         await _work.DisposeAsync();
         _randomness.Dispose();
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 AC2 (D-166): a restricted account signs in with its password as an
+    /// active one does: a session is issued, and no failure is counted or recorded.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedAccountSignsInWithItsFactorAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        _accounts.Stands(subject, AccountState.Restricted);
+        Remembered(subject);
+
+        SignInProgress reached = await SignedInAsync(subject, Factor.Password, Secret);
+
+        Assert.Equal(SignInStatus.Complete, reached.Status);
+        Assert.NotNull(await _live.FindAsync(
+            reached.Session ?? throw new InvalidOperationException("No session was issued."),
+            TestContext.Current.CancellationToken));
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 AC2 (D-166): a restricted account signs in with the provider it
+    /// linked as an active one does.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedAccountSignsInWithItsProviderAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        await _authenticators.LinkAsync(
+            Authenticator.Linked(
+                AuthenticatorId.New(_clock),
+                subject,
+                Factor.Google,
+                Label(Factor.Google),
+                _clock.GetUtcNow()),
+            "linked-at-the-provider",
+            TestContext.Current.CancellationToken);
+
+        _accounts.Stands(subject, AccountState.Restricted);
+
+        SignInOutcome outcome = (await Service.DelegatedAsync(
+                Factor.Google,
+                "linked-at-the-provider",
+                new SessionOrigin(Source, Browser),
+                TestContext.Current.CancellationToken))
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        Assert.Equal(SignInStatus.Complete, outcome.Progress.Status);
+        Assert.NotNull(outcome.Session);
+        Assert.Empty(_audit.Failed);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 AC2 (D-166): a restricted account is sent its sign-in link, and the
+    /// link signs it in.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedAccountIsSentItsSignInLinkAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        _accounts.Stands(subject, AccountState.Restricted);
+        Enables(Factor.EmailLink);
+        Remembered(subject);
+
+        SignInLanding landed = await PressedAsync(subject);
+
+        Assert.Single(_notifications.Mail);
+        Assert.Equal(SignInStatus.Complete, landed.SignedIn?.Status);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 (D-166): only the restricted state joins the active one at sign-in;
+    /// a suspended, deleting or deleted account is still refused as a wrong password is.
+    /// </summary>
+    /// <param name="state">Where the account stands.</param>
+    [Theory]
+    [InlineData(AccountState.Suspended)]
+    [InlineData(AccountState.Deleting)]
+    [InlineData(AccountState.Deleted)]
+    public async Task IDN_ACCT_007_ASuspendedDeletingOrDeletedAccountIsStillRefusedAsync(AccountState state)
+    {
+        SubjectId subject = await AccountAsync();
+
+        _accounts.Stands(subject, state);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        Assert.Equal(ErrorCodes.FactorRejected, Refused(await PresentAsync(began.Challenge, Factor.Password, Secret)));
+        Assert.Empty(await _live.LiveOfAsync(subject, _clock.GetUtcNow(), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 (D-166): trusting a browser writes to the account, so a restricted
+    /// account's sign-in is not offered it and records none where it asks, while an
+    /// active account's same sign-in is offered it.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_007_ARestrictedAccountsSignInTrustsNoDeviceAsync()
+    {
+        SubjectId active = await AccountAsync();
+
+        Holds(active, Factor.Totp);
+        Remembered(active);
+
+        SignInOutcome offered = await TrustedAsync();
+
+        _accounts.Stands(active, AccountState.Restricted);
+
+        SignInOutcome withheld = await TrustedAsync();
+
+        Assert.True(offered.Progress.TrustDeviceOffered);
+        Assert.NotNull(offered.Trusted);
+        Assert.Equal(SignInStatus.Complete, withheld.Progress.Status);
+        Assert.False(withheld.Progress.TrustDeviceOffered);
+        Assert.Null(withheld.Trusted);
     }
 
     /// <summary>
@@ -1789,6 +1914,30 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Assert.NotEqual(default, subject);
 
         return Reached(await PresentAsync(began.Challenge, factor, value));
+    }
+
+    // A password and the second step, asking that the browser be trusted.
+    private async ValueTask<SignInOutcome> TrustedAsync()
+    {
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = Reached(await PresentAsync(began.Challenge, Factor.Password, Secret));
+
+        string code = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
+
+        SignInOutcome outcome = (await Service.PresentAsync(
+                began.Challenge,
+                new FactorPresentation(Factor.Totp) { Value = code, TrustDevice = true },
+                new SessionOrigin(Source, Browser),
+                remembered: null,
+                trusted: null,
+                TestContext.Current.CancellationToken))
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        _clock.Advance(TimeSpan.FromSeconds(TotpCodes.StepSeconds));
+
+        return outcome;
     }
 
     private async ValueTask<(string Challenge, string Token, string Browser)> AskedAsync(

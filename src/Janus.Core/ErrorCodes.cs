@@ -359,6 +359,26 @@ public static class ErrorCodes
     public static ErrorCode AccountAdministrativelySuspended { get; } = ErrorCode.Parse("identity.account.adminsuspended");
 
     /// <summary>
+    /// The subject an administrative operation names is borne by no account. Name the
+    /// subject of an account the deployment holds.
+    /// </summary>
+    /// <remarks>
+    /// Implements IDN-LIFE-013, IDN-LIFE-003, PRIV-RIGHT-004, IDN-ATTR-003, chapter 10
+    /// section 1.1.
+    /// </remarks>
+    public static ErrorCode AccountNotFound { get; } = ErrorCode.Parse("identity.account.notfound");
+
+    /// <summary>
+    /// The operation does not apply to the state the account is in. The details name
+    /// the state and, where it is suspended, who suspended it.
+    /// </summary>
+    /// <remarks>
+    /// Implements IDN-ACCT-007, IDN-LIFE-013, IDN-LIFE-003, PRIV-RIGHT-004, chapter 10
+    /// section 1.1.
+    /// </remarks>
+    public static ErrorCode AccountStateConflict { get; } = ErrorCode.Parse("identity.account.stateconflict");
+
+    /// <summary>
     /// The identifier is the primary of its kind, which is not removable. Set another
     /// primary first, then remove it.
     /// </summary>
@@ -371,6 +391,13 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements REG-IDENT-001, chapter 10 section 1.1.</remarks>
     public static ErrorCode IdentifierInvalid { get; } = ErrorCode.Parse("identity.identifier.invalid");
+
+    /// <summary>
+    /// The identifier is not verified, so it is not made the primary of its kind or
+    /// named as its backup, and nothing changes. Verify it first.
+    /// </summary>
+    /// <remarks>Implements REG-IDENT-005, REG-IDENT-002, chapter 10 section 1.1.</remarks>
+    public static ErrorCode IdentifierUnverified { get; } = ErrorCode.Parse("identity.identifier.unverified");
 
     /// <summary>
     /// The address's domain is outside the verified domains an organization the
@@ -475,9 +502,10 @@ public static class ErrorCodes
     /// <summary>
     /// The step the request is for is not the step the registration has reached: its
     /// predecessor is incomplete, or it is complete already. Read the session's state
-    /// and answer the step it names.
+    /// and answer the step it names. A confirmation while a staged identifier is
+    /// unverified is such a step.
     /// </summary>
-    /// <remarks>Implements REG-SESS-002, REG-SESS-004, chapter 10 section 1.1.</remarks>
+    /// <remarks>Implements REG-SESS-002, REG-SESS-003, REG-SESS-004, chapter 10 section 1.1.</remarks>
     public static ErrorCode RegistrationIncomplete { get; } = ErrorCode.Parse("identity.registration.incomplete");
 
     /// <summary>
@@ -530,6 +558,13 @@ public static class ErrorCodes
     /// </summary>
     /// <remarks>Implements IDN-ATTR-002, chapter 10 section 1.1.</remarks>
     public static ErrorCode PhotoNotEnabled { get; } = ErrorCode.Parse("identity.photo.notenabled");
+
+    /// <summary>
+    /// The account shows no photo: none is set, or an organization it belongs to does
+    /// not show photos, answered alike. Set a photo, or read none.
+    /// </summary>
+    /// <remarks>Implements IDN-ATTR-002, IDN-ATTR-003, chapter 10 section 1.1.</remarks>
+    public static ErrorCode PhotoNotFound { get; } = ErrorCode.Parse("identity.photo.notfound");
 
     /// <summary>
     /// A second username change fell inside <c>identifiers.username.changecooloff</c>.

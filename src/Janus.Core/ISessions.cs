@@ -71,14 +71,19 @@ public interface ISessions
     /// suspension use. Distinct from ending every session in the deployment.
     /// </summary>
     /// <param name="context">Who is asking.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
     /// <param name="subject">Whose sessions.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Success, or <c>authz.denied</c> where the caller does not hold
-    /// <c>session:revoke-account</c> in the administrative organization.
+    /// Success, or the refusal, judged in this order: <c>authz.denied</c> where the
+    /// caller does not hold <c>session:revoke-account</c> in the administrative
+    /// organization, <c>identity.account.notfound</c> where no account bears the subject,
+    /// <c>auth.stepup.required</c> where the session has not proved
+    /// <c>account:sessionsrevoke</c>.
     /// </returns>
     ValueTask<Result> RevokeAccountAsync(
         AccessContext context,
+        SessionId session,
         SubjectId subject,
         CancellationToken cancellationToken);
 
@@ -87,12 +92,16 @@ public interface ISessions
     /// suspected compromise calls for. Distinct from ending one account's.
     /// </summary>
     /// <param name="context">Who is asking.</param>
+    /// <param name="session">The session the step-up is judged on.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Success, or <c>authz.denied</c> where the caller does not hold
-    /// <c>session:revoke</c> in the administrative organization.
+    /// Success, or the refusal, judged in this order: <c>authz.denied</c> where the
+    /// caller does not hold <c>session:revoke</c> in the administrative organization,
+    /// <c>auth.stepup.required</c> where the session has not proved
+    /// <c>session:revokeall</c>.
     /// </returns>
     ValueTask<Result> RevokeEveryAsync(
         AccessContext context,
+        SessionId session,
         CancellationToken cancellationToken);
 }

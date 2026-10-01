@@ -56,7 +56,9 @@ internal static class TakedownEndpoints
             return Answers.Malformed("trigger");
         }
 
-        if (body.Reason is not { Length: > 0 } reason)
+        // API-CONV-002: the reason is free text, 1 to 1024 characters after trimming,
+        // refused here before the service is asked.
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
             return Answers.Malformed("reason");
         }
@@ -112,7 +114,9 @@ internal static class TakedownEndpoints
         ArgumentNullException.ThrowIfNull(takedowns);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (body.Reason is not { Length: > 0 } reason)
+        // API-CONV-002: the reason is free text, 1 to 1024 characters after trimming,
+        // refused here before the service is asked.
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
             return Answers.Malformed("reason");
         }

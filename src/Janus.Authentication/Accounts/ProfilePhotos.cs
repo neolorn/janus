@@ -46,8 +46,8 @@ internal sealed class ProfilePhotos(
     /// <param name="context">Who is asking.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The stored JPEG, empty where the account shows none and where no organization
-    /// it belongs to shows photos at all.
+    /// The stored JPEG, or the refusal: <c>identity.photo.notfound</c> where the account
+    /// shows none and where no organization it belongs to shows photos at all, alike.
     /// </returns>
     /// <exception cref="ArgumentNullException">The context is absent.</exception>
     public async ValueTask<Result<ReadOnlyMemory<byte>>> ReadAsync(
@@ -68,8 +68,8 @@ internal sealed class ProfilePhotos(
     /// <param name="subject">Whose.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The stored JPEG, empty where the account shows none and where no organization
-    /// it belongs to shows photos at all.
+    /// The stored JPEG, or the refusal: <c>identity.photo.notfound</c> where the account
+    /// shows none and where no organization it belongs to shows photos at all, alike.
     /// </returns>
     public async ValueTask<Result<ReadOnlyMemory<byte>>> ReadOfAsync(
         SubjectId subject,
@@ -87,9 +87,13 @@ internal sealed class ProfilePhotos(
 
         // A policy that shows no photo shows nothing of one set while it did, and an
         // account that never set one answers the same way (09 section 6).
-        return shown
-            ? Result.Success(await directory.PhotoAsync(subject, cancellationToken).ConfigureAwait(false))
-            : Result.Success(ReadOnlyMemory<byte>.Empty);
+        ReadOnlyMemory<byte> image = shown
+            ? await directory.PhotoAsync(subject, cancellationToken).ConfigureAwait(false)
+            : ReadOnlyMemory<byte>.Empty;
+
+        return image.IsEmpty
+            ? Result.Failure<ReadOnlyMemory<byte>>(Error.From(ErrorCodes.PhotoNotFound))
+            : Result.Success(image);
     }
 
     /// <summary>

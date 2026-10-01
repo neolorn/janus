@@ -3,6 +3,7 @@ using System;
 using Janus.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Janus.Storage.Migrations;
 
 [DbContext(typeof(StoreContext))]
-partial class StoreContextModelSnapshot : ModelSnapshot
+[Migration("20260930214522_HoldTheStateATakedownFinds")]
+partial class HoldTheStateATakedownFinds
 {
-    protected override void BuildModel(ModelBuilder modelBuilder)
+    /// <inheritdoc />
+    protected override void BuildTargetModel(ModelBuilder modelBuilder)
     {
 #pragma warning disable 612, 618
         modelBuilder
@@ -515,8 +518,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .IsRequired()
                     .HasMaxLength(64)
                     .HasColumnType("character varying(64)")
-                    .HasColumnName("label")
-                    .UseCollation("identity_ci");
+                    .HasColumnName("label");
 
                 b.Property<DateTimeOffset?>("LastUsedAt")
                     .HasColumnType("timestamp with time zone")
@@ -1362,27 +1364,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("created_at");
 
-                b.Property<bool>("IsCurrent")
-                    .ValueGeneratedOnAddOrUpdate()
-                    .HasColumnType("boolean")
-                    .HasColumnName("is_current")
-                    .HasComputedColumnSql("signing_from IS NOT NULL AND superseded_at IS NULL", true);
-
-                b.Property<bool>("IsNext")
-                    .ValueGeneratedOnAddOrUpdate()
-                    .HasColumnType("boolean")
-                    .HasColumnName("is_next")
-                    .HasComputedColumnSql("signing_from IS NULL", true);
-
-                b.Property<DateTimeOffset?>("KeptUntil")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("kept_until");
-
-                b.Property<TimeSpan>("LongestLifetime")
-                    .HasColumnType("interval")
-                    .HasColumnName("longest_lifetime");
-
                 b.Property<byte[]>("PrivateKey")
+                    .IsRequired()
                     .HasColumnType("bytea")
                     .HasColumnName("private_key");
 
@@ -1395,10 +1378,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("retires_at");
 
-                b.Property<DateTimeOffset?>("SigningFrom")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("signing_from");
-
                 b.Property<DateTimeOffset?>("SupersededAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("superseded_at");
@@ -1406,24 +1385,12 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasKey("KeyId")
                     .HasName("pk_signing_keys");
 
-                b.HasIndex("IsCurrent")
-                    .IsUnique()
-                    .HasDatabaseName("ux_signing_keys_current")
-                    .HasFilter("is_current");
-
-                b.HasIndex("IsNext")
-                    .IsUnique()
-                    .HasDatabaseName("ux_signing_keys_next")
-                    .HasFilter("is_next");
-
                 b.HasIndex("RetiresAt")
                     .HasDatabaseName("ix_signing_keys_retires_at");
 
                 b.ToTable("signing_keys", "identity", t =>
                     {
-                        t.HasCheckConstraint("ck_signing_keys_private_key", "private_key IS NOT NULL OR retires_at IS NOT NULL");
-
-                        t.HasCheckConstraint("ck_signing_keys_stage", "(signing_from IS NULL AND longest_lifetime = interval '0' AND superseded_at IS NULL AND retires_at IS NULL AND kept_until IS NULL) OR (signing_from >= created_at AND superseded_at IS NULL AND retires_at IS NULL AND kept_until IS NULL) OR (signing_from >= created_at AND superseded_at >= signing_from AND retires_at > superseded_at AND kept_until >= retires_at)");
+                        t.HasCheckConstraint("ck_signing_keys_retirement", "(superseded_at IS NULL AND retires_at IS NULL) OR (superseded_at IS NOT NULL AND retires_at > superseded_at)");
                     });
             });
 
@@ -1948,28 +1915,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
-        modelBuilder.Entity("Janus.Storage.Authentication.Sending.SendKeyCounterRecord", b =>
-            {
-                b.Property<byte[]>("Key")
-                    .HasMaxLength(32)
-                    .HasColumnType("bytea")
-                    .HasColumnName("key");
-
-                b.Property<int>("FingerprintVersion")
-                    .HasColumnType("integer")
-                    .HasColumnName("fingerprint_version");
-
-                b.PrimitiveCollection<DateTimeOffset[]>("SentAt")
-                    .IsRequired()
-                    .HasColumnType("timestamp with time zone[]")
-                    .HasColumnName("sent_at");
-
-                b.HasKey("Key")
-                    .HasName("pk_send_key_counters");
-
-                b.ToTable("send_key_counters", "identity");
-            });
-
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.SendRecord", b =>
             {
                 b.Property<byte[]>("Reference")
@@ -2259,12 +2204,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("expires_at");
 
-                b.Property<int>("FingerprintVersion")
+                b.Property<int?>("FingerprintVersion")
                     .HasColumnType("integer")
                     .HasColumnName("fingerprint_version");
 
                 b.Property<byte[]>("Identifier")
-                    .IsRequired()
                     .HasMaxLength(32)
                     .HasColumnType("bytea")
                     .HasColumnName("identifier");
@@ -2296,7 +2240,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     {
                         t.HasCheckConstraint("ck_signin_challenges_handle", "octet_length(handle) = 32");
 
-                        t.HasCheckConstraint("ck_signin_challenges_identifier", "octet_length(identifier) = 32");
+                        t.HasCheckConstraint("ck_signin_challenges_identifier", "(identifier IS NULL) = (fingerprint_version IS NULL) AND (identifier IS NULL OR octet_length(identifier) = 32)");
 
                         t.HasCheckConstraint("ck_signin_challenges_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
@@ -2313,11 +2257,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasMaxLength(32)
                     .HasColumnType("bytea")
                     .HasColumnName("browser");
-
-                b.Property<byte[]>("Challenge")
-                    .HasMaxLength(32)
-                    .HasColumnType("bytea")
-                    .HasColumnName("challenge");
 
                 b.Property<byte[]>("Code")
                     .IsRequired()
@@ -2362,8 +2301,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.ToTable("signin_links", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_signin_links_browser", "browser IS NULL OR octet_length(browser) = 32");
-
-                        t.HasCheckConstraint("ck_signin_links_challenge", "challenge IS NULL OR octet_length(challenge) = 32");
 
                         t.HasCheckConstraint("ck_signin_links_factor", "factor IN ('apple', 'breakGlass', 'emailCode', 'emailLink', 'google', 'passkey', 'password', 'phoneCode', 'phoneLink', 'recoveryCodes', 'securityKey', 'totp')");
 
@@ -2649,8 +2586,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<string>("Name")
                     .IsRequired()
                     .HasColumnType("text")
-                    .HasColumnName("name")
-                    .UseCollation("identity_ci");
+                    .HasColumnName("name");
 
                 b.Property<Guid>("Organization")
                     .HasColumnType("uuid")
@@ -2943,18 +2879,14 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("text")
                     .HasColumnName("principal_reason");
 
-                b.Property<Guid?>("Subject")
-                    .HasColumnType("uuid")
-                    .HasColumnName("subject");
-
                 b.HasKey("Category", "OccurredAt", "Id")
                     .HasName("pk_audit_records");
 
                 b.HasIndex("ActingSubject", "OccurredAt")
                     .HasDatabaseName("ix_audit_records_acting_subject");
 
-                b.HasIndex("Subject", "OccurredAt")
-                    .HasDatabaseName("ix_audit_records_subject");
+                b.HasIndex("EffectiveSubject", "OccurredAt")
+                    .HasDatabaseName("ix_audit_records_effective_subject");
 
                 b.ToTable("audit_records", "identity", t =>
                     {
@@ -3239,11 +3171,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_memberships_subject");
 
-                b.HasIndex("Subject", "Organization")
-                    .IsUnique()
-                    .HasDatabaseName("ux_memberships_current")
-                    .HasFilter("ended_at IS NULL");
-
                 b.ToTable("memberships", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_memberships_acknowledged", "(acknowledged_at IS NULL) = (acknowledged_documents IS NULL)");
@@ -3261,7 +3188,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnName("id");
 
                 b.Property<string>("CanonicalName")
-                    .IsRequired()
                     .HasColumnType("text")
                     .HasColumnName("canonical_name");
 
@@ -3395,11 +3321,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("text")
                     .HasColumnName("purpose");
 
-                b.Property<string>("Document")
-                    .IsRequired()
-                    .HasColumnType("text")
-                    .HasColumnName("document");
-
                 b.Property<DateTimeOffset>("GrantedAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("granted_at");
@@ -3455,11 +3376,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<string>("Purpose")
                     .HasColumnType("text")
                     .HasColumnName("purpose");
-
-                b.Property<string>("Document")
-                    .IsRequired()
-                    .HasColumnType("text")
-                    .HasColumnName("document");
 
                 b.Property<string>("Mechanism")
                     .IsRequired()
@@ -3593,7 +3509,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     {
                         t.HasCheckConstraint("ck_erasures_attempts", "attempts >= 0");
 
-                        t.HasCheckConstraint("ck_erasures_reason", "reason IN ('erasure-request', 'minor-takedown')");
+                        t.HasCheckConstraint("ck_erasures_reason", "reason IN ('erasure-request', 'minor-takedown', 'organization-erasure')");
 
                         t.HasCheckConstraint("ck_erasures_status", "status IN ('awaiting-subscribers', 'complete', 'failed')");
 
@@ -3708,7 +3624,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                         t.HasCheckConstraint("ck_outbox_kind", "kind IN ('erasure-requested', 'export-requested', 'restriction-changed', 'takedown-executed')");
 
-                        t.HasCheckConstraint("ck_outbox_reason", "reason IN ('erasure-request', 'minor-takedown')");
+                        t.HasCheckConstraint("ck_outbox_reason", "reason IN ('erasure-request', 'minor-takedown', 'organization-erasure')");
 
                         t.HasCheckConstraint("ck_outbox_status", "status IN ('awaiting-subscribers', 'complete', 'failed')");
 

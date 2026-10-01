@@ -553,7 +553,8 @@ internal sealed class RecoveryService(
     }
 
     // D-140: an account its own holder deactivated recovers; one an administrator
-    // suspended, or one on its way out, does not.
+    // suspended, or one on its way out, does not. A restricted account signs in, so it
+    // recovers as an active one does (IDN-ACCT-007).
     private async ValueTask<bool> RecoverableAsync(
         SubjectId subject,
         CancellationToken cancellationToken)
@@ -561,7 +562,7 @@ internal sealed class RecoveryService(
         AccountState? state = await accounts.StateAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        return state is AccountState.Active
+        return state is AccountState.Active or AccountState.Restricted
             || (state is AccountState.Suspended
                 && await accounts.SuspendedByAsync(subject, cancellationToken).ConfigureAwait(false)
                     is SuspensionOrigin.Self);

@@ -120,27 +120,27 @@ internal sealed class DeclarationCoverage(
             return Missing(Passkeys);
         }
 
-        if (addresses.ChangePassword.Length is 0)
+        if (string.IsNullOrWhiteSpace(addresses.ChangePassword))
         {
             return Missing(Passkeys + ".changePassword");
         }
 
-        if (addresses.Enrol.Length is 0)
+        if (string.IsNullOrWhiteSpace(addresses.Enrol))
         {
             return Missing(Passkeys + ".enrol");
         }
 
-        if (addresses.Manage.Length is 0)
+        if (string.IsNullOrWhiteSpace(addresses.Manage))
         {
             return Missing(Passkeys + ".manage");
         }
 
-        if (authentication is null || authentication.SignIn.Length is 0)
+        if (authentication is null || string.IsNullOrWhiteSpace(authentication.SignIn))
         {
             return Missing(Authentication + ".signIn");
         }
 
-        if (authentication.Provider.Length is 0)
+        if (string.IsNullOrWhiteSpace(authentication.Provider))
         {
             return Missing(Authentication + ".provider");
         }

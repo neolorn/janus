@@ -254,6 +254,123 @@ public sealed class AccountTests
     }
 
     /// <summary>
+    /// IDN-LIFE-003 AC5, chapter 10 section 5.12b: a takedown holds the suspension it
+    /// found with its origin, and the reversal returns the account to it as it stood.
+    /// </summary>
+    /// <param name="origin">Who suspended the account before the takedown.</param>
+    [Theory]
+    [InlineData(SuspensionOrigin.Self)]
+    [InlineData(SuspensionOrigin.Administrator)]
+    public void IDN_LIFE_003_AC5_AReversalRestoresTheSuspensionTheTakedownFoundAsync(SuspensionOrigin origin)
+    {
+        Account account = SuspendedBy(origin);
+
+        account.Takedown(Noon);
+
+        Assert.Equal((AccountState.Deleting, origin), (account.State, account.SuspensionHeld));
+
+        account.ReverseTakedown();
+
+        Assert.Equal(AccountState.Suspended, account.State);
+        Assert.Equal(origin, account.SuspendedBy);
+        Assert.Null(account.SuspensionHeld);
+        Assert.Null(account.DeletingBy);
+        Assert.Null(account.DeletingSince);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003 AC5 (D-166): a takedown of an account already in its own deletion
+    /// holds that deletion with its origin and start, and the reversal returns the
+    /// account to it with the clock it had, not to a window begun again.
+    /// </summary>
+    /// <param name="origin">What began the deletion the takedown found.</param>
+    [Theory]
+    [InlineData(DeletionOrigin.Self)]
+    [InlineData(DeletionOrigin.OutOfBandRequest)]
+    public void IDN_LIFE_003_AC5_AReversalReturnsARunningDeletionToItsOwnWindowAsync(DeletionOrigin origin)
+    {
+        DateTimeOffset began = Noon - TimeSpan.FromDays(3);
+        var account = Account.Create(Ahmed, Noon - TimeSpan.FromDays(30));
+        account.Restrict();
+        account.RequestDeletion(origin, began);
+
+        account.Takedown(Noon);
+
+        Assert.Equal(AccountState.Deleting, account.State);
+        Assert.Equal((DeletionOrigin.Takedown, Noon), (account.DeletingBy, account.DeletingSince));
+        Assert.Equal((origin, began), (account.DeletionHeld, account.DeletionHeldSince));
+        Assert.Throws<InvalidOperationException>(account.CancelDeletion);
+        Assert.Throws<InvalidOperationException>(() => account.Takedown(Noon));
+
+        account.ReverseTakedown();
+
+        Assert.Equal(AccountState.Deleting, account.State);
+        Assert.Equal((origin, began), (account.DeletingBy, account.DeletingSince));
+        Assert.Null(account.DeletionHeld);
+        Assert.Null(account.DeletionHeldSince);
+        Assert.Null(account.SuspendedBy);
+        Assert.True(account.RestrictionHeld);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-013: a takedown reversed on an account an administrator suspended leaves
+    /// it suspended by the administrator, so only <c>account:manage</c> reactivates it.
+    /// </summary>
+    [Fact]
+    public void IDN_LIFE_013_AReversedTakedownReturnsTheAdministratorsSuspension()
+    {
+        Account account = SuspendedBy(SuspensionOrigin.Administrator);
+        account.Takedown(Noon);
+
+        account.ReverseTakedown();
+
+        Assert.Equal(
+            (AccountState.Suspended, SuspensionOrigin.Administrator),
+            (account.State, account.SuspendedBy));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-013: a takedown reversed on an account its owner deactivated leaves it
+    /// deactivated by its owner, who stands it back up.
+    /// </summary>
+    [Fact]
+    public void IDN_LIFE_013_AReversedTakedownReturnsTheOwnersDeactivation()
+    {
+        Account account = SuspendedBy(SuspensionOrigin.Self);
+        account.Takedown(Noon);
+
+        account.ReverseTakedown();
+
+        Assert.Equal((AccountState.Suspended, SuspensionOrigin.Self), (account.State, account.SuspendedBy));
+
+        account.Reactivate();
+
+        Assert.Equal(AccountState.Active, account.State);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003, chapter 10 section 5.12b: an erased account holds nothing of the
+    /// state a takedown found.
+    /// </summary>
+    [Fact]
+    public void IDN_LIFE_003_AnErasedAccountHoldsNothing()
+    {
+        var account = Account.Create(Ahmed, Noon);
+        account.Deactivate();
+        account.HoldRestriction();
+        account.Takedown(Noon);
+
+        account.MarkErased();
+
+        Assert.Equal(AccountState.Deleted, account.State);
+        Assert.Null(account.SuspensionHeld);
+        Assert.False(account.RestrictionHeld);
+        Assert.Null(account.DeletionHeld);
+        Assert.Null(account.DeletionHeldSince);
+        Assert.Throws<InvalidOperationException>(() => account.Takedown(Noon));
+    }
+
+    /// <summary>
     /// IDN-LIFE-003: the ordinary deletion is not reversed through the takedown path
     /// either, so neither operation can stand in for the other.
     /// </summary>
@@ -293,6 +410,45 @@ public sealed class AccountTests
 
         Assert.Equal(AccountState.Deleting, account.State);
         Assert.Equal(DeletionOrigin.OutOfBandRequest, account.DeletingBy);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003, PRIV-RIGHT-001 (D-166): a suspended account enters the window on a
+    /// request that arrived out of band, holding the suspension with its origin, and a
+    /// cancellation returns it suspended by that origin; the subject's own request does
+    /// not start a suspended account's window.
+    /// </summary>
+    /// <param name="origin">Who suspended the account.</param>
+    [Theory]
+    [InlineData(SuspensionOrigin.Administrator)]
+    [InlineData(SuspensionOrigin.Self)]
+    public void IDN_LIFE_003_ASuspendedAccountEntersTheWindowOutOfBandAndComesBackSuspended(
+        SuspensionOrigin origin)
+    {
+        var account = Account.Create(Ahmed, Noon);
+
+        if (origin is SuspensionOrigin.Self)
+        {
+            account.Deactivate();
+        }
+        else
+        {
+            account.Suspend();
+        }
+
+        Assert.Throws<InvalidOperationException>(() => account.RequestDeletion(DeletionOrigin.Self, Noon));
+
+        account.RequestDeletion(DeletionOrigin.OutOfBandRequest, Noon);
+
+        Assert.Equal(
+            (AccountState.Deleting, DeletionOrigin.OutOfBandRequest, Noon, origin),
+            (account.State, account.DeletingBy, account.DeletingSince, account.SuspensionHeld));
+
+        account.CancelDeletion();
+
+        Assert.Equal((AccountState.Suspended, origin), (account.State, account.SuspendedBy));
+        Assert.Null(account.SuspensionHeld);
+        Assert.Null(account.DeletingBy);
     }
 
     /// <summary>
@@ -412,5 +568,21 @@ public sealed class AccountTests
         account.MarkErased();
 
         Assert.Throws<InvalidOperationException>(account.MarkErased);
+    }
+
+    private static Account SuspendedBy(SuspensionOrigin origin)
+    {
+        var account = Account.Create(Ahmed, Noon - TimeSpan.FromDays(30));
+
+        if (origin is SuspensionOrigin.Self)
+        {
+            account.Deactivate();
+        }
+        else
+        {
+            account.Suspend();
+        }
+
+        return account;
     }
 }

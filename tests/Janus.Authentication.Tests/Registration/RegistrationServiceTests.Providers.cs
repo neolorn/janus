@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
@@ -211,6 +212,24 @@ public sealed partial class RegistrationServiceTests
         Assert.False(Identity(session, IdentifierKind.Email).IsVerified);
         Assert.Null(Identity(session, IdentifierKind.Email).Code);
         Assert.Equal(MessageKind.AccountExists, Assert.Single(_notifications.Mail).Message);
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 AC2, REG-IDENT-008: a provider does not vouch for an address held
+    /// out of reach for its owner's undo; nothing is sent and nobody is told.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_006_AC2_AReservedAddressIsNotVouchedForByAProviderAsync()
+    {
+        _directory.Reserved(IdentifierKind.Email, Gmail, Noon + TimeSpan.FromDays(7));
+
+        RegistrationSessionId session = await AgedAsync();
+
+        _ = Ok(await ProvidedAsync(session, Factor.Google, GoogleSubject, Gmail, verified: true));
+
+        Assert.False(Identity(session, IdentifierKind.Email).IsVerified);
+        Assert.Null(Identity(session, IdentifierKind.Email).Code);
+        Assert.Empty(_notifications.Mail);
     }
 
     /// <summary>

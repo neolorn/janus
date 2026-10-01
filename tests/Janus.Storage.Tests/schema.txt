@@ -24,16 +24,24 @@ table accounts
   column terms_version character varying(64)
   column restriction_held boolean not null default false
   column emergency boolean not null default false
+  column suspension_held text
+  column deletion_held text
+  column deletion_held_since timestamp with time zone
   constraint ck_accounts_age_answer CHECK (((adult_affirmed IS NULL) OR (age_group IS NULL)))
   constraint ck_accounts_age_group CHECK (((age_group IS NULL) OR (age_group = ANY (ARRAY['adult'::text, 'minor'::text]))))
   constraint ck_accounts_answered_age_at CHECK (((answered_age_at IS NULL) = ((adult_affirmed IS NULL) AND (age_group IS NULL))))
   constraint ck_accounts_deleting CHECK (((deleting_by IS NULL) = (deleting_since IS NULL)))
   constraint ck_accounts_deleting_by CHECK (((deleting_by IS NULL) OR (deleting_by = ANY (ARRAY['oob-request'::text, 'self'::text, 'takedown'::text]))))
+  constraint ck_accounts_deletion_held CHECK (((deletion_held IS NULL) OR (deletion_held = ANY (ARRAY['oob-request'::text, 'self'::text]))))
+  constraint ck_accounts_deletion_held_since CHECK (((deletion_held IS NULL) = (deletion_held_since IS NULL)))
+  constraint ck_accounts_deletion_held_state CHECK (((deletion_held IS NULL) OR ((state = 'deleting'::text) AND (deleting_by = 'takedown'::text))))
   constraint ck_accounts_documents CHECK (((terms_version IS NULL) = (notice_version IS NULL)))
   constraint ck_accounts_restriction_held CHECK (((NOT restriction_held) OR (state = ANY (ARRAY['deleting'::text, 'suspended'::text]))))
   constraint ck_accounts_state CHECK ((state = ANY (ARRAY['active'::text, 'deleted'::text, 'deleting'::text, 'restricted'::text, 'suspended'::text])))
   constraint ck_accounts_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_accounts_suspended_by CHECK (((suspended_by IS NULL) OR (suspended_by = ANY (ARRAY['administrator'::text, 'self'::text]))))
+  constraint ck_accounts_suspension_held CHECK (((suspension_held IS NULL) OR (suspension_held = ANY (ARRAY['administrator'::text, 'self'::text]))))
+  constraint ck_accounts_suspension_held_state CHECK (((suspension_held IS NULL) OR ((state = 'deleting'::text) AND (deleting_by = ANY (ARRAY['takedown'::text, 'oob-request'::text])))))
   constraint pk_accounts PRIMARY KEY (subject)
   index ix_accounts_deleting_since using btree (deleting_since) WHERE (deleting_since IS NOT NULL)
   index ux_accounts_emergency unique using btree (emergency) WHERE emergency

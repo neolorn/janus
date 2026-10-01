@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
 using Janus.Core;
@@ -24,6 +25,8 @@ namespace Janus.Authentication.Sessions;
 /// <param name="policies">Where the principal's policy is resolved.</param>
 /// <param name="configuration">Where the lifetimes are read from.</param>
 /// <param name="scope">Whether the caller may end sessions that are not their own.</param>
+/// <param name="stepUp">What ending sessions that are not the caller's asks of the caller's own session.</param>
+/// <param name="directory">Whether the account whose sessions an administrator ends exists.</param>
 /// <param name="locations">What the address a session was used from resolves to.</param>
 /// <param name="concurrent">The watch over sessions used implausibly far apart at once.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
@@ -43,6 +46,8 @@ internal sealed class SessionService(
     PolicyResolution policies,
     IConfigurationStore configuration,
     AdministrativeScope scope,
+    StepUpGuard stepUp,
+    IAccountDirectory directory,
     ILocationResolver locations,
     ConcurrentSessions concurrent,
     IUnitOfWork work,
@@ -644,30 +649,70 @@ internal sealed class SessionService(
     /// <inheritdoc/>
     public async ValueTask<Result> RevokeAccountAsync(
         AccessContext context,
+        SessionId session,
         SubjectId subject,
         CancellationToken cancellationToken)
     {
-        Error? refused = await scope
-            .RefusedAsync(context, Permissions.SessionRevokeAccount, cancellationToken)
-            .ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(context);
 
-        return refused is not null
-            ? Result.Failure(refused)
-            : await EndAccountAsync(subject, cancellationToken).ConfigureAwait(false);
+        if (context.Acting is not SubjectId acting)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        if (await scope
+                .RefusedAsync(context, Permissions.SessionRevokeAccount, cancellationToken)
+                .ConfigureAwait(false) is Error refused)
+        {
+            return Result.Failure(refused);
+        }
+
+        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false) is null)
+        {
+            return Result.Failure(Error.From(ErrorCodes.AccountNotFound));
+        }
+
+        // 09 section 8a: ending another person's sessions is stepped up, judged after
+        // every other refusal.
+        if (await stepUp
+                .PassedAsync(acting, session, StepUpAction.AccountSessionsRevoke, cancellationToken)
+                .ConfigureAwait(false)
+            is Error challenged)
+        {
+            return Result.Failure(challenged);
+        }
+
+        return await EndAccountAsync(subject, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
     public async ValueTask<Result> RevokeEveryAsync(
         AccessContext context,
+        SessionId session,
         CancellationToken cancellationToken)
     {
-        Error? refused = await scope
-            .RefusedAsync(context, Permissions.SessionRevoke, cancellationToken)
-            .ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(context);
 
-        if (refused is not null)
+        if (context.Acting is not SubjectId acting)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        if (await scope
+                .RefusedAsync(context, Permissions.SessionRevoke, cancellationToken)
+                .ConfigureAwait(false) is Error refused)
         {
             return Result.Failure(refused);
+        }
+
+        // 09 section 8a: ending every session is stepped up, judged after every other
+        // refusal.
+        if (await stepUp
+                .PassedAsync(acting, session, StepUpAction.SessionRevokeAll, cancellationToken)
+                .ConfigureAwait(false)
+            is Error challenged)
+        {
+            return Result.Failure(challenged);
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))

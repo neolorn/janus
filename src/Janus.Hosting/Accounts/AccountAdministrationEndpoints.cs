@@ -22,10 +22,6 @@ internal static class AccountAdministrationEndpoints
 {
     private static readonly IResult Nothing = TypedResults.NoContent();
 
-    // Chapter 09 section 8a: an account that shows no photo, and one whose policy shows
-    // none, answer alike.
-    private static readonly IResult NoPhoto = TypedResults.NotFound();
-
     // IDN-ATTR-004: what is stored is JPEG, whatever was uploaded.
     private const string StoredPhoto = "image/jpeg";
 
@@ -103,6 +99,7 @@ internal static class AccountAdministrationEndpoints
             await accounts
                 .LiftRestrictionAsync(
                     browser.Asking,
+                    browser.Required.Id,
                     new SubjectId(subject),
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -122,6 +119,7 @@ internal static class AccountAdministrationEndpoints
             await accounts
                 .CancelDeletionAsync(
                     browser.Asking,
+                    browser.Required.Id,
                     new SubjectId(subject),
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -150,8 +148,6 @@ internal static class AccountAdministrationEndpoints
                     new SubjectId(subject),
                     cancellationToken)
                 .ConfigureAwait(false),
-            image => image.IsEmpty
-                ? NoPhoto
-                : TypedResults.Bytes(image, StoredPhoto));
+            image => TypedResults.Bytes(image, StoredPhoto));
     }
 }

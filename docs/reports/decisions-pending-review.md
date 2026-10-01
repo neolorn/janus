@@ -4806,6 +4806,8 @@ the moment the window runs out the same offer stages a verification.
 unavailable to other accounts until the undo window ends, and that an account offering it
 meanwhile is answered as REG-IDENT-001 AC2 answers an account offering a held value.
 
+**Superseded by D-166.**
+
 ---
 
 ## 142. A dead cookie leaves the request anonymous and one stage requires a session
@@ -6262,6 +6264,8 @@ account holds no takedown.
 `GET /admin/accounts/{subject}/takedown`; 10 section 1.1 gains
 `identity.takedown.notfound` (404), listed below under the rows for chapter 10.
 
+**Superseded by D-166.**
+
 ---
 
 ## 170. A takedown starts from active, restricted or suspended, and from nothing else
@@ -6304,6 +6308,8 @@ chapter grants a trigger. A second trigger writes nothing and answers **409**
 starts from, and `10` section 1.1 could widen `identity.takedown.active` to a second
 trigger.
 
+**Superseded by D-166.**
+
 ---
 
 ## 171. `AccountSuspended` is published after the trigger commits, and `TakedownExecuted` travels on the outbox
@@ -6341,6 +6347,8 @@ shows the delivery.
 
 *Chapter text that should change.* IDN-LIFE-003 could say that `TakedownExecuted` is
 the outbox record and `AccountSuspended` follows the commit.
+
+**Superseded by D-166.**
 
 ---
 
@@ -9409,6 +9417,8 @@ actions).
 their answers, and chapter 10 could hold the audit rows below, with the category of
 `identity.account.reactivated` depending on who acted.
 
+**Superseded by D-166.**
+
 ---
 
 ## 255. An administrator's suspension of an account its owner deactivated
@@ -9452,6 +9462,8 @@ choice is theirs, by the link or by recovery.
 *Chapter text that should change.* IDN-LIFE-013 could say that an administrator's
 suspension of a self-deactivated account makes it the administrator's to reverse, and
 that an administrator does not reactivate an account its owner deactivated.
+
+**Superseded by D-166.**
 
 ---
 
@@ -9538,6 +9550,8 @@ while the account is suspended or deleting is held and in force when it returns,
 chapter 09 section 8a could say that the takedown reversal restores `restricted` where
 the account was restricted.
 
+**Superseded by D-166.**
+
 ---
 
 ## 258. What lifting a restriction answers, writes and asks
@@ -9584,6 +9598,8 @@ actions).
 answers and say whether its preamble's "touches another person's account" adds gates
 chapter 10 section 5a does not list; chapter 10 could hold the audit row below.
 
+**Superseded by D-166.**
+
 ---
 
 ## 259. Whether a restriction held away from the restricted state is lifted
@@ -9607,6 +9623,8 @@ The refusal is `authz.denied`, as for an account not restricted at all.
 
 *Chapter text that should change.* PRIV-RIGHT-004 could say that a restriction held
 while the account is suspended or deleting is lifted only once the account is back.
+
+**Superseded by D-166.**
 
 ---
 
@@ -9657,6 +9675,8 @@ request's status vocabulary has no value for it.
 answers and say which origins it cancels, and IDN-LIFE-003 could say that "recorded
 against the request" is the audit row naming it.
 
+**Superseded by D-166.**
+
 ---
 
 ## 261. What reading an account's photo as an administrator answers and whose policy withholds it
@@ -9699,6 +9719,8 @@ administrative organization never declared for anyone but its own members.
 
 *Chapter text that should change.* Chapter 09 section 8a could say that "the policy" is
 that of the account's organizations and give the endpoint its other answers.
+
+**Superseded by D-166.**
 
 ---
 
@@ -15056,6 +15078,8 @@ a session it already held or out of band (PRIV-RIGHT-001 to PRIV-RIGHT-004).
 covers and say that the refusal is `authz.restricted`, and say whether the sign-in
 paths admit a restricted account, since the table and the code disagree.
 
+**Superseded by D-166.**
+
 ---
 
 ## 363. A replacement ends the other sessions when it applies, and the session that completes an identifier change rotates
@@ -15094,6 +15118,8 @@ is kept and is not rotated, since its browser is not there to receive a new secr
 *Chapter text that should change.* IDN-LIFE-008 could say that a replacement ends the
 other sessions when it applies, and that the rotation is of the session that completes
 the change.
+
+**Superseded by D-166.**
 
 ---
 

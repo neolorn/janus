@@ -562,7 +562,7 @@ internal sealed class SignInLinks(
         // (AUTH-FACT-003 AC5, AUTH-ABUSE-003).
         if (!policy.LoginFactors.Contains(channel.Factor)
             || await accounts.StateAsync(subject, cancellationToken).ConfigureAwait(false)
-                is not AccountState.Active)
+                is not (AccountState.Active or AccountState.Restricted))
         {
             return await WithheldAsync(channel, language, source, ask, unheld: false, cancellationToken)
                 .ConfigureAwait(false);

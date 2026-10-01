@@ -89,6 +89,35 @@ public sealed class TakedownEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// API-CONV-002 (D-166): a reason past 1024 characters after trimming is answered
+    /// 400 <c>api.request.malformed</c> naming <c>reason</c>, at the trigger and at the
+    /// reversal, and moves nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_CONV_002_AReasonPastTheLimitIsMalformedAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+        string past = new('r', 1025);
+
+        Answer trigger = await browser.SendAsync(
+            "POST",
+            Takedown,
+            ("trigger", "customer-report"),
+            ("reason", past));
+        Answer reversal = await browser.SendAsync("POST", $"{Takedown}/reverse", ("reason", past));
+
+        foreach (Answer refused in new[] { trigger, reversal })
+        {
+            Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+            Assert.Equal(ErrorCodes.RequestMalformed.ToString(), refused.Text("code"));
+            Assert.Equal("reason", refused.Json().GetProperty("details").GetProperty("member").GetString());
+        }
+
+        Assert.Equal(AccountState.Active, _deployment.AccountStates.Of(Ahmed));
+    }
+
+    /// <summary>
     /// 09 section 8a: the reversal inside the window is answered 204, and one after it
     /// 422 <c>identity.takedown.windowelapsed</c>.
     /// </summary>
@@ -131,6 +160,44 @@ public sealed class TakedownEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, elapsed.Status);
         Assert.Equal(ErrorCodes.TakedownWindowElapsed.ToString(), elapsed.Text("code"));
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003 AC2, 09 section 8a: the progress of a reversed takedown reads
+    /// <c>reversed</c> true with a null <c>erasureDue</c>, and an account never taken
+    /// down and a subject no account bears are each not found under their own code.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_AC2_AReversedTakedownReadsAsReversedAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+
+        Answer never = await browser.SendAsync("GET", Takedown);
+
+        _ = await browser.SendAsync(
+            "POST",
+            Takedown,
+            ("trigger", "customer-report"),
+            ("reason", "a parent wrote in"));
+
+        JsonElement standing = (await browser.SendAsync("GET", Takedown)).Json();
+
+        _ = await browser.SendAsync("POST", $"{Takedown}/reverse", ("reason", "an adult, misjudged"));
+
+        JsonElement reversed = (await browser.SendAsync("GET", Takedown)).Json();
+        Answer nobody = await browser.SendAsync(
+            "GET",
+            $"/admin/accounts/{Guid.Parse("44444444-4444-4444-8444-444444444444")}/takedown");
+
+        Assert.Equal(StatusCodes.Status404NotFound, never.Status);
+        Assert.Equal(ErrorCodes.TakedownNotFound.ToString(), never.Text("code"));
+        Assert.False(standing.GetProperty("reversed").GetBoolean());
+        Assert.Equal(JsonValueKind.String, standing.GetProperty("erasureDue").ValueKind);
+        Assert.True(reversed.GetProperty("reversed").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, reversed.GetProperty("erasureDue").ValueKind);
+        Assert.Equal(StatusCodes.Status404NotFound, nobody.Status);
+        Assert.Equal(ErrorCodes.AccountNotFound.ToString(), nobody.Text("code"));
     }
 
     /// <summary>

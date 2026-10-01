@@ -40,6 +40,27 @@ public sealed class ApiStatusTests
     }
 
     /// <summary>
+    /// REG-SESS-002 AC1, API-CONV-003: a step whose predecessor is incomplete is a
+    /// failed state precondition, so it answers 409 and not as a body refused on what
+    /// it says.
+    /// </summary>
+    [Fact]
+    public void REG_SESS_002_AC1_AStepOutOfOrderIsAConflict() =>
+        Assert.Equal(StatusCodes.Status409Conflict, ApiStatus.Of(ErrorCodes.RegistrationIncomplete));
+
+    /// <summary>
+    /// REG-IDENT-005 AC2, REG-IDENT-002: an unverified identifier made primary or named
+    /// as the backup is a failed state precondition, and an identifier the account does
+    /// not hold is a body refused on what it says.
+    /// </summary>
+    [Fact]
+    public void REG_IDENT_005_AC2_AnUnverifiedIdentifierIsAConflict()
+    {
+        Assert.Equal(StatusCodes.Status409Conflict, ApiStatus.Of(ErrorCodes.IdentifierUnverified));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, ApiStatus.Of(ErrorCodes.IdentifierInvalid));
+    }
+
+    /// <summary>
     /// API-CONV-003: 401 is session death and nothing else, so no other failure may
     /// take it however much it looks like one.
     /// </summary>

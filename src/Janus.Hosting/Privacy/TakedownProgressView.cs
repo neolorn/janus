@@ -11,7 +11,11 @@ namespace Janus.Hosting.Privacy;
 /// <param name="TakedownId">What the takedown is held under.</param>
 /// <param name="Subject">Whose account was taken down.</param>
 /// <param name="TriggeredAt">When phase one committed.</param>
-/// <param name="ErasureDue">When the grace window ends and the erasure runs.</param>
+/// <param name="ErasureDue">
+/// When the grace window ends and the erasure runs, and nothing once the takedown was
+/// reversed.
+/// </param>
+/// <param name="Reversed">Whether the takedown was reversed.</param>
 /// <param name="Status">How far the subscribers have got.</param>
 /// <param name="Attempts">How many delivery attempts have been made across them.</param>
 /// <param name="Subscribers">Each registered subscriber and whether it confirmed.</param>
@@ -20,7 +24,8 @@ internal sealed record TakedownProgressView(
     Guid TakedownId,
     Guid Subject,
     DateTimeOffset TriggeredAt,
-    DateTimeOffset ErasureDue,
+    DateTimeOffset? ErasureDue,
+    bool Reversed,
     ErasureStatus Status,
     int Attempts,
     IReadOnlyList<SubscriberConfirmationView> Subscribers)
@@ -40,6 +45,7 @@ internal sealed record TakedownProgressView(
             progress.Subject.Value,
             progress.TriggeredAt,
             progress.ErasureDue,
+            progress.Reversed,
             progress.Status,
             progress.Attempts,
             [.. progress.Subscribers.Select(SubscriberConfirmationView.Of)]);
