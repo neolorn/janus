@@ -91,6 +91,7 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
         Assert.Null(await connection.ExecuteScalarAsync<DateTime?>("SELECT retired_at FROM identity.key_rotations"));
 
         await CountedAsync(connection, 2);
+        await SweptAsync(connection, 1);
 
         Invocation sealedCopy = await Invocation.PipedAsync([Command, Sealed], Rotating());
 
@@ -132,6 +133,7 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
         await CountedAsync(connection, 1);
 
         await Invocation.PipedAsync([Command], Rotating());
+        await SweptAsync(connection, 1);
         await Invocation.PipedAsync([Command, Sealed], Rotating());
 
         IReadOnlyList<(string Action, string Principal, string Reason, Guid Acting, string Details)> recorded =
@@ -178,6 +180,9 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
         Assert.Equal(0, await connection.ExecuteScalarAsync<int>("SELECT count(*)::int FROM identity.key_rotations"));
 
         Assert.Equal(0, (await Invocation.PipedAsync([Command], Rotating())).ExitCode);
+
+        await SweptAsync(connection, 1);
+
         Assert.Equal(0, (await Invocation.PipedAsync([Command, Sealed], Rotating())).ExitCode);
 
         Invocation again = await Invocation.PipedAsync([Command], Rotating());
@@ -215,6 +220,14 @@ public sealed class FingerprintKeyRotationTests(DatabaseFixture database) : ICla
             VALUES ('source', @key, @version, 1, now());
             """,
             new { key = RandomNumberGenerator.GetBytes(32), version });
+
+    // D-166 (318): a seal waits while any line under a previous version stands, so the
+    // cases that retire one first remove its lines, as the expiry sweep does once they
+    // no longer count.
+    private static async Task SweptAsync(NpgsqlConnection connection, int version) =>
+        await connection.ExecuteAsync(
+            "DELETE FROM identity.throttle_counters WHERE fingerprint_version = @version",
+            new { version });
 
     private async Task<NpgsqlConnection> ResetAsync()
     {
