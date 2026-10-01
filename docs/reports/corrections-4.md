@@ -1,13 +1,17 @@
 # Corrections 4: D-166 and D-167
 
-Status: stopped at open question 20 (Tier 3). D-168 settled questions 1 and 2 of the
-first stop, D-169 question 3, D-170 questions 4 to 6, D-171 question 7, D-172 questions
-8 and 9, D-173 question 10, D-174 question 11, D-175 question 12, D-176 question 13,
-D-177 question 14, D-178 questions 15 and 16, D-179 question 17 and D-180 questions 18
-and 19; all are applied. Of the rest of D-166, section D.8 is applied up to 340 and 121
-and 336, with D-171 item 3, D-166 343 and 349 with D-175, 215, 221, 263 and 270 with
-D-176 to D-179; the signing credential of CONV-CODE-007 criterion 4, which completes the
-key ring of D-171, stops the run at question 20 (section 2).
+Status: complete but for the parked items. D-168 settled questions 1 and 2 of the first
+stop, D-169 question 3, D-170 questions 4 to 6, D-171 question 7, D-172 questions 8 and
+9, D-173 question 10, D-174 question 11, D-175 question 12, D-176 question 13, D-177
+question 14, D-178 questions 15 and 16, D-179 question 17, D-180 questions 18 and 19 and
+D-181 question 20; all are applied. Under D-182 a question parks its item and not the
+run: the rest of D-166 is applied, on the working branch and in seven parts
+(`part/privacy`, `part/authorization`, `part/organizations`, `part/sending`,
+`part/sessions`, `part/registration-accounts`, `part/gates`) merged into it one at a
+time, but for the items the open questions park and 209 (2) (section 2). Questions 21 to
+65 are open (section 4); question 66 was withdrawn. The push of `corrections-4` after
+`02bb2419` was refused in the session's environment, so the branch is unpushed from
+`02bb2419` on and the pull request waits on the push.
 
 ## 1. Items implemented
 
@@ -297,22 +301,373 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 
 **Commit type of `c440f0a`.** It adds the key `integration.mailserver.endpoint` and its startup rule, with its changelog line, under the type `test`; the type is `feat`. The history is not rewritten.
 
+### On `corrections-4`: D-181, D-182 and D-166 D.8 beside the parts
+
+| Instruction | Commit | Items | Tests |
+|---|---|---|---|
+| The documentation of D-181 | `4a23fb4a` | none | none |
+| The documentation of D-182 | `b7329af7` | none | none |
+| D-181, question 20: the first read of the signing keys 5 minutes before the cadence makes the next key and publishes it; the first read once the cadence has passed and that key has been published 5 minutes makes it current; of two processes one makes each change, in a transaction of its own; the first read after a replaced key's overlap (the longest access-token lifetime it signed under, plus 5 minutes) retires it from the key set and drops its private key, its public key kept apart for validation until the longest a session can last; the credentials held in the library's credential source in `Janus.Authentication`, which the provider's signing, key set and validation read through its event model, the options built once; `token.signing.algorithm` admits `ES256` alone; migration `HoldSigningKeysThroughTheirKeeping` | `211b1d42` | AUTH-KEY-001, CONV-CODE-007 | `SigningKeysTests.AUTH_KEY_001_AC1_TheFirstReadOnceTheCadenceHasPassedMakesTheNextKeyCurrentAsync`, `SigningKeysTests.AUTH_KEY_001_AC1_NoReadChangesAKeyBeforeItsTimeAsync`, `SigningKeysTests.OPS_SEC_002_AC1_TheRunningInstanceRotatesWithoutRestartOrAPersonAsync`, `SigningKeysTests.AUTH_KEY_001_AC2_TheOverlapIsTheLongestLifetimeTheKeySignedUnderAndFiveMinutesAsync`, `SigningKeysTests.AUTH_KEY_001_AC2_NoChangeOfTheLifetimeAfterTheRotationShortensTheOverlapAsync`, `SigningKeysTests.AUTH_KEY_001_AC2_ALongerLifetimeIsCommittedBeforeTheAccessTokenIsSignedAsync`, `SigningKeysTests.OPS_SEC_002_AC2_WhatThePreviousKeySignedVerifiesThroughTheOverlapAsync`, `SigningKeysTests.AUTH_KEY_001_AC3_ThePreviousKeyLeavesThePublishedSetAfterTheOverlapAsync`, `SigningKeysTests.AUTH_KEY_001_AC4_EveryPublishedKeyCarriesTheConfiguredAlgorithmAsync`, `SigningKeysTests.AUTH_KEY_001_AC4_ThePublishedSetCarriesThePublicHalfAloneAsync`, `SigningKeysTests.AUTH_KEY_001_AC5_AReplacedKeySignsNothingAfterTheRotationAsync`, `SigningKeysTests.AUTH_KEY_001_AC5_TheFirstReadAfterTheOverlapRetiresTheKeyAsync`, `SigningKeysTests.AUTH_KEY_001_AC6_AReplacedKeyIsKeptUntilTheLongestASessionCanLastAsync`, `SigningKeysTests.AUTH_KEY_001_AC7_WhereTheDatabaseHoldsNoKeyTheFirstReadMakesOneCurrentAsync`, `SigningKeysTests.AUTH_KEY_001_AC7_OfTwoProcessesFindingTheSameChangeDueOneMakesItAsync`, `SigningKeysTests.AUTH_KEY_001_AC7_ALongerLifetimeAgainstAReplacedKeyIsRefusedAndTheCurrentKeySignsAsync`, `SigningKeysTests.AUTH_KEY_001_AC8_AKeyMadeAfterTheCadenceSignsOnceItHasBeenPublishedFiveMinutesAsync`, `SigningKeysTests.AUTH_KEY_001_AC8_EveryKeyButTheFirstIsPublishedFiveMinutesBeforeItSignsAsync` (400 reads at uneven steps over a one-hour cadence), `SigningKeysTests.CONV_CODE_007_AC4_AReplacedKeyHoldsItsPublicKeyApartFromItsPrivateKeyObjectAsync`, `SigningKeysTests.CONV_CODE_007_AC4_ASetThatReplacesAnotherCarriesTheObjectsItKeepsAsync`, `SigningKeysTests.CONV_CODE_007_AC4_TheBytesAKeyIsMadeFromAreZeroWhenTheMakingReturnsAsync`, `SigningKeyRotationTests.AUTH_KEY_001_AC1_TheRunningProviderSignsWithTheNextKeyAfterTheCadenceAsync`, `SigningKeyRotationTests.AUTH_KEY_001_AC2_TheLongestLifetimeIsStoredWithTheKeyThatSignsAsync`, `SigningKeyRotationTests.AUTH_KEY_001_AC3_AfterTheOverlapTheKeyLeavesTheSetAndItsAccessTokenIsRefusedAsync`, `SigningKeyRotationTests.AUTH_KEY_001_AC3_TheDocumentAndTheTokenHashesAreUnchangedAfterTheStartKeyRetiresAsync`, `SigningKeyRotationTests.AUTH_KEY_001_AC4_EveryIssuedTokenIsSignedWithTheConfiguredAlgorithmAsync`, `SigningKeyRotationTests.AUTH_KEY_001_AC6_ARefreshTokenARetiredKeySignedIsStillAcceptedAsync`, `SigningKeyRotationTests.AUTH_KEY_001_AC7_TheStartMakesAKeyCurrentBeforeTheOptionsAreBuiltAsync`, `SigningKeyRotationTests.AUTH_KEY_001_AC8_TheNextKeyIsPublishedFiveMinutesBeforeItSignsAsync`, `SigningKeyRotationTests.CONV_CODE_007_AC4_TheOptionsAreNeverRebuiltAndHoldOnlyTheSourcesObjectAsync`, `SigningKeyStoreTests.AUTH_KEY_001_AC5_RetirementAndRemovalWaitForTheirTimesAsync`, `SigningKeyStoreTests.AUTH_KEY_001_AC7_TheTableAdmitsOneNextKeyAndOneCurrentKeyAsync`, `SigningKeyStoreTests.AUTH_KEY_001_AC7_APromotionIsWrittenOnlyWhereTheKeysStandAsReadAsync`, `SigningKeyStoreTests.AUTH_KEY_001_AC7_ALongerLifetimeIsNeverLoweredAndRefusedOnceTheKeyIsReplacedAsync`, `SigningKeyConcurrencyTests.AUTH_KEY_001_AC7_OfTwoProcessesStartingOnAnEmptyDatabaseOneMakesTheKeyAsync`, `SigningKeyConcurrencyTests.AUTH_KEY_001_AC7_OfTwoProcessesFindingTheSameChangeDueOneMakesItAsync`, `SigningKeyConcurrencyTests.AUTH_KEY_001_AC7_AChangeDuringARequestThatRollsBackStaysMadeAsync`, `SigningKeyConcurrencyTests.AUTH_KEY_001_AC7_ALongerLifetimeAgainstAKeyAnotherProcessReplacedIsRefusedAsync` (PostgreSQL, two containers over one database, the second process's clock a minute behind), `ConfigureTests.AUTH_KEY_001_AC4_ConfigureRefusesASigningAlgorithmOtherThanES256Async` |
+| D-166 D.8, 317 (1) and (3): a seal before the rotation completes refused `model.rotation.notready`; retirement waits while a value is still wrapped under the previous version; the retirement report carries `keepUntil` | `81165fe5` | OPS-SEC-003 | `KeyRotationTests.OPS_SEC_003_AC4_ASealBeforeTheRotationCompletesIsRefusedAsync`, `KeyRotationTests.OPS_SEC_003_AC3_RetirementWaitsWhileValuesAreStillWrappedUnderThePreviousVersionAsync`, `KeyRotationTests.OPS_SEC_003_TheRetirementReportSaysHowLongTheRetiredVersionIsKeptAsync`, `FingerprintKeyRotationTests.OPS_SEC_003_AC6_ASealBeforeTheRotationCompletesIsRefusedAsync`, `FingerprintRotationTests.OPS_SEC_003_AC6_RetirementWaitsForAHeldUsernameAndForgetsWhatTheVersionHashedAsync` (renamed in `a7546b70`), `ErrorCodesTests` (the catalogue) |
+| D-166 D.8, 341: the key-encryption key's cryptoperiod warning read from its own rotation record, and from bootstrap where none stands; ledger line 341 | `c5f86a6e` | DR-009a | `EnvelopeRotationWatchTests.DR_009a_AC1_ALogEntryWithoutARotationLeavesTheCryptoperiodRaisedAsync`, `EnvelopeRotationWatchTests.DR_009a_AC1_ACompletedRotationEndsTheWarningAsync`, `EnvelopeRotationWatchTests.DR_009a_AC1_ADeploymentNeverRotatedCountsFromBootstrapAsync`, `EnvelopeRotationWatchTests.DR_009a_AC1_AFingerprintKeyRotationDoesNotEndTheWarningAsync`, `MaintenanceStoreTests.DR_009a_AC1_TheCryptoperiodIsReadFromTheKeysOwnRotationRecordAsync` |
+| D-166 D.8, 303 but for `Subject` on `AuditEntry` (question 35): `audit_records.subject` names the account acted on; every new record's effective identity is the acting one; the trail is found by subject or acting subject; personal details sealed under the subject; `AuditEntry` carries `Principal` and `PrincipalReason`; ledger line 303 | `9cfccf3a` | IDN-AUD-001, AUTHZ-IMP-001, PRIV-BREACH-002 | `AuditRecordTests.IDN_AUD_001_AC4_TheAccountActedOnIsTheSubjectAndNeverTheEffectiveIdentity`, `AuditStoreTests.IDN_PRIN_001_AC4_TheTrailNamesTheBackgroundPrincipalAndItsReasonAsync`, `AuditStoreTests.AUTHZ_IMP_001_AC4_ABreakGlassActionOnAnotherAccountNamesItAsTheSubjectAsync`, `AuditTrailEndpointTests` (the principal fields) |
+| D-166 D.8, 304 (2) and 334: each due run started on its own, one run per job in flight; the worker wakes at the next due or at a run's end and awaits the runs in flight when it stops; ledger line 334 | `be8b2140` | INF-BG-001 | `BackgroundWorkerTests.INF_BG_001_ARunInProgressHoldsNoOtherJobsTurnAsync` (25 repeated runs green) |
+| D-166 D.8, 323: two licences under one identifier and a future `performedAt` refused 422 `api.request.invalid` naming the member | `30b1c4bc`, `5db004f4` | OPS-MAINT-001 | `MaintenanceRecordsTests.OPS_MAINT_001_TwoLicencesUnderOneIdentifierAreRefusedAsync`, `MaintenanceRecordsTests.OPS_MAINT_001_AC3_ATaskDatedAfterNowIsRefusedAsync`, `MaintenanceEndpointTests.OPS_MAINT_001_ARequestRefusedOnItsMeaningIsInvalidAtItsMemberAsync` |
+| D-166 D.8, the audit action rows: `identity.credential.labelled` renamed `auth.credential.labelled`; `auth.credential.invalidationheld` described as `10` describes it; the code carries exactly the 77 actions of `10` section 5 | `f407060d` | IDN-AUD-001, CONV-NAME-003 | `AuditActionsTests.IDN_AUD_001_TheSetOfActionsIsClosed` |
+| D-166 D.8, 318 (1) and (2): a sweep of each abuse count under every version (throttle lines, settled sends, registration sources, notices, callbacks), run by the expiry sweep; retirement waits on every line under a previous version in the seven tables | `a7546b70` | OPS-SEC-003 | `FingerprintRotationTests.OPS_SEC_003_AC6_RetirementWaitsWhileAnAbuseCountUnderThePreviousVersionStillCountsAsync`, `FingerprintRotationTests.OPS_SEC_003_AC6_TheSweepForgetsAThrottleCounterOnceItStandsAtNothingAsync`, `FingerprintRotationTests.OPS_SEC_003_AC6_RetirementWaitsForAHeldUsernameAsync`, `ExpirySweepTests.OPS_SEC_003_AC6_ThePassRemovesEveryAbuseCountItsCheckNoLongerReadsAsync` |
+| The secret scanner's entry for the item identifier a migration comment names (section 3) | `07ac1df4` | OPS-DEP-004 | No test can decide it. The pinned scanner, run locally as the pipeline runs it, over 996 commits: no finding |
+
+**D-181 (`211b1d42`).**
+- OpenIddict 7.7.1 was read at its tag, and the same steps on its development branch, before the work. Every token but the identity token takes the first signing credential of the options; the key set, the validation parameters, the list of signing algorithms and the token hashes (`at_hash`, `c_hash`) read the options' credentials. Each such step is removed and replaced at its own order by one that reads the source; the validation keys are set on the request's copy of the parameters, so the options' list is never read.
+- OpenIddict requires one asymmetric signing credential at the start, so the start makes a key current before the options are built.
+- Migration `HoldSigningKeysThroughTheirKeeping`: a key held before it is taken as signing from when it was made, under the ceiling of `oidc.accesstoken.lifetime` (section 3); a replaced key is kept for the ceiling of `session.default.absolute` from its replacement; the down migration deletes next and retired keys, which the earlier schema cannot hold. Up, down and up again were checked by hand on PostgreSQL 17 with an old current, an old replaced, a next and a retired row.
+- The CONV-CODE-007 AC1 scan found two comparisons of a token type with an OpenIddict constant. The code was rewritten (a constant pattern; two `const` fields, compared without regard to case), not the gate.
+- Criterion no test decides: `c_hash`. The provider answers `response_type=code` alone, so no identity token is issued beside a code and `c_hash` is never computed; it is the method of `at_hash`, which is tested before and after the start key retires. Verified by review.
+
+**317 (1) and (3) (`81165fe5`).** A `--retention` shorter than the default is read as the default ("never prints a date earlier than the default gives"); `--retention` without `--sealed`, without a value, not a duration or repeated is `api.request.malformed` naming `--retention`. `model.rotation.notready` stands in `ApiStatus`'s fault group beside the startup codes: no request raises it, and the command exits 1. The ledger line of 317 waits with 317 (2) (question 26).
+
+**341 (`c5f86a6e`).** The watch stays in `Janus.Authentication`: D-166 341 moves it to `Janus.Hosting` only where the audit reader is not reachable from `Janus.Authentication`, and it is reached through the watch's own store port (`IMaintenanceStore.KeyEncryptionKeyRotatedAsync`, `BootstrappedAsync`), which `Janus.Storage` implements over `audit_records`. Its reads filter on the nil acting subject and use `ix_audit_records_acting_subject`; no index was added.
+
+**303 (`9cfccf3a`).** No backfill: a record written before keeps the account as its effective identity and names no subject. A record carrying personal details and no subject is refused (`InvalidOperationException`).
+
+**304 (2) and 334 (`be8b2140`).** 334 part (3) was already in the tree (`P90D`, `RestoreTestTests.DR_007_AC1_NoIntervalExceedsTheShortestQuarter`). The in-memory fakes the worker reaches take a lock, since the runs of one round overlap. 304 (1) was built after every part had merged (below).
+
+**323.** No ledger line: section G keeps the entry. The changelog line landed alone in `30b1c4bc` (section 2).
+
+### `part/privacy`, merged as `d768c524`
+
+| Instruction | Commit | Items | Tests |
+|---|---|---|---|
+| D-166 D.7, 414 under X4, but for the detail of an entered request (question 21): a request's detail, channel, identity confirmation and refusal reason 1 to 1024 characters after trimming, at the endpoint and in the service; a detail kept trimmed | `01c23b22` | API-CONV-002, CONV-CODE-006, PRIV-RIGHT-001 | `PrivacyRequestEndpointTests.API_CONV_002_AnOverlongDetailIsRefusedBeforeTheServiceAsync`, `PrivacyRequestEndpointTests.API_CONV_002_AnEntryWithABlankChannelOrConfirmationIsRefusedAsync`, `PrivacyRequestEndpointTests.API_CONV_002_ARefusalWithABlankReasonIsRefusedAsync`, `PrivacyRequestTests.API_CONV_002_ABlankOrOverlongDetailIsMalformedAsync`, `PrivacyRequestTests.API_CONV_002_ADetailIsHeldTrimmedAsync`, `PrivacyRequestTests.API_CONV_002_AnEntryWithABlankChannelOrConfirmationIsMalformedAsync`, `PrivacyRequestTests.API_CONV_002_ABlankOrOverlongRefusalReasonIsMalformedAsync` |
+| D-166 X8: the fulfilment of a privacy request stepped up (`StepUpAction.PrivacyRequestFulfil`), asked after every other refusal | `9c9983cf` | PRIV-RIGHT-001, AUTH-STEP-001 | `PrivacyRequestEndpointTests.PRIV_RIGHT_001_AC5_AFulfilmentWithoutStepUpIsRefusedAsync`, `PrivacyRequestTests.PRIV_RIGHT_001_AC5_AFulfilmentWithoutStepUpChangesNothingAsync`, `PrivacyRequestTests.PRIV_RIGHT_001_AC5_TheStepUpIsAskedAfterEveryOtherRefusalAsync` |
+| D-166 D.7, 130: a control for a purpose taking no consent refused; a withdrawal of a consent or an objection never held answered as the withdrawal; an objection before any notice named as such; ledger line 130 | `430eeb6f` | PRIV-CONS-008, PRIV-RIGHT-001a, PRIV-CONS-001 | `RegistrationFlowTests.PRIV_CONS_001_AC1_AControlForAPurposeTakingNoConsentIsRefusedAsync`, `ConsentTests.PRIV_CONS_008_AC1_WithdrawingAConsentNeverGivenAnswersAsTheWithdrawalAsync`, `ConsentTests.PRIV_RIGHT_001a_AnObjectionBeforeAnyNoticeIsNamedAsSuchAsync`, `ConsentTests.PRIV_RIGHT_001a_WithdrawingAnObjectionNeverMadeAnswersAsTheWithdrawalAsync` |
+| D-166 D.7, 406: a consent purpose for the hosting refused at the start by any spelling, `model.purpose.hostingconsent`; ledger line 406 | `aca200ba` | INT-HOST-002, PRIV-CONS-010 | `AuthorizationModelTests.INT_HOST_002_AC1_AConsentPurposeForTheHostingFailsStartup` (new cases) |
+| D-166 D.7, 264: a failed takedown or restriction delivery completed by hand; ledger line 264 | `ad943871` | IDN-LIFE-003a, IDN-LIFE-003 | `ErasureServiceTests.IDN_LIFE_003a_AFailedTakedownDeliveryIsCompletedByHandAsync`, `ErasureServiceTests.IDN_LIFE_003a_AFailedRestrictionDeliveryIsCompletedByHandAsync`, `ErasureServiceTests.IDN_LIFE_003a_ADeliveryOfAnotherKindIsNotFoundAsync`, `TakedownServiceTests.IDN_LIFE_003_AC2_ATakedownCompletedByHandReadsCompleteAsync` |
+| D-166 D.7, 332, first part: erasures completed before the ledger was registered written to it once, read a page at a time | `ce2478a3` | DR-016, IDN-LIFE-003a | `OutboxPublisherTests.DR_016_AnErasureCompletedBeforeTheLedgerWasRegisteredIsAppendedOnceAsync`, `OutboxStoreTests.DR_016_AC5_TheCompletedErasuresWithoutALineAreReadAPageAtATimeAsync` |
+| D-166 D.7, 333, with the ledger line of 332: the audit carries an erasure reason in its written spelling | `3654a829` | DR-016, PRIV-RIGHT-005 | `DeletionSweepTests.DR_016_TheAuditCarriesTheReasonInItsWrittenSpellingAsync`, `ErasureReplayTests.DR_016_TheAuditCarriesTheReasonInItsWrittenSpellingAsync` |
+| D-166 D.7, 148: a reconsent judged in the service, not at the endpoint; ledger line 148 | `58ce60b9` | PRIV-CONS-001, PRIV-CONS-007 | `ConsentTests.PRIV_CONS_001_AC1_ADashboardGrantOverASupersededConsentIsRecordedAsReconsentAsync`, `ConsentTests.PRIV_CONS_001_AC1_AnAdministratorGrantOverASupersededConsentIsRecordedAsNamedAsync` |
+| D-166 D.7, 150: the export carries every grant naming the account and the groups it belongs to; ledger line 150 | `2a2d48ce` | PRIV-RIGHT-003, REG-ACCT-001 | `ExportSourceTests.PRIV_RIGHT_003_TheExportCarriesEveryGrantNamingTheAccountAsync`, `ExportSourceTests.REG_ACCT_001_TheExportCarriesTheGroupsTheAccountBelongsToAsync` |
+| D-166 D.7, the data category of an encrypted field: an encrypted field whose category no purpose names stops the start | `f7373d6a` | PRIV-PRIN-001, PRIV-RIGHT-005a | `AuthorizationModelTests.PRIV_PRIN_001_AC2_AnEncryptedFieldWhoseCategoryNoPurposeNamesFailsStartup` |
+| D-166 D.7, 133 and 147 part (4): a consent records the document and version it was given against (migration `NameTheDocumentOfAConsent`); a revision ends a consent given against another document | `c573f655` | PRIV-CONS-001, PRIV-CONS-007, PRIV-RIGHT-001a | `SupersessionTests.PRIV_CONS_001_AC2_AConsentNamesTheDocumentAndVersionItWasGivenAgainstAsync`, `SupersessionTests.PRIV_CONS_007_AC1_AConsentGivenAgainstAnotherDocumentIsEndedByARevisionAsync`, `ConsentStoreTests.PRIV_CONS_007_AC1_ALiveConsentAgainstAnotherDocumentIsFoundAsync` |
+
+- Parked: the detail of an entered request (question 21), 156 (question 28), 133 and 147 (1) to (3) (question 29), 133 and 147 (5) (question 30). No ledger line for 133, 147, 156 or 414.
+- Merge: no conflict, the model snapshot merged clean. Fast checks after the merge: Analyzers 20, Authentication 849, Authorization 129, Cli 20, Conformance 2, Core 484, Hosting 778, Identity 89, Privacy 252, Storage 33, no failure.
+
+### `part/authorization`, merged as `a8b1f104`
+
+| Instruction | Commit | Items | Tests |
+|---|---|---|---|
+| D-166 D.1, 396: a permission the model does not declare raised at the request before the gate reads, and answered in no capability; truth-table row "a permission the model does not declare": Raised; ledger line 396 | `cb73c32a` | AUTHZ-PRIN-003, CONV-ERR-001, BFF-CAP-002, AUTHZ-TEST-001 | `GateBehaviourTests.BFF_CAP_002_AC2_AnUndeclaredPermissionIsRaisedAndAnsweredInNoCapabilityAsync`, `GateBehaviourTests.CONV_ERR_001_AC3_AnUndeclaredPermissionRaisesAtTheRequestBeforeTheGateReadsAsync`, `TruthTableTests` (the new row) |
+| D-166 D.1, 265, the first half: the lookup of an unregistered record of a declared type refused as the gate refuses, an undeclared type malformed; truth-table row "a lookup of a record no registration names, by a caller reading grants": Denied | `ef62ecdc` | AUTHZ-DERIVE-007, AUTHZ-SCOPE-001, AUTHZ-TEST-001 | `AccessEndpointTests.AUTHZ_DERIVE_007_AnUnregisteredRecordReadsAsARefusalAsync`, `ReverseLookupTests.AUTHZ_DERIVE_007_AnUndeclaredTypeIsRefusedAsMalformedAsync`, `ReverseLookupTests.AUTHZ_DERIVE_007_AnUnregisteredRecordIsRefusedAsTheGateRefusesAsync`, `ReverseLookupTests.AUTHZ_SCOPE_001_AnUnregisteredRecordIsRefusedEvenToAHolderOfGrantReadAsync`, `ExplanationTests.CONV_DESIGN_002_AC3_ALookupOfARecordNoRowNamesIsRefusedAsTheGateRefusesAsync`, `TruthTableTests` (the new row) |
+| D-166 D.1, 176: a refused resolution answered with the gate's refusal and its correlation | `503dcbe7` | AUTHZ-CONCEAL-004, AUTHZ-GATE-004 | `ExplanationTests.AUTHZ_CONCEAL_004_AC1_AResolutionRefusedIsTheGatesRefusalWithItsCorrelationAsync` |
+| D-166 D.1, 184: a resource type named `organization` stops the start; an unresolved grant refused (`ErrorCodes.GrantUnresolved`); ledger line 184 | `e2069ae7` | AUTHZ-MODEL-004, AUTHZ-GRANT-001 | `AuthorizationModelTests.AUTHZ_MODEL_004_ATypeNamedOrganizationFailsStartup`, `ErrorCodesTests`, `GrantEndpointTests` (changed) |
+| D-166 D.1, 183 and 187: an unknown role or restriction answered not found; a restriction reason past its length refused; ledger lines 183 and 187 | `f534c961` | AUTHZ-GRANT-004, AUTH-ABUSE-004, API-CONV-002 | `RoleEndpointTests.AUTHZ_GRANT_004_AnUnknownRoleIsNotFoundAsync`, `RestrictionEndpointTests.AUTH_ABUSE_004_AnUnknownNameIsNotFoundAsync` (renamed), `RestrictionEndpointTests.AUTH_ABUSE_004_AReasonPastItsLengthIsMalformedAsync`, `RestrictionAdministrationTests.AUTH_ABUSE_004_AReasonPastItsLengthIsRefusedAsync` |
+| D-166 D.1, 188: the reserved account keeps its role and its grant; ledger line 188 | `49c5bcba` | OPS-BOOT-002, API-CONV-002 | `GrantEndpointTests.OPS_BOOT_002_TheReservedAccountsAdministrationIsNotRevokedAsync`, `RoleEndpointTests.OPS_BOOT_002_TheReservedAccountsRoleKeepsEveryLibraryPermissionAsync` |
+| D-166 D.1, 189, and 247 in part: a role a standing invitation names is not removed; ledger line 189 | `650c6c7d` | AUTHZ-GRANT-004, REG-INV-001 | `RoleEndpointTests.AUTHZ_GRANT_004_ARoleAnOpenInvitationNamesIsNotRemovedAsync`, `RoleEndpointTests.AUTHZ_GRANT_004_ARoleAStandingInvitationNamesIsNotRemovedAsync`, `InvitationStoreTests.AUTHZ_GRANT_004_ARoleAStandingInvitationNamesIsNamedAsync` |
+| D-166 X5: a member group the group cannot hold answered invalid | `d709ddc2` | AUTHZ-GROUP-001 | `GroupEndpointTests.AUTHZ_GROUP_001_AMemberGroupTheGroupCannotHoldIsInvalidAsync` |
+| D-166 D.1, 352: a resource registration refused on its meaning answered invalid; a refused batch writes nothing | `d77844d9` | AUTHZ-INHERIT-002 | `ResourceRegistrationTests.AUTHZ_INHERIT_002_ARefusalOnMeaningIsInvalidAndARefusedBatchWritesNothingAsync` |
+| D-166 D.1, 410: another account's session or browser answered as none | `eed5f7f0` | CONV-DESIGN-002, AUTH-SESS-013, AUTH-FACT-015 | `SessionServiceTests.CONV_DESIGN_002_AC3_AnotherAccountsSessionIsAnsweredAsNoneAsync`, `DeviceServiceTests.CONV_DESIGN_002_AC3_AnotherAccountsBrowserIsAnsweredAsNoneAsync`, `AccountApplicationTests.CONV_DESIGN_002_AC3_AnotherAccountsSessionOrBrowserReadsAsNoneAsync` |
+| D-166 D.1, 111: the nearest container a derivation admits through is named | `f764ee09` | AUTHZ-GATE-004 | `PermissionRuleTests.AUTHZ_GATE_004_TheNearestAdmittingContainerIsNamed` |
+| D-166 D.1, 321: a refusal recorded and counted outside the caller's transaction | `0a488817` | AUTHZ-CONCEAL-004, AUTHZ-GATE-004 | `GateBehaviourTests.AUTHZ_GATE_004_AC4_ADenialInsideATransactionThatRollsBackIsStillRecordedAndCountedAsync` |
+| D-166 D.1, 339: an absent record refused with the statements of a present one; ledger line 339 | `05689c65` | AUTHZ-CONCEAL-002, BFF-ERR-003 | `ConcealmentTests.AUTHZ_CONCEAL_002_AC2_AnAbsentRecordAndARefusedOneRunTheSameStatementsAsync` (`Janus.Hosting.Tests`, `Authorization`) |
+| D-166 D.1, 252: an administrative grant confers nothing without a membership; truth-table rows "a grant of the administrative organization to a member": Allowed, "to a non-member": Denied; ledger line 252 | `cbd0bb43` | IDN-LIFE-009a, IDN-MEM-001, AUTHZ-TEST-001 | `GateBehaviourTests.IDN_LIFE_009a_AnAdministrativeGrantConfersNothingWithoutAMembershipAsync`, `InvitationServiceTests.IDN_MEM_001_EndingTheAdministrativeMembershipStopsItsGrantsAndKeepsThemAsync` (`Janus.Hosting.Tests`, `Organizations`), `TruthTableTests` (the new rows) |
+| D-166 D.1, 110: a check and a page decided over the host's rows in one statement; ledger line 110 | `2ccf3317` | AUTHZ-DERIVE-001, AUTHZ-GATE-005, AUTHZ-GATE-002 | `GateBehaviourTests.AUTHZ_GATE_005_AC1_AStoredDenyAndADerivationAreDecidedInOneStatementAsync`, `GateBehaviourTests.AUTHZ_DERIVE_001_ACheckWithTheHostsRowsReadsNoGrantThroughTheLibraryAsync`, `GateBehaviourTests.AUTHZ_GATE_005_AC1_APageCostsOneStatementOverTheHostsRowsAsync` (extended) |
+
+- Parked: the second half of 265 (question 22) and 136 whole (question 34).
+- Limits recorded with the work: `ExplainAsync<TResource>` reads the stored candidates through the library's connection, since 110 names the page and the check only; the denial-spike alert of a refusal inside a transaction that rolls back still rolls back (question 59).
+- Merge: one conflict, `src/Janus.Core/PublicAPI.Unshipped.txt`, the lines of both sides kept. Fast checks after the merge: Analyzers 20, Authentication 850, Authorization 131, Cli 20, Conformance 2, Core 484, Hosting 788, Identity 90, Privacy 252, Storage 33, no failure.
+
+### `part/organizations`, merged as `13bbe7db`
+
+| Instruction | Commit | Items | Tests |
+|---|---|---|---|
+| D-166 D.6, 413: an organization's comparison key required (`organizations.canonical_name` not null), the unreleased `AddOrganizationComparisonKeys` amended as 413 orders; ledger line 413 | `f709f222` | IDN-ACCT-004 | `OrganizationStoreTests.IDN_ACCT_004_AC3_AnOrganizationWithoutItsKeyIsRefusedByTheDatabaseAsync` |
+| D-166 D.6, 154: an attachment decided under the account's row lock; one current membership of an organization held by the database (migration `HoldOneCurrentMembershipOfAnOrganization`) | `46b3534e` | IDN-MEM-002 | `MembershipAttachmentTests.IDN_MEM_002_AC2_TwoAttachmentsTogetherLeaveOneMembershipAsync`, `MembershipAttachmentTests.IDN_MEM_002_TheDatabaseHoldsOneCurrentMembershipOfAnOrganizationAsync` |
+| D-166 D.6, 155: the organization erasure's events written before its commit; no domain of an erased organization left readable; the organization erasure reason retired (migration `RetireTheOrganizationErasureReason`); ledger line 155 | `b359fa5c`, `f58a34ad`, `349325d7` | IDN-ORG-003, IDN-ORG-005, IDN-LIFE-003b, DR-016, CONV-DESIGN-002 | `OrganizationErasureSweepTests.IDN_ORG_003_AnErasureWhoseEventRowFailsErasesNothingAsync`, `OrganizationErasureSweepTests.IDN_ORG_003_APassThatCannotReadItsWindowErasesNothingAsync`, `OrganizationErasureSweepTests.IDN_ORG_005_TheErasureIsFiledUnderTheOrganizationAsync`, `OrganizationStatesTests.IDN_ORG_003_TheErasureLeavesNoDomainOfTheOrganizationAsync` |
+| D-166 X5 and 230: a path naming no organization answered 404 `identity.organization.notfound`, the path's organization resolved as the gate step | `61b3df11`, `f2b8d7ad` | IDN-ORG-003, IDN-MEM-001, REG-DOM-001, REG-INV-001, CONV-DESIGN-002 | `OrganizationEndpointTests.IDN_ORG_003_AC13_AnOrganizationTheDeploymentDoesNotHoldIsNotFoundAsync`, `OrganizationPolicyEndpointTests.IDN_ORG_003_ThePolicyOfAnOrganizationTheDeploymentDoesNotHoldIsNotFoundAsync`, `OrganizationDomainEndpointTests.REG_DOM_001_AnOrganizationTheDeploymentDoesNotHoldIsNotFoundAsync`, `InvitationEndpointTests.REG_INV_001_AnOrganizationTheDeploymentDoesNotHoldIsNotFoundAsync`, `InvitationServiceTests.REG_INV_001_AnOrganizationTheDeploymentDoesNotHoldIsNotFoundAsync`, `PublicSurfaceTests.CONV_DESIGN_002_AC3_EveryOperationMeetsTheGateBeforeItReadsOrWrites` |
+| D-166 D.6, 200 and 204: a policy or domain change made in process without a reason refused by its code, judged at the endpoint from `Janus.Core`; ledger line 200 | `acb0b8f2`, `10ff8a43` | AUTH-STEP-002a, REG-DOM-001, OPS-CFG-005, LIB-API-005 | `OrganizationPolicyEndpointTests.AUTH_STEP_002a_AReplacementInProcessWithoutAReasonIsRefusedAsync`, `OrganizationDomainEndpointTests.REG_DOM_001_AChangeInProcessWithoutAReasonIsRefusedAsync`, `IdentityEndpointsTests.LIB_API_005_AC1_NoEndpointCarriesLogicItsServiceDoesNotAsync`, the readability tests (updated) |
+| D-166 D.6, 209 (1) and (3), 211, 212 and 220: a domain not listed answered 404 (`DomainNotFound`); a lock listing a domain needs `dnsResolver` at the start (`config.value.notallowed`); ledger line 209 | `db60ab71` | REG-DOM-001, LIB-HOST-001, OPS-CFG-003 | `OrganizationDomainEndpointTests.REG_DOM_001_AC12_ADomainIsNotListedWithoutAResolverAsync`, `StartupValidationTests.REG_DOM_001_AC12_ADeploymentWhoseLockListsADomainNeedsAResolverAsync` |
+| D-166 D.6, 223: an integrated invitation without a personal email refused 422 (`InvitationAddressRequired`); ledger line 223 | `9e0dbc1d` | REG-INV-001, REG-MAIL-001 | `InvitationServiceTests.REG_INV_001_AC4_AnIntegratedInvitationNeedsAPersonalEmailAsync`, `InvitationEndpointTests.REG_INV_001_AC4_AnIntegratedInvitationWithoutAPersonalEmailIsRefusedAsync` |
+| D-166 D.6, 225: a phone bound without reading the registration setting; ledger line 225 | `050d46be` | REG-INV-001 | The invitation service tests, over fakes whose set now validates (section 3) |
+| D-166 D.6, 228: a role-naming invitation asks the grant gate as well; ledger line 228 | `f20ce3a0` | REG-INV-001, AUTH-STEP-002 | `InvitationServiceTests.REG_INV_001_ARoleAsksTheGrantGateAsWellAsync` |
+| D-166 D.6, 229: an unpublished document refused as an invalid request; ledger line 229 | `b312303a` | REG-INV-001, API-CONV-003 | `InvitationServiceTests.REG_INV_001_AnUnpublishedDocumentIsRefusedAsync`, `InvitationEndpointTests.REG_INV_001_AnUnpublishedDocumentIsRefusedAsync` |
+| D-166 D.6, 231: a taken corporate address refused 409 (`MailboxTaken`); ledger line 231 | `1f155712` | REG-MAIL-001, INT-MAIL-006 | `InvitationServiceTests.REG_MAIL_001_AnAddressAlreadyTakenIsRefusedAsync`, `InvitationEndpointTests.REG_MAIL_001_AnAddressAlreadyTakenIsRefusedAsync` |
+| D-166 D.6, 233: only an unacknowledged invitation of the organization is revoked, any other answered not found; ledger line 233 | `5e21b292` | IDN-LIFE-009a, API-CONV-003 | `InvitationServiceTests.IDN_LIFE_009a_OnlyAnUnacknowledgedInvitationOfTheOrganizationIsRevokedAsync`, `InvitationEndpointTests.IDN_LIFE_009a_AnUnusedInvitationIsRevokedAsync` |
+| D-166 D.6, 242 (1): an inviter with no display name shown by the primary email | `2e5b49df` | REG-INV-002 | `InvitationServiceTests.REG_INV_001_AnInviterWithNoDisplayNameIsShownByTheirPrimaryEmailAsync` |
+| D-166 D.6, 242 (2) and 244: an acknowledgement that cannot be met refused before enrolment, the membership limit and the email maximum before the credential policy (`IMembershipAttachment.RefusedAsync`, `Membership.Refused`) | `7737f068` | REG-INV-002, IDN-MEM-002 | `InvitationServiceTests.REG_INV_002_TheMembershipLimitComesBeforeTheCredentialPolicyAsync`, `InvitationServiceTests.REG_INV_002_TheEmailMaximumComesBeforeTheCredentialPolicyAsync` |
+| D-166 D.6, 242 (3) and 245: the domain lock judged at acknowledgement, but for an accepting account holding no verified email (question 41); ledger line 245 | `2e8174c1`, `86e23f9e` | REG-DOM-001, REG-INV-002 | `InvitationServiceTests.REG_DOM_001_AnOpenInvitationIsAcknowledgedOnlyWithAnAddressTheLockAdmitsAsync` |
+| D-166 D.6, 242 (4), the first half: the unmet requirement named `policyRequirement` at enrolment | `044a9a7f` | REG-INV-002, AUTH-FACT-017 | `InvitationServiceTests.REG_INV_002_AC2_AnAccountBelowTheRequiredAssuranceIsHeldAtEnrolmentAsync`, the redundancy test (updated) |
+| D-166 D.6, 242 (5) and 247: the inviter judged again at acknowledgement; an expiring grant does not stand in for the permanent one; ledger lines 242 and 247 | `04f2eaaa` | REG-INV-001 | `InvitationServiceTests.REG_INV_001_AnInviterWhoLostTheRightToGrantGrantsNothingAsync`, `MembershipAttachmentTests.REG_INV_001_AnExpiringGrantDoesNotStandInForThePermanentOneAsync` |
+| D-166 D.6, 248 and 251: the corporate address announced as added and as removed; ledger lines 248 and 251 | `169579e1` | REG-MAIL-001, REG-MAIL-003 | `InvitationServiceTests.REG_INV_001_AC4_TheCorporateAddressIsAnnouncedAsAddedAsync`, `InvitationServiceTests.REG_MAIL_003_TheRetiredCorporateAddressIsAnnouncedAsRemovedAsync` |
+| D-166 D.6, 250: the end of a membership stepped up (`StepUpAction.MembershipEnd`); an account holding no membership there answered 404 `identity.membership.notfound`, with its remediation; ledger line 250 | `455f1eb2`, `52c960a6` | IDN-MEM-001, REG-MAIL-003, AUTH-STEP-001, LIB-API-003 | `InvitationServiceTests.IDN_MEM_001_AnAccountHoldingNoMembershipThereIsNotFoundAsync`, `InvitationServiceTests.IDN_MEM_001_EndingAMembershipAsksForStepUpAsync`, `InvitationServiceTests.IDN_MEM_001_OnlyACurrentMembershipIsEndedAsync`, `InvitationEndpointTests.IDN_MEM_001_AMembershipIsEndedAsync`, `ErrorCodesTests` |
+| The organization directory's fixture holds one current membership per organization, as 154 requires | `b9f9d904` | IDN-ORG-003, IDN-MEM-002 | `OrganizationDirectoryTests.IDN_ORG_003_AC1_OnlyCurrentMembersAreNamedAsync` |
+
+- Parked: 242 (4), the downgrade and `auth.factor.notpermitted` halves (question 36), with ledger line 246; the case of 242 (3) of an account holding no verified email (question 41); 209 (2), which waits on the owner's approval to download `IdnaMappingTable.txt`. 223 point (3) was built on the working branch after the merges (`18b79ca4`), since `ErrorCodes.GrantUnresolved` came with `part/authorization`.
+- Merge: one conflict, `src/Janus.Core/StepUpAction.cs` (section 3), and one semantic conflict in a test (section 3). The model has no pending change. Fast checks after the merge: Analyzers 20, Authentication 860, Authorization 131, Cli 20, Conformance 2, Core 484, Hosting 798, Identity 90, Privacy 253, Storage 33, no failure; the integration suite of `Janus.Storage.Tests` 442, no failure.
+
+### `part/sending`, merged as `5c85be6c`
+
+| Instruction | Commit | Items | Tests |
+|---|---|---|---|
+| D-166 D.3, 120 (1): a restriction's name held to the rule of its place | `50016b49` | INT-SMS-003, AUTH-ABUSE-004 | `RestrictionSetSettingTests.INT_SMS_003_ARestrictionNameOutsideTheRuleIsRefused`, `RestrictionSetSettingTests.INT_SMS_003_ARestrictionNameIsAtMostSixtyFourCharacters`, `RestrictionSetSettingTests.INT_SMS_003_ARestrictionNameInsideTheRuleIsAdmitted`, `RestrictionSetSettingTests.INT_SMS_003_TheShippedRestrictionNamesKeepTheRule`, `RestrictionAdministrationTests.INT_SMS_003_ARestrictionNamedOutsideTheRuleIsRefusedBeforeAnythingBeginsAsync` |
+| D-166 D.3, 120 (2): a governing document or subscriber named outside the rule refused at the start | `ef19b85f` | INT-SMS-003, LIB-HOST-001 | `StartupValidationTests.INT_SMS_003_AC3_ASubscriberNamedOutsideTheRuleIsRefusedAsync`, `StartupValidationTests.INT_SMS_003_AC3_AGoverningDocumentNamedOutsideTheRuleIsRefusedAsync` |
+| D-166 D.3, 120 (3) to (5): the key and outstanding places measured per deployment; ledger line 120 | `25d5dc9c` | INT-SMS-003, AUTH-ABUSE-005 | `MessagePlaceholdersTests.INT_SMS_003_AC1_TheKeyWidthCoversTheFamilies`, `MessagePlaceholdersTests.INT_SMS_003_EveryEventKindFitsItsPlace`, `SendingValidationTests.INT_SMS_003_AC1_TheSubscribersAreMeasuredAtTheirJoinedWidthAsync` |
+| D-166 D.3, 342 (1) to (4): each restriction governs its channel (`sms`, `email`, `any`); narrowing a channel is a loosening; ledger line 342 | `61204cc0` | AUTH-ABUSE-004, OPS-ALERT-002, OPS-ALERT-003 | `SendingServiceTests.AUTH_ABUSE_004_ARestrictionGovernsOnlyItsChannelAsync`, `SendingServiceTests.AUTH_ABUSE_004_AC5_ANoticeToAHolderIsNotCountedBySmsSourceAsync`, `SendingServiceTests.AUTH_ABUSE_004_ASendNoRequestAskedForIsCountedUnderNoSourceAsync`, `SendingServiceTests.OPS_ALERT_003_AnAlertIsCarriedWithEveryRestrictionsBucketFullAsync`, `RestrictionEndpointTests.AUTH_ABUSE_004_AC3_NarrowingAChannelIsALooseningAsync`, `RestrictionSetSettingTests.AUTH_ABUSE_004_AC3_NarrowingAChannelIsALoosening`, `RestrictionSetSettingTests.AUTH_ABUSE_004_TheShippedRestrictionsCarryTheirChannels`, `RestrictionSetSettingTests.AUTH_ABUSE_004_AStoredRestrictionWithoutAChannelReadsAsAny`, `AuthenticationServiceTests.AUTH_ABUSE_004_TheCheckCodeIsSentUnderTheSourceThatAskedAsync` |
+| D-166 D.3, 122: destination counters kept apart from other keys (migration `CountKeysApartFromDestinations`, `CounterStaleness`, `SendCounterSweep`); ledger line 122 | `fe839f64`, `3d136d1e` | PRIV-RET-005, AUTH-ABUSE-004 | `SendLedgerTests.PRIV_RET_005_AC2_ALongerSourceRestrictionKeepsNoDestinationRecordAsync`, `ExpirySweepTests.PRIV_RET_005_AC2_ARecordIsGoneWithoutAnotherSendAsync`, the schema contract lines of `send_key_counters` |
+| D-166 D.3, 123 (1): the landing origins a link lands on required at the start (`LandingOrigins`, public) | `56312065` | LIB-HOST-001, API-LAND-001 | `StartupValidationTests.LIB_HOST_001_ADeploymentThatDeclaredNoLandingOriginsIsRefusedAsync`, `StartupValidationTests.LIB_HOST_001_AC6_ALandingOriginNoBrowserClientReturnsToIsRefusedAsync`, `StartupValidationTests.LIB_HOST_001_AC6_AnAuthenticationOriginThatIsNotTheSignInOriginIsRefusedAsync` |
+| D-166 D.3, 123 (2) to (4): every link an address on its landing origin, `{link}` in place of `{token}`, a text carrying a link budgeted at two segments; 123 (5) was already in the tree | `908f5817` | API-LAND-001, INT-SMS-003, LIB-HOST-001 | `LandingLinksTests.API_LAND_001_AC4_EveryLinkIsItsApplicationsOriginThenItsKindAndToken`, `LandingLinksTests.INT_SMS_003_NoLinkIsWiderThanItIsMeasured`, `MessageBudgetTests.INT_SMS_003_ATextCarryingALinkHoldsTwoSegments`, `MessagePlaceholdersTests.INT_SMS_003_TheLinkIsMeasuredAtItsComposedWidth`, `SendingValidationTests.LIB_HOST_001_NoLinkIsMeasuredWithoutTheLandingOriginsAsync`, `SendingValidationTests.INT_SMS_003_ATextCarryingALinkIsBudgetedAtTwoSegmentsAsync`, `ApiConventionTests.API_LAND_001_AC4_NoEndpointTakesALinkTokenInAPathOrQueryAsync`, `DefaultMessageTemplatesTests.API_LAND_001_AC4_EveryShippedLinkRendersAnAbsoluteAddressOfItsApplication`, `DefaultMessageTemplatesTests.API_LAND_001_AC4_NoShippedTemplateNamesTheRetiredTokenPlace`, `DefaultMessageTemplatesTests.AUTH_ABUSE_005_EveryShippedTextMessageFitsItsBudgetAtItsWidest` (renamed) |
+| D-166 D.3, the message kinds, (5): a request's type and status spelled as the chapter spells them | `cc804177` | INT-SMS-003 | `MessagePlaceholdersTests.INT_SMS_003_TypeAndStatusAreMeasuredAtTheirWrittenSpellings`, `DeadlineSweepTests.INT_SMS_003_AnAlertCarriesTheTypeAndStatusAsTheChapterSpellsThemAsync` |
+| D-166 D.3, the message kinds, (6): a text template naming a place with no width, or the retired token place, stops the start | `b9c5243e` | INT-SMS-003 | `SendingValidationTests.INT_SMS_003_ATemplateNamingAPlaceWithNoWidthStopsStartupAsync`, `SendingValidationTests.INT_SMS_003_ATemplateNamingTheRetiredTokenPlaceStopsStartupAsync` |
+| D-166 D.3, 335 but for the twenty-sets test (question 27): a recovery-code reminder stays owed while every channel refuses, and is closed where no channel can reach | `4ea7c61e` | AUTH-FACT-008 | `RecoveryCodeRemindersTests.AUTH_FACT_008_AC5_ASetWhoseEveryNoticeIsRefusedStaysOwedAsync`, `RecoveryCodeRemindersTests.AUTH_FACT_008_AC5_ASetNoChannelCanReachIsClosedAsync` |
+| D-166 D.3, 119 (7): recovery and invitation links counted under `signin`, by no notification restriction | `a60f77f5` | AUTH-ABUSE-004 | `RecoveryFlowTests.AUTH_ABUSE_004_ARecoveryLinkIsCountedByNoNotificationRestrictionAsync`, `InvitationEndpointTests.AUTH_ABUSE_004_AnInvitationLinkIsCountedByNoNotificationRestrictionAsync` |
+| D-166 D.3, 119 (5): the deduplication claim committed before an alert is sent; no alert sent while a transaction is open | `01a5a2c9` | OPS-ALERT-002, INF-BG-001 | `AlertRouterTests.OPS_ALERT_002_TheClaimIsCommittedBeforeTheAlertIsSentAsync`, `AlertDispatchTests.OPS_ALERT_002_NoAlertIsSentWhileATransactionIsOpenAsync` |
+
+- Parked: 118, 235 and the twenty-sets test of 335 (question 27); 119 (1) to (4) (question 38); 119 (6) (question 39). Question 24 parks nothing. No ledger line for 118, 119, 123 (until `5b6102f3`), 227, 235, 322, 335 or 423.
+- The message kinds (1) to (3) were built on the working branch after the merges (`9fde7b80`, `5b6102f3`, `3848dae9`): `SignInCode` takes 21 on `part/sessions`, and a gap at 21 trips CA1027.
+- A delivery that fails after its committed alert claim is not tried again inside its window (119 (5)); the changelog says so.
+- Merge: conflicts in `CHANGELOG.md`, `InvitationService.cs`, `RestrictionAdministration.cs`, `DeclarationCoverage.cs` and `StartupValidationTests.cs`, the lines of both sides kept; two semantic conflicts in tests (section 3). The model has no pending change. Fast checks after the merge green (Authentication 875, Core 509, Hosting 809, Privacy 254); the integration suites `Janus.Storage.Tests` 443, `Janus.Hosting.Tests` 264, `Janus.Conformance.Tests` 10, no failure.
+
+### `part/sessions`, merged as `700051e6`
+
+| Instruction | Commit | Items | Tests |
+|---|---|---|---|
+| D-166 E.8: the throttled refusal built in one place (`Error.Throttled`, in `Janus.Core`), its code read only by the builder and the status map | `7d9477bc` | AUTH-ABUSE-002, BFF-ABUSE-001 | `ErrorTests.AUTH_ABUSE_002_AC2_TheThrottledRefusalCarriesTheInstantAndNothingElse`, `ErrorTests.Throttled_AnInstantWithAnOffset_IsWrittenInUtc`, `LibraryStructureTests.AUTH_ABUSE_002_AC2_OnlyTheBuilderAndTheStatusMapReadTheThrottledCode` |
+| D-166 D.2, 401: a throttle delay run from the count its failure wrote | `aefb6b0f` | AUTH-ABUSE-001 | `ThrottleServiceTests.AUTH_ABUSE_001_ASourceAtNineFailuresIsHeldTheWholeDelayItEarnedAsync` |
+| D-166 D.2, the preferred second step named by its method | `f883e827` | IDN-ATTR-008, API-CONV-003 | `AccountFlowTests.IDN_ATTR_008_AC2_AMethodNotEnrolledIsInvalidOverTheWireAsync`, `AccountServiceTests` (changed) |
+| D-166 D.2, 421 (1) and (3): a recognised browser's failures counted against every scope; a carried token looked up alike for a held and an unheld identifier; ledger line 421 | `038ce1c7` | AUTH-ABUSE-001, AUTH-ABUSE-003 | `ThrottleServiceTests.AUTH_ABUSE_001_AC5_ARecognisedBrowsersFailuresCountAgainstTheAccountAsync`, `AuthenticationServiceTests.AUTH_ABUSE_003_AC2_ACarriedTokenIsLookedUpAlikeForAHeldAndAnUnheldIdentifierAsync` |
+| D-166 D.2, 419, the amendment of the unreleased `AddChallengeIdentifiers`: the identifier hash required on every sign-in challenge | `777086bd` | OPS-SEC-003, AUTH-ABUSE-001 | `ChallengeStoreTests` and `FingerprintRotationTests` (adjusted) |
+| D-166 D.2, 417: group names and credential labels compared without case (migration `CollateGroupNamesAndCredentialLabels`); ledger line 417 | `db7b0136` | OPS-DB-001, AUTH-FACT-001, INF-DB-001 | `AccountServiceTests.AUTH_FACT_001_AC5_ALabelHeldInOtherCapitalsIsRefusedAsync`, `CredentialServiceTests.AUTH_FACT_001_AC5_AnEnrolmentUnderALabelHeldInOtherCapitalsIsRefusedAsync`, `AuthenticatorStoreTests.AUTH_FACT_001_AC5_ALabelHeldInOtherCapitalsIsRefusedByTheDatabaseAsync`, `AuthenticatorStoreTests.AUTH_FACT_001_AC5_ALabelIsFoundHeldWithoutRegardToCaseAsync`, `GroupClosureStoreTests.OPS_DB_001_AnOrganizationsGroupsSortWithoutRegardToCaseAsync` |
+| D-166 D.2, 115 but for (2) (question 31), under X3: every code try decided under a lock on its row | `6b79266c` | AUTH-FACT-004, AUTH-FACT-003, INT-SMS-001 | `AuthenticationServiceTests.AUTH_FACT_004_AC6_AnEmailSignInCodeIsHeldToItsOwnKeysAsync`, `AuthenticationServiceTests.AUTH_FACT_004_AC6_TheCodeASignInLinkShowsIsHeldToTheLinkAndTheSignInCapAsync`, `AuthenticationServiceTests.AUTH_FACT_004_AC3_WrongCodesInvalidateTheHeldSignInAsync`, `PendingSignInStoreTests.AUTH_FACT_004_AC4_APendingSignInHeldForATryIsReadByTheNextOnlyAfterItAsync`, `VerificationCodesTests.AUTH_FACT_004_AC3_ConcurrentWrongTriesAreAllCountedAsync`, `VerificationCodesTests.AUTH_FACT_004_AC3_TwoConcurrentRightTriesSucceedOnceAsync` |
+| D-166 D.2, 419 but for the link-token case (question 32): registration codes and asks held to the progressive delay | `7f350977` | AUTH-ABUSE-001, REG-SESS-003 | `RegistrationServiceTests.AUTH_ABUSE_001_WrongRegistrationCodesAreHeldByTheDelayAsync` |
+| D-166 D.2, 402 and 422: refused device codes and pressed links that are gone recorded behind the source delay; a throttled return carries its interval; ledger lines 402 and 422 | `50432574` | CONV-LOG-005, AUTH-ABUSE-001, AUTH-ABUSE-002, BFF-ABUSE-001 | `AuthenticationServiceTests.CONV_LOG_005_AC1_ADeviceCodeForAHandleThatOpensNothingIsRecordedAsync`, `AuthenticationServiceTests.CONV_LOG_005_AC1_APressedLinkThatIsGoneIsRecordedBehindTheSourceDelayAsync`, `AuthenticationServiceTests.CONV_LOG_005_AC1_AnUnpressedLinkThatIsGoneWritesNothingAsync`, `SignInFlowTests.CONV_LOG_005_AC1_ALinkTokenUnderAnotherFactorIsRefusedAsMalformedAsync`, `SessionAuditTests.CONV_LOG_005_AC1_ARefusedDeviceCodeIsRecordedAsItsVerificationAsync`, `ProviderSignInTests.BFF_ABUSE_001_AC2_AThrottledProviderReturnCarriesItsIntervalAsync`, `ProviderSignInTests.AUTH_ABUSE_002_AC2_AThrottledReturnCarriesItsIntervalAsync` |
+| D-166 D.2, 208: what went to an address given up since refused; no ledger line, as section G gives none | `9017f0ba` | REG-IDENT-006, REG-DOM-001, CONV-LOG-005 | `DomainLockTests.REG_DOM_001_AnAddressThatDoesNotParseIsRefusedWhereverALockAppliesAsync`, `AuthenticationServiceTests.REG_IDENT_006_ALinkSentBeforeTheAddressWasRemovedDoesNotSignInAsync`, `AuthenticationServiceTests.REG_IDENT_006_AC6_ACodeSentBeforeTheAddressWasRemovedDoesNotSignInAsync`, `AuthenticationServiceTests.REG_IDENT_006_AC6_ASignInOpenedWithAnAddressSinceRemovedDoesNotSignInAsync` |
+| D-166 D.2, 146: the second-step code sent by text and the carrier asked first (migration `BindSecondStepCodesToTheirChallenge`); ledger line 146 | `52482ed5` | AUTH-FACT-002, AUTH-FACT-002b, AUTH-FACT-004, AUTH-STEP-002 | `AuthenticationServiceTests.AUTH_FACT_002_AC4_APasswordAndASentTextCodeCompleteAtAal2Async`, `AuthenticationServiceTests.AUTH_FACT_002_AC4_ATextCodeIssuedForAnotherSignInIsRefusedAsync`, `AuthenticationServiceTests.AUTH_FACT_002_AC6_AnAskBeforeAFirstFactorSendsNothingAsync`, `AuthenticationServiceTests.AUTH_FACT_002b_AC6_AReportedChangeAtTheAskSendsNoTextCodeAsync`, `AuthenticationServiceTests.AUTH_FACT_002b_AC6_AReportedChangeWithholdsTheTextCodeFromAStepUpAsync`, `AuthenticationServiceTests.AUTH_FACT_002b_AC6_AReportedChangeSendsNoSignInLinkByTextAsync`, `AuthenticationServiceTests.AUTH_ABUSE_003_AC1_ANumberNoAccountHoldsIsAnsweredInTheSameBytesAsync`, `SignInFlowTests.AUTH_FACT_002_AC4_ATextCodeAskedForAndPresentedCompletesAtAal2Async`, `SignInFlowTests.AUTH_FACT_002b_AC6_ALinkByTextToAReportedNumberIsAnsweredAsAnyAskAsync`, `PendingSignInStoreTests.AUTH_FACT_002_AC4_ASecondStepCodeIsReadBackBoundToItsChallengeAsync`, `StepUpGuardTests.AUTH_FACT_002b_AC6_AReportedChangeWithholdsTheTextCodeFromTheCombinationsAsync`, `StepUpGuardTests.AUTH_FACT_002b_AC6_AStepUpLeftWithNoCombinationIsToldToReportTheLossAsync`, `RecoveryServiceTests.AUTH_FACT_002b_AC6_AReportedChangeSendsNoRecoveryLinkByTextAsync`, `SendingServiceTests.AUTH_FACT_002b_AC6_ARecoveryLinkByTextIsConsideredBeforeItGoesAsync` |
+| D-166 D.2, 152 (1) to (3) but for `Effective` (question 40), under X1: each credential event written before its commit | `50cd2637` | AUTH-STEP-007, AUTH-RECOV-007, CONV-DESIGN-002 | `CredentialServiceTests.AUTH_STEP_007_AnEnrolmentWhoseEventRowFailsCommitsNothingAsync`, `CredentialServiceTests.AUTH_STEP_007_ASetPasswordIsAnnouncedAsync`, `RecoveryServiceTests.AUTH_STEP_007_ARecoveredPasswordIsAnnouncedAsync`, `LossReportsTests.AUTH_RECOV_007_ASuspensionWhoseEventRowFailsLeavesTheCredentialActiveAsync`, `LossReportsTests.AUTH_RECOV_007_AReportNamesWhoMadeItAsync` |
+| D-166 D.2, 129 (2): an assertion with no handle refused where no account was named; no changelog line, since every caller passes `identified: true` | `6e0c13e8` | REG-PM-001 | `WebAuthnServiceTests.REG_PM_001_AnAssertionWithNoHandleIsRefusedWhereNoAccountWasNamedAsync`, `WebAuthnServiceTests.REG_PM_001_ASecondStepKeyWithNoHandleIsJudgedAsBeforeAsync` |
+| D-166 D.2, 328: a host's report judged against the gate it costs (`AttainedAssurance`; `IAssuranceProvider.AttainedAsync` in place of `LevelAsync`; `ISessionGates.CostAsync`, `StepUpGuard.CostAsync`) | `669bac7b` | LIB-HOST-004, AUTH-STEP-002, AUTH-STEP-003 | `StepUpGatesTests.LIB_HOST_004_AProviderReportingTheGateMetAdmitsTheActionAsync`, `StepUpGatesTests.LIB_HOST_004_AProviderReportingAnOlderProofIsRefusedWithTheGateAsync`, `StepUpGatesTests.LIB_HOST_004_AProviderReportingNoPhishingResistanceMeetsNoPhishingResistantGateAsync` |
+| D-166 D.2, 326, option A: places compared by country where no city is known; ledger line 326 | `9c55c377` | OPS-ALERT-007 | `SessionServiceTests.OPS_ALERT_007_APlaceWithACountryAndNoCityIsComparedByItsCountryAsync` |
+
+- Parked: 115 (2) (question 31), the link-token case of 419 (question 32), `Effective` on `CredentialSuspended` (question 40), 129 (1) (question 42), the truth-table rows of 328 (question 46); the ledger lines of 115, 129, 152, 328 and 419 with them. No ledger line for 208 or 401. `StepUpAction` gains nothing here; `MessageKind.SignInCode` takes 21.
+- Merge: conflicts in `CHANGELOG.md`, the `StepUpGuard` construction of `InvitationServiceTests` and the parameters of the Hosting `Deployment`, the lines of both sides kept; two semantic conflicts in tests (section 3). The model has no pending change. Fast checks after the merge green (Authentication 905, Authorization 134, Core 512, Hosting 815); the integration suites `Janus.Storage.Tests` 451 (one test put right and its class run again, 4 of 4) and `Janus.Hosting.Tests` 264, no failure.
+
+### `part/registration-accounts`, merged as `899cbebb`
+
+| Instruction | Commit | Items | Tests |
+|---|---|---|---|
+| D-166 D.4, 127: a blank passkey or sign-in address refused at the start | `67c5dcec` | REG-PM-001, LIB-HOST-001 | `StartupValidationTests.REG_PM_001_AC3_ABlankFieldIsRefusedAsync` |
+| D-166 F and D.4, `identity.registration.incomplete`: a step out of order answered 409 | `3ff77d5d` | REG-SESS-002, REG-SESS-003 | `ApiStatusTests.REG_SESS_002_AC1_AStepOutOfOrderIsAConflict`, `RegistrationWizardTests.REG_SESS_003_AConfirmationBeforeTheAddressIsVerifiedIsAConflictAsync`, `ApiStatusTests` (updated) |
+| D-166 D.4, an unverified identifier made primary or backup refused 409 | `13513b9f` | REG-IDENT-005, REG-IDENT-002 | `ApiStatusTests.REG_IDENT_005_AC2_AnUnverifiedIdentifierIsAConflict`, `IdentifierServiceTests.REG_IDENT_002_AnUnverifiedIdentifierIsNotNamedTheBackupAsync` |
+| D-166 D.4, 415: no account created without its document versions | `0283b42e` | REG-SESS-007 | `RegistrationServiceTests.REG_SESS_007_AC2_AnAccountIsNeverCreatedWithoutItsDocumentVersionsAsync` |
+| D-166 D.4, 141: a reserved address answered as a held one; ledger line 141 | `4459da5b` | REG-IDENT-006, REG-SESS-005, REG-INV-002, REG-IDENT-008 | `RegistrationServiceTests.REG_IDENT_006_AC2_AReservedAddressIsNotVouchedForByAProviderAsync`, `RegistrationServiceTests.REG_IDENT_006_AC2_AReservedAddressIsAnsweredAtRegistrationAsAHeldOneIsAsync`, `RegistrationServiceTests.REG_SESS_005_AC4_AnAddressTakenSinceItWasStagedEndsTheSessionAtTheTermsAsync`, `RegistrationServiceTests.REG_SESS_005_AC4_AnAddressReservedSinceItWasStagedEndsTheSessionAtTheTermsAsync`, `RegistrationServiceTests.REG_IDENT_006_AC2_ABoundEmailReservedForAnUndoOpensNoRegistrationAsync`, `RegistrationFlowTests.REG_IDENT_006_AC2_TheUndoRestoresAnAddressARegistrationTriedToTakeAsync` |
+| D-166 D.4, 363: the session a replacement completes under is kept; ledger line 363 | `327ba1fe` | IDN-LIFE-008, BFF-SESS-004 | `IdentifierServiceTests.IDN_LIFE_008_AC1_AReplacementCompletedInAnotherSessionKeepsThatSessionAloneAsync`, `IdentifierServiceTests.IDN_LIFE_008_AC1_AReplacementTheOldAddressConfirmsEndsEverySessionAsync`, `AccountApplicationTests.BFF_SESS_004_AC2_TheSessionThatCompletesAReplacementAnswersToItsNewSecretAsync` |
+| D-166 D.5, 169, 170, 254, 255 and 257: the state a takedown finds held and restored at its reversal (migration `HoldTheStateATakedownFinds`); ledger lines 169, 170, 254, 255 and 257 | `b1960a2e` | IDN-LIFE-003, IDN-LIFE-013, PRIV-RIGHT-004, IDN-ATTR-003 | `TakedownEndpointTests.IDN_LIFE_003_AC2_AReversedTakedownReadsAsReversedAsync`, `TakedownServiceTests.IDN_LIFE_003_AC2_AReversedTakedownReadsAsReversedAsync`, `AccountTests.IDN_LIFE_003_AC5_AReversalRestoresTheSuspensionTheTakedownFoundAsync`, `AccountTests.IDN_LIFE_003_AC5_AReversalReturnsARunningDeletionToItsOwnWindowAsync`, `AccountTests.IDN_LIFE_013_AReversedTakedownReturnsTheAdministratorsSuspension`, `AccountTests.IDN_LIFE_013_AReversedTakedownReturnsTheOwnersDeactivation`, `AccountTests.IDN_LIFE_003_AnErasedAccountHoldsNothing`, `DeletionSweepTests.IDN_LIFE_003_ATakenDownDeletionIsErasedAtItsSettledInstantAsync`, `TakedownServiceTests.IDN_LIFE_003_ARunningDeletionIsTakenDownAsync`, `AccountStatesTests.IDN_LIFE_003_ARunningDeletionIsTakenDownAsync`, `TakedownServiceTests.IDN_LIFE_003_AnErasedAccountIsNotTakenDownAsync`, `TakedownServiceTests.IDN_LIFE_003_ASubjectWithNoAccountIsNotFoundAsync`, `AccountStoreTests.IDN_LIFE_003_TheRowCarriesWhatATakedownHoldsAsync`, `AccountStatesTests.IDN_LIFE_013_AReversedTakedownLeavesTheAccountToAnAdministratorAsync` |
+| D-166 D.5, 171 under X1: the suspension and the reversal written before the commit; ledger line 171 | `d94a6ebe` | IDN-LIFE-003, CONV-DESIGN-002 | `TakedownServiceTests.IDN_LIFE_003_AC4_TheSuspensionIsWrittenInTheTriggerTransactionAsync`, `TakedownServiceTests.IDN_LIFE_003_ARefusedAnnouncementLeavesNothingAsync`, `TakedownServiceTests.IDN_LIFE_003_AC5_TheReversalIsWrittenInItsTransactionAsync`, `TakedownServiceTests.IDN_LIFE_003_ARefusedReversalAnnouncementLeavesNothingAsync`, `TakedownServiceTests.IDN_LIFE_003_AC4_EveryTriggerAnnouncesTheSuspensionAsync`, `AccountStatesTests.IDN_LIFE_003_AC4_TheSuspensionRowCommitsWithTheTriggerAsync` |
+| D-166 D.5, 173 and 174: the reversal and the erasure judged under a row lock; a reason past the limit malformed; the step-up judged after every other refusal | `78521dd6` | IDN-LIFE-003, API-CONV-002 | `TakedownServiceTests.API_CONV_002_AReasonPastTheLimitIsMalformedAsync`, `TakedownEndpointTests.API_CONV_002_AReasonPastTheLimitIsMalformedAsync`, `TakedownServiceTests.IDN_LIFE_003_TheStepUpIsJudgedAfterEveryOtherRefusalAsync`, `AccountStatesTests.IDN_LIFE_003_AReversalAtTheBoundaryWaitsForTheErasureAndRefusesAsync`, `AccountStatesTests.IDN_LIFE_003_AnErasureAtTheBoundaryWaitsForTheReversalAndRefusesAsync` |
+| D-166 D.5, 258 to 261: the lift of a restriction and a cancellation on the subject's behalf stepped up; an account without a photo answered `identity.photo.notfound`; ledger lines 258 to 261 | `32d19634` | PRIV-RIGHT-004, IDN-LIFE-003, IDN-ATTR-003, AUTH-STEP-001 | `AccountAdministrationTests.PRIV_RIGHT_004_LiftingARestrictionAsksForStepUpAsync`, `AccountAdministrationTests.IDN_LIFE_003_ACancellationOnTheSubjectsBehalfAsksForStepUpAsync`, `AccountAdministrationEndpointTests.IDN_ATTR_003_AC3_AnAccountWithoutAPhotoIsAnsweredWithTheCodeAsync`, the PRIV-RIGHT-004 AC2 test (a stale session case added) |
+| D-166 X8: ending sessions that are not the caller's stepped up | `b1f28504` | AUTH-SESS-011, AUTH-SESS-009, AUTH-STEP-001 | `SessionServiceTests.AUTH_SESS_011_RevokingOneAccountAsksForStepUpAsync`, `SessionServiceTests.AUTH_SESS_009_TheExplicitRevocationAsksForStepUpAsync`, `SessionRevocationEndpointTests.AUTH_SESS_011_OneAccountsRevocationAsksForStepUpAsync`, `SessionRevocationEndpointTests.AUTH_SESS_009_EveryRevocationAsksForStepUpAsync` |
+| D-166 D.5, 362 (1) to (4) and (6): a restricted account signs in with its factors, provider and links, reads, and is refused a change; its sessions end at the restriction; ledger line 362 | `6a586266` | IDN-ACCT-007, AUTH-SESS-010 | `AuthenticationServiceTests.IDN_ACCT_007_AC2_ARestrictedAccountSignsInWithItsFactorAsync`, `AuthenticationServiceTests.IDN_ACCT_007_AC2_ARestrictedAccountSignsInWithItsProviderAsync`, `AuthenticationServiceTests.IDN_ACCT_007_AC2_ARestrictedAccountIsSentItsSignInLinkAsync`, `AuthenticationServiceTests.IDN_ACCT_007_ASuspendedDeletingOrDeletedAccountIsStillRefusedAsync`, `AuthenticationServiceTests.IDN_ACCT_007_ARestrictedAccountsSignInTrustsNoDeviceAsync`, `OidcServiceTests.IDN_ACCT_007_AC2_ARestrictedAccountsClaimsAreAnsweredAsync`, `RecoveryServiceTests.IDN_ACCT_007_AC2_ARestrictedAccountRecoversItsPasswordAsync`, `CredentialServiceTests.IDN_ACCT_007_AC2_AnApprovedRecoveryEnrolsForARestrictedAccountAsync`, `InvitationServiceTests.IDN_ACCT_007_AC2_ARestrictedAccountAcknowledgesNoInvitationAsync`, `AccountStatesTests.AUTH_SESS_010_RestrictingAnAccountEndsItsSessionsAsync`, `AccountApplicationTests.IDN_ACCT_007_AC2_ARestrictedAccountSignsInReadsAndIsRefusedAChangeAsync` |
+| D-166 D.5, an out-of-band erasure by the account's state (question 45) | `0149b6d6` | PRIV-RIGHT-001, IDN-LIFE-003 | `PrivacyRequestTests.PRIV_RIGHT_001_IDN_LIFE_003_AnActiveOrRestrictedAccountEntersTheWindowAsync`, `PrivacyRequestTests.PRIV_RIGHT_001_IDN_LIFE_003_ASuspendedAccountEntersTheWindowAndComesBackSuspendedAsync`, `PrivacyRequestTests.PRIV_RIGHT_001_IDN_LIFE_003_ADeletingAccountKeepsItsRunningWindowAsync`, `PrivacyRequestTests.PRIV_RIGHT_001_IDN_LIFE_003_ADeletedAccountChangesNothingAsync`, `PrivacyRequestTests.PRIV_RIGHT_001_IDN_LIFE_003_AnErasureThatCannotBeginFailsTheFulfilmentAsync`, `AccountTests.IDN_LIFE_003_ASuspendedAccountEntersTheWindowOutOfBandAndComesBackSuspended`, `AccountStatesTests.IDN_LIFE_003_ASuspendedAccountBeginsItsDeletionOutOfBandAsync` |
+| D-166 D.5, the grants at deletion: the account's grants revoked in the erasure transaction (`SubjectEraser` takes `DataConnections`; `GrantStore.RaiseAsync`) | `f7757aff` | IDN-LIFE-014, IDN-PRIN-003, AUTHZ-CACHE-001 | `SubjectEraserTests.IDN_LIFE_014_TheAccountsGrantsReadRevokedAndEveryRowStandsAsync` |
+| D-166 D.5, 362 (5), the mailbox half: a restricted holder's mailbox stays owed enabled | `0bab2cda` | IDN-ACCT-007, INT-MAIL-006a | `MailboxStoreTests.IDN_ACCT_007_AC2_ARestrictedHolderStandsAsync`; the app-password half is `AppPasswordsTests.REG_MAIL_002_AC4_ARestrictedAccountListsAndRevokesAndCreatesNoneAsync`, from 263 (section 3) |
+| The deployment key's migration test writes its rows in the columns of its own migration (section 3) | `60dd9cb9` | PRIV-RIGHT-005a | `DeploymentDataKeyTests` (the PRIV-RIGHT-005a AC18 rows) |
+
+- Parked: 143 (question 23), the removal of the `photo.enabled` family of 144 and 315 (question 25). Committed under questions still open: the reversal of a takedown (question 44), the codes of the fulfilment (question 45). 306 was left to the working branch, then parked (question 31). The patches of 143 and 144 are held aside.
+- Merge: conflicts in `CHANGELOG.md`, `CredentialService.ActingAsync` (this part's structure, in which enrolment is not asked about the restriction, with the working branch's access context), `InvitationAcknowledgement` (the gate, the scope, the roles and the restriction), `StepUpAction.cs` (section 3), `InvitationServiceTests` and `ErrorCodesTests` (both sides kept, in order); semantic conflicts in tests (section 3). The model has no pending change. Fast checks after the merge green (Authentication 929, Core 512, Hosting 826, Identity 99, Privacy 274); the integration suites `Janus.Storage.Tests` 460 (one test put right and its class run again, 6 of 6), `Janus.Hosting.Tests` 269, `Janus.Cli.Tests` 69, no failure.
+
+### `part/gates`, merged as `02bb2419`
+
+| Instruction | Commit | Items | Tests |
+|---|---|---|---|
+| D-166 D.11, 142: the step a swept session reaches succeeds on the retry | `e39bc024` | BFF-ORDER-001 | `SessionRequirementTests.BFF_ORDER_001_ASweptSessionIsRefusedOnceAndTheRetrySucceedsAsync` |
+| D-166 D.11, 272: every correlation reference marked never logged; ledger line 272 | `fda23656` | CONV-LOG-003, INT-GEN-003 | `NeverLoggedTests.CONV_LOG_003_AC1_EveryCorrelationReferenceIsMarked` |
+| D-166 E.10: the migration tool's files marked generated code | `30a8c32c` | CONV-SETUP-004 | `LibraryStructureTests.CONV_SETUP_004_AC3_OnlyTheMigrationToolsFilesAreGeneratedAndEverySuppressionIsJustified` |
+| D-166 E.9: a failed migration run exits non-zero and applies nothing after the failing migration | `58f11da4` | OPS-MIG-002 | `MigrationRunTests.OPS_MIG_002_AC1_AFailedRunExitsNonZeroAndAppliesNothingAfterTheFailingMigrationAsync` |
+| D-166 D.11, 167: the product name only before a project name; ledger line 167 | `f94cefec` | CONV-NAME-001 | `ProductNameTests.CONV_NAME_001_AC2_ADottedNameThatIsNoProjectIsFound`, `ProductNameTests.CONV_NAME_001_AC2_ALockedPackageIsHeldToTheProjectsInLowerCase` |
+| D-166 D.11, 271: the books fixture declared under a neutral resource type | `e2fc8969` | PRIV-SENS-002a | `ProcessingRecordsTests` (the fixture) |
+| D-166 D.11, 351: the unreferenced OpenID Connect handler package dropped | `1edd76e0` | CONV-DESIGN-008 | `LibraryStructureTests` (the allowed list) |
+| D-166 D.11, 385: the consent refusals read as denials too; ledger line 385 | `8e360625` | CONV-ERR-001 | `LibraryStructureTests.CONV_ERR_001_AC1_NoDenialIsSignalledByAnException` |
+| D-166 D.11, 386: the item behind each interface the host implements named | `d7629d29` | CONV-DESIGN-002, LIB-HOST-001 | `PublicSurfaceTests` (`NotServiceContracts`) |
+| D-166 D.11, 405: the vendor initialism found as a whole word | `a54e846b` | LIB-EXT-001 | `IntegrationBoundaryTests.LIB_EXT_001_AC3_NoProviderNameAppearsInTheCoreNamespace` |
+| D-166 D.11, 416: the grants sought by condition in every reverse read | `a85e1576` | OPS-DB-003 | `VolumeTests.OPS_DB_003_AC2_TheReverseLookupReadsNoTableWhole` |
+| D-166, Tier 1 correction (2): the test projects held to the grants the item permits | `1071f4a6` | CONV-LAYOUT-002 | `LibraryStructureTests.CONV_LAYOUT_002_AC1_InternalsAreVisibleOnlyWhereThePermittedGrantsSay` |
+| D-166 D.10, 378, and Tier 1 correction (3): pending migrations judged by list, the deploy stopped only on data loss; `destructive-operations.sh` fails where `DESTRUCTIVE_DDL_GATE` is unset, empty, or neither `enabled` nor `disabled`; ledger line 378 | `6482b960` | OPS-DEP-001, OPS-DEP-002 | No test can decide it. Verified by scenario: the gate was run against scratch repositories for each value of the variable |
+| D-166 D.10, 393: a fault logged by its frames and those of each inner fault, never by its message; ledger line 393 | `98b1227d` | BFF-ERR-002, INF-BG-001, CONV-LOG-003 | `ErrorTranslationTests.BFF_ERR_002_AC2_AFaultIsLoggedByTheFramesOfItAndItsInnerFaultAndNoMessageAsync`, the INF-BG-001 AC2 test of `BackgroundWorkerTests` (changed) |
+| D-166 D.10, 276 (A): a callback refusal other than the rate limit answered 422 | `682e2521` | INT-GEN-003, BFF-MACH-002, BFF-MACH-003, IDN-LIFE-012a | `HostCallbackTests`, `DeliveryReportEndpointTests` and `ProviderEventTests` (changed); `ProviderEventTests.IDN_LIFE_012a_AnEventNothingDeclaredOrReadableVerifiesIsRefusedAsync` delivers to Apple |
+| D-166 D.10, 276 (B): a claim settled once carried; an unsettled claim taken over after `integration.callback.claimtimeout` (`PT5M`, floor `PT1M`); `integration.callback.inprogress` 409; migration `SettleCallbackClaims`, which marks the claims standing settled; ledger line 276 | `82a3ae2b` | BFF-MACH-002, INT-GEN-003, IDN-LIFE-012a | `CallbackStoreTests.BFF_MACH_002_AC3_AnEventIsClaimedOnceAsync`, `CallbackStoreTests.BFF_MACH_002_AC3_AnEventGivenBackIsClaimedAgainAsync`, `CallbackStoreTests.BFF_MACH_002_AC3_AnUnsettledClaimIsTakenOverOnlyAfterFiveMinutesAsync`, `CallbackStoreTests.IDN_LIFE_012a_AProviderEventIsClaimedSettledOnceAsync`, `HostCallbackTests.BFF_MACH_002_AC3_ADeliveryWhoseRouteNeverFinishedIsCarriedAfterFiveMinutesAsync`, `HostCallbackTests.BFF_MACH_002_AC3_ADeliveryMeetingOneInProgressIsNotAcknowledgedAsync` |
+| D-166 D.11, 355: a derived case asked once for each derivation, the sample host carrying a second derivation; ledger line 355 | `7c87e688` | LIB-TEST-001 | `ConformanceSuiteTests.LIB_TEST_001_AC2_AWrongDerivedRowIsReportedForEachDerivationAsync` |
+| D-166 D.11, 359 and 382 (1): each configuration key held with its type, scope and constraints in `configuration-keys.txt` | `340aff6c` | LIB-API-001 | `SettingsCatalogueTests.LIB_API_001_AC2_TheKeysAreTheContract`, in place of `TheKeyNamesAreTheContract` and `TheFamiliesAreTheContract` |
+| D-166 D.11, 359 and 382 (2): each code held with the status it answers with in `error-statuses.txt` | `120aa5e4` | LIB-API-001 | `ErrorCodesTests.LIB_API_001_AC2_TheStatusesAreTheContract` |
+| D-166 D.11, 359 and 382 (4) for `error-statuses.txt`: the release script judges the status each code answers with | `bd803a8e` | LIB-API-001, REF-001, CONV-VCS-003 | No test can decide it. Verified by 11 scenarios in a scratch repository |
+| D-166 D.11, 377: the schema scanned for the fingerprint key after every store; ledger line 377 | `2b826111` | INF-HOST-003 | `FingerprintKeyTests.INF_HOST_003_AC4_NoStoreWritesTheFingerprintKeyAsync`, `FingerprintKeyTests.INF_HOST_003_AC4_EveryStoreThatComputesAFingerprintIsDriven` |
+| D-166, Tier 1 correction (1), but for what questions 49 and 53 park: identifiers bound at the edge as their own types (`IParsable<T>` on twelve identifiers of `Janus.Core`, about fifty handlers); a route naming the max UUID as a subject malformed | `097b2001` | CONV-DESIGN-004, CONV-DESIGN-006 | `SubjectIdTests.CONV_DESIGN_004_AC2_ASubjectIsReadFromTextAndTheMaxUuidIsNot`, `AccountAdministrationEndpointTests.CONV_DESIGN_004_AC2_ARouteNamingTheMaxUuidAsASubjectIsMalformedAsync`, `CanonicalValueTests` (section 3) |
+| D-166, Tier 1 correction (1): `MailboxPush.Address` an `EmailAddress`, `HostedMailbox.Address` an `EmailAddress?` (question 52) | `55850e21` | CONV-DESIGN-004, INT-MAIL-001, INT-MAIL-007 | `JmapMailServerTests` and `InvitationServiceTests` (changed) |
+| D-166, Tier 1 correction (1) (c) 3: the self-hosted corpus address read as a `Uri`, the request unchanged | `fa30c44f` | CONV-DESIGN-004 | `ScreeningTests.INT_PWD_003_AC1_SwitchingToTheSelfHostedCorpusIsConfigurationOnlyAsync` |
+
+- Parked: 135 (question 37), 389 whole (question 48), the exemption rule of CONV-DESIGN-004 AC2 with `BrowserProfileLog` and `Concealment` (question 49), 359 and 382 (3) with the endpoint lines of (4) and the scenarios of (5) (questions 50 and 51), the four string-bound routes (question 53). No ledger line for 382 or 389. The changelog line of 389 (6) waits with 389 (question 47). The repository variable of 378 is the owner's to create (question 54). The last LIB-TEST-001 AC4 probe was built on the working branch after 145 (`43b4fec4`).
+- Merge: conflicts in `AccountAdministrationEndpoints`, `AccountEndpoints`, `ApiStatus`, `OrganizationEndpoints`, `PrivacyEndpoints`, `SessionRevocationEndpoints`, `configuration-keys.txt` and `AccountAdministrationEndpointTests`. The endpoints keep the working branch's session argument (`browser.Required.Id`) with this part's typed route values, the `new OrganizationId(id)` locals dropped and `id` passed on; `ApiStatus` keeps `MailboxTaken` and `CallbackInProgress`; the test file keeps both sides' tests; the contract files and one fixture are recorded in section 3. The model has no pending change. Fast checks after the merge green; the integration suites `Janus.Storage.Tests` 465, `Janus.Hosting.Tests` 269, `Janus.Cli.Tests` 69, `Janus.Conformance.Tests` 11, no failure.
+- Fast checks in a worktree fail `ProductNameTests.CONV_NAME_001_AC2_TheProductNameAppearsOnlyInNamespacesIdentifiersAndTheEntryPoint` alone, since a worktree's `.git` is a file whose `gitdir` path names the product; each part's counts above stand with that one failure, and the fast checks after each merge ran in the repository's own checkout, where it passes.
+
+### On `corrections-4`, after the merges
+
+| Instruction | Commit | Items | Tests |
+|---|---|---|---|
+| D-166 D.3, the message kinds (1): a verification sent with its link is a kind of its own | `9fde7b80` | REG-SESS-003 | `IdentifierServiceTests.REG_SESS_003_AnAddedIdentifierIsSentItsCodeAndItsLinkAsync`, `RegistrationServiceTests.REG_SESS_003_ARegistrationMessageCarriesItsCodeAndItsLinkAsync`, `DefaultMessageTemplatesTests.REG_SESS_003_AVerificationLinkRendersItsCodeAndItsLink` |
+| D-166 D.3, the message kinds (2): `CredentialSuspended` (23) carries `{link}`, the cancel link; ledger line 123 | `5b6102f3` | AUTH-RECOV-007 | `LossReportsTests.AUTH_RECOV_007_TheNoticeRepeatsAcrossTheWindowAsync`, `DefaultMessageTemplatesTests` (the linked kinds), `RecoveryFlowTests` (the template), `VocabularyContractTests` |
+| D-166 D.3, the message kinds (3): `OobDeletionNotice` (24), sent after the fulfilment's commit where it started the window | `3848dae9` | IDN-LIFE-003 | `PrivacyRequestTests.IDN_LIFE_003_AnErasureThatStartsTheWindowSendsTheOutOfBandNoticeAsync`, `PrivacyRequestTests.IDN_LIFE_003_AnErasureOnAnAccountAlreadyDeletingSendsNoNoticeAsync` |
+| D-166 D.6, 223 point (3): a role the deployment does not hold answered 422 `authz.grant.unresolved` naming `roles` | `18b79ca4` | REG-INV-001 | `InvitationServiceTests.REG_INV_001_TheRolesAttachedAskWhatAGrantAsksAsync` (the unknown case), `InvitationEndpointTests.REG_INV_001_ARoleTheDeploymentDoesNotHoldIsUnresolvedAsync` |
+| D-166 D.9, 145 and 279 (1): a pushed `redirect_uri` other than the registered one refused `invalid_request` and logged with the correlation identifier; an absent one takes the registered one | `00b8729f` | AUTH-OIDC-006, API-REDIR-001 | `OidcFlowTests.AUTH_OIDC_006_AC1_APushedRequestNamingAnUnregisteredDestinationIsRefusedAsync`, `OidcFlowTests.API_REDIR_001_AC2_ADestinationContainingTheRegisteredOneIsRefusedAsync`, `OidcFlowTests.API_REDIR_001_AC4_OnlyTheRefusedDestinationIsRecordedAsync`, `ProviderConformanceTests.AUTH_OIDC_006_AC1_APushNamingAnotherDestinationIsRefusedAsync` |
+| LIB-TEST-001 AC4, the last probe: a push naming an unregistered destination; a 400 carrying a `request_uri` is a finding of its own | `43b4fec4` | LIB-TEST-001, AUTH-OIDC-006 | `ProviderProbesTests` (16 probes), `ConformanceSuiteTests.AUTH_OIDC_006_AC1_TheSampleHostsProviderRefusesEveryRetiredFormAsync` |
+| D-166 D.9, 145 and 279: a return address `https`, or `http` on `127.0.0.1` or `[::1]` alone; registration refuses as the start does (`model.startup.redirectclient`) | `74b61698` | AUTH-OIDC-006, API-REDIR-001 | `RedirectValidationTests.AUTH_OIDC_006_APlaintextReturnAddressStopsStartupAsync`, `ClientRegistryTests.AUTH_OIDC_006_AReturnAddressStartupWouldRefuseIsNotRegisteredAsync`, `RegisterClientTests.AUTH_OIDC_006_APlaintextReturnAddressIsNotRegisteredAsync` |
+| D-166 D.9, 145 and 279: the done step answers the origin of the registered return address | `4ad2e5c9` | API-REDIR-002, REG-SESS-008 | `RegistrationServiceTests` (the API-REDIR-002 and REG-SESS-008 tests, changed) |
+| D-166 D.9, 145 and 279: a session keeps the client that registered it (`sessions.client`, migration `KeepTheRegisteringClientOnItsSession`) and answers its landing (`SessionDetail.Landing`); ledger lines 145 and 279 | `9274ce1a` | REG-SESS-008, API-REDIR-002 | `RegistrationFlowTests.REG_SESS_008_TheDoneStepReadsItsReturnFromTheSessionAsync`, `RegistrationFlowTests.REG_SESS_008_ASessionThatCapturedNoClientAnswersNoLandingAsync`, `SessionStoreTests.REG_SESS_008_TheSessionKeepsTheClientTheRegistrationCapturedAsync` |
+| D-166 D.9, 160 but for `KeysAsync` (question 55): `IOidc.ClaimsAsync` takes an access context and answers the effective identity alone | `00f1e14f` | LIB-API-005 | `OidcServiceTests.LIB_API_005_ClaimsAnswerOnlyTheEffectiveSubjectAsync` |
+| D-166 D.9, 286: a withdrawal suspends where no other usable credential, the password included, may begin a sign-in; ledger line 286 | `a508410c` | IDN-LIFE-012a | `ProviderEventTests.IDN_LIFE_012a_AC2_AWithdrawnIdentityWhoseOtherWayInIsHeldSuspendsTheAccountAsync` |
+| D-166 D.9, 394: every provider error answered with its code alone (`error_description` and `error_uri` cleared on the six response events of the endpoints served); ledger line 394 | `fa520b95` | LIB-API-003 | `OidcFlowTests.LIB_API_003_AC1_NoProviderErrorCarriesADescriptionAsync` |
+| D-166 D.8, 304 (1): each job's service refuses a principal of another operation; `BackgroundJob.RunAsync` takes the access context; ledger line 304 | `f8cf504c` | IDN-PRIN-001, INF-BG-002 | `BackgroundJobsTests.IDN_PRIN_001_AC3_EveryJobRefusesAPrincipalOfAnotherOperationAsync` (section 3) |
+| The integration suites put right after `43b4fec4` and `a7546b70` (section 2) | `47da7a0f`, `266227bf` | LIB-TEST-001, AUTH-OIDC-006, OPS-SEC-003 | `ConformanceSuiteTests.AUTH_OIDC_006_AC1_AProviderAdmittingWhatItShouldRefuseIsReportedAsync` (21 findings, the destination finding asserted); three cases of `FingerprintKeyRotationTests` |
+| D-166 C, X2 checked again: two reads merged since that still fell back now fault (`AuthenticationService.HeldAsync`, `RecoveryService.RaiseAsync`) | `afeca4a8` | OPS-CFG-008, CONV-ERR-001 | The fault tests of each area |
+| D-166 C, X1: a recovery approval's alerts raised before its commit | `caf6eaf3` | AUTH-RECOV-002, OPS-ALERT-001, CONV-DESIGN-002 | `RecoveryServiceTests.CONV_DESIGN_002_AnApprovalWhoseAlertCannotBeWrittenCommitsNothingAsync` |
+| D-166 C, X1: `IPrivacyAlerts.RaiseAsync` and `IAccessAlerts.RaiseAsync` return a result; a raise whose row cannot be written fails its caller | `8007c5b9` | OPS-ALERT-001, OPS-ALERT-005, CONV-DESIGN-002 | `ReadVolumeTests.CONV_DESIGN_002_AnAnomalyThatCannotBeWrittenIsTheAnswerAsync`, `LegalDocumentTests.CONV_DESIGN_002_ARaiseThatCannotBeWrittenIsTheAnswerAsync`, `DeadlineSweepTests.CONV_DESIGN_002_AWarningThatCannotBeWrittenFailsThePassAsync`, `HolidayListWatchTests.CONV_DESIGN_002_ARaiseThatCannotBeWrittenFailsTheWatchAsync` |
+| D-166 C, X1: a spent delivery raised in the transaction that records it | `014801ae` | IDN-LIFE-003a, CONV-DESIGN-002 | `OutboxPublisherTests.CONV_DESIGN_002_AnExhaustionThatCannotBeRaisedCommitsNothingAsync` |
+| D-166 C, X1: a consent change whose event row cannot be written fails | `b16e0a59` | PRIV-CONS-008, PRIV-RIGHT-001a, CONV-DESIGN-002 | `ConsentTests.CONV_DESIGN_002_AChangeWhoseEventCannotBeWrittenCommitsNothingAsync` |
+| D-166 C, X1: an alert destination change and its event written together | `4f65e214` | OPS-ALERT-004a, CONV-DESIGN-002 | `AlertDestinationChangeTests.CONV_DESIGN_002_TheChangeAndItsEventCommitTogetherAsync` |
+| D-166 C, X7, and 119 (7): the enrolment link of an assisted recovery sent under `signin` | `a01214a8` | REG-IDENT-002, AUTH-ABUSE-004 | `RecoveryServiceTests.REG_IDENT_002_AC4_TheEnrolmentLinkIsSentUnderSignInAsync` |
+| D-166 C, X3: a recovery code spent under a lock on its set | `b589a447` | AUTH-FACT-008, CONV-DESIGN-003 | `RecoveryCodeStoreTests.AUTH_FACT_008_AC1_TwoConcurrentSpendsOfOneCodeSucceedOnceAsync` |
+| D-166 C, X4 and X5 with the correction of D-178: an unreadable member named as the request writes it, by the shared reader | `88d219cf` | API-CONV-002 | `ApiConventionTests.API_CONV_002_AC4_AnUnreadableMemberIsNamedAsTheRequestWritesIt` |
+| D-166 C, X3: a generator's code judged under a lock on its row | `ebf90bff` | AUTH-FACT-005, CONV-DESIGN-003 | `AuthenticatorStoreTests.AUTH_FACT_005_AC3_TheSameCodeTwiceAtOnceSucceedsOnceAsync` |
+| D-166 C, X3: a security key's counter judged under a lock on its row | `07c22428` | AUTH-FACT-014, CONV-DESIGN-003 | `AuthenticatorStoreTests.AUTH_FACT_014_AC3_TwoAssertionsOfOneCounterAtOnceSucceedOnceAsync` |
+| D-166 C, X3: only the hash the password verified against is rehashed | `2d9499ac` | AUTH-PASS-007, CONV-DESIGN-003 | `PasswordStoreTests.AUTH_PASS_007_AC2_ARehashOfAPasswordSetSinceChangesNothingAsync` |
+| D-166 C, X3: a trusted browser's failures counted under a lock on its row | `fe7c1911` | AUTH-FACT-015, CONV-DESIGN-003 | `DeviceStoreTests.AUTH_FACT_015_AC6_FailuresAtOnceAreAllCountedAsync` |
+| D-166 C, X3 (F5): a held credential restored only where its row still holds | `110cef9e` | IDN-LIFE-012a, CONV-DESIGN-003 | `SessionServiceTests.IDN_LIFE_012a_AHoldEndedSinceTheReadIsNotRestoredAsync` |
+| D-166 C, X3 (R1, R2): a recovery link spent under a lock on its row | `99f7b417` | AUTH-RECOV-002, AUTH-RECOV-005, CONV-DESIGN-003 | `RecoveryLinkStoreTests.AUTH_RECOV_002_AC1_TwoOpeningsOfOneLinkAtOnceOpenOnceAsync` |
+| D-166 C, X3 (R3): an enrolment session ended under a lock on its link | `aeec66ee` | AUTH-RECOV-002, CONV-DESIGN-003 | `RecoveryLinkStoreTests.AUTH_RECOV_002_AC1_TwoCompletionsOfOneEnrolmentSessionAtOnceCompleteOnceAsync` |
+| D-166 C, X3 (R4): the day limits of approvals counted under a hold | `f0cf93be` | AUTH-RECOV-002, CONV-DESIGN-003 | `RecoveryApprovalStoreTests.AUTH_RECOV_002_ApprovalsAtOnceAreCountedOneAfterAnotherAsync` |
+| D-166 C, X3 (R5): a challenge completed under a lock on its row | `d7697618` | AUTH-STEP-001, CONV-DESIGN-003 | `ChallengeStoreTests.CONV_DESIGN_003_AC6_TwoCompletionsOfOneSignInAtOnceCompleteOnceAsync` |
+| D-166 C, X3 (R6): an age or a code of a registration decided under a lock on the session | `df64c62b` | REG-SESS-003, REG-PROF-002, CONV-DESIGN-003 | `RegistrationSessionStoreTests.REG_SESS_003_AC3_WrongCodesAtOnceAreAllCountedAsync` |
+| D-166 C, X3 (C1): an account's transition decided again under a lock on the account | `7b0c1e59` | IDN-LIFE-013, IDN-LIFE-003, PRIV-RIGHT-004, CONV-DESIGN-003 | `AccountLifecycleTests.IDN_LIFE_013_ASuspensionCommittedMeanwhileIsNotReversedByALinkAsync`, `AccountDirectoryTests.IDN_LIFE_013_AReactivationAndASuspensionAtOnceLeaveTheAdministratorsAsync` |
+| D-166 C, X3 (C2): a restriction, a deletion or a takedown decided under a lock on the account | `6755f833` | IDN-LIFE-003, PRIV-RIGHT-004, CONV-DESIGN-003 | `AccountStatesTests.IDN_LIFE_003_TwoTakedownsAtOnceTakeTheAccountDownOnceAsync` |
+| D-166 C, X3 (C3): what an account keeps judged under locks on its credentials | `eb1df5d0` | IDN-LIFE-012, IDN-LIFE-012a, AUTH-STEP-006, CONV-DESIGN-003 | `AuthenticatorStoreTests.IDN_LIFE_012_AC3_TwoUnlinksAtOnceLeaveAWayInAsync` |
+| D-166 C, X3 (C4): a suspension for a withdrawal decided under a lock on the account | `bf8b0abb` | IDN-LIFE-012a, IDN-LIFE-013, CONV-DESIGN-003 | `ProviderEventTests.IDN_LIFE_012a_AC2_ADeletionBegunMeanwhileIsLeftToItAsync` |
+| D-166 C, X3 (C5): a provider linked once under a lock on the account | `2fcde660` | IDN-LIFE-012, CONV-DESIGN-003 | `AuthenticatorStoreTests.IDN_LIFE_012_TwoLinksOfOneProviderAtOnceLinkOnceAsync` |
+| D-166 C, X3 (C6): a loss report ended under locks on the account and the credential | `9408bf46` | AUTH-RECOV-007, AUTH-RECOV-007a, CONV-DESIGN-003 | `LossReportsTests.AUTH_RECOV_007_ACancellationCommittedMeanwhileStandsAsync` |
+| D-166 C, X3 (C7): identifiers changed under a lock on the set | `d963cc86`, `8c4b6876` | REG-IDENT-005, REG-IDENT-006, REG-IDENT-009, CONV-DESIGN-003 | `IdentifierServiceTests.REG_IDENT_006_AC1_AnAddressMadePrimaryMeanwhileIsSparedAsync`, `IdentifierStoreTests.REG_IDENT_005_TwoPromotionsAtOnceLeaveOnePrimaryAsync` |
+| D-166 C, X3 (C7): a corporate address taken under the identifier lock | `32c0bb13` | REG-MAIL-001, REG-MAIL-003, CONV-DESIGN-003 | `InvitationServiceTests.REG_MAIL_001_AnAddressProvedMeanwhileHearsOfTheCorporateAddressAsync` |
+| D-166 C, X3 (C8): a code judged under a lock on its verification | `278c0312` | REG-IDENT-004, REG-IDENT-007, CONV-DESIGN-003 | `IdentifierServiceTests.REG_IDENT_007_AC2_AChangeAbandonedMeanwhileIsNotAppliedAsync`, `PendingVerificationStoreTests.REG_IDENT_004_WrongCodesAtOnceAreAllCountedAsync` |
+| D-166 C, X3 (O1): an invitation decided under a lock on its row | `9dae9201` | IDN-LIFE-009a, REG-INV-001, CONV-DESIGN-003 | `InvitationServiceTests.REG_INV_001_AnInvitationRevokedMeanwhileAttachesNothingAsync`, `InvitationStoreTests.IDN_LIFE_009a_AC2_TwoPressesAtOnceAttachTheInvitationOnceAsync` |
+| D-166 C, X3 (O2): an organization's deletion decided under a lock on its row | `3a7648c8` | IDN-ORG-003, CONV-DESIGN-003 | `InvitationServiceTests.IDN_ORG_003_AC12_ADeletionRequestedMeanwhileTakesNoInvitationAsync`, `OrganizationErasureSweepTests.IDN_ORG_003_AC2_AWindowCancelledMeanwhileIsLeftBeAsync`, `OrganizationStatesTests.IDN_ORG_003_AC2_ACancellationAndTheErasureAtOnceDoNotBothStandAsync` |
+| D-166 C, X3 (O3): a membership ended under a lock on its row | `6afb1007` | IDN-MEM-001, CONV-DESIGN-003 | `MembershipEndingTests.IDN_MEM_001_TwoEndsAtOnceEndTheMembershipOnceAsync` |
+| D-166 C, X3 (O4, O5): a role or a grant decided under a lock on the role | `98e4763a` | OPS-CFG-007, AUTHZ-GRANT-002, CONV-DESIGN-003 | `GrantEndpointTests.OPS_CFG_007_AC1_ARoleThatCameToAdministerMeanwhileIsNotConferredAsync`, `GrantStoreTests.AUTHZ_GRANT_002_TwoGrantsSayingOneThingAtOnceWriteOneAsync` |
+| D-166 C, X3 (O6): group members changed with the organization's groups held | `5ab31fe9` | AUTHZ-GROUP-001, OPS-CFG-007, CONV-DESIGN-003 | `GrantEndpointTests.AUTHZ_GRANT_001_AGroupRemovedMeanwhileIsGivenNothingAsync`, `GroupEndpointTests.AUTHZ_GROUP_001_ANestingMadeMeanwhileIsJudgedForACycleAsync`, `GroupEndpointTests.AUTHZ_GRANT_003_AC3_AGroupGivenAGrantMeanwhileIsNotRemovedAsync`, `GroupEndpointTests.OPS_CFG_007_AC1_AGroupThatCameToAdministerMeanwhileGainsNoMemberAsync`, `GroupClosureStoreTests.AUTHZ_GROUP_001_TwoNestingsAtOnceCloseNoCycleAsync` |
+| D-166 C, X3 (O7): an export counted with its actor's exports held | `068c529c` | OPS-ALERT-006, CONV-DESIGN-003 | `ExportOperationsTests.OPS_ALERT_006_AnExportAdmittedMeanwhileIsCountedAsync`, `ExportStoreTests.OPS_ALERT_006_ExportsAtOnceAdmitNoMoreThanTheLimitAsync` |
+| D-166 C, X3 (O8): a derivation refreshed with the organization's tree held | `e945e6c5` | AUTHZ-DERIVE-005, CONV-DESIGN-003 | `MaterialisationTests.AUTHZ_DERIVE_005_AC1_TwoRefreshesAtOnceWriteTheGrantOnceAsync` |
+| D-166 C, X3 (O9): a restriction edited on the set read under the settings row lock | `a5500e9c` | OPS-CFG-002, AUTH-ABUSE-004, CONV-DESIGN-003 | `RestrictionAdministrationTests.OPS_CFG_002_AC6_ARestrictionTightenedMeanwhileStaysTightenedAsync` |
+| D-166 C, X3 (V1): a privacy request decided under a lock on its row; the deadline sweep leaves a decided request | `0a9dded2` | PRIV-RIGHT-001, PRIV-RIGHT-002, CONV-DESIGN-003 | `DeadlineSweepTests.PRIV_RIGHT_002_AC5_ARequestDecidedMeanwhileDoesNotLapseAsync`, `PrivacyRequestTests.PRIV_RIGHT_002_AC5_AnErasureRefusedMeanwhileBeginsNoDeletionAsync`, `PrivacyRequestStoreTests.PRIV_RIGHT_002_AC5_TwoDecisionsAtOnceDecideOnceAsync` |
+| D-166 C, X3 (V2): a privacy request queued with the subject's requests of its type held | `9cc80a40` | PRIV-RIGHT-001, CONV-DESIGN-003 | `PrivacyRequestTests.PRIV_RIGHT_001_AC1_ARequestQueuedMeanwhileMakesADuplicateAsync`, `PrivacyRequestStoreTests.PRIV_RIGHT_001_AC1_TwoRequestsOfATypeAtOnceQueueOneAsync` |
+| D-166 C, X3 (V3): a subject's export counted with their exports held | `13b7f357` | PRIV-RIGHT-003, CONV-DESIGN-003 | `ExportServiceTests.PRIV_RIGHT_003_AnExportCountedMeanwhileIsCountedAsync`, `ExportLedgerTests.PRIV_RIGHT_003_ExportsAtOnceCountNoMoreThanTheLimitAsync` |
+| D-166 C, X3 (V4): an erasure delivery completed under a lock on its row | `34d62537` | IDN-LIFE-003a, CONV-DESIGN-003 | `ErasureServiceTests.IDN_LIFE_003a_AnErasureClosedMeanwhileIsNotClosedTwiceAsync`, `OutboxStoreTests.IDN_LIFE_003a_TwoCompletionsAtOnceCloseTheErasureOnceAsync` |
+| D-166 C, X3 (V5): a consent granted or withdrawn with the subject's records held | `5c72f803` | PRIV-CONS-008, PRIV-RIGHT-001a, CONV-DESIGN-003 | `ConsentTests.PRIV_CONS_008_AC5_AConsentWithdrawnMeanwhileIsWithdrawnOnceAsync`, `ConsentStoreTests.PRIV_CONS_008_AC5_TwoWithdrawalsAtOnceWithdrawOnceAsync` |
+| D-166 C, X3 (V6): a key rotation run with its progress held, each batch from the committed point | `1aff8edd` | OPS-SEC-003, CONV-DESIGN-003 | `KeyRotationTests.OPS_SEC_003_AC2_TwoRunsAtOnceStartAndCompleteTheRotationOnceAsync`, `KeyRotationTests.OPS_SEC_003_AC4_TwoSealsAtOnceRetireTheRotationOnceAsync`, `FingerprintRotationTests.OPS_SEC_003_AC6_TwoRunsAtOnceStartAndCompleteTheRotationOnceAsync`, `FingerprintRotationTests.OPS_SEC_003_AC6_TwoSealsAtOnceRetireTheRotationOnceAsync` |
+| D-166 C, X3 (S1), the counting half: counted, spent and released on the ledger rows as they stand; a tracked send's reference compared in constant time | `056b8580`, `5c3e2ec5` | AUTH-ABUSE-004, INT-SMS-005, CONV-DESIGN-003, CONV-CODE-007 | `SendLedgerTests.AUTH_ABUSE_004_AC1_SendsCountedAtOnceAreEachCountedAsync`, `SendLedgerTests.AUTH_ABUSE_004_AC4_SendsSpendingCreditAtOnceSpendEachCreditOnceAsync`, `SendLedgerTests.AUTH_ABUSE_004_AC4_CreditGrantedAtOnceIsAddedTwiceAsync`, `SendLedgerTests.AUTH_ABUSE_004_AC2_ASendReleasedTwiceAtOnceIsReleasedOnceAsync`; the CONV-CODE-007 gate |
+| D-166 C, X3 (S2): a failure counted with the scope's counter held | `d0ca242f` | AUTH-ABUSE-001, CONV-DESIGN-003 | `ThrottleServiceTests.AUTH_ABUSE_001_AC1_AFailureCountedMeanwhileIsCountedFromAsync`, `ThrottleLedgerTests.AUTH_ABUSE_001_AC1_FailuresAtOnceAreEachCountedAsync` |
+| D-166 C, X3 (S3): a notice judged with the address's notices held | `613a782f` | AUTH-ABUSE-003, REG-SESS-005, CONV-DESIGN-003 | `RecoveryServiceTests.AUTH_ABUSE_003_AC4_AnAddressToldMeanwhileIsToldOnceAsync`, `NoticeLedgerTests.AUTH_ABUSE_003_AC4_AsksAtOnceTellTheAddressOnceAsync` |
+| D-166 C, X3 (S4): a callback counted with the source's callbacks held | `a0915e10` | INT-GEN-003, CONV-DESIGN-003 | `DeliveryReportsTests.INT_GEN_003_ACallbackCountedMeanwhileIsCountedAsync`, `CallbackLedgerTests.INT_GEN_003_CallbacksAtOnceAdmitNoMoreThanTheLimitAsync` |
+| D-166 C, X3: a session begun with the account held; a suspended, deleting or deleted account refused `auth.factor.rejected` | `c3542f8c` | IDN-LIFE-013, CONV-DESIGN-003 | `SessionServiceTests.IDN_LIFE_013_AnAccountSuspendedMeanwhileBeginsNoSessionAsync` |
+| D-166 C, X4 and X5: `PUT /admin/compliance/licences` takes the list itself as its body; duplicate identifiers name `id` | `53f40f1f` | OPS-MAINT-001, API-CONV-002 | `MaintenanceEndpointTests` (changed) |
+| D-166 C, X4: grant and group free text bounded at the endpoint | `f30fe31c` | API-CONV-002, CONV-CODE-006 | `GrantEndpointTests.CONV_CODE_006_AC3_AReasonOutsideTheBoundIsRefusedBeforeTheServiceAsync`, `GroupEndpointTests.CONV_CODE_006_AC3_FreeTextOutsideTheBoundIsRefusedBeforeTheServiceAsync` |
+| D-166 C, X4: organization and invitation free text bounded | `00b331c3` | API-CONV-002, CONV-CODE-006, REG-MAIL-003 | `OrganizationEndpointTests.CONV_CODE_006_AC3_FreeTextOutsideTheBoundIsRefusedBeforeTheServiceAsync`, `InvitationEndpointTests.CONV_CODE_006_AC3_AReasonOutsideTheBoundIsRefusedBeforeTheServiceAsync` |
+| D-166 C, X4: an approval's free text bounded before the step-up | `6f308ae9` | API-CONV-002, CONV-CODE-006, AUTH-RECOV-002 | `RecoveryServiceTests.CONV_CODE_006_AC3_AnApprovalsFreeTextIsHeldToItsBoundAsync`, `RecoveryFlowTests.CONV_CODE_006_AC3_AnApprovalsFreeTextOutsideTheBoundIsRefusedBeforeTheServiceAsync` |
+| D-166 C, X4: a maintenance log entry's note held to its bound | `a190d995` | API-CONV-002, CONV-CODE-006, OPS-MAINT-001 | `MaintenanceRecordsTests.CONV_CODE_006_AC3_ANoteIsHeldToItsBoundAsync`, `MaintenanceEndpointTests.CONV_CODE_006_AC3_ANoteOutsideTheBoundIsRefusedBeforeTheServiceAsync` |
+| D-166 C, X4: an entered request's detail held to its bound (section 2) | `5f9390d2` | API-CONV-002, CONV-CODE-006 | `PrivacyRequestEndpointTests.API_CONV_002_AnEntryWithADetailOutsideTheBoundIsRefusedBeforeTheServiceAsync`, `PrivacyRequestTests.API_CONV_002_AnEntryWithABlankOrOverlongDetailIsMalformedAsync` |
+| D-166 C, X5: an erasure fulfilled while the account entered its window under the lock is recorded fulfilled | `cc005cc7` | CONV-DESIGN-003, PRIV-RIGHT-001, IDN-LIFE-003 | `PrivacyRequestTests.PRIV_RIGHT_001_AnAccountDeletingMeanwhileKeepsItsRunningWindowAsync` |
+| D-166 C, X5: an own deactivation or deletion the state does not admit answered `identity.account.stateconflict` naming it, a restricted one `authz.restricted`, both before the step-up | `f38acbc0` | IDN-ACCT-007, AUTHZ-GATE-006, IDN-LIFE-013, IDN-LIFE-014 | `AccountLifecycleTests.IDN_ACCT_007_ADeactivationTheStateDoesNotAdmitIsRefusedBeforeTheStepUpAsync`, `AccountLifecycleTests.IDN_ACCT_007_ASuspensionCommittedMeanwhileIsNamedToADeactivationAsync` |
+| D-166 C, X5: a takedown refused under the lock answered for the state found there | `7a90742d` | IDN-LIFE-003, CONV-DESIGN-003 | `TakedownServiceTests.IDN_LIFE_003_AStateCommittedMeanwhileIsTheOneAnsweredAsync` |
+| D-166 C, X5: a group gone between the scope read and the lock refused as one no row names | `386fd395` | AUTHZ-SCOPE-001, CONV-DESIGN-002 | `GroupEndpointTests.CONV_DESIGN_002_AC3_AGroupRemovedMeanwhileIsRefusedAsOneNoRowNamesAsync` |
+| D-166 C, X8: the step-up judged after every other refusal (a username, an identifier added or removed, a recovery approval, the end of a membership) | `05b4cc05` | REG-IDENT-004, REG-IDENT-006, REG-IDENT-009, AUTH-RECOV-002, IDN-MEM-001 | `AccountServiceTests.REG_IDENT_009_TheStepUpIsJudgedAfterEveryOtherRefusalAsync`, `IdentifierServiceTests.REG_IDENT_004_TheStepUpIsJudgedAfterEveryOtherRefusalAsync`, the channel assertion of the recovery AC3 test |
+| D-166 F: the register finding `organisational-measures-missing` spelled as `10` spells it | `4dad00b5` | PRIV-ROPA-001 | `ProcessingRecordsTests` and `ProcessingRecordsEndpointTests` (the PRIV-ROPA-001 AC2 tests) |
+| D-166 G: the "Revised by entry" lines no code commit carries (144, 175, 190, 280, 284, 367) | `46d290fd` | none | none |
+
+**145, 279 and the last probe.** The probe of LIB-TEST-001 AC4 for a pushed request naming another destination waited for 145 and 279 (1), since the provider rewrote such a destination before. The machine answers of 394 now carry their headers (test only).
+
+**304 (1) (`f8cf504c`).** The expiry sweep, which reaches the stores itself, is guarded in `BackgroundJobs`. `SmsBalance` and `LocationDatabase` keep an unguarded private read for their own callers on the request path. The worker passes `AccessContext.Of(job.Principal)`.
+
+**The section C sweeps.**
+- X2: two reads merged since the sweep still turned a failure into a value and now fault (`afeca4a8`). `ReadVolume.TodayAsync`, `WorkingCalendar`, `RestoreTest` and the `SignOn` matches were reviewed and left: each passes a checked failure on, or is not a configuration read.
+- X1: the services that publish inside the transaction of the fact were reviewed and left, as was `BreakGlassService.LimitReachedAsync`, which raises in its own transaction as D-166 292 orders.
+- X3: one lock primitive per kind of row, with a storage test on two connections each; the commits are listed above. Reviewed and left: the signing key changes of D-181 (an insert that does nothing on conflict, a conditional promotion, a lengthening that never lowers, retirement and removal conditional on the stored times); the cancellations that hold their row before the directory write. Residual and failing closed: two definitions of one new role at once meet the primary key; a revocation from a group while a member is added is judged on the grant as read under the group lock; the factor accumulation of `PresentAsync` can lose an update. Residual: a takedown's reported erasure date is computed from the read before the lock; `InvitationAcknowledgement` checks the personal email and the email maximum on the set read before the lock, and a change meanwhile makes the domain throw and the transaction roll back; `InvitationService.IssueAsync` sends its link before its transaction (119, parked), so a refusal under the lock leaves a sent link that opens nothing; a source's callbacks stay held to the end of the request's transaction, which in `ProviderEventIntake` includes the provider key check; `Supersession` writes `superseded_at` without the consent hold.
+- X4 and X5: every member named by hand was listed; none carries a `$` root, a list index or a nested path written otherwise. The routes and services already bounded were reviewed and left, as were the refusals `authz.denied` and `api.request.malformed` the chapters settle. The profile names and credential labels have their own bounds and codes, outside X4.
+- X6: the domain half needs nothing: the edit refuses a domain the resolver cannot read before the step-up, the start refuses a listed domain without `dnsResolver`, and bootstrap writes no domains. The photos half is parked (question 25).
+- X7: the enrolment link of an assisted recovery goes under `signin` (`a01214a8`); the rest is parked (questions 27, 38 and 60).
+- X8: the three gates no entry built have their 403 `auth.stepup.required` test (`SessionRevocationEndpointTests.AUTH_SESS_011_OneAccountsRevocationAsksForStepUpAsync`, `SessionRevocationEndpointTests.AUTH_SESS_009_EveryRevocationAsksForStepUpAsync`, `PrivacyRequestEndpointTests.PRIV_RIGHT_001_AC5_AFulfilmentWithoutStepUpIsRefusedAsync`). All 36 gate names of `10` section 5a are spent in `src`. The ungated `/admin` writes are 5a's list of operations not gated, plus `POST /admin/groups`, `DELETE /admin/groups/{id}` and `POST /admin/privacy/requests`; none touches an account or loosens a control. Left: `AppPasswords.RevokeAsync`, `IdentifierService.StageAsync` and the organization policy, whose refusals after the step-up come from the act itself.
+- Section F: every new code is an `ErrorCodes` member with the status `09` gives; the renamed codes carry their new names; no retired code remains; the statuses of `identity.registration.incomplete` (409), `identity.identifier.invalid` (422) and `integration.callback.rejected` (429 only with `details.retryAt`, otherwise 422) are as `10` gives them; the new and changed keys, the protected list, the seven step-up actions, `breakglass-generated` and the restriction shape match. The vocabularies of `10` sections 5.1 to 5.49 that a surface carries are spelled as `10` spells them, but for `4dad00b5` and the two parked members (`derivation-driftcheck`, question 22; `registration-channel`, question 23).
+- Section G: every "Superseded by D-166" line section G names is present but for the 23 entries whose items are parked (section 2); the "Revised by entry" lines are present.
+- Observed, outside the sweeps: the analyser JAN0005 inspects expression statements only, so an expression-bodied member that discards a `Result` through `=> await X()` escapes it.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
 |---|---|---|
-| CONV-CODE-007 criterion 4 with D-171, the signing credential: a credential a rotation replaces leaves the server's options when its overlap ends | Open question 20 | Question 20 |
-| `details.member` of an unreadable body member, named as API-CONV-002 criterion 4 now states (D-179) | Part of the section C sweep, X4 and X5 | Question 20 |
-| D-166 362, but for its point (5) | Not reached | Question 20 |
-| D-166 D.8, the paragraphs after 121 and 336: 317, 318, 341, 303 (and the audit's subject), 304 and 334 parts (1) and (2), 323, the audit action rows | Not reached: they follow the key ring in the log's order | Question 20 |
-| D-166 section D.2, the entries after 114 (115, 129, 146, 152, 208, 328, 401, 402 and 422, 417, 419, 421, 326, and the preferred second step) | Not reached | Question 20 |
-| D-166 section C, rules X1 and X3 to X9 as sweeps (X2 is applied, under 116; X3 on the configuration routes, under 178) | Not reached | Question 20 |
-| D-166 sections D.1 to D.7 and D.9 to D.11 | Not reached | Question 20 |
-| D-166 section E, every item other than E.6 | Not reached | Question 20 |
-| D-166 section F, the rows of chapter 10 other than those applied under D.8 (the retired step-up and device verification codes, `model.startup.secretunavailable`, `config.change.reasonrequired`, the retired switches, `integration.mailserver.endpoint`, `breakglass-generated`) | Not reached. The three contract tests that failed at `aa7c5e9` now pass at `0dc0ae0` | Question 20 |
-| D-166 section G, the ledger lines of the entries not yet applied | Each goes in the commit that applies its entry | Question 20 |
-| Truth-table rows for D-166 entries 396 and 265 | They state the D-166 outcomes, so they belong with those fixes | Question 20 |
-| The full gate, the pull request for `corrections-4` | The run stopped before step 4 of the work order (section 5) | Question 20 |
+| CONV-CODE-007 criterion 4 with D-171, the signing credential: a credential a rotation replaces leaves the server's options when its overlap ends | Open question 20, settled by D-181 | Nothing: applied in `211b1d42` |
+| `details.member` of an unreadable body member, named as API-CONV-002 criterion 4 now states (D-179) | Part of the section C sweep, X4 and X5 | Nothing: applied in `88d219cf` |
+| D-166 362, but for its point (5) | Not reached at the first stop | Nothing: applied in `6a586266`, and point (5) in `0bab2cda` with the test of 263 |
+| D-166 D.8, the paragraphs after 121 and 336: 317, 318, 341, 303 (and the audit's subject), 304 and 334 parts (1) and (2), 323, the audit action rows | Not reached at the first stop | Applied (section 1), but for 317 (2), 318 (3) and `Subject` on `AuditEntry`, below |
+| D-166 section D.2, the entries after 114 (115, 129, 146, 152, 208, 328, 401, 402 and 422, 417, 419, 421, 326, and the preferred second step) | Not reached at the first stop | Applied on `part/sessions`, but for 115 (2), 129 (1), `Effective` of 152 (3), the rows of 328 and the link-token case of 419, below |
+| D-166 section C, rules X1 and X3 to X9 as sweeps (X2 is applied, under 116; X3 on the configuration routes, under 178) | Not reached at the first stop | Applied on the working branch after the merges (section 1), but for the points below |
+| D-166 sections D.1 to D.7 and D.9 to D.11 | Not reached at the first stop | Applied on the parts and the working branch, but for the items below |
+| D-166 section E, every item other than E.6 | Not reached at the first stop | E.8 in `7d9477bc`, E.9 in `58f11da4`, E.10 in `30a8c32c`; E.1 to E.3, E.7 and E.11 ask nothing of the code; E.4 and E.5 below |
+| D-166 section F, the rows of chapter 10 other than those applied under D.8 | Not reached at the first stop | Applied with each entry and checked in the section F sweep (`4dad00b5`), but for `derivation-driftcheck`, `registration-channel` and `abuse.source.sitelimit`, below |
+| D-166 section G, the ledger lines of the entries not yet applied | Each goes in the commit that applies its entry | Written with each entry and in `46d290fd`, but for the 23 entries below |
+| Truth-table rows for D-166 entries 396 and 265 | They state the D-166 outcomes, so they belong with those fixes | Nothing: written in `cb73c32a` and `ef62ecdc` |
+| The full gate, the pull request for `corrections-4` | The push of `corrections-4` after `02bb2419` was refused in the session's environment | The full gate: section 5. The pull request: the push |
+| The detail of an entered request: absent and blank told apart (D-166 414 under X4); built while parked, in `5f9390d2` (slips, below) | Open question 21 | Question 21 |
+| 265, the second half: the relationship sources, their start check, the full answer of `GET /admin/access`, the drift-check job and its principal `derivation-driftcheck`, `RefreshAsync`, their AUTHZ-DERIVE-005 and AUTHZ-DERIVE-007 tests; ledger line 265 | Open question 22 | Question 22 |
+| 143, the stream of `GET /register/events` raising the degradation `registration-channel`; ledger line 143 | Open question 23 | Question 23 |
+| The removal of the `photo.enabled` family of 144 and 315, and the photos half of X6; ledger line 144 | Open question 25 | Question 25 |
+| 317 (2), the coded refusal of a retired version's unwrap; ledger line 317 | Open question 26 | Question 26 |
+| 118, the governed send contract; 235; the twenty-sets test of 335; X1 at `SendingService.CarryAsync`; ledger lines 118, 235 and 335 | Open question 27 | Question 27 |
+| 156, the lawful basis table | Open question 28 | Question 28 |
+| 133 and 147 (1) to (3), the consented resources against the document a purpose now names, with `ConsentGateTests.PRIV_CONS_007_APurposeGivenAnotherDocumentAsksItsSubjectsAgainAsync`; ledger lines 133 and 147 | Open question 29 | Question 29 |
+| 133 and 147 (5), a grant or objection while a live record stands | Open question 30 | Question 30 |
+| 115 (2), registration and identifier codes in the verification-code record; 306 whole, which needs that record; ledger lines 115 and 306 | Open question 31 | Question 31 |
+| 419, a registration link token that opens nothing; ledger line 419 | Open question 32 | Question 32 |
+| 318 (3), what retirement forgets; ledger line 318 | Open question 33 | Question 33 |
+| 136 whole: the record, its migration, the explanation's principal and reason, its two tests; ledger line 136 | Open question 34 | Question 34 |
+| `Subject` on `AuditEntry`, its view and its test (303) | Open question 35 | Question 35 |
+| 242 (4), the downgrade and `auth.factor.notpermitted` halves, with `AuthenticationServiceTests.IDN_LIFE_009b_ASessionHeldBeforeTheMembershipIsDowngradedAsync`; ledger line 246 | Open question 36 | Question 36 |
+| 135, the grants of the maintenance role in every schema | Open question 37 | Question 37 |
+| 119 (1) to (4) and what builds on them; 227 and 322; ledger lines 119, 227 and 322 | Open question 38 | Question 38 |
+| 119 (6), the erased value in `send_outbox.wrapped_key`, with `SubjectEraserTests.PRIV_RIGHT_005_AC1_AnOutstandingMessageIsUnreadableAndUncarriedAfterErasureAsync` | Open question 39 | Question 39 |
+| `Effective` on `CredentialSuspended` (152 (3)); ledger line 152 | Open question 40 | Question 40 |
+| 242 (3), an accepting account holding no verified email | Open question 41 | Question 41 |
+| 129 (1) whole: the registration session's credential authority, the key and generator paths, their tests; ledger line 129 | Open question 42 | Question 42 |
+| The truth-table rows of 328; ledger line 328 | Open question 46 | Question 46 |
+| The section of the changelog line of 389 (6) | Open question 47 | Question 47 |
+| 389 whole, with the row `abuse.source.sitelimit` of section F; ledger line 389 | Open question 48 | Question 48 |
+| The exemption rule of CONV-DESIGN-004 criterion 2 and its test; `BrowserProfileLog` and `Concealment` | Open question 49 | Question 49 |
+| 359 and 382 (3), the endpoint lines of (4) and the endpoint and response-member scenarios of (5); ledger line 382 | Open questions 50 and 51 | Questions 50 and 51 |
+| The four routes that bind a string: `RoleEndpoints` `name`, `ConfigurationEndpoints` `key`, `RestrictionEndpoints` `name`, `AppPasswordEndpoints` `id` | Open question 53 | Question 53 |
+| 160, `IOidc.KeysAsync`, its two callers and its `PublicAPI` line; ledger line 160 | Open question 55 | Question 55 |
+| 282, the Google 400 writer of `ProviderEventIntake`, its tests on both routes; E.5, a token without `jti`; ledger line 282 | Open question 56 | Question 56 |
+| E.4, CONV-DESIGN-007, the area registration methods and their test | Open question 57 | Question 57 |
+| X9, every return after `BeginAsync`, and its test | Open question 58 | Question 58 |
+| X1 at `DenialSpikes.WatchAsync`, the transaction its alert is written in | Open question 59 | Question 59 |
+| The purpose of the identifier-change-confirm link (`IdentifierService.AskOldAsync`) | Open question 60 | Question 60 |
+| X3 at V7 (`OutboxPublisher`) and S6 (`SendingService`, retry and settle) | Open question 61 | Question 61 |
+| X3 at C9, the settings restriction decided before the transaction | Open question 62 | Question 62 |
+| X3 at S1, the admission half | Open question 63 | Question 63 |
+| X3 at S5, `AlertDestinationChange` | Open question 64 | Question 64 |
+| X4 at `PUT /admin/compliance/assessments` (`dataOwner`, `organisationalSecurityMeasures`) | Open question 65 | Question 65 |
+| 209 (2), the IDNA mapping | It needs `IdnaMappingTable.txt`, and its download waits on the owner's approval | The owner's approval of the download |
+
+**Slips.** None is rewritten; each commit is green on the fast checks unless said.
+- `30b1c4bc` carries only the changelog line of 323; its code and tests are in `5db004f4`. The two are one change split in two commits.
+- `86e23f9e` uses the commit type `style`, which CONV-VCS-003's list does not hold. The commit-message check was red on the push of `13bbe7db` and is red on the pull request (question 43).
+- `82a3ae2b` has a body line of 76 characters, past the 72 of CONV-VCS-003 (question 43).
+- `05b4cc05` has a footer line of 84 characters.
+- `43b4fec4` and `a7546b70` left the integration suites red (the permissive provider's count of findings; three rotation cases of `FingerprintKeyRotationTests`) until `47da7a0f` and `266227bf`.
+- On `part/organizations`: from `61b3df11` until `f2b8d7ad`, `PublicSurfaceTests.CONV_DESIGN_002_AC3_EveryOperationMeetsTheGateBeforeItReadsOrWrites` was red; from `acb0b8f2` until `10ff8a43`, `IdentityEndpointsTests.LIB_API_005_AC1_NoEndpointCarriesLogicItsServiceDoesNotAsync` was red; `455f1eb2` left two documentation tests of `ErrorCodesTests` red until `52c960a6`; `2e8174c1` was committed with the format check red, put right by `86e23f9e`.
+- `fe839f64` left the schema contract test red until `3d136d1e` recorded `send_key_counters`.
+- `5f9390d2`, in the X4 sweep, built the detail rule of an entered request while question 21 parks it: a detail given is trimmed and held to 1 to 1024 characters, and none is held as empty. It stands until the answer.
+- The push of `corrections-4` after `02bb2419` was refused in the session's environment. The branch is unpushed from `02bb2419` on.
 
 ## 3. Resolved by rule
 
@@ -351,6 +706,56 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 | `PrivacyContractTests.PRIV_CONS_010_AC1_NoLibrarySourceNamesATransferPurpose` (`1566815`) | The test flags any `"transfer"` literal, and so the wire name of `FormerMailbox.Transfer` that `10` section 5.44 gives | PRIV-CONS-010 AC1 (no consent-based purpose named for the hosting or its transfer); PRIV-CONS-002 AC1 (a purpose is a string) | A `[JsonStringEnumMemberName(...)]` line names no purpose and is skipped; every other literal is still read; test only |
 | The mail server row's condition "or the library's default mail transport is in use" (`de42f15`) | The library ships no transport, so the condition can never hold | D-166 270 ("Until the shipped transports exist"); INT-MAIL-008 | The condition is not coded, and no setting stands in for it |
 | `AlertsTests` (`72f0e85`) | `breakglass-generated` takes the next free value, 31, but is declared after `breakglass-used` in the table's order, so the test that read the order from the values failed | OPS-ALERT-001; the working guide's section 3, test infrastructure | The test reads the declaration order from the enumeration's fields |
+| `src/Janus.Authentication/Janus.Authentication.csproj` (`211b1d42`) | D-181 places the credential source in `Janus.Authentication`, and the `SigningCredentials` and `JsonWebKey` objects it holds have their types only through `OpenIddict.Server`, which the project did not reference | AUTH-KEY-001 and CONV-CODE-007 with D-181; CONV-DESIGN-008 | The project references `OpenIddict.Server`, a package CONV-DESIGN-008 lists and `Janus.Hosting` already references; every OpenIddict and IdentityModel type stays internal, no `PublicAPI` line is added, and no project references `Microsoft.IdentityModel.JsonWebTokens` directly For audit: a reference added to a shipped project may fail the condition of no new dependency. |
+| `src/Janus.Hosting/Oidc/SigningAlgorithms.cs` and `TokenDigests.cs` (`211b1d42`) | Two steps of the provider that D-181 does not name read a signing credential from the options (the discovery's list of signing algorithms, and the token hashes for the algorithm) | AUTH-KEY-001 with D-181: no step of the provider takes a signing credential from its options, and such steps are replaced through its event model | Both are removed and replaced at the same order by steps that read the source; `SigningKeyRotationTests.AUTH_KEY_001_AC3_TheDocumentAndTheTokenHashesAreUnchangedAfterTheStartKeyRetiresAsync` |
+| Migration `HoldSigningKeysThroughTheirKeeping`, column `signing_keys.longest_lifetime` (`211b1d42`) | D-181 gives no value for a key stored before the column existed, whose longest lifetime was recorded nowhere | AUTH-KEY-001 criterion 2 with D-181: the overlap covers the longest lifetime the key signed under | The migration writes the ceiling of `oidc.accesstoken.lifetime` (1 hour), the one value known to cover every access token such a key could have signed |
+| `AuditAction`, eight remarks (`f407060d`) | Eight remarks cited items no chapter holds (AUTH-ABUSE-009, AUTH-REC-004 four times, AUTH-REC-006, AUTH-TOK-004, REG-PM-002) | `10` section 5 names the governing item of each action | Each remark cites the item of its row in `10` section 5 (AUTH-ABUSE-008 and LIB-HOST-001, AUTH-RECOV-007, AUTH-RECOV-007 criterion 3, AUTH-FACT-001, AUTH-RECOV-002 and AUTH-RECOV-002a, AUTH-OIDC-003) |
+| `.gitleaks.toml` (`07ac1df4`) | Secret scanning on the pushes of `a8b1f104` and `13bbe7db` flagged `PRIV-BREACH-002` under `generic-api-key`, in a comment of `src/Janus.Storage/Migrations/20260930224333_NameTheSubjectOfEachAuditRecord.cs` (line 16, from `9cfccf3a`) | OPS-DEP-004; the working guide's section 3, an allow-list entry for specification text | One entry: that file and the exact value `^PRIV-BREACH-002$`, `condition = "AND"`, reason "an item identifier in a migration's comment". It is an item identifier, not a credential. The pinned scanner, run locally over 996 commits: no finding |
+| `BackgroundJobsTests` (`f8cf504c`) | D-166 304 names `BackgroundWorkerTests`, a unit class over a hand-built container that holds none of the job services | IDN-PRIN-001 criterion 3; the working guide's section 3, test infrastructure | The test needs the deployment's own container, which `BackgroundJobsTests` builds, so it is there under the name the settlement gives; test only |
+| `PrivacyRequestTests` (`01c23b22`, `9c9983cf`) | D-166 gives the tests under `PrivacyRequestServiceTests`, a class that does not exist | CONV-TEST-001; the working guide's section 3, test infrastructure | The tests are in `PrivacyRequestTests`, the class of the service's tests, under the names D-166 gives |
+| `RoleEndpoints`, a role a standing invitation names (`650c6c7d`) | D-166 189 says an invitation "not past expiry"; `03`, `09` and `10` say "standing" | AUTHZ-GRANT-004; `10`, the definition of a standing invitation | A role counts as referenced by a standing invitation as the chapters and `10` define it |
+| `tests/Janus.Hosting.Tests`, `Organizations/InvitationServiceTests` and `HostFixture` (`cbd0bb43`) | The test of 252 needs the gate's memberships on PostgreSQL, while the class D-166 names is a unit class over a fake gate; ending a membership needs a mail and an SMS transport, which the fixture did not register | IDN-LIFE-009a, IDN-MEM-001; CONV-TEST-001; the working guide's section 3, test infrastructure | The test is in the integration class over `HostFixture`, which registers `MailTransportInMemory` and `SmsTransportInMemory`; no runtime code changed |
+| `tests/Janus.Hosting.Tests`, `Authorization/ConcealmentTests` (`05689c65`) | The criterion of 339 needs the statements traced on PostgreSQL; the `ConcealmentTests` of the BFF is a unit class | AUTHZ-CONCEAL-002 criterion 2; the working guide's section 3, test infrastructure | The test is in an integration class of that name in `Janus.Hosting.Tests`; no runtime code changed |
+| The Hosting `Deployment` fixture, `OrganizationDomainService` and `DomainReverification` registrations (`db60ab71`) | A deployment that lists a domain now needs `dnsResolver`, and the fixture declared none | LIB-HOST-001 (the resolver is optional); the working guide's section 3, test infrastructure | The fixture takes a resolver parameter, true by default, and the two services are registered by factories passing the optional resolver, as the other optional declarations are |
+| `ConfigurationInMemory` and the three configuration fakes (`050d46be`) | The fakes' `Set` accepted a value its setting refuses, so a test could hold what the real store cannot | OPS-CFG-003; the working guide's section 3, test infrastructure | Each fake's `Set` validates through `setting.Accept`, and `ConfigurationInMemory` gains `Forget<TValue>(Setting<TValue>)`; test only |
+| `InvitationService.IssueAsync`, `RevokeAsync` and `MembershipEnd.EndAsync` (`f2b8d7ad`) | Each read the path's organization before the gate, which the gate test refuses | CONV-DESIGN-002 criterion 3 (the gate test's existing rule for `ScopeOfAsync`); D-166 X5 | The path's organization is resolved by a private `ScopeOfAsync` as the gate step, and the standing is read after the gate; an organization the deployment does not hold is 404 `identity.organization.notfound` |
+| `OrganizationEndpoints`, the reason of a policy or domain change (`10ff8a43`) | D-166 200 puts the check at the endpoint, and LIB-API-005 criterion 1 forbids an endpoint to reach an area type | D-166 200; LIB-API-005 criterion 1 | The endpoint checks with `Janus.Core` types alone: a blank reason is 422 `config.change.reasonrequired` naming `policy.<id>`, a reason past 1024 characters 400 `api.request.malformed` naming `reason` |
+| `OrganizationDirectoryTests` (`b9f9d904`) | The fixture placed two current memberships in one organization, which the constraint of 154 now refuses | IDN-MEM-002; the working guide's section 3, test infrastructure | The fixture places one current membership per organization; test only |
+| The scope of a send alert of 119 (3) (no commit) | 119 (3) writes the scope `send:invitation-link`; `10` section 5.23 writes `send:<channel>` | OPS-ALERT-002; `10` section 5.23 governs scopes | The scope is written as `10` writes it. Nothing is built: 119 (3) waits on question 38 |
+| The refusals of the name rule (`ef19b85f`) | 120 (2) names no member for a refusal at the start | LIB-HOST-001; `10`, `details.declaration` and `details.field` | A purpose's document is named by `details.declaration` (the purpose's name) with `details.field` `document`, a subscriber by its name with `details.field` `name` |
+| `RestrictionEndpointTests` (`61204cc0`) | D-166 names `RestrictionEndpointsTests` | CONV-TEST-001 | The tests are in the existing class, `RestrictionEndpointTests` |
+| Test names of 120 and 123 (`25d5dc9c`, `908f5817`) | Some names D-166 gives say AC1 where the criterion is AC3 | CONV-TEST-007 | D-166's names are kept, as the settlement writes them |
+| The name rule's lower-case letters (`50016b49`) | 120 (1) says "lower-case letters" | INT-SMS-003; `10` section 5.26 | Read as the ASCII letters a to z, as every name `10` gives is |
+| `ExpirySweepTests` and `BackgroundJobsTests.Deployed` (`fe839f64`) | The test of 122 needs the sweep run over the deployment's container | PRIV-RET-005 criterion 2; the working guide's section 3, test infrastructure | `ExpirySweepTests` is created in `Janus.Hosting.Tests/Background`, and `BackgroundJobsTests.Deployed` is internal static; test only |
+| The width of `{link}` (`908f5817`) | D-166 123 (3) measures `{link}` at its own application's origin; `10` section 5.26, which governs widths, measures it at the longer declared origin and the widest kind | INT-SMS-003; `10` section 5.26 | `{link}` is measured as `10` measures it |
+| `AlertDispatch` (`01a5a2c9`) | 119 (5) commits the claim before the send, and the dispatch's delivery ran inside an open transaction | OPS-ALERT-002, INF-BG-001 | The router runs in a transaction of its own, the row is removed in a transaction after the router returns, and a row an early stop leaves is folded by the deduplication |
+| `INT_SMS_003_AC1_APlaceTheLibraryDoesNotFillIsMeasuredAsWrittenAsync` (`b9c5243e`) | The test asserted the behaviour the message kinds (6) replace | INT-SMS-003 with D-166 D.3, the message kinds (6) | The test is retired; the new behaviour has its own tests |
+| `Deployment`, the hand-built Hosting hosts, the Conformance `SampleHost`, `Landing.cs`, `MailTransportInMemory` and `AlertRouterTests` (`56312065`, `908f5817`, `01a5a2c9`) | Every host must now declare its landing origins, a test must read a token through its link, and the claim's commit must be observed | LIB-HOST-001; the working guide's section 3, test infrastructure | The fixtures declare `LandingOrigins`; `Authentication.Tests/Sending/Landing.cs` gives `SendRequest.Token()`; `MailTransportInMemory` gains a `Handed` hook; `AlertRouterTests` has a `TransactionWitness` fake; no runtime code beyond the items |
+| `DeadlineSweep`, the spelling of a request's type and status (`cc804177`) | `WrittenName` is internal to `Janus.Authentication` | INT-SMS-003; CONV-NAME-003 | The sweep uses spelled `JsonSerializerOptions`, as `TakedownService` does |
+| `Error.Throttled` (`7d9477bc`) | E.8 moves the builder and names no place for the check that no one else builds the code | AUTH-ABUSE-002 criterion 2; D-166 E.8 | The throttled refusal is built by `Error.Throttled` alone, and the structure test admits only the builder and the status map |
+| The sign-in code (`6b79266c`) | 115 names the code a sign-in shows and not its key | AUTH-FACT-004 criterion 6 | The sign-in code is held to the mail's own keys (`MailAlone`) |
+| Five wrong tries (`6b79266c`) | AUTH-FACT-004 criterion 3 says five wrong tries invalidate | AUTH-FACT-004 criterion 3 | Five wrong tries answer invalid, and the sixth answers expired |
+| 146 (4), an ask with a risk signal (`52482ed5`) | 146 (4) answers 202 and then considers the signal | D-166 146 (4) with 146 (3) and `/recovery/begin` | The ask answers 202, issues and sends nothing, records the consideration and counts nothing For audit: it decides a step-up ask, which may be security semantics and Tier 3. |
+| The send path of 146 (`52482ed5`) | The governed send of 118 is parked | D-166 146; AUTH-FACT-002 | The second-step code goes by the path `SignInLinks` takes today; question 27 moves both |
+| The Hosting `Deployment`, a `signals` parameter (`52482ed5`) | The tests of 146 need the phone signals | The working guide's section 3, test infrastructure | The fixture takes the signals; test only |
+| 152 under X9 (`50cd2637`) | A refusal of `keys.EnrolAsync` or `generators.ConfirmAsync` after 152 (1)'s transaction opens left it open | CONV-DESIGN-003, as 115 does | The empty transaction is committed before the refusal returns |
+| `UnitOfWorkInMemory.OutermostCommitted` and `PendingEventsUnwritable` (`50cd2637`) | The X1 tests must observe the outermost commit and an event row that cannot be written | The working guide's section 3, test infrastructure | Two fake members; test only |
+| `StepUpGates`, the values of 328 (`669bac7b`) | 328 names the three values the gate reads | LIB-HOST-004, AUTH-STEP-002 | The gate reads them through `ISessionGates.CostAsync`; no view leaves the gate met where it is not For audit: it decides how the step-up gate fails, which may be security semantics and Tier 3. |
+| The X1 tests of 152 (`50cd2637`) | That nothing stands after a failed event row is not observed by the tests themselves | CONV-TEST-007; `UnitOfWorkTests.CONV_DESIGN_003_AC3` | The tests assert that the outermost transaction never commits and that no notice goes out; that nothing stands follows from the rollback on disposal, which `UnitOfWorkTests` proves, as `b359fa5c` |
+| `DeploymentDataKeyTests` (`60dd9cb9`) | The test wrote its rows through the current model, whose columns its migration does not have | PRIV-RIGHT-005a criterion 18; the working guide's section 3, test infrastructure | The rows are written in raw SQL in the columns of `20260929142007`; test only |
+| `AccountStatesInMemory` (`6a586266`) | The end-to-end test of IDN-ACCT-007 criterion 2 needs the Privacy fake to know the restriction | The working guide's section 3, test infrastructure | The Hosting `Deployment` sets the fake's `Restricted` hook; test only |
+| 141 at the terms step (`4459da5b`) | D-166 141 names no code for an address reserved since it was staged | REG-SESS-005 criterion 3; D-166 141 | The session ends as `SessionExpired`, as REG-SESS-005 criterion 3 answers |
+| The erasure of an account's grants (`f7757aff`) | The grants at deletion name no cache step | AUTHZ-CACHE-001 (any change of a grant) | The erasure raises the grant version counter |
+| 362 (5), the app-password half (`0bab2cda`) | D-166 names a test of its own | REG-MAIL-002 criterion 4 | `AppPasswordsTests.REG_MAIL_002_AC4_ARestrictedAccountListsAndRevokesAndCreatesNoneAsync`, from 263, decides it; no second test is written |
+| `SuspendedBy` through a takedown's window (`b1960a2e`) | 169 names no change to who suspended | IDN-LIFE-003 criterion 4 | `SuspendedBy` stays `Administrator` through the window, as the existing test of criterion 4 has it |
+| `CanonicalValueTests` (`097b2001`) | The test that every canonical value with rules is read from text took the identifiers' `IParsable<T>` members for values with rules | CONV-DESIGN-004 criterion 3 | A `Parse` or `TryParse` taking an `IFormatProvider` is not counted; the assertion is unchanged; test only |
+| `JmapMailServer.ProvisionAsync` (`55850e21`) | The check that the address holds an `@` is unreachable once the push carries an `EmailAddress` | CONV-DESIGN-004 | The check is dropped |
+| `UndoIdentifierAsync` and `AbandonIdentifierAsync` (`097b2001`) | Each took a `Guid` while its route binds an `IdentifierId` | CONV-DESIGN-004 | Each takes an `IdentifierId`, as the route does |
+| `StepUpAction` at the merges (`13bbe7db`, `899cbebb`) | `part/organizations` took 30 for `MembershipEnd`, which `part/privacy` had taken for `PrivacyRequestFulfil`; `part/registration-accounts` took values the merged branch held | `10` section 5a names the actions and no value | Each member takes the next free value in the order merged: `MembershipEnd` 31, `AccountRestrictionLift` 32, `AccountDeletionCancel` 33, `AccountSessionsRevoke` 34, `SessionRevokeAll` 35, with their `PublicAPI` lines |
+| Tests at the merges (`13bbe7db`, `5c85be6c`, `700051e6`, `899cbebb`) | Tests one part wrote met a change of another: the end of a membership now stepped up, a token now in a link, the subject of 303, the `StepUpGuard` construction, the session the fulfilment takes, the registrations `BrowserProfileTests` needs, `organizations.canonical_name` now required | The working guide's section 3, test infrastructure; each behaviour is the merged part's | Each test is brought to the merged behaviour (a stepped-up session, `Token()` through the link, the 303 subject, the new constructor arguments, the browser session, `IIdentifierDirectory` and `PhoneSignals` registered, `canonical_name` written; `HostFixture` registers `LandingOrigins`); no assertion is weakened |
+| `error-statuses.txt` at the merge of `part/gates` (`02bb2419`) | The file `120aa5e4` made lacked 14 codes the working branch had declared since | LIB-API-001 criterion 2; `09` and `10` | The 14 codes are added with the statuses `09` and `10` give, `identity.registration.incomplete` 409 (`3ff77d5d`) |
+| `configuration-keys.txt` at the merge of `part/gates` (`02bb2419`) | `part/gates` changed the file's form, and the working branch had added `code.signin.attempts` and `code.signin.lifetime` | LIB-API-001 criterion 2; `10` section 4 | The new form, with both keys written in it |
+| `FingerprintKeyTests` at the merge of `part/gates` (`02bb2419`) | `RestrictionKey` takes a kind since 122 | INF-HOST-003 criterion 4 | The test passes `RestrictionKeyKind.Destination`; test only |
 
 ## 4. Open questions
 
@@ -830,9 +1235,738 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
   disposed while a signature begun with it may still run. Each touches the key
   material's lifetime, so no proposal is made. Nothing of it is committed.
 
+- **Settled by D-181**, applied in `211b1d42`.
+
+**21. Tier 2. D-166 414 under X4: the detail of an entered request.**
+
+- **Item.** D-166 414 and X4: a request's detail is 1 to 1024 characters after trimming.
+- **What the code needs.** `PrivacyRequestEntry.Detail` is a non-nullable string, and the
+  endpoint passes `body.Detail ?? ""`, so an absent detail and a blank one cannot be told
+  apart in the service.
+- **What the specification says.** `09` section 8a gives the detail of an entered request
+  as optional; X4 holds every free-text member to 1 to 1024 characters after trimming.
+- **Readings.**
+  1. `Detail` becomes `string?`; an absent detail is stored as the empty string. Smallest
+     fix: the record's member and its `PublicAPI` line.
+  2. The detail is nullable through the queue. Smallest fix: as 1, and a migration drops
+     `NOT NULL` from the column.
+  3. No surface change: the empty string is read as absent. Smallest fix: the rule in the
+     service and at the endpoint.
+- **Parked.** The detail rule of `EnterAsync` alone. `5f9390d2` built it while parked, as
+  reading 3 (section 2).
+- **Answer:** pending.
+
+**22. Tier 2. D-166 265 and LIB-HOST-001: the shape of a relationship source.**
+
+- **Item.** D-166 265, the half it settles: the host declares its relationship sources,
+  and the library builds its filter sources from them.
+- **What the code needs.** A declaration with a shape. "Builds its `FilterSources` from it"
+  also needs the ancestry, the grants and the resource type of each source.
+- **What the specification says.** LIB-HOST-001 lists relationship sources among the
+  declarations and gives them no shape; no chapter names the type.
+- **Readings.**
+  1. `RelationshipSource.Of<TRow>(name, Func<IServiceProvider, IQueryable<TRow>>)`,
+     registered as a singleton. Smallest fix: one public type.
+  2. An `IRelationshipSource` interface the host implements, registered scoped. Smallest
+     fix: one public interface.
+  3. A member of the model builder, `Relationship<TRow>(...)`. Smallest fix: one builder
+     method.
+- **Parked.** The declaration, its start check, the full answer of `GET /admin/access`, the
+  drift-check job and its principal `derivation-driftcheck`, `RefreshAsync`, the
+  AUTHZ-DERIVE-005 and AUTHZ-DERIVE-007 tests, ledger line 265.
+- **Answer:** pending.
+
+**23. Tier 2. D-166 143 and OPS-OBS-002 against LIB-API-005: who raises the loss of the registration channel.**
+
+- **Item.** D-166 143: the stream that serves `GET /register/events` raises the
+  degradation `registration-channel` through `IAlertChannels`.
+- **What the code needs.** The endpoint, or something it holds, to reach `IAlertChannels`.
+- **What the specification says.** `07` LIB-API-005 limits what an endpoint takes beside its
+  contract to the pre-authentication binding, the session rotation and the registration
+  signal; the gate of LIB-API-005 criterion 3 enforces that list.
+- **Readings.**
+  1. "Registration signal" covers raising its loss. Smallest fix: the gate's list widens.
+  2. `RegistrationSignals`, a singleton, raises it itself. Smallest fix: the signals reach
+     `IAlertChannels`, which is scoped, through a scope of their own.
+  3. `07` adds `IAlertChannels` for this endpoint. Smallest fix: the chapter and the gate's
+     list.
+- **Parked.** 143 and its ledger line, with the `registration-channel` member of section F.
+  The patch is held aside.
+- **Answer:** pending.
+
+**24. Tier 2. D-166 120 (2), INT-SMS-003 and `10` section 5.26: a document name on the publish route.**
+
+- **Item.** D-166 120 (2): a governing document named outside the name rule is refused at
+  the start.
+- **What the code needs.** `POST /admin/documents/{document}/versions` and its translation
+  route take any route segment, and the alert `governing-text-missing` carries that name
+  into the document place, whose width is 64.
+- **What the specification says.** Nothing on what the publish route does with a name
+  outside the rule or one no deployment declares.
+- **Readings.**
+  1. The route refuses a name outside the rule. Smallest fix: a code and status the `09`
+     row does not yet name.
+  2. The route refuses any name that is neither `privacy-notice` nor a document a purpose
+     declares. Smallest fix: as 1.
+  3. As is: the width covers declared names only.
+- **Parked.** Nothing; 120 is otherwise built.
+- **Answer:** pending.
+
+**25. Tier 2. D-166 144 and 315 against entry 403 and the closed ledger: the retired `photo.enabled` family.**
+
+- **Item.** D-166 144 and 315 retire `photo.enabled.<organization>`.
+- **What the code needs.** `SettingsCatalogueTests.REF_001_AC1` (entry 403, kept) counts the
+  ledger's owed rows of chapter 10 in both directions, and the ledger still owes
+  `photo.enabled`. The ledger is closed.
+- **What the specification says.** D-166 section F gathered the owed rows into `10`; section
+  G gives no line that strikes the appendix row.
+- **Readings.**
+  1. Strike the appendix row. Smallest fix: one ledger change that section G does not give.
+  2. The gate counts `10` alone now (entry 403, reading 1). Smallest fix: the test, and 403
+     superseded.
+  3. Drop the reverse assertion. This weakens the gate.
+- **Parked.** The removal of the `photo.enabled` family, the photos half of X6, ledger line
+  144. The patch is held aside.
+- **Answer:** pending.
+
+**26. Tier 3. D-166 317 (2) and OPS-SEC-003 criterion 3: a retired version's unwrap as a coded refusal.**
+
+- **Item.** D-166 317 (2): a failure of `PersonalFieldCipher.Unwrap` under a retired version
+  carries `model.startup.secretunavailable`, `details.key` `keyEncryptionKeys` and
+  `details.version`, "as a coded refusal".
+- **What the code needs.** `Unwrap` returns `byte[]` and throws `CryptographicException`;
+  about 24 callers in `Janus.Storage` return plain values; the only coded exception is
+  `StartupException`, for faults at the start.
+- **What the specification says.** The item names the code and its details, and not the
+  path by which a refusal reaches a request from a value read in a store.
+- **Parked.** 317 (2), ledger line 317.
+- **Answer:** pending.
+
+**27. Tier 2. D-166 118: the governed send contract.**
+
+- **Item.** D-166 118: a governed send contract in `Janus.Core`.
+- **What the code needs.** An interface and an input type; neither is named.
+- **What the specification says.** `07` pairs `INotificationHandler` with `SendRequest`,
+  which 118 makes the admitted message.
+- **Readings.**
+  1. `IGovernedSend` with an `OutboundMessage` input; `SendRequest` becomes the admitted
+     message (it loses `Purpose` and `Source` and gains `Reference`), and `DrawAsync` for
+     119 (4). Smallest fix: one public interface, one public record, the changed record.
+  2. The same interface; the input keeps the name `SendRequest`, and the admitted message
+     takes a new name (`AdmittedMessage`). Smallest fix: as 1; `07`'s pairing is out of
+     step.
+- **Parked.** 118, 235, the twenty-sets test of 335, X1 at `SendingService.CarryAsync`,
+  ledger lines 118, 235 and 335.
+- **Answer:** pending.
+
+**28. Tier 2. D-166 156, PRIV-BASIS-001 and CONV-ENUM-001: the lawful basis table.**
+
+- **Item.** D-166 156: the lawful basis table is seeded at the start.
+- **What the code needs.** The table's and columns' names, its grants, its writer, what
+  becomes of a row no declaration names, the rule for two starts at once, and the default
+  labels.
+- **What the specification says.** `10` gives none of these, and section 5.7 holds no label
+  (the Basis column of PRIV-BASIS-001). `08` also lists the sensitive-data categories as a
+  seeded table.
+- **Readings.**
+  1. A hosted service at the start upserts the declared bases and deletes the undeclared,
+     in `identity.lawful_bases`, the label on the declaration, no table of sensitive
+     categories. Smallest fix: one migration, one service.
+  2. As 1, the undeclared rows kept.
+  3. As 1, with a `sensitive_categories` table.
+  4. The command or a migration writes the rows.
+- **Parked.** 156.
+- **Answer:** pending.
+
+**29. Tier 3. D-166 133 and 147 (1) to (4), AUTHZ-GATE-002 and PRIV-CONS-007: the consented resources against the document a purpose now names.**
+
+- **Item.** D-166 133 and 147: the view `identity.consented_resources` admits only consents
+  given against the document the purpose now names.
+- **What the code needs.** That document lives only in the declaration held in memory; the
+  view has no document column, and nothing stamps `superseded_at` when a declaration
+  moves a purpose to another document.
+- **What the specification says.** The values of AUTHZ-GATE-002 define the view without the
+  document. A query through the view would admit what `AccessGate.Unconsented` refuses
+  (AUTHZ-GATE-002 criterion 4, PRIV-CONS-007).
+- **Parked.** 133 and 147 (1) to (3), the gate's reading of another document,
+  `ConsentGateTests.PRIV_CONS_007_APurposeGivenAnotherDocumentAsksItsSubjectsAgainAsync`,
+  ledger lines 133 and 147. Point (4) is in `c573f655`.
+- **Answer:** pending.
+
+**30. Tier 3. D-166 133 and 147 (5) and PRIV-CONS-001: a grant while a live record stands.**
+
+- **Item.** D-166 133 and 147 (5).
+- **What the code needs.** What a grant, or an objection, does while a live record for the
+  purpose stands. A unique partial index refuses a second live row.
+- **What the specification says.** No chapter says.
+- **Parked.** 133 and 147 (5).
+- **Answer:** pending.
+
+**31. Tier 3. D-166 115 (2), AUTH-FACT-004 criterion 3, REG-SESS-005 criterion 1 and AUTH-ABUSE-003: verifying a code for a held identifier.**
+
+- **Item.** D-166 115 (2): registration and identifier codes live in the verification-code
+  record.
+- **What the code needs.** A held identifier has no code row there, so a verify answers
+  expired at once, where a fresh one answers invalid five times: the answer tells whether
+  the identifier is held.
+- **What the specification says.** No chapter says what a verify answers for a held
+  identifier.
+- **Parked.** 115 (2), and 306 whole, whose sweep needs that record's expiry
+  (`identifier_verifications` holds `CodeExpiresAt` only inside `enc_staged`); the two
+  `IdentifierServiceTests` and the storage test of 306; ledger lines 115 and 306. 115 (1)
+  and (3) are in `6b79266c`.
+- **Answer:** pending.
+
+**32. Tier 2. D-166 419 and REG-SESS-003 criterion 6: a registration link token that opens nothing.**
+
+- **Item.** D-166 419: such a token is counted through `ThrottleService.FailedAsync` against
+  the source and the identifier's hash.
+- **What the code needs.** `IRegistration.LandAsync` takes no source, and a token that opens
+  nothing finds no session, so there is neither `session.Source` nor an identifier.
+- **What the specification says.** Nothing on where the source comes from on that path.
+- **Readings.**
+  1. `IRegistration.LandAsync` takes a `string source`, as `IAuthentication.LandAsync` and
+     `IIdentifiers.LandAsync` do. Smallest fix: one parameter and its `PublicAPI` line.
+  2. Every registration operation takes the source. Smallest fix: the request address on
+     every call.
+  3. Count against the source of the landing browser's session, and nothing where there is
+     none. Smallest fix: no surface change.
+- **Parked.** That case alone, and ledger line 419.
+- **Answer:** pending.
+
+**33. Tier 3. D-166 318 (3) against OPS-SEC-003: what a fingerprint key's retirement forgets.**
+
+- **Item.** D-166 318 (3): `ForgetAsync` deletes only `send_grants` lines under a previous
+  version and released username holds.
+- **What the specification says.** `06` OPS-SEC-003: a keyed hash kept with no plaintext (a
+  sign-in in progress, a throttle ledger line) is forgotten when its version retires.
+- **What the code needs.** One rule. The log and the chapter differ on what retirement
+  forgets.
+- **Parked.** 318 (3), ledger line 318. 318 (1) and (2) are in `a7546b70`.
+- **Answer:** pending.
+
+**34. Tier 2. D-166 136 against `10` `alerting.denials.threshold`: the actor of a principal's refusal.**
+
+- **Item.** D-166 136 counts the actor of a system principal's refusal by the principal's
+  name.
+- **What the code needs.** After 136 a principal records the nil subject (the column is
+  `NOT NULL`).
+- **What the specification says.** `10` `alerting.denials.threshold`: the actor is the acting
+  subject recorded, and refusals naming none count as one actor. Read with 136, every
+  principal shares one actor, and the clause on refusals naming none never applies.
+- **Readings.**
+  1. By the principal's name where there is one, else by the acting subject (D-166).
+     Smallest fix: the row of `10`.
+  2. By the acting subject alone, the nil subject standing for every principal (`10`).
+     Smallest fix: D-166 136's count.
+- **Parked.** All of 136: the record, its migration, the explanation's principal and
+  reason, `ExplanationTests.AUTHZ_CONCEAL_004_AC1_ARefusalOfBackgroundWorkNamesThePrincipalAndItsReasonAsync`,
+  the audit store's test of IDN-AUD-001 criterion 1, ledger line 136.
+  `OPS_ALERT_001_AC1_ARunOfRefusalsNamingNoOneIsRaisedAsync` turns on the answer.
+- **Answer:** pending.
+
+**35. Tier 2. D-166 303 (1) against `09` `GET /admin/audit`: the subject of an audit entry.**
+
+- **Item.** D-166 303 (1) appends only `Principal` and `PrincipalReason` to the public
+  `AuditEntry`.
+- **What the code needs.** After 303 (2) the data subject lives only in
+  `audit_records.subject`.
+- **What the specification says.** `09` `GET /admin/audit`: each entry carries the data
+  subject.
+- **Readings.**
+  1. `AuditEntry` and its view gain `SubjectId? Subject`. Smallest fix: one member and its
+     `PublicAPI` line.
+  2. D-166's shape stands, and `09` changes.
+- **Parked.** `Subject` on `AuditEntry`, the view, its test. The rest of 303 is in
+  `9cfccf3a`.
+- **Answer:** pending.
+
+**36. Tier 3. D-166 242 (4), AUTH-SESS-009 and IDN-LIFE-009b: a downgraded session, and where `auth.factor.notpermitted` is judged.**
+
+- **Item.** D-166 242 (4).
+- **What the code needs.** (A) A representation of a downgraded session: `Session` has no
+  such state, and `StepUp.Proved` reads `Attained` and `AttainedAt`. (B) A place to judge
+  `auth.factor.notpermitted` "in `AuthenticationService.AcceptsAsync` and
+  `SessionService.PresentAsync` alike, as a sign-in does".
+- **What the specification says.** (A) Nothing on how a downgrade is held. (B)
+  `AcceptsAsync` is shared with sign-in and runs before the factor is verified, so a
+  refusal there tells a caller not yet authenticated which factors the organization
+  permits; a sign-in today refuses in `SessionService.BeginAsync`, after the factor
+  succeeds.
+- **Parked.** 242 (4), the downgrade and `auth.factor.notpermitted` halves, with
+  `AuthenticationServiceTests.IDN_LIFE_009b_ASessionHeldBeforeTheMembershipIsDowngradedAsync`
+  and ledger line 246. The `policyRequirement` half is in `044a9a7f`.
+- **Answer:** pending.
+
+**37. Tier 2. D-166 135 and OPS-MIG-003a criterion 4: the `public` schema.**
+
+- **Item.** D-166 135: `DatabaseRoleTests` reads every schema.
+- **What the code needs.** Widened so, the test finds `USAGE` on `SCHEMA public` held through
+  `PUBLIC`, PostgreSQL's default since version 15, which no migration grants.
+- **What the specification says.** "Every schema", with no word on the default grant.
+- **Readings.**
+  1. Every schema means the library's schemas; `USAGE` on `public` through `PUBLIC` is left
+     out. Smallest fix: the test alone.
+  2. `(SCHEMA public, USAGE)` joins `AuthorizationModel.MaintenanceGrants`. Smallest fix:
+     the serialized model and the truth table.
+  3. A migration revokes `USAGE` on `public` from `PUBLIC`. Smallest fix: one migration,
+     which changes the host's database.
+- **Parked.** 135.
+- **Answer:** pending.
+
+**38. Tier 2. D-166 119 (1): an immediate attempt after the caller's commit.**
+
+- **Item.** D-166 119 (1): an after-commit registration on `IUnitOfWork` makes the
+  immediate attempt of `SendAsync` wait for the caller's outermost commit.
+- **What the code needs.** `SendAsync` returns `Result<SendReference>`, and the reference is
+  drawn when the message is carried, so inside a caller's transaction there is no outcome
+  to return.
+- **What the specification says.** 118 (question 27) moves the reference into the admitted
+  message; 119 (5) says callers that act on the outcome send outside transactions.
+- **Readings.**
+  1. Build (1) now; `SendAsync` inside an open transaction faults
+     (`InvalidOperationException`) until (2) and (3) move the callers to `Undertake`.
+  2. Build only the `IUnitOfWork` registration now, and wire `SendingService` with 118, (2)
+     and (3).
+  3. Park all of (1) with 118.
+- **Parked.** 119 (1) and what builds on it, (2) to (4); 227 and 322 with 119; ledger lines
+  119, 227 and 322.
+- **Answer:** pending.
+
+**39. Tier 3. D-166 119 (6) and PRIV-RIGHT-005a: the erased value in `send_outbox.wrapped_key`.**
+
+- **Item.** D-166 119 (6).
+- **What the code needs.** The layout of the erased value. The outbox has no
+  `format_marker` column: `wrapped_key` is a bare 40-byte RFC 5649 wrap.
+- **What the specification says.** `04`: an erased wrapped key is 32 zero bytes under marker
+  `0x00`, and the outbox holds "the erased value (marker `0x00`, Values above)".
+  `subject_keys` keeps the marker in a column of its own, and `MailboxStore`'s release
+  zeroes the stored length without a marker. Whether the value is 33 bytes (`0x00` and 32
+  zeros) or 32 zeros with the marker implied is not settled.
+- **Parked.** 119 (6) and
+  `SubjectEraserTests.PRIV_RIGHT_005_AC1_AnOutstandingMessageIsUnreadableAndUncarriedAfterErasureAsync`.
+- **Answer:** pending.
+
+**40. Tier 2. D-166 152 (3) against AUTHZ-IMP-001 criterion 3: `Effective` on `CredentialSuspended`.**
+
+- **Item.** D-166 152 (3): `CredentialSuspended` carries `Actor`, the reporting context's
+  acting subject, "and `Effective` where it differs".
+- **What the code needs.** To compare the acting and the effective identity.
+- **What the specification says.** AUTHZ-IMP-001 criterion 3: "No feature reads them as
+  differing", enforced by
+  `AccessSeamTests.LIB_SEAM_002_AC2_NoFeatureReadsActingAndEffectiveAsDiffering`, which
+  refuses `Effective ==` and `!=` in `src`. The documentation of `DomainEvent.Effective`
+  says "where it was not their own".
+- **Readings.**
+  1. `Effective` is never set on `CredentialSuspended`. Every path today has the acting
+     equal to the effective; only the reserved seam `AccessContext.Of(acting, effective)`
+     loses it.
+  2. `Effective` is always the context's effective identity. This departs from "where it
+     differs" and from the documentation.
+  3. Compare, and relax the gate. This weakens a gate.
+- **Parked.** `Effective` on `CredentialSuspended`, ledger line 152. The rest of 152 is in
+  `50cd2637`.
+- **Answer:** pending.
+
+**41. Tier 3. D-166 242 (3) and REG-DOM-001: an accepting account that holds no verified email.**
+
+- **Item.** D-166 242 (3): at acknowledgement the lock is judged on the corporate address
+  where one is taken on, else the bound email, else at least one verified email of the
+  accepting account.
+- **What the code needs.** The answer for an account signed in by phone, holding no
+  verified email.
+- **What the specification says.** REG-DOM-001's second paragraph says a phone sign-in uses
+  no sign-in email, so the lock does not reach it; "at least one verified email" finds
+  none, so it refuses.
+- `2e8174c1` admits that case (the loop over no email returns no refusal); no test asserts
+  it. A follow-up changes it if the answer is otherwise.
+- **Parked.** That case.
+- **Answer:** pending.
+
+**42. Tier 3. D-166 129 (1), `09` section 4 and REG-SESS-006: where a registration's open ceremony and unconfirmed generator are held.**
+
+- **Item.** D-166 129 (1): `BeginKeyAsync` and the generator's begin under a registration
+  session's `CredentialAuthority`.
+- **What the code needs.** A place to hold, between begin and complete or confirm, the open
+  WebAuthn ceremony (kind, challenge, expiry) and the unconfirmed generator (identifier,
+  label, secret).
+- **What the specification says.** `identity.key_ceremonies` has a foreign key to
+  `identity.accounts`, and an unconfirmed generator is a row of `identity.authenticators`
+  with the same key: both need an account row before the terms step, which 129 forbids.
+  No chapter names where they go, and the answer decides where an unconfirmed generator's
+  secret is stored.
+- **Parked.** 129 (1) whole: the registration form of `CredentialAuthority`, `Asking`, the
+  key and generator paths, the `RegistrationFlowTests` of REG-SESS-006 criteria 1 and 4
+  and their counterparts, ledger line 129. 129 (2) is in `6e0c13e8`.
+- **Answer:** pending.
+
+**43. Process. CONV-VCS-003: two commit messages out of the rule.**
+
+- **Item.** CONV-VCS-003 and its commit-message check.
+- **What the code needs.** `86e23f9e` (on the pushed `corrections-4`) uses the type `style`,
+  outside the chapter's list of types; the check was red on the push of `13bbe7db` and
+  will be red on the pull request. `82a3ae2b` has a body line of 76 characters, past 72.
+- **What the specification says.** The history is not rewritten without the owner's word,
+  and the default branch takes no force push.
+- **Readings.**
+  1. Reword both: a rebase of `corrections-4` from the parent of `13bbe7db` and a force
+     push of that branch, which is not the default one.
+  2. Leave both; the pull request's commit-message check stays red.
+- **Parked.** Nothing. The local message check now reads the type list as well.
+- **Answer:** pending.
+
+**44. Tier 3. D-166 169, 170, 254, 255 and 257 (3) against PRIV-RIGHT-004 and `10` section 5.12b: what a takedown's reversal keeps.**
+
+- **Item.** D-166 169 and its group, point (3): `Account.ReverseTakedown` restores a held
+  deletion, else a held suspension, else restricted where a restriction is held, else
+  active, "and clears every held value".
+- **What the specification says.** `04` PRIV-RIGHT-004 and `10` section 5.12b hold a
+  restriction requested while the account is suspended or deleting, in force when the
+  account returns.
+- **What the code does.** `b1960a2e` keeps `RestrictionHeld`, and an out-of-band deletion's
+  held suspension, on a reversal to a held deletion or suspension, as the chapter says.
+- **Parked.** Nothing more; the reversal is committed as said, under the open question.
+- **Answer:** pending.
+
+**45. Tier 2. An out-of-band erasure by the account's state (`0149b6d6`): the fulfilment's codes against `09`.**
+
+- **Item.** D-166 D.5, an out-of-band erasure by the account's state.
+- **What the code does.** The fulfilment answers 404 `identity.account.notfound` where the
+  subject has no account, and 409 `identity.account.stateconflict` where the window cannot
+  begin.
+- **What the specification says.** `09`'s fulfil row lists only 403, 404 for the request,
+  and 409 for a request already decided.
+- **Readings.**
+  1. The `09` row gains both.
+  2. Both are answered as a code the row already has.
+  3. The fulfilment never refuses on the account; it records the request fulfilled.
+- **Parked.** Nothing more; `0149b6d6` is committed with the codes of reading 1, and the
+  ledger lines of the D.5 items are written.
+- **Answer:** pending.
+
+**46. Tier 2. D-166 328 and CONV-VCS-004: truth-table rows for the step-up gate.**
+
+- **Item.** D-166 328 changes `StepUpGates.cs` and `ISessionGates.cs` in
+  `src/Janus.Authorization/Gate`, a path the truth-table gate counts as permission logic.
+- **What the code needs.** The table has no step-up outcome, and `HostFixture` registers no
+  `IAssuranceProvider`. The step-up commits `d12ea4a2`, `44f99f4b` and `b7704d1b` touched
+  no row.
+- **What the specification says.** CONV-VCS-004 and AUTHZ-TEST-001 name relationship,
+  permission and condition logic.
+- **Readings.**
+  1. The step-up gate is not that logic; no rows.
+  2. `Decided.StepUpRequired` and two rows (a report that meets the gate, Allowed; an aged
+     report, StepUpRequired) in a second fixture that registers a provider.
+- **Parked.** Ledger line 328, and the rows under reading 2. The code of 328 is in
+  `669bac7b`.
+- **Answer:** pending.
+
+**47. Tier 2. D-166 389 (6) against CONV-VCS-005: the section of a changelog line.**
+
+- **Item.** D-166 389 (6): a changelog line under `Unreleased` (Security).
+- **What the specification says.** CONV-VCS-005: the first version's section records under
+  Added alone.
+- **Readings.**
+  1. A `### Security` heading under `Unreleased`.
+  2. The line under `### Added`.
+- **Parked.** The line, with 389 (question 48).
+- **Answer:** pending.
+
+**48. Tier 2. D-166 389 (2): the address a registration's first session records.**
+
+- **Item.** D-166 389 (2): `RegistrationEndpoints` passes the source in its counting form
+  (an IPv6 address cut to its /64) at begin.
+- **What the code needs.** `RegistrationSession.Source` is one string, and
+  `RegistrationService.CompleteAsync` opens the first session with
+  `new SessionOrigin(live.Source, device)`, so that session would record the /64 and not
+  the whole address.
+- **What the specification says.** Nothing on the first session's address.
+- **Readings.**
+  1. `CompleteAsync` takes the completing request's `SessionOrigin` (the whole address); the
+     contract path of `AcceptTermsAsync` keeps `live.Source`.
+  2. Begin stores both. Smallest fix: a new column, which 389 (6) says is not needed.
+  3. The /64 is accepted for a registration's first session.
+- **Parked.** 389 whole, with the row `abuse.source.sitelimit` and the /48 count of section
+  F, ledger line 389.
+- **Answer:** pending.
+
+**49. Tier 2. D-166 Tier 1 correction (1) and CONV-DESIGN-004 criterion 2: what the exemption rule clears.**
+
+- **Item.** D-166 Tier 1 correction (1): the whole-file exclusion of `Foreign` removed and
+  every project scanned.
+- **What the code needs.** Matches the literal rule (only `ForeignMembers` pairs and
+  `OpenIddict.*` interfaces exempt) cannot clear: `SubjectId(Guid value)`, the value type's
+  own constructor; `ProviderDocuments.GetDocumentAsync(string address)` and
+  `ProviderMetadataReading.GetConfigurationAsync(string address)`, which implement
+  `IDocumentRetriever` and `IConfigurationRetriever<T>` of
+  `Microsoft.IdentityModel.Protocols`. `BrowserProfileLog.Concealed` and
+  `ConcealedTooLate` take a `Guid` correlation (an `AuditRecordId` value); a
+  `[LoggerMessage]` method logs its declared parameters, so logging `.Value` keeps a `Guid`
+  parameter the scan reports, and taking `AuditRecordId` keeps the text but changes the
+  structured state.
+- **What the specification says.** `08` criterion 2 exempts a member that implements an
+  interface of a CONV-DESIGN-008 package; D-166's reflection test requires `OpenIddict.*`.
+- **Readings.**
+  1. Literal: the test fails, and nothing clears the constructor of `SubjectId`.
+  2. A match inside the declaration of the value type it names is exempt;
+     `ForeignMembers` gains the two IdentityModel pairs; the reflection test admits an
+     interface from an assembly of a CONV-DESIGN-008 package (`OpenIddict.*` or
+     `Microsoft.IdentityModel.*`).
+  For the log: (i) take `AuditRecordId`; (ii) keep `Guid` and exempt it under the rule;
+  (iii) another the owner names.
+- **Parked.** The exemption rule and its test; `BrowserProfileLog` and `Concealment`
+  unchanged. `LeakedPasswordCorpus.Range` takes a `Uri` (`fa30c44f`).
+- **Answer:** pending.
+
+**50. Tier 2. D-166 359 and 382 (3): which statuses `endpoints.txt` lists.**
+
+- **Item.** D-166 359 and 382 (3): `endpoints.txt` holds each status the endpoint answers
+  and the codes each status carries.
+- **What the code needs.** Which statuses. 154 endpoints carry no `Produces` metadata.
+- **Readings.**
+  1. Only those `09`'s heading lists.
+  2. Those, and the statuses that cut across (401 `auth.session.expired` on session routes,
+     403 `auth.session.csrfinvalid` on state-changing routes, 400 `api.request.malformed` on
+     bodies, 404 `authz.resource.notfound` for a method the path does not take, 500
+     `system.fault`), derived from each endpoint's markers in the generator.
+- **Parked.** With question 51.
+- **Answer:** pending.
+
+**51. Tier 2. D-166 359 and 382 (3): where the statuses and codes come from, and what carries them.**
+
+- **Item.** As question 50.
+- **What the code needs.** Nothing in the code yields an endpoint's codes, so they would be
+  copied from `09` (the file recording `09` where a handler differs); ASP.NET Core has no
+  metadata type for an error code.
+- **Readings.**
+  1. A new internal metadata record in `Janus.Hosting` (a status with its codes, through a
+     route builder extension), with `09` as the source. `08` names none.
+  2. The owner names another source or carrier.
+- **Parked.** 359 and 382 (3), the endpoint lines of (4), the endpoint and response-member
+  scenarios of (5), ledger line 382.
+- **Answer:** pending.
+
+**52. Tier 2. D-166 Tier 1 correction (1): `HostedMailbox.Address`.**
+
+- **Item.** D-166 Tier 1 correction (1) says `HostedMailbox.Address` takes `EmailAddress`.
+- **What the code does.** `55850e21` makes it `EmailAddress?`: the reconciliation reads a
+  listed address that does not parse as no mailbox's address (IDN-ACCT-004), rather than
+  failing the listing.
+- **Readings.**
+  1. Keep `EmailAddress?`, null for an address that does not parse.
+  2. `EmailAddress`; a listing holding such an address faults.
+- **Parked.** Nothing more; `55850e21` is committed under reading 1.
+- **Answer:** pending.
+
+**53. Tier 2. D-166 Tier 1 correction (1) and `08`: four routes that bind a string.**
+
+- **Item.** `08`: no handler takes a value with a type as a bare string.
+- **What the code needs.** `RoleEndpoints` `name` (`RoleName`), `ConfigurationEndpoints`
+  `key` (`ConfigurationKey`), `RestrictionEndpoints` `name` and `AppPasswordEndpoints` `id`
+  bind strings and check them in the handler, naming `details.member` (API-CONV-002
+  criterion 4). Bound through `IParsable<T>`, they answer 400 malformed with no member,
+  since `MalformedRequest` names none for a failure that is not JSON.
+- **Readings.**
+  1. Bind through `IParsable<T>`; those routes lose `details.member`.
+  2. Keep the string binding where the refusal names its member; `08` is out of step.
+  3. Bind through `IParsable<T>`, with a refusal of the path that names its member.
+- **Parked.** Those four routes.
+- **Answer:** pending.
+
+**54. Owner action. D-166 378 and OPS-DEP-002: the repository variable `DESTRUCTIVE_DDL_GATE`.**
+
+- **Item.** D-166 378.
+- **What the code needs.** `destructive-operations.sh` now fails where the variable is
+  unset, so the pull request's destructive-operations job needs it, with the value
+  `disabled`.
+- **What the specification says.** Repository settings are the owner's.
+- **Parked.** Nothing; the variable is not created.
+- **Answer:** pending.
+
+**55. Tier 2. D-166 160: the access context of `IOidc.KeysAsync`.**
+
+- **Item.** D-166 160: `KeysAsync` takes an `AccessContext` and admits any, the anonymous one
+  included.
+- **What the code needs.** `AccessContext` has no anonymous form (its factories are
+  `Of(subject)`, `Of(acting, effective)`, `Of(SystemPrincipal)` and break-glass). The
+  callers are `KeySetAnswer` (the key set's `GET`, by nobody) and `SignOn.RecordAsync`.
+- **Readings.**
+  1. A public `AccessContext.Anonymous`, all null, for both callers, with its `PublicAPI`
+     line.
+  2. `AccessContext.Of(SystemPrincipal.ForDeployment("key-set", "AUTH-KEY-001", ...))` for
+     both, with a new principal name and an operation to choose.
+  3. `KeySetAnswer` as 1, `SignOn` as 2.
+- **Parked.** The signature of `IOidc.KeysAsync`, its two callers, its `PublicAPI` line,
+  ledger line 160. The `ClaimsAsync` half is in `00f1e14f`.
+- **Answer:** pending.
+
+**56. Tier 3. D-166 282 against `07` LIB-API-003 and `09` section 10: a provider event's refusal.**
+
+- Written as Tier 2; raised to Tier 3 when asked: point 1 is two texts that contradict
+  each other on behaviour, and point 2 rests on RFC 8935 section 2.4, which the repository
+  does not hold.
+- **Item.** D-166 282, and E.5 (a Security Event Token without `jti`).
+- **What the specification says.** (1) `07` LIB-API-003: the description carries the `err`
+  code again, never a sentence; D-166 282 and Tier 1 item 5: the description carries
+  `integration.callback.rejected`. (2) `09` section 10 groups a token that cannot be read,
+  one without `jti` and one the provider's keys do not verify as failing validation;
+  D-166 fixes `invalid_request` only for the token without `jti`.
+- **What the code needs.** `ProviderKeys.VerifiesAsync` returns a `bool` over the signature,
+  the issuer, the audience, the lifetime and unreadable documents; no item maps these to
+  an `err`.
+- **Parked.** The Google 400 writer in `ProviderEventIntake`, the Google 422 expectation of
+  `ProviderEventTests`, the IDN-LIFE-012a criterion 3 tests on both routes, E.5, ledger
+  line 282.
+- **Answer:** pending.
+
+**57. Tier 2. D-166 E.4 and CONV-DESIGN-007: the area registration methods.**
+
+- **Item.** D-166 E.4: each area registers its own types through an `IServiceCollection`
+  method.
+- **What the code needs.** Such a method in `Janus.Core`, `Janus.Identity`,
+  `Janus.Authorization` and `Janus.Privacy` needs
+  `Microsoft.Extensions.DependencyInjection.Abstractions`, which none references and
+  CONV-DESIGN-008 does not list. `Janus.Identity` defines no registered type.
+- **What the specification says.** `08`: the key ring and the mail server in use are
+  registered where the ring is (`Janus.Hosting`, `Janus.Cli`: `AddKeyRing`).
+- **Readings.**
+  1. A `FrameworkReference` to `Microsoft.AspNetCore.App` in the four; `AddIdentityArea`
+     empty; `AddCoreArea` holds the key ring, the mail server in use and `Janus.Core`'s
+     defaults.
+  2. The owner adds the abstractions package to CONV-DESIGN-008; then as 1.
+  3. Only projects that define registered types and already reference the container:
+     `AddAuthenticationArea` beside `AddStorageArea`, the others as they are, the test over
+     two projects.
+- **Parked.** All of E.4.
+- **Answer:** pending.
+
+**58. Tier 2. D-166 X9 and CONV-DESIGN-003 criterion 5: a unit of work left clean.**
+
+- **Item.** D-166 X9.
+- **What the code needs.** About 136 returns between `BeginAsync` and `CommitAsync`, in about
+  50 services, none of which rolls back. The scoped `UnitOfWork` keeps the transaction, so
+  the next operation joins at depth 1 and commits nothing. `IUnitOfWork` has `Begin`,
+  `Commit` and `Dispose` (a dispose rolls back and resets the depth); the idiom of
+  `CredentialService.RefusedAsync` commits the empty transaction. A commit or rollback
+  never clears the change tracker, so a refused operation's tracked writes are saved by
+  the next commit.
+- **What the specification says.** Neither the member nor what an inner failure does to the
+  outer transaction.
+- **Readings.**
+  1. `DisposeAsync` before a failure returns, the tracker cleared in `DisposeAsync`, an
+     inner failure rolling back the outermost; no surface change.
+  2. A public `RollbackAsync` on `IUnitOfWork`, with its `PublicAPI` line and three fakes.
+  3. A savepoint per nested `BeginAsync`.
+- **Parked.** All of X9, its sites and its test.
+- **Answer:** pending.
+
+**59. Tier 3. D-166 321 and AUTHZ-GATE-004 criterion 4 against X1: the transaction of a denial-spike alert.**
+
+- Written as Tier 2; raised to Tier 3 when asked: the gate's denial alert is security
+  semantics.
+- **Item.** D-166 321 and X1.
+- **What the code does.** `AccessGate` writes `authz.access.denied` outside any transaction
+  (321); `DenialSpikes.WatchAsync` then raises through `IAccessAlerts` and
+  `AlertChannels.RaiseAsync`, which joins the caller's open transaction, so a rollback
+  loses the alert row and `AlertRaised` while the record and the count stay.
+- **What the specification says.** 321 names "no record, no count and no alert" as the
+  defect; its fix and its test cover the record and the count.
+- **Parked.** The transaction of the raise of `DenialSpikes`. Related: question 34.
+- **Answer:** pending.
+
+**60. Tier 3. D-166 119 (7), AUTH-ABUSE-004, `10` section 5.15, REG-IDENT-002 and REG-IDENT-007, `10` section 5.25: the purpose of the identifier-change-confirm link.**
+
+- **Item.** D-166 119 (7).
+- **What the code does.** The identifier-change-confirm link (`IdentifierService.AskOldAsync`,
+  sent to the displaced address to confirm a replacement) goes under `notification`.
+- **What the specification says.** As a link the person asked for, it may not carry
+  `notification`, and no chapter names its purpose (`signin` and `verification` both fit);
+  as a notice to an existing holder it answers to `notification` alone.
+- **Parked.** Its purpose alone. The enrolment link of an assisted recovery goes under
+  `signin` (`a01214a8`).
+- **Answer:** pending.
+
+**61. Tier 2. D-166 X3, CONV-DESIGN-003 criterion 6 and INF-BG-001: passes that overlap across processes.**
+
+- **Item.** D-166 X3 at V7 and S6.
+- **What the code needs.** `JobRunStore.Claim` is a claim per interval, not a lease for the
+  pass. The outbox, the sends and the alert dispatch run every `PT5S`, with network calls in
+  batches of 100, so passes overlap across processes. `OutboxPublisher.DueAsync` and
+  `SendingService.RetryAsync` read due rows with no claim: an attempt count lost, a failure
+  or raise made twice, a duplicate confirmation insert that throws, an erasure ledger line
+  appended twice. An inline attempt past `outbox.retry.initial` meets the retry pass.
+- **Readings.**
+  1. A claim per row, by a conditional update, before anyone is called (`OutboxPublisher`,
+     the retry and settle of `SendingService`, `AlertDispatch`).
+  2. A lease for the pass on `job_runs`, with an expiry; a migration.
+  3. The overlap accepted under at-least-once delivery: the lost update fixed (an increment
+     in SQL), `ON CONFLICT DO NOTHING`, an idempotent ledger append.
+- **Parked.** V7 (`OutboxPublisher`) and S6 (the retry and settle of `SendingService`).
+- **Answer:** pending.
+
+**62. Tier 3. D-166 X3 at C9, IDN-ACCT-007 criterion 2 and AUTHZ-GATE-006 criterion 2 against CONV-DESIGN-003 criterion 6: a restriction committed after the gate reads.**
+
+- **Item.** D-166 X3, place C9.
+- **What the code does.** `ISettingsRestriction.RefusedAsync` (`GatedSettings`, then
+  `AccessGate.RequireSettingsChangeAsync`) reads `SubjectSets.Restricted` before
+  `BeginAsync`, at 16 sites; `AccountStates.RestrictAsync` writes under the account row lock
+  (C2). A restriction committed between the gate's read and the change's commit does not
+  stop the change; every modifying action the gate refuses under a restriction has the same
+  window. `AccessGate` resolves `SubjectSets` once per operation, and `GatedSettings`
+  enforces the restriction in no second place.
+- **Parked.** C9.
+- **Answer:** pending.
+
+**63. Tier 3. D-166 X3 at S1, AUTH-ABUSE-004 criterion 1 against CONV-DESIGN-003 criterion 6: the admission of a send.**
+
+- Written as Tier 2; raised to Tier 3 when asked: sending restrictions are restriction
+  semantics.
+- **Item.** D-166 X3, place S1.
+- **What the code does.** `SendingService` judges a send on the counters read in
+  `PlanAsync`, outside any transaction, carries it, and counts it in `SettleAsync` after
+  the transport took it. Sends made at once while the count stands one below the limit
+  each pass the check and are all sent, and one credit is judged available to each. A lock cannot span the transport call
+  without the after-commit carrying of 119 (1) (questions 27 and 38).
+- **Parked.** The admission half of S1. The lost updates, which every way of settling it
+  needs, are in `056b8580` and `5c3e2ec5`.
+- **Answer:** pending.
+
+**64. Tier 3. D-166 X3 at S5, OPS-ALERT-004a against CONV-DESIGN-003 criterion 6 and X7: whom a destination change notifies.**
+
+- Written as Tier 2; raised to Tier 3 when asked: the notice to a replaced alert
+  destination is a security control (OPS-ALERT-004a, D-083).
+- **Item.** D-166 X3, place S5.
+- **What the code does.** `AlertDestinationChange` reads the destinations in force and
+  notifies them before its transaction, then writes the replacement under the settings row
+  lock (178). Two changes at once (A to B, A to C) both notify A, and B is replaced
+  without B being told. Deciding under the lock whom to notify means carrying the notice
+  inside the transaction (a send in the caller's transaction, which X7 and the parked
+  119 (1) move after the commit) or refusing a change whose value in force moved.
+- **Parked.** S5.
+- **Answer:** pending.
+
+**65. Tier 2. D-166 X4, API-CONV-002 criterion 3 and CONV-CODE-006 criterion 3: the free text of `PUT /admin/compliance/assessments`.**
+
+- **Item.** D-166 X4 at `PUT /admin/compliance/assessments` (PRIV-ROPA-001).
+- **What the code needs.** `dataOwner` and `organisationalSecurityMeasures` reach
+  `IProcessingRecords.DeclareAsync` untrimmed and unbounded.
+- **What the specification says.** X4 says every free-text member; API-CONV-002 names four;
+  `09` section 8a says an omitted field is cleared. Document text is free text no bound
+  of 1024 can hold, so "every other" is not literal.
+- **Readings.**
+  1. Both are free text: trimmed, blank or past 1024 characters malformed naming the
+     member, absent cleared.
+  2. Blank clears as omitted; only the upper bound applies.
+  3. Record content, outside X4; nothing changes.
+- **Parked.** The free text of that route.
+- **Answer:** pending.
+
+**66. Withdrawn.** It asked after the row `abuse.source.sitelimit` of section F, which is
+part of 389 (3) and waits with 389 on question 48.
+
 ## 5. Gate result
 
-**`corrections-4`.** Not run. The run stopped at question 20, before step 4 of the work
+**`corrections-4`, at the stop at question 20.** Not run. The run stopped at question 20, before step 4 of the work
 order, so the full gate was not run and no pull request was opened. The branch is pushed so
 its commits can be read.
 - At `7b45d2b`, the head of the code, in the repository's own checkout: build with
@@ -870,3 +2004,28 @@ its commits can be read.
 - Push run 36201534531 failed the contract tests on `7a4d4dd`.
 - Push run 36201936626 on `3d1b5d8` was green.
 - Pull request run 36201939031 on `3d1b5d8` was green on attempt 2. Attempt 1 failed REG_SESS_003 alone, as above.
+
+**`corrections-4`, at the end of the run.** Full gate on corrections-4 at `46d290fd`, run once and locally, job by job as the gates workflow runs it (range base `b6d14fe`, the merge base with `main`). The branch is unpushed from `02bb2419`, so no pipeline run exists for it yet.
+
+| Job | Result |
+|---|---|
+| Locked restore | passed |
+| Public surface files up to date (`release.sh`) | passed |
+| Format | passed |
+| Unit tests | passed, 2808 |
+| Contract tests | passed, 132 |
+| Unicode tables regenerate without a diff | passed |
+| Integration tests | passed, 859 |
+| Policy coverage test | passed, 3 |
+| Truth-table suite (change check and suite) | passed, 69 |
+| Double migration run | passed (against a `postgres:17-alpine` container; no release is tagged, so run two starts from the empty schema) |
+| Janus.Analyzers rules, permitted outcome, forbidden log values | passed, 20 |
+| Dependency allow-list | passed |
+| InternalsVisibleTo allow-list | passed |
+| Forbidden markers and commented-out code | passed |
+| Acceptance-criterion test names | passed |
+| Commit message format | failed: `86e23f9e` (type `style`) and `82a3ae2b` (a body line of 76 characters), question 43 |
+| Changelog line present | passed |
+| Destructive-operation detection report | passed with `DESTRUCTIVE_DDL_GATE` set to `disabled` for the run; the repository variable does not exist yet (question 54) |
+| Dependency vulnerability alerting | passed |
+| Secret scanning | not run locally: it downloads the pinned scanner, which waits on the owner's approval; the last full-history scan, at `07ac1df4`, found nothing |
