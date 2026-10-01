@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using Janus.Core;
@@ -13,7 +14,10 @@ namespace Janus.Hosting.Bff;
 /// rather than a decision taken at each endpoint, so that one failure cannot answer
 /// 409 in one place and 422 in another, and so that a code added without a status is
 /// a failing test rather than a surprise in production. A code the table does not
-/// name answers as a fault, which discloses nothing the table did not decide.
+/// name answers as a fault, which discloses nothing the table did not decide. The one
+/// code whose status is not its own alone is <c>integration.callback.rejected</c>:
+/// 429 where the callback rate limit refused it and it carries <c>retryAt</c>, and the
+/// table's 422 otherwise (10 section 6, entry 276).
 /// </remarks>
 internal static class ApiStatus
 {
@@ -160,7 +164,7 @@ internal static class ApiStatus
         [ErrorCodes.ConfigurationKeyProtected] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ConfigurationLastDestination] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ConfigurationPolicyBelowSystem] = StatusCodes.Status422UnprocessableEntity,
-        [ErrorCodes.CallbackRejected] = StatusCodes.Status429TooManyRequests,
+        [ErrorCodes.CallbackRejected] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.EndpointInsecure] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.SmsBalanceFloor] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.PurposeNoConsent] = StatusCodes.Status422UnprocessableEntity,
@@ -193,6 +197,22 @@ internal static class ApiStatus
         Statuses.TryGetValue(code, out int status)
             ? status
             : StatusCodes.Status500InternalServerError;
+
+    /// <summary>
+    /// The status a failure answers with: its code's, save for a callback the rate
+    /// limit refused, which carries the instant it is admitted again.
+    /// </summary>
+    /// <param name="error">The failure.</param>
+    /// <returns>The status.</returns>
+    /// <exception cref="ArgumentNullException">The failure is absent.</exception>
+    public static int Of(Error error)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+
+        return error.Code == ErrorCodes.CallbackRejected && error.Details.ContainsKey("retryAt")
+            ? StatusCodes.Status429TooManyRequests
+            : Of(error.Code);
+    }
 
     /// <summary>
     /// Whether the table names the code, which every code the library raises is

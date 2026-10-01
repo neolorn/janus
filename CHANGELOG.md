@@ -368,9 +368,10 @@ against the public contract of LIB-API-001.
   route does not answer with a 2xx. An unsigned callback (`IUnsignedCallback`) reaches
   the route only with a reference issued for it and once the host has confirmed it with
   the provider. Both are held to `integration.callback.ratelimit` and to the provider's
-  published ranges first, and every refusal is answered 429
-  `integration.callback.rejected`, recorded against its source and counted toward
-  `alerting.callback.threshold`. Claimed events and issued references are kept, as
+  published ranges first. A refusal is answered `integration.callback.rejected`: 429
+  with `Retry-After` and `details.retryAt` where the rate limit refused it, 422 with no
+  `Retry-After` otherwise, and every refusal but the rate limit's is recorded against
+  its source and counted toward `alerting.callback.threshold`. Claimed events and issued references are kept, as
   hashes, in the `callback_events` and `callback_references` tables.
 - `ICallbackReferences.IssueAsync` issues the correlation reference an unsigned callback
   carries: 128 random bits in base64url, of which only the hash is kept.
@@ -379,7 +380,7 @@ against the public contract of LIB-API-001.
   puts in the query string, and every transport implements it. A report of failed
   delivery for a send the library made releases that send from its restrictions and
   nothing else; a report carrying an unknown reference, or one the transport cannot
-  read, is refused 429 `integration.callback.rejected`.
+  read, is refused 422 `integration.callback.rejected`.
 - `SensitiveBodyAttribute` marks an endpoint whose request and response bodies never
   reach the framework's request logging, whatever fields the deployment or the endpoint
   asks it to record. Every endpoint the library maps carries it, and a request the

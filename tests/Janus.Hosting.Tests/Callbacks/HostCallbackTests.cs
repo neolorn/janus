@@ -132,7 +132,11 @@ public sealed class HostCallbackTests : IAsyncDisposable
 
         Assert.All(
             new[] { unsigned, misSigned, altered },
-            context => Assert.Equal(StatusCodes.Status429TooManyRequests, context.Response.StatusCode));
+            context =>
+            {
+                Assert.Equal(StatusCodes.Status422UnprocessableEntity, context.Response.StatusCode);
+                Assert.Equal(0, context.Response.Headers.RetryAfter.Count);
+            });
         Assert.Equal(0, _signed.Parsed);
         Assert.Equal(0, _reached);
     }
@@ -150,7 +154,7 @@ public sealed class HostCallbackTests : IAsyncDisposable
             Body,
             SignedHostCallback.Signing(Body, Noon - TimeSpan.FromMinutes(6), Secret));
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, replayed.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, replayed.Response.StatusCode);
         Assert.Equal(0, _reached);
 
         HttpContext timely = await SentAsync(
@@ -244,7 +248,7 @@ public sealed class HostCallbackTests : IAsyncDisposable
             later,
             SignedHostCallback.Signing(later, Noon + TimeSpan.FromHours(2), "the-next-secret"));
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, expired.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, expired.Response.StatusCode);
         Assert.Equal(StatusCodes.Status200OK, current.Response.StatusCode);
         Assert.Equal(2, _reached);
     }
@@ -261,7 +265,7 @@ public sealed class HostCallbackTests : IAsyncDisposable
 
         HttpContext unverified = await SentAsync(Events, Body, SignedHostCallback.Signing(Body, Noon, Secret));
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, unverified.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, unverified.Response.StatusCode);
         Assert.Equal(0, _signed.Parsed);
         Assert.Equal(0, _reached);
     }
@@ -279,7 +283,7 @@ public sealed class HostCallbackTests : IAsyncDisposable
 
         HttpContext refused = await SentAsync(Events, unkeyed, SignedHostCallback.Signing(unkeyed, Noon, Secret));
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, refused.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Response.StatusCode);
         Assert.Equal(1, _signed.Parsed);
         Assert.Equal(0, _claims.Held);
         Assert.Equal(0, _reached);
@@ -333,7 +337,7 @@ public sealed class HostCallbackTests : IAsyncDisposable
 
         HttpContext outside = await SentAsync(Events, Body, SignedHostCallback.Signing(Body, Noon, Secret));
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, outside.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, outside.Response.StatusCode);
         Assert.Equal(0, _reached);
 
         _signed.Sources = [IPNetwork.Parse("203.0.113.0/24")];
@@ -359,7 +363,7 @@ public sealed class HostCallbackTests : IAsyncDisposable
 
         HttpContext unconfirmed = await SentAsync(Status, "{}", headers: [], query: "?reference=" + reference);
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, unconfirmed.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, unconfirmed.Response.StatusCode);
         Assert.Equal(0, _reached);
 
         _unsigned.Confirms = true;
@@ -395,8 +399,10 @@ public sealed class HostCallbackTests : IAsyncDisposable
             query: "?reference=" + Base64Url.EncodeToString(guessed));
         HttpContext misdirected = await SentAsync(Status, "{}", headers: [], query: "?reference=" + elsewhere);
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, forged.Response.StatusCode);
-        Assert.Equal(StatusCodes.Status429TooManyRequests, misdirected.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, forged.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, misdirected.Response.StatusCode);
+        Assert.Equal(0, forged.Response.Headers.RetryAfter.Count);
+        Assert.Equal(0, misdirected.Response.Headers.RetryAfter.Count);
         Assert.Equal(2, _unsignedLog.Entries.Count(entry => entry is (LogLevel.Warning, 1)));
         Assert.Equal(0, _unsigned.Asked);
         Assert.Equal(0, _reached);
