@@ -77,8 +77,9 @@ internal sealed class AccountStatesInMemory : IAccountStates
     }
 
     /// <summary>
-    /// Gets or sets what another transaction commits while a deletion waits for the
-    /// account's row, so a test may move the account under a decision about to be taken.
+    /// Gets or sets what another transaction commits while a deletion or a takedown waits
+    /// for the account's row, so a test may move the account under a decision about to
+    /// be taken.
     /// </summary>
     public Action<SubjectId>? Holding { get; set; }
 
@@ -187,6 +188,8 @@ internal sealed class AccountStatesInMemory : IAccountStates
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
+        Holding?.Invoke(subject);
+
         PendingDeletion? running = _deletions.GetValueOrDefault(subject);
 
         if (Of(subject) is not AccountState found

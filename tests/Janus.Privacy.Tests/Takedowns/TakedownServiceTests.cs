@@ -340,6 +340,39 @@ public sealed class TakedownServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-003, CONV-DESIGN-003 AC6: a state another transaction committed while
+    /// the trigger waited for the account's row is the one it answers for, as it would
+    /// have been found before, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_AStateCommittedMeanwhileIsTheOneAnsweredAsync()
+    {
+        _accounts.Holding = subject =>
+        {
+            _accounts.Holding = null;
+            _accounts.Erases(subject);
+        };
+
+        Error erased = Refused(await ExecutedAsync());
+
+        _accounts.Hold(Ahmed, AccountState.Active);
+        _accounts.Holding = subject =>
+        {
+            _accounts.Holding = null;
+            _accounts.Deletes(subject, DeletionOrigin.Takedown, Noon);
+        };
+
+        Error taken = Refused(await ExecutedAsync());
+
+        Assert.Equal(ErrorCodes.AccountStateConflict, erased.Code);
+        Assert.Equal("deleted", erased.Details["state"].GetString());
+        Assert.Equal(ErrorCodes.TakedownActive, taken.Code);
+        Assert.Empty(_outbox.Deliveries);
+        Assert.Empty(_audit.Entries);
+    }
+
+    /// <summary>
     /// IDN-LIFE-003, 09 section 8a: the trigger, the reading and the reversal each
     /// answer a subject no account bears as not found, and nothing is written.
     /// </summary>

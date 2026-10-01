@@ -1478,6 +1478,9 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- A takedown refused under the account's lock answers for the state it found there,
+  `identity.takedown.active` or `identity.account.stateconflict`, rather than
+  `authz.denied`.
 - `POST /account/deactivate` and `POST /account/delete` refuse an account whose state
   does not admit them with `identity.account.stateconflict` naming the state, and a
   restricted account's deactivation with `authz.restricted` from the gate, before

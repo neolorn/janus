@@ -82,18 +82,9 @@ internal sealed class TakedownService(
             .StandingAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        // IDN-LIFE-003: a takedown finds an account in any state but its own and an
-        // erasure; a running deletion is held and its clock kept.
-        switch (standing)
+        if (Untaken(standing) is Error untaken)
         {
-            case null:
-                return Result.Failure<ExecutedTakedown>(Error.From(ErrorCodes.AccountNotFound));
-            case { State: AccountState.Deleting, DeletingBy: DeletionOrigin.Takedown }:
-                return Result.Failure<ExecutedTakedown>(Error.From(ErrorCodes.TakedownActive));
-            case { State: AccountState.Deleted }:
-                return Result.Failure<ExecutedTakedown>(StateConflict(standing.State));
-            default:
-                break;
+            return Result.Failure<ExecutedTakedown>(untaken);
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -105,7 +96,7 @@ internal sealed class TakedownService(
             windows.ErasureDue(
                 DeletionOrigin.Takedown,
                 now,
-                standing.State is AccountState.Deleting ? standing.DeletingSince : null));
+                standing!.State is AccountState.Deleting ? standing.DeletingSince : null));
 
         if (await ChallengedAsync(context, session, StepUpAction.AccountTakedown, cancellationToken)
                 .ConfigureAwait(false)
@@ -122,9 +113,14 @@ internal sealed class TakedownService(
 
         // AUTH-SESS-010 AC2: the suspension and the end of every session are both the
         // library's, so they are one transaction and not two steps.
+        // D-166 X3, X5: refused under the account's lock, the takedown is answered for
+        // the state it found there; the reserved account, which no takedown names, is
+        // refused as OPS-BOOT-002 refuses it.
         if (!await accounts.TakeDownAsync(subject, now, cancellationToken).ConfigureAwait(false))
         {
-            return Result.Failure<ExecutedTakedown>(Error.From(ErrorCodes.Denied));
+            return Result.Failure<ExecutedTakedown>(
+                Untaken(await accounts.StandingAsync(subject, cancellationToken).ConfigureAwait(false))
+                ?? Error.From(ErrorCodes.Denied));
         }
 
         // IDN-LIFE-003a: the hosts' half is a delivery written with the transition, and
@@ -377,6 +373,18 @@ internal sealed class TakedownService(
         && since >= triggeredAt
             ? since
             : null;
+
+    // IDN-LIFE-003: a takedown finds an account in any state but its own and an
+    // erasure; a running deletion is held and its clock kept.
+    private static Error? Untaken(AccountStanding? standing) =>
+        standing switch
+        {
+            null => Error.From(ErrorCodes.AccountNotFound),
+            { State: AccountState.Deleting, DeletingBy: DeletionOrigin.Takedown } =>
+                Error.From(ErrorCodes.TakedownActive),
+            { State: AccountState.Deleted } => StateConflict(standing.State),
+            _ => null,
+        };
 
     private static Error StateConflict(AccountState state) =>
         Error.From(ErrorCodes.AccountStateConflict, "state", JsonSerializer.SerializeToElement(state, Spelled));
