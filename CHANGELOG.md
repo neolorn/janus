@@ -1478,6 +1478,8 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- A maintenance log entry's `note`, where one is given, is 1 to 1024 characters after
+  trimming, refused `api.request.malformed` otherwise, and kept trimmed.
 - A recovery approval refuses a reason or a `channelUsed` past 1024 characters after
   trimming, and a blank `channelUsed`, at the endpoint before any permission is asked
   and in the service before the step-up.

@@ -130,6 +130,16 @@ internal sealed class MaintenanceRecords(
             return Result.Failure<MaintenanceEntry>(Error.From(ErrorCodes.Denied));
         }
 
+        // API-CONV-002, X4: a note is optional, and one given is 1 to 1024 characters
+        // after trimming, for an in-process caller as at the endpoint.
+        string? stated = note?.Trim();
+
+        if (stated is { Length: 0 or > 1024 })
+        {
+            return Result.Failure<MaintenanceEntry>(
+                Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement("note")));
+        }
+
         DateTimeOffset now = time.GetUtcNow();
 
         // A task is recorded once it has been performed; a date ahead of the clock
@@ -139,7 +149,7 @@ internal sealed class MaintenanceRecords(
             return Result.Failure<MaintenanceEntry>(Invalid("performedAt"));
         }
 
-        var entry = new MaintenanceEntry(MaintenanceEntryId.Of(now), task, performedAt, actor, note);
+        var entry = new MaintenanceEntry(MaintenanceEntryId.Of(now), task, performedAt, actor, stated);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)

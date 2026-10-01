@@ -210,6 +210,34 @@ public sealed class MaintenanceEndpointTests : IAsyncDisposable
         Assert.Empty(_deployment.Maintenance.Log);
     }
 
+    /// <summary>
+    /// CONV-CODE-006 AC3 and API-CONV-002 AC3: a note past 1024 characters after
+    /// trimming, or a blank one, is malformed before the service is reached, so a
+    /// caller without the permission is answered for the body.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC3_ANoteOutsideTheBoundIsRefusedBeforeTheServiceAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        DateTimeOffset now = _deployment.Clock.GetUtcNow();
+
+        foreach (string note in new[] { "   ", " " + new string('n', 1025) + " " })
+        {
+            Answer answer = await browser.SendAsync(
+                "POST",
+                "/admin/compliance/maintenance",
+                ("task", "approver-review"),
+                ("performedAt", now),
+                ("note", note));
+
+            Assert.Equal(StatusCodes.Status400BadRequest, answer.Status);
+            Assert.Equal("note", answer.Json().GetProperty("details").GetProperty("member").GetString());
+        }
+
+        Assert.Empty(_deployment.Maintenance.Log);
+    }
+
     private async Task<Browser> AuthorisedAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);

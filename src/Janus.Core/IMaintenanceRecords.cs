@@ -61,8 +61,10 @@ public interface IMaintenanceRecords
     /// <param name="note">What they noted, where they noted anything.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// The entry, or the refusal: <c>api.request.malformed</c> naming
-    /// <c>performedAt</c> where it lies after now.
+    /// The entry, or the refusal: <c>api.request.invalid</c> naming
+    /// <c>performedAt</c> where it lies after now, or <c>api.request.malformed</c>
+    /// naming <c>note</c> where one is given blank or past 1024 characters after
+    /// trimming.
     /// </returns>
     ValueTask<Result<MaintenanceEntry>> RecordAsync(
         AccessContext context,

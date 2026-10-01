@@ -125,13 +125,22 @@ internal static class MaintenanceEndpoints
             return Answers.Malformed("performedAt");
         }
 
+        // API-CONV-002, X4: a note is optional, and one given is 1 to 1024 characters
+        // after trimming, refused before the service is called (CONV-CODE-006 AC2).
+        string? note = body.Note?.Trim();
+
+        if (note is { Length: 0 or > 1024 })
+        {
+            return Answers.Malformed("note");
+        }
+
         return Answers.Of(
             await records
                 .RecordAsync(
                     browser.Asking,
                     task,
                     performedAt,
-                    body.Note,
+                    note,
                     cancellationToken)
                 .ConfigureAwait(false),
             entry => TypedResults.Json(
