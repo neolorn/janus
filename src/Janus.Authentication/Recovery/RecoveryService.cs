@@ -910,24 +910,15 @@ internal sealed class RecoveryService(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        Error? failure = null;
-
         int account = (await configuration
                 .ReadAsync(Settings.AlertingRecoveryAccountThreshold, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, error => Withheld<int>(error, ref failure));
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         int raised = (await configuration
                 .ReadAsync(Settings.AlertingRecoveryApproverThreshold, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, error => Withheld<int>(error, ref failure));
-
-        // The thresholds are the alert's, not the approval's: one that will not read
-        // leaves the alert unraised and the approval as it stands.
-        if (failure is not null)
-        {
-            return Result.Success();
-        }
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         if (forAccount >= account)
         {

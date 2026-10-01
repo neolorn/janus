@@ -1637,17 +1637,10 @@ internal sealed class AuthenticationService(
             return null;
         }
 
-        Error? failure = null;
-
         TimeSpan grace = (await configuration
                 .ReadAsync(Settings.PolicyEnforcementGrace, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(value => value, error => Withheld<TimeSpan>(error, ref failure));
-
-        if (failure is not null)
-        {
-            return null;
-        }
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         IReadOnlyList<Authenticator> enrolled = await authenticators
             .OfAsync(subject, cancellationToken)
