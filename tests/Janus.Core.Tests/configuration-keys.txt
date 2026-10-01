@@ -58,6 +58,7 @@ identifiers.email.max
 identifiers.phone.max
 identifiers.username.changecooloff
 identifiers.username.enabled
+integration.callback.claimtimeout
 integration.callback.ratelimit
 integration.mail.endpoint
 integration.mailserver.endpoint

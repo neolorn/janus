@@ -3633,6 +3633,7 @@ static Janus.Core.Configuration.Settings.IdentifiersEmailMax.get -> Janus.Core.C
 static Janus.Core.Configuration.Settings.IdentifiersPhoneMax.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.IdentifiersUsernameChangeCoolOff.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.IdentifiersUsernameEnabled.get -> Janus.Core.Configuration.FlagSetting!
+static Janus.Core.Configuration.Settings.IntegrationCallbackClaimTimeout.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.IntegrationCallbackRateLimit.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.IntegrationMailEndpoint.get -> Janus.Core.Configuration.TextSetting!
 static Janus.Core.Configuration.Settings.IntegrationMailServerEndpoint.get -> Janus.Core.Configuration.TextSetting!
@@ -3799,6 +3800,7 @@ static Janus.Core.ErrorCodes.AccountAdministrativelySuspended.get -> Janus.Core.
 static Janus.Core.ErrorCodes.AffirmationRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.BreakGlassConsumed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.BreakGlassInvalid.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.CallbackInProgress.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.CallbackRejected.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ChallengeRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ChangePending.get -> Janus.Core.ErrorCode

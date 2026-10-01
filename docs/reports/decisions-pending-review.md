@@ -10555,6 +10555,8 @@ the confirmation a host supplies; 10 section 1 could give `integration.callback.
 429 for every cause; 04 or 06 could give `callback_events` and `callback_references` a
 retention.
 
+**Superseded by D-166.**
+
 ---
 
 ## 277. A report of delivery is held to a live send

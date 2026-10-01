@@ -364,15 +364,20 @@ against the public contract of LIB-API-001.
   the signed bytes are, its secrets and its event identifier; the library verifies the
   signature over the raw bytes in fixed time against the current secret and, for 24
   hours after a rotation, the previous one, holds a five-minute window where the scheme
-  carries an instant, and carries each event once, giving the claim back when the host's
-  route does not answer with a 2xx. An unsigned callback (`IUnsignedCallback`) reaches
-  the route only with a reference issued for it and once the host has confirmed it with
-  the provider. Both are held to `integration.callback.ratelimit` and to the provider's
-  published ranges first. A refusal is answered `integration.callback.rejected`: 429
-  with `Retry-After` and `details.retryAt` where the rate limit refused it, 422 with no
+  carries an instant, and carries each event once: the claim is settled when the host's
+  route answers with a 2xx and given back when it does not or throws, a delivery meeting
+  a claim still unsettled is answered 409 `integration.callback.inprogress` (not a
+  rejection), and one meeting a claim left unsettled for
+  `integration.callback.claimtimeout` (five minutes by default, at least one) takes it
+  over and is carried. An unsigned callback (`IUnsignedCallback`) reaches the route only
+  with a reference issued for it and once the host has confirmed it with the provider.
+  Both are held to `integration.callback.ratelimit` and to the provider's published
+  ranges first. A refusal is answered `integration.callback.rejected`: 429 with
+  `Retry-After` and `details.retryAt` where the rate limit refused it, 422 with no
   `Retry-After` otherwise, and every refusal but the rate limit's is recorded against
-  its source and counted toward `alerting.callback.threshold`. Claimed events and issued references are kept, as
-  hashes, in the `callback_events` and `callback_references` tables.
+  its source and counted toward `alerting.callback.threshold`. Claimed events and issued
+  references are kept, as hashes, in the `callback_events` and `callback_references`
+  tables, a claim with when it was taken and when it settled.
 - `ICallbackReferences.IssueAsync` issues the correlation reference an unsigned callback
   carries: 128 random bits in base64url, of which only the hash is kept.
 - `GET /callbacks/sms/dlr` takes the SMS gateway's delivery report on the machine

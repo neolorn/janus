@@ -38,6 +38,19 @@ internal static partial class CallbackLog
     public static partial void Repeated(ILogger log, string callback, string correlationId);
 
     /// <summary>
+    /// A delivery of an event whose earlier delivery is still being carried, answered
+    /// to be delivered again and not counted as a rejection.
+    /// </summary>
+    /// <param name="log">The logger.</param>
+    /// <param name="callback">The callback's name.</param>
+    /// <param name="correlationId">What resolves the request.</param>
+    [LoggerMessage(
+        EventId = 4,
+        Level = LogLevel.Information,
+        Message = "A delivery to {Callback} met one still being carried and was not carried ({CorrelationId}).")]
+    public static partial void InProgress(ILogger log, string callback, string correlationId);
+
+    /// <summary>
     /// A provider whose published keys could not be read, so no event of it verifies
     /// until they can be.
     /// </summary>
