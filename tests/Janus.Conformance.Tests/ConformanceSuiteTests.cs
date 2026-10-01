@@ -187,6 +187,34 @@ public sealed class ConformanceSuiteTests(SampleHost host) : IClassFixture<Sampl
     }
 
     /// <summary>
+    /// LIB-TEST-001 AC2: a derived row the table states wrongly is written and asked once
+    /// for each derivation the binder declares, the steward's and the borrower's, and is
+    /// reported for each with the derivation's relationship named, so a derivation
+    /// behind the first is held to the table too.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_TEST_001_AC2_AWrongDerivedRowIsReportedForEachDerivationAsync()
+    {
+        ConformanceReport report = await TableAsync(
+            context => new SampleRows<Binder>(context, SampleHost.BinderType, row => row.Id),
+            [new(TruthTableScenario.DerivedGrant, SampleHost.ReadBinder, Allowed: false)]);
+
+        Assert.Equal(
+            [SampleHost.Borrower, SampleHost.Steward],
+            report.Findings
+                .Select(found => found.Failure.Details["derivation"].GetString())
+                .Order(StringComparer.Ordinal));
+        Assert.All(
+            report.Findings,
+            found => Assert.Equal(
+                ("derived-grant", true, true),
+                (found.Failure.Details["scenario"].GetString(),
+                    found.Failure.Details["check"].GetBoolean(),
+                    found.Failure.Details["filter"].GetBoolean())));
+    }
+
+    /// <summary>
     /// LIB-TEST-001 AC3: the sample host's declaration holds together.
     /// </summary>
     [Fact]

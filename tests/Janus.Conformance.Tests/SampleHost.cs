@@ -30,7 +30,7 @@ namespace Janus.Conformance.Tests;
 
 /// <summary>
 /// A deployment of the library as the smallest host stands one up: three kinds of
-/// thing of its own and two facts about them it derives roles from, the values
+/// thing of its own and three facts about them it derives roles from, the values
 /// LIB-HOST-001 requires and no other, mail and SMS taken in memory, and the library
 /// mounted under a path of the host's choosing.
 /// </summary>
@@ -58,6 +58,11 @@ public sealed class SampleHost : IAsyncLifetime
     /// The relationship the steward role is derived from.
     /// </summary>
     public const string Steward = "steward";
+
+    /// <summary>
+    /// The relationship the borrower role is derived from, the binder's second.
+    /// </summary>
+    public const string Borrower = "borrower";
 
     // The one purpose the host processes its records for, and what it holds of whom.
     private const string Keeping = "keeping records";
@@ -175,6 +180,14 @@ public sealed class SampleHost : IAsyncLifetime
                 "steward",
                 row => row.BinderId,
                 "binder_id")
+            .Relationship<BinderBorrower>(
+                Borrower,
+                BinderType.ToString(),
+                "sample.borrowers",
+                row => row.Borrower,
+                "borrower",
+                row => row.BinderId,
+                "binder_id")
             .Resource<Shelf>(ShelfType.ToString(), type => type
                 .BelongsToOrganization()
                 .Derivation(Keeper, Keeper, materialised: true)
@@ -182,6 +195,7 @@ public sealed class SampleHost : IAsyncLifetime
             .Resource<Binder>(BinderType.ToString(), type => type
                 .ContainedIn(ShelfType.ToString())
                 .Derivation(Steward, Steward)
+                .Derivation(Borrower, Borrower)
                 .Purpose(Keeping, "contractual-obligation", data: [Records], subjects: [Members]))
             .Resource<Sheet>(SheetType.ToString(), type => type
                 .ContainedIn(BinderType.ToString())
@@ -253,6 +267,11 @@ public sealed class SampleHost : IAsyncLifetime
                     steward uuid NOT NULL,
                     PRIMARY KEY (binder_id, steward));
                 CREATE INDEX ix_stewards_steward ON sample.stewards (steward);
+                CREATE TABLE sample.borrowers (
+                    binder_id text NOT NULL REFERENCES sample.binders (id),
+                    borrower uuid NOT NULL,
+                    PRIMARY KEY (binder_id, borrower));
+                CREATE INDEX ix_borrowers_borrower ON sample.borrowers (borrower);
                 """);
         }
 

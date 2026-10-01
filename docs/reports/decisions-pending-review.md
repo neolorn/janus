@@ -14671,6 +14671,8 @@ from opening one.
 table in the library's scenarios, and list them; OPS-DATA-002 could say whether the
 conformance package is the service layer its AC2 speaks of.
 
+**Superseded by D-166.**
+
 ---
 
 ## 356. The provider probe a host runs asks what a registered client can be refused

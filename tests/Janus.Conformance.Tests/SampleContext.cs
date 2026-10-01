@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Janus.Conformance.Tests;
 
 /// <summary>
-/// The sample host's own context: its three kinds of thing, the two facts it derives
+/// The sample host's own context: its three kinds of thing, the three facts it derives
 /// roles from, and the library's two contract tables mapped beside them.
 /// </summary>
 /// <param name="options">How the context reaches the database.</param>
@@ -36,6 +36,11 @@ internal class SampleContext(DbContextOptions options) : DbContext(options)
     /// Who looks after which binder.
     /// </summary>
     public DbSet<BinderSteward> Stewards => Set<BinderSteward>();
+
+    /// <summary>
+    /// Who has borrowed which binder.
+    /// </summary>
+    public DbSet<BinderBorrower> Borrowers => Set<BinderBorrower>();
 
     /// <summary>
     /// The ancestry the library keeps.
@@ -93,6 +98,16 @@ internal class SampleContext(DbContextOptions options) : DbContext(options)
             steward.Property(row => row.BinderId).HasColumnName("binder_id");
             steward.Property(row => row.Steward)
                 .HasColumnName("steward")
+                .HasConversion(subject => subject.Value, value => new SubjectId(value));
+        });
+
+        modelBuilder.Entity<BinderBorrower>(borrower =>
+        {
+            borrower.ToTable("borrowers", "sample");
+            borrower.HasKey(row => new { row.BinderId, row.Borrower });
+            borrower.Property(row => row.BinderId).HasColumnName("binder_id");
+            borrower.Property(row => row.Borrower)
+                .HasColumnName("borrower")
                 .HasConversion(subject => subject.Value, value => new SubjectId(value));
         });
 
