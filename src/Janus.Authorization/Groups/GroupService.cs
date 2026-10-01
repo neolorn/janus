@@ -147,7 +147,7 @@ internal sealed class GroupService(
 
         if (await groups.FindAsync(group, cancellationToken).ConfigureAwait(false) is not Group found)
         {
-            return Result.Failure(Malformed("id"));
+            return Result.Failure(await GoneAsync(context, cancellationToken).ConfigureAwait(false));
         }
 
         if (Stated(reason) is not string stated)
@@ -167,7 +167,7 @@ internal sealed class GroupService(
 
         if (await groups.FindAsync(group, cancellationToken).ConfigureAwait(false) is not Group held)
         {
-            return await RefusedAsync(Malformed("id"), cancellationToken).ConfigureAwait(false);
+            return await RefusedAsync(await GoneAsync(context, cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
         }
 
         // AUTHZ-GRANT-003 AC3: a grant's history names the group it was given to,
@@ -215,7 +215,7 @@ internal sealed class GroupService(
 
         if (await groups.FindAsync(group, cancellationToken).ConfigureAwait(false) is not Group found)
         {
-            return Result.Failure(Malformed("id"));
+            return Result.Failure(await GoneAsync(context, cancellationToken).ConfigureAwait(false));
         }
 
         // X5, D-166: a member group that does not exist or belongs to another
@@ -252,7 +252,7 @@ internal sealed class GroupService(
         Group? held = await groups.FindAsync(group, cancellationToken).ConfigureAwait(false);
 
         Error? refused = held is null
-            ? Malformed("id")
+            ? await GoneAsync(context, cancellationToken).ConfigureAwait(false)
             : !await JoinableAsync(member, held.Organization, cancellationToken).ConfigureAwait(false)
                 ? Unjoinable()
                 : await CycleAsync(group, member, cancellationToken).ConfigureAwait(false)
@@ -306,7 +306,7 @@ internal sealed class GroupService(
 
         if (await groups.FindAsync(group, cancellationToken).ConfigureAwait(false) is not Group found)
         {
-            return Result.Failure(Malformed("id"));
+            return Result.Failure(await GoneAsync(context, cancellationToken).ConfigureAwait(false));
         }
 
         if (Stated(reason) is not string stated)
@@ -327,7 +327,7 @@ internal sealed class GroupService(
         Group? held = await groups.FindAsync(group, cancellationToken).ConfigureAwait(false);
 
         if ((held is null
-                ? Malformed("id")
+                ? await GoneAsync(context, cancellationToken).ConfigureAwait(false)
                 : await ChangeRefusedAsync(context, acting, session, held, cancellationToken).ConfigureAwait(false))
             is Error refused)
         {
@@ -380,6 +380,11 @@ internal sealed class GroupService(
         await groups.ScopeOfAsync(group, cancellationToken).ConfigureAwait(false) is OrganizationId organization
             ? await ManagingRefusedAsync(context, organization, cancellationToken).ConfigureAwait(false)
             : await unscoped.RefusedAsync(context, Permissions.GroupManage, cancellationToken).ConfigureAwait(false);
+
+    // 09 section 8: a group that no longer stands belongs to no organization, so it is
+    // refused as one no row names, whoever asks (AUTHZ-SCOPE-001).
+    private ValueTask<Error> GoneAsync(AccessContext context, CancellationToken cancellationToken) =>
+        unscoped.RefusedAsync(context, Permissions.GroupManage, cancellationToken);
 
     private async ValueTask<Error?> ManagingRefusedAsync(
         AccessContext context,

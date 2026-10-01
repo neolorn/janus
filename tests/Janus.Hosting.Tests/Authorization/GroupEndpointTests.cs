@@ -256,6 +256,29 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// 09 section 8, AUTHZ-SCOPE-001, CONV-DESIGN-003: a group removed while a change
+    /// waited for the organization's groups names no row, so the change is refused as
+    /// one naming no group is, and writes nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AC3_AGroupRemovedMeanwhileIsRefusedAsOneNoRowNamesAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
+        GroupId tellers = Id(await CreatedAsync(administrator, "Tellers"));
+        int changes = _deployment.GroupChanges.Changes.Count;
+
+        _deployment.Groups.Holding = held =>
+        {
+            _deployment.Groups.Holding = null;
+            _ = _deployment.Groups.RemoveAsync(tellers, CancellationToken.None).AsTask();
+        };
+
+        Denied(await AddedAsync(administrator, tellers, User));
+        Assert.Equal(changes, _deployment.GroupChanges.Changes.Count);
+    }
+
+    /// <summary>
     /// AUTHZ-GROUP-001 and AUTHZ-GRANT-003 AC3: a group that holds a member, belongs to
     /// a group, or was ever given a grant is not removed, and one nothing names is.
     /// </summary>
