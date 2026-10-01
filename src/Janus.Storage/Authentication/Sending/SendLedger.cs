@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -210,7 +211,7 @@ internal sealed class SendLedger(StoreContext context, DataConnections connectio
     {
         ArgumentNullException.ThrowIfNull(reference);
 
-        bool tracked = context.Sends.Local.Any(row => row.Reference.SequenceEqual(reference));
+        bool tracked = context.Sends.Local.Any(row => CryptographicOperations.FixedTimeEquals(row.Reference, reference));
 
         // The row is keyed by the hash of the reference, so an unknown one finds
         // nothing and a settled one was swept (INT-SMS-005). D-166 X3: it is read under
