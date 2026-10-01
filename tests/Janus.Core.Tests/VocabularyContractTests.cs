@@ -297,6 +297,7 @@ public sealed class VocabularyContractTests
                 "identifier-settings-changed",
                 "invitation-link",
                 "no-account",
+                "oob-deletion-notice",
                 "privacy-request-lapsed",
                 "privacy-request-received",
                 "recovery-codes-reminder",

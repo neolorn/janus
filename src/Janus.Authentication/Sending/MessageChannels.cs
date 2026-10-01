@@ -50,6 +50,7 @@ internal static class MessageChannels
         MessageKind.RecoveryCodesReminder,
         MessageKind.SignInCode,
         MessageKind.CredentialSuspended,
+        MessageKind.OobDeletionNotice,
     ];
 
     /// <summary>
@@ -71,6 +72,7 @@ internal static class MessageChannels
         MessageKind.DeletionNotice,
         MessageKind.RecoveryCodesReminder,
         MessageKind.CredentialSuspended,
+        MessageKind.OobDeletionNotice,
     ]);
 
     /// <summary>

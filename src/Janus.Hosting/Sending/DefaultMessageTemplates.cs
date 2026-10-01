@@ -253,6 +253,16 @@ internal sealed class DefaultMessageTemplates : IMessageTemplates
                 "سيُحذف حسابك بانتهاء مهلة السماح. لإلغاء ذلك استخدم هذا: {link}",
                 "سيُحذف حسابك. للإلغاء: {link}")),
         (
+            MessageKind.OobDeletionNotice,
+            new Words(
+                "Your account is set to be deleted",
+                "A request to delete your account was carried out. Your account will be deleted when its grace window ends.",
+                "A request to delete your account was carried out. It will be deleted soon."),
+            new Words(
+                "حسابك في طريقه للحذف",
+                "نُفذ طلب لحذف حسابك. سيُحذف حسابك بانتهاء مهلة السماح.",
+                "نُفذ طلب لحذف حسابك. سيُحذف قريبا.")),
+        (
             MessageKind.InvitationLink,
             new Words(
                 "You are invited to join an organization",

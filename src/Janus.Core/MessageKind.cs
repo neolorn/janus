@@ -168,4 +168,12 @@ public enum MessageKind
     /// </summary>
     [JsonStringEnumMemberName("credential-suspended")]
     CredentialSuspended = 23,
+
+    /// <summary>
+    /// An erasure request received out of band was fulfilled and the deletion grace
+    /// window started, sent to the security-notice set with no cancel link
+    /// (IDN-LIFE-003).
+    /// </summary>
+    [JsonStringEnumMemberName("oob-deletion-notice")]
+    OobDeletionNotice = 24,
 }

@@ -1731,6 +1731,7 @@ Janus.Core.MessageKind.IdentifierRemoved = 9 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.IdentifierSettingsChanged = 11 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.InvitationLink = 19 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.NoAccount = 6 -> Janus.Core.MessageKind
+Janus.Core.MessageKind.OobDeletionNotice = 24 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.PrivacyRequestLapsed = 16 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.PrivacyRequestReceived = 15 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.RecoveryCodesReminder = 20 -> Janus.Core.MessageKind

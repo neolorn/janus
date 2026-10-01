@@ -381,6 +381,37 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-003 (D-166, message kinds (3)): a fulfilled out-of-band erasure that
+    /// starts the window tells the security-notice set with the out-of-band deletion
+    /// notice, which carries no cancel link, and never with the self-service one.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_AnErasureThatStartsTheWindowSendsTheOutOfBandNoticeAsync()
+    {
+        _ = await ErasedAsync();
+
+        Assert.Equal(
+            [(Ahmed, MessageKind.PrivacyRequestReceived), (Ahmed, MessageKind.OobDeletionNotice)],
+            _notices.Told);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003 (D-166, message kinds (3)): an erasure fulfilled against a window
+    /// already running starts nothing, so it sends no deletion notice of either kind.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003_AnErasureOnAnAccountAlreadyDeletingSendsNoNoticeAsync()
+    {
+        _accounts.Deletes(Ahmed, DeletionOrigin.Self, Noon - TimeSpan.FromDays(3));
+
+        _ = await ErasedAsync();
+
+        Assert.Equal([(Ahmed, MessageKind.PrivacyRequestReceived)], _notices.Told);
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-001, IDN-LIFE-003 (D-166): an account already erased has the erasure
     /// recorded fulfilled, and nothing further happens to it.
     /// </summary>

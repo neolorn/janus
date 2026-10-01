@@ -20,7 +20,7 @@ namespace Janus.Privacy.Requests;
 /// <param name="stepUp">What a fulfilment asks of the caller's session.</param>
 /// <param name="accounts">Where an account enters the restricted or deleting state.</param>
 /// <param name="restrictions">Where an account is restricted and the subscribers told.</param>
-/// <param name="notices">Where the automatic receipt goes.</param>
+/// <param name="notices">Where the automatic receipt and the out-of-band deletion notice go.</param>
 /// <param name="audit">Where each exercise is written down.</param>
 /// <param name="configuration">Where the decision period and the warning lead are read.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
@@ -250,9 +250,12 @@ internal sealed class PrivacyRequestService(
         }
 
         // IDN-LIFE-003: what the fulfilment could not do leaves the request open.
-        if (await DoneAsync(held, now, cancellationToken).ConfigureAwait(false) is Error notDone)
+        bool windowStarted = (await DoneAsync(held, now, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<bool>(error, ref failure));
+
+        if (failure is not null)
         {
-            return Result.Failure(notDone);
+            return Result.Failure(failure);
         }
 
         held.Fulfil(now);
@@ -273,6 +276,16 @@ internal sealed class PrivacyRequestService(
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
             return Result.Failure(notCommitted);
+        }
+
+        // IDN-LIFE-003: the security-notice set hears of a window an out-of-band request
+        // started, after the commit as the receipt is, and the notice carries no cancel
+        // link; a window already running was announced when it began.
+        if (windowStarted)
+        {
+            _ = await notices
+                .TellAsync(held.Subject, MessageKind.OobDeletionNotice, Source, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         return Result.Success();
@@ -384,7 +397,9 @@ internal sealed class PrivacyRequestService(
             : Result.Failure<QueuedRequest>(Error.From(ErrorCodes.RequestDecided));
     }
 
-    private async ValueTask<Error?> DoneAsync(
+    // What the fulfilment does to the account, answering whether it started a deletion
+    // grace window.
+    private async ValueTask<Result<bool>> DoneAsync(
         QueuedRequest request,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -396,7 +411,7 @@ internal sealed class PrivacyRequestService(
                     .ApplyAsync(request.Subject, now, cancellationToken)
                     .ConfigureAwait(false);
 
-                return null;
+                return Result.Success(false);
 
             // 09 section 8a, IDN-LIFE-003: a fulfilled erasure follows the state it
             // finds. An account already in its window, by any origin, keeps the window
@@ -411,12 +426,12 @@ internal sealed class PrivacyRequestService(
 
                 if (standing is null)
                 {
-                    return Error.From(ErrorCodes.AccountNotFound);
+                    return Result.Failure<bool>(Error.From(ErrorCodes.AccountNotFound));
                 }
 
                 if (standing.State is AccountState.Deleting or AccountState.Deleted)
                 {
-                    return null;
+                    return Result.Success(false);
                 }
 
                 return await accounts
@@ -426,15 +441,15 @@ internal sealed class PrivacyRequestService(
                             now,
                             cancellationToken)
                         .ConfigureAwait(false)
-                    ? null
-                    : Error.From(ErrorCodes.AccountStateConflict);
+                    ? Result.Success(true)
+                    : Result.Failure<bool>(Error.From(ErrorCodes.AccountStateConflict));
 
             // Rectification of data the subject cannot edit is the correction itself,
             // which is the deployment's own record and not the library's: what the
             // library owes is the decision and the deadline it was made inside.
             case PrivacyRequestType.Rectification:
             default:
-                return null;
+                return Result.Success(false);
         }
     }
 

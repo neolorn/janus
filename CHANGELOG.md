@@ -1479,6 +1479,9 @@ against the public contract of LIB-API-001.
 - The notices of a loss report, and of a removal that would lower the account's
   reachable assurance, go out as the new message kind `credential-suspended`, whose
   templates name `{link}`, the link that cancels the suspension.
+- A fulfilled erasure request that starts an account's grace window tells the
+  security-notice set with the new message kind `oob-deletion-notice`, which carries no
+  cancel link; one fulfilled against a window already running sends nothing.
 - A registration is held to the progressive delay as a sign-in is: a refused code is
   counted against the session's source and the identifier, and while the delay stands a
   code or a further ask for a code is refused `auth.throttled` with `retryAt`.
