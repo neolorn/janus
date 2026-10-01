@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
@@ -277,17 +278,32 @@ internal sealed class RecoveryService(
             return Result.Failure<ApprovedRecovery>(denied);
         }
 
+        // API-CONV-002, X4: the reason and the channel are free text of 1 to 1024
+        // characters after trimming, refused for an in-process caller as the endpoint
+        // refuses them, and before the step-up, which is judged last.
+        if (reason.Trim() is not { Length: > 0 } stated)
+        {
+            return Result.Failure<ApprovedRecovery>(Error.From(ErrorCodes.RecoveryReasonRequired));
+        }
+
+        if (stated.Length > 1024)
+        {
+            return Result.Failure<ApprovedRecovery>(
+                Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement("reason")));
+        }
+
+        if (channelUsed.Trim().Length is 0 or > 1024)
+        {
+            return Result.Failure<ApprovedRecovery>(
+                Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement("channelUsed")));
+        }
+
         if (await stepUp
                 .PassedAsync(approver, session, StepUpAction.RecoveryApprove, cancellationToken)
                 .ConfigureAwait(false)
             is Error closed)
         {
             return Result.Failure<ApprovedRecovery>(closed);
-        }
-
-        if (reason.Trim().Length is 0)
-        {
-            return Result.Failure<ApprovedRecovery>(Error.From(ErrorCodes.RecoveryReasonRequired));
         }
 
         HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
@@ -305,7 +321,7 @@ internal sealed class RecoveryService(
                 approver,
                 context.BreakGlassReason,
                 subject,
-                reason.Trim(),
+                stated,
                 channel,
                 source,
                 cancellationToken)

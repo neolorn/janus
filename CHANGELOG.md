@@ -1478,6 +1478,9 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- A recovery approval refuses a reason or a `channelUsed` past 1024 characters after
+  trimming, and a blank `channelUsed`, at the endpoint before any permission is asked
+  and in the service before the step-up.
 - The organization and invitation endpoints refuse a name or a reason past 1024
   characters after trimming, and an invitation's reason given without a former
   mailbox, before any permission is asked.

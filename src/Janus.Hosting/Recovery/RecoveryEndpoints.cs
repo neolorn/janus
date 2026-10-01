@@ -189,13 +189,20 @@ internal static class RecoveryEndpoints
         }
 
         // AUTH-RECOV-002: chapter 10 names the refusal of an approval without a
-        // written reason, so an absent one is answered by it rather than as malformed.
-        if (request.Reason is not { Length: > 0 } reason)
+        // written reason, so an absent or blank one is answered by it rather than as
+        // malformed; free text past 1024 characters after trimming is malformed
+        // (API-CONV-002, X4).
+        if (request.Reason?.Trim() is not { Length: > 0 } reason)
         {
             return Answers.Refused(Error.From(ErrorCodes.RecoveryReasonRequired));
         }
 
-        if (request.ChannelUsed is not { Length: > 0 } channel)
+        if (reason.Length > 1024)
+        {
+            return Answers.Malformed("reason");
+        }
+
+        if (request.ChannelUsed?.Trim() is not { Length: > 0 and <= 1024 } channel)
         {
             return Answers.Malformed("channelUsed");
         }

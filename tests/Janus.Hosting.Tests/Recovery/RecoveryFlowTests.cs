@@ -255,6 +255,39 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
         Assert.Equal(sent, _deployment.Mail.Taken.Count);
     }
 
+    /// <summary>
+    /// CONV-CODE-006 AC3 and API-CONV-002 AC3: a reason or a channel past 1024
+    /// characters after trimming, or a blank channel, is malformed before the service
+    /// is reached, so a caller without the permission is answered for the body.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC3_AnApprovalsFreeTextOutsideTheBoundIsRefusedBeforeTheServiceAsync()
+    {
+        Browser caller = await RegisteredAsync();
+        int sent = _deployment.Mail.Taken.Count;
+        string overlong = " " + new string('r', 1025) + " ";
+
+        Answer longer = await caller.SendAsync(
+            "POST",
+            "/admin/recovery/approve",
+            ("subject", Guid.NewGuid().ToString()),
+            ("reason", overlong),
+            ("channelUsed", Flow.Address));
+        Answer unreached = await caller.SendAsync(
+            "POST",
+            "/admin/recovery/approve",
+            ("subject", Guid.NewGuid().ToString()),
+            ("reason", "Confirmed by video call."),
+            ("channelUsed", "   "));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, longer.Status);
+        Assert.Equal("reason", longer.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal(StatusCodes.Status400BadRequest, unreached.Status);
+        Assert.Equal("channelUsed", unreached.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal(sent, _deployment.Mail.Taken.Count);
+    }
+
     // The account the tests recover, signed in, with the clock past the minute the
     // registration's own messages hold the address for (AUTH-ABUSE-004).
     private async Task<Browser> RegisteredAsync()
