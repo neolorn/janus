@@ -5008,6 +5008,8 @@ host's and that the library stores what it answers. `09` section 6 should say th
 upload is the request body and that `DELETE` is not held to the policy. `10` section 1.1
 should drop the **(new)** mark from the three photo codes, which are now raised.
 
+**Revised by entry 315.**
+
 ---
 
 ## 145. The registry is the list, and the default is a client it holds
@@ -6493,6 +6495,8 @@ administrative organization through a port of its own, as each reads memberships
 *Chapter text that should change.* AUTHZ-SCOPE-001 could say that an operation on the
 deployment, or on an account, is scoped to the administrative organization.
 
+**Revised by entries 194 and 205.**
+
 ---
 
 ## 176. A correlation identifier resolves for `audit:read` in the administrative organization, and for its own principal only on a disclosing type
@@ -7096,6 +7100,8 @@ chapter says where the permission is asked or which organization a listing reads
 bodies of `POST` and of both member routes, the path and body of `DELETE`, the 201 and
 204 answers and the 400s, and say that `group:manage` is asked in the group's
 organization.
+
+**Revised by entry 411.**
 
 ---
 
@@ -10850,6 +10856,8 @@ host-run suite runs the same refusals. Each named form is read at its widest:
 the library's own or part of LIB-TEST-001's package; 07 LIB-TEST-001 could name the
 provider's refusals among what the host-run suite verifies.
 
+**Revised by entry 356.**
+
 ---
 
 ## 281. An access token's audience, and the adapter that verifies it
@@ -11033,6 +11041,8 @@ never shown. Under it:
 *Chapter text that should change.* 01 IDN-LIFE-012 could say the provider's subject
 identifier is held as a keyed fingerprint on the linked credential; 04 PRIV-RIGHT-005c
 could list it among the fingerprints erasure neutralises.
+
+**Revised by entry 318.**
 
 ---
 
@@ -15343,6 +15353,8 @@ change and break-glass use. AC1 says raising the minimum level does not suppress
 | --- | --- | --- | --- |
 | `auth.authentication.failed` | security | `AuditActions.AuthenticationFailed` | A factor presented at sign-in, or the break-glass credential, was refused. The acting subject is the nil subject; the effective subject is the account the attempt was made against, or the nil subject where the identifier resolved to none or the break-glass code was refused before the reserved account was read; `details.factor` names the factor. Nothing that was typed is written. The row names no organization. (CONV-LOG-005) |
 | `auth.stepup.failed` | security | `AuditActions.StepUpFailed` | A factor presented to step a live session up was refused, including against a challenge that is not the asker's. The acting and effective subject is the session's account; `details.session` names the session and `details.factor` the factor. The row names no organization. (CONV-LOG-005) |
+
+**Revised by entry 400.**
 
 **Revised by entry 402.**
 
