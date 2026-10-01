@@ -90,8 +90,57 @@ public sealed class RegistrationSessionStoreTests(DatabaseFixture database) : IC
             await Store(reading).FindAsync(other.Id, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// REG-SESS-003 AC3, CONV-DESIGN-003 AC6: wrong codes presented at once are each
+    /// decided on the session's row under its lock, so every one is counted against
+    /// the staged identifier and none is written over another.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_SESS_003_AC3_WrongCodesAtOnceAreAllCountedAsync()
+    {
+        RegistrationSession opened = Opened();
+        var staged = IdentifierId.New(TimeProvider.System);
+
+        opened.Stage(StagedIdentity.Of(staged, IdentifierKind.Email, "person@example.test", "person@example.test"));
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Store(writing).AddAsync(opened, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await Task.WhenAll(MissedAsync(opened.Id, staged), MissedAsync(opened.Id, staged), MissedAsync(opened.Id, staged));
+
+        await using StoreContext reading = database.Context();
+        RegistrationSession read = Assert.IsType<RegistrationSession>(
+            await Store(reading).FindAsync(opened.Id, TestContext.Current.CancellationToken));
+
+        Assert.Equal(3, read.Identity(staged)!.WrongAttempts);
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
+
+    // Each wrong code is its own request, deciding on the session as the registration
+    // service does.
+    private async Task MissedAsync(RegistrationSessionId session, IdentifierId staged)
+    {
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+        RegistrationSessionStore store = Store(context);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        RegistrationSession held = Assert.IsType<RegistrationSession>(
+            await store.FindForUpdateAsync(session, TestContext.Current.CancellationToken));
+
+        held.Identity(staged)!.Missed(cap: 5);
+
+        await store.RecordAsync(held, TestContext.Current.CancellationToken);
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+    }
 
     private static RegistrationSession Opened() =>
         RegistrationSession.Open(

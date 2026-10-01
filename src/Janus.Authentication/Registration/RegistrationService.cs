@@ -248,14 +248,29 @@ internal sealed class RegistrationService(
     }
 
     /// <inheritdoc/>
-    public async ValueTask<Result<RegistrationState>> RecordAgeAsync(
+    public ValueTask<Result<RegistrationState>> RecordAgeAsync(
         RegistrationSessionId session,
+        DateOnly dateOfBirth,
+        CancellationToken cancellationToken) =>
+        HeldAsync(session, live => AgeAsync(live, dateOfBirth, cancellationToken), cancellationToken);
+
+    /// <inheritdoc/>
+    public ValueTask<Result<RegistrationState>> VerifyAsync(
+        RegistrationSessionId session,
+        IdentifierId identifier,
+        [NeverLogged] string code,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(code);
+
+        return HeldAsync(session, live => VerifiedAsync(live, identifier, code, cancellationToken), cancellationToken);
+    }
+
+    private async ValueTask<Result<RegistrationState>> AgeAsync(
+        RegistrationSession? live,
         DateOnly dateOfBirth,
         CancellationToken cancellationToken)
     {
-        RegistrationSession? live =
-            await LiveAsync(session, cancellationToken).ConfigureAwait(false);
-
         if (live is null)
         {
             return Gone();
@@ -594,18 +609,12 @@ internal sealed class RegistrationService(
         return Result.Success(State(live));
     }
 
-    /// <inheritdoc/>
-    public async ValueTask<Result<RegistrationState>> VerifyAsync(
-        RegistrationSessionId session,
+    private async ValueTask<Result<RegistrationState>> VerifiedAsync(
+        RegistrationSession? live,
         IdentifierId identifier,
         [NeverLogged] string code,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(code);
-
-        RegistrationSession? live =
-            await LiveAsync(session, cancellationToken).ConfigureAwait(false);
-
         if (live is null)
         {
             return Gone();
@@ -1568,6 +1577,31 @@ internal sealed class RegistrationService(
         failure = error;
 
         return default!;
+    }
+
+    // D-166 X3: an answer decided on the session's one document is decided on its row
+    // under the lock, from the read to the write, so answers given at once are decided
+    // one after another and none is written over another.
+    private async ValueTask<Result<RegistrationState>> HeldAsync(
+        RegistrationSessionId id,
+        Func<RegistrationSession?, ValueTask<Result<RegistrationState>>> decide,
+        CancellationToken cancellationToken)
+    {
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<RegistrationState>(notBegun);
+        }
+
+        RegistrationSession? held = await sessions.FindForUpdateAsync(id, cancellationToken)
+            .ConfigureAwait(false);
+
+        Result<RegistrationState> decided = await decide(
+                held is null || held.HasExpired(time.GetUtcNow()) ? null : held)
+            .ConfigureAwait(false);
+
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match(() => decided, Result.Failure<RegistrationState>);
     }
 
     private async ValueTask<RegistrationSession?> LiveAsync(

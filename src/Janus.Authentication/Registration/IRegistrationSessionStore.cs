@@ -26,6 +26,19 @@ internal interface IRegistrationSessionStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// The session an identifier names, read under a lock on its row held until the
+    /// operation's transaction ends, so answers given to it at once are decided one
+    /// after another (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="id">Which session.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The session as committed when the lock was taken, or nothing.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask<RegistrationSession?> FindForUpdateAsync(
+        RegistrationSessionId id,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// The session that sent a link, found by what the token fingerprints to.
     /// </summary>
     /// <param name="fingerprint">The fingerprint of the token the message carried.</param>

@@ -45,6 +45,35 @@ internal sealed class RegistrationSessionStore(
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<RegistrationSession?> FindForUpdateAsync(
+        RegistrationSessionId id,
+        CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A registration session's row is held only inside the operation's transaction.");
+        }
+
+        bool tracked = context.RegistrationSessions.Local.Any(record => record.Id == id);
+
+        RegistrationSessionRecord? held = (await context.RegistrationSessions
+                .FromSql($"SELECT * FROM identity.registration_sessions WHERE id = {id.Value} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .SingleOrDefault();
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the decision is made on is the row as it stood when the lock was taken.
+        if (held is not null && tracked)
+        {
+            await context.Entry(held).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return held is null ? null : await ReadAsync(held, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<RegistrationSession?> FindByLinkAsync(
         byte[] fingerprint,
         CancellationToken cancellationToken)
