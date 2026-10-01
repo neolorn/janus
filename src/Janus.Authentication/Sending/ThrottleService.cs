@@ -141,6 +141,10 @@ internal sealed class ThrottleService(
 
         foreach ((ThrottleScope scope, string key) in Counting(attempt))
         {
+            // D-166 X3: counted from what stands with the scope's counter held, so
+            // failures at once are each counted.
+            await ledger.HoldAsync(scope, key, cancellationToken).ConfigureAwait(false);
+
             ThrottleCounter? counted = await ledger
                 .FindAsync(scope, key, cancellationToken)
                 .ConfigureAwait(false);
@@ -200,6 +204,7 @@ internal sealed class ThrottleService(
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+        await ledger.HoldAsync(ThrottleScope.Account, account.ToString(), cancellationToken).ConfigureAwait(false);
         await ledger.ClearAsync(ThrottleScope.Account, account.ToString(), cancellationToken).ConfigureAwait(false);
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));

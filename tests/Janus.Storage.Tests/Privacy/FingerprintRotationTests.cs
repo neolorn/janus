@@ -107,7 +107,7 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
 
         await using (StoreContext counting = database.Context())
         {
-            await new ThrottleLedger(counting, Deployment.Fingerprints)
+            await new ThrottleLedger(counting, new DataConnections(counting), Deployment.Fingerprints)
                 .FailedAsync(ThrottleScope.Source, "192.0.2.1", standing: 2, Noon, cancellationToken);
             await counting.SaveChangesAsync(cancellationToken);
         }
@@ -125,7 +125,7 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
         Assert.NotNull(await Mailboxes(reading, Rotating).FindAsync(seeded.Held, cancellationToken));
         Assert.Equal(
             new ThrottleCounter(3, Noon),
-            await new ThrottleLedger(reading, Ring(Rotating)).FindAsync(ThrottleScope.Source, "192.0.2.1", cancellationToken));
+            await new ThrottleLedger(reading, new DataConnections(reading), Ring(Rotating)).FindAsync(ThrottleScope.Source, "192.0.2.1", cancellationToken));
     }
 
     /// <summary>
@@ -283,9 +283,9 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
 
         await using (StoreContext counting = database.Context())
         {
-            await new ThrottleLedger(counting, Deployment.Fingerprints)
+            await new ThrottleLedger(counting, new DataConnections(counting), Deployment.Fingerprints)
                 .FailedAsync(ThrottleScope.Source, "192.0.2.1", standing: 0, Noon, cancellationToken);
-            await new ThrottleLedger(counting, Ring(Rotating))
+            await new ThrottleLedger(counting, new DataConnections(counting), Ring(Rotating))
                 .FailedAsync(ThrottleScope.Source, "192.0.2.2", standing: 0, releases, cancellationToken);
             await counting.SaveChangesAsync(cancellationToken);
         }
@@ -299,7 +299,7 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
 
         await using (StoreContext sweeping = database.Context())
         {
-            await new ThrottleLedger(sweeping, Ring(Rotating)).SweepAsync(releases, Decay, cancellationToken);
+            await new ThrottleLedger(sweeping, new DataConnections(sweeping), Ring(Rotating)).SweepAsync(releases, Decay, cancellationToken);
         }
 
         KeyRetirement retirement = Retirement(await RetiredAsync(new FixedTime(releases), cancellationToken));
@@ -328,7 +328,7 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
 
         await using (StoreContext counting = database.Context())
         {
-            await new ThrottleLedger(counting, Deployment.Fingerprints)
+            await new ThrottleLedger(counting, new DataConnections(counting), Deployment.Fingerprints)
                 .FailedAsync(ThrottleScope.Source, "192.0.2.9", standing: 0, Noon, cancellationToken);
             await new SendLedger(counting, new DataConnections(counting), Deployment.Fingerprints).RecordAsync(
                 RandomNumberGenerator.GetBytes(32),
@@ -363,7 +363,7 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
         {
             var sends = new SendLedger(sweeping, new DataConnections(sweeping), Ring(Rotating));
 
-            await new ThrottleLedger(sweeping, Ring(Rotating)).SweepAsync(later, Decay, cancellationToken);
+            await new ThrottleLedger(sweeping, new DataConnections(sweeping), Ring(Rotating)).SweepAsync(later, Decay, cancellationToken);
             await sends.SweepSettledAsync(later, cancellationToken);
             await sends.SweepAsync(new CounterStaleness(later.AddDays(-1), later.AddDays(-1)), cancellationToken);
             await new RegistrationSourceLedger(sweeping, Ring(Rotating)).SweepAsync(later, cancellationToken);
@@ -389,7 +389,7 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
 
         await using (StoreContext counting = database.Context())
         {
-            var ledger = new ThrottleLedger(counting, Ring(Rotating));
+            var ledger = new ThrottleLedger(counting, new DataConnections(counting), Ring(Rotating));
 
             foreach (int failures in new[] { 1, 3, 8 })
             {
@@ -410,11 +410,11 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
 
         await using (StoreContext sweeping = database.Context())
         {
-            await new ThrottleLedger(sweeping, Ring(Rotating)).SweepAsync(now, Decay, cancellationToken);
+            await new ThrottleLedger(sweeping, new DataConnections(sweeping), Ring(Rotating)).SweepAsync(now, Decay, cancellationToken);
         }
 
         await using StoreContext reading = database.Context();
-        var read = new ThrottleLedger(reading, Ring(Rotating));
+        var read = new ThrottleLedger(reading, new DataConnections(reading), Ring(Rotating));
         List<bool> kept = [];
 
         foreach ((string key, ThrottleCounter _) in written)

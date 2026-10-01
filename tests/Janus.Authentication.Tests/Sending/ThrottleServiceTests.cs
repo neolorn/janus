@@ -69,6 +69,33 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-001 AC1, CONV-DESIGN-003: a failure counted against a scope while this
+    /// one waited for its counter is counted, so this one counts from it.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AC1_AFailureCountedMeanwhileIsCountedFromAsync()
+    {
+        var attempt = new ThrottleAttempt("198.51.100.8", Typed("meanwhile@example.test"));
+
+        await FailedAsync(attempt, times: 1);
+
+        _ledger.Holding = scope =>
+        {
+            if (scope is ThrottleScope.Source)
+            {
+                _ledger.Holding = null;
+                _ = _ledger.FailedAsync(scope, attempt.Source, standing: 1, Noon, TestContext.Current.CancellationToken).AsTask();
+            }
+        };
+
+        await FailedAsync(attempt, times: 1);
+
+        Assert.Equal(
+            3,
+            (await _ledger.FindAsync(ThrottleScope.Source, attempt.Source, TestContext.Current.CancellationToken))?.Failures);
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-001 AC2: what was accumulated halves once per half-life, so an
     /// account left alone is not still held an hour later.
     /// </summary>

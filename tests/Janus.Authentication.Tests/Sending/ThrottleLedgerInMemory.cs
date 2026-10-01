@@ -22,6 +22,20 @@ internal sealed class ThrottleLedgerInMemory : IThrottleLedger
     /// </summary>
     public IReadOnlyCollection<(ThrottleScope Scope, string Key)> Counted => _counters.Keys;
 
+    /// <summary>
+    /// Gets or sets what another transaction commits while this one waits for a
+    /// scope's counter, so a test may count a failure under one about to be counted.
+    /// </summary>
+    public Action<ThrottleScope>? Holding { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask HoldAsync(ThrottleScope scope, string key, CancellationToken cancellationToken)
+    {
+        Holding?.Invoke(scope);
+
+        return ValueTask.CompletedTask;
+    }
+
     /// <inheritdoc/>
     public ValueTask<ThrottleCounter?> FindAsync(
         ThrottleScope scope,

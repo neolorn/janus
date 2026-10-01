@@ -317,6 +317,7 @@ internal static class StorageRegistration
             provider.GetRequiredService<IKeyRing>()));
         services.AddScoped<IThrottleLedger>(provider => new ThrottleLedger(
             provider.GetRequiredService<StoreContext>(),
+            provider.GetRequiredService<DataConnections>(),
             provider.GetRequiredService<IKeyRing>()));
         services.AddScoped<INoticeLedger>(provider => new NoticeLedger(
             provider.GetRequiredService<StoreContext>(),

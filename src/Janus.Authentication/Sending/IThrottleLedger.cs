@@ -13,6 +13,18 @@ namespace Janus.Authentication.Sending;
 internal interface IThrottleLedger
 {
     /// <summary>
+    /// Holds one scope's counter against every other change of it until the
+    /// operation's transaction ends, so what stands is read as committed and two
+    /// failures at once are counted one after the other (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="scope">Which scope.</param>
+    /// <param name="key">The source, the account or the identifier.</param>
+    /// <param name="cancellationToken">Abandons the wait.</param>
+    /// <returns>The work of holding it.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask HoldAsync(ThrottleScope scope, string key, CancellationToken cancellationToken);
+
+    /// <summary>
     /// What one scope has accumulated.
     /// </summary>
     /// <param name="scope">Which scope.</param>

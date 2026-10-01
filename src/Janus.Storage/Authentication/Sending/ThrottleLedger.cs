@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Authentication.Sending;
 using Janus.Core;
 using Microsoft.EntityFrameworkCore;
@@ -14,15 +16,58 @@ namespace Janus.Storage.Authentication.Sending;
 /// Where failed attempts are counted, under the hash of what they were made against.
 /// </summary>
 /// <param name="context">The context the operation runs on.</param>
+/// <param name="connections">Where the lock statement takes its connection from.</param>
 /// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <remarks>
 /// Implements AUTH-ABUSE-001, OPS-SEC-003 and CONV-DESIGN-003. A counter kept under a
 /// previous version of the fingerprint key is read until the rotation retires the
 /// version, and the next failure is counted under the current one from where it stood.
 /// </remarks>
-internal sealed class ThrottleLedger(StoreContext context, IKeyRing ring)
+internal sealed class ThrottleLedger(StoreContext context, DataConnections connections, IKeyRing ring)
     : IThrottleLedger
 {
+    // D-166 X3: a failure is counted from what stood, read before the row is written,
+    // and a first failure has no row to lock, so the scope's counter is held for the
+    // rest of the transaction; no read takes this lock.
+    private const string Hold =
+        """
+        SELECT pg_advisory_xact_lock(hashtextextended(
+            'identity.throttle_counters/' || @scope || '/' || encode(@key, 'hex'),
+            0));
+        """;
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask HoldAsync(ThrottleScope scope, string key, CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A throttle counter is held only inside the operation's transaction.");
+        }
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        _ = await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                Hold,
+                new { scope = scope.ToString(), key = Hashed(key) },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        // A counter the context already tracks was read before the lock, so it is read
+        // again under every version it may stand under: the failure is counted from the
+        // counter as committed.
+        foreach (byte[] hashed in Candidates(key))
+        {
+            if (context.ThrottleCounters.Local.FirstOrDefault(row => row.Scope == scope && CryptographicOperations.FixedTimeEquals(row.Key, hashed))
+                is ThrottleRecord tracked)
+            {
+                await context.Entry(tracked).ReloadAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
     /// <inheritdoc/>
     public async ValueTask<ThrottleCounter?> FindAsync(
         ThrottleScope scope,

@@ -152,7 +152,7 @@ public sealed class FingerprintKeyTests(DatabaseFixture database) : IClassFixtur
             Authenticator.Linked(AuthenticatorId.New(TimeProvider.System), subject, Factor.Google, label, Noon),
             "provider-subject-" + tag,
             cancellationToken);
-        await new ThrottleLedger(context, ring)
+        await new ThrottleLedger(context, new DataConnections(context), ring)
             .FailedAsync(ThrottleScope.Source, "192.0.2." + tag, standing: 2, Noon, cancellationToken);
         _ = await new NoticeLedger(context, ring)
             .FirstAsync("absent" + tag + "@example.test", Noon, TimeSpan.FromHours(1), cancellationToken);
