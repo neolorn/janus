@@ -1478,6 +1478,9 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- A session begun from a sign-in holds the account while it begins, so an account
+  suspended or set to deletion at the same moment is left with no session begun after
+  its sessions were ended.
 - Callbacks from one source are counted against `integration.callback.ratelimit`, and
   their rejections against the alert's threshold, with the source's callbacks held, so a
   burst admits no more than the limit.

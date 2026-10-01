@@ -980,6 +980,24 @@ internal sealed class SessionService(
             return Result.Failure<IssuedSession>(notBegun);
         }
 
+        // D-166 X3: the account is held while its session begins, so a transition that
+        // ends its sessions either ends this one too or is seen here, and no session
+        // begun from a sign-in outlives it. The answer is the sign-in's own for an
+        // account that may not sign in.
+        if (admission is not Admission.Exempt)
+        {
+            await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+            if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
+                is AccountState.Suspended or AccountState.Deleting or AccountState.Deleted)
+            {
+                return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                    .Match(
+                        () => Result.Failure<IssuedSession>(Error.From(ErrorCodes.FactorRejected)),
+                        Result.Failure<IssuedSession>);
+            }
+        }
+
         await sessions
             .AddAsync(session, secret.Fingerprint(), token.Fingerprint(), cancellationToken)
             .ConfigureAwait(false);

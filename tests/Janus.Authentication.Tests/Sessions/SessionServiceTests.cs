@@ -1173,6 +1173,33 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-013, CONV-DESIGN-003: an account suspended while its session waited to
+    /// begin begins none, and the answer is the sign-in's for an account that may not
+    /// sign in.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_013_AnAccountSuspendedMeanwhileBeginsNoSessionAsync()
+    {
+        SubjectId subject = Subject();
+
+        _accounts.Stands(subject, AccountState.Active);
+        _accounts.Holding = held =>
+        {
+            _accounts.Holding = null;
+            _accounts.Stands(held, AccountState.Suspended);
+        };
+
+        Result<IssuedSession> begun = await Service.BeginAsync(
+            subject,
+            [Factor.Password],
+            Somewhere,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.FactorRejected, Refusal(begun));
+        Assert.Empty(_sessions.All);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003: an operation opens one transaction and commits it once.
     /// </summary>
     [Fact]
