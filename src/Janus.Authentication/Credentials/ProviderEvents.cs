@@ -256,9 +256,10 @@ internal sealed class ProviderEvents(
         return Result.Success(ProviderEventOutcome.SessionsEnded);
     }
 
-    // IDN-LIFE-012a AC2: the credential is unlinked where the account keeps another way
-    // in; where it is the last (IDN-LIFE-012 AC3), the account is suspended instead, and
-    // told either way, as every removal of a credential is.
+    // IDN-LIFE-012a AC2: the credential is unlinked where another usable credential, the
+    // password included, may begin a sign-in; where none may (IDN-LIFE-012 AC3), one a
+    // provider holds among them, the account is suspended instead, and told either way,
+    // as every removal of a credential is.
     private async ValueTask<Result<ProviderEventOutcome>> WithdrawnAsync(
         Authenticator linked,
         string source,
@@ -272,7 +273,9 @@ internal sealed class ProviderEvents(
         bool password = await SecondStep.AvailableAsync(passwords, linked.Subject, cancellationToken)
             .ConfigureAwait(false);
 
-        if (HeldFactors.KeptWithout(enrolled, linked, password))
+        if (HeldFactors.Of([.. enrolled.Where(credential => credential.Id != linked.Id)], password)
+            .Usable
+            .Any(factor => FactorCatalogue.Of(factor).CanBePrimary))
         {
             await authenticators.RemoveAsync(linked.Id, cancellationToken).ConfigureAwait(false);
 

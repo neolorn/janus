@@ -379,8 +379,8 @@ against the public contract of LIB-API-001.
   ends every session of the account and holds the linked credential until the person
   signs in by another factor, which restores it under `auth.credential.restored`;
   withdrawn consent or a deleted provider account unlinks the credential, or suspends
-  the account with a security notice where it is the last way in; a disabled relay
-  address drops to unverified. An event of an undeclared provider, or one the keys do
+  the account with a security notice where no other usable credential, the password
+  included, may begin a sign-in; a disabled relay address drops to unverified. An event of an undeclared provider, or one the keys do
   not verify, is refused as every rejected callback is. The client the documents are
   read with is `identity-providers`.
 - `UseCallback` mounts one of the host's own providers' callbacks on the machine

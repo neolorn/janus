@@ -11122,6 +11122,8 @@ the account back to whoever holds the owner's mail. Under it:
 is the last way to begin a sign-in and that the suspension is recorded as the
 administrator's.
 
+**Superseded by D-166.**
+
 ---
 
 ## 287. A disabled address that is the personal email a membership keeps

@@ -245,6 +245,48 @@ public sealed class ProviderEventTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-012a AC2 (D-166, 286): where the account's other way in is a credential a
+    /// provider's event holds, nothing usable may begin a sign-in without the withdrawn
+    /// identity, so the credential stays and the account is suspended instead.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012a_AC2_AWithdrawnIdentityWhoseOtherWayInIsHeldSuspendsTheAccountAsync()
+    {
+        var subject = SubjectId.New(_randomness);
+
+        _deployment.Accounts.Stands(subject, AccountState.Active);
+        _deployment.Identifiers.Reads(subject, Language);
+        _ = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, "apple-and-google@example.test");
+
+        Authenticator google = await LinkAsync(subject, Factor.Google, GoogleSubject);
+        Authenticator apple = await LinkAsync(subject, Factor.Apple, AppleSubject);
+
+        _ = await DeliveredAsync(
+            Google,
+            _deployment.SocialProviders.Signed(
+                Factor.Google,
+                "evt-1",
+                GoogleEvent(Risc + "account-disabled", GoogleSubject)));
+
+        Assert.True(Held(google).IsHeldByProvider);
+
+        Answer answered = await DeliveredAsync(
+            Apple,
+            Wrapped(_deployment.SocialProviders.Signed(
+                Factor.Apple,
+                "evt-2",
+                AppleEvent("consent-revoked", AppleSubject))));
+
+        Assert.Equal(StatusCodes.Status200OK, answered.Status);
+        Assert.Contains(_deployment.Authenticators.All, held => held.Id == apple.Id);
+        Assert.Equal(AccountState.Suspended, await StateAsync(subject));
+        Assert.Equal(
+            (AuditActions.ProviderEventTaken, apple.Id, "consent-revoked", ProviderEventOutcome.AccountSuspended),
+            _deployment.CredentialAudit.ProviderEvents[^1]);
+    }
+
+    /// <summary>
     /// IDN-LIFE-012a: the address Apple stopped forwarding to drops to unverified.
     /// </summary>
     /// <returns>The work of the test.</returns>
