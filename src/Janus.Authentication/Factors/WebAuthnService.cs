@@ -367,30 +367,36 @@ internal sealed class WebAuthnService(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        // A counter that did not advance is a credential that exists twice. An
-        // authenticator that keeps no counter reports nought every time, which is the
-        // absence the chapter excludes and not a counter standing still.
-        if (Kept(assertion.Counter) && Kept(held.WebAuthn.Counter) && assertion.Counter <= held.WebAuthn.Counter)
-        {
-            await audit.RecordedAsync(CounterMoved, held.Subject, held.Id, now, cancellationToken)
-                .ConfigureAwait(false);
-
-            return Result.Failure<Authenticator>(Error.From(ErrorCodes.WebAuthnCounterMismatch));
-        }
-
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure<Authenticator>(notBegun);
         }
 
-        if (Kept(assertion.Counter))
-        {
-            held.Counted(assertion.Counter);
-        }
+        // D-166 X3: the counter is judged on the row under its lock, so two assertions
+        // made at once are judged one after the other and the stored counter never
+        // moves backwards.
+        Authenticator? locked = await authenticators.FindForUpdateAsync(held.Id, cancellationToken)
+            .ConfigureAwait(false);
+        ErrorCode? refused = locked is not { IsUsable: true, WebAuthn: not null }
+            ? ErrorCodes.FactorRejected
+            : Moved(assertion, locked.WebAuthn) ? ErrorCodes.WebAuthnCounterMismatch : null;
 
-        held.Used(now);
-        await authenticators.RecordAsync(held, cancellationToken).ConfigureAwait(false);
+        if (refused == ErrorCodes.WebAuthnCounterMismatch)
+        {
+            await audit.RecordedAsync(CounterMoved, held.Subject, held.Id, now, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        else if (refused is null)
+        {
+            if (Kept(assertion.Counter))
+            {
+                locked!.Counted(assertion.Counter);
+            }
+
+            locked!.Used(now);
+            await authenticators.RecordAsync(locked, cancellationToken).ConfigureAwait(false);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -398,8 +404,16 @@ internal sealed class WebAuthnService(
             return Result.Failure<Authenticator>(notCommitted);
         }
 
-        return Result.Success(held);
+        return refused is ErrorCode refusal
+            ? Result.Failure<Authenticator>(Error.From(refusal))
+            : Result.Success(locked!);
     }
+
+    // A counter that did not advance is a credential that exists twice. An authenticator
+    // that keeps no counter reports nought every time, which is the absence the chapter
+    // excludes and not a counter standing still.
+    private static bool Moved(WebAuthnAssertion assertion, WebAuthnMaterial held) =>
+        Kept(assertion.Counter) && Kept(held.Counter) && assertion.Counter <= held.Counter;
 
     /// <summary>
     /// The account's credentials that were enrolled under a relying party identifier
