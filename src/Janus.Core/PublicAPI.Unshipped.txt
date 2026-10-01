@@ -1139,13 +1139,13 @@ Janus.Core.HeldGrant.Subject.get -> Janus.Core.GrantSubject
 Janus.Core.HeldGrant.Subject.init -> void
 Janus.Core.HostedMailbox
 Janus.Core.HostedMailbox.<Clone>$() -> Janus.Core.HostedMailbox!
-Janus.Core.HostedMailbox.Address.get -> string!
+Janus.Core.HostedMailbox.Address.get -> Janus.Core.EmailAddress?
 Janus.Core.HostedMailbox.Address.init -> void
-Janus.Core.HostedMailbox.Deconstruct(out Janus.Core.MailboxId? Mailbox, out string! Address, out bool Enabled) -> void
+Janus.Core.HostedMailbox.Deconstruct(out Janus.Core.MailboxId? Mailbox, out Janus.Core.EmailAddress? Address, out bool Enabled) -> void
 Janus.Core.HostedMailbox.Enabled.get -> bool
 Janus.Core.HostedMailbox.Enabled.init -> void
 Janus.Core.HostedMailbox.Equals(Janus.Core.HostedMailbox? other) -> bool
-Janus.Core.HostedMailbox.HostedMailbox(Janus.Core.MailboxId? Mailbox, string! Address, bool Enabled) -> void
+Janus.Core.HostedMailbox.HostedMailbox(Janus.Core.MailboxId? Mailbox, Janus.Core.EmailAddress? Address, bool Enabled) -> void
 Janus.Core.HostedMailbox.Mailbox.get -> Janus.Core.MailboxId?
 Janus.Core.HostedMailbox.Mailbox.init -> void
 Janus.Core.IAccessGate
@@ -1622,15 +1622,15 @@ Janus.Core.MailboxId.Value.get -> System.Guid
 Janus.Core.MailboxId.Value.init -> void
 Janus.Core.MailboxPush
 Janus.Core.MailboxPush.<Clone>$() -> Janus.Core.MailboxPush!
-Janus.Core.MailboxPush.Address.get -> string!
+Janus.Core.MailboxPush.Address.get -> Janus.Core.EmailAddress
 Janus.Core.MailboxPush.Address.init -> void
-Janus.Core.MailboxPush.Deconstruct(out Janus.Core.MailboxId Mailbox, out System.Guid Key, out string! Address, out Janus.Core.MailboxState State) -> void
+Janus.Core.MailboxPush.Deconstruct(out Janus.Core.MailboxId Mailbox, out System.Guid Key, out Janus.Core.EmailAddress Address, out Janus.Core.MailboxState State) -> void
 Janus.Core.MailboxPush.Equals(Janus.Core.MailboxPush? other) -> bool
 Janus.Core.MailboxPush.Key.get -> System.Guid
 Janus.Core.MailboxPush.Key.init -> void
 Janus.Core.MailboxPush.Mailbox.get -> Janus.Core.MailboxId
 Janus.Core.MailboxPush.Mailbox.init -> void
-Janus.Core.MailboxPush.MailboxPush(Janus.Core.MailboxId Mailbox, System.Guid Key, string! Address, Janus.Core.MailboxState State) -> void
+Janus.Core.MailboxPush.MailboxPush(Janus.Core.MailboxId Mailbox, System.Guid Key, Janus.Core.EmailAddress Address, Janus.Core.MailboxState State) -> void
 Janus.Core.MailboxPush.State.get -> Janus.Core.MailboxState
 Janus.Core.MailboxPush.State.init -> void
 Janus.Core.FormerMailbox

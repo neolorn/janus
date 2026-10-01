@@ -110,7 +110,7 @@ public sealed class JmapMailServerTests : IDisposable
         Assert.Equal(["authenticate"], Members(account, "disabledPermissions"));
         Assert.Empty(Members(account, "enabledPermissions"));
         Assert.Equal(
-            [new HostedMailbox(Mailbox, Address, Enabled: false)],
+            [new HostedMailbox(Mailbox, Email(Address), Enabled: false)],
             Value(await started.Server.MailboxesAsync(cancellationToken)));
     }
 
@@ -346,10 +346,10 @@ public sealed class JmapMailServerTests : IDisposable
 
         Assert.Equal(
             [
-                new HostedMailbox(Mailbox, "inherits@example.test", Enabled: true),
-                new HostedMailbox(Another, "merges@example.test", Enabled: false),
-                new HostedMailbox(null, "replaces@example.test", Enabled: false),
-                new HostedMailbox(null, "granted@example.test", Enabled: true),
+                new HostedMailbox(Mailbox, Email("inherits@example.test"), Enabled: true),
+                new HostedMailbox(Another, Email("merges@example.test"), Enabled: false),
+                new HostedMailbox(null, Email("replaces@example.test"), Enabled: false),
+                new HostedMailbox(null, Email("granted@example.test"), Enabled: true),
             ],
             listed);
         Assert.True(_server.Requests.Count > 1);
@@ -571,7 +571,14 @@ public sealed class JmapMailServerTests : IDisposable
     public void Dispose() => _server.Dispose();
 
     private static MailboxPush Push(MailboxState state) =>
-        new(Mailbox, Guid.CreateVersion7(), Address, state);
+        new(Mailbox, Guid.CreateVersion7(), Email(Address), state);
+
+    private static EmailAddress Email(string address)
+    {
+        Assert.True(EmailAddress.TryParse(address, out EmailAddress email));
+
+        return email;
+    }
 
     private static bool Succeeded(Result result) => result.Match(() => true, _ => false);
 

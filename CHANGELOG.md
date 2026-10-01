@@ -543,10 +543,12 @@ against the public contract of LIB-API-001.
   raises `degradation` on any difference without changing either side. The address is
   held encrypted under its holder's key and is erased with them.
 - A mailbox push carries the mailbox's identifier (`MailboxPush.Mailbox`, a public
-  `MailboxId`), and the mail server's listing answers, for each account, the identifier
-  it carries (`HostedMailbox.Mailbox`), its address and whether it is enabled. An
-  `IMailServer` answers `integration.mailserver.conflict` where a push meets, at the
-  mailbox's name, an account that does not carry that identifier, and changes nothing.
+  `MailboxId`) and its address as an `EmailAddress`, and the mail server's listing
+  answers, for each account, the identifier it carries (`HostedMailbox.Mailbox`), its
+  address as an `EmailAddress`, or nothing where what the server lists does not read
+  as one, and whether it is enabled. An `IMailServer` answers
+  `integration.mailserver.conflict` where a push meets, at the mailbox's name, an
+  account that does not carry that identifier, and changes nothing.
   Reconciliation compares each mailbox with the account listed under its identifier,
   reads the listed address in its canonical form, and counts every account carrying no
   identifier of a mailbox the library holds.
