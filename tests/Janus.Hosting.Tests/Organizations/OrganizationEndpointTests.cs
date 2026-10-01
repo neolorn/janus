@@ -397,6 +397,41 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
         Assert.Empty(_deployment.OrganizationChanges.Changes);
     }
 
+    /// <summary>
+    /// CONV-CODE-006 AC3 and API-CONV-002 AC3: a name or a reason past 1024 characters
+    /// after trimming is malformed before the service is reached, so a caller without
+    /// the permission is answered for the body, and nothing changes.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC3_FreeTextOutsideTheBoundIsRefusedBeforeTheServiceAsync()
+    {
+        (Browser caller, _) = await SignedInAsync();
+        string overlong = " " + new string('r', 1025) + " ";
+
+        Answer named = await caller.SendAsync(
+            "POST",
+            "/admin/organizations",
+            ("name", overlong),
+            ("reason", "Opening a branch."));
+        Answer created = await caller.SendAsync(
+            "POST",
+            "/admin/organizations",
+            ("name", "Southern branch"),
+            ("reason", overlong));
+        Answer requested = await RequestedAsync(caller, Branch, reason: overlong);
+        Answer cancelled = await caller.SendAsync(
+            "POST",
+            "/admin/organizations/" + Branch + "/delete/cancel",
+            ("reason", overlong));
+
+        Assert.Equal("name", Member(named));
+        Assert.Equal("reason", Member(created));
+        Assert.Equal("reason", Member(requested));
+        Assert.Equal("reason", Member(cancelled));
+        Assert.Empty(_deployment.OrganizationChanges.Changes);
+    }
+
     private static string Member(Answer answer)
     {
         Assert.Equal(StatusCodes.Status400BadRequest, answer.Status);

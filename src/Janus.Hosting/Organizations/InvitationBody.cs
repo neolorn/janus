@@ -53,11 +53,20 @@ internal sealed record InvitationBody(
             roles.Add(role);
         }
 
+        // REG-MAIL-003, X4: a reason comes with a former mailbox and only with one, and
+        // is 1 to 1024 characters after trimming (API-CONV-002).
+        string? reason = Reason?.Trim();
+
+        if ((FormerMailbox is null) != (reason is null) || reason is { Length: 0 or > 1024 })
+        {
+            return (null, "reason");
+        }
+
         return (
             new InvitationRequest(Email, Phone, CorporateEmail, roles, Documents ?? [])
             {
                 FormerMailbox = FormerMailbox,
-                Reason = Reason,
+                Reason = reason,
             },
             string.Empty);
     }

@@ -450,6 +450,33 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
         Assert.Equal(AuditActions.InvitationIssued, Assert.Single(_deployment.OrganizationChanges.Changes).Action);
     }
 
+    /// <summary>
+    /// CONV-CODE-006 AC3, API-CONV-002 AC3 and REG-MAIL-003: a reason past 1024
+    /// characters after trimming, or one without a former mailbox, is malformed before
+    /// the service is reached, so a caller without the permission is answered for the
+    /// body.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC3_AReasonOutsideTheBoundIsRefusedBeforeTheServiceAsync()
+    {
+        Browser caller = await Flow.SignedInAsync(_deployment);
+        string overlong = " " + new string('r', 1025) + " ";
+
+        Answer longer = await caller.SendAsync(
+            "POST",
+            PathOf(Administration),
+            """{"email":"invited@elsewhere.test","corporateEmail":"invited@example.test","formerMailbox":"replace","reason":""" + "\"" + overlong + "\"}");
+        Answer unpaired = await caller.SendAsync(
+            "POST",
+            PathOf(Administration),
+            """{"email":"invited@elsewhere.test","corporateEmail":"invited@example.test","reason":"Kept."}""");
+
+        Assert.Equal("reason", Member(longer));
+        Assert.Equal("reason", Member(unpaired));
+        Assert.Empty(_deployment.Invitations.Held);
+    }
+
     private static EmailAddress Parsed(string value)
     {
         Assert.True(EmailAddress.TryParse(value, out EmailAddress address));
