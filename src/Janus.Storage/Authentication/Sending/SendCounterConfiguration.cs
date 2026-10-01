@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 namespace Janus.Storage.Authentication.Sending;
 
 /// <summary>
-/// How what a restriction key has been sent is stored.
+/// How what a destination has been sent is stored.
 /// </summary>
 /// <remarks>Implements AUTH-ABUSE-004.</remarks>
 internal sealed class SendCounterConfiguration : IEntityTypeConfiguration<SendCounterRecord>

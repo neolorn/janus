@@ -106,6 +106,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             _sessions,
             _directory,
             _notifications,
+            Landing.Links,
             _notices,
             new PasswordService(
                 _passwords,
@@ -1880,7 +1881,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     // the person reading it.
     private string Token(IdentifierKind kind) =>
         (kind is IdentifierKind.Email ? _notifications.Mail[^1] : _notifications.Texts[^1])
-            .Values["token"];
+            .Token();
 
     // What a completed WebAuthn ceremony stages, with the material a test does not
     // care about drawn once.

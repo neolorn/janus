@@ -758,6 +758,54 @@ against the public contract of LIB-API-001.
   answers 404 `auth.restriction.notfound` to a read, a deletion and a grant, and a
   reason past 1024 characters is refused with `api.request.malformed` naming `reason`.
   `IRestrictionSet` is the same set of operations in process.
+- A restriction's name is 1 to 64 lower-case letters and digits separated by single
+  `.`, `-` or `_`. `PUT /admin/restrictions/{name}` with a name outside that rule is
+  refused with `config.value.notallowed` before anything is written, and a stored set
+  holding one does not read.
+- A restriction names the channel it governs, `sms`, `email` or `any` (the default, and
+  what a stored restriction without one reads as), and counts and refuses only the sends
+  on that channel: `sms.destination` and `sms.source` ship as `sms`, `email.destination`
+  as `email` and `notification.destination` as `any`. `/admin/restrictions` reads and
+  writes `channel`, and changing it to anything but `any` is a loosening. A security
+  notice to an address or number its owner holds answers only to restrictions whose
+  purpose is `notification`, an alert answers to no restriction, and a send no request
+  asked for (a reminder, a repeated loss-report notice, a lapsed privacy request, an
+  alert) carries no source, so no `source` restriction counts it. The new-device check
+  code is counted under the source of the sign-in that asked for it.
+- A deployment declares `LandingOrigins`, the origin of the authentication application
+  and of the account application, where every link the library sends lands. Without
+  it the deployment does not start (`model.startup.declarationmissing`,
+  `details.key` `landingOrigins.authentication` or `landingOrigins.account`); an origin
+  that is not an `https` origin a registered browser client returns to, or an
+  authentication origin that is not the sign-in address's, is refused with
+  `model.startup.declarationinvalid` under the same key.
+- An alert's deduplication claim is committed before the alert is sent, and the
+  `alert-dispatch` pass removes a carried condition afterwards, so no alert transport
+  is called while a transaction is open. A delivery that fails after the claim is not
+  repeated inside the same window.
+- A recovery link and an invitation link are sent and drawn under the `signin` purpose,
+  as a sign-in link is, and answer to the restrictions it answers to; no `notification`
+  restriction counts them, so `notification.destination` counts notices alone.
+- A recovery-code set whose every reminder was refused stays owed its reminder, where
+  it was closed as reminded; a set whose account holds no channel a reminder can reach
+  is closed as before.
+- A text-message template naming a place the library does not fill, `{token}` among
+  them, stops startup with `model.startup.declarationinvalid` (`details.declaration` the
+  message kind, `details.field` the place), where it was sent with the brace in it.
+- A privacy-deadline alert names the request's `type` and `status` as chapter 10 spells
+  them (`rectification`, `deemed-refused-by-lapse`), and a text message naming either
+  place is measured at those spellings.
+- Every link the library sends is a whole address, `<origin>/link#<kind>.<token>`, on
+  the declared landing origin of the application its kind belongs to, with the token in
+  the fragment. Templates fill it with the new `{link}` place; the `{token}` place is
+  retired. A text message whose template carries a link is budgeted at two segments
+  (306 units in the default alphabet, 134 outside it), every other at one.
+- What a destination has been sent is kept apart from what an account, a source, the
+  deployment or a host key has, each for the longest interval of the restrictions now
+  declared on its own kind of key, so a longer source restriction no longer keeps a
+  destination's record. A record past that interval is deleted before the next send's
+  counters are read and by the `expiry-sweep` job, whether or not its key is sent to
+  again.
 - `GET /admin/config/{key}` reads one runtime key under `config:read`: its value in
   force and its default in the key's own JSON type, whether it is protected, and which
   way it loosens (`increase`, `decrease` or `any-change`). `PUT /admin/config/{key}`
@@ -884,6 +932,11 @@ against the public contract of LIB-API-001.
   every send. Nothing is measured at the moment of a send. The notice sent when someone
   tries to register an address already held, or to change another account to it, points
   its holder to sign-in and to recovery.
+- A text-message template naming `{outstanding}` is measured at the width of every
+  registered required subject-event subscriber's name as the alert carries them, and
+  one naming `{key}` at the widest key a change can name, an organization's key at the
+  width of its identifier and a category's retention key at the longest category the
+  host declared.
 - Publishing an event answers for itself. An operation records its event inside the
   transaction that made it true and commits nothing it could not publish, so a change
   never reaches the database without its event reaching a consumer. Every method of the
@@ -996,6 +1049,11 @@ against the public contract of LIB-API-001.
   subscriber named `erasure-ledger`, with `model.startup.subscribername` naming it,
   since a confirmation is recorded under the name and a shared one would let an erasure
   close with a subscriber's work undone.
+- A subject-event subscriber's name, and the name of the governing document a purpose
+  names, is 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_`.
+  A deployment that registers or declares one outside that rule does not start: the
+  failure is `model.startup.declarationinvalid`, `details.declaration` naming the
+  subscriber or the purpose and `details.field` `name` or `document`.
 - A data subject request enters a queue with a statutory clock on it. A subject submits
   a restriction or a rectification for themselves at `POST /privacy/requests` and is
   answered with the request identifier, the receipt timestamp and the date the decision

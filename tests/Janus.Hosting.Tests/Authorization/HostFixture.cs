@@ -166,6 +166,10 @@ public sealed class HostFixture : IAsyncLifetime
         // through the transports a host registers.
         services.AddSingleton<IMailTransport>(new MailTransportInMemory());
         services.AddSingleton<ISmsTransport>(new SmsTransportInMemory());
+
+        // LIB-HOST-001, API-LAND-001: and a link it sends lands where the deployment
+        // declares its applications are.
+        services.AddSingleton(new LandingOrigins("https://identity.example.test", "https://accounts.example.test"));
         services.AddJanus(ConnectionString, Declaration(), ApplicationKind.Public);
 
         // PRIV-RIGHT-005b: the deployment declares its documents sensitive, so it
@@ -224,8 +228,12 @@ public sealed class HostFixture : IAsyncLifetime
     /// Whether the derivation is precomputed into grant rows rather than evaluated per
     /// request, which is the same deployment after materialisation (AUTHZ-TEST-001 AC3).
     /// </param>
+    /// <param name="document">
+    /// The governing document the recommendations purpose names, or nothing where the
+    /// privacy notice governs it.
+    /// </param>
     /// <returns>The declaration.</returns>
-    internal static AuthorizationDeclaration Declaration(bool materialised = false) =>
+    internal static AuthorizationDeclaration Declaration(bool materialised = false, string? document = null) =>
         new AuthorizationDeclarationBuilder()
             .RetentionFloor("identity", TimeSpan.FromDays(365))
             .RetentionFloor("history", TimeSpan.FromDays(365))
@@ -280,7 +288,8 @@ public sealed class HostFixture : IAsyncLifetime
                     "recommendations",
                     "agreement",
                     data: ["history"],
-                    subjects: ["members"]))
+                    subjects: ["members"],
+                    document: document))
             .Resource<HostNote>("note", type => type
                 .ContainedIn("workspace")
                 .Discloses()

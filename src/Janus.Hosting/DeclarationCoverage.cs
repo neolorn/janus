@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Oidc;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Credentials;
@@ -21,6 +22,10 @@ namespace Janus.Hosting;
 /// <param name="authentication">
 /// Where a browser holding no session is sent, or nothing where the deployment
 /// registered none.
+/// </param>
+/// <param name="landing">
+/// Where a link the library sends lands, or nothing where the deployment registered
+/// none.
 /// </param>
 /// <param name="signOn">
 /// Which client of the provider this application is, or nothing where the deployment
@@ -40,12 +45,15 @@ namespace Janus.Hosting;
 /// registered no resolver.
 /// </param>
 /// <param name="providers">The social providers whose security events the deployment takes.</param>
+/// <param name="declaration">What the host declared about its own domain.</param>
+/// <param name="subscribers">The subject-event subscribers the host registered.</param>
+/// <param name="clients">The clients registered with the provider.</param>
 /// <param name="configuration">
 /// Where the organizations that show photos, and the domains each lists, are read.
 /// </param>
 /// <remarks>
 /// Implements LIB-HOST-001, REG-PM-001, AUTH-SESS-012, BFF-SESS-006, IDN-ATTR-002,
-/// INT-MAIL-010, IDN-LIFE-012a and REG-DOM-001.
+/// INT-MAIL-010, IDN-LIFE-012a, REG-DOM-001, INT-SMS-003 and API-LAND-001.
 /// The library knows no route of the frontend, so it has none to fall back on: a
 /// deployment that declares none of these is stopped here rather than answering a
 /// password manager as a site that offers neither page, meeting an interactive
@@ -60,17 +68,26 @@ namespace Janus.Hosting;
 /// the HTTPS address of its document and at least one client, since a declaration short
 /// of that would verify none of the events it was declared for; one that is malformed is
 /// refused as invalid rather than missing, naming the provider and the member at fault
-/// (D-175).
+/// (D-175). A governing document's name and a subscriber's fill a message place
+/// measured at the width the name rule bounds, so one declared outside the rule is
+/// refused here rather than carried into a text longer than the width it was measured
+/// at. A landing origin is an application of this deployment, so one that no registered
+/// browser client returns to, or an authentication origin that is not where the sign-in
+/// address is, would send every link somewhere the deployment does not serve.
 /// </remarks>
 internal sealed class DeclarationCoverage(
     PasskeyAddresses? addresses,
     AuthenticationAddresses? authentication,
+    LandingOrigins? landing,
     SignOnClient? signOn,
     IMailServerInUse mail,
     MailServerClient? mailClient,
     ImageCodec? codec,
     IDnsResolver? dns,
     IEnumerable<SocialProvider> providers,
+    AuthorizationDeclaration declaration,
+    IEnumerable<ISubjectEventSubscriber> subscribers,
+    IOidcClientStore clients,
     IConfigurationStore configuration)
 {
     private const string Passkeys = "passkeyAddresses";
@@ -78,6 +95,10 @@ internal sealed class DeclarationCoverage(
     private const string Authentication = "authenticationAddresses";
 
     private const string Client = "signOnClient.clientId";
+
+    private const string LandingAuthentication = "landingOrigins.authentication";
+
+    private const string LandingAccount = "landingOrigins.account";
 
     private const string Codec = "imageCodec";
 
@@ -124,6 +145,16 @@ internal sealed class DeclarationCoverage(
             return Missing(Authentication + ".provider");
         }
 
+        if (landing is null || landing.Authentication.Length is 0)
+        {
+            return Missing(LandingAuthentication);
+        }
+
+        if (landing.Account.Length is 0)
+        {
+            return Missing(LandingAccount);
+        }
+
         // BFF-SESS-006: every application of a deployment is a client of the one
         // provider, and which one this process is is not something the library can
         // work out from anything else it holds.
@@ -139,9 +170,23 @@ internal sealed class DeclarationCoverage(
             return Missing(MailClient);
         }
 
-        if (Malformed() is (string declaration, string field))
+        if (Malformed() is (string declared, string field))
         {
-            return Invalid(declaration, field);
+            return Invalid(declared, field);
+        }
+
+        if (Unruled() is (string named, string member))
+        {
+            return Invalid(named, member);
+        }
+
+        if (await UnlandedAsync(landing, authentication.SignIn, cancellationToken).ConfigureAwait(false)
+            is string unlanded)
+        {
+            return Result.Failure(Error.From(
+                ErrorCodes.StartupDeclarationInvalid,
+                "key",
+                JsonSerializer.SerializeToElement(unlanded)));
         }
 
         if ((await PhotographedAsync(cancellationToken).ConfigureAwait(false))
@@ -212,6 +257,65 @@ internal sealed class DeclarationCoverage(
                         StringComparison.Ordinal)))
             {
                 return (declaration, "return");
+            }
+        }
+
+        return null;
+    }
+
+    // An origin is the scheme, host and port alone, written as a browser writes it, so
+    // one address stands for it and nothing else does; anything else is no origin.
+    private static string? Origin(string address) =>
+        Uri.TryCreate(address, UriKind.Absolute, out Uri? parsed)
+            ? parsed.GetLeftPart(UriPartial.Authority)
+            : null;
+
+    private static bool IsOrigin(string declared) =>
+        Uri.TryCreate(declared, UriKind.Absolute, out Uri? parsed)
+        && parsed.Scheme == Uri.UriSchemeHttps
+        && string.Equals(parsed.GetLeftPart(UriPartial.Authority), declared, StringComparison.Ordinal);
+
+    // LIB-HOST-001 AC6, API-LAND-001: the landing origin that is not an https origin, is
+    // not where a registered browser client returns to, or, for the authentication
+    // application, is not where the sign-in address is, as its key; or nothing.
+    private async ValueTask<string?> UnlandedAsync(
+        LandingOrigins declared,
+        string signIn,
+        CancellationToken cancellationToken)
+    {
+        HashSet<string> served = [.. (await clients.AllAsync(cancellationToken).ConfigureAwait(false))
+            .Where(client => client.Kind is OidcClientKind.BrowserApplication)
+            .Select(client => Origin(client.Redirect))
+            .OfType<string>()];
+
+        if (!IsOrigin(declared.Authentication)
+            || !served.Contains(declared.Authentication)
+            || !string.Equals(Origin(signIn), declared.Authentication, StringComparison.Ordinal))
+        {
+            return LandingAuthentication;
+        }
+
+        return IsOrigin(declared.Account) && served.Contains(declared.Account) ? null : LandingAccount;
+    }
+
+    // INT-SMS-003: the governing document a purpose names, as the purpose it is
+    // declared on, and the subscriber whose name breaks the rule of a message place,
+    // as the name it is registered under, or nothing where every one keeps it.
+    private (string Declaration, string Field)? Unruled()
+    {
+        foreach (PurposeDeclaration purpose in declaration.ResourceTypes.SelectMany(type => type.Purposes))
+        {
+            if (purpose.Document is string document && !PlaceName.Holds(document))
+            {
+                return (purpose.Name, "document");
+            }
+        }
+
+        foreach (ISubjectEventSubscriber subscriber in subscribers)
+        {
+            if (!PlaceName.Holds(subscriber.Name))
+            {
+                return (subscriber.Name, "name");
             }
         }
 

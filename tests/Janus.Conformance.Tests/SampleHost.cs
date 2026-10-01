@@ -350,6 +350,12 @@ public sealed class SampleHost : IAsyncLifetime
             provider.AbsoluteUri));
         builder.Services.AddSingleton(new SignOnClient(Application));
 
+        // API-LAND-001: both applications of the sample are served at its one origin,
+        // where its browser client returns.
+        builder.Services.AddSingleton(new LandingOrigins(
+            Origin.GetLeftPart(UriPartial.Authority),
+            Origin.GetLeftPart(UriPartial.Authority)));
+
         // LIB-HOST-001, OPS-SEC-001: where the deployment's secrets are read from, which
         // the entry point is handed none of.
         builder.Services.AddSingleton<ISecretSource>(new SecretSourceInMemory(

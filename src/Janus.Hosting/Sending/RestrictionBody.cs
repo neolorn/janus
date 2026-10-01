@@ -10,12 +10,14 @@ namespace Janus.Hosting.Sending;
 /// </summary>
 /// <param name="Key">What it counts by: <c>destination</c>, <c>account</c>, <c>source</c>, <c>global</c> or <c>host:&lt;name&gt;</c>.</param>
 /// <param name="Purpose">Which sends it counts; <c>any</c> where absent.</param>
+/// <param name="Channel">Which channel's sends it counts; <c>any</c> where absent.</param>
 /// <param name="Buckets">The limits it holds.</param>
 /// <param name="Reason">Why, which a loosening requires.</param>
 /// <remarks>Implements chapter 09 section 8, AUTH-ABUSE-004 and OPS-CFG-002.</remarks>
 internal sealed record RestrictionBody(
     string? Key,
     string? Purpose,
+    string? Channel,
     IReadOnlyList<BucketBody>? Buckets,
     string? Reason)
 {
@@ -39,6 +41,13 @@ internal sealed record RestrictionBody(
             return (null, "purpose");
         }
 
+        RestrictionChannel channel = RestrictionChannel.Any;
+
+        if (Channel is string carried && !SettingText.TryRead(carried, out channel))
+        {
+            return (null, "channel");
+        }
+
         if (Buckets is null)
         {
             return (null, "buckets");
@@ -56,7 +65,7 @@ internal sealed record RestrictionBody(
             buckets.Add(read);
         }
 
-        return (new Restriction(name, kind, host, purpose, buckets), string.Empty);
+        return (new Restriction(name, kind, host, purpose, buckets) { Channel = channel }, string.Empty);
     }
 
     private static bool Keyed(string? written, out RestrictionKeyKind kind, out string? host)

@@ -29,13 +29,19 @@ public static class Settings
             RestrictionKeyKind.Destination,
             HostKeyName: null,
             RestrictionPurpose.Any,
-            [new Bucket(3, TimeSpan.FromHours(24), BucketWindow.Sliding)]),
+            [new Bucket(3, TimeSpan.FromHours(24), BucketWindow.Sliding)])
+        {
+            Channel = RestrictionChannel.Sms,
+        },
         new(
             "sms.source",
             RestrictionKeyKind.Source,
             HostKeyName: null,
             RestrictionPurpose.Any,
-            [new Bucket(10, TimeSpan.FromHours(1), BucketWindow.Sliding)]),
+            [new Bucket(10, TimeSpan.FromHours(1), BucketWindow.Sliding)])
+        {
+            Channel = RestrictionChannel.Sms,
+        },
         new(
             "email.destination",
             RestrictionKeyKind.Destination,
@@ -44,7 +50,10 @@ public static class Settings
             [
                 new Bucket(5, TimeSpan.FromHours(1), BucketWindow.Sliding),
                 new Bucket(1, TimeSpan.FromSeconds(60), BucketWindow.Fixed),
-            ]),
+            ])
+        {
+            Channel = RestrictionChannel.Email,
+        },
         new(
             "notification.destination",
             RestrictionKeyKind.Destination,

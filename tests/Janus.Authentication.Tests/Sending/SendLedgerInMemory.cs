@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Sending;
+using Janus.Core;
 
 namespace Janus.Authentication.Tests.Sending;
 
@@ -45,18 +46,12 @@ internal sealed class SendLedgerInMemory : ISendLedger
         _sends[key] = [.. sends];
 
     /// <inheritdoc/>
-    public ValueTask<IReadOnlyDictionary<RestrictionKey, SendCounter>> CountersAsync(
+    public async ValueTask<IReadOnlyDictionary<RestrictionKey, SendCounter>> CountersAsync(
         IReadOnlyCollection<RestrictionKey> keys,
-        DateTimeOffset stale,
+        CounterStaleness stale,
         CancellationToken cancellationToken)
     {
-        foreach (RestrictionKey held in _sends
-            .Where(one => one.Value.Count > 0 && one.Value[^1] < stale)
-            .Select(one => one.Key)
-            .ToArray())
-        {
-            _ = _sends.Remove(held);
-        }
+        await SweepAsync(stale, cancellationToken);
 
         var standing = new Dictionary<RestrictionKey, SendCounter>();
 
@@ -71,7 +66,24 @@ internal sealed class SendLedgerInMemory : ISendLedger
             }
         }
 
-        return ValueTask.FromResult<IReadOnlyDictionary<RestrictionKey, SendCounter>>(standing);
+        return standing;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask SweepAsync(CounterStaleness stale, CancellationToken cancellationToken)
+    {
+        foreach (RestrictionKey held in _sends
+            .Where(one => one.Value.Count > 0 && one.Value[^1] < Before(one.Key))
+            .Select(one => one.Key)
+            .ToArray())
+        {
+            _ = _sends.Remove(held);
+        }
+
+        return ValueTask.CompletedTask;
+
+        DateTimeOffset Before(RestrictionKey key) =>
+            key.Kind is RestrictionKeyKind.Destination ? stale.Destinations : stale.Keys;
     }
 
     /// <inheritdoc/>

@@ -149,6 +149,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Policies,
             Lock,
             _notifications,
+            Landing.Links,
             new NonExistenceNotice(
                 _configuration,
                 _notifications,
@@ -824,7 +825,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             browser: null,
             TestContext.Current.CancellationToken);
 
-        string carried = _notifications.Texts[^1].Values["token"];
+        string carried = _notifications.Texts[^1].Token();
 
         Assert.NotNull(await _pending.FindAsync(
             subject,
@@ -927,6 +928,23 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Assert.Equal(SignInStatus.DeviceVerificationRequired, reached.Status);
         Assert.Null(reached.Session);
         Assert.Single(_notifications.Mail);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 and chapter 10 section 5.14: the new-device check code is asked for
+    /// by the request that presented the password, so it is sent under that request's
+    /// source and never under the address it goes to (D-166, 342).
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_TheCheckCodeIsSentUnderTheSourceThatAskedAsync()
+    {
+        await AccountAsync();
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = Reached(await PresentAsync(began.Challenge, Factor.Password, Secret));
+
+        Assert.Equal(Source, Assert.Single(_notifications.Mail).Source);
     }
 
     /// <summary>
@@ -1390,7 +1408,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     // what the person reads rather than what the store holds.
     private string Code() => _notifications.Mail[^1].Values["code"];
 
-    private string Token() => _notifications.Mail[^1].Values["token"];
+    private string Token() => _notifications.Mail[^1].Token();
 
     // A code of the same shape that is not the one sent.
     private static string Other(string code) =>

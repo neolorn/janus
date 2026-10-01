@@ -1947,6 +1947,28 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
+        modelBuilder.Entity("Janus.Storage.Authentication.Sending.SendKeyCounterRecord", b =>
+            {
+                b.Property<byte[]>("Key")
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("key");
+
+                b.Property<int>("FingerprintVersion")
+                    .HasColumnType("integer")
+                    .HasColumnName("fingerprint_version");
+
+                b.PrimitiveCollection<DateTimeOffset[]>("SentAt")
+                    .IsRequired()
+                    .HasColumnType("timestamp with time zone[]")
+                    .HasColumnName("sent_at");
+
+                b.HasKey("Key")
+                    .HasName("pk_send_key_counters");
+
+                b.ToTable("send_key_counters", "identity");
+            });
+
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.SendRecord", b =>
             {
                 b.Property<byte[]>("Reference")

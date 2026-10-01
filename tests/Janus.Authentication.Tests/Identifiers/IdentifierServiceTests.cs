@@ -84,6 +84,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
             _restriction,
             _pending,
             _notifications,
+            Landing.Links,
             _notices,
             _sessions,
             new StepUpGuard(
@@ -378,7 +379,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         Assert.Equal(MessageKind.IdentifierDetached, left.Message);
         Assert.Empty(left.Values);
         Assert.Equal(MessageKind.IdentifierRemoved, kept.Message);
-        Assert.NotEmpty(kept.Values["token"]);
+        Assert.NotEmpty(kept.Token());
 
         Assert.True(await _directory.IsReservedAsync(
             IdentifierKind.Email,
@@ -738,7 +739,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         Accepted(await Service.LandAsync(
             session: null,
-            asked.Values["token"],
+            asked.Token(),
             press: true,
             Source,
             TestContext.Current.CancellationToken));
@@ -1044,7 +1045,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     // The undo the remaining channels were sent, which is what the removal notice
     // carries for the deployment's template to put in its words.
     private string Undo() =>
-        _notifications.Mail.Last(sent => sent.Message is MessageKind.IdentifierRemoved).Values["token"];
+        _notifications.Mail.Last(sent => sent.Message is MessageKind.IdentifierRemoved).Token();
 
     private async Task<IReadOnlyList<HeldIdentifier>> HeldAsync() =>
         (await _directory.HeldAsync(_person, TestContext.Current.CancellationToken)).All;

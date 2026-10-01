@@ -33,8 +33,6 @@ internal sealed class AlertRouter(
     IUnitOfWork work,
     IAlertLog log)
 {
-    private const string Operator = "operator";
-
     /// <summary>
     /// Raises one condition to the destinations the deployment configured.
     /// </summary>
@@ -73,17 +71,18 @@ internal sealed class AlertRouter(
             .FirstAsync(Alerts.Deduplication(raised.IdempotencyKey), raised.RaisedAt, window, cancellationToken)
             .ConfigureAwait(false);
 
-        Result<AlertDelivery> delivered = first
-            ? await DeliverAsync(raised, audience, cancellationToken).ConfigureAwait(false)
-            : Result.Success(new AlertDelivery(0, 0, SmsUnreachable: false, Deduplicated: true));
-
+        // D-022: the claim is committed before anything is sent, because the delivery
+        // acts on what the channels answer and no transport is called while a
+        // transaction is open.
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
             return Result.Failure<AlertDelivery>(notCommitted);
         }
 
-        return delivered;
+        return first
+            ? await DeliverAsync(raised, audience, cancellationToken).ConfigureAwait(false)
+            : Result.Success(new AlertDelivery(0, 0, SmsUnreachable: false, Deduplicated: true));
     }
 
     /// <summary>
@@ -293,13 +292,15 @@ internal sealed class AlertRouter(
     {
         // An operator destination belongs to no account, so the language resolves at
         // step three: every language the deployment declared, as one send (IDN-ATTR-001).
+        // No request asked for an alert, so it carries no source, and it is outside
+        // every restriction (OPS-ALERT-002, AUTH-ABUSE-004).
         Result<SendReference> sent = await sending
             .SendAsync(
                 new SendRequest(
                     destination,
                     MessageKind.Alert,
                     RestrictionPurpose.Notification,
-                    Operator,
+                    Source: null,
                     Language: null)
                 {
                     Values = Values(raised),

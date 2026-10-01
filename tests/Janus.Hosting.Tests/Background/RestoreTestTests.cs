@@ -389,6 +389,7 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
             .AddSingleton(new AuthenticationAddresses(
                 "https://accounts.example.test/signin",
                 "https://accounts.example.test"))
+            .AddSingleton(Landing.Origins)
             .AddSingleton(new SignOnClient("this-application"))
             .AddSingleton<ISecretSource>(new SecretSourceInMemory(new Dictionary<string, ProviderCredential>(StringComparer.Ordinal))
             {

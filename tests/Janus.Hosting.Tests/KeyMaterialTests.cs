@@ -237,6 +237,7 @@ public sealed class KeyMaterialTests
             .AddSingleton(new AuthenticationAddresses(
                 "https://accounts.example.test/signin",
                 "https://accounts.example.test"))
+            .AddSingleton(Landing.Origins)
             .AddSingleton(new SignOnClient("this-application"))
             .AddSingleton<ISecretSource>(source)
             .AddJanus(Connection, HostFixture.Declaration(), ApplicationKind.Public);

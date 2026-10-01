@@ -85,6 +85,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
                 _links,
                 _sessions,
                 _notifications,
+                Landing.Links,
                 _audit,
                 Gate,
                 _events,

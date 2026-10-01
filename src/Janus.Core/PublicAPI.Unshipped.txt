@@ -1535,6 +1535,15 @@ Janus.Core.KeyEncryptionKeys.Equals(Janus.Core.KeyEncryptionKeys? other) -> bool
 Janus.Core.KeyEncryptionKeys.KeyEncryptionKeys(int CurrentVersion, System.Collections.Generic.IReadOnlyDictionary<int, System.ReadOnlyMemory<byte>>! Versions) -> void
 Janus.Core.KeyEncryptionKeys.Versions.get -> System.Collections.Generic.IReadOnlyDictionary<int, System.ReadOnlyMemory<byte>>!
 Janus.Core.KeyEncryptionKeys.Versions.init -> void
+Janus.Core.LandingOrigins
+Janus.Core.LandingOrigins.<Clone>$() -> Janus.Core.LandingOrigins!
+Janus.Core.LandingOrigins.Account.get -> string!
+Janus.Core.LandingOrigins.Account.init -> void
+Janus.Core.LandingOrigins.Authentication.get -> string!
+Janus.Core.LandingOrigins.Authentication.init -> void
+Janus.Core.LandingOrigins.Deconstruct(out string! Authentication, out string! Account) -> void
+Janus.Core.LandingOrigins.Equals(Janus.Core.LandingOrigins? other) -> bool
+Janus.Core.LandingOrigins.LandingOrigins(string! Authentication, string! Account) -> void
 Janus.Core.LawfulBases
 Janus.Core.LawfulBasisDeclaration
 Janus.Core.LawfulBasisDeclaration.<Clone>$() -> Janus.Core.LawfulBasisDeclaration!
@@ -2385,6 +2394,8 @@ Janus.Core.Restriction
 Janus.Core.Restriction.<Clone>$() -> Janus.Core.Restriction!
 Janus.Core.Restriction.Buckets.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.Bucket!>!
 Janus.Core.Restriction.Buckets.init -> void
+Janus.Core.Restriction.Channel.get -> Janus.Core.RestrictionChannel
+Janus.Core.Restriction.Channel.init -> void
 Janus.Core.Restriction.Deconstruct(out string! Name, out Janus.Core.RestrictionKeyKind Key, out string? HostKeyName, out Janus.Core.RestrictionPurpose Purpose, out System.Collections.Generic.IReadOnlyList<Janus.Core.Bucket!>! Buckets) -> void
 Janus.Core.Restriction.Equals(Janus.Core.Restriction? other) -> bool
 Janus.Core.Restriction.HostKeyName.get -> string?
@@ -2420,6 +2431,10 @@ Janus.Core.RestrictionKeySupplier.RestrictionKeySupplier(string! Name, System.Fu
 Janus.Core.RestrictionKeySuppliers
 Janus.Core.RestrictionKeySuppliers.All.get -> System.Collections.Generic.IReadOnlyCollection<Janus.Core.RestrictionKeySupplier!>!
 Janus.Core.RestrictionKeySuppliers.TryFind(string! name, out Janus.Core.RestrictionKeySupplier! supplier) -> bool
+Janus.Core.RestrictionChannel
+Janus.Core.RestrictionChannel.Any = 0 -> Janus.Core.RestrictionChannel
+Janus.Core.RestrictionChannel.Email = 2 -> Janus.Core.RestrictionChannel
+Janus.Core.RestrictionChannel.Sms = 1 -> Janus.Core.RestrictionChannel
 Janus.Core.RestrictionPurpose
 Janus.Core.RestrictionPurpose.Any = 0 -> Janus.Core.RestrictionPurpose
 Janus.Core.RestrictionPurpose.Notification = 4 -> Janus.Core.RestrictionPurpose
@@ -2442,14 +2457,14 @@ Janus.Core.RoleName.RoleName() -> void
 Janus.Core.ScriptMixing
 Janus.Core.SendContext
 Janus.Core.SendContext.<Clone>$() -> Janus.Core.SendContext!
-Janus.Core.SendContext.Deconstruct(out Janus.Core.RestrictionPurpose Purpose, out Janus.Core.SendKind Kind, out Janus.Core.SubjectId? Subject, out string! Source) -> void
+Janus.Core.SendContext.Deconstruct(out Janus.Core.RestrictionPurpose Purpose, out Janus.Core.SendKind Kind, out Janus.Core.SubjectId? Subject, out string? Source) -> void
 Janus.Core.SendContext.Equals(Janus.Core.SendContext? other) -> bool
 Janus.Core.SendContext.Kind.get -> Janus.Core.SendKind
 Janus.Core.SendContext.Kind.init -> void
 Janus.Core.SendContext.Purpose.get -> Janus.Core.RestrictionPurpose
 Janus.Core.SendContext.Purpose.init -> void
-Janus.Core.SendContext.SendContext(Janus.Core.RestrictionPurpose Purpose, Janus.Core.SendKind Kind, Janus.Core.SubjectId? Subject, string! Source) -> void
-Janus.Core.SendContext.Source.get -> string!
+Janus.Core.SendContext.SendContext(Janus.Core.RestrictionPurpose Purpose, Janus.Core.SendKind Kind, Janus.Core.SubjectId? Subject, string? Source) -> void
+Janus.Core.SendContext.Source.get -> string?
 Janus.Core.SendContext.Source.init -> void
 Janus.Core.SendContext.Subject.get -> Janus.Core.SubjectId?
 Janus.Core.SendContext.Subject.init -> void
@@ -2470,7 +2485,7 @@ Janus.Core.SendReference.Value.get -> string!
 Janus.Core.SendRequest
 Janus.Core.SendRequest.<Clone>$() -> Janus.Core.SendRequest!
 Janus.Core.SendRequest.Context.get -> Janus.Core.SendContext!
-Janus.Core.SendRequest.Deconstruct(out Janus.Core.SendDestination! Destination, out Janus.Core.MessageKind Message, out Janus.Core.RestrictionPurpose Purpose, out string! Source, out string? Language) -> void
+Janus.Core.SendRequest.Deconstruct(out Janus.Core.SendDestination! Destination, out Janus.Core.MessageKind Message, out Janus.Core.RestrictionPurpose Purpose, out string? Source, out string? Language) -> void
 Janus.Core.SendRequest.Destination.get -> Janus.Core.SendDestination!
 Janus.Core.SendRequest.Destination.init -> void
 Janus.Core.SendRequest.Equals(Janus.Core.SendRequest? other) -> bool
@@ -2482,8 +2497,8 @@ Janus.Core.SendRequest.Message.get -> Janus.Core.MessageKind
 Janus.Core.SendRequest.Message.init -> void
 Janus.Core.SendRequest.Purpose.get -> Janus.Core.RestrictionPurpose
 Janus.Core.SendRequest.Purpose.init -> void
-Janus.Core.SendRequest.SendRequest(Janus.Core.SendDestination! Destination, Janus.Core.MessageKind Message, Janus.Core.RestrictionPurpose Purpose, string! Source, string? Language) -> void
-Janus.Core.SendRequest.Source.get -> string!
+Janus.Core.SendRequest.SendRequest(Janus.Core.SendDestination! Destination, Janus.Core.MessageKind Message, Janus.Core.RestrictionPurpose Purpose, string? Source, string? Language) -> void
+Janus.Core.SendRequest.Source.get -> string?
 Janus.Core.SendRequest.Source.init -> void
 Janus.Core.SendRequest.Subject.get -> Janus.Core.SubjectId?
 Janus.Core.SendRequest.Subject.init -> void
@@ -3135,6 +3150,9 @@ override Janus.Core.IssuedInvitation.ToString() -> string!
 override Janus.Core.KeyEncryptionKeys.Equals(object? obj) -> bool
 override Janus.Core.KeyEncryptionKeys.GetHashCode() -> int
 override Janus.Core.KeyEncryptionKeys.ToString() -> string!
+override Janus.Core.LandingOrigins.Equals(object? obj) -> bool
+override Janus.Core.LandingOrigins.GetHashCode() -> int
+override Janus.Core.LandingOrigins.ToString() -> string!
 override Janus.Core.LawfulBasisDeclaration.Equals(object? obj) -> bool
 override Janus.Core.LawfulBasisDeclaration.GetHashCode() -> int
 override Janus.Core.LawfulBasisDeclaration.ToString() -> string!
@@ -4021,6 +4039,8 @@ static Janus.Core.IssuedInvitation.operator !=(Janus.Core.IssuedInvitation? left
 static Janus.Core.IssuedInvitation.operator ==(Janus.Core.IssuedInvitation? left, Janus.Core.IssuedInvitation? right) -> bool
 static Janus.Core.KeyEncryptionKeys.operator !=(Janus.Core.KeyEncryptionKeys? left, Janus.Core.KeyEncryptionKeys? right) -> bool
 static Janus.Core.KeyEncryptionKeys.operator ==(Janus.Core.KeyEncryptionKeys? left, Janus.Core.KeyEncryptionKeys? right) -> bool
+static Janus.Core.LandingOrigins.operator !=(Janus.Core.LandingOrigins? left, Janus.Core.LandingOrigins? right) -> bool
+static Janus.Core.LandingOrigins.operator ==(Janus.Core.LandingOrigins? left, Janus.Core.LandingOrigins? right) -> bool
 static Janus.Core.LawfulBases.Default.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.LawfulBasisDeclaration!>!
 static Janus.Core.LawfulBasisDeclaration.operator !=(Janus.Core.LawfulBasisDeclaration? left, Janus.Core.LawfulBasisDeclaration? right) -> bool
 static Janus.Core.LawfulBasisDeclaration.operator ==(Janus.Core.LawfulBasisDeclaration? left, Janus.Core.LawfulBasisDeclaration? right) -> bool

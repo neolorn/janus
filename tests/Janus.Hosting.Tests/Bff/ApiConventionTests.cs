@@ -412,6 +412,34 @@ public sealed class ApiConventionTests
         }
     }
 
+    /// <summary>
+    /// API-LAND-001 AC4: no endpoint takes a link token in a path or a query, so a
+    /// token reaches the library only in the body of a press and loading an address
+    /// that carries one, as a mail scanner does, changes nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_LAND_001_AC4_NoEndpointTakesALinkTokenInAPathOrQueryAsync()
+    {
+        await using var deployment = new Deployment();
+
+        foreach (RouteEndpoint route in deployment.Endpoints.OfType<RouteEndpoint>())
+        {
+            Assert.DoesNotContain(route.RoutePattern.Parameters, parameter => Carries(parameter.Name));
+
+            if (route.Metadata.GetMetadata<MethodInfo>() is { } handler)
+            {
+                Assert.DoesNotContain(
+                    handler.GetParameters(),
+                    parameter => parameter.ParameterType == typeof(string) && Carries(parameter.Name ?? string.Empty));
+            }
+        }
+    }
+
+    // Whether a route or handler parameter is named for a link token.
+    private static bool Carries(string named) =>
+        named.Contains("token", StringComparison.OrdinalIgnoreCase);
+
     // Whether a field or a route parameter names an account rather than a record of
     // one kind or another.
     private static bool Names(string named) =>

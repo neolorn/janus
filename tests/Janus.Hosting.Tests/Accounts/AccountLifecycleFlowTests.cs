@@ -1,5 +1,7 @@
+
 using System;
 using System.Threading.Tasks;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
@@ -36,7 +38,7 @@ public sealed class AccountLifecycleFlowTests : IAsyncDisposable
                     message,
                     kind,
                     "en",
-                    new MessageTemplate(kind is SendKind.Email ? "notice" : null, "{token}"));
+                    new MessageTemplate(kind is SendKind.Email ? "notice" : null, "{link}"));
             }
         }
     }
@@ -167,7 +169,7 @@ public sealed class AccountLifecycleFlowTests : IAsyncDisposable
     }
 
     // The token the notice carried, read off the body the template put it in.
-    private string Link() => _deployment.Mail.Taken[^1].Body;
+    private string Link() => Landing.Token(_deployment.Mail.Taken[^1].Body);
 
     private SubjectId Subject() => _deployment.Directory.Created[^1].Subject;
 

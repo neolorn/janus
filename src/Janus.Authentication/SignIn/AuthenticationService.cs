@@ -1224,7 +1224,7 @@ internal sealed class AuthenticationService(
         }
 
         return checks
-            ? await HoldAsync(open, subject, reached, changeRequired, cancellationToken)
+            ? await HoldAsync(open, subject, reached, origin.Address, changeRequired, cancellationToken)
                 .ConfigureAwait(false)
             : await CompleteAsync(
                     open,
@@ -1327,6 +1327,7 @@ internal sealed class AuthenticationService(
         Challenge open,
         SubjectId subject,
         Assurance reached,
+        string source,
         bool changeRequired,
         CancellationToken cancellationToken)
     {
@@ -1366,7 +1367,7 @@ internal sealed class AuthenticationService(
                         SendDestination.Of(address),
                         MessageKind.VerificationCode,
                         RestrictionPurpose.Verification,
-                        primary.Canonical,
+                        source,
                         RecipientLanguage.Of(settled, requested: null, languages))
                     {
                         Subject = subject,

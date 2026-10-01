@@ -28,6 +28,7 @@ namespace Janus.Authentication.Recovery;
 /// <param name="identifiers">Where the channels a notice reaches are read.</param>
 /// <param name="policies">What policy governs the account.</param>
 /// <param name="sending">Where a message goes out.</param>
+/// <param name="landing">Where a link the message carries lands.</param>
 /// <param name="audit">Where what became of a credential is recorded.</param>
 /// <param name="events">Where what became of a credential is announced.</param>
 /// <param name="configuration">Where the window and the notice interval come from.</param>
@@ -47,6 +48,7 @@ internal sealed class LossReports(
     IIdentifierDirectory identifiers,
     PolicyResolution policies,
     INotificationHandler sending,
+    LandingLinks landing,
     ICredentialAudit audit,
     IEvents events,
     IConfigurationStore configuration,
@@ -69,10 +71,6 @@ internal sealed class LossReports(
     private const string Ended = "credential-restored";
 
     private const string Completed = "credential-invalidated";
-
-    // The notices the window carries are asked for by no request, so they count
-    // against the deployment itself and not against a person's address.
-    private const string Origin = "recovery";
 
     /// <summary>
     /// Reports a credential lost.
@@ -415,8 +413,10 @@ internal sealed class LossReports(
     {
         // Every notice carries the same link: a fresh token would strand the one
         // already in somebody's inbox, which is the one they are most likely to open.
+        // The notices the window carries are asked for by no request, so they carry
+        // no source and no source restriction counts them (section 5.14).
         report.Notified(
-            await TellAsync(report, Origin, cancellationToken).ConfigureAwait(false),
+            await TellAsync(report, source: null, cancellationToken).ConfigureAwait(false),
             now);
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -513,7 +513,7 @@ internal sealed class LossReports(
     // that ends it (AUTH-RECOV-007).
     private async ValueTask<bool> TellAsync(
         LossReport report,
-        string source,
+        string? source,
         CancellationToken cancellationToken)
     {
         HeldIdentifiers held = await identifiers.HeldAsync(report.Subject, cancellationToken)
@@ -522,7 +522,7 @@ internal sealed class LossReports(
         string? language = await LanguageAsync(report.Subject, cancellationToken).ConfigureAwait(false);
         var values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
         {
-            ["token"] = Encoding.UTF8.GetString(report.Cancel),
+            ["link"] = landing.Of(LinkKind.LossReport, Encoding.UTF8.GetString(report.Cancel)),
         };
 
         bool delivered = false;

@@ -192,6 +192,11 @@ public static class HostingRegistration
             services.GetRequiredService<TimeProvider>()));
         services.AddScoped<ConfigurationAdministration>();
         services.AddScoped<RestrictionAdministration>();
+        services.AddScoped<SendCounterSweep>();
+
+        // API-LAND-001: every link lands on an origin the host declared, and one it did
+        // not declare stops the start, so nothing is registered in its place.
+        services.AddScoped(provider => new LandingLinks(provider.GetRequiredService<LandingOrigins>()));
         services.AddScoped<IRestrictionSet, RestrictionSetService>();
         services.AddScoped<ThrottleService>();
         services.AddScoped<NonExistenceNotice>();
@@ -345,12 +350,16 @@ public static class HostingRegistration
         services.AddScoped(provider => new DeclarationCoverage(
             provider.GetService<PasskeyAddresses>(),
             provider.GetService<AuthenticationAddresses>(),
+            provider.GetService<LandingOrigins>(),
             provider.GetService<SignOnClient>(),
             provider.GetRequiredService<IMailServerInUse>(),
             provider.GetService<MailServerClient>(),
             provider.GetService<ImageCodec>(),
             provider.GetService<IDnsResolver>(),
             provider.GetServices<SocialProvider>(),
+            provider.GetRequiredService<AuthorizationDeclaration>(),
+            provider.GetServices<ISubjectEventSubscriber>(),
+            provider.GetRequiredService<IOidcClientStore>(),
             provider.GetRequiredService<IConfigurationStore>()));
 
         services.ConfigureHttpJsonOptions(ReadThroughContexts);
@@ -576,6 +585,7 @@ public static class HostingRegistration
             provider.GetRequiredService<IMailboxStore>(),
             provider.GetRequiredService<IMailServerInUse>(),
             provider.GetRequiredService<INotificationHandler>(),
+            provider.GetRequiredService<LandingLinks>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IOrganizationAudit>(),
             provider.GetRequiredService<IUnitOfWork>(),

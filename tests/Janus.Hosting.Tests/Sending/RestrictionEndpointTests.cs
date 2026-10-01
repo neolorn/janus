@@ -66,6 +66,7 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
 
         Assert.Equal("destination", email.GetProperty("key").GetString());
         Assert.Equal("any", email.GetProperty("purpose").GetString());
+        Assert.Equal("email", email.GetProperty("channel").GetString());
 
         JsonElement fixedBucket = email.GetProperty("buckets")[1];
 
@@ -193,6 +194,41 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
         Assert.Contains(
             _deployment.Events.Of<AlertRaised>(),
             alert => alert.Condition is AlertCondition.RestrictionLoosened);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC3 and chapter 10 section 5.15a: narrowing a restriction to one
+    /// channel lets the other channel's sends through, so it is a loosening, which
+    /// <c>restriction:edit</c> alone is refused and which with <c>system:administer</c>
+    /// and a reason takes effect and is announced as one; a channel outside the
+    /// vocabulary is a malformed request naming <c>channel</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC3_NarrowingAChannelIsALooseningAsync()
+    {
+        Browser editor = await AuthorisedAsync(Permissions.RestrictionEdit);
+
+        Answer refused = await NarrowedAsync(editor, "sms");
+        Answer unreadable = await NarrowedAsync(editor, "fax");
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
+        Assert.Equal(StatusCodes.Status400BadRequest, unreadable.Status);
+        Assert.Equal("channel", unreadable.Json().GetProperty("details").GetProperty("member").GetString());
+
+        _deployment.Gate.Grant(
+            _deployment.Directory.Created[^1].Subject,
+            Administration,
+            Permissions.SystemAdminister);
+
+        Answer narrowed = await NarrowedAsync(editor, "sms");
+
+        Assert.Equal(StatusCodes.Status204NoContent, narrowed.Status);
+        Assert.Equal(
+            RestrictionChannel.Sms,
+            (await InForceAsync()).Single(one => one.Name == "notification.destination").Channel);
+        Assert.True(Assert.Single(_deployment.Events.Of<SendingRestrictionChanged>()).Loosening);
     }
 
     /// <summary>
@@ -459,6 +495,17 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
             ("key", "destination"),
             ("buckets", buckets),
             ("reason", reason));
+
+    // notification.destination as it ships, but for the channel given.
+    private static Task<Answer> NarrowedAsync(Browser browser, string channel) =>
+        browser.SendAsync(
+            "PUT",
+            "/admin/restrictions/notification.destination",
+            ("key", "destination"),
+            ("purpose", "notification"),
+            ("channel", channel),
+            ("buckets", new object[] { new { max = 5, interval = "PT24H", window = "sliding" } }),
+            ("reason", "texts only"));
 
     private async Task<Restriction> SmsDestinationAsync() =>
         (await InForceAsync()).Single(one => one.Name == "sms.destination");

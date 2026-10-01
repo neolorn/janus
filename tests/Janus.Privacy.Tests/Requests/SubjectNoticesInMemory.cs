@@ -22,7 +22,7 @@ internal sealed class SubjectNoticesInMemory : ISubjectNotices
     public ValueTask<int> TellAsync(
         SubjectId subject,
         MessageKind message,
-        string source,
+        string? source,
         CancellationToken cancellationToken)
     {
         _told.Add((subject, message));

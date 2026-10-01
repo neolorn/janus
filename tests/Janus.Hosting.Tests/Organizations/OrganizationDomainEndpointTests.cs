@@ -206,7 +206,7 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
                 MessageKind.SignInLink,
                 kind,
                 "en",
-                new MessageTemplate(kind is SendKind.Email ? "link" : null, "{code} {token}"));
+                new MessageTemplate(kind is SendKind.Email ? "link" : null, "{code} {link}"));
         }
 
         (Browser administrator, SubjectId member) = await AuthorisedAsync();
