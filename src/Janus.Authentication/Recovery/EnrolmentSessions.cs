@@ -41,6 +41,22 @@ internal sealed class EnrolmentSessions(
     }
 
     /// <summary>
+    /// Whether a session is still open, read under a lock on the link it stands on and
+    /// held until the caller's transaction ends, so a second completion of it waits for
+    /// the first to end it and finds it ended (D-148, CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="session">Which session.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Whether it is open.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<bool> HoldAsync(
+        EnrolmentSessionId session,
+        CancellationToken cancellationToken) =>
+        await links.FindForUpdateAsync(session, cancellationToken).ConfigureAwait(false)
+            is RecoveryLink link
+            && !link.HasExpired(time.GetUtcNow());
+
+    /// <summary>
     /// Ends one, which completing the enrolment does: what the person set is used by
     /// signing in with it (D-148).
     /// </summary>

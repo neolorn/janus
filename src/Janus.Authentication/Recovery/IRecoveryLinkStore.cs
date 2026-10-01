@@ -41,6 +41,19 @@ internal interface IRecoveryLinkStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// The link that opened one enrolment session, read under a lock on its row held
+    /// until the operation's transaction ends, so a second completion of the session
+    /// waits for the first and finds it ended (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="session">Which session.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The link as committed when the lock was taken, or nothing.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask<RecoveryLink?> FindForUpdateAsync(
+        EnrolmentSessionId session,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Records a newly issued link, replacing whatever of that purpose the account had
     /// outstanding: asking again is what ends an older message.
     /// </summary>

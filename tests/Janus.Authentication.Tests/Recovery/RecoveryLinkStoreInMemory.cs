@@ -35,6 +35,12 @@ internal sealed class RecoveryLinkStoreInMemory : IRecoveryLinkStore
         ValueTask.FromResult(_links.Values.SingleOrDefault(link => link.Session == session));
 
     /// <inheritdoc/>
+    public ValueTask<RecoveryLink?> FindForUpdateAsync(
+        EnrolmentSessionId session,
+        CancellationToken cancellationToken) =>
+        FindAsync(session, cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask ReplaceAsync(RecoveryLink link, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(link);

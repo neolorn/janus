@@ -75,6 +75,34 @@ internal sealed class RecoveryLinkStore(StoreContext context) : IRecoveryLinkSto
                 .ConfigureAwait(false));
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<RecoveryLink?> FindForUpdateAsync(
+        EnrolmentSessionId session,
+        CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A recovery link's row is held only inside the operation's transaction.");
+        }
+
+        bool tracked = context.RecoveryLinks.Local.Any(record => record.Session == session);
+
+        RecoveryLinkRecord? held = (await context.RecoveryLinks
+                .FromSql($"SELECT * FROM identity.recovery_links WHERE session = {session.Value} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .SingleOrDefault();
+
+        // As for a token: a tracked row was read before the lock, so it is read again.
+        if (held is not null && tracked)
+        {
+            await context.Entry(held).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return Read(held);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask ReplaceAsync(RecoveryLink link, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(link);

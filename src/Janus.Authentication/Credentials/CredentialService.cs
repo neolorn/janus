@@ -117,8 +117,32 @@ internal sealed class CredentialService(
             return Result.Failure(gate);
         }
 
-        _ = (await SetAsync(acting.Subject, password, cancellationToken).ConfigureAwait(false))
-            .Match(() => true, error => Withheld<bool>(error, ref failure));
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        if (!await HeldOpenAsync(acting, cancellationToken).ConfigureAwait(false))
+        {
+            failure = Error.From(ErrorCodes.EnrolmentTokenInvalid);
+        }
+        else
+        {
+            _ = (await SetAsync(acting.Subject, password, cancellationToken).ConfigureAwait(false))
+                .Match(() => true, error => Withheld<bool>(error, ref failure));
+        }
+
+        if (failure is null)
+        {
+            await CompletedAsync(acting, cancellationToken).ConfigureAwait(false);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
 
         if (failure is not null)
         {
@@ -130,8 +154,6 @@ internal sealed class CredentialService(
 
         _ = await TellAsync(acting.Subject, MessageKind.SecurityNotice, source, cancellationToken)
             .ConfigureAwait(false);
-
-        await CompletedAsync(acting, cancellationToken).ConfigureAwait(false);
 
         return Result.Success();
     }
@@ -280,6 +302,12 @@ internal sealed class CredentialService(
             return Result.Failure<EnrolledCredential>(notBegun);
         }
 
+        if (!await HeldOpenAsync(acting, cancellationToken).ConfigureAwait(false))
+        {
+            return await RefusedAsync<EnrolledCredential>(Error.From(ErrorCodes.EnrolmentTokenInvalid), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         AuthenticatorId enrolled = (await keys
                 .EnrolAsync(
                     acting.Subject,
@@ -414,6 +442,12 @@ internal sealed class CredentialService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure<EnrolledCredential>(notBegun);
+        }
+
+        if (!await HeldOpenAsync(acting, cancellationToken).ConfigureAwait(false))
+        {
+            return await RefusedAsync<EnrolledCredential>(Error.From(ErrorCodes.EnrolmentTokenInvalid), cancellationToken)
+                .ConfigureAwait(false);
         }
 
         _ = (await generators
@@ -1081,6 +1115,8 @@ internal sealed class CredentialService(
             return Result.Failure<EnrolledCredential>(unannounced);
         }
 
+        await CompletedAsync(acting, cancellationToken).ConfigureAwait(false);
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
@@ -1091,8 +1127,6 @@ internal sealed class CredentialService(
         // session is not one of them.
         _ = await TellAsync(acting.Subject, MessageKind.CredentialEnrolled, source, cancellationToken)
             .ConfigureAwait(false);
-
-        await CompletedAsync(acting, cancellationToken).ConfigureAwait(false);
 
         return Result.Success(new EnrolledCredential(
             credential,
@@ -1109,8 +1143,15 @@ internal sealed class CredentialService(
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match(() => Result.Failure<TValue>(refusal), Result.Failure<TValue>);
 
-    // D-148: completing the enrolment ends the enrolment session, and what was set is
-    // used by signing in with it.
+    // D-148, D-166 X3: the enrolment session a completion acts under is held under its
+    // link's lock from the start of the transaction that completes it, so a second
+    // completion at once waits for this one to end it and is refused.
+    private async ValueTask<bool> HeldOpenAsync(Acting acting, CancellationToken cancellationToken) =>
+        acting.Enrolment is not EnrolmentSessionId opened
+        || await enrolments.HoldAsync(opened, cancellationToken).ConfigureAwait(false);
+
+    // D-148: completing the enrolment ends the enrolment session in the transaction
+    // that completes it, and what was set is used by signing in with it.
     private async ValueTask CompletedAsync(Acting acting, CancellationToken cancellationToken)
     {
         if (acting.Enrolment is EnrolmentSessionId opened)
