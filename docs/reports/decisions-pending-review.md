@@ -12961,6 +12961,8 @@ record are one session, and that the alert names the sessions and not the places
 AUTH-SESS-013 could say that the place kept under the person's key includes where the
 city lies.
 
+**Superseded by D-166.**
+
 ---
 
 ## 327. Where read volume is counted from, and how a person's normal is kept

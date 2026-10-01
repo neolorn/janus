@@ -1302,6 +1302,9 @@ against the public contract of LIB-API-001.
   attained and the most the account can reach. A step-up gate judged from a host's
   report is met only where all four meet what the acting person's policy says the gate
   costs, and is otherwise refused `auth.stepup.required` with the gate it asks for.
+- `concurrent-sessions-implausible` now compares a place whose country is known: two
+  sessions whose countries differ raise it whatever their cities, and the distance is
+  measured only where both places name a city.
 - A value the library reads from text under a rule, left unset (such as its `default`),
   throws `InvalidOperationException` where its text is read, so no such value reaches a
   row.
