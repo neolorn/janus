@@ -8,8 +8,10 @@ using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Identity.Identifiers;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace Janus.Storage.Identity.Identifiers;
 
@@ -33,6 +35,29 @@ internal sealed class IdentifierStore(
     IKeyRing ring,
     RandomNumberGenerator randomness) : IIdentifierStore
 {
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        // The account's row stands for its set: every change to the set takes it
+        // first, so two changes to one account's identifiers run one after the other.
+        _ = await AccountStore.HeldAsync(context, subject, cancellationToken).ConfigureAwait(false);
+
+        List<object> read =
+        [
+            .. context.Identifiers.Local.Where(held => held.Subject == subject),
+            .. context.BackupSettings.Local.Where(settled => settled.Subject == subject),
+            .. context.IdentifierRemovals.Local.Where(removal => removal.Subject == subject),
+        ];
+
+        // A row the context already tracks was read before the lock, so it is read
+        // again; one another transaction removed meanwhile leaves the context.
+        foreach (EntityEntry entry in read.Select(context.Entry).Where(entry => entry.State is EntityState.Unchanged))
+        {
+            await entry.ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     /// <inheritdoc/>
     public async ValueTask<IdentifierSet> FindBySubjectAsync(
         SubjectId subject,

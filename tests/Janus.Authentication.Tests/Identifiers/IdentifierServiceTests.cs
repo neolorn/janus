@@ -328,6 +328,32 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-006 AC1, CONV-DESIGN-003 AC6: an address made primary while the removal
+    /// waited for the set's lock is judged as it now stands, so it is spared.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_006_AC1_AnAddressMadePrimaryMeanwhileIsSparedAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+
+        _directory.Holding = subject =>
+            _directory.PromoteAsync(subject, second, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.IdentifierPrimary,
+            Refused(await Service.RemoveAsync(
+                Acting,
+                Stepped(),
+                second,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.True(Named(await HeldAsync(), Second).IsPrimary);
+        Assert.DoesNotContain(_events.Published, raised => raised is IdentifierRemoved);
+    }
+
+    /// <summary>
     /// REG-MAIL-001 AC5: the personal email a membership keeps is not made primary,
     /// removed or replaced by the person while the membership lasts.
     /// </summary>

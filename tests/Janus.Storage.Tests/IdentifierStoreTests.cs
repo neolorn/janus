@@ -670,8 +670,59 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
             await Store(context).RecordAsync(set, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// REG-IDENT-005, CONV-DESIGN-003 AC6: two promotions at once, each of another
+    /// address, read the set under its lock, so the second moves the role from the first
+    /// and the kind keeps one primary.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_005_TwoPromotionsAtOnceLeaveOnePrimaryAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        IdentifierId first = await WriteAsync(subject, _entered);
+        IdentifierId second = await WriteAsync(subject, Fresh("Second"));
+        IdentifierId third = await WriteAsync(subject, Fresh("Third"));
+
+        await RecordAsync(subject, set =>
+        {
+            set.Verify(first, Noon);
+            set.Verify(second, Noon);
+            set.Verify(third, Noon);
+            set.MakePrimary(first);
+        });
+
+        await Task.WhenAll(PromotedAsync(subject, second), PromotedAsync(subject, third));
+
+        await using StoreContext reading = database.Context();
+        IdentifierSet read = await Store(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
+
+        Assert.Single(read.All, identifier => identifier.IsPrimary);
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
+
+    // Each promotion is its own request, reading the set before its transaction as the
+    // identifier service does and again under the set's lock.
+    private async Task PromotedAsync(SubjectId subject, IdentifierId promoted)
+    {
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+        IdentifierStore store = Store(context);
+
+        _ = await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        await store.HoldAsync(subject, TestContext.Current.CancellationToken);
+
+        IdentifierSet set = await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
+        set.MakePrimary(promoted);
+
+        await store.RecordAsync(set, TestContext.Current.CancellationToken);
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+    }
 
     private IdentifierStore Store(StoreContext context) =>
         new(context, _deployment.Ring, _deployment.Randomness);

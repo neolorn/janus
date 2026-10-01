@@ -1478,6 +1478,10 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- An identifier's addition, promotion, removal, undo and backup setting, and a
+  username's choice, are decided again on the account's identifiers under a lock, so
+  two changes at once leave one primary of a kind and no more of a kind than the
+  maximum, and the second is refused with the code the set as it then stands answers.
 - A reported credential's invalidation and the cancellation of its report are decided
   under a lock on the credential's row, so a report cancelled at the window's end is
   never invalidated after all; the invalidation also holds the account's row, which a

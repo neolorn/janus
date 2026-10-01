@@ -139,6 +139,18 @@ internal sealed class IdentifierService(
             return Result.Failure(notBegun);
         }
 
+        // D-166 X3: the set is read again under its lock, so of two additions at once
+        // the second counts what the first took on.
+        await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        held = await directory.HeldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        if (Standing(held, canonical) is null && held.OfKind(kind).Count >= maximum)
+        {
+            return await SettledAsync(Error.From(ErrorCodes.IdentifierMaximum), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         Error? refused = await StageAsync(
                 subject, session, held, kind, entered, canonical, maximum, source, cancellationToken)
             .ConfigureAwait(false);
@@ -459,22 +471,9 @@ internal sealed class IdentifierService(
         HeldIdentifiers held = await directory.HeldAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        if (held.Find(identifier) is not HeldIdentifier promoted)
+        if (Unpromotable(held.Find(identifier)) is Error refused)
         {
-            return Result.Failure(Error.From(ErrorCodes.IdentifierInvalid));
-        }
-
-        // REG-IDENT-005: an identifier the account holds but has not proved is a
-        // failed precondition, not a value the operation does not take.
-        if (!promoted.IsVerified)
-        {
-            return Result.Failure(Error.From(ErrorCodes.IdentifierUnverified));
-        }
-
-        // REG-MAIL-001: the personal email stays non-primary for the whole membership.
-        if (promoted.IsPersonal)
-        {
-            return Result.Failure(Error.From(ErrorCodes.IdentifierLocked));
+            return Result.Failure(refused);
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -484,6 +483,19 @@ internal sealed class IdentifierService(
         {
             return Result.Failure(notBegun);
         }
+
+        // D-166 X3: decided again on the set under its lock, so of two promotions at
+        // once, or a promotion and a removal, the second decides on what the first left.
+        await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        held = await directory.HeldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        if (Unpromotable(held.Find(identifier)) is Error moved)
+        {
+            return await SettledAsync(moved, cancellationToken).ConfigureAwait(false);
+        }
+
+        HeldIdentifier promoted = held.Find(identifier)!;
 
         await directory.PromoteAsync(subject, identifier, cancellationToken).ConfigureAwait(false);
 
@@ -559,6 +571,16 @@ internal sealed class IdentifierService(
             return Result.Failure(notBegun);
         }
 
+        // D-166 X3: as for a promotion.
+        await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        held = await directory.HeldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        if (Named(held, kind, choice, named) is Error moved)
+        {
+            return await SettledAsync(moved, cancellationToken).ConfigureAwait(false);
+        }
+
         await directory
             .SettleBackupAsync(subject, kind, choice, named, cancellationToken)
             .ConfigureAwait(false);
@@ -615,25 +637,9 @@ internal sealed class IdentifierService(
         HeldIdentifiers held = await directory.HeldAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        if (held.Find(identifier) is not HeldIdentifier going)
+        if (await UnremovableAsync(held, identifier, cancellationToken).ConfigureAwait(false) is Error refused)
         {
-            return Result.Failure(Error.From(ErrorCodes.IdentifierInvalid));
-        }
-
-        // REG-MAIL-001: the personal email stays on the account for the whole membership.
-        if (going.IsPersonal)
-        {
-            return Result.Failure(Error.From(ErrorCodes.IdentifierLocked));
-        }
-
-        if (going.IsPrimary)
-        {
-            return Result.Failure(Error.From(ErrorCodes.IdentifierPrimary));
-        }
-
-        if (await RequiredAsync(going, held, cancellationToken).ConfigureAwait(false) is Error last)
-        {
-            return Result.Failure(last);
+            return Result.Failure(refused);
         }
 
         Error? failure = null;
@@ -654,6 +660,18 @@ internal sealed class IdentifierService(
         {
             return Result.Failure(notBegun);
         }
+
+        // D-166 X3: as for a promotion.
+        await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        held = await directory.HeldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        if (await UnremovableAsync(held, identifier, cancellationToken).ConfigureAwait(false) is Error moved)
+        {
+            return await SettledAsync(moved, cancellationToken).ConfigureAwait(false);
+        }
+
+        HeldIdentifier going = held.Find(identifier)!;
 
         await pending.RemoveAsync(identifier, cancellationToken).ConfigureAwait(false);
 
@@ -733,6 +751,18 @@ internal sealed class IdentifierService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: the removal is read again under the set's lock, so of two undos at
+        // once the second finds the value already back and answers as for a spent link.
+        await directory.HoldAsync(given.Subject, cancellationToken).ConfigureAwait(false);
+
+        if (await directory
+                .GivenUpAsync(OpaqueToken.Of(linkToken).Fingerprint(), cancellationToken)
+                .ConfigureAwait(false) is null)
+        {
+            return await SettledAsync(Error.From(ErrorCodes.ChangeWindowElapsed), cancellationToken)
+                .ConfigureAwait(false);
         }
 
         await directory.TakeBackAsync(given.Id, maximum, cancellationToken).ConfigureAwait(false);
@@ -958,6 +988,14 @@ internal sealed class IdentifierService(
         return Result.Success();
     }
 
+    // REG-IDENT-005: only an identifier the account holds and has proved is promoted,
+    // and the personal email stays non-primary for the whole membership (REG-MAIL-001).
+    private static Error? Unpromotable(HeldIdentifier? promoted) =>
+        promoted is null ? Error.From(ErrorCodes.IdentifierInvalid)
+        : !promoted.IsVerified ? Error.From(ErrorCodes.IdentifierUnverified)
+        : promoted.IsPersonal ? Error.From(ErrorCodes.IdentifierLocked)
+        : null;
+
     private static IntegerSetting Maximum(IdentifierKind kind) =>
         kind is IdentifierKind.Email ? Settings.IdentifiersEmailMax : Settings.IdentifiersPhoneMax;
 
@@ -1068,6 +1106,36 @@ internal sealed class IdentifierService(
     // IDN-ATTR-001: a message goes out in the language the account settled on, and in
     // every language the deployment declares where it has settled none; the operations
     // here carry no locale of the person's request.
+    // A refusal decided under the set's lock ends the transaction that took the lock.
+    private async ValueTask<Result> SettledAsync(Error refusal, CancellationToken cancellationToken) =>
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match(() => Result.Failure(refusal), Result.Failure);
+
+    // The personal email stays on the account for the whole membership (REG-MAIL-001),
+    // the primary of a kind is not removed, and neither is the last way a kind reaches.
+    private async ValueTask<Error?> UnremovableAsync(
+        HeldIdentifiers held,
+        IdentifierId identifier,
+        CancellationToken cancellationToken)
+    {
+        if (held.Find(identifier) is not HeldIdentifier going)
+        {
+            return Error.From(ErrorCodes.IdentifierInvalid);
+        }
+
+        if (going.IsPersonal)
+        {
+            return Error.From(ErrorCodes.IdentifierLocked);
+        }
+
+        if (going.IsPrimary)
+        {
+            return Error.From(ErrorCodes.IdentifierPrimary);
+        }
+
+        return await RequiredAsync(going, held, cancellationToken).ConfigureAwait(false);
+    }
+
     private async ValueTask<string?> LanguageAsync(SubjectId subject, CancellationToken cancellationToken)
     {
         string? settled = await directory.LanguageAsync(subject, cancellationToken)

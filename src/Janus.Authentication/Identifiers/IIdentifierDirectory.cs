@@ -75,6 +75,17 @@ internal interface IIdentifierDirectory
     ValueTask<HeldIdentifiers> HeldAsync(SubjectId subject, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Holds one account's identifiers under a lock until the operation's transaction
+    /// ends, so what <see cref="HeldAsync"/> and every command read after it is the set
+    /// as committed when the lock was taken (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="subject">Whose identifiers.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of taking the lock.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Takes an identifier on to the account, unverified.
     /// </summary>
     /// <param name="subject">Whose it is.</param>

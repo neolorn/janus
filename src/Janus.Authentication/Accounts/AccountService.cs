@@ -733,6 +733,10 @@ internal sealed class AccountService(
             return Error.From(ErrorCodes.UsernameReserved);
         }
 
+        // D-166 X3: the set is read under its lock, so two usernames chosen at once are
+        // chosen one after the other and the second is judged against the first.
+        await identifiers.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
         HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 

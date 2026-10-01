@@ -140,6 +140,16 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
             [.. all.Where(identifier => Admits(subject, identifier))]));
     }
 
+    /// <summary>
+    /// What another transaction committed on an account's identifiers while this one
+    /// waited for their lock, applied as the lock is taken.
+    /// </summary>
+    public Func<SubjectId, ValueTask>? Holding { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        Holding?.Invoke(subject) ?? ValueTask.CompletedTask;
+
     /// <inheritdoc/>
     public ValueTask<string?> LanguageAsync(SubjectId subject, CancellationToken cancellationToken) =>
         ValueTask.FromResult(_languages.GetValueOrDefault(subject));

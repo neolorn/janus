@@ -87,6 +87,11 @@ internal sealed class IdentifierDirectory(
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        identifiers.HoldAsync(subject, cancellationToken);
+
+    /// <inheritdoc/>
     public async ValueTask TakeOnAsync(
         SubjectId subject,
         IdentifierId id,

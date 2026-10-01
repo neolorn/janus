@@ -17,6 +17,17 @@ namespace Janus.Identity.Identifiers;
 internal interface IIdentifierStore
 {
     /// <summary>
+    /// Holds one account's identifiers under a lock until the operation's transaction
+    /// ends, so every read of the set after it is the set as committed when the lock was
+    /// taken and a change decided on it cannot race another (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="subject">Whose identifiers.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of taking the lock.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reads one account's identifiers and the backup settings it has changed.
     /// </summary>
     /// <param name="subject">Whose identifiers to read.</param>
