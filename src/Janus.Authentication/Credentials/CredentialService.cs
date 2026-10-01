@@ -535,48 +535,55 @@ internal sealed class CredentialService(
             return Result.Failure(gate);
         }
 
-        Authenticator? going = await authenticators.FindAsync(credential, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (going is null || going.Subject != acting.Subject)
-        {
-            return Result.Failure(Error.From(ErrorCodes.CredentialNotFound));
-        }
-
-        IReadOnlyList<Authenticator> enrolled = await authenticators
-            .OfAsync(acting.Subject, cancellationToken)
-            .ConfigureAwait(false);
-
-        bool password = await SecondStep.AvailableAsync(held, acting.Subject, cancellationToken)
-            .ConfigureAwait(false);
-
-        // IDN-LIFE-012 AC3: a provider's identity that is the account's last way in is
-        // not removed by this route either.
-        if (IsLinked(going) && !HeldFactors.KeptWithout(enrolled, going, password))
-        {
-            return Result.Failure(Error.From(ErrorCodes.LinkLastCredential));
-        }
-
-        // AUTH-STEP-006, AUTH-RECOV-007: a removal that would leave the account
-        // reaching less than it does now runs the notified window instead, so the
-        // credential is refused at once and gone only once somebody has been told.
-        if (Lowers(enrolled, going, password))
-        {
-            return (await losses.SuspendAsync(acting.Context, going, source, cancellationToken).ConfigureAwait(false))
-                .Match(
-                    reported => Result.Failure(Error.From(
-                        ErrorCodes.CredentialLastSecondFactor,
-                        "invalidatesAt",
-                        JsonSerializer.SerializeToElement(reported.InvalidatesAt))),
-                    Result.Failure);
-        }
-
         DateTimeOffset now = time.GetUtcNow();
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: the account's credentials are read under their locks, so of two
+        // removals at once the second decides on what the first left.
+        IReadOnlyList<Authenticator> enrolled = await authenticators
+            .OfForUpdateAsync(acting.Subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        Authenticator? going = enrolled.FirstOrDefault(each => each.Id == credential);
+
+        bool password = await SecondStep.AvailableAsync(held, acting.Subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        // IDN-LIFE-012 AC3: a provider's identity that is the account's last way in is
+        // not removed by this route either.
+        Error? refusal = going is null
+            ? Error.From(ErrorCodes.CredentialNotFound)
+            : IsLinked(going) && !HeldFactors.KeptWithout(enrolled, going, password)
+                ? Error.From(ErrorCodes.LinkLastCredential)
+                : null;
+
+        // AUTH-STEP-006, AUTH-RECOV-007: a removal that would leave the account
+        // reaching less than it does now runs the notified window instead, so the
+        // credential is refused at once and gone only once somebody has been told.
+        bool lowers = refusal is null && Lowers(enrolled, going!, password);
+
+        if (refusal is not null || lowers)
+        {
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notSettled)
+            {
+                return Result.Failure(notSettled);
+            }
+
+            return refusal is not null
+                ? Result.Failure(refusal)
+                : (await losses.SuspendAsync(acting.Context, going!, source, cancellationToken).ConfigureAwait(false))
+                    .Match(
+                        reported => Result.Failure(Error.From(
+                            ErrorCodes.CredentialLastSecondFactor,
+                            "invalidatesAt",
+                            JsonSerializer.SerializeToElement(reported.InvalidatesAt))),
+                        Result.Failure);
         }
 
         await authenticators.RemoveAsync(credential, cancellationToken).ConfigureAwait(false);
@@ -761,6 +768,25 @@ internal sealed class CredentialService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: the last way in is judged again on the credentials under their locks,
+        // so of two unlinks at once, or an unlink and a provider's withdrawal, the second
+        // decides on what the first left.
+        IReadOnlyList<Authenticator> standing = await authenticators
+            .OfForUpdateAsync(acting.Subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        Error? moved = standing.FirstOrDefault(credential => credential.Id == linked.Id) is not Authenticator still
+            ? Error.From(ErrorCodes.CredentialNotFound)
+            : !HeldFactors.KeptWithout(standing, still, password)
+                ? Error.From(ErrorCodes.LinkLastCredential)
+                : null;
+
+        if (moved is not null)
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Failure(moved), Result.Failure);
         }
 
         await authenticators.RemoveAsync(linked.Id, cancellationToken).ConfigureAwait(false);

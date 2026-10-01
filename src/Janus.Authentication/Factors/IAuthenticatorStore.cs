@@ -58,6 +58,20 @@ internal interface IAuthenticatorStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Every credential of an account, whatever its state, read under a lock on each
+    /// row held until the operation's transaction ends, so a decision on what the
+    /// account would keep is made on the set as committed and cannot race another
+    /// (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="subject">Whose credentials.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The credentials as committed when the locks were taken.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask<IReadOnlyList<Authenticator>> OfForUpdateAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Every credential of an account, whatever its state.
     /// </summary>
     /// <param name="subject">Whose credentials.</param>

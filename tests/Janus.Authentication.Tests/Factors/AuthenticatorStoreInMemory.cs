@@ -75,6 +75,19 @@ internal sealed class AuthenticatorStoreInMemory : IAuthenticatorStore
             _linked.TryGetValue((provider, providerSubject), out AuthenticatorId id) ? _held.GetValueOrDefault(id) : null);
 
     /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<Authenticator>> OfForUpdateAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        foreach (Authenticator held in _held.Values.Where(credential => credential.Subject == subject).ToList())
+        {
+            Locking?.Invoke(held);
+        }
+
+        return OfAsync(subject, cancellationToken);
+    }
+
+    /// <inheritdoc/>
     public ValueTask<IReadOnlyList<Authenticator>> OfAsync(
         SubjectId subject,
         CancellationToken cancellationToken) =>

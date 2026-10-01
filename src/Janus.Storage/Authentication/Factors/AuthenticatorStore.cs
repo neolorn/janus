@@ -154,21 +154,39 @@ internal sealed class AuthenticatorStore(
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        if (records.Count is 0)
+        return await ReadAsync(subject, records, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<IReadOnlyList<Authenticator>> OfForUpdateAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
         {
-            return [];
+            throw new InvalidOperationException("A credential's row is held only inside the operation's transaction.");
         }
 
-        byte[] dataKey = await DataKeyAsync(subject, cancellationToken).ConfigureAwait(false);
+        HashSet<AuthenticatorId> tracked =
+            [.. context.Authenticators.Local.Where(record => record.Subject == subject).Select(record => record.Id)];
 
-        try
+        // The rows are locked in one order, so two transactions locking one account's
+        // set wait for each other rather than each holding a part of it.
+        List<AuthenticatorRecord> held = await context.Authenticators
+            .FromSql($"SELECT * FROM identity.authenticators WHERE subject = {subject.Value} ORDER BY id FOR UPDATE")
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the decision is made on is the set as it stood when the locks were taken.
+        foreach (AuthenticatorRecord record in held.Where(record => tracked.Contains(record.Id)))
         {
-            return [.. records.Select(record => Read(dataKey, record))];
+            await context.Entry(record).ReloadAsync(cancellationToken).ConfigureAwait(false);
         }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(dataKey);
-        }
+
+        return await ReadAsync(subject, [.. held.OrderBy(record => record.AddedAt)], cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -345,6 +363,28 @@ internal sealed class AuthenticatorStore(
         try
         {
             return Read(dataKey, record);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(dataKey);
+        }
+    }
+
+    private async ValueTask<IReadOnlyList<Authenticator>> ReadAsync(
+        SubjectId subject,
+        List<AuthenticatorRecord> records,
+        CancellationToken cancellationToken)
+    {
+        if (records.Count is 0)
+        {
+            return [];
+        }
+
+        byte[] dataKey = await DataKeyAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            return [.. records.Select(record => Read(dataKey, record))];
         }
         finally
         {

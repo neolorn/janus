@@ -405,8 +405,54 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
         Assert.Null(read.InvalidatesAt);
     }
 
+    /// <summary>
+    /// IDN-LIFE-012 AC3, CONV-DESIGN-003 AC6: two unlinks at once, each of an identity
+    /// the other leaves the account to sign in with, read the account's credentials
+    /// under their locks, so the second finds the first gone and the last way in stays.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_012_AC3_TwoUnlinksAtOnceLeaveAWayInAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        var google = Authenticator.Linked(AuthenticatorId.New(TimeProvider.System), subject, Factor.Google, Label("Google"), Noon);
+        var apple = Authenticator.Linked(AuthenticatorId.New(TimeProvider.System), subject, Factor.Apple, Label("Apple"), Noon);
+
+        await LinkedAsync(google, _providerSubject);
+        await LinkedAsync(apple, "001234." + Guid.NewGuid().ToString("N") + ".0789");
+
+        bool[] unlinked = await Task.WhenAll(UnlinkedAsync(subject, google.Id), UnlinkedAsync(subject, apple.Id));
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(1, unlinked.Count(answer => answer));
+        Assert.Single(await Store(reading).OfAsync(subject, TestContext.Current.CancellationToken));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
+
+    // Each unlink is its own request, keeping another way in as the credential service
+    // does: the identity goes only where the set read under the locks holds another.
+    private async Task<bool> UnlinkedAsync(SubjectId subject, AuthenticatorId going)
+    {
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+        AuthenticatorStore store = Store(context);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        IReadOnlyList<Authenticator> standing = await store.OfForUpdateAsync(subject, TestContext.Current.CancellationToken);
+        bool kept = standing.Any(credential => credential.Id == going) && standing.Count > 1;
+
+        if (kept)
+        {
+            await store.RemoveAsync(going, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return kept;
+    }
 
     private static IEnumerable<Factor> Kinds(IReadOnlyList<Authenticator> held)
     {

@@ -266,9 +266,17 @@ internal sealed class ProviderEvents(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        // D-166 X3: what the account keeps is judged on its credentials under their
+        // locks, so a withdrawal and an unlink or a removal at once never leave it with
+        // no way in; an identity unlinked meanwhile has nothing left to withdraw.
         IReadOnlyList<Authenticator> enrolled = await authenticators
-            .OfAsync(linked.Subject, cancellationToken)
+            .OfForUpdateAsync(linked.Subject, cancellationToken)
             .ConfigureAwait(false);
+
+        if (enrolled.All(credential => credential.Id != linked.Id))
+        {
+            return Result.Success(ProviderEventOutcome.Recorded);
+        }
 
         bool password = await SecondStep.AvailableAsync(passwords, linked.Subject, cancellationToken)
             .ConfigureAwait(false);
