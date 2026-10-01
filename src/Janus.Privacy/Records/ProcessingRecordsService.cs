@@ -227,7 +227,7 @@ internal sealed class ProcessingRecordsService(
 
         if (string.IsNullOrWhiteSpace(supplied.OrganisationalSecurityMeasures))
         {
-            flags.Add(new RegisterFlag(RegisterFinding.OrganisationalMeasuresMissing, string.Empty));
+            flags.Add(new RegisterFlag(RegisterFinding.OrganizationalMeasuresMissing, string.Empty));
         }
 
         if (supplied.AssessmentLinks.Count is 0)

@@ -136,7 +136,7 @@ public sealed class ProcessingRecordsEndpointTests : IAsyncDisposable
         JsonElement before = (await browser.SendAsync("GET", "/admin/ropa?format=template")).Json();
 
         Assert.Equal(
-            ["data-owner-missing", "organisational-measures-missing", "assessment-links-missing"],
+            ["data-owner-missing", "organizational-measures-missing", "assessment-links-missing"],
             Findings(before).Where(Supplied));
 
         Answer stated = await browser.SendAsync(
@@ -206,7 +206,7 @@ public sealed class ProcessingRecordsEndpointTests : IAsyncDisposable
 
     private static bool Supplied(string finding) =>
         finding is "data-owner-missing"
-            or "organisational-measures-missing"
+            or "organizational-measures-missing"
             or "assessment-links-missing";
 
     private static IEnumerable<string> Named(JsonElement element) =>

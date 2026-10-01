@@ -1478,6 +1478,8 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- The register finding for unstated security measures is spelled
+  `organizational-measures-missing`, as the reference spells it.
 - A username change, an identifier's addition or removal, a recovery approval and the
   end of a membership judge the step-up after every other refusal they give before
   their transaction, so a session whose proof is no longer recent hears the refusal the

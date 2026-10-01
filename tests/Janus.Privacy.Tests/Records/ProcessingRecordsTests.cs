@@ -274,7 +274,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
         Assert.Equal(
             [
                 RegisterFinding.DataOwnerMissing,
-                RegisterFinding.OrganisationalMeasuresMissing,
+                RegisterFinding.OrganizationalMeasuresMissing,
                 RegisterFinding.AssessmentLinksMissing,
             ],
             missing.Flags

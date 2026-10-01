@@ -21,10 +21,10 @@ public enum RegisterFinding
     DataOwnerMissing = 0,
 
     /// <summary>
-    /// The deployment has stated no organisational security measures.
+    /// The deployment has stated no organizational security measures.
     /// </summary>
-    [JsonStringEnumMemberName("organisational-measures-missing")]
-    OrganisationalMeasuresMissing = 1,
+    [JsonStringEnumMemberName("organizational-measures-missing")]
+    OrganizationalMeasuresMissing = 1,
 
     /// <summary>
     /// The deployment has named no assessment links.
