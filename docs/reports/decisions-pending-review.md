@@ -15573,6 +15573,8 @@ after live flows, since the rotations exist only as commands.
 
 *Chapter text that should change.* None.
 
+**Superseded by D-166.**
+
 ---
 
 ## 378. The destructive-operation report reads what the added migrations' Up runs, and reports more than the chapter's list
