@@ -7,7 +7,8 @@
 # links its migration note; a release tag names the version its commit added.
 # REF-001 AC2 and LIB-API-001: the version is raised as well by what the contract's
 # lists lost or gained since the previous release: the configuration keys, the
-# library-owned schema, the error codes, the audit actions and the permissions.
+# library-owned schema, the error codes and the status each answers with, the audit
+# actions and the permissions.
 # CONV-VCS-003 AC2: a commit that breaks the contract as released carries the breaking
 # marker; it breaks it where it removes or changes a shipped line, marks one removed in
 # an unshipped file, or takes away an entry of a list the previous release held. A
@@ -31,6 +32,7 @@ src/Janus.Core/Permissions.cs Permission permission'
 listed=(
   tests/Janus.Core.Tests/configuration-keys.txt
   tests/Janus.Storage.Tests/schema.txt
+  tests/Janus.Hosting.Tests/error-statuses.txt
   src/Janus.Core/ErrorCodes.cs
   src/Janus.Core/AuditActions.cs
   src/Janus.Core/Permissions.cs
@@ -80,16 +82,18 @@ removed() {
 }
 
 # The contract's lists at a commit, one entry a line and each named for its list: the
-# configuration keys and the library-owned schema as their contract tests hold them,
-# and the codes and names as their catalogues declare them, read from the literal each
-# declaration parses. A schema line is named for its relation, since a column's line
-# alone reads the same in every table that has it.
+# configuration keys, the library-owned schema and the codes' statuses as their
+# contract tests hold them, and the codes and names as their catalogues declare them,
+# read from the literal each declaration parses. A schema line is named for its
+# relation, since a column's line alone reads the same in every table that has it.
 contract() {
   {
     git show "$1:tests/Janus.Core.Tests/configuration-keys.txt" 2>/dev/null \
       | sed -n 's/^\(..*\)$/configuration key \1/p' || true
     git show "$1:tests/Janus.Storage.Tests/schema.txt" 2>/dev/null \
       | awk '/^[^ ]/ { relation = $2; print "schema " $0; next } NF { print "schema " relation ":" $0 }' || true
+    git show "$1:tests/Janus.Hosting.Tests/error-statuses.txt" 2>/dev/null \
+      | sed -n 's/^\(..*\)$/error status \1/p' || true
 
     while read -r file type label; do
       git show "$1:${file}" 2>/dev/null \
