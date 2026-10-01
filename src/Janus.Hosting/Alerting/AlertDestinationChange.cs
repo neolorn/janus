@@ -20,6 +20,7 @@ namespace Janus.Hosting.Alerting;
 /// <param name="administration">The one operation a runtime setting is written through.</param>
 /// <param name="router">What carries the alert to the previous destinations.</param>
 /// <param name="events">Where the emitted events go.</param>
+/// <param name="work">The transaction the change and its event are written in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements OPS-ALERT-004a and OPS-ALERT-004. The notice is not suppressible: no
@@ -30,6 +31,7 @@ internal sealed class AlertDestinationChange(
     ConfigurationAdministration administration,
     AlertRouter router,
     IEvents events,
+    IUnitOfWork work,
     TimeProvider time)
 {
     /// <summary>
@@ -128,9 +130,16 @@ internal sealed class AlertDestinationChange(
             return Result.Failure(failure);
         }
 
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         // OPS-CFG-005: the change is written through the one operation that classifies
         // it, gates it and writes it down, which is what the destination change was
-        // missing.
+        // missing. It joins this transaction, so the change and its event commit
+        // together (CONV-DESIGN-002).
         Result changed = await administration
             .ChangeAsync(setting, replacement, reason, challenge, context, cancellationToken)
             .ConfigureAwait(false);
@@ -147,6 +156,12 @@ internal sealed class AlertDestinationChange(
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
             return Result.Failure(unpublished);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
         }
 
         return Result.Success();

@@ -22,6 +22,17 @@ internal sealed class EventsInMemory : IEvents, IAlertChannels
     public List<DomainEvent> Published { get; } = [];
 
     /// <summary>
+    /// The transaction the events are written in, where a test reads whether each was
+    /// written while it was open.
+    /// </summary>
+    public UnitOfWorkInMemory? Work { get; init; }
+
+    /// <summary>
+    /// Every event published while <see cref="Work"/> was open, in order.
+    /// </summary>
+    public List<DomainEvent> PublishedInTransaction { get; } = [];
+
+    /// <summary>
     /// The published events of one kind, in order.
     /// </summary>
     /// <typeparam name="TEvent">The kind.</typeparam>
@@ -48,6 +59,11 @@ internal sealed class EventsInMemory : IEvents, IAlertChannels
         lock (_gate)
         {
             Published.Add(raised);
+
+            if (Work is { Open: true })
+            {
+                PublishedInTransaction.Add(raised);
+            }
         }
 
         return ValueTask.FromResult(Result.Success());

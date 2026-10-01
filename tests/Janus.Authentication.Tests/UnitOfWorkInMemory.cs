@@ -30,6 +30,11 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
     public int OutermostCommitted { get; private set; }
 
     /// <summary>
+    /// Whether a transaction is open: begun and not yet committed.
+    /// </summary>
+    public bool Open => _depth > 0;
+
+    /// <summary>
     /// The failure the next opening answers, where a test sets one.
     /// </summary>
     public Error? RefusesBegin { get; set; }

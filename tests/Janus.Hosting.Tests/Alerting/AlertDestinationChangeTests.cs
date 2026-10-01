@@ -61,7 +61,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
     private readonly SmsBalanceLedgerInMemory _balances = new();
     private readonly ConfigurationAuditInMemory _changes = new();
     private readonly UnitOfWorkInMemory _work = new();
-    private readonly EventsInMemory _events = new();
+    private readonly EventsInMemory _events;
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly AccessGateInMemory _gate = new();
@@ -73,6 +73,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
     /// </summary>
     public AlertDestinationChangeTests()
     {
+        _events = new EventsInMemory { Work = _work };
         _configuration.Set(Settings.NotificationLanguages, OneLanguage);
         _configuration.Set(Settings.AlertingEmailDestinations, ThreeAddresses);
         _configuration.Set(Settings.AlertingSmsDestinations, TwoNumbers);
@@ -120,6 +121,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
                 _work,
                 _log),
             _events,
+            _work,
             _clock);
 
     /// <inheritdoc/>
@@ -297,6 +299,21 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
         Assert.Empty(_changes.Written);
         Assert.Empty(_mail.Taken);
         Assert.Empty(_events.Published);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002, OPS-ALERT-004a: the change and the event that announces it are
+    /// written in one transaction, so neither commits without the other.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_002_TheChangeAndItsEventCommitTogetherAsync()
+    {
+        await ChangedAsync(SendKind.Email, Elsewhere);
+
+        AlertRaised raised = Assert.Single(_events.PublishedInTransaction.OfType<AlertRaised>());
+
+        Assert.Equal(AlertCondition.AlertDestinationChanged, raised.Condition);
+        Assert.False(_work.Open);
     }
 
     private async Task<IReadOnlyList<string>> DestinationsAsync(TextListSetting setting) =>
