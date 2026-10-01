@@ -50,6 +50,9 @@ internal sealed class ProviderProbes(
 
     private const string Secret = "client_secret";
 
+    // RFC 2606: a name that resolves nowhere, so no deployment registers it.
+    private const string Elsewhere = "https://unregistered.invalid/";
+
     // The implicit form and every hybrid one, each of which hands a token to the
     // browser.
     private static readonly string[] Implicit =
@@ -116,7 +119,9 @@ internal sealed class ProviderProbes(
                 return Result.Failure<IReadOnlyList<Error>>(failure);
             }
 
-            if (!string.Equals(answered.Error, probe.Expected, StringComparison.Ordinal))
+            // A refusal that still hands back a reference has issued what it refused.
+            if (!string.Equals(answered.Error, probe.Expected, StringComparison.Ordinal)
+                || answered.RequestUri is not null)
             {
                 findings.Add(Finding(probe, answered));
             }
@@ -267,7 +272,8 @@ internal sealed class ProviderProbes(
 
     // Every probe but the discovery, in the order they are asked: the implicit and
     // hybrid forms, the retired grants, the plain method, a challenge naming no method,
-    // which RFC 7636 reads as plain, no proof key at all, and a client that does not
+    // which RFC 7636 reads as plain, no proof key at all, a destination other than the
+    // registered one, which OAuth 2.1 section 2.3.5 fails, and a client that does not
     // authenticate, which is a public client, and none exists.
     private IEnumerable<Probe> Probes(OidcClient registered, Uri push, Uri token)
     {
@@ -325,6 +331,13 @@ internal sealed class ProviderProbes(
             push,
             "code_challenge",
             With(With(Pushed(), "code_challenge", null), "code_challenge_method", null),
+            InvalidRequest,
+            Authenticated: true);
+        yield return new Probe(
+            "push",
+            push,
+            "redirect_uri",
+            With(Pushed(), "redirect_uri", Elsewhere),
             InvalidRequest,
             Authenticated: true);
         yield return new Probe(
@@ -393,14 +406,18 @@ internal sealed class ProviderProbes(
         bool Authenticated);
 
     // What the provider answered: its status and, where it answered in JSON, the
-    // document.
+    // document, its error and any reference it handed back.
     private sealed record Answer(int Status, JsonElement? Document)
     {
-        public string? Error =>
+        public string? Error => Member("error");
+
+        public string? RequestUri => Member("request_uri");
+
+        private string? Member(string name) =>
             Document is JsonElement { ValueKind: JsonValueKind.Object } answered
-            && answered.TryGetProperty("error", out JsonElement error)
-            && error.ValueKind == JsonValueKind.String
-                ? error.GetString()
+            && answered.TryGetProperty(name, out JsonElement member)
+            && member.ValueKind == JsonValueKind.String
+                ? member.GetString()
                 : null;
     }
 }

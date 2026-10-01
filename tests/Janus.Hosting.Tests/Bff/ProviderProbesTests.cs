@@ -31,7 +31,8 @@ public sealed class ProviderProbesTests
     /// LIB-TEST-001 AC4: the probes are asked at the endpoints the document names, as the
     /// application's own client, on the sign-on's connection; each that authenticates
     /// presents the registry's secret, the one that asks about a client that does not
-    /// authenticate presents none, and the provider refuses them all.
+    /// authenticate presents none, and the provider refuses them all, a push naming a
+    /// destination other than the registered one among them (D-166, 145).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -47,7 +48,11 @@ public sealed class ProviderProbesTests
 
         Assert.Empty(findings.Select(Described));
         Assert.Equal("/.well-known/openid-configuration", deployment.Provider.Asked[0].AbsolutePath);
-        Assert.Equal(15, carried.Length);
+        Assert.Equal(16, carried.Length);
+        Assert.Contains(
+            carried,
+            fields => fields.TryGetValue("redirect_uri", out StringValues sent)
+                && string.Equals(sent.ToString(), "https://unregistered.invalid/", StringComparison.Ordinal));
         Assert.All(carried, fields => Assert.Equal(Client, fields["client_id"].ToString()));
         Assert.All(carried[..^1], fields => Assert.Equal(Secret, fields["client_secret"].ToString()));
         Assert.False(carried[^1].ContainsKey("client_secret"));

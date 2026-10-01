@@ -24,7 +24,8 @@ against the public contract of LIB-API-001.
   database, so it runs against a deployment kept for it.
   `ConformanceSuite.ProviderAsync` asks the provider each form AUTH-OIDC-006 retires and
   reports, under `auth.oidc.nonconformant`, each one it admits or its discovery document
-  lists. The requests are made by the library's own half of the sign-on, as the client
+  lists, a push naming a destination other than the client's registered one included,
+  and a refusal that still hands back a `request_uri`. The requests are made by the library's own half of the sign-on, as the client
   the host declares for the application, so the suite takes the deployment and who asks
   and nothing else: no client is registered for it and it holds no secret.
   `IProviderProbes` in `Janus.Core` is the operation it asks through, called in process
