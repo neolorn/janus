@@ -550,7 +550,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
         Error unknown = Failure(await IssueAsync(Customer, Request(email: Personal, roles: [RoleName.Parse("ghost")])));
 
-        Assert.Equal((ErrorCodes.RequestMalformed, "roles"), (unknown.Code, Member(unknown)));
+        Assert.Equal((ErrorCodes.GrantUnresolved, "roles"), (unknown.Code, Member(unknown)));
         Assert.Equal(
             ErrorCodes.Denied,
             Failure(await IssueAsync(Customer, Request(email: Personal, roles: [clerk, root]))).Code);

@@ -493,9 +493,11 @@ internal sealed class InvitationService(
 
         foreach (RoleName role in distinct)
         {
+            // REG-INV-001: a role the deployment does not hold reads well and means
+            // nothing, as a grant naming one does.
             if (await roles.FindAsync(role, cancellationToken).ConfigureAwait(false) is not DefinedRole defined)
             {
-                return Result.Failure<IReadOnlyList<RoleName>>(Malformed("roles"));
+                return Result.Failure<IReadOnlyList<RoleName>>(Named(ErrorCodes.GrantUnresolved, "roles"));
             }
 
             administering |= defined.Permissions.Contains(Permissions.SystemAdminister);

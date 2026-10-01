@@ -230,6 +230,30 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-INV-001 (D-166, 223 (3)): a role the deployment does not hold, named in the
+    /// body, is <c>422</c> <c>authz.grant.unresolved</c> naming <c>roles</c>, and nothing
+    /// is issued.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_INV_001_ARoleTheDeploymentDoesNotHoldIsUnresolvedAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Branch, Permissions.GrantManage);
+
+        Answer refused = await administrator.SendAsync(
+            "POST",
+            PathOf(Branch),
+            """{"email":"invited@elsewhere.test","roles":["ghost"]}""");
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.GrantUnresolved.ToString(), refused.Text("code"));
+        Assert.Equal("roles", refused.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Empty(_deployment.Invitations.Held);
+    }
+
+    /// <summary>
     /// 09 section 8a: issuing needs <c>membership:manage</c> in the organization and
     /// is the <c>invitation:issue</c> step-up action.
     /// </summary>

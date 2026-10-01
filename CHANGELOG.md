@@ -2010,6 +2010,8 @@ against the public contract of LIB-API-001.
   not collect.
 - An invitation naming a role is also the `grant:manage` step-up action, judged after
   `invitation:issue`.
+- An invitation naming a role the deployment does not hold is refused `422`
+  `authz.grant.unresolved` naming `roles`, in place of `400` `api.request.malformed`.
 - An invitation naming a legal document the deployment never published is refused `422`
   `api.request.invalid` naming `documents`; a blank name stays `api.request.malformed`.
 - An invitation asserting a corporate address a member holds, or one a standing
