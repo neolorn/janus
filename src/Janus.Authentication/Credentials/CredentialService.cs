@@ -677,6 +677,17 @@ internal sealed class CredentialService(
             return Result.Failure(notBegun);
         }
 
+        // D-166 X3: one identity of a provider per account is judged again on the
+        // account's row under its lock, so two links of one provider at once write one.
+        await accounts.HoldAsync(acting.Subject, cancellationToken).ConfigureAwait(false);
+
+        if ((await authenticators.OfAsync(acting.Subject, cancellationToken).ConfigureAwait(false))
+            .Any(credential => credential.Factor == provider))
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Failure(Error.From(ErrorCodes.FactorRejected)), Result.Failure);
+        }
+
         await authenticators.LinkAsync(linked, providerSubject, cancellationToken).ConfigureAwait(false);
         await audit
             .RecordedAsync(Enrolled, acting.Subject, linked.Id, now, cancellationToken)

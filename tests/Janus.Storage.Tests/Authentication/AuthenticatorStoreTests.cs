@@ -9,6 +9,7 @@ using Janus.Core;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Passwords;
+using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Audit;
 using Janus.Storage.Settings;
 using Microsoft.EntityFrameworkCore;
@@ -428,8 +429,56 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
         Assert.Single(await Store(reading).OfAsync(subject, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// IDN-LIFE-012, CONV-DESIGN-003 AC6: two links of one provider to one account at
+    /// once, each of a different identity, are judged under the lock on the account's
+    /// row, so the second finds the first and the account holds one identity of it.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_012_TwoLinksOfOneProviderAtOnceLinkOnceAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+
+        bool[] linked = await Task.WhenAll(
+            LinkedOnceAsync(subject, "001234." + Guid.NewGuid().ToString("N") + ".0001"),
+            LinkedOnceAsync(subject, "001234." + Guid.NewGuid().ToString("N") + ".0002"));
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(1, linked.Count(answer => answer));
+        Assert.Single(await Store(reading).OfAsync(subject, TestContext.Current.CancellationToken));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
+
+    // Each link is its own request, judging the provider's identity on the account under
+    // the account's lock as the credential service does.
+    private async Task<bool> LinkedOnceAsync(SubjectId subject, string providerSubject)
+    {
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+        AuthenticatorStore store = Store(context);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        _ = await new AccountStore(context).HoldAsync(subject, TestContext.Current.CancellationToken);
+
+        bool free = (await store.OfAsync(subject, TestContext.Current.CancellationToken))
+            .All(credential => credential.Factor != Factor.Google);
+
+        if (free)
+        {
+            await store.LinkAsync(
+                Authenticator.Linked(AuthenticatorId.New(TimeProvider.System), subject, Factor.Google, Label("Google"), Noon),
+                providerSubject,
+                TestContext.Current.CancellationToken);
+        }
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return free;
+    }
 
     // Each unlink is its own request, keeping another way in as the credential service
     // does: the identity goes only where the set read under the locks holds another.

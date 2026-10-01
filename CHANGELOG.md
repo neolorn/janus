@@ -1478,6 +1478,9 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- Linking a provider's identity is judged again on the account's row under a lock, so
+  two links of one provider at once leave the account one identity of it and the second
+  is refused `auth.factor.rejected`.
 - The suspension a provider's withdrawal makes is decided on the account's row under a
   lock, so a deletion begun or a suspension made at the same moment is the one it
   follows and is never written over.
