@@ -138,6 +138,10 @@ internal sealed class NonExistenceNotice(
                 return Result.Failure(notBegun);
             }
 
+            // D-166 X3: whether the address was told is read with its notices held, so
+            // two asks at once tell it once.
+            await ledger.HoldAsync(destination.Canonical, cancellationToken).ConfigureAwait(false);
+
             if (await ledger
                 .FirstAsync(destination.Canonical, now, window, cancellationToken)
                 .ConfigureAwait(false))

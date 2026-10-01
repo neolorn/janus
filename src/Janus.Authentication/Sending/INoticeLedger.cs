@@ -13,6 +13,17 @@ namespace Janus.Authentication.Sending;
 internal interface INoticeLedger
 {
     /// <summary>
+    /// Holds one address's notices against every other notice to it until the
+    /// operation's transaction ends, so whether it was told is read as committed and two
+    /// asks at once tell it once (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="destination">The plain address, which the lock names only hashed.</param>
+    /// <param name="cancellationToken">Abandons the wait.</param>
+    /// <returns>The work of holding it.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask HoldAsync(string destination, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Whether this address may be told, recording the notice where it may.
     /// </summary>
     /// <param name="destination">The plain address, which the ledger stores hashed.</param>

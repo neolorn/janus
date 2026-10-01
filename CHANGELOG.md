@@ -1478,6 +1478,8 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- An address no account holds, or one whose holder is told of a duplicate, is judged
+  with its notices held, so asks at the same moment send one notice in the window.
 - Failures counted against one throttle scope at the same moment, and a success that
   clears the account's count, each act on the counter as committed, so every failure is
   counted.

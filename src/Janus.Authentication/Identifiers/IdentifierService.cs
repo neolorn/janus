@@ -1402,10 +1402,17 @@ internal sealed class IdentifierService(
                 .ReadAsync(Settings.AbuseNonexistentWindow, cancellationToken).ConfigureAwait(false))
             .Match(read => read, error => Withheld<TimeSpan>(error, ref failure));
 
-        if (failure is not null
-            || !await notices
-                .FirstAsync(canonical, time.GetUtcNow(), window, cancellationToken)
-                .ConfigureAwait(false))
+        if (failure is not null)
+        {
+            return 0;
+        }
+
+        // D-166 X3: the holder is told once however many ask at once.
+        await notices.HoldAsync(canonical, cancellationToken).ConfigureAwait(false);
+
+        if (!await notices
+            .FirstAsync(canonical, time.GetUtcNow(), window, cancellationToken)
+            .ConfigureAwait(false))
         {
             return 0;
         }

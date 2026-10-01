@@ -321,6 +321,7 @@ internal static class StorageRegistration
             provider.GetRequiredService<IKeyRing>()));
         services.AddScoped<INoticeLedger>(provider => new NoticeLedger(
             provider.GetRequiredService<StoreContext>(),
+            provider.GetRequiredService<DataConnections>(),
             provider.GetRequiredService<IKeyRing>()));
         services.AddScoped<ICallbackLedger>(provider => new CallbackLedger(
             provider.GetRequiredService<StoreContext>(),

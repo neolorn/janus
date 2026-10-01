@@ -2012,6 +2012,9 @@ internal sealed class RegistrationService(
             return failure;
         }
 
+        // D-166 X3: the holder is told once however many ask at once.
+        await notices.HoldAsync(staged.Canonical, cancellationToken).ConfigureAwait(false);
+
         if (!await notices
             .FirstAsync(staged.Canonical, time.GetUtcNow(), window, cancellationToken)
             .ConfigureAwait(false))

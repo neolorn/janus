@@ -18,6 +18,20 @@ internal sealed class NoticeLedgerInMemory : INoticeLedger
     /// </summary>
     public List<(string Destination, DateTimeOffset At)> Told { get; } = [];
 
+    /// <summary>
+    /// Gets or sets what another transaction commits while this one waits for an
+    /// address's notices, so a test may tell it under an ask about to be judged.
+    /// </summary>
+    public Action<string>? Holding { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask HoldAsync(string destination, CancellationToken cancellationToken)
+    {
+        Holding?.Invoke(destination);
+
+        return ValueTask.CompletedTask;
+    }
+
     /// <inheritdoc/>
     public ValueTask<bool> FirstAsync(
         string destination,

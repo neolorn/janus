@@ -840,6 +840,32 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-003 AC4, CONV-DESIGN-003: an address told while this ask waited for its
+    /// notices is told already, so this ask tells it nothing more.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_003_AC4_AnAddressToldMeanwhileIsToldOnceAsync()
+    {
+        _ = await AccountAsync();
+
+        _notices.Holding = destination =>
+        {
+            _notices.Holding = null;
+            _ = _notices.FirstAsync(destination, _clock.GetUtcNow(), TimeSpan.FromHours(24), TestContext.Current.CancellationToken).AsTask();
+        };
+
+        Assert.True(Succeeded(await Service.BeginAsync(
+            Elsewhere,
+            Language,
+            Source,
+            TestContext.Current.CancellationToken)));
+
+        Assert.Empty(_notifications.Mail);
+        Assert.Single(_notices.Told);
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-002 AC3, AUTH-ABUSE-003: a recovery no link answers, because the
     /// policy closes the route or because the window has already told an address no
     /// account holds, counts against the sending restrictions as the link would have,
