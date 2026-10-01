@@ -18,7 +18,9 @@ against the public contract of LIB-API-001.
   the checks startup runs and reports a refusal under its own code.
   `ConformanceSuite.TruthTableAsync` writes each case of the host's table into the
   deployment and reports, under `authz.truthtable.disagreement`, each case the single
-  check or the list filter decides otherwise than the table states; it writes into the
+  check or the list filter decides otherwise than the table states. A derived case is
+  written once for each derivation declared at the level it uses, and its finding names
+  the derivation's relationship under `details.derivation`. It writes into the
   database, so it runs against a deployment kept for it.
   `ConformanceSuite.ProviderAsync` asks the provider each form AUTH-OIDC-006 retires and
   reports, under `auth.oidc.nonconformant`, each one it admits or its discovery document
