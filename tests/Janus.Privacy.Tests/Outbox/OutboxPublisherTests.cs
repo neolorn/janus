@@ -234,6 +234,29 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-002, IDN-LIFE-003a AC4: the exhaustion's row is written in the
+    /// transaction that records the failed delivery, so a row that cannot be written
+    /// fails the pass before the failure is committed.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AnExhaustionThatCannotBeRaisedCommitsNothingAsync()
+    {
+        _subscribers.Add(new SubscriberInMemory("host", required: true) { Confirms = false });
+        _configuration.Set(Settings.OutboxRetryMaxAttempts, 1);
+
+        _ = await RaisedAsync(SubjectEventKind.ErasureRequested);
+
+        _alerts.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
+
+        Assert.Equal(0, _work.Committed);
+    }
+
+    /// <summary>
     /// IDN-LIFE-003a: an optional subscriber that did not confirm holds nothing
     /// open, so the delivery closes on what the required ones did.
     /// </summary>
