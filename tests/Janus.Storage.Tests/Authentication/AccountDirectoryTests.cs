@@ -97,7 +97,7 @@ public sealed class AccountDirectoryTests(DatabaseFixture database)
 
         await using (StoreContext writing = database.Context())
         {
-            var requests = new PrivacyRequestStore(writing);
+            var requests = new PrivacyRequestStore(writing, new DataConnections(writing));
 
             await requests.AddAsync(behind, TestContext.Current.CancellationToken);
             await requests.AddAsync(open, TestContext.Current.CancellationToken);

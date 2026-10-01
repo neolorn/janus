@@ -44,7 +44,7 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
         await using StoreContext reading = database.Context();
 
         QueuedRequest held = Assert.IsType<QueuedRequest>(
-            await new PrivacyRequestStore(reading)
+            await new PrivacyRequestStore(reading, new DataConnections(reading))
                 .FindAsync(written.Id, TestContext.Current.CancellationToken));
 
         Assert.Equal(subject, held.Subject);
@@ -88,7 +88,7 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
         await using StoreContext reading = database.Context();
 
         QueuedRequest after = Assert.IsType<QueuedRequest>(
-            await new PrivacyRequestStore(reading)
+            await new PrivacyRequestStore(reading, new DataConnections(reading))
                 .FindAsync(written.Id, TestContext.Current.CancellationToken));
 
         Assert.Equal(PrivacyRequestStatus.DeemedRefusedByLapse, after.Status);
@@ -121,7 +121,7 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
 
         await using StoreContext reading = database.Context();
 
-        IReadOnlyList<QueuedRequest> reached = await new PrivacyRequestStore(reading)
+        IReadOnlyList<QueuedRequest> reached = await new PrivacyRequestStore(reading, new DataConnections(reading))
             .ReachedAsync(Clock.EscalateAt, TestContext.Current.CancellationToken);
 
         Assert.Contains(reached, request => request.Id == open.Id);
@@ -144,7 +144,7 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
             TestContext.Current.CancellationToken));
 
         await using StoreContext reading = database.Context();
-        var store = new PrivacyRequestStore(reading);
+        var store = new PrivacyRequestStore(reading, new DataConnections(reading));
 
         Assert.True(await store.OpenAsync(
             subject,
@@ -179,11 +179,36 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
         await using StoreContext reading = database.Context();
 
         QueuedRequest after = Assert.IsType<QueuedRequest>(
-            await new PrivacyRequestStore(reading)
+            await new PrivacyRequestStore(reading, new DataConnections(reading))
                 .FindAsync(written.Id, TestContext.Current.CancellationToken));
 
         Assert.Equal(1, decided.Count(answer => answer));
         Assert.False(after.Open);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001 AC1, CONV-DESIGN-003 AC6: two requests of one type at once are
+    /// each queued with the subject's requests of it held, so the second finds the
+    /// first open and one is queued.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001_AC1_TwoRequestsOfATypeAtOnceQueueOneAsync()
+    {
+        SubjectId subject = await RegisteredAsync();
+
+        bool[] queued = await Task.WhenAll(
+            QueuedOnceAsync(Entered(subject, PrivacyRequestType.Restriction)),
+            QueuedOnceAsync(Entered(subject, PrivacyRequestType.Restriction)));
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(1, queued.Count(answer => answer));
+        Assert.Equal(
+            1,
+            (await new PrivacyRequestStore(reading, new DataConnections(reading))
+                .AllAsync(TestContext.Current.CancellationToken))
+                .Count(request => request.Subject == subject));
     }
 
     private static QueuedRequest Entered(SubjectId subject, PrivacyRequestType type) =>
@@ -211,13 +236,37 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
         return subject;
     }
 
+    // A request queued as the service queues one: the subject's requests of the type
+    // held, and the request written only where none stands open.
+    private async Task<bool> QueuedOnceAsync(QueuedRequest request)
+    {
+        await using StoreContext writing = database.Context();
+        await using var work = new UnitOfWork(writing);
+        var store = new PrivacyRequestStore(writing, new DataConnections(writing));
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        await store.HoldAsync(request.Subject, request.Type, TestContext.Current.CancellationToken);
+
+        bool fresh = !await store.OpenAsync(request.Subject, request.Type, TestContext.Current.CancellationToken);
+
+        if (fresh)
+        {
+            await store.AddAsync(request, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return fresh;
+    }
+
     // A decision as the service makes one: the request read before, then again under
     // its row's lock, and decided only where it still stands open.
     private async Task<bool> DecidedOnceAsync(PrivacyRequestId request, Action<QueuedRequest> decide)
     {
         await using StoreContext writing = database.Context();
         await using var work = new UnitOfWork(writing);
-        var store = new PrivacyRequestStore(writing);
+        var store = new PrivacyRequestStore(writing, new DataConnections(writing));
 
         _ = await store.FindAsync(request, TestContext.Current.CancellationToken);
         Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
@@ -243,7 +292,7 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
     {
         await using StoreContext writing = database.Context();
 
-        await write(new PrivacyRequestStore(writing));
+        await write(new PrivacyRequestStore(writing, new DataConnections(writing)));
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 }

@@ -240,6 +240,34 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-RIGHT-001 AC1, CONV-DESIGN-003: a request of the type queued while this one
+    /// waited for the subject's requests makes this one a duplicate, so one is queued
+    /// and one receipt is sent.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001_AC1_ARequestQueuedMeanwhileMakesADuplicateAsync()
+    {
+        _requests.Holding = () =>
+        {
+            _requests.Holding = null;
+            _ = SubmittedAsync(PrivacyRequestType.Restriction);
+        };
+
+        Result<PrivacyRequestReceipt> refused = await Requests.SubmitAsync(
+            AccessContext.Of(Ahmed),
+            PrivacyRequestType.Restriction,
+            "again",
+            CancellationToken.None);
+
+        Assert.Equal(
+            ErrorCodes.RequestDuplicate,
+            refused.Match(_ => default, error => error.Code));
+        Assert.Single(_requests.Queue);
+        Assert.Single(_notices.Told, told => told.Message is MessageKind.PrivacyRequestReceived);
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-004 AC1, 09 section 8a: fulfilling a restriction suspends action by
     /// moving the account to restricted, deletes nothing, and tells the subscribers.
     /// </summary>

@@ -492,6 +492,18 @@ internal sealed class PrivacyRequestService(
             return Result.Failure<PrivacyRequestReceipt>(notBegun);
         }
 
+        // D-166 X3: whether one of the type stands open is read again with the
+        // subject's requests of it held, so two submitted at once queue one.
+        await requests.HoldAsync(request.Subject, request.Type, cancellationToken).ConfigureAwait(false);
+
+        if (await requests.OpenAsync(request.Subject, request.Type, cancellationToken).ConfigureAwait(false))
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(
+                    () => Result.Failure<PrivacyRequestReceipt>(Error.From(ErrorCodes.RequestDuplicate)),
+                    Result.Failure<PrivacyRequestReceipt>);
+        }
+
         await requests.AddAsync(request, cancellationToken).ConfigureAwait(false);
         await audit
             .RecordedAsync(

@@ -21,6 +21,19 @@ internal interface IPrivacyRequestStore
     ValueTask AddAsync(QueuedRequest request, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Holds one subject's requests of one type against every other request of theirs
+    /// of that type until the operation's transaction ends, so whether one stands open
+    /// is read as committed and two at once are queued one after the other
+    /// (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="subject">Whose requests.</param>
+    /// <param name="type">What they ask for.</param>
+    /// <param name="cancellationToken">Abandons the wait.</param>
+    /// <returns>The work of holding them.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask HoldAsync(SubjectId subject, PrivacyRequestType type, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reads one request under a lock on its row held until the operation's transaction
     /// ends, so a decision on it cannot race another (CONV-DESIGN-003).
     /// </summary>
