@@ -1612,6 +1612,9 @@ against the public contract of LIB-API-001.
 - `SubjectId` and `OrganizationId` in `Janus.Core`: an account's opaque identifier,
   drawn from randomness alone so that it carries nothing about the person, and the
   organization's, ordered by the instant it was issued.
+- The identifiers of `Janus.Core` that a route carries implement `IParsable<T>`, and
+  every endpoint binds them through it, so a route naming the max UUID as a subject is
+  refused 400 `api.request.malformed` before any operation runs.
 - `AccountState`, `SuspensionOrigin`, `DeletionOrigin`, `TakedownTrigger`,
   `ErasureStatus` and `ErasureReason` in `Janus.Core`: the state an account is in, why
   it entered the one it is in, and how far an erasure's host-side work has got.

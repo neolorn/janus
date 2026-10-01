@@ -375,7 +375,7 @@ internal static class AuthenticationEndpoints
     }
 
     private static async Task<IResult> ForgetDeviceAsync(
-        Guid id,
+        DeviceId id,
         IAuthentication authentication,
         RequestSession browser,
         CancellationToken cancellationToken)
@@ -387,7 +387,7 @@ internal static class AuthenticationEndpoints
 
         return Answers.Of(
             await authentication
-                .ForgetDeviceAsync(holder, new DeviceId(id), cancellationToken)
+                .ForgetDeviceAsync(holder, id, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }

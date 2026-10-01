@@ -75,6 +75,22 @@ public sealed class SubjectIdTests
         Assert.Throws<ArgumentException>(() => new SubjectId(Guid.AllBitsSet));
 
     /// <summary>
+    /// CONV-DESIGN-004 AC2: a subject read as a route carries it is the identifier the
+    /// text names, and the max UUID or text that names no identifier is not read at all.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_004_AC2_ASubjectIsReadFromTextAndTheMaxUuidIsNot()
+    {
+        var issued = Guid.Parse("4a1d1c8e-6b6f-4c3e-9f0a-2d5e7b8c9d01");
+
+        Assert.True(SubjectId.TryParse(issued.ToString(), provider: null, out SubjectId read));
+        Assert.Equal(issued, read.Value);
+        Assert.False(SubjectId.TryParse(Guid.AllBitsSet.ToString(), provider: null, out _));
+        Assert.False(SubjectId.TryParse("not-a-subject", provider: null, out _));
+        Assert.Throws<FormatException>(() => SubjectId.Parse(Guid.AllBitsSet.ToString(), provider: null));
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-005a (D-174): the nil subject stays a value, since it means no subject
     /// wherever a column admits it.
     /// </summary>

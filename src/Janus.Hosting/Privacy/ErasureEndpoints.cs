@@ -64,7 +64,7 @@ internal static class ErasureEndpoints
     private static async Task<IResult> ReadAsync(
         IErasures erasures,
         RequestSession browser,
-        Guid id,
+        ErasureId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(erasures);
@@ -74,7 +74,7 @@ internal static class ErasureEndpoints
             await erasures
                 .ReadAsync(
                     browser.Asking,
-                    new ErasureId(id),
+                    id,
                     cancellationToken)
                 .ConfigureAwait(false),
             progress => TypedResults.Json(
@@ -87,7 +87,7 @@ internal static class ErasureEndpoints
     private static async Task<IResult> CompleteAsync(
         IErasures erasures,
         RequestSession browser,
-        Guid id,
+        ErasureId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(erasures);
@@ -98,7 +98,7 @@ internal static class ErasureEndpoints
                 .CompleteAsync(
                     browser.Asking,
                     browser.Required.Id,
-                    new ErasureId(id),
+                    id,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);

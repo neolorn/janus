@@ -138,7 +138,7 @@ internal static class GrantEndpoints
         [FromBody] GrantRevocationBody body,
         IGrants grants,
         RequestSession browser,
-        Guid id,
+        GrantId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -155,7 +155,7 @@ internal static class GrantEndpoints
                 .RevokeAsync(
                     browser.Asking,
                     browser.Required.Id,
-                    new GrantId(id),
+                    id,
                     reason,
                     cancellationToken)
                 .ConfigureAwait(false),
