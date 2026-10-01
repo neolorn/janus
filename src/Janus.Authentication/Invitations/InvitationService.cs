@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Identifiers;
 using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Organizations;
 using Janus.Authentication.Policies;
@@ -28,6 +29,9 @@ namespace Janus.Authentication.Invitations;
 /// <param name="locks">Whether the organization's domain lock admits an address.</param>
 /// <param name="invitations">Where invitations are kept.</param>
 /// <param name="accounts">Where the name of who issued an invitation is read.</param>
+/// <param name="identifiers">
+/// Where the primary email of who issued an invitation is read, where they show no name.
+/// </param>
 /// <param name="acknowledgement">What attaches the membership an invitation offers.</param>
 /// <param name="end">What ends a membership.</param>
 /// <param name="mailboxes">Where the corporate mailboxes are reserved.</param>
@@ -36,7 +40,7 @@ namespace Janus.Authentication.Invitations;
 /// with where the deployment has one.
 /// </param>
 /// <param name="sending">What carries the link.</param>
-/// <param name="configuration">Where the lifetime, the phone setting and the languages are read.</param>
+/// <param name="configuration">Where the lifetime and the languages are read.</param>
 /// <param name="audit">Where every issue and revocation is written down.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
@@ -61,6 +65,7 @@ internal sealed class InvitationService(
     DomainLock locks,
     IInvitationStore invitations,
     IAccountDirectory accounts,
+    IIdentifierDirectory identifiers,
     InvitationAcknowledgement acknowledgement,
     MembershipEnd end,
     IMailboxStore mailboxes,
@@ -91,6 +96,13 @@ internal sealed class InvitationService(
             return Result.Failure<IssuedInvitation>(Error.From(ErrorCodes.Denied));
         }
 
+        // 09 section 8: a path naming no organization is answered for the organization,
+        // whichever organization the permission is asked in.
+        if (await ScopeOfAsync(organization, cancellationToken).ConfigureAwait(false) is null)
+        {
+            return Result.Failure<IssuedInvitation>(Error.From(ErrorCodes.OrganizationNotFound));
+        }
+
         if (await RefusedAsync(context, Permissions.MembershipManage, organization, cancellationToken)
                 .ConfigureAwait(false)
             is Error refused)
@@ -98,11 +110,17 @@ internal sealed class InvitationService(
             return Result.Failure<IssuedInvitation>(refused);
         }
 
-        // An organization on its way out takes no new members.
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
-            is not { DeletionRequestedAt: null } standing)
+            is not OrganizationStanding standing)
         {
-            return Result.Failure<IssuedInvitation>(Malformed("id"));
+            return Result.Failure<IssuedInvitation>(Error.From(ErrorCodes.OrganizationNotFound));
+        }
+
+        // IDN-ORG-003 AC12: an organization on its way out takes no new members, since
+        // its grants confer nothing, so the issue is refused as the gate refuses.
+        if (standing.DeletionRequestedAt is not null)
+        {
+            return Result.Failure<IssuedInvitation>(Error.From(ErrorCodes.Denied));
         }
 
         bool integrated = standing.IsAdministrative && inUse.Chosen().Match(_ => true, _ => false);
@@ -170,6 +188,17 @@ internal sealed class InvitationService(
             is Error challenged)
         {
             return Result.Failure<IssuedInvitation>(challenged);
+        }
+
+        // REG-INV-001: a role named is granted when the membership attaches, so the
+        // issue is also the step-up a grant is, judged after the issue's own.
+        if (attached.Count > 0
+            && await stepUp
+                .PassedAsync(acting, session, StepUpAction.GrantManage, cancellationToken)
+                .ConfigureAwait(false)
+            is Error ungranted)
+        {
+            return Result.Failure<IssuedInvitation>(ungranted);
         }
 
         var token = OpaqueToken.Draw(randomness);
@@ -243,6 +272,13 @@ internal sealed class InvitationService(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
+        // 09 section 8: a path naming no organization is answered for the organization,
+        // whichever organization the permission is asked in.
+        if (await ScopeOfAsync(organization, cancellationToken).ConfigureAwait(false) is null)
+        {
+            return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
+        }
+
         if (await RefusedAsync(context, Permissions.MembershipManage, organization, cancellationToken)
                 .ConfigureAwait(false)
             is Error refused)
@@ -254,7 +290,7 @@ internal sealed class InvitationService(
                 is not Invitation held
             || held.Organization != organization)
         {
-            return Result.Failure(Malformed("invitationId"));
+            return Result.Failure(Error.From(ErrorCodes.InvitationNotFound));
         }
 
         if (held.IsAcknowledged)
@@ -371,40 +407,25 @@ internal sealed class InvitationService(
             return Result.Failure<Bound>(failure);
         }
 
+        // REG-MAIL-001: an integrated invitation sends its link to the personal email
+        // and provisions the corporate one, so it names both, and not as one address;
+        // a value that does not read stays the identifier's refusal above.
         if (integrated)
         {
             if (email is null
                 || (corporate is not null && string.Equals(email.Canonical, corporate.Canonical, StringComparison.Ordinal)))
             {
-                return Result.Failure<Bound>(Named(ErrorCodes.IdentifierInvalid, "email"));
+                return Result.Failure<Bound>(Named(ErrorCodes.InvitationAddressRequired, "email"));
             }
 
             if (corporate is null)
             {
-                return Result.Failure<Bound>(Named(ErrorCodes.IdentifierInvalid, "corporateEmail"));
+                return Result.Failure<Bound>(Named(ErrorCodes.InvitationAddressRequired, "corporateEmail"));
             }
         }
         else if (corporate is not null)
         {
             return Result.Failure<Bound>(Malformed("corporateEmail"));
-        }
-
-        if (phone is not null)
-        {
-            AttributeRequirement collected = (await configuration
-                    .ReadAsync(Settings.RegistrationPhone, cancellationToken).ConfigureAwait(false))
-                .Match(value => value, error => Withheld<AttributeRequirement>(error, ref failure));
-
-            if (failure is not null)
-            {
-                return Result.Failure<Bound>(failure);
-            }
-
-            // A phone the deployment does not collect is a field no registration takes.
-            if (collected is AttributeRequirement.Off)
-            {
-                return Result.Failure<Bound>(Malformed("phone"));
-            }
         }
 
         if ((corporate ?? email)?.Address is EmailAddress member
@@ -515,9 +536,12 @@ internal sealed class InvitationService(
                     .ConfigureAwait(false))
                 .Match(value => value, error => Withheld<DocumentVersion>(error, ref failure));
 
+            // API-CONV-003: a document never published is well formed and names nothing
+            // the deployment can show; any other refusal is the store's own.
             if (failure is not null)
             {
-                return Result.Failure<IReadOnlyList<InvitationDocument>>(Malformed("documents"));
+                return Result.Failure<IReadOnlyList<InvitationDocument>>(
+                    failure.Code == ErrorCodes.DocumentNotFound ? Named(ErrorCodes.RequestInvalid, "documents") : failure);
             }
 
             shown.Add(new InvitationDocument(current.DocumentName, current.Version));
@@ -547,7 +571,7 @@ internal sealed class InvitationService(
 
         if (existing.IsHeld)
         {
-            return Result.Failure<Reservation>(Malformed("corporateEmail"));
+            return Result.Failure<Reservation>(Named(ErrorCodes.MailboxTaken, "corporateEmail"));
         }
 
         IReadOnlyList<Invitation> standing = await invitations
@@ -556,7 +580,7 @@ internal sealed class InvitationService(
 
         if (standing.Any(invitation => !invitation.HasExpired(now)))
         {
-            return Result.Failure<Reservation>(Malformed("corporateEmail"));
+            return Result.Failure<Reservation>(Named(ErrorCodes.MailboxTaken, "corporateEmail"));
         }
 
         if (!existing.WasHeld)
@@ -631,16 +655,21 @@ internal sealed class InvitationService(
                 .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The invitation's organization has no row.");
 
-        // The person is shown who invited them by the name that account shows, and by
-        // nothing of theirs the account does not show (REG-INV-002).
+        // 09 section 6a: the person is shown who invited them by the name that account
+        // shows, else by its primary email, and by nothing where neither reads, as for
+        // an inviter since erased.
         HeldProfile inviter = await accounts.ProfileAsync(invitation.Inviter, cancellationToken)
             .ConfigureAwait(false);
+        string? invitedBy = inviter.DisplayName?.Value
+            ?? (await identifiers.HeldAsync(invitation.Inviter, cancellationToken).ConfigureAwait(false))
+                .OfKind(IdentifierKind.Email)
+                .FirstOrDefault(email => email.IsPrimary)?.Entered;
 
         return Result.Success(new AttachedInvitation(
             invitation.Id,
             invitation.Organization,
             standing.Name,
-            inviter.DisplayName?.Value,
+            invitedBy,
             invitation.Roles,
             invitation.Documents,
             invitation.ExpiresAt));
@@ -670,11 +699,12 @@ internal sealed class InvitationService(
     /// <inheritdoc/>
     public ValueTask<Result> EndMembershipAsync(
         AccessContext context,
+        SessionId session,
         OrganizationId organization,
         SubjectId member,
         string source,
         CancellationToken cancellationToken) =>
-        end.EndAsync(context, organization, member, source, cancellationToken);
+        end.EndAsync(context, session, organization, member, source, cancellationToken);
 
     /// <inheritdoc/>
     public ValueTask<Result> AcknowledgeAsync(
@@ -734,6 +764,15 @@ internal sealed class InvitationService(
                 .ConfigureAwait(false))
             .Match(_ => (Error?)null, error => error);
     }
+
+    // CONV-DESIGN-002 AC3: the organization the path names is where the gate is asked,
+    // and resolving it, read alone, is part of the gate step.
+    private async ValueTask<OrganizationId?> ScopeOfAsync(
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false) is null
+            ? null
+            : organization;
 
     private async ValueTask<Error?> RefusedAsync(
         AccessContext context,

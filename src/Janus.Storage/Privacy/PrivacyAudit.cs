@@ -51,6 +51,7 @@ internal sealed class PrivacyAudit(IAuditStore records, TimeProvider time) : IPr
         AuditAction action,
         SystemPrincipal principal,
         SubjectId? subject,
+        OrganizationId? organization,
         DateTimeOffset at,
         IReadOnlyDictionary<string, JsonElement> details,
         CancellationToken cancellationToken) =>
@@ -63,7 +64,7 @@ internal sealed class PrivacyAudit(IAuditStore records, TimeProvider time) : IPr
                     at,
                     principal,
                     subject,
-                    organization: null,
+                    organization,
                     details),
                 cancellationToken)
             .ConfigureAwait(false);

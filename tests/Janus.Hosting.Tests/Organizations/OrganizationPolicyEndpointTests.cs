@@ -9,6 +9,7 @@ using Janus.Authentication.Policies;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Organizations;
@@ -328,16 +329,25 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// Chapter 10 section 4.1a and API-CONV-002: a replacement names only the fields of
-    /// the policy object, never the domain lock, with values the object takes, a reason
-    /// and an organization the deployment holds; anything else is refused, naming the
-    /// member where it is the request that is malformed.
+    /// Chapter 10 section 4.1a, API-CONV-002 and 09 section 8a: a replacement names only
+    /// the fields of the policy object, never the domain lock, with values the object
+    /// takes and a reason; anything else is refused, naming the member where it is the
+    /// request that is malformed, and a reason absent as a configuration change without
+    /// one is, naming the organization's policy key. A member the object does not have is
+    /// refused before any permission is asked.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task AUTH_STEP_002a_WhatAReplacementNamesMustBeReadableAsync()
     {
-        Browser administrator = await AuthorisedAsync();
+        (Browser administrator, SubjectId subject) = await SignedInAsync();
+
+        Answer withheld = await administrator.SendAsync(
+            "PUT",
+            PathOf(Branch),
+            """{"emailDomains":["example.com"],"reason":"Staff only."}""");
+
+        _deployment.Gate.Grant(subject, Administration, Permissions.OrganizationManage);
 
         Answer misspelt = await administrator.SendAsync(
             "PUT",
@@ -348,12 +358,18 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
             PathOf(Branch),
             """{"emailDomains":["example.com"],"reason":"Staff only."}""");
         Answer unreasoned = await administrator.SendAsync("PUT", PathOf(Branch), """{"requiredAssurance":"aal2"}""");
+        Answer blank = await administrator.SendAsync(
+            "PUT",
+            PathOf(Branch),
+            """{"requiredAssurance":"aal2","reason":"  "}""");
+        Answer overlong = await administrator.SendAsync(
+            "PUT",
+            PathOf(Branch),
+            """{"requiredAssurance":"aal2","reason":""" + "\"" + new string('r', 1025) + "\"}");
         Answer numbered = await administrator.SendAsync(
             "PUT",
             PathOf(Branch),
             """{"requiredAssurance":"aal2","reason":7}""");
-        Answer unheld = await administrator.SendAsync("PUT", PathOf(new OrganizationId(Guid.NewGuid())), Tightened);
-        Answer unknown = await administrator.SendAsync("GET", PathOf(new OrganizationId(Guid.NewGuid())));
         Answer listed = await administrator.SendAsync("PUT", PathOf(Branch), "[]");
         Answer unreadable = await administrator.SendAsync(
             "PUT",
@@ -361,15 +377,69 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
             """{"requiredAssurance":"aal9","reason":"Staff hold administrative roles."}""");
 
         Assert.Equal("requiredAssurence", Member(misspelt));
+        Assert.Equal("emailDomains", Member(withheld));
         Assert.Equal("emailDomains", Member(locked));
-        Assert.Equal("reason", Member(unreasoned));
+        Assert.Equal(PolicyKey(Branch), Unreasoned(unreasoned));
+        Assert.Equal(PolicyKey(Branch), Unreasoned(blank));
+        Assert.Equal("reason", Member(overlong));
         Assert.Equal("reason", Member(numbered));
-        Assert.Equal("id", Member(unheld));
-        Assert.Equal("id", Member(unknown));
         Assert.Equal(StatusCodes.Status400BadRequest, listed.Status);
         Assert.Equal(ErrorCodes.RequestMalformed.ToString(), listed.Text("code"));
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, unreadable.Status);
         Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed.ToString(), unreadable.Text("code"));
+        Assert.Empty(_deployment.Changes.Written);
+    }
+
+    /// <summary>
+    /// 09 section 8a: a replacement asked in process without a reason is refused as a
+    /// configuration change without one is, naming the organization's policy key, and
+    /// nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_STEP_002a_AReplacementInProcessWithoutAReasonIsRefusedAsync()
+    {
+        (_, SubjectId subject) = await SignedInAsync();
+
+        _deployment.Gate.Grant(subject, Administration, Permissions.OrganizationManage);
+
+        await using AsyncServiceScope scope = _deployment.Scope();
+        IOrganizations organizations = scope.ServiceProvider.GetRequiredService<IOrganizations>();
+
+        Result replaced = await organizations.ReplacePolicyAsync(
+            AccessContext.Of(subject),
+            SessionId.New(_deployment.Clock),
+            Branch,
+            PolicyOverride.None,
+            " ",
+            TestContext.Current.CancellationToken);
+
+        Error refused = replaced.Match(() => throw new Xunit.Sdk.XunitException("replaced"), error => error);
+
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired, refused.Code);
+        Assert.Equal(PolicyKey(Branch), refused.Details["key"].GetString());
+        Assert.Empty(_deployment.Changes.Written);
+    }
+
+    /// <summary>
+    /// IDN-ORG-003 and 09 section 8a: reading or replacing the policy of an organization
+    /// the deployment does not hold is <c>404</c> <c>identity.organization.notfound</c>,
+    /// and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_ThePolicyOfAnOrganizationTheDeploymentDoesNotHoldIsNotFoundAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+        var unheld = new OrganizationId(Guid.NewGuid());
+
+        Answer read = await administrator.SendAsync("GET", PathOf(unheld));
+        Answer replaced = await administrator.SendAsync("PUT", PathOf(unheld), Tightened);
+
+        Assert.Equal(StatusCodes.Status404NotFound, read.Status);
+        Assert.Equal(ErrorCodes.OrganizationNotFound.ToString(), read.Text("code"));
+        Assert.Equal(StatusCodes.Status404NotFound, replaced.Status);
+        Assert.Equal(ErrorCodes.OrganizationNotFound.ToString(), replaced.Text("code"));
         Assert.Empty(_deployment.Changes.Written);
     }
 
@@ -397,6 +467,17 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
     }
 
     private static string PathOf(OrganizationId organization) => "/admin/organizations/" + organization + "/policy";
+
+    private static string PolicyKey(OrganizationId organization) =>
+        Settings.OrganizationPolicy.For(organization.ToString()).ToString();
+
+    private static string Unreasoned(Answer answer)
+    {
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, answer.Status);
+        Assert.Equal(ErrorCodes.ConfigurationChangeReasonRequired.ToString(), answer.Text("code"));
+
+        return answer.Json().GetProperty("details").GetProperty("key").GetString()!;
+    }
 
     private static string Member(Answer answer)
     {

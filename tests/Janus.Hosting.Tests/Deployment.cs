@@ -131,6 +131,9 @@ internal sealed class Deployment : IAsyncDisposable
     /// <param name="logging">
     /// The least level the host logs at; every level, unless it says otherwise.
     /// </param>
+    /// <param name="resolver">
+    /// Whether the host registers a DNS resolver; it does, unless it says otherwise.
+    /// </param>
     public Deployment(
         ApplicationKind application = ApplicationKind.Public,
         PasskeyAddresses? addresses = null,
@@ -139,7 +142,8 @@ internal sealed class Deployment : IAsyncDisposable
         AuthenticationAddresses? signIn = null,
         SignOnClient? client = null,
         IReadOnlyList<SocialProvider>? providers = null,
-        LogLevel logging = LogLevel.Trace)
+        LogLevel logging = LogLevel.Trace,
+        bool resolver = true)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
@@ -174,7 +178,8 @@ internal sealed class Deployment : IAsyncDisposable
             addresses ?? Pages,
             signIn ?? Screen,
             client ?? Registered,
-            providers ?? [SocialProviders.Google, SocialProviders.Apple]);
+            providers ?? [SocialProviders.Google, SocialProviders.Apple],
+            resolver);
 
         _application = builder.Build();
 
@@ -731,7 +736,8 @@ internal sealed class Deployment : IAsyncDisposable
         PasskeyAddresses addresses,
         AuthenticationAddresses signIn,
         SignOnClient client,
-        IReadOnlyList<SocialProvider> providers)
+        IReadOnlyList<SocialProvider> providers,
+        bool resolver)
     {
         _ = services.AddSingleton<TimeProvider>(Clock);
         _ = services.AddSingleton(_randomness);
@@ -983,10 +989,35 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<Janus.Authentication.Organizations.IOrganizationAudit>(OrganizationChanges);
         _ = services.AddScoped<IOrganizations, Janus.Authentication.Organizations.OrganizationService>();
         _ = services.AddSingleton<Janus.Authentication.Organizations.IDomainStore>(Domains);
-        _ = services.AddSingleton<IDnsResolver>(Dns);
+
+        // The resolver is the host's to declare, and the domains are served with or
+        // without one, as AddJanus serves them.
+        if (resolver)
+        {
+            _ = services.AddSingleton<IDnsResolver>(Dns);
+        }
+
         _ = services.AddScoped<Janus.Authentication.Organizations.DomainLock>();
-        _ = services.AddScoped<Janus.Authentication.Organizations.DomainReverification>();
-        _ = services.AddScoped<IOrganizationDomains, Janus.Authentication.Organizations.OrganizationDomainService>();
+        _ = services.AddScoped(provider => new Janus.Authentication.Organizations.DomainReverification(
+            provider.GetRequiredService<Janus.Authentication.Organizations.IDomainStore>(),
+            provider.GetService<IDnsResolver>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>()));
+        _ = services.AddScoped<IOrganizationDomains>(provider => new Janus.Authentication.Organizations.OrganizationDomainService(
+            provider.GetRequiredService<AdministrativeScope>(),
+            provider.GetRequiredService<StepUpGuard>(),
+            provider.GetRequiredService<Janus.Authentication.Organizations.IOrganizationDirectory>(),
+            provider.GetRequiredService<Janus.Authentication.Organizations.IDomainStore>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<ConfigurationAdministration>(),
+            provider.GetService<IDnsResolver>(),
+            provider.GetRequiredService<Janus.Authentication.Organizations.IOrganizationAudit>(),
+            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<RandomNumberGenerator>()));
         _ = services.AddSingleton<Janus.Authentication.Invitations.IInvitationStore>(Invitations);
         _ = services.AddSingleton<Janus.Authentication.Invitations.IRoleCatalogue>(RoleCatalogue);
         _ = services.AddSingleton<Janus.Authentication.Mailboxes.IMailboxStore>(Mailboxes);

@@ -100,7 +100,7 @@ public sealed class OrganizationErasureSweepTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-ORG-003: the erasure is announced once it has committed, naming the
+    /// IDN-ORG-003: the erasure is announced in its own transaction, naming the
     /// organization, how many memberships it ended and nobody at all.
     /// </summary>
     /// <returns>The work of the test.</returns>
@@ -128,7 +128,7 @@ public sealed class OrganizationErasureSweepTests : IAsyncDisposable
 
     /// <summary>
     /// IDN-MEM-001: every membership the erasure ended is announced as ended, each
-    /// under its own key and naming whose it was, once the erasure has committed.
+    /// under its own key and naming whose it was, in the erasure's transaction.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -180,15 +180,15 @@ public sealed class OrganizationErasureSweepTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-ORG-003: the erasure has committed by the time it is announced, so a
-    /// consumer that will not take the announcement stops the pass with its refusal
-    /// rather than leaving an organization half erased.
+    /// IDN-ORG-003 AC6, X1 of D-166: an event row that cannot be written fails the
+    /// erasure before it commits, so the pass answers the failure and nothing of the
+    /// erasure stands; the next organization is not begun.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task IDN_ORG_003_APassWhoseAnnouncementIsRefusedAnswersWithTheRefusalAsync()
+    public async Task IDN_ORG_003_AnErasureWhoseEventRowFailsErasesNothingAsync()
     {
-        _organizations.Deletes(Acme, Noon);
+        _organizations.Deletes(Acme, Noon, members: 1);
         _organizations.Deletes(Beta, Noon.AddMinutes(1));
 
         _clock.Advance(Settings.OrganizationDeletionGrace.Default + TimeSpan.FromMinutes(1));
@@ -200,9 +200,55 @@ public sealed class OrganizationErasureSweepTests : IAsyncDisposable
         Assert.Equal(
             ErrorCodes.SystemFault,
             swept.Match(_ => null, error => (ErrorCode?)error.Code));
-
-        Assert.Equal(Acme, Assert.Single(_organizations.Erased));
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(0, _work.Committed);
+        Assert.Empty(_events.Published);
     }
+
+    /// <summary>
+    /// IDN-ORG-003 AC7, X2 of D-166: a window that cannot be read is a fault, and the
+    /// pass erases nothing rather than reading a window of its own.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_APassThatCannotReadItsWindowErasesNothingAsync()
+    {
+        _organizations.Deletes(Acme, Noon, members: 1);
+
+        _clock.Advance(Settings.OrganizationDeletionGrace.Default);
+
+        _configuration.Unreachable = Settings.OrganizationDeletionGrace.Key;
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
+
+        Assert.Empty(_organizations.Erased);
+        Assert.Equal(0, _work.Opened);
+        Assert.Empty(_audit.Entries);
+        Assert.Empty(_events.Published);
+    }
+
+    /// <summary>
+    /// IDN-ORG-005, D-166 (155): the erasure's record is filed under the organization it
+    /// erased, so the organization's trail carries its end.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ORG_005_TheErasureIsFiledUnderTheOrganizationAsync()
+    {
+        _organizations.Deletes(Acme, Noon);
+
+        _clock.Advance(Settings.OrganizationDeletionGrace.Default);
+
+        _ = await ErasedAsync();
+
+        PrivacyAuditEntry written = Assert.Single(_audit.Entries);
+
+        Assert.Equal(AuditActions.OrganizationErased, written.Action);
+        Assert.Equal(Acme, written.Organization);
+        Assert.NotNull(written.Principal);
+    }
+
 
     private async ValueTask<int> ErasedAsync() =>
         (await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken))

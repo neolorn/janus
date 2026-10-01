@@ -275,7 +275,7 @@ table erasures
   column status text not null
   column attempts integer not null
   constraint ck_erasures_attempts CHECK ((attempts >= 0))
-  constraint ck_erasures_reason CHECK ((reason = ANY (ARRAY['erasure-request'::text, 'minor-takedown'::text, 'organization-erasure'::text])))
+  constraint ck_erasures_reason CHECK ((reason = ANY (ARRAY['erasure-request'::text, 'minor-takedown'::text])))
   constraint ck_erasures_status CHECK ((status = ANY (ARRAY['awaiting-subscribers'::text, 'complete'::text, 'failed'::text])))
   constraint ck_erasures_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint fk_erasures_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
@@ -605,6 +605,7 @@ table memberships
   constraint pk_memberships PRIMARY KEY (id)
   index ix_memberships_organization using btree (organization)
   index ix_memberships_subject using btree (subject)
+  index ux_memberships_current unique using btree (subject, organization) WHERE (ended_at IS NULL)
 table nonexistence_notices
   column id uuid not null
   column destination bytea not null
@@ -710,7 +711,7 @@ table organizations
   column deletion_requested_at timestamp with time zone
   column erased_at timestamp with time zone
   column administrative boolean not null default false
-  column canonical_name text
+  column canonical_name text not null
   constraint ck_organizations_erased CHECK (((erased_at IS NULL) OR (deletion_requested_at IS NOT NULL)))
   constraint pk_organizations PRIMARY KEY (id)
   index ix_organizations_deletion_requested_at using btree (deletion_requested_at) WHERE ((deletion_requested_at IS NOT NULL) AND (erased_at IS NULL))
@@ -727,7 +728,7 @@ table outbox
   column next_attempt_at timestamp with time zone not null
   constraint ck_outbox_attempts CHECK ((attempts >= 0))
   constraint ck_outbox_kind CHECK ((kind = ANY (ARRAY['erasure-requested'::text, 'export-requested'::text, 'restriction-changed'::text, 'takedown-executed'::text])))
-  constraint ck_outbox_reason CHECK ((reason = ANY (ARRAY['erasure-request'::text, 'minor-takedown'::text, 'organization-erasure'::text])))
+  constraint ck_outbox_reason CHECK ((reason = ANY (ARRAY['erasure-request'::text, 'minor-takedown'::text])))
   constraint ck_outbox_status CHECK ((status = ANY (ARRAY['awaiting-subscribers'::text, 'complete'::text, 'failed'::text])))
   constraint ck_outbox_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint fk_outbox_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT

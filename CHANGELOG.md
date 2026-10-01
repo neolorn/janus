@@ -818,6 +818,16 @@ against the public contract of LIB-API-001.
   written to the audit trail as `identity.organization.erased`. A window cancelled
   inside itself is never reached, and an erasure asked for before the window elapses
   writes nothing.
+- The organization erasure writes its `MembershipChanged` and `OrganizationErased`
+  events in its own transaction, so an event that cannot be written leaves the
+  organization unerased, and its `identity.organization.erased` record is filed under
+  the organization.
+- An organization's erasure erases no account, so `ErasureReason` holds
+  `erasure-request` and `minor-takedown` only; `organization-erasure` is gone from it
+  and from the erasures and outbox tables.
+- The organization erasure replaces every domain the organization listed with its
+  identifier, as it does the name, and marks each one still listed removed at the
+  erasure.
 - Startup verifies that the database carries the schema this build was compiled against,
   before any other check reads a table and before the host's web server starts. A
   database behind the model answers `model.startup.schemamismatch`, names every
@@ -1327,9 +1337,10 @@ against the public contract of LIB-API-001.
   session for it, attaches the invitation its link carried to that account, and answers
   `identity.registration.signedin`.
 - An organization's name is judged on its comparison key, the `NFKC_Casefold` form every
-  identifier is compared under, stored beside it in `organizations.canonical_name`; a
-  name mixing scripts within a word is refused as `identity.identifier.mixedscript`, and
-  one the key reduces to nothing as `api.request.malformed`.
+  identifier is compared under, stored beside it in `organizations.canonical_name`, which
+  the database requires on every row; a name mixing scripts within a word is refused as
+  `identity.identifier.mixedscript`, and one the key reduces to nothing as
+  `api.request.malformed`.
 - A management or account request missing a member its body requires is refused before
   anything else is judged: a missing reason by its own code
   (`authz.grant.reasonrequired`, `config.change.reasonrequired`,
@@ -1796,6 +1807,65 @@ against the public contract of LIB-API-001.
   for another, and a second membership of an organization the account is already a
   member of is refused whatever the setting says, naming that organization. Nothing in
   the schema separates staff from customers.
+- Two invitations acknowledged together for one account are decided one after the
+  other, under a lock on the account's row, so they never leave more memberships than
+  the setting allows; the database also refuses a second current membership of one
+  organization for an account (`ux_memberships_current`).
+- A route under `/admin/organizations/{id}` whose `{id}` names no organization the
+  deployment holds answers `404` `identity.organization.notfound` and writes nothing,
+  whichever organization its permission is asked in; issuing an invitation into an
+  organization whose deletion was requested answers `authz.denied`.
+- A change of an organization's policy or of its domains whose reason is absent or
+  blank is refused `422` `config.change.reasonrequired` naming the key
+  `policy.<organization>`, at the endpoint before any permission is asked and in the
+  service alike; a policy replacement naming `emailDomains` is refused `400` naming it
+  before any permission is asked.
+- Verifying a domain the organization does not list, never listed or removed, answers
+  `404` `identity.domain.notfound`.
+- A deployment that registers no `IDnsResolver` lists no domain: adding one is refused
+  `422` `config.value.notallowed` with `details.field` `emailDomains` and
+  `details.requires` `dnsResolver`, and a deployment whose stored lock lists a domain
+  does not start without a resolver (`model.startup.declarationmissing`, `details.key`
+  `dnsResolver`).
+- An invitation into an organization whose mail is integrated that names no personal
+  `email`, no `corporateEmail`, or one address as both is refused `422`
+  `identity.invitation.addressrequired`, naming the member; `identity.identifier.invalid`
+  stays for an address that does not read.
+- An invitation binds the phone it names without reading `registration.phone`, which
+  takes `required` or `optional` only, so no deployment refuses a phone as one it does
+  not collect.
+- An invitation naming a role is also the `grant:manage` step-up action, judged after
+  `invitation:issue`.
+- An invitation naming a legal document the deployment never published is refused `422`
+  `api.request.invalid` naming `documents`; a blank name stays `api.request.malformed`.
+- An invitation asserting a corporate address a member holds, or one a standing
+  invitation that has not expired reserves, is refused `409` `identity.mailbox.taken`
+  naming `corporateEmail`.
+- Revoking an invitation the organization did not issue, or none, answers `404`
+  `identity.invitation.notfound`.
+- The membership step shows an inviter who shows no display name by their primary
+  email, and by nothing only where neither reads.
+- Acknowledging an invitation tells the membership limit and the email maximum before
+  the organization's credential policy, so nobody is sent to enrol for a membership
+  they cannot take.
+- Acknowledging an invitation judges the organization's domain lock as it then stands
+  on the address the member will sign in with, and refuses one outside it with
+  `identity.identifier.domainnotallowed`.
+- An acknowledgement held at enrolment names the unmet requirement as
+  `policyRequirement` `{ field, value }`, with no deadline, in place of a flat `field`
+  and `value`.
+- An invitation whose inviter no longer manages the organization's memberships, or may
+  no longer grant a role it names, is answered as expired at acknowledgement and grants
+  nothing.
+- A role the invitation grants is written beside an expiring grant of the same role,
+  and is skipped only where the account holds it permanently.
+- Taking the corporate address on at an acknowledgement publishes `IdentifierAdded`,
+  and retiring it at the end of the membership publishes `IdentifierRemoved`, each in
+  the transaction that makes the change.
+- Ending a membership is the `membership:end` step-up action, and `EndMembershipAsync`
+  takes the session it is judged on. An account holding no current membership of the
+  organization, a second end included, answers `404` `identity.membership.notfound`
+  before any step-up is asked.
 - An audit trail. Every record names who acted, whose identity the action was taken
   under, the instant it occurred and the organization where one applies; an event about
   a principal holding no membership carries none, and the absence is the recorded fact.

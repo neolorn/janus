@@ -80,5 +80,13 @@ internal sealed class MembershipConfiguration : IEntityTypeConfiguration<Members
 
         builder.HasIndex(membership => membership.Organization)
             .HasDatabaseName("ix_memberships_organization");
+
+        // IDN-MEM-002, X3 of D-166: an account holds one current membership of an
+        // organization, whatever commits together.
+        builder.HasIndex(membership => new { membership.Subject, membership.Organization })
+            .IsUnique()
+            .HasDatabaseName("ux_memberships_current")
+            .HasFilter("ended_at IS NULL");
+
     }
 }

@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Core;
 using Janus.Identity.Organizations;
 using Janus.Privacy.Erasures;
 using Janus.Storage.Identity.Organizations;
 using Janus.Storage.Privacy.Erasures;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Storage.Tests.Privacy;
@@ -111,6 +113,50 @@ public sealed class OrganizationStatesTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// IDN-ORG-003, D-166 (155): the erasure leaves no domain of the organization
+    /// readable. Each becomes the identifier; one still listed is removed at the
+    /// erasure, one removed before keeps its instant, and another organization's
+    /// domain of the same name is untouched.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ORG_003_TheErasureLeavesNoDomainOfTheOrganizationAsync()
+    {
+        OrganizationId organization = await DeletingAsync(Noon);
+        OrganizationId other = await CreateAsync();
+
+        string listed = "listed-" + Guid.NewGuid().ToString("N") + ".example";
+        string dropped = "dropped-" + Guid.NewGuid().ToString("N") + ".example";
+
+        await DomainAsync(organization, listed, removed: null);
+        await DomainAsync(organization, dropped, Noon.AddDays(1));
+        await DomainAsync(other, listed, removed: null);
+
+        _ = await EraseAsync(organization, Noon + Window);
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        List<(string Domain, DateTimeOffset? RemovedAt)> erased =
+        [
+            .. await connection.QueryAsync<(string Domain, DateTimeOffset? RemovedAt)>(new CommandDefinition(
+                "SELECT domain, removed_at FROM identity.organization_domains "
+                    + "WHERE organization = @organization ORDER BY removed_at",
+                new { organization = organization.Value },
+                cancellationToken: TestContext.Current.CancellationToken)),
+        ];
+        string? standing = await connection.ExecuteScalarAsync<string>(new CommandDefinition(
+            "SELECT domain FROM identity.organization_domains WHERE organization = @other AND removed_at IS NULL",
+            new { other = other.Value },
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        string identifier = organization.Value.ToString("D", CultureInfo.InvariantCulture);
+
+        Assert.Equal(
+            [(identifier, (DateTimeOffset?)Noon.AddDays(1)), (identifier, Noon + Window)],
+            erased);
+        Assert.Equal(listed, standing);
+    }
+
+    /// <summary>
     /// IDN-ORG-003 AC3: the erasure does not execute before the window elapses, so a
     /// caller that asks for one a day early writes nothing.
     /// </summary>
@@ -166,7 +212,26 @@ public sealed class OrganizationStatesTests(DatabaseFixture database)
         return id;
     }
 
+    private async ValueTask DomainAsync(OrganizationId organization, string domain, DateTimeOffset? removed)
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO identity.organization_domains (token, organization, domain, added_at, removed_at) "
+                + "VALUES (@token, @organization, @domain, @added, @removed)",
+            new
+            {
+                token = Guid.NewGuid().ToString("N"),
+                organization = organization.Value,
+                domain,
+                added = Noon,
+                removed,
+            },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
     private async ValueTask<OrganizationId> DeletingAsync(DateTimeOffset at)
+
     {
         OrganizationId id = await CreateAsync();
 

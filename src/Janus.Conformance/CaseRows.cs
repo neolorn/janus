@@ -44,13 +44,16 @@ internal sealed class CaseRows(
     public async ValueTask<OrganizationId> OrganizationAsync(CancellationToken cancellationToken)
     {
         var organization = OrganizationId.New(clock);
+        string name = "Conformance " + organization.Value.ToString("n", CultureInfo.InvariantCulture);
 
         await ExecuteAsync(
-            "INSERT INTO identity.organizations (id, name, created_at) VALUES (@id, @name, @at);",
+            "INSERT INTO identity.organizations (id, name, canonical_name, created_at) "
+                + "VALUES (@id, @name, @canonicalName, @at);",
             new
             {
                 id = organization.Value,
-                name = "Conformance " + organization.Value.ToString("n", CultureInfo.InvariantCulture),
+                name,
+                canonicalName = CanonicalForm.Of(name),
                 at = clock.GetUtcNow() - Before,
             },
             cancellationToken).ConfigureAwait(false);

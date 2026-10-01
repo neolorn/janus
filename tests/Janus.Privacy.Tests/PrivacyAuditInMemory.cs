@@ -39,11 +39,15 @@ internal sealed class PrivacyAuditInMemory : IPrivacyAudit
         AuditAction action,
         SystemPrincipal principal,
         SubjectId? subject,
+        OrganizationId? organization,
         DateTimeOffset at,
         IReadOnlyDictionary<string, JsonElement> details,
         CancellationToken cancellationToken)
     {
-        _entries.Add(new PrivacyAuditEntry(action, Acting: null, subject, at, details, principal));
+        _entries.Add(new PrivacyAuditEntry(action, Acting: null, subject, at, details, principal)
+        {
+            Organization = organization,
+        });
 
         return ValueTask.CompletedTask;
     }

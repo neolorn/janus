@@ -1,9 +1,13 @@
 using System;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication.Factors;
+using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Hosting.Tests.Authorization;
+using Janus.Privacy.SubjectKeys;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit;
@@ -60,11 +64,14 @@ public sealed class InvitationServiceTests(HostFixture host) : IClassFixture<Hos
 
         Assert.True(await HeldAsync(member, administrative));
 
+        SessionId session = await SteppedUpAsync(administrator);
+
         await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
         {
             Result ended = await scope.ServiceProvider.GetRequiredService<IInvitations>()
                 .EndMembershipAsync(
                     AccessContext.Of(administrator),
+                    session,
                     administrative,
                     member,
                     Source,
@@ -75,6 +82,48 @@ public sealed class InvitationServiceTests(HostFixture host) : IClassFixture<Hos
 
         Assert.False(await HeldAsync(member, administrative));
         Assert.Equal(1, await StandingAsync(held));
+    }
+
+    // A session of the account's own that proved a phishing-resistant second factor just
+    // now, which the end of a membership asks for as its step-up (AUTH-STEP-001).
+    private async Task<SessionId> SteppedUpAsync(SubjectId account)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        IServiceProvider services = scope.ServiceProvider;
+
+        var session = Session.Begin(
+            SessionId.New(TimeProvider.System),
+            account,
+            new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),
+            new SessionOrigin(Source, new DeviceDescription("Firefox", "Linux")),
+            services.GetRequiredService<TimeProvider>().GetUtcNow(),
+            TimeSpan.FromDays(7),
+            TimeSpan.FromDays(30),
+            breakGlassReason: null);
+
+        IUnitOfWork work = services.GetRequiredService<IUnitOfWork>();
+
+        await work.BeginAsync(cancellationToken);
+
+        // A session is kept under its person's key, which an account written directly
+        // does not have until its first session asks for it.
+        ISubjectKeyStore keys = services.GetRequiredService<ISubjectKeyStore>();
+
+        if (await keys.FindBySubjectAsync(account, cancellationToken) is null)
+        {
+            await keys.CreateAsync(account, cancellationToken);
+        }
+
+        await services.GetRequiredService<ISessionStore>().AddAsync(
+            session,
+            RandomNumberGenerator.GetBytes(32),
+            RandomNumberGenerator.GetBytes(32),
+            cancellationToken);
+        await work.CommitAsync(cancellationToken);
+
+        return session.Id;
     }
 
     // An organization-wide check, as an administrative operation makes it.

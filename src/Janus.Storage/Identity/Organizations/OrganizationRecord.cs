@@ -26,10 +26,9 @@ internal sealed class OrganizationRecord
 
     /// <summary>
     /// The <c>canonical_name</c> column, the name's <c>NFKC_Casefold</c> comparison key
-    /// (IDN-ACCT-004). Every write carries it; it is absent only on a row written before
-    /// the column was, which OPS-MIG-005 adds nullable.
+    /// (IDN-ACCT-004).
     /// </summary>
-    public string? CanonicalName { get; set; }
+    public string CanonicalName { get; set; } = string.Empty;
 
     /// <summary>
     /// The <c>created_at</c> column.

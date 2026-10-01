@@ -292,7 +292,14 @@ internal sealed class RestoreTest(
         }
 
         await audit
-            .RecordedAsync(AuditActions.RestoreTestCompleted, principal, subject: null, now, measured, cancellationToken)
+            .RecordedAsync(
+                AuditActions.RestoreTestCompleted,
+                principal,
+                subject: null,
+                organization: null,
+                now,
+                measured,
+                cancellationToken)
             .ConfigureAwait(false);
 
         if ((outcome is not RestoreTestOutcome.Passed || outlived)

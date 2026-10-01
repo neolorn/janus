@@ -131,6 +131,7 @@ internal sealed class DeletionSweep(
                 Erased,
                 principal,
                 deletion.Subject,
+                organization: null,
                 now,
                 Named(deletion, reason),
                 cancellationToken)

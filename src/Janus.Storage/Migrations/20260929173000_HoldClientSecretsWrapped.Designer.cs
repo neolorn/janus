@@ -3157,6 +3157,7 @@ partial class HoldClientSecretsWrapped
                     .HasColumnName("id");
 
                 b.Property<string>("CanonicalName")
+                    .IsRequired()
                     .HasColumnType("text")
                     .HasColumnName("canonical_name");
 

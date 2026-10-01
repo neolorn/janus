@@ -45,9 +45,14 @@ internal sealed class ConfigurationInMemory : IConfigurationStore, IConfiguratio
     /// <typeparam name="TValue">The type of the setting's value.</typeparam>
     /// <param name="setting">The setting.</param>
     /// <param name="value">The value.</param>
+    /// <exception cref="InvalidOperationException">
+    /// The setting does not take the value, which no deployment could then hold.
+    /// </exception>
     public void Set<TValue>(Setting<TValue> setting, TValue value)
         where TValue : notnull =>
-        _values[setting.Key] = value;
+        _values[setting.Key] = setting.Accept(value).Match(
+            admitted => (object)admitted,
+            refused => throw new InvalidOperationException(refused.Code.ToString()));
 
     /// <inheritdoc/>
     public ValueTask<Result<TValue>> ReadAsync<TValue>(

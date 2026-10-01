@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Janus.Storage.Migrations;
 
 [DbContext(typeof(StoreContext))]
-[Migration("20260929170223_HoldTheDeploymentKeyUnderTheMaxUuid")]
-partial class HoldTheDeploymentKeyUnderTheMaxUuid
+[Migration("20260930211003_RetireTheOrganizationErasureReason")]
+partial class RetireTheOrganizationErasureReason
 {
     /// <inheritdoc />
     protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -57,6 +57,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.ToTable("lifecycle_links", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_lifecycle_links_kind", "kind IN ('deletion-cancellation', 'reactivation')");
+
+                        t.HasCheckConstraint("ck_lifecycle_links_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
 
                         t.HasCheckConstraint("ck_lifecycle_links_token", "octet_length(token) = 32");
                     });
@@ -104,6 +106,11 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.Property<DateTimeOffset>("RaisedAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("raised_at");
+
+                b.Property<string>("Scope")
+                    .HasMaxLength(320)
+                    .HasColumnType("character varying(320)")
+                    .HasColumnName("scope");
 
                 b.HasKey("Id")
                     .HasName("pk_raised_alerts");
@@ -195,6 +202,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.ToTable("break_glass_credentials", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_break_glass_credentials_ended", "consumed_at IS NULL OR replaced_at IS NULL");
+
+                        t.HasCheckConstraint("ck_break_glass_credentials_issued_by_not_max_uuid", "issued_by <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -317,6 +326,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                         t.HasCheckConstraint("ck_key_ceremonies_expiry", "expires_at > issued_at");
 
                         t.HasCheckConstraint("ck_key_ceremonies_kind", "kind IN ('apple', 'breakGlass', 'emailCode', 'emailLink', 'google', 'passkey', 'password', 'phoneCode', 'phoneLink', 'recoveryCodes', 'securityKey', 'totp')");
+
+                        t.HasCheckConstraint("ck_key_ceremonies_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -574,6 +585,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
 
                         t.HasCheckConstraint("ck_authenticators_state", "state IN ('active', 'invalidated', 'suspended')");
 
+                        t.HasCheckConstraint("ck_authenticators_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_authenticators_webauthn", "(credential_id IS NULL) = (public_key IS NULL) AND (credential_id IS NULL) = (algorithm IS NULL) AND (credential_id IS NULL) = (relying_party IS NULL) AND (credential_id IS NULL) = (backup_eligible IS NULL) AND (credential_id IS NULL) = (backup_state IS NULL)");
                     });
             });
@@ -638,6 +651,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.ToTable("devices", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_devices_kind", "kind IN ('remembered', 'trusted')");
+
+                        t.HasCheckConstraint("ck_devices_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -663,7 +678,10 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.HasKey("Subject", "Ordinal")
                     .HasName("pk_recovery_codes");
 
-                b.ToTable("recovery_codes", "identity");
+                b.ToTable("recovery_codes", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_recovery_codes_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Factors.RecoveryCodeSetRecord", b =>
@@ -691,7 +709,10 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.HasKey("Subject")
                     .HasName("pk_recovery_code_sets");
 
-                b.ToTable("recovery_code_sets", "identity");
+                b.ToTable("recovery_code_sets", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_recovery_code_sets_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Factors.VerificationCodeRecord", b =>
@@ -802,6 +823,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                         t.HasCheckConstraint("ck_identifier_verifications_old", "is_replacement OR (NOT old_must_confirm AND old_confirmed_at IS NULL AND old_link IS NULL)");
 
                         t.HasCheckConstraint("ck_identifier_verifications_old_link", "old_link IS NULL OR octet_length(old_link) = 32");
+
+                        t.HasCheckConstraint("ck_identifier_verifications_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -901,6 +924,10 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
 
                         t.HasCheckConstraint("ck_invitations_forgotten", "enc_identifiers IS NULL OR (revoked_at IS NULL AND acknowledged_at IS NULL)");
 
+                        t.HasCheckConstraint("ck_invitations_invitee_not_max_uuid", "invitee <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
+                        t.HasCheckConstraint("ck_invitations_inviter_not_max_uuid", "inviter <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_invitations_key", "(enc_identifiers IS NULL) = (wrapped_key IS NULL)");
 
                         t.HasCheckConstraint("ck_invitations_outcome", "revoked_at IS NULL OR acknowledged_at IS NULL");
@@ -913,6 +940,10 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                     .ValueGeneratedOnAdd()
                     .HasColumnType("uuid")
                     .HasColumnName("id");
+
+                b.Property<bool>("Attempted")
+                    .HasColumnType("boolean")
+                    .HasColumnName("attempted");
 
                 b.Property<int>("Attempts")
                     .HasColumnType("integer")
@@ -961,9 +992,9 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                     .HasColumnType("text")
                     .HasColumnName("pushed");
 
-                b.Property<DateTimeOffset?>("ReleasedAt")
+                b.Property<DateTimeOffset?>("RemovalOwedAt")
                     .HasColumnType("timestamp with time zone")
-                    .HasColumnName("released_at");
+                    .HasColumnName("removal_owed_at");
 
                 b.Property<DateTimeOffset>("ReservedAt")
                     .HasColumnType("timestamp with time zone")
@@ -983,13 +1014,15 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.HasIndex("Fingerprint")
                     .IsUnique()
                     .HasDatabaseName("ux_mailboxes_fingerprint")
-                    .HasFilter("fingerprint <> decode(repeat('00', 32), 'hex')");
+                    .HasFilter("fingerprint <> decode(repeat('00', 32), 'hex') AND removal_owed_at IS NULL");
 
                 b.HasIndex("Holder")
                     .HasDatabaseName("ix_mailboxes_holder");
 
                 b.ToTable("mailboxes", "identity", t =>
                     {
+                        t.HasCheckConstraint("ck_mailboxes_holder_not_max_uuid", "holder <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_mailboxes_key", "(holder IS NULL) = (wrapped_key IS NOT NULL)");
 
                         t.HasCheckConstraint("ck_mailboxes_pending", "pending IS NULL OR pending IN ('disabled', 'enabled', 'removed')");
@@ -998,7 +1031,7 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
 
                         t.HasCheckConstraint("ck_mailboxes_pushed", "pushed IS NULL OR pushed IN ('disabled', 'enabled', 'removed')");
 
-                        t.HasCheckConstraint("ck_mailboxes_released", "released_at IS NULL OR (holder IS NULL AND retired_at IS NULL)");
+                        t.HasCheckConstraint("ck_mailboxes_removal_owed", "removal_owed_at IS NULL OR holder IS NULL OR retired_at IS NOT NULL");
                     });
             });
 
@@ -1058,7 +1091,10 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.HasKey("Id")
                     .HasName("pk_maintenance_log");
 
-                b.ToTable("maintenance_log", "identity");
+                b.ToTable("maintenance_log", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_maintenance_log_actor_not_max_uuid", "actor <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Oidc.OidcAuthorizationRecord", b =>
@@ -1118,7 +1154,10 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_oidc_authorizations_subject");
 
-                b.ToTable("oidc_authorizations", "identity");
+                b.ToTable("oidc_authorizations", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_oidc_authorizations_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Oidc.OidcClientRecord", b =>
@@ -1159,6 +1198,10 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                     .IsRequired()
                     .HasColumnType("bytea")
                     .HasColumnName("secret");
+
+                b.Property<DateTimeOffset>("SecretIssuedAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("secret_issued_at");
 
                 b.HasKey("ClientId")
                     .HasName("pk_oidc_clients");
@@ -1300,7 +1343,10 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_oidc_tokens_subject");
 
-                b.ToTable("oidc_tokens", "identity");
+                b.ToTable("oidc_tokens", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_oidc_tokens_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Oidc.SigningKeyRecord", b =>
@@ -1424,7 +1470,10 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.HasKey("Subject")
                     .HasName("pk_passwords");
 
-                b.ToTable("passwords", "identity");
+                b.ToTable("passwords", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_passwords_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Policies.PolicyRaiseRecord", b =>
@@ -1520,6 +1569,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
 
                 b.ToTable("loss_reports", "identity", t =>
                     {
+                        t.HasCheckConstraint("ck_loss_reports_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_loss_reports_window", "invalidates_at > reported_at");
                     });
             });
@@ -1553,7 +1604,12 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.HasIndex("Approver", "At")
                     .HasDatabaseName("ix_recovery_approvals_approver");
 
-                b.ToTable("recovery_approvals", "identity");
+                b.ToTable("recovery_approvals", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_recovery_approvals_approver_not_max_uuid", "approver <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
+                        t.HasCheckConstraint("ck_recovery_approvals_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Recovery.RecoveryLinkRecord", b =>
@@ -1617,11 +1673,15 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
 
                 b.ToTable("recovery_links", "identity", t =>
                     {
+                        t.HasCheckConstraint("ck_recovery_links_approver_not_max_uuid", "approver <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_recovery_links_expiry", "expires_at > issued_at");
 
                         t.HasCheckConstraint("ck_recovery_links_purpose", "purpose IN ('enrolment', 'self-service')");
 
                         t.HasCheckConstraint("ck_recovery_links_session", "session IS NULL OR spent_at IS NOT NULL");
+
+                        t.HasCheckConstraint("ck_recovery_links_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
 
                         t.HasCheckConstraint("ck_recovery_links_token", "octet_length(token) = 32");
                     });
@@ -1677,7 +1737,10 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.HasIndex("ExpiresAt")
                     .HasDatabaseName("ix_registration_sessions_expires_at");
 
-                b.ToTable("registration_sessions", "identity");
+                b.ToTable("registration_sessions", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_registration_sessions_provisional_subject_not_max_uuid", "provisional_subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.BalanceReadingRecord", b =>
@@ -1822,7 +1885,10 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.HasIndex("NextAttemptAt")
                     .HasDatabaseName("ix_send_outbox_due");
 
-                b.ToTable("send_outbox", "identity");
+                b.ToTable("send_outbox", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_send_outbox_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authentication.Sending.SendGrantRecord", b =>
@@ -2113,6 +2179,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
 
                         t.HasCheckConstraint("ck_sessions_phishing_resistant", "phishing_resistant = (phishing_resistant_at IS NOT NULL)");
 
+                        t.HasCheckConstraint("ck_sessions_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_sessions_type", "type IN ('auth', 'oidc-token', 'per-app')");
                     });
             });
@@ -2173,6 +2241,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                         t.HasCheckConstraint("ck_signin_challenges_handle", "octet_length(handle) = 32");
 
                         t.HasCheckConstraint("ck_signin_challenges_identifier", "(identifier IS NULL) = (fingerprint_version IS NULL) AND (identifier IS NULL OR octet_length(identifier) = 32)");
+
+                        t.HasCheckConstraint("ck_signin_challenges_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -2234,6 +2304,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
 
                         t.HasCheckConstraint("ck_signin_links_factor", "factor IN ('apple', 'breakGlass', 'emailCode', 'emailLink', 'google', 'passkey', 'password', 'phoneCode', 'phoneLink', 'recoveryCodes', 'securityKey', 'totp')");
 
+                        t.HasCheckConstraint("ck_signin_links_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_signin_links_token", "octet_length(token) = 32");
 
                         t.HasCheckConstraint("ck_signin_links_wrong_attempts", "wrong_attempts >= 0");
@@ -2268,6 +2340,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.ToTable("bulk_exports", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_bulk_exports_actor", "(actor IS NULL) <> (principal IS NULL)");
+
+                        t.HasCheckConstraint("ck_bulk_exports_actor_not_max_uuid", "actor <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -2284,7 +2358,10 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.HasKey("Actor")
                     .HasName("pk_read_baselines");
 
-                b.ToTable("read_baselines", "identity");
+                b.ToTable("read_baselines", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_read_baselines_actor_not_max_uuid", "actor <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authorization.Gate.ReadVolumeRecord", b =>
@@ -2307,7 +2384,10 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.HasIndex("Day")
                     .HasDatabaseName("ix_read_volume_day");
 
-                b.ToTable("read_volume", "identity");
+                b.ToTable("read_volume", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_read_volume_actor_not_max_uuid", "actor <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Authorization.Grants.GrantRecord", b =>
@@ -2396,6 +2476,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
 
                 b.ToTable("grants", "identity", t =>
                     {
+                        t.HasCheckConstraint("ck_grants_granted_by_not_max_uuid", "granted_by <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_grants_kind", "kind IN ('derived', 'materialised', 'stored')");
 
                         t.HasCheckConstraint("ck_grants_reason", "length(btrim(reason)) BETWEEN 1 AND 1024");
@@ -2403,6 +2485,10 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                         t.HasCheckConstraint("ck_grants_resource", "(resource_type IS NULL) = (resource_id IS NULL)");
 
                         t.HasCheckConstraint("ck_grants_revocation", "(revoked_at IS NULL AND revoked_by IS NULL AND revocation_reason IS NULL)\nOR (revoked_at IS NOT NULL AND revoked_by IS NOT NULL\n    AND length(btrim(revocation_reason)) BETWEEN 1 AND 1024)");
+
+                        t.HasCheckConstraint("ck_grants_revoked_by_not_max_uuid", "revoked_by <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
+                        t.HasCheckConstraint("ck_grants_subject_id_not_max_uuid", "subject_id <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
 
                         t.HasCheckConstraint("ck_grants_subject_type", "subject_type IN ('group', 'user')");
                     });
@@ -2423,6 +2509,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
 
                 b.ToTable("grant_versions", "identity", t =>
                     {
+                        t.HasCheckConstraint("ck_grant_versions_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_grant_versions_version", "version >= 0");
                     });
             });
@@ -2455,6 +2543,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                     {
                         t.HasCheckConstraint("ck_group_closure_depth", "depth >= 1");
 
+                        t.HasCheckConstraint("ck_group_closure_member_id_not_max_uuid", "member_id <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_group_closure_member_type", "member_type IN ('group', 'user')");
                     });
             });
@@ -2481,6 +2571,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
 
                 b.ToTable("group_members", "identity", t =>
                     {
+                        t.HasCheckConstraint("ck_group_members_member_id_not_max_uuid", "member_id <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_group_members_member_type", "member_type IN ('group', 'user')");
                     });
             });
@@ -2585,6 +2677,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.ToTable("resources", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_resources_contained_in", "(contained_in_type IS NULL) = (contained_in_id IS NULL)");
+
+                        t.HasCheckConstraint("ck_resources_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -2705,6 +2799,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
 
                         t.HasCheckConstraint("ck_accounts_state", "state IN ('active', 'deleted', 'deleting', 'restricted', 'suspended')");
 
+                        t.HasCheckConstraint("ck_accounts_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_accounts_suspended_by", "suspended_by IS NULL OR suspended_by IN ('administrator', 'self')");
                     });
             });
@@ -2807,6 +2903,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                         t.HasCheckConstraint("ck_identifier_backup_settings_rule", "rule IN ('all-verified', 'primary-only') OR rule IS NULL");
 
                         t.HasCheckConstraint("ck_identifier_backup_settings_setting", "(rule IS NULL) <> (named IS NULL)");
+
+                        t.HasCheckConstraint("ck_identifier_backup_settings_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -2889,6 +2987,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                         t.HasCheckConstraint("ck_identifiers_personal", "NOT is_personal OR (kind = 'email' AND verified_at IS NOT NULL AND NOT is_primary)");
 
                         t.HasCheckConstraint("ck_identifiers_primary", "NOT is_primary OR verified_at IS NOT NULL");
+
+                        t.HasCheckConstraint("ck_identifiers_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -2974,6 +3074,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
 
                         t.HasCheckConstraint("ck_identifier_removals_kind", "kind IN ('email', 'phone', 'username')");
 
+                        t.HasCheckConstraint("ck_identifier_removals_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_identifier_removals_window", "expires_at > removed_at");
                     });
             });
@@ -3047,11 +3149,18 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_memberships_subject");
 
+                b.HasIndex("Subject", "Organization")
+                    .IsUnique()
+                    .HasDatabaseName("ux_memberships_current")
+                    .HasFilter("ended_at IS NULL");
+
                 b.ToTable("memberships", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_memberships_acknowledged", "(acknowledged_at IS NULL) = (acknowledged_documents IS NULL)");
 
                         t.HasCheckConstraint("ck_memberships_ended", "ended_at IS NULL OR ended_at >= created_at");
+
+                        t.HasCheckConstraint("ck_memberships_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -3129,7 +3238,10 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.HasKey("Subject")
                     .HasName("pk_account_preferences");
 
-                b.ToTable("account_preferences", "identity");
+                b.ToTable("account_preferences", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_account_preferences_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Identity.Profiles.ProfilePhotoRecord", b =>
@@ -3150,7 +3262,10 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.HasKey("Subject")
                     .HasName("pk_profile_photos");
 
-                b.ToTable("profile_photos", "identity");
+                b.ToTable("profile_photos", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_profile_photos_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Identity.Profiles.ProfileRecord", b =>
@@ -3174,7 +3289,10 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.HasKey("Subject")
                     .HasName("pk_profiles");
 
-                b.ToTable("profiles", "identity");
+                b.ToTable("profiles", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_profiles_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Privacy.Consents.ConsentRecordRow", b =>
@@ -3228,6 +3346,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                         t.HasCheckConstraint("ck_consents_mechanism", "mechanism IN ('administrator', 'dashboard', 'reconsent', 'registration')");
 
                         t.HasCheckConstraint("ck_consents_purpose", "length(trim(purpose)) > 0");
+
+                        t.HasCheckConstraint("ck_consents_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -3267,6 +3387,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                         t.HasCheckConstraint("ck_objections_mechanism", "mechanism IN ('administrator', 'dashboard', 'reconsent', 'registration')");
 
                         t.HasCheckConstraint("ck_objections_purpose", "length(trim(purpose)) > 0");
+
+                        t.HasCheckConstraint("ck_objections_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -3371,9 +3493,11 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                     {
                         t.HasCheckConstraint("ck_erasures_attempts", "attempts >= 0");
 
-                        t.HasCheckConstraint("ck_erasures_reason", "reason IN ('erasure-request', 'minor-takedown', 'organization-erasure')");
+                        t.HasCheckConstraint("ck_erasures_reason", "reason IN ('erasure-request', 'minor-takedown')");
 
                         t.HasCheckConstraint("ck_erasures_status", "status IN ('awaiting-subscribers', 'complete', 'failed')");
+
+                        t.HasCheckConstraint("ck_erasures_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -3398,7 +3522,10 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                 b.HasIndex("Subject", "AssembledAt")
                     .HasDatabaseName("ix_privacy_exports_subject");
 
-                b.ToTable("privacy_exports", "identity");
+                b.ToTable("privacy_exports", "identity", t =>
+                    {
+                        t.HasCheckConstraint("ck_privacy_exports_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+                    });
             });
 
         modelBuilder.Entity("Janus.Storage.Privacy.Outbox.DeliveryConfirmationRecord", b =>
@@ -3481,9 +3608,11 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
 
                         t.HasCheckConstraint("ck_outbox_kind", "kind IN ('erasure-requested', 'export-requested', 'restriction-changed', 'takedown-executed')");
 
-                        t.HasCheckConstraint("ck_outbox_reason", "reason IN ('erasure-request', 'minor-takedown', 'organization-erasure')");
+                        t.HasCheckConstraint("ck_outbox_reason", "reason IN ('erasure-request', 'minor-takedown')");
 
                         t.HasCheckConstraint("ck_outbox_status", "status IN ('awaiting-subscribers', 'complete', 'failed')");
+
+                        t.HasCheckConstraint("ck_outbox_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
             });
 
@@ -3602,6 +3731,8 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                     {
                         t.HasCheckConstraint("ck_privacy_requests_status", "status IN ('deemed-refused-by-lapse', 'fulfilled', 'granted-by-lapse', 'open', 'refused')");
 
+                        t.HasCheckConstraint("ck_privacy_requests_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
+
                         t.HasCheckConstraint("ck_privacy_requests_type", "type IN ('erasure', 'rectification', 'restriction')");
                     });
             });
@@ -3620,7 +3751,7 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("completed_at");
 
-                b.Property<Guid?>("LastSubject")
+                b.Property<Guid?>("LastKey")
                     .HasColumnType("uuid")
                     .HasColumnName("last_subject");
 
@@ -3653,7 +3784,7 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
 
         modelBuilder.Entity("Janus.Storage.Privacy.SubjectKeys.SubjectKeyRecord", b =>
             {
-                b.Property<Guid>("Subject")
+                b.Property<Guid>("Id")
                     .HasColumnType("uuid")
                     .HasColumnName("subject");
 
@@ -3670,7 +3801,7 @@ partial class HoldTheDeploymentKeyUnderTheMaxUuid
                     .HasColumnType("bytea")
                     .HasColumnName("wrapped_key");
 
-                b.HasKey("Subject")
+                b.HasKey("Id")
                     .HasName("pk_subject_keys");
 
                 b.HasIndex("KeyVersion")

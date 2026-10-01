@@ -3153,6 +3153,7 @@ partial class RefuseTheMaxUuidWhereASubjectStands
                     .HasColumnName("id");
 
                 b.Property<string>("CanonicalName")
+                    .IsRequired()
                     .HasColumnType("text")
                     .HasColumnName("canonical_name");
 

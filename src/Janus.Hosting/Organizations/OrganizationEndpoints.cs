@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -197,6 +198,11 @@ internal static class OrganizationEndpoints
             return Answers.Refused(failure);
         }
 
+        if (Unexplained(organization, reason) is IResult unexplained)
+        {
+            return unexplained;
+        }
+
         return Answers.Of(
             await organizations
                 .ReplacePolicyAsync(
@@ -248,9 +254,11 @@ internal static class OrganizationEndpoints
             return Answers.Malformed("domain");
         }
 
-        if (body.Reason is not { Length: > 0 } reason)
+        var organization = new OrganizationId(id);
+
+        if (Unexplained(organization, body.Reason) is IResult unexplained)
         {
-            return Answers.Malformed("reason");
+            return unexplained;
         }
 
         return Answers.Of(
@@ -258,9 +266,9 @@ internal static class OrganizationEndpoints
                 .AddDomainAsync(
                     browser.Asking,
                     browser.Required.Id,
-                    new OrganizationId(id),
+                    organization,
                     domain,
-                    reason,
+                    body.Reason!,
                     cancellationToken)
                 .ConfigureAwait(false),
             added => TypedResults.Json(
@@ -282,9 +290,11 @@ internal static class OrganizationEndpoints
         ArgumentNullException.ThrowIfNull(domains);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (body.Reason is not { Length: > 0 } reason)
+        var organization = new OrganizationId(id);
+
+        if (Unexplained(organization, body.Reason) is IResult unexplained)
         {
-            return Answers.Malformed("reason");
+            return unexplained;
         }
 
         return Answers.Of(
@@ -292,9 +302,9 @@ internal static class OrganizationEndpoints
                 .VerifyDomainAsync(
                     browser.Asking,
                     browser.Required.Id,
-                    new OrganizationId(id),
+                    organization,
                     domain,
-                    reason,
+                    body.Reason!,
                     cancellationToken)
                 .ConfigureAwait(false),
             verified => TypedResults.Json(
@@ -318,9 +328,11 @@ internal static class OrganizationEndpoints
         ArgumentNullException.ThrowIfNull(domains);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (body.Reason is not { Length: > 0 } reason)
+        var organization = new OrganizationId(id);
+
+        if (Unexplained(organization, body.Reason) is IResult unexplained)
         {
-            return Answers.Malformed("reason");
+            return unexplained;
         }
 
         return Answers.Of(
@@ -328,9 +340,9 @@ internal static class OrganizationEndpoints
                 .RemoveDomainAsync(
                     browser.Asking,
                     browser.Required.Id,
-                    new OrganizationId(id),
+                    organization,
                     domain,
-                    reason,
+                    body.Reason!,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
@@ -410,6 +422,7 @@ internal static class OrganizationEndpoints
             await invitations
                 .EndMembershipAsync(
                     browser.Asking,
+                    browser.Required.Id,
                     new OrganizationId(id),
                     new SubjectId(subject),
                     RequestOrigin.Source(context.Request),
@@ -417,6 +430,21 @@ internal static class OrganizationEndpoints
                 .ConfigureAwait(false),
             Nothing);
     }
+
+    // 09 section 8a: a change of an organization's policy or of its domains is a
+    // configuration change of its policy key, so a reason absent or blank is refused
+    // with the code a change without one is, naming that key, before any permission is
+    // asked; one past the bound of API-CONV-002 is a request the boundary does not read.
+    private static IResult? Unexplained(OrganizationId organization, string? reason) =>
+        (reason?.Trim().Length ?? 0) switch
+        {
+            0 => Answers.Refused(Error.From(
+                ErrorCodes.ConfigurationChangeReasonRequired,
+                "key",
+                JsonSerializer.SerializeToElement(Settings.OrganizationPolicy.For(organization.ToString()).ToString()))),
+            > 1024 => Answers.Malformed("reason"),
+            _ => null,
+        };
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)
     {

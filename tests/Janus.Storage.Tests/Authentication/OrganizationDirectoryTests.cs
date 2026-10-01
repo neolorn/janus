@@ -96,8 +96,8 @@ public sealed class OrganizationDirectoryTests(DatabaseFixture database)
 
     /// <summary>
     /// IDN-ORG-003 AC1: the members whose sessions a deletion request ends are those
-    /// holding a membership of the organization now, each named once; a membership that
-    /// has ended names nobody.
+    /// holding a membership of the organization now, each named once, a member who held
+    /// an earlier one that ended included; a membership that has ended names nobody.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -107,7 +107,7 @@ public sealed class OrganizationDirectoryTests(DatabaseFixture database)
         SubjectId twice = await _deployment.AccountAsync(Noon);
         SubjectId departed = await _deployment.AccountAsync(Noon);
 
-        await PlaceAsync(twice, organization, until: null);
+        await PlaceAsync(twice, organization, Noon.AddDays(1));
         await PlaceAsync(twice, organization, until: null);
         await PlaceAsync(departed, organization, Noon.AddDays(1));
 

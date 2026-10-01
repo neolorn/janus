@@ -349,6 +349,7 @@ public static class HostingRegistration
             provider.GetRequiredService<IMailServerInUse>(),
             provider.GetService<MailServerClient>(),
             provider.GetService<ImageCodec>(),
+            provider.GetService<IDnsResolver>(),
             provider.GetServices<SocialProvider>(),
             provider.GetRequiredService<IConfigurationStore>()));
 
@@ -569,6 +570,7 @@ public static class HostingRegistration
             provider.GetRequiredService<DomainLock>(),
             provider.GetRequiredService<IInvitationStore>(),
             provider.GetRequiredService<IAccountDirectory>(),
+            provider.GetRequiredService<IIdentifierDirectory>(),
             provider.GetRequiredService<InvitationAcknowledgement>(),
             provider.GetRequiredService<MembershipEnd>(),
             provider.GetRequiredService<IMailboxStore>(),
