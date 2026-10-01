@@ -203,10 +203,12 @@ public sealed class ModelTests
             "bulk_exports.principal",
 
             // Not an account field: a host callback's provider events, each claimed once
-            // by the hash of the provider's identifier (BFF-MACH-002).
+            // by the hash of the provider's identifier and settled once carried
+            // (BFF-MACH-002).
             "callback_events.callback",
             "callback_events.claimed_at",
             "callback_events.identifier",
+            "callback_events.settled_at",
 
             // Not an account field: the correlation references issued for a host's
             // unsigned callbacks, each held by its hash (INT-GEN-003, BFF-MACH-003).

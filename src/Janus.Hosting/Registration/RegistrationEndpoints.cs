@@ -227,7 +227,7 @@ internal static class RegistrationEndpoints
     }
 
     private static async Task<IResult> ChangeAsync(
-        Guid id,
+        IdentifierId id,
         IdentifierValueRequest request,
         IRegistration registration,
         RequestSession browser,
@@ -245,13 +245,13 @@ internal static class RegistrationEndpoints
             ? Answers.Malformed("value")
             : Answers.Of(
                 await registration
-                    .ChangeAsync(session, new IdentifierId(id), value, cancellationToken)
+                    .ChangeAsync(session, id, value, cancellationToken)
                     .ConfigureAwait(false),
                 state => Shown(state, StatusCodes.Status202Accepted));
     }
 
     private static async Task<IResult> DiscardAsync(
-        Guid id,
+        IdentifierId id,
         IRegistration registration,
         RequestSession browser,
         CancellationToken cancellationToken)
@@ -262,7 +262,7 @@ internal static class RegistrationEndpoints
             ? Gone()
             : Answers.Of(
                 await registration
-                    .DiscardAsync(session, new IdentifierId(id), cancellationToken)
+                    .DiscardAsync(session, id, cancellationToken)
                     .ConfigureAwait(false),
                 state => Shown(state, StatusCodes.Status200OK));
     }
@@ -390,7 +390,7 @@ internal static class RegistrationEndpoints
     }
 
     private static async Task<IResult> VerifyAsync(
-        Guid id,
+        IdentifierId id,
         VerifyRequest request,
         IRegistration registration,
         RequestSession browser,
@@ -419,7 +419,7 @@ internal static class RegistrationEndpoints
             ? Answers.Malformed("code")
             : Answers.Of(
                 await registration
-                    .VerifyAsync(session, new IdentifierId(id), code, cancellationToken)
+                    .VerifyAsync(session, id, code, cancellationToken)
                     .ConfigureAwait(false),
                 _ => Nothing);
     }

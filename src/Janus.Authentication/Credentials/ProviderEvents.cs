@@ -116,7 +116,7 @@ internal sealed class ProviderEvents(
         ArgumentNullException.ThrowIfNull(source);
 
         bool claimed = await admission
-            .ClaimAsync(CallbackOf(notice.Provider), notice.EventId, cancellationToken)
+            .CarryAsync(CallbackOf(notice.Provider), notice.EventId, cancellationToken)
             .ConfigureAwait(false);
 
         Authenticator? linked = notice.Subject is null

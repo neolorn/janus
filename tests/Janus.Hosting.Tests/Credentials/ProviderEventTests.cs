@@ -14,6 +14,7 @@ using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Tests.Oidc;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Net.Http.Headers;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Credentials;
@@ -105,7 +106,7 @@ public sealed class ProviderEventTests : IAsyncDisposable
                 "evt-1",
                 GoogleEvent(Risc + "sessions-revoked", GoogleSubject)));
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, answered.Status);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, answered.Status);
         Assert.Equal(ErrorCodes.CallbackRejected.ToString(), answered.Text("code"));
         Assert.Equal(live, Live(subject).Count);
         Assert.Equal(AuthenticatorState.Active, Held(linked).State);
@@ -362,7 +363,8 @@ public sealed class ProviderEventTests : IAsyncDisposable
 
     /// <summary>
     /// IDN-LIFE-012a: an event of a provider the deployment declared nothing for, and
-    /// one whose provider's keys cannot be read, verify against nothing and are refused.
+    /// one whose provider's keys cannot be read, verify against nothing and are refused
+    /// as a callback refused for anything but its rate is: 422 with no interval.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -373,27 +375,33 @@ public sealed class ProviderEventTests : IAsyncDisposable
         Prepared(undeclared);
 
         Answer unknown = await new Machine(undeclared).DeliverAsync(
-            Google,
-            Delivered,
-            undeclared.SocialProviders.Signed(
-                Factor.Google,
+            Apple,
+            "application/json",
+            Wrapped(undeclared.SocialProviders.Signed(
+                Factor.Apple,
                 "evt-1",
-                GoogleEvent(Risc + "sessions-revoked", GoogleSubject)));
+                AppleEvent("consent-revoked", AppleSubject))));
 
         _deployment.SocialProviders.Reachable = false;
 
         Answer unreadable = await DeliveredAsync(
-            Google,
-            _deployment.SocialProviders.Signed(
-                Factor.Google,
+            Apple,
+            Wrapped(_deployment.SocialProviders.Signed(
+                Factor.Apple,
                 "evt-1",
-                GoogleEvent(Risc + "sessions-revoked", GoogleSubject)));
+                AppleEvent("consent-revoked", AppleSubject))));
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, unknown.Status);
-        Assert.Equal(StatusCodes.Status429TooManyRequests, unreadable.Status);
+        Assert.All(
+            new[] { unknown, unreadable },
+            refused =>
+            {
+                Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+                Assert.Equal(ErrorCodes.CallbackRejected.ToString(), refused.Text("code"));
+                Assert.Null(refused.Header(HeaderNames.RetryAfter));
+            });
         Assert.Contains(
             _deployment.Logs.Lines,
-            line => line.Contains("providers/google could not be read", StringComparison.Ordinal));
+            line => line.Contains("providers/apple could not be read", StringComparison.Ordinal));
     }
 
     // A deployment that can send the notice a removed credential or a suspended account

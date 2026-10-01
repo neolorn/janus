@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -36,6 +37,12 @@ public sealed class VolumeTests(VolumeFixture volume) : IClassFixture<VolumeFixt
         "Seq Scan on grants",
         "Seq Scan on ancestry",
     ];
+
+    // A plan node that reads the grants, whatever index it reads them by.
+    private static readonly Regex ScanOfGrants = new(
+        @"\bScan\b.*\bon grants\b",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1));
 
     /// <summary>
     /// AUTHZ-TEST-002 AC1: the plan of the primary list query is captured over a
@@ -126,9 +133,9 @@ public sealed class VolumeTests(VolumeFixture volume) : IClassFixture<VolumeFixt
     /// <summary>
     /// OPS-DB-003 AC2: the reverse lookup reads the grants on one record by its own
     /// index, and reads neither the grants nor the ancestry whole, at the stated volumes
-    /// and for a record the grants reach. Every read of that index seeks it by a
-    /// condition; an index walked end to end under a filter is the table read whole by
-    /// another name.
+    /// and for a record the grants reach. Every read of the grants seeks the index it
+    /// reads, whichever that is, by a condition; an index walked end to end under a
+    /// filter is the table read whole by another name.
     /// </summary>
     [Fact]
     public void OPS_DB_003_AC2_TheReverseLookupReadsNoTableWhole()
@@ -137,7 +144,7 @@ public sealed class VolumeTests(VolumeFixture volume) : IClassFixture<VolumeFixt
 
         string[] lines = volume.ReversePlan.Split(Environment.NewLine);
         int[] reads = [.. Enumerable.Range(0, lines.Length)
-            .Where(at => lines[at].Contains("using " + LiveResource + " on grants", StringComparison.Ordinal))];
+            .Where(at => ScanOfGrants.IsMatch(lines[at]))];
 
         // Every grant is on a container, one in each ten thousand on the record's own,
         // and none of those is revoked.
@@ -147,11 +154,23 @@ public sealed class VolumeTests(VolumeFixture volume) : IClassFixture<VolumeFixt
             Scanned,
             whole => Assert.DoesNotContain(whole, volume.ReversePlan, StringComparison.Ordinal));
 
+        Assert.Contains("using " + LiveResource + " on grants", volume.ReversePlan, StringComparison.Ordinal);
         Assert.NotEmpty(reads);
         Assert.All(
             reads,
-            at => Assert.StartsWith("Index Cond:", lines[at + 1].Trim(), StringComparison.Ordinal));
+            at => Assert.Contains(Beneath(lines, at), line => line.StartsWith("Index Cond:", StringComparison.Ordinal)));
     }
+
+    // The lines of a plan node's own details and of the nodes it reads through, which
+    // are every line after it indented further than it is.
+    private static string[] Beneath(string[] lines, int at)
+    {
+        int depth = Depth(lines[at]);
+
+        return [.. lines.Skip(at + 1).TakeWhile(line => Depth(line) > depth).Select(line => line.Trim())];
+    }
+
+    private static int Depth(string line) => line.Length - line.TrimStart().Length;
 
     // What the database holds once the fixture has written it, read back rather than
     // taken on trust: the volumes are the criterion, not the loops that produced them.

@@ -118,7 +118,7 @@ internal sealed class MailServerInMemory : IMailServer
             return ValueTask.FromResult(Result.Failure(Error.From(ErrorCodes.SystemFault)));
         }
 
-        if (_hosted.TryGetValue(push.Address, out Hosted? found) && found.Mailbox != push.Mailbox)
+        if (_hosted.TryGetValue(push.Address.Value, out Hosted? found) && found.Mailbox != push.Mailbox)
         {
             return ValueTask.FromResult(Result.Failure(Error.From(ErrorCodes.MailServerConflict)));
         }
@@ -127,7 +127,7 @@ internal sealed class MailServerInMemory : IMailServer
         {
             Applied.Add(push);
             Set(
-                push.Address,
+                push.Address.Value,
                 push.State switch
                 {
                     MailboxState.Enabled => true,
@@ -147,7 +147,7 @@ internal sealed class MailServerInMemory : IMailServer
             Unreachable
                 ? Result.Failure<IReadOnlyList<HostedMailbox>>(Error.From(ErrorCodes.SystemFault))
                 : Result.Success<IReadOnlyList<HostedMailbox>>(
-                    [.. _hosted.Select(pair => new HostedMailbox(pair.Value.Mailbox, pair.Key, pair.Value.Enabled))]));
+                    [.. _hosted.Select(pair => new HostedMailbox(pair.Value.Mailbox, Listed(pair.Key), pair.Value.Enabled))]));
 
     /// <summary>
     /// The app passwords the server holds for one person.
@@ -231,6 +231,10 @@ internal sealed class MailServerInMemory : IMailServer
                 ? Result.Success()
                 : Result.Failure(Error.From(ErrorCodes.CredentialNotFound)));
     }
+
+    // An address the server holds, as a listing reads it.
+    private static EmailAddress? Listed(string address) =>
+        EmailAddress.TryParse(address, out EmailAddress listed) ? listed : null;
 
     private sealed record Hosted(MailboxId? Mailbox, bool Enabled);
 

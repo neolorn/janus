@@ -1,6 +1,11 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Xml;
 using Janus.Core.Configuration;
 using Xunit;
 
@@ -15,6 +20,13 @@ namespace Janus.Core.Tests;
 [Trait("kind", "contract")]
 public sealed class SettingsCatalogueTests
 {
+    // The constraints a setting can hold on its value, by the name the catalogue gives
+    // each.
+    private static readonly string[] Constraints = ["Floor", "Ceiling", "Allowed", "Minimum", "Unremovable"];
+
+    // The capital that begins each word of a name after the first.
+    private static readonly Regex Words = new("(?<=.)([A-Z])", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+
     // The eleven keys of LIB-HOST-001 that name the deployment, and the three that
     // are named only where their condition holds.
     private static readonly string[] NamedByTheDeployment =
@@ -94,31 +106,25 @@ public sealed class SettingsCatalogueTests
         Assert.Empty(ReferenceRows.MarkedProtected.Except(ReferenceRows.ProtectedList, StringComparer.Ordinal));
 
     /// <summary>
-    /// LIB-API-001: the key names are the contract, so a key that is renamed, added or
-    /// dropped fails here and carries its version bump.
+    /// LIB-API-001 AC2: the keys are the contract, each with its type, its scope and
+    /// every constraint the catalogue holds on its value, and the families with their
+    /// scopes, so a key renamed, added, dropped, retyped, rescoped or bounded otherwise,
+    /// and a family added or dropped, fails here and carries its version bump.
     /// </summary>
     [Fact]
-    public void LIB_API_001_AC2_TheKeyNamesAreTheContract()
+    public void LIB_API_001_AC2_TheKeysAreTheContract()
     {
-        string[] declared = [.. Settings.All.Select(setting => setting.Key.ToString()).Order(StringComparer.Ordinal)];
+        string[] declared =
+        [
+            .. Settings.All.Select(Contracted),
+            .. Settings.Families.Select(family => family.Prefix + " family " + Scope(family.Scope)),
+        ];
 
         Assert.Equal(
             Repository.ReadText("tests/Janus.Core.Tests/configuration-keys.txt")
                 .ReplaceLineEndings("\n")
                 .Split('\n', StringSplitOptions.RemoveEmptyEntries),
-            declared);
-    }
-
-    /// <summary>
-    /// LIB-API-001: the families are part of the same contract, and each states
-    /// whether the library has a value for a member the deployment never wrote.
-    /// </summary>
-    [Fact]
-    public void LIB_API_001_AC2_TheFamiliesAreTheContract()
-    {
-        string[] declared = [.. Settings.Families.Select(family => family.Prefix).Order(StringComparer.Ordinal)];
-
-        Assert.Equal(["photo.enabled", "policy", "retention"], declared);
+            declared.Order(StringComparer.Ordinal));
     }
 
     /// <summary>
@@ -215,6 +221,55 @@ public sealed class SettingsCatalogueTests
         Assert.Equal(
             Settings.All.Count,
             Settings.All.Select(setting => setting.Key.ToString()).Distinct(StringComparer.Ordinal).Count());
+
+    // One key's line of the contract: its name, its type, its scope and each
+    // constraint the catalogue holds on its value, by the name the catalogue gives it.
+    private static string Contracted(Setting setting)
+    {
+        Type type = setting.GetType();
+        StringBuilder line = new StringBuilder()
+            .Append(setting.Key.ToString())
+            .Append(' ')
+            .Append(Kind(type))
+            .Append(' ')
+            .Append(Scope(setting.Scope));
+
+        foreach (string constraint in Constraints)
+        {
+            if (type.GetProperty(constraint)?.GetValue(setting) is { } held && Written(constraint, held) is { Length: > 0 } text)
+            {
+                line.Append(' ')
+                    .Append(CultureInfo.InvariantCulture.TextInfo.ToLower(constraint))
+                    .Append('=')
+                    .Append(text);
+            }
+        }
+
+        return line.ToString();
+    }
+
+    // The type a key's value has, read from the kind of setting it is declared as.
+    private static string Kind(Type type)
+    {
+        string name = type.Name.Split('`')[0];
+
+        return CultureInfo.InvariantCulture.TextInfo.ToLower(
+            Words.Replace(name[..^nameof(Setting).Length], "-$1"));
+    }
+
+    private static string Scope(SettingScope scope) => scope == SettingScope.Protected ? "P" : "R";
+
+    // A bound as the reference writes it, a set as its members in order, and a set
+    // or a minimum that holds nothing back as nothing.
+    private static string Written(string constraint, object held) => held switch
+    {
+        TimeSpan span => XmlConvert.ToString(span),
+        0 when constraint == "Minimum" => string.Empty,
+        IEnumerable members => string.Join(
+            ',',
+            members.Cast<object>().Select(SettingText.Of).Order(StringComparer.Ordinal)),
+        _ => SettingText.Of(held),
+    };
 
     // Reading the default of a setting whose type is only known at runtime. A setting
     // that resolves hands back a value; one that does not throws, which is the failure

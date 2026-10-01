@@ -149,7 +149,7 @@ internal static class CredentialEndpoints
     // AUTH-FACT-002b: the ceremony the upgrade opens is completed at the same place
     // any other is, because it is the same ceremony.
     private static async Task<IResult> UpgradeAsync(
-        Guid id,
+        AuthenticatorId id,
         ICredentials credentials,
         RequestSession browser,
         CancellationToken cancellationToken)
@@ -160,7 +160,7 @@ internal static class CredentialEndpoints
             ? Nobody()
             : Answers.Of(
                 await credentials
-                    .UpgradeKeyAsync(authority, new AuthenticatorId(id), cancellationToken)
+                    .UpgradeKeyAsync(authority, id, cancellationToken)
                     .ConfigureAwait(false),
                 Ceremony);
     }
@@ -258,7 +258,7 @@ internal static class CredentialEndpoints
     // suspends the credential for the notified window instead, which the contract
     // says with the code that carries when the window ends.
     private static async Task<IResult> RemoveAsync(
-        Guid id,
+        AuthenticatorId id,
         ICredentials credentials,
         RequestSession browser,
         HttpContext context,
@@ -273,7 +273,7 @@ internal static class CredentialEndpoints
                 await credentials
                     .RemoveAsync(
                         authority,
-                        new AuthenticatorId(id),
+                        id,
                         RequestOrigin.Source(context.Request),
                         cancellationToken)
                     .ConfigureAwait(false),

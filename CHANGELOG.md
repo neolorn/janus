@@ -18,7 +18,9 @@ against the public contract of LIB-API-001.
   the checks startup runs and reports a refusal under its own code.
   `ConformanceSuite.TruthTableAsync` writes each case of the host's table into the
   deployment and reports, under `authz.truthtable.disagreement`, each case the single
-  check or the list filter decides otherwise than the table states; it writes into the
+  check or the list filter decides otherwise than the table states. A derived case is
+  written once for each derivation declared at the level it uses, and its finding names
+  the derivation's relationship under `details.derivation`. It writes into the
   database, so it runs against a deployment kept for it.
   `ConformanceSuite.ProviderAsync` asks the provider each form AUTH-OIDC-006 retires and
   reports, under `auth.oidc.nonconformant`, each one it admits or its discovery document
@@ -385,14 +387,20 @@ against the public contract of LIB-API-001.
   the signed bytes are, its secrets and its event identifier; the library verifies the
   signature over the raw bytes in fixed time against the current secret and, for 24
   hours after a rotation, the previous one, holds a five-minute window where the scheme
-  carries an instant, and carries each event once, giving the claim back when the host's
-  route does not answer with a 2xx. An unsigned callback (`IUnsignedCallback`) reaches
-  the route only with a reference issued for it and once the host has confirmed it with
-  the provider. Both are held to `integration.callback.ratelimit` and to the provider's
-  published ranges first, and every refusal is answered 429
-  `integration.callback.rejected`, recorded against its source and counted toward
-  `alerting.callback.threshold`. Claimed events and issued references are kept, as
-  hashes, in the `callback_events` and `callback_references` tables.
+  carries an instant, and carries each event once: the claim is settled when the host's
+  route answers with a 2xx and given back when it does not or throws, a delivery meeting
+  a claim still unsettled is answered 409 `integration.callback.inprogress` (not a
+  rejection), and one meeting a claim left unsettled for
+  `integration.callback.claimtimeout` (five minutes by default, at least one) takes it
+  over and is carried. An unsigned callback (`IUnsignedCallback`) reaches the route only
+  with a reference issued for it and once the host has confirmed it with the provider.
+  Both are held to `integration.callback.ratelimit` and to the provider's published
+  ranges first. A refusal is answered `integration.callback.rejected`: 429 with
+  `Retry-After` and `details.retryAt` where the rate limit refused it, 422 with no
+  `Retry-After` otherwise, and every refusal but the rate limit's is recorded against
+  its source and counted toward `alerting.callback.threshold`. Claimed events and issued
+  references are kept, as hashes, in the `callback_events` and `callback_references`
+  tables, a claim with when it was taken and when it settled.
 - `ICallbackReferences.IssueAsync` issues the correlation reference an unsigned callback
   carries: 128 random bits in base64url, of which only the hash is kept.
 - `GET /callbacks/sms/dlr` takes the SMS gateway's delivery report on the machine
@@ -400,7 +408,7 @@ against the public contract of LIB-API-001.
   puts in the query string, and every transport implements it. A report of failed
   delivery for a send the library made releases that send from its restrictions and
   nothing else; a report carrying an unknown reference, or one the transport cannot
-  read, is refused 429 `integration.callback.rejected`.
+  read, is refused 422 `integration.callback.rejected`.
 - `SensitiveBodyAttribute` marks an endpoint whose request and response bodies never
   reach the framework's request logging, whatever fields the deployment or the endpoint
   asks it to record. Every endpoint the library maps carries it, and a request the
@@ -571,10 +579,12 @@ against the public contract of LIB-API-001.
   raises `degradation` on any difference without changing either side. The address is
   held encrypted under its holder's key and is erased with them.
 - A mailbox push carries the mailbox's identifier (`MailboxPush.Mailbox`, a public
-  `MailboxId`), and the mail server's listing answers, for each account, the identifier
-  it carries (`HostedMailbox.Mailbox`), its address and whether it is enabled. An
-  `IMailServer` answers `integration.mailserver.conflict` where a push meets, at the
-  mailbox's name, an account that does not carry that identifier, and changes nothing.
+  `MailboxId`) and its address as an `EmailAddress`, and the mail server's listing
+  answers, for each account, the identifier it carries (`HostedMailbox.Mailbox`), its
+  address as an `EmailAddress`, or nothing where what the server lists does not read
+  as one, and whether it is enabled. An `IMailServer` answers
+  `integration.mailserver.conflict` where a push meets, at the mailbox's name, an
+  account that does not carry that identifier, and changes nothing.
   Reconciliation compares each mailbox with the account listed under its identifier,
   reads the listed address in its canonical form, and counts every account carrying no
   identifier of a mailbox the library holds.
@@ -1505,8 +1515,10 @@ against the public contract of LIB-API-001.
 - Under the mount, a path no endpoint serves and a method a path does not take answer
   404 `authz.resource.notfound` in the error envelope, and a fault answers 500
   `system.fault` with the correlation identifier and nothing of what was thrown; the
-  log keeps the fault's type under that identifier. The host's routes outside the
-  mount answer as the host has them answer.
+  log keeps under that identifier the full type name and stack frames of the fault and
+  of each fault beneath it, and never a message, as it does for a fault a background job
+  or a restore test step throws. The host's routes outside the mount answer as the host
+  has them answer.
 - An authorization request refused where the refusal cannot go back to a client is
   answered to the browser in the error envelope rather than as the provider's text:
   400 `api.request.malformed` with the protocol's code in `details.error`, or 500
@@ -1801,8 +1813,9 @@ against the public contract of LIB-API-001.
   key or the text of a notice is marked with it: `SessionId`, `GeneratedRecoveryCodes`,
   `KeyEncryptionKeys`, the code of `LinkLanding` and `SignInLanding`, the token of
   `IssuedInvitation`, the secret and address of `GeneratorEnrolment`, the text of
-  `DocumentVersion` and `DocumentTranslation`, and the secret parameters of the service
-  contracts. The marker states the rule for the host as it does for the library's own
+  `DocumentVersion` and `DocumentTranslation`, a send's correlation reference
+  (`SendReference`, and the reference of `SmsDeliveryReport`), and the secret parameters
+  of the service contracts. The marker states the rule for the host as it does for the library's own
   build.
 - `Settings` in `Janus.Core.Configuration`: every configuration key of chapter 10
   section 4 with its type, its default, the floors, ceilings and value sets it admits,
@@ -1842,6 +1855,9 @@ against the public contract of LIB-API-001.
 - `SubjectId` and `OrganizationId` in `Janus.Core`: an account's opaque identifier,
   drawn from randomness alone so that it carries nothing about the person, and the
   organization's, ordered by the instant it was issued.
+- The identifiers of `Janus.Core` that a route carries implement `IParsable<T>`, and
+  every endpoint binds them through it, so a route naming the max UUID as a subject is
+  refused 400 `api.request.malformed` before any operation runs.
 - `AccountState`, `SuspensionOrigin`, `DeletionOrigin`, `TakedownTrigger`,
   `ErasureStatus` and `ErasureReason` in `Janus.Core`: the state an account is in, why
   it entered the one it is in, and how far an erasure's host-side work has got.

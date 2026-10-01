@@ -54,29 +54,27 @@ public sealed class PublicSurfaceTests
     ];
 
     // CONV-DESIGN-002 AC1: the interfaces of the core that are not service contracts,
-    // since the host implements them and the library calls them: the extension points
-    // of LIB-EXT-001, what the host declares of its model and its purposes
-    // (LIB-HOST-001, LIB-HOST-002, LIB-HOST-004), and the receivers of what the library
-    // publishes (LIB-API-001, IDN-LIFE-003a). An interface added outside this list is a
+    // since the host implements them and the library calls them, each beside the item
+    // that makes the host implement it. An interface added outside this list is a
     // service contract and is held to the rule.
     private static readonly Type[] NotServiceContracts =
     [
-        typeof(IAssuranceProvider),
-        typeof(ICertificateRenewal),
-        typeof(IClockReference),
-        typeof(IDnsResolver),
-        typeof(IErasureLedger),
-        typeof(IEventConsumer<>),
-        typeof(ILocationSource),
-        typeof(IMailServer),
-        typeof(IMailTransport),
-        typeof(IMessageTemplates),
-        typeof(INotificationHandler),
-        typeof(IPurposeHandler),
-        typeof(IRestoreTestInstance),
-        typeof(ISecretSource),
-        typeof(ISmsTransport),
-        typeof(ISubjectEventSubscriber),
+        typeof(IAssuranceProvider), // LIB-HOST-004: assurance where authentication is not the library's.
+        typeof(ICertificateRenewal), // LIB-HOST-001, optional: an environment seam (INF-TLS-003).
+        typeof(IClockReference), // LIB-HOST-001, optional: an environment seam (INF-HOST-001).
+        typeof(IDnsResolver), // LIB-HOST-001, optional: an environment seam (REG-DOM-001).
+        typeof(IErasureLedger), // LIB-HOST-001, optional: an environment seam (DR-016).
+        typeof(IEventConsumer<>), // LIB-API-001 and IDN-LIFE-003a: the receiver of an emitted event.
+        typeof(ILocationSource), // LIB-HOST-001, optional: an environment seam (INT-GEN-006).
+        typeof(IMailServer), // LIB-HOST-001, optional: an environment seam (INT-MAIL-001).
+        typeof(IMailTransport), // LIB-EXT-001 and LIB-HOST-001: mail delivery.
+        typeof(IMessageTemplates), // LIB-EXT-001: message and content templates.
+        typeof(INotificationHandler), // LIB-EXT-001: notification handling.
+        typeof(IPurposeHandler), // LIB-HOST-001: a purpose handler.
+        typeof(IRestoreTestInstance), // LIB-HOST-001, optional: an environment seam (DR-007).
+        typeof(ISecretSource), // LIB-EXT-001 and LIB-HOST-001: the secret source.
+        typeof(ISmsTransport), // LIB-EXT-001 and LIB-HOST-001: SMS delivery.
+        typeof(ISubjectEventSubscriber), // LIB-HOST-001: a subject-event handler.
     ];
 
     // Every type the shipped assemblies declare.

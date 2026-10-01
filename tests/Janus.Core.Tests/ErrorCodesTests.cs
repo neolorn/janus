@@ -138,6 +138,7 @@ public sealed class ErrorCodesTests
         "identity.username.invalid",
         "identity.username.reserved",
         "identity.username.taken",
+        "integration.callback.inprogress",
         "integration.callback.rejected",
         "integration.endpoint.insecure",
         "integration.mailserver.conflict",

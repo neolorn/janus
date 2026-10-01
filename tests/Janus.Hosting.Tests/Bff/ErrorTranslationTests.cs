@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Janus.Authentication.Tests;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
@@ -95,7 +96,7 @@ public sealed class ErrorTranslationTests
     /// <summary>
     /// LIB-API-003 AC4, BFF-ERR-002 AC1 and AC2: an endpoint that throws is answered as
     /// a fault, with the correlation identifier and nothing of what was thrown, and
-    /// what was thrown is found in the log by that identifier by its type alone.
+    /// what was thrown is found in the log by that identifier by its type.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -120,6 +121,40 @@ public sealed class ErrorTranslationTests
             line => line.Contains(correlation, StringComparison.Ordinal)
                 && line.Contains(nameof(InvalidOperationException), StringComparison.Ordinal));
         Assert.DoesNotContain(deployment.Logs.Lines, line => line.Contains("db.internal", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// BFF-ERR-002 AC2: the entry a fault is logged as under the correlation identifier
+    /// carries the type and stack frames of what was thrown and of the fault beneath it,
+    /// and the message of neither.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ERR_002_AC2_AFaultIsLoggedByTheFramesOfItAndItsInnerFaultAndNoMessageAsync()
+    {
+        await using var deployment = new Deployment(prefix: Prefix);
+        var browser = new Browser(deployment);
+
+        _ = await browser.SendAsync("GET", Prefix + "/register");
+
+        deployment.Configuration.Unreachable = Settings.RegistrationSessionLifetime.Key;
+
+        Answer answered = await browser.SendAsync("POST", Prefix + "/register", "{\"clientId\":\"web\"}");
+        string correlation = answered.Text("correlationId");
+        string entry = Assert.Single(
+            deployment.Logs.Lines,
+            line => line.Contains(correlation, StringComparison.Ordinal)
+                && line.Contains(ErrorCodes.SystemFault.ToString(), StringComparison.Ordinal));
+
+        Assert.Contains(typeof(InvalidOperationException).FullName!, entry, StringComparison.Ordinal);
+        Assert.Contains(typeof(TimeoutException).FullName!, entry, StringComparison.Ordinal);
+        Assert.Contains(
+            nameof(ConfigurationInMemory) + "." + nameof(ConfigurationInMemory.ReadAsync),
+            entry,
+            StringComparison.Ordinal);
+        Assert.Contains(nameof(ConfigurationInMemory) + ".Unreached", entry, StringComparison.Ordinal);
+        Assert.DoesNotContain("could not be reached", entry, StringComparison.Ordinal);
+        Assert.DoesNotContain("timed out", entry, StringComparison.Ordinal);
     }
 
     /// <summary>

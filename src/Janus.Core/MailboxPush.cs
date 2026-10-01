@@ -21,4 +21,4 @@ namespace Janus.Core;
 /// holds an account under the mailbox's name not carrying its identifier answers
 /// <c>integration.mailserver.conflict</c> and changes nothing.
 /// </remarks>
-public sealed record MailboxPush(MailboxId Mailbox, Guid Key, string Address, MailboxState State);
+public sealed record MailboxPush(MailboxId Mailbox, Guid Key, EmailAddress Address, MailboxState State);

@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Callbacks;
 using Janus.Core;
+using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -19,8 +20,11 @@ namespace Janus.Hosting.Callbacks;
 /// Implements BFF-MACH-002, INT-GEN-003 and entry 276. The signature is verified over
 /// the raw bytes before anything parses them, compared in fixed time against the one
 /// each live secret gives, and a delivery of an event already carried is acknowledged
-/// without reaching the route. A claim whose delivery the route did not carry through is
-/// given back, so the provider's next delivery is carried.
+/// without reaching the route. The claim is committed before the route runs, settled
+/// once the route answers 2xx and given back where it does not or throws, so the
+/// provider's next delivery is carried. A delivery meeting a claim still unsettled is
+/// answered <c>integration.callback.inprogress</c> until the claim has stood for
+/// <c>integration.callback.claimtimeout</c>, when the delivery takes it over.
 /// </remarks>
 internal sealed class SignedCallbackGuard(ISignedCallback callback) : IMiddleware
 {
@@ -74,17 +78,29 @@ internal sealed class SignedCallbackGuard(ISignedCallback callback) : IMiddlewar
             return;
         }
 
-        bool claimed = await admission
-            .ClaimAsync(callback.Name, identifier, cancellationToken)
-            .ConfigureAwait(false);
+        DateTimeOffset claimedAt = time.GetUtcNow();
+        CallbackClaim claim = (await admission
+                .ClaimAsync(callback.Name, identifier, claimedAt, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
-        if (!claimed)
+        if (claim is CallbackClaim.Settled)
         {
             CallbackLog.Repeated(log, callback.Name, context.TraceIdentifier);
             context.Response.StatusCode = StatusCodes.Status200OK;
+
+            return;
+        }
+
+        // Not a rejection: the provider delivers it again, and the delivery is carried
+        // once the claim settles or is given back, or has stood past the timeout.
+        if (claim is CallbackClaim.InProgress)
+        {
+            CallbackLog.InProgress(log, callback.Name, context.TraceIdentifier);
+            await Refusal.WriteAsync(context, ErrorCodes.CallbackInProgress, cancellationToken).ConfigureAwait(false);
 
             return;
         }
@@ -99,10 +115,7 @@ internal sealed class SignedCallbackGuard(ISignedCallback callback) : IMiddlewar
         }
         finally
         {
-            if (!carried)
-            {
-                await ReleasedAsync(context, identifier, CancellationToken.None).ConfigureAwait(false);
-            }
+            await ConcludedAsync(context, identifier, claimedAt, carried, CancellationToken.None).ConfigureAwait(false);
         }
     }
 
@@ -166,23 +179,36 @@ internal sealed class SignedCallbackGuard(ISignedCallback callback) : IMiddlewar
         }
     }
 
-    // In a scope of its own, so that nothing the route left open in the request's
-    // transaction holds the claim back; and under a token the request's abandonment
-    // does not cancel, so an abandoned delivery gives its claim back too.
-    private async ValueTask ReleasedAsync(HttpContext context, string identifier, CancellationToken cancellationToken)
+    // The claim settled where the route carried the delivery and given back where it
+    // did not or threw. In a scope of its own, so that nothing the route left open in
+    // the request's transaction holds the claim back; and under a token the request's
+    // abandonment does not cancel, so an abandoned delivery concludes its claim too.
+    private async ValueTask ConcludedAsync(
+        HttpContext context,
+        string identifier,
+        DateTimeOffset claimedAt,
+        bool carried,
+        CancellationToken cancellationToken)
     {
         await using AsyncServiceScope scope = context.RequestServices
             .GetRequiredService<IServiceScopeFactory>()
             .CreateAsyncScope();
 
         IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        CallbackAdmission admission = scope.ServiceProvider.GetRequiredService<CallbackAdmission>();
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
-        await scope.ServiceProvider
-            .GetRequiredService<CallbackAdmission>()
-            .ReleaseAsync(callback.Name, identifier, cancellationToken)
-            .ConfigureAwait(false);
+
+        if (carried)
+        {
+            await admission.SettleAsync(callback.Name, identifier, claimedAt, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            await admission.ReleaseAsync(callback.Name, identifier, claimedAt, cancellationToken).ConfigureAwait(false);
+        }
+
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }

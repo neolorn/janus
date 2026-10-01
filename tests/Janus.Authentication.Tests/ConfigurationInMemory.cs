@@ -59,7 +59,7 @@ internal sealed class ConfigurationInMemory : IConfigurationStore, IConfiguratio
         Setting<TValue> setting,
         CancellationToken cancellationToken) =>
         setting.Key.Equals(Unreachable)
-            ? throw new InvalidOperationException("The settings table at db.internal:5432 could not be reached.")
+            ? throw Unreached()
             : ValueTask.FromResult(Read(setting));
 
     /// <inheritdoc/>
@@ -151,6 +151,22 @@ internal sealed class ConfigurationInMemory : IConfigurationStore, IConfiguratio
                 return Result.Success();
             },
             Result.Failure));
+    }
+
+    // A store that has gone away throws its own fault over the one its connection
+    // threw, each carrying a message that names where the store lives.
+    private static InvalidOperationException Unreached()
+    {
+        try
+        {
+            throw new TimeoutException("The connection to db.internal:5432 timed out.");
+        }
+        catch (TimeoutException beneath)
+        {
+            return new InvalidOperationException(
+                "The settings table at db.internal:5432 could not be reached.",
+                beneath);
+        }
     }
 
     // A required key the deployment never named is undeclared, not a value nobody

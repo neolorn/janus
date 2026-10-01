@@ -38,7 +38,7 @@ internal static class ExplanationEndpoints
     private static async Task<IResult> ResolveAsync(
         IAccessGate gate,
         RequestSession browser,
-        Guid correlationId,
+        AuditRecordId correlationId,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(gate);
@@ -48,7 +48,7 @@ internal static class ExplanationEndpoints
             await gate
                 .ResolveAsync(
                     browser.Asking,
-                    new AuditRecordId(correlationId),
+                    correlationId,
                     cancellationToken)
                 .ConfigureAwait(false),
             Explained);
@@ -57,7 +57,7 @@ internal static class ExplanationEndpoints
     private static async Task<IResult> ResolveOwnAsync(
         IAccessGate gate,
         RequestSession browser,
-        Guid correlationId,
+        AuditRecordId correlationId,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(gate);
@@ -67,7 +67,7 @@ internal static class ExplanationEndpoints
             await gate
                 .ResolveOwnAsync(
                     browser.Asking,
-                    new AuditRecordId(correlationId),
+                    correlationId,
                     cancellationToken)
                 .ConfigureAwait(false),
             Explained);

@@ -42,8 +42,8 @@ public sealed class NeverLoggedValueAnalyzerTests
     /// CONV-LOG-003 AC1: the rule fires on the library's own carriers of a forbidden
     /// value, as they are marked in <c>Janus.Core</c>: a session identifier, recovery
     /// codes, the key-encryption keys, a link's code, an invitation's token, a
-    /// generator's secret and its address, an app password, and the text of a notice
-    /// in either language.
+    /// generator's secret and its address, an app password, the text of a notice in
+    /// either language, and a send's correlation reference.
     /// </summary>
     /// <returns>The running test.</returns>
     [Fact]
@@ -67,7 +67,8 @@ public sealed class NeverLoggedValueAnalyzerTests
                     GeneratorEnrolment enrolment,
                     IssuedAppPassword issued,
                     DocumentVersion notice,
-                    DocumentTranslation translation)
+                    DocumentTranslation translation,
+                    SendReference reference)
                 {
                     logger.LogInformation("{Session}", session);
                     logger.LogInformation("{Codes}", codes);
@@ -79,11 +80,12 @@ public sealed class NeverLoggedValueAnalyzerTests
                     logger.LogInformation("{Secret}", issued.Secret);
                     logger.LogInformation("{Text}", notice.Text);
                     logger.LogInformation("{Text}", translation.Text);
+                    logger.LogInformation("{Reference}", reference);
                 }
             }
             """);
 
-        Assert.Equal(10, reported.Length);
+        Assert.Equal(11, reported.Length);
         Assert.All(reported, rule => Assert.Equal("JAN0002", rule));
     }
 

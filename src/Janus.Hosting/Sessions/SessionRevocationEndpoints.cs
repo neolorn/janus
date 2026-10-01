@@ -41,7 +41,7 @@ internal static class SessionRevocationEndpoints
     private static async Task<IResult> RevokeAccountAsync(
         ISessions sessions,
         RequestSession browser,
-        Guid subject,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sessions);
@@ -52,7 +52,7 @@ internal static class SessionRevocationEndpoints
                 .RevokeAccountAsync(
                     browser.Asking,
                     browser.Required.Id,
-                    new SubjectId(subject),
+                    subject,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);

@@ -1159,13 +1159,13 @@ Janus.Core.HeldGrant.Subject.get -> Janus.Core.GrantSubject
 Janus.Core.HeldGrant.Subject.init -> void
 Janus.Core.HostedMailbox
 Janus.Core.HostedMailbox.<Clone>$() -> Janus.Core.HostedMailbox!
-Janus.Core.HostedMailbox.Address.get -> string!
+Janus.Core.HostedMailbox.Address.get -> Janus.Core.EmailAddress?
 Janus.Core.HostedMailbox.Address.init -> void
-Janus.Core.HostedMailbox.Deconstruct(out Janus.Core.MailboxId? Mailbox, out string! Address, out bool Enabled) -> void
+Janus.Core.HostedMailbox.Deconstruct(out Janus.Core.MailboxId? Mailbox, out Janus.Core.EmailAddress? Address, out bool Enabled) -> void
 Janus.Core.HostedMailbox.Enabled.get -> bool
 Janus.Core.HostedMailbox.Enabled.init -> void
 Janus.Core.HostedMailbox.Equals(Janus.Core.HostedMailbox? other) -> bool
-Janus.Core.HostedMailbox.HostedMailbox(Janus.Core.MailboxId? Mailbox, string! Address, bool Enabled) -> void
+Janus.Core.HostedMailbox.HostedMailbox(Janus.Core.MailboxId? Mailbox, Janus.Core.EmailAddress? Address, bool Enabled) -> void
 Janus.Core.HostedMailbox.Mailbox.get -> Janus.Core.MailboxId?
 Janus.Core.HostedMailbox.Mailbox.init -> void
 Janus.Core.IAccessGate
@@ -1650,15 +1650,15 @@ Janus.Core.MailboxId.Value.get -> System.Guid
 Janus.Core.MailboxId.Value.init -> void
 Janus.Core.MailboxPush
 Janus.Core.MailboxPush.<Clone>$() -> Janus.Core.MailboxPush!
-Janus.Core.MailboxPush.Address.get -> string!
+Janus.Core.MailboxPush.Address.get -> Janus.Core.EmailAddress
 Janus.Core.MailboxPush.Address.init -> void
-Janus.Core.MailboxPush.Deconstruct(out Janus.Core.MailboxId Mailbox, out System.Guid Key, out string! Address, out Janus.Core.MailboxState State) -> void
+Janus.Core.MailboxPush.Deconstruct(out Janus.Core.MailboxId Mailbox, out System.Guid Key, out Janus.Core.EmailAddress Address, out Janus.Core.MailboxState State) -> void
 Janus.Core.MailboxPush.Equals(Janus.Core.MailboxPush? other) -> bool
 Janus.Core.MailboxPush.Key.get -> System.Guid
 Janus.Core.MailboxPush.Key.init -> void
 Janus.Core.MailboxPush.Mailbox.get -> Janus.Core.MailboxId
 Janus.Core.MailboxPush.Mailbox.init -> void
-Janus.Core.MailboxPush.MailboxPush(Janus.Core.MailboxId Mailbox, System.Guid Key, string! Address, Janus.Core.MailboxState State) -> void
+Janus.Core.MailboxPush.MailboxPush(Janus.Core.MailboxId Mailbox, System.Guid Key, Janus.Core.EmailAddress Address, Janus.Core.MailboxState State) -> void
 Janus.Core.MailboxPush.State.get -> Janus.Core.MailboxState
 Janus.Core.MailboxPush.State.init -> void
 Janus.Core.FormerMailbox
@@ -3585,6 +3585,8 @@ static Janus.Core.AuditEntry.operator ==(Janus.Core.AuditEntry? left, Janus.Core
 static Janus.Core.AuditRecordId.New(System.TimeProvider! time) -> Janus.Core.AuditRecordId
 static Janus.Core.AuditRecordId.operator !=(Janus.Core.AuditRecordId left, Janus.Core.AuditRecordId right) -> bool
 static Janus.Core.AuditRecordId.operator ==(Janus.Core.AuditRecordId left, Janus.Core.AuditRecordId right) -> bool
+static Janus.Core.AuditRecordId.Parse(string! s, System.IFormatProvider? provider) -> Janus.Core.AuditRecordId
+static Janus.Core.AuditRecordId.TryParse(string? s, System.IFormatProvider? provider, out Janus.Core.AuditRecordId result) -> bool
 static Janus.Core.AuthenticationAddresses.operator !=(Janus.Core.AuthenticationAddresses? left, Janus.Core.AuthenticationAddresses? right) -> bool
 static Janus.Core.AuthenticationAddresses.operator ==(Janus.Core.AuthenticationAddresses? left, Janus.Core.AuthenticationAddresses? right) -> bool
 static Janus.Core.AuthenticatorAssertion.operator !=(Janus.Core.AuthenticatorAssertion? left, Janus.Core.AuthenticatorAssertion? right) -> bool
@@ -3594,6 +3596,8 @@ static Janus.Core.AuthenticatorAttestation.operator ==(Janus.Core.AuthenticatorA
 static Janus.Core.AuthenticatorId.New(System.TimeProvider! time) -> Janus.Core.AuthenticatorId
 static Janus.Core.AuthenticatorId.operator !=(Janus.Core.AuthenticatorId left, Janus.Core.AuthenticatorId right) -> bool
 static Janus.Core.AuthenticatorId.operator ==(Janus.Core.AuthenticatorId left, Janus.Core.AuthenticatorId right) -> bool
+static Janus.Core.AuthenticatorId.Parse(string! s, System.IFormatProvider? provider) -> Janus.Core.AuthenticatorId
+static Janus.Core.AuthenticatorId.TryParse(string? s, System.IFormatProvider? provider, out Janus.Core.AuthenticatorId result) -> bool
 static Janus.Core.AuthorizationDeclaration.operator !=(Janus.Core.AuthorizationDeclaration? left, Janus.Core.AuthorizationDeclaration? right) -> bool
 static Janus.Core.AuthorizationDeclaration.operator ==(Janus.Core.AuthorizationDeclaration? left, Janus.Core.AuthorizationDeclaration? right) -> bool
 static Janus.Core.BackupSelection.operator !=(Janus.Core.BackupSelection? left, Janus.Core.BackupSelection? right) -> bool
@@ -3688,6 +3692,7 @@ static Janus.Core.Configuration.Settings.IdentifiersEmailMax.get -> Janus.Core.C
 static Janus.Core.Configuration.Settings.IdentifiersPhoneMax.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.IdentifiersUsernameChangeCoolOff.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.IdentifiersUsernameEnabled.get -> Janus.Core.Configuration.FlagSetting!
+static Janus.Core.Configuration.Settings.IntegrationCallbackClaimTimeout.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.IntegrationCallbackRateLimit.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.IntegrationMailEndpoint.get -> Janus.Core.Configuration.TextSetting!
 static Janus.Core.Configuration.Settings.IntegrationMailServerEndpoint.get -> Janus.Core.Configuration.TextSetting!
@@ -3806,6 +3811,8 @@ static Janus.Core.DeviceDescription.operator ==(Janus.Core.DeviceDescription? le
 static Janus.Core.DeviceId.New(System.TimeProvider! time) -> Janus.Core.DeviceId
 static Janus.Core.DeviceId.operator !=(Janus.Core.DeviceId left, Janus.Core.DeviceId right) -> bool
 static Janus.Core.DeviceId.operator ==(Janus.Core.DeviceId left, Janus.Core.DeviceId right) -> bool
+static Janus.Core.DeviceId.Parse(string! s, System.IFormatProvider? provider) -> Janus.Core.DeviceId
+static Janus.Core.DeviceId.TryParse(string? s, System.IFormatProvider? provider, out Janus.Core.DeviceId result) -> bool
 static Janus.Core.DeviceSummary.operator !=(Janus.Core.DeviceSummary? left, Janus.Core.DeviceSummary? right) -> bool
 static Janus.Core.DeviceSummary.operator ==(Janus.Core.DeviceSummary? left, Janus.Core.DeviceSummary? right) -> bool
 static Janus.Core.DeviceVerified.operator !=(Janus.Core.DeviceVerified? left, Janus.Core.DeviceVerified? right) -> bool
@@ -3839,6 +3846,8 @@ static Janus.Core.EnrolmentSessionId.operator !=(Janus.Core.EnrolmentSessionId l
 static Janus.Core.EnrolmentSessionId.operator ==(Janus.Core.EnrolmentSessionId left, Janus.Core.EnrolmentSessionId right) -> bool
 static Janus.Core.ErasureId.operator !=(Janus.Core.ErasureId left, Janus.Core.ErasureId right) -> bool
 static Janus.Core.ErasureId.operator ==(Janus.Core.ErasureId left, Janus.Core.ErasureId right) -> bool
+static Janus.Core.ErasureId.Parse(string! s, System.IFormatProvider? provider) -> Janus.Core.ErasureId
+static Janus.Core.ErasureId.TryParse(string? s, System.IFormatProvider? provider, out Janus.Core.ErasureId result) -> bool
 static Janus.Core.ErasureProgress.operator !=(Janus.Core.ErasureProgress? left, Janus.Core.ErasureProgress? right) -> bool
 static Janus.Core.ErasureProgress.operator ==(Janus.Core.ErasureProgress? left, Janus.Core.ErasureProgress? right) -> bool
 static Janus.Core.ErasureRequested.operator !=(Janus.Core.ErasureRequested? left, Janus.Core.ErasureRequested? right) -> bool
@@ -3857,6 +3866,7 @@ static Janus.Core.ErrorCodes.AccountStateConflict.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.AffirmationRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.BreakGlassConsumed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.BreakGlassInvalid.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.CallbackInProgress.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.CallbackRejected.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ChallengeRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ChangePending.get -> Janus.Core.ErrorCode
@@ -4030,6 +4040,8 @@ static Janus.Core.GeneratorEnrolment.operator ==(Janus.Core.GeneratorEnrolment? 
 static Janus.Core.GrantId.New(System.TimeProvider! time) -> Janus.Core.GrantId
 static Janus.Core.GrantId.operator !=(Janus.Core.GrantId left, Janus.Core.GrantId right) -> bool
 static Janus.Core.GrantId.operator ==(Janus.Core.GrantId left, Janus.Core.GrantId right) -> bool
+static Janus.Core.GrantId.Parse(string! s, System.IFormatProvider? provider) -> Janus.Core.GrantId
+static Janus.Core.GrantId.TryParse(string? s, System.IFormatProvider? provider, out Janus.Core.GrantId result) -> bool
 static Janus.Core.GrantRequest.operator !=(Janus.Core.GrantRequest? left, Janus.Core.GrantRequest? right) -> bool
 static Janus.Core.GrantRequest.operator ==(Janus.Core.GrantRequest? left, Janus.Core.GrantRequest? right) -> bool
 static Janus.Core.GrantSubject.Of(Janus.Core.GroupId group) -> Janus.Core.GrantSubject
@@ -4039,6 +4051,8 @@ static Janus.Core.GrantSubject.operator ==(Janus.Core.GrantSubject left, Janus.C
 static Janus.Core.GroupId.New(System.TimeProvider! time) -> Janus.Core.GroupId
 static Janus.Core.GroupId.operator !=(Janus.Core.GroupId left, Janus.Core.GroupId right) -> bool
 static Janus.Core.GroupId.operator ==(Janus.Core.GroupId left, Janus.Core.GroupId right) -> bool
+static Janus.Core.GroupId.Parse(string! s, System.IFormatProvider? provider) -> Janus.Core.GroupId
+static Janus.Core.GroupId.TryParse(string? s, System.IFormatProvider? provider, out Janus.Core.GroupId result) -> bool
 static Janus.Core.HeldGrant.operator !=(Janus.Core.HeldGrant? left, Janus.Core.HeldGrant? right) -> bool
 static Janus.Core.HeldGrant.operator ==(Janus.Core.HeldGrant? left, Janus.Core.HeldGrant? right) -> bool
 static Janus.Core.HostedMailbox.operator !=(Janus.Core.HostedMailbox? left, Janus.Core.HostedMailbox? right) -> bool
@@ -4048,6 +4062,8 @@ static Janus.Core.IdentifierAdded.operator ==(Janus.Core.IdentifierAdded? left, 
 static Janus.Core.IdentifierId.New(System.TimeProvider! time) -> Janus.Core.IdentifierId
 static Janus.Core.IdentifierId.operator !=(Janus.Core.IdentifierId left, Janus.Core.IdentifierId right) -> bool
 static Janus.Core.IdentifierId.operator ==(Janus.Core.IdentifierId left, Janus.Core.IdentifierId right) -> bool
+static Janus.Core.IdentifierId.Parse(string! s, System.IFormatProvider? provider) -> Janus.Core.IdentifierId
+static Janus.Core.IdentifierId.TryParse(string? s, System.IFormatProvider? provider, out Janus.Core.IdentifierId result) -> bool
 static Janus.Core.IdentifierKinds.Detect(string! entered, bool usernamesEnabled) -> Janus.Core.IdentifierKind?
 static Janus.Core.IdentifierPrimaryChanged.operator !=(Janus.Core.IdentifierPrimaryChanged? left, Janus.Core.IdentifierPrimaryChanged? right) -> bool
 static Janus.Core.IdentifierPrimaryChanged.operator ==(Janus.Core.IdentifierPrimaryChanged? left, Janus.Core.IdentifierPrimaryChanged? right) -> bool
@@ -4062,6 +4078,8 @@ static Janus.Core.InvitationDocument.operator ==(Janus.Core.InvitationDocument? 
 static Janus.Core.InvitationId.New(System.TimeProvider! time) -> Janus.Core.InvitationId
 static Janus.Core.InvitationId.operator !=(Janus.Core.InvitationId left, Janus.Core.InvitationId right) -> bool
 static Janus.Core.InvitationId.operator ==(Janus.Core.InvitationId left, Janus.Core.InvitationId right) -> bool
+static Janus.Core.InvitationId.Parse(string! s, System.IFormatProvider? provider) -> Janus.Core.InvitationId
+static Janus.Core.InvitationId.TryParse(string? s, System.IFormatProvider? provider, out Janus.Core.InvitationId result) -> bool
 static Janus.Core.InvitationRequest.operator !=(Janus.Core.InvitationRequest? left, Janus.Core.InvitationRequest? right) -> bool
 static Janus.Core.InvitationRequest.operator ==(Janus.Core.InvitationRequest? left, Janus.Core.InvitationRequest? right) -> bool
 static Janus.Core.IssuedAppPassword.operator !=(Janus.Core.IssuedAppPassword? left, Janus.Core.IssuedAppPassword? right) -> bool
@@ -4124,6 +4142,8 @@ static Janus.Core.OrganizationErased.operator ==(Janus.Core.OrganizationErased? 
 static Janus.Core.OrganizationId.New(System.TimeProvider! time) -> Janus.Core.OrganizationId
 static Janus.Core.OrganizationId.operator !=(Janus.Core.OrganizationId left, Janus.Core.OrganizationId right) -> bool
 static Janus.Core.OrganizationId.operator ==(Janus.Core.OrganizationId left, Janus.Core.OrganizationId right) -> bool
+static Janus.Core.OrganizationId.Parse(string! s, System.IFormatProvider? provider) -> Janus.Core.OrganizationId
+static Janus.Core.OrganizationId.TryParse(string? s, System.IFormatProvider? provider, out Janus.Core.OrganizationId result) -> bool
 static Janus.Core.OrganizationPolicy.operator !=(Janus.Core.OrganizationPolicy? left, Janus.Core.OrganizationPolicy? right) -> bool
 static Janus.Core.OrganizationPolicy.operator ==(Janus.Core.OrganizationPolicy? left, Janus.Core.OrganizationPolicy? right) -> bool
 static Janus.Core.PasskeyAddresses.operator !=(Janus.Core.PasskeyAddresses? left, Janus.Core.PasskeyAddresses? right) -> bool
@@ -4184,6 +4204,8 @@ static Janus.Core.PrivacyRequestEntry.operator ==(Janus.Core.PrivacyRequestEntry
 static Janus.Core.PrivacyRequestId.Of(System.DateTimeOffset at) -> Janus.Core.PrivacyRequestId
 static Janus.Core.PrivacyRequestId.operator !=(Janus.Core.PrivacyRequestId left, Janus.Core.PrivacyRequestId right) -> bool
 static Janus.Core.PrivacyRequestId.operator ==(Janus.Core.PrivacyRequestId left, Janus.Core.PrivacyRequestId right) -> bool
+static Janus.Core.PrivacyRequestId.Parse(string! s, System.IFormatProvider? provider) -> Janus.Core.PrivacyRequestId
+static Janus.Core.PrivacyRequestId.TryParse(string? s, System.IFormatProvider? provider, out Janus.Core.PrivacyRequestId result) -> bool
 static Janus.Core.PrivacyRequestReceipt.operator !=(Janus.Core.PrivacyRequestReceipt? left, Janus.Core.PrivacyRequestReceipt? right) -> bool
 static Janus.Core.PrivacyRequestReceipt.operator ==(Janus.Core.PrivacyRequestReceipt? left, Janus.Core.PrivacyRequestReceipt? right) -> bool
 static Janus.Core.ProcessingRecord.operator !=(Janus.Core.ProcessingRecord? left, Janus.Core.ProcessingRecord? right) -> bool
@@ -4279,6 +4301,8 @@ static Janus.Core.SessionDetail.operator ==(Janus.Core.SessionDetail? left, Janu
 static Janus.Core.SessionId.New(System.TimeProvider! time) -> Janus.Core.SessionId
 static Janus.Core.SessionId.operator !=(Janus.Core.SessionId left, Janus.Core.SessionId right) -> bool
 static Janus.Core.SessionId.operator ==(Janus.Core.SessionId left, Janus.Core.SessionId right) -> bool
+static Janus.Core.SessionId.Parse(string! s, System.IFormatProvider? provider) -> Janus.Core.SessionId
+static Janus.Core.SessionId.TryParse(string? s, System.IFormatProvider? provider, out Janus.Core.SessionId result) -> bool
 static Janus.Core.SessionLocation.operator !=(Janus.Core.SessionLocation? left, Janus.Core.SessionLocation? right) -> bool
 static Janus.Core.SessionLocation.operator ==(Janus.Core.SessionLocation? left, Janus.Core.SessionLocation? right) -> bool
 static Janus.Core.SessionSummary.operator !=(Janus.Core.SessionSummary? left, Janus.Core.SessionSummary? right) -> bool
@@ -4308,6 +4332,8 @@ static Janus.Core.SubjectExport.operator ==(Janus.Core.SubjectExport? left, Janu
 static Janus.Core.SubjectId.New(System.Security.Cryptography.RandomNumberGenerator! randomness) -> Janus.Core.SubjectId
 static Janus.Core.SubjectId.operator !=(Janus.Core.SubjectId left, Janus.Core.SubjectId right) -> bool
 static Janus.Core.SubjectId.operator ==(Janus.Core.SubjectId left, Janus.Core.SubjectId right) -> bool
+static Janus.Core.SubjectId.Parse(string! s, System.IFormatProvider? provider) -> Janus.Core.SubjectId
+static Janus.Core.SubjectId.TryParse(string? s, System.IFormatProvider? provider, out Janus.Core.SubjectId result) -> bool
 static Janus.Core.SubscriberConfirmation.operator !=(Janus.Core.SubscriberConfirmation? left, Janus.Core.SubscriberConfirmation? right) -> bool
 static Janus.Core.SubscriberConfirmation.operator ==(Janus.Core.SubscriberConfirmation? left, Janus.Core.SubscriberConfirmation? right) -> bool
 static Janus.Core.SystemPrincipal.ForDeployment(string! name, string! reason, params System.Collections.Generic.IReadOnlyList<Janus.Core.SystemOperation>! operations) -> Janus.Core.SystemPrincipal!

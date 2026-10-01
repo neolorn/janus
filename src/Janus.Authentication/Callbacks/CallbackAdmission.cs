@@ -15,7 +15,7 @@ namespace Janus.Authentication.Callbacks;
 /// answers a flood before any lookup, the count of rejections that raises the alert,
 /// and the claim on a provider's event that carries a repeated delivery once.
 /// </summary>
-/// <param name="configuration">Where the rate limit and the alert threshold come from.</param>
+/// <param name="configuration">Where the rate limit, the alert threshold and the claim timeout come from.</param>
 /// <param name="callbacks">What counts callbacks per source.</param>
 /// <param name="events">What holds the claimed provider events.</param>
 /// <param name="alerts">Where the repeated-failure alert goes.</param>
@@ -135,20 +135,74 @@ internal sealed class CallbackAdmission(
     }
 
     /// <summary>
-    /// Claims a provider's event for a callback, so it is carried once however many
-    /// times the provider delivers it.
+    /// Claims a host callback's event for one delivery: the claim is the delivery's
+    /// where the event holds none, or holds one left unsettled for
+    /// <c>integration.callback.claimtimeout</c> or longer, which it takes over.
+    /// </summary>
+    /// <param name="callback">The callback's name.</param>
+    /// <param name="identifier">The provider's event identifier.</param>
+    /// <param name="at">When the delivery arrived, which the claim records.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>What the delivery found, or the failure that kept the timeout from being read.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public async ValueTask<Result<CallbackClaim>> ClaimAsync(
+        string callback,
+        string identifier,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(callback);
+        ArgumentNullException.ThrowIfNull(identifier);
+
+        Result<TimeSpan> timeout = await configuration
+            .ReadAsync(Settings.IntegrationCallbackClaimTimeout, cancellationToken)
+            .ConfigureAwait(false);
+
+        return await timeout
+            .Match<ValueTask<Result<CallbackClaim>>>(
+                async standing => Result.Success(await events
+                    .ClaimAsync(callback, Hashed(identifier), at, at - standing, cancellationToken)
+                    .ConfigureAwait(false)),
+                error => ValueTask.FromResult(Result.Failure<CallbackClaim>(error)))
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Claims a provider's security event settled, in the transaction its work runs in,
+    /// so it is carried once however many times the provider delivers it.
     /// </summary>
     /// <param name="callback">The callback's name.</param>
     /// <param name="identifier">The provider's event identifier.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>Whether this delivery is the one to carry.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
-    public ValueTask<bool> ClaimAsync(string callback, string identifier, CancellationToken cancellationToken)
+    public ValueTask<bool> CarryAsync(string callback, string identifier, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(callback);
         ArgumentNullException.ThrowIfNull(identifier);
 
-        return events.ClaimAsync(callback, Hashed(identifier), time.GetUtcNow(), cancellationToken);
+        return events.CarryAsync(callback, Hashed(identifier), time.GetUtcNow(), cancellationToken);
+    }
+
+    /// <summary>
+    /// Settles the claim a delivery took once the host's route has carried it.
+    /// </summary>
+    /// <param name="callback">The callback's name.</param>
+    /// <param name="identifier">The provider's event identifier.</param>
+    /// <param name="claimed">When the delivery took the claim.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of settling it.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public ValueTask SettleAsync(
+        string callback,
+        string identifier,
+        DateTimeOffset claimed,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(callback);
+        ArgumentNullException.ThrowIfNull(identifier);
+
+        return events.SettleAsync(callback, Hashed(identifier), claimed, time.GetUtcNow(), cancellationToken);
     }
 
     /// <summary>
@@ -157,15 +211,20 @@ internal sealed class CallbackAdmission(
     /// </summary>
     /// <param name="callback">The callback's name.</param>
     /// <param name="identifier">The provider's event identifier.</param>
+    /// <param name="claimed">When the delivery took the claim.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of giving it back.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
-    public ValueTask ReleaseAsync(string callback, string identifier, CancellationToken cancellationToken)
+    public ValueTask ReleaseAsync(
+        string callback,
+        string identifier,
+        DateTimeOffset claimed,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(callback);
         ArgumentNullException.ThrowIfNull(identifier);
 
-        return events.ReleaseAsync(callback, Hashed(identifier), cancellationToken);
+        return events.ReleaseAsync(callback, Hashed(identifier), claimed, cancellationToken);
     }
 
     private static byte[] Hashed(string identifier) => SHA256.HashData(Encoding.UTF8.GetBytes(identifier));

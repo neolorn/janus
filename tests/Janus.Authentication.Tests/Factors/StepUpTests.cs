@@ -17,6 +17,10 @@ namespace Janus.Authentication.Tests.Factors;
 [Trait("kind", "unit")]
 public sealed class StepUpTests : IDisposable
 {
+    // The head every library assembly's name carries, read from the core's
+    // namespace so no string spells the product name (CONV-NAME-001).
+    private static readonly string Library = typeof(Result).Namespace!.Split('.')[0] + ".";
+
     private static readonly DateTimeOffset Noon =
         new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
@@ -676,7 +680,7 @@ public sealed class StepUpTests : IDisposable
 
         Assert.DoesNotContain(
             typeof(Gate).Assembly.GetReferencedAssemblies(),
-            referenced => referenced.Name!.StartsWith("Janus.", StringComparison.Ordinal));
+            referenced => referenced.Name!.StartsWith(Library, StringComparison.Ordinal));
     }
 
     private static HashSet<Factor> Set(params Factor[] factors) => [.. factors];
