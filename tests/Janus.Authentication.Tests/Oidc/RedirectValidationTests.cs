@@ -56,6 +56,40 @@ public sealed class RedirectValidationTests
     }
 
     /// <summary>
+    /// AUTH-OIDC-006, API-REDIR-001 AC3 (D-166, 145): a return address a code would cross
+    /// a network to in plain text stops the deployment, naming the client; one on a
+    /// loopback IP literal crosses none, and starts.
+    /// </summary>
+    /// <param name="redirect">The return address registered.</param>
+    /// <param name="starts">Whether the deployment starts with it.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("http://app.example.test/signin/callback", false)]
+    [InlineData("http://localhost:8080/signin/callback", false)]
+    [InlineData("http://127.0.0.2:8080/signin/callback", false)]
+    [InlineData("ftp://app.example.test/signin/callback", false)]
+    [InlineData("http://127.0.0.1:8080/signin/callback", true)]
+    [InlineData("http://[::1]:8080/signin/callback", true)]
+    public async Task AUTH_OIDC_006_APlaintextReturnAddressStopsStartupAsync(string redirect, bool starts)
+    {
+        await RegisterAsync(Application, redirect);
+
+        Error? refused = await RefusalAsync();
+
+        if (starts)
+        {
+            Assert.Null(refused);
+
+            return;
+        }
+
+        Assert.NotNull(refused);
+        Assert.Equal(
+            (ErrorCodes.StartupRedirectClient, Application),
+            (refused.Code, refused.Details["client"].GetString()));
+    }
+
+    /// <summary>
     /// LIB-HOST-001 AC3: the default is a key outside the declarations, so a
     /// deployment that names none starts and falls back to nothing.
     /// </summary>

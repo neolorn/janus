@@ -31,6 +31,8 @@ internal sealed class ClientRegistry(
     RandomNumberGenerator randomness,
     TimeProvider time)
 {
+    private const string Redirect = "redirect";
+
     /// <summary>
     /// The principal a registration from the server is recorded under: the command
     /// cannot know which person at the server runs it.
@@ -55,10 +57,17 @@ internal sealed class ClientRegistry(
 
         if (Unregistrable(client) is string member)
         {
-            return Result.Failure(Error.From(
-                ErrorCodes.RequestMalformed,
-                "member",
-                JsonSerializer.SerializeToElement(member)));
+            // API-REDIR-001 AC3: a return address is refused as startup refuses it, so
+            // nothing registered here stops the next start.
+            return Result.Failure(string.Equals(member, Redirect, StringComparison.Ordinal)
+                ? Error.From(
+                    ErrorCodes.StartupRedirectClient,
+                    "client",
+                    JsonSerializer.SerializeToElement(client.ClientId))
+                : Error.From(
+                    ErrorCodes.RequestMalformed,
+                    "member",
+                    JsonSerializer.SerializeToElement(member)));
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -106,7 +115,7 @@ internal sealed class ClientRegistry(
     private static string? Unregistrable(OidcClient client) =>
         Blank(client.ClientId) ? "client"
         : string.IsNullOrWhiteSpace(client.Name) ? "name"
-        : !RedirectValidation.Origin(client.Redirect) ? "redirect"
+        : !RedirectValidation.Origin(client.Redirect) ? Redirect
         : client.Scopes.Count is 0 || client.Scopes.Any(Blank) ? "scopes"
         : null;
 

@@ -114,7 +114,6 @@ public sealed class ClientRegistryTests : IAsyncDisposable
     [Theory]
     [InlineData("client")]
     [InlineData("name")]
-    [InlineData("redirect")]
     [InlineData("scopes")]
     public async Task AUTH_OIDC_001_AClientTheRegistryCannotServeIsRefusedAsync(string member)
     {
@@ -122,11 +121,33 @@ public sealed class ClientRegistryTests : IAsyncDisposable
         {
             "client" => Mail with { ClientId = "mail server" },
             "name" => Mail with { Name = " " },
-            "redirect" => Mail with { Redirect = "/callback" },
             _ => Mail with { Scopes = ["openid", string.Empty] },
         };
 
         Assert.Equal(member, Refused(await RegisteredAsync(broken)));
+        Assert.Empty(_clients.Registered);
+        Assert.Empty(_audit.Registrations);
+        Assert.Equal(0, _work.Opened);
+    }
+
+    /// <summary>
+    /// AUTH-OIDC-006, API-REDIR-001 AC3 (D-166, 145): a return address startup would
+    /// refuse is refused where it is registered, as startup refuses it, naming the
+    /// client, and nothing is registered or recorded.
+    /// </summary>
+    /// <param name="redirect">The return address.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("/callback")]
+    [InlineData("http://mail.example.test/callback")]
+    public async Task AUTH_OIDC_006_AReturnAddressStartupWouldRefuseIsNotRegisteredAsync(string redirect)
+    {
+        Error refused = (await RegisteredAsync(Mail with { Redirect = redirect }))
+            .Match(() => throw new InvalidOperationException("The client was registered."), failure => failure);
+
+        Assert.Equal(
+            (ErrorCodes.StartupRedirectClient, Mail.ClientId),
+            (refused.Code, refused.Details["client"].GetString()));
         Assert.Empty(_clients.Registered);
         Assert.Empty(_audit.Registrations);
         Assert.Equal(0, _work.Opened);

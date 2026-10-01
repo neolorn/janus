@@ -926,7 +926,9 @@ against the public contract of LIB-API-001.
   suspension carries when its window ends. None carries secret material.
 - The client registry is the one list of return destinations. Every registered client's
   return address is read at startup, and a deployment holding one that is not an
-  absolute origin does not start. Registration resolves the client identifier it is
+  absolute `https` address with a host, or `http` on a loopback IP literal (`127.0.0.1`,
+  `[::1]`), does not start, failing `model.startup.redirectclient` naming the client;
+  `register-client` refuses such an address the same way. Registration resolves the client identifier it is
   given against the registry as it takes it, and what a completed registration reports
   as the return is the address that client registered; no step after the first takes a
   destination at all. An identifier the registry does not hold registers the person

@@ -121,6 +121,30 @@ public sealed class RegisterClientTests(BootstrappedDeployment deployment) : ICl
         Assert.Equal(("api.request.malformed", "scopes"), Refusal(missing));
     }
 
+    /// <summary>
+    /// AUTH-OIDC-006, API-REDIR-001 AC3 (D-166, 145): a plaintext return address off the
+    /// loopback is refused by the command as startup would refuse it, naming the client,
+    /// and nothing is registered.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_OIDC_006_APlaintextReturnAddressIsNotRegisteredAsync()
+    {
+        Invocation run = await RegisteredAsync(Arguments("plain", "protocol", "http://mail.example.test/callback"));
+
+        using var refusal = JsonDocument.Parse(run.Error);
+
+        Assert.NotEqual(0, run.ExitCode);
+        Assert.Equal("model.startup.redirectclient", refusal.RootElement.GetProperty("code").GetString());
+        Assert.Equal("plain", refusal.RootElement.GetProperty("details").GetProperty("client").GetString());
+
+        await using NpgsqlConnection connection = await deployment.OpenAsync();
+
+        Assert.Equal(
+            0,
+            await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM identity.oidc_clients WHERE client_id = 'plain'"));
+    }
+
     private static IReadOnlyList<string> Arguments(string client, string kind, string redirect) =>
     [
         "register-client",
