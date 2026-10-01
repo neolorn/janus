@@ -1252,8 +1252,9 @@ against the public contract of LIB-API-001.
   token, and its own layer that asks for `offline_access` is refused where it asks, with
   `invalid_request`; a protocol client is handed one that rotates on use, and presenting
   a spent one ends the session everything stood on. An authorization request naming a
-  client the registry does not hold is answered 400, and a destination that is not the
-  client's registered one is replaced by it rather than refused. Every access token
+  client the registry does not hold is answered 400, and a pushed `redirect_uri` that is
+  not the client's registered one is refused 400 `invalid_request` with no description
+  and no `request_uri`; a push naming none takes the registered one. Every access token
   names the client it was issued to in `aud`, beside `client_id`, as RFC 9068 has it, so
   a party verifying a token offline can refuse one issued to any other client. The token
   and userinfo routes are carried on the machine profile, a second pipeline profile that

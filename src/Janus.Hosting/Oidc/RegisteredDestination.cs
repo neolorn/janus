@@ -2,7 +2,9 @@ using System;
 using System.Threading.Tasks;
 using Janus.Authentication.Oidc;
 using Janus.Core;
+using Microsoft.AspNetCore;
 using Microsoft.Extensions.Logging;
+using OpenIddict.Abstractions;
 using OpenIddict.Server;
 
 namespace Janus.Hosting.Oidc;
@@ -11,15 +13,16 @@ namespace Janus.Hosting.Oidc;
 /// Where the code is returned to, which is the one destination the registry holds.
 /// </summary>
 /// <param name="clients">The registry the client is read from.</param>
-/// <param name="log">Where a replaced destination is recorded.</param>
+/// <param name="log">Where a refused destination is recorded.</param>
 /// <remarks>
-/// Implements API-REDIR-001 and AUTH-OIDC-006. The destination is not matched by prefix
-/// or pattern: either the request named the client's one registered destination or it
-/// did not, and one that did not is replaced by the registered one before anything else
-/// reads it, so the answer reveals nothing about the check (API-REDIR-001 AC1) and the
-/// code goes where the deployment registered whatever was asked for. It is judged where
-/// the request is pushed, because every authorization request is (AUTH-OIDC-006 AC2)
-/// and the one the browser then carries holds only what was kept here.
+/// Implements AUTH-OIDC-006 AC1 and API-REDIR-001 AC4. The destination is not matched by
+/// prefix or pattern: either the request named the client's one registered destination
+/// or it did not, and a pushed request is an authorization request validated as one
+/// (RFC 9126 section 2.1), so one that named another is refused with
+/// <c>invalid_request</c>, no description and no reference (OAuth 2.1 section 2.3.5). A
+/// request naming none takes the registered one. It is judged where the request is
+/// pushed, because every authorization request is (AUTH-OIDC-006 AC2) and the one the
+/// browser then carries holds only what was kept here.
 /// </remarks>
 internal sealed class RegisteredDestination(
     IOidcClientStore clients,
@@ -47,14 +50,25 @@ internal sealed class RegisteredDestination(
             return;
         }
 
+        if (context.RedirectUri is null)
+        {
+            context.Request.RedirectUri = client.Redirect;
+            context.SetRedirectUri(client.Redirect);
+
+            return;
+        }
+
         if (string.Equals(context.RedirectUri, client.Redirect, StringComparison.Ordinal))
         {
             return;
         }
 
-        OidcLog.DestinationReplaced(log, client.ClientId, context.RedirectUri ?? string.Empty);
+        OidcLog.DestinationRefused(
+            log,
+            context.Transaction.GetHttpRequest()?.HttpContext.TraceIdentifier ?? string.Empty,
+            client.ClientId,
+            context.RedirectUri);
 
-        context.Request.RedirectUri = client.Redirect;
-        context.SetRedirectUri(client.Redirect);
+        context.Reject(error: OpenIddictConstants.Errors.InvalidRequest);
     }
 }

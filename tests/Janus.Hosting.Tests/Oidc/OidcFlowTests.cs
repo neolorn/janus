@@ -349,31 +349,60 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
-    /// API-REDIR-001 AC1 and AC4: a destination that is not the client's registered
-    /// one is replaced by it rather than refused, and the attempt is recorded.
+    /// AUTH-OIDC-006 AC1 and API-REDIR-001 AC4 (D-166, 145): a pushed request naming a
+    /// destination that is not the client's registered one is an authorization request
+    /// that fails, refused <c>invalid_request</c> with no description and no reference,
+    /// and the attempt is recorded.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task API_REDIR_001_AC1_AnUnknownDestinationIsReplacedAndLoggedAsync()
+    public async Task AUTH_OIDC_006_AC1_APushedRequestNamingAnUnregisteredDestinationIsRefusedAsync()
     {
         await using var deployment = new Deployment();
 
-        Browser browser = await RelyingParty.PreparedAsync(deployment);
-        Answer answered = await browser.SendAsync(
-            "GET",
-            await RelyingParty.AuthorizeAsync(
-                deployment,
-                RelyingParty.Application,
-                silent: true,
-                redirect: "https://attacker.test/collect"));
+        _ = await RelyingParty.PreparedAsync(deployment);
 
-        Assert.Equal(StatusCodes.Status302Found, answered.Status);
-        Assert.StartsWith(
-            RelyingParty.Destination + "?",
-            RelyingParty.Where(answered),
-            StringComparison.Ordinal);
-        Assert.NotEmpty(RelyingParty.Returned(answered, "code"));
-        Assert.Contains((Microsoft.Extensions.Logging.LogLevel.Warning, 1), deployment.OidcLog.Entries);
+        Answer pushed = await RelyingParty.PushAsync(
+            deployment,
+            RelyingParty.Application,
+            silent: true,
+            "https://attacker.test/collect",
+            "openid email");
+
+        Assert.Equal(StatusCodes.Status400BadRequest, pushed.Status);
+        Assert.Equal("invalid_request", pushed.Text("error"));
+        Assert.False(pushed.Json().TryGetProperty("error_description", out _));
+        Assert.False(pushed.Json().TryGetProperty("request_uri", out _));
+        Assert.Equal((LogLevel.Warning, 1), Assert.Single(deployment.OidcLog.Entries));
+        Assert.Empty(deployment.Tokens.All);
+    }
+
+    /// <summary>
+    /// API-REDIR-001 AC2: a destination that holds the registered one within it is not
+    /// the registered one, and is refused where it is pushed.
+    /// </summary>
+    /// <param name="asked">The destination the request names.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("https://attacker.test/collect?next=" + RelyingParty.Destination)]
+    [InlineData(RelyingParty.Destination + ".attacker.test")]
+    [InlineData("https://attacker.test/" + RelyingParty.Destination)]
+    public async Task API_REDIR_001_AC2_ADestinationContainingTheRegisteredOneIsRefusedAsync(string asked)
+    {
+        await using var deployment = new Deployment();
+
+        _ = await RelyingParty.PreparedAsync(deployment);
+
+        Answer pushed = await RelyingParty.PushAsync(
+            deployment,
+            RelyingParty.Application,
+            silent: true,
+            asked,
+            "openid email");
+
+        Assert.Equal(StatusCodes.Status400BadRequest, pushed.Status);
+        Assert.Equal("invalid_request", pushed.Text("error"));
+        Assert.False(pushed.Json().TryGetProperty("request_uri", out _));
     }
 
     /// <summary>
@@ -756,7 +785,7 @@ public sealed class OidcFlowTests
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task API_REDIR_001_AC4_OnlyTheReplacedDestinationIsRecordedAsync()
+    public async Task API_REDIR_001_AC4_OnlyTheRefusedDestinationIsRecordedAsync()
     {
         await using var deployment = new Deployment();
 
@@ -768,13 +797,12 @@ public sealed class OidcFlowTests
 
         Assert.Empty(deployment.OidcLog.Entries);
 
-        _ = await browser.SendAsync(
-            "GET",
-            await RelyingParty.AuthorizeAsync(
-                deployment,
-                RelyingParty.Application,
-                silent: true,
-                redirect: "https://attacker.test/collect"));
+        _ = await RelyingParty.PushAsync(
+            deployment,
+            RelyingParty.Application,
+            silent: true,
+            "https://attacker.test/collect",
+            "openid email");
 
         Assert.Equal(LogLevel.Warning, Assert.Single(deployment.OidcLog.Entries).Level);
     }
