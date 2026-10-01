@@ -21,6 +21,20 @@ internal sealed class BulkExportLedgerInMemory : IBulkExportLedger
     /// </summary>
     public IReadOnlyList<(SubjectId? Actor, string? Principal, DateTimeOffset At)> Admitted => _admitted;
 
+    /// <summary>
+    /// Gets or sets what another transaction commits while this one waits for the
+    /// actor's exports, so a test may admit one under a count about to be made.
+    /// </summary>
+    public Action? Holding { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask HoldAsync(SubjectId? actor, string? principal, CancellationToken cancellationToken)
+    {
+        Holding?.Invoke();
+
+        return ValueTask.CompletedTask;
+    }
+
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<DateTimeOffset>> SinceAsync(
         SubjectId? actor,

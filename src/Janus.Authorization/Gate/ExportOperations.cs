@@ -16,6 +16,7 @@ namespace Janus.Authorization.Gate;
 /// <param name="ledger">When each actor's recent exports were admitted.</param>
 /// <param name="audit">Where each admitted export is recorded.</param>
 /// <param name="configuration">Where the step-up flag, the limit and the auditing flag are read.</param>
+/// <param name="work">The one transaction an admission is counted and recorded in.</param>
 /// <param name="time">The clock the window is read against.</param>
 /// <remarks>
 /// Implements OPS-ALERT-006 and D-045. An export is a permission the host declares
@@ -30,6 +31,7 @@ internal sealed class ExportOperations(
     IBulkExportLedger ledger,
     IAccessAudit audit,
     IConfigurationStore configuration,
+    IUnitOfWork work,
     TimeProvider time)
 {
     // D-045: the limit counts the exports of the last hour, rolling, so it cannot be
@@ -111,6 +113,23 @@ internal sealed class ExportOperations(
                 .ConfigureAwait(false))
             .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
+        // OPS-CFG-004: the flag is protected, so what turns the record off is a redeploy
+        // and never the person about to export.
+        bool auditing = (await configuration
+                .ReadAsync(Settings.ExfiltrationExportAuditing, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: the hour is counted with the actor's exports held, so exports at
+        // the same moment are each counted against the ones admitted before them.
+        await ledger.HoldAsync(context.Acting, principal, cancellationToken).ConfigureAwait(false);
+
         IReadOnlyList<DateTimeOffset> taken = await ledger
             .SinceAsync(context.Acting, principal, now - Window, cancellationToken)
             .ConfigureAwait(false);
@@ -121,19 +140,13 @@ internal sealed class ExportOperations(
         {
             DateTimeOffset retryAt = limit <= 0 ? now + Window : taken[^limit] + Window;
 
-            return Result.Failure(Error.Throttled(retryAt));
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Failure(Error.Throttled(retryAt)), Result.Failure);
         }
 
         await ledger
             .RecordAsync(context.Acting, principal, now, now - Window, cancellationToken)
             .ConfigureAwait(false);
-
-        // OPS-CFG-004: the flag is protected, so what turns the record off is a redeploy
-        // and never the person about to export.
-        bool auditing = (await configuration
-                .ReadAsync(Settings.ExfiltrationExportAuditing, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
         if (auditing)
         {
@@ -154,6 +167,6 @@ internal sealed class ExportOperations(
                 .ConfigureAwait(false);
         }
 
-        return Result.Success();
+        return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 }
