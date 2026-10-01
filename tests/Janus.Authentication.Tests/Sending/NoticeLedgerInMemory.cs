@@ -38,6 +38,15 @@ internal sealed class NoticeLedgerInMemory : INoticeLedger
     }
 
     /// <inheritdoc/>
+    public ValueTask SweepAsync(DateTimeOffset now, TimeSpan window, CancellationToken cancellationToken)
+    {
+        TimeSpan kept = window > TimeSpan.FromHours(1) ? window : TimeSpan.FromHours(1);
+
+        Told.RemoveAll(notice => notice.At < now - kept);
+
+        return ValueTask.CompletedTask;
+    }
+
     public ValueTask<int> SinceAsync(DateTimeOffset from, CancellationToken cancellationToken) =>
         ValueTask.FromResult(Told.Count(notice => notice.At >= from));
 }

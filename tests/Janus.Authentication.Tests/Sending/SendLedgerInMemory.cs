@@ -16,7 +16,7 @@ internal sealed class SendLedgerInMemory : ISendLedger
 {
     private readonly Dictionary<RestrictionKey, List<DateTimeOffset>> _sends = [];
     private readonly Dictionary<RestrictionKey, int> _credit = [];
-    private readonly Dictionary<string, (RestrictionKey[] Counted, DateTimeOffset At)> _records = [];
+    private readonly Dictionary<string, (RestrictionKey[] Counted, DateTimeOffset At, DateTimeOffset SettlesAt)> _records = [];
 
     /// <summary>
     /// The keys the ledger holds a record for.
@@ -120,7 +120,23 @@ internal sealed class SendLedgerInMemory : ISendLedger
             }
         }
 
-        _records[Convert.ToHexString(reference)] = ([.. counted.Select(count => count.Key)], at);
+        TimeSpan settles = counted.Select(count => count.Retain).DefaultIfEmpty(TimeSpan.Zero).Max();
+
+        _records[Convert.ToHexString(reference)] = ([.. counted.Select(count => count.Key)], at, at + settles);
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask SweepSettledAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        foreach (string settled in _records
+            .Where(record => record.Value.SettlesAt < now)
+            .Select(record => record.Key)
+            .ToArray())
+        {
+            _ = _records.Remove(settled);
+        }
 
         return ValueTask.CompletedTask;
     }
@@ -134,7 +150,7 @@ internal sealed class SendLedgerInMemory : ISendLedger
     {
         string held = Convert.ToHexString(reference);
 
-        if (!_records.TryGetValue(held, out (RestrictionKey[] Counted, DateTimeOffset At) record))
+        if (!_records.TryGetValue(held, out (RestrictionKey[] Counted, DateTimeOffset At, DateTimeOffset SettlesAt) record))
         {
             return ValueTask.FromResult(false);
         }

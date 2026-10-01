@@ -33,12 +33,7 @@ internal sealed class RegistrationSourceLedger(
     {
         ArgumentNullException.ThrowIfNull(source);
 
-        DateTimeOffset oldest = at - Kept;
-
-        await context.RegistrationSources
-            .Where(started => started.At < oldest)
-            .ExecuteDeleteAsync(cancellationToken)
-            .ConfigureAwait(false);
+        await SweepAsync(at, cancellationToken).ConfigureAwait(false);
 
         context.RegistrationSources.Add(new RegistrationSourceRecord
         {
@@ -69,6 +64,17 @@ internal sealed class RegistrationSourceLedger(
         }
 
         return counted;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask SweepAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        DateTimeOffset oldest = now - Kept;
+
+        _ = await context.RegistrationSources
+            .Where(started => started.At < oldest)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private IReadOnlyList<byte[]> Candidates(string source) =>

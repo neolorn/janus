@@ -238,6 +238,31 @@ internal sealed class ThrottleService(
         }
     }
 
+    /// <summary>
+    /// The expiry sweep's pass over the counters: each one whose standing has decayed to
+    /// nothing goes, whatever version of the fingerprint key it is under (D-166, 318).
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the pass.</param>
+    /// <returns>Success, or the failure to read the decay.</returns>
+    public async ValueTask<Result> SweepAsync(CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        TimeSpan decay = (await configuration
+                .ReadAsync(Settings.AbuseThrottleDecay, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<TimeSpan>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
+        await ledger.SweepAsync(time.GetUtcNow(), decay, cancellationToken).ConfigureAwait(false);
+
+        return Result.Success();
+    }
+
     private async ValueTask<Result<ThrottleTerms>> TermsAsync(CancellationToken cancellationToken)
     {
         Error? failure = null;

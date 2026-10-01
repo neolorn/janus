@@ -34,12 +34,7 @@ internal sealed class CallbackLedger(StoreContext context, IKeyRing ring)
     {
         ArgumentNullException.ThrowIfNull(source);
 
-        DateTimeOffset oldest = at - Kept;
-
-        await context.Callbacks
-            .Where(callback => callback.At < oldest)
-            .ExecuteDeleteAsync(cancellationToken)
-            .ConfigureAwait(false);
+        await SweepAsync(at, cancellationToken).ConfigureAwait(false);
 
         IReadOnlyList<byte[]> candidates = Candidates(source);
 
@@ -101,6 +96,17 @@ internal sealed class CallbackLedger(StoreContext context, IKeyRing ring)
         }
 
         return rejected + 1;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask SweepAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        DateTimeOffset oldest = now - Kept;
+
+        _ = await context.Callbacks
+            .Where(callback => callback.At < oldest)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     // The current version first, which is the one a callback is recorded under.

@@ -47,12 +47,7 @@ internal sealed class NoticeLedger(StoreContext context, IKeyRing ring)
             }
         }
 
-        DateTimeOffset oldest = at - (window > Hour ? window : Hour);
-
-        await context.NonexistenceNotices
-            .Where(notice => notice.At < oldest)
-            .ExecuteDeleteAsync(cancellationToken)
-            .ConfigureAwait(false);
+        await SweepAsync(at, window, cancellationToken).ConfigureAwait(false);
 
         context.NonexistenceNotices.Add(new NoticeRecord
         {
@@ -70,6 +65,17 @@ internal sealed class NoticeLedger(StoreContext context, IKeyRing ring)
         await context.NonexistenceNotices
             .CountAsync(notice => notice.At >= from, cancellationToken)
             .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask SweepAsync(DateTimeOffset now, TimeSpan window, CancellationToken cancellationToken)
+    {
+        DateTimeOffset oldest = now - (window > Hour ? window : Hour);
+
+        _ = await context.NonexistenceNotices
+            .Where(notice => notice.At < oldest)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
 
     private IReadOnlyList<byte[]> Candidates(string destination) =>
         Fingerprint.Candidates(Encoding.UTF8.GetBytes(destination), ring);

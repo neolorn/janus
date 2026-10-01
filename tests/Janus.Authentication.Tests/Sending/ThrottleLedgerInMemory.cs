@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -53,5 +54,18 @@ internal sealed class ThrottleLedgerInMemory : IThrottleLedger
     }
 
     /// <inheritdoc/>
+    public ValueTask SweepAsync(DateTimeOffset now, TimeSpan halfLife, CancellationToken cancellationToken)
+    {
+        foreach ((ThrottleScope Scope, string Key) decayed in _counters
+            .Where(counter => Throttle.Standing(counter.Value, now, halfLife) == 0)
+            .Select(counter => counter.Key)
+            .ToArray())
+        {
+            _counters.Remove(decayed);
+        }
+
+        return ValueTask.CompletedTask;
+    }
+
     public byte[] Identify(string identifier) => SHA256.HashData(Encoding.UTF8.GetBytes(identifier));
 }

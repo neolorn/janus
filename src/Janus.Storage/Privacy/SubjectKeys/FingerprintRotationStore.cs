@@ -21,13 +21,12 @@ namespace Janus.Storage.Privacy.SubjectKeys;
 /// <param name="deployment">The deployment's data key, which a reserved mailbox's own key is wrapped under.</param>
 /// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <remarks>
-/// Implements OPS-SEC-003, PRIV-RIGHT-005c and OPS-MIG-003a, as entry 318 of the
-/// decisions pending review settles them. A fingerprint is computed again from the value
-/// held beside it, decrypted under the key it is held under, and written back only where
-/// it and its version still stand as they were read, so an erasure or a change made
-/// meanwhile is never overwritten and nothing is computed twice. A stored fingerprint
-/// that is not the one its value computes under its version is a defect, and stops the
-/// run rather than being replaced.
+/// Implements OPS-SEC-003, PRIV-RIGHT-005c and OPS-MIG-003a (D-166, 318). A fingerprint
+/// is computed again from the value held beside it, decrypted under the key it is held
+/// under, and written back only where it and its version still stand as they were read,
+/// so an erasure or a change made meanwhile is never overwritten and nothing is computed
+/// twice. A stored fingerprint that is not the one its value computes under its version
+/// is a defect, and stops the run rather than being replaced.
 /// </remarks>
 internal sealed class FingerprintRotationStore(
     DataConnections connections,
@@ -97,6 +96,20 @@ internal sealed class FingerprintRotationStore(
         "send_key_counters",
         "sends",
         "signin_challenges",
+        "throttle_counters",
+    ];
+
+    // D-166, 318: the abuse counts, each of which still counts until the expiry sweep
+    // finds that its own check no longer reads it, so a retirement waits on every line
+    // under a previous version rather than forgetting one that counts.
+    private static readonly string[] Counts =
+    [
+        "callbacks",
+        "nonexistence_notices",
+        "registration_sources",
+        "send_counters",
+        "send_key_counters",
+        "sends",
         "throttle_counters",
     ];
 
@@ -212,6 +225,8 @@ internal sealed class FingerprintRotationStore(
                 [
                     .. Subjects.Select(column => $"({column.Standing})"),
                     "(SELECT count(*) FROM identity.mailboxes WHERE fingerprint_version <> @current AND fingerprint <> @neutral)",
+                    .. Counts.Select(ledger =>
+                        $"(SELECT count(*) FROM identity.{ledger} WHERE fingerprint_version <> @current)"),
                 ])
             + ")::int;";
 
