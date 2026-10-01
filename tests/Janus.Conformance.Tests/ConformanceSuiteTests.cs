@@ -301,9 +301,17 @@ public sealed class ConformanceSuiteTests(SampleHost host) : IClassFixture<Sampl
             () => new AdmittingProvider(),
             services => ConformanceSuite.ProviderAsync(services, Asking(), TestContext.Current.CancellationToken));
 
-        Assert.Equal(20, report.Findings.Count);
+        Assert.Equal(21, report.Findings.Count);
         Assert.All(report.Findings, found => Assert.Equal(ConformanceCheck.Provider, found.Check));
         Assert.All(report.Findings, found => Assert.Equal(ErrorCodes.ProviderNonconformant, found.Failure.Code));
+        Assert.Contains(
+            ("push", "redirect_uri", "https://unregistered.invalid/", "invalid_request", 200),
+            report.Findings.Where(found => found.Failure.Details.ContainsKey("field")).Select(found => (
+                found.Failure.Details["probe"].GetString(),
+                found.Failure.Details["field"].GetString(),
+                found.Failure.Details["sent"].GetString(),
+                found.Failure.Details["expected"].GetString(),
+                found.Failure.Details["status"].GetInt32())));
         Assert.Contains(
             ("push", "response_type", "token", "unsupported_response_type", 200),
             report.Findings.Where(found => found.Failure.Details.ContainsKey("field")).Select(found => (
