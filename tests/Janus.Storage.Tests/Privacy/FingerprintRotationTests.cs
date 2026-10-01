@@ -330,7 +330,7 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
         {
             await new ThrottleLedger(counting, Deployment.Fingerprints)
                 .FailedAsync(ThrottleScope.Source, "192.0.2.9", standing: 0, Noon, cancellationToken);
-            await new SendLedger(counting, Deployment.Fingerprints).RecordAsync(
+            await new SendLedger(counting, new DataConnections(counting), Deployment.Fingerprints).RecordAsync(
                 RandomNumberGenerator.GetBytes(32),
                 [
                     new SendCount(
@@ -361,7 +361,7 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
 
         await using (StoreContext sweeping = database.Context())
         {
-            var sends = new SendLedger(sweeping, Ring(Rotating));
+            var sends = new SendLedger(sweeping, new DataConnections(sweeping), Ring(Rotating));
 
             await new ThrottleLedger(sweeping, Ring(Rotating)).SweepAsync(later, Decay, cancellationToken);
             await sends.SweepSettledAsync(later, cancellationToken);

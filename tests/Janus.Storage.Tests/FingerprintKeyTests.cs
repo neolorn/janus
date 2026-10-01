@@ -158,7 +158,7 @@ public sealed class FingerprintKeyTests(DatabaseFixture database) : IClassFixtur
             .FirstAsync("absent" + tag + "@example.test", Noon, TimeSpan.FromHours(1), cancellationToken);
         await new RegistrationSourceLedger(context, ring).RecordAsync("198.51.100." + tag, Noon, cancellationToken);
 
-        var sends = new SendLedger(context, ring);
+        var sends = new SendLedger(context, new DataConnections(context), ring);
         var destination = new RestrictionKey("email.destination", RestrictionKeyKind.Destination, "destination" + tag + "@example.test");
 
         await sends.RecordAsync(

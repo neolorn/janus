@@ -1478,6 +1478,9 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- Sends counted, credit granted or spent and sends released at the same moment each
+  change the sending ledger's rows as they then stand, so no count or credit is lost and
+  a send is released once.
 - A key rotation, `rotate-kek` and `rotate-fingerprint-key` alike, starts, takes each
   batch, completes and retires with its progress held, so two runs at once start it
   once, count each value once and record one completion and one retirement.

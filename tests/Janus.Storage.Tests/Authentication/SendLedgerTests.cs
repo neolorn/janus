@@ -275,11 +275,81 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
         Assert.Equal(0, (await StandingAsync(destination, Noon - Day)).Credit);
     }
 
+    /// <summary>
+    /// AUTH-ABUSE-004 AC1, CONV-DESIGN-003 AC6: sends counted against one key at once
+    /// each change the record as it then stands, so every one of them is counted.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC1_SendsCountedAtOnceAreEachCountedAsync()
+    {
+        RestrictionKey destination = Destination("+201001234570");
+
+        await Task.WhenAll(Enumerable.Range(0, 5).Select(at =>
+            CountedOnceAsync(Reference((byte)(40 + at)), [new SendCount(destination, Day)], Noon.AddMinutes(at), [])));
+
+        Assert.Equal(5, (await StandingAsync(destination, Noon - Day)).Sends.Count);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC4, CONV-DESIGN-003 AC6: sends spending one key's credit at once
+    /// each spend it as it then stands, so two credits are spent by two sends and a
+    /// third finds none.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC4_SendsSpendingCreditAtOnceSpendEachCreditOnceAsync()
+    {
+        RestrictionKey destination = Destination("+201001234571");
+
+        await using (StoreContext granting = database.Context())
+        {
+            await Ledger(granting).GrantAsync(destination, 2, TestContext.Current.CancellationToken);
+        }
+
+        await Task.WhenAll(Enumerable.Range(0, 3).Select(at =>
+            CountedOnceAsync(Reference((byte)(50 + at)), [new SendCount(destination, Day)], Noon, [destination])));
+
+        Assert.Equal(0, (await StandingAsync(destination, Noon - Day)).Credit);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC4, CONV-DESIGN-003 AC6: credit granted to one key twice at once
+    /// is added to the row as it stands, so both grants stand.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC4_CreditGrantedAtOnceIsAddedTwiceAsync()
+    {
+        RestrictionKey destination = Destination("+201001234572");
+
+        await Task.WhenAll(GrantedOnceAsync(destination, 2), GrantedOnceAsync(destination, 3));
+
+        Assert.Equal(5, (await StandingAsync(destination, Noon - Day)).Credit);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC2, INT-SMS-005, CONV-DESIGN-003 AC6: two reports releasing one send
+    /// at once each read it under its lock, so it is released once and a time counted
+    /// at the same instant for another send stays.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC2_ASendReleasedTwiceAtOnceIsReleasedOnceAsync()
+    {
+        RestrictionKey destination = Destination("+201001234573");
+        byte[] reference = Reference(60);
+
+        await RecordedAsync(reference, [new SendCount(destination, Day)], Noon);
+        await RecordedAsync(Reference(61), [new SendCount(destination, Day)], Noon);
+
+        bool[] released = await Task.WhenAll(ReleasedOnceAsync(reference), ReleasedOnceAsync(reference));
+
+        Assert.Equal(1, released.Count(answer => answer));
+        Assert.Equal([Noon], (await StandingAsync(destination, Noon - Day)).Sends);
+    }
+
     private static RestrictionKey Destination(string number) => new("sms.destination", RestrictionKeyKind.Destination, number);
 
     private static byte[] Reference(byte one) => [.. Enumerable.Repeat(one, Fingerprint.Length)];
 
-    private static SendLedger Ledger(StoreContext context) => new(context, Deployment.Fingerprints);
+    private static SendLedger Ledger(StoreContext context) => new(context, new DataConnections(context), Deployment.Fingerprints);
 
     private async Task RecordedAsync(
         byte[] reference,
@@ -297,6 +367,50 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
             TestContext.Current.CancellationToken);
 
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    // A send counted as the sending service counts one, in a transaction of its own.
+    private async Task CountedOnceAsync(
+        byte[] reference,
+        IReadOnlyCollection<SendCount> counted,
+        DateTimeOffset at,
+        IReadOnlyCollection<RestrictionKey> spent)
+    {
+        await using StoreContext writing = database.Context();
+        await using var work = new UnitOfWork(writing);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        await Ledger(writing).RecordAsync(reference, counted, spent, at, TestContext.Current.CancellationToken);
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+    }
+
+    private async Task GrantedOnceAsync(RestrictionKey key, int credit)
+    {
+        await using StoreContext writing = database.Context();
+        await using var work = new UnitOfWork(writing);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        await Ledger(writing).GrantAsync(key, credit, TestContext.Current.CancellationToken);
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+    }
+
+    // A delivery report's release, in a transaction of its own.
+    private async Task<bool> ReleasedOnceAsync(byte[] reference)
+    {
+        await using StoreContext writing = database.Context();
+        await using var work = new UnitOfWork(writing);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        bool released = await Ledger(writing).ReleaseAsync(reference, TestContext.Current.CancellationToken);
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return released;
     }
 
     private async Task<SendCounter> StandingAsync(RestrictionKey key, DateTimeOffset stale) =>

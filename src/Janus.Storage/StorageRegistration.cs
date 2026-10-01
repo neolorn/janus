@@ -313,6 +313,7 @@ internal static class StorageRegistration
             provider.GetRequiredService<RandomNumberGenerator>()));
         services.AddScoped<ISendLedger>(provider => new SendLedger(
             provider.GetRequiredService<StoreContext>(),
+            provider.GetRequiredService<DataConnections>(),
             provider.GetRequiredService<IKeyRing>()));
         services.AddScoped<IThrottleLedger>(provider => new ThrottleLedger(
             provider.GetRequiredService<StoreContext>(),

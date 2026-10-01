@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Authentication.Sending;
 using Janus.Core;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +17,7 @@ namespace Janus.Storage.Authentication.Sending;
 /// the sends a delivery report can still take back.
 /// </summary>
 /// <param name="context">The context the operation runs on.</param>
+/// <param name="connections">Where the counting statements take their connection from.</param>
 /// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <remarks>
 /// Implements AUTH-ABUSE-004, INT-SMS-005, PRIV-RET-005, OPS-SEC-003 and CONV-DESIGN-003.
@@ -23,12 +25,42 @@ namespace Janus.Storage.Authentication.Sending;
 /// longest interval of its own restrictions (D-166, 122). The plain key value crosses
 /// into this class and no further. What was counted or granted under a previous version
 /// of the fingerprint key still stands until the rotation retires the version; what is
-/// counted or granted now is under the current one.
+/// counted or granted now is under the current one. Sends counted, credit granted or
+/// spent and sends released at the same moment each change the row as it then stands,
+/// never as it was read, so none is lost (D-166 X3).
 /// </remarks>
-internal sealed class SendLedger(StoreContext context, IKeyRing ring)
+internal sealed class SendLedger(StoreContext context, DataConnections connections, IKeyRing ring)
     : ISendLedger
 {
     private const string Separator = "\u0000";
+
+    private const string Destinations = "identity.send_counters";
+
+    private const string Keys = "identity.send_key_counters";
+
+    // D-166 X3: the grant's row is held while the credit is read and spent, so two sends
+    // at once spend two credits.
+    private const string Credit =
+        """
+        SELECT credit FROM identity.send_grants WHERE key = @key FOR UPDATE;
+        """;
+
+    private const string Spend =
+        """
+        UPDATE identity.send_grants SET credit = credit - 1 WHERE key = @key;
+        """;
+
+    private const string SpendLast =
+        """
+        DELETE FROM identity.send_grants WHERE key = @key;
+        """;
+
+    private const string Grant =
+        """
+        INSERT INTO identity.send_grants AS granted (key, fingerprint_version, credit)
+        VALUES (@key, @version, @credit)
+        ON CONFLICT (key) DO UPDATE SET credit = granted.credit + EXCLUDED.credit;
+        """;
 
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyDictionary<RestrictionKey, SendCounter>> CountersAsync(
@@ -56,13 +88,16 @@ internal sealed class SendLedger(StoreContext context, IKeyRing ring)
                 DateTimeOffset[]? times = await TimesAsync(key.Kind, hashed, cancellationToken)
                     .ConfigureAwait(false);
 
-                SendGrantRecord? grant = await context.SendGrants
-                    .FindAsync([hashed], cancellationToken)
+                int? granted = await context.SendGrants
+                    .AsNoTracking()
+                    .Where(grant => grant.Key == hashed)
+                    .Select(grant => (int?)grant.Credit)
+                    .SingleOrDefaultAsync(cancellationToken)
                     .ConfigureAwait(false);
 
-                found |= times is not null || grant is not null;
+                found |= times is not null || granted is not null;
                 sent.AddRange(times ?? []);
-                credit += grant?.Credit ?? 0;
+                credit += granted ?? 0;
             }
 
             if (!found)
@@ -109,9 +144,20 @@ internal sealed class SendLedger(StoreContext context, IKeyRing ring)
 
         TimeSpan settles = TimeSpan.Zero;
 
-        foreach (SendCount count in counted)
+        // The rows are taken in one order, the destinations' table first and each table's
+        // keys by their hash, so two sends counting under the same keys never wait on each
+        // other in a ring.
+        (SendCount Count, byte[] Hashed)[] ordered =
+        [
+            .. counted
+                .Select(count => (Count: count, Hashed: Hashed(count.Key)))
+                .OrderBy(one => one.Count.Key.Kind is RestrictionKeyKind.Destination ? 0 : 1)
+                .ThenBy(one => Convert.ToHexString(one.Hashed), StringComparer.Ordinal),
+        ];
+
+        foreach ((SendCount count, byte[] hashed) in ordered)
         {
-            await CountAsync(count, at, cancellationToken).ConfigureAwait(false);
+            await CountAsync(count, hashed, at, cancellationToken).ConfigureAwait(false);
 
             if (count.Retain > settles)
             {
@@ -123,23 +169,10 @@ internal sealed class SendLedger(StoreContext context, IKeyRing ring)
         {
             foreach (byte[] hashed in Candidates(key))
             {
-                SendGrantRecord? grant = await context.SendGrants
-                    .FindAsync([hashed], cancellationToken)
-                    .ConfigureAwait(false);
-
-                if (grant is null)
+                if (await SpentAsync(hashed, cancellationToken).ConfigureAwait(false))
                 {
-                    continue;
+                    break;
                 }
-
-                grant.Credit--;
-
-                if (grant.Credit <= 0)
-                {
-                    context.SendGrants.Remove(grant);
-                }
-
-                break;
             }
         }
 
@@ -148,7 +181,7 @@ internal sealed class SendLedger(StoreContext context, IKeyRing ring)
         context.Sends.Add(new SendRecord
         {
             Reference = reference,
-            Counted = [.. counted.Select(count => Hashed(count.Key))],
+            Counted = [.. ordered.Select(one => one.Hashed)],
             FingerprintVersion = Fingerprint.CurrentVersion(ring),
             SentAt = at,
             SettlesAt = at + settles,
@@ -177,48 +210,43 @@ internal sealed class SendLedger(StoreContext context, IKeyRing ring)
     {
         ArgumentNullException.ThrowIfNull(reference);
 
+        bool tracked = context.Sends.Local.Any(row => row.Reference.SequenceEqual(reference));
+
         // The row is keyed by the hash of the reference, so an unknown one finds
-        // nothing and a settled one was swept (INT-SMS-005).
-        SendRecord? send = await context.Sends
-            .FindAsync([reference], cancellationToken)
-            .ConfigureAwait(false);
+        // nothing and a settled one was swept (INT-SMS-005). D-166 X3: it is read under
+        // its lock, so two reports releasing it at once release it once.
+        SendRecord? send = (await context.Sends
+                .FromSql($"SELECT * FROM identity.sends WHERE reference = {reference} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .SingleOrDefault();
 
         if (send is null)
         {
             return false;
         }
 
-        // The send names its keys by their hashes alone, and a hash is kept in one
-        // table or the other, so each is looked for in both.
-        foreach (byte[] hashed in send.Counted)
+        if (tracked)
         {
-            if (await context.SendCounters.FindAsync([hashed], cancellationToken).ConfigureAwait(false)
-                is SendCounterRecord destination)
-            {
-                DateTimeOffset[] kept = Without(destination.SentAt, send.SentAt);
+            await context.Entry(send).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
 
-                if (kept.Length == 0)
-                {
-                    context.SendCounters.Remove(destination);
-                }
-                else
-                {
-                    destination.SentAt = kept;
-                }
-            }
-            else if (await context.SendKeyCounters.FindAsync([hashed], cancellationToken).ConfigureAwait(false)
-                is SendKeyCounterRecord key)
-            {
-                DateTimeOffset[] kept = Without(key.SentAt, send.SentAt);
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
 
-                if (kept.Length == 0)
-                {
-                    context.SendKeyCounters.Remove(key);
-                }
-                else
-                {
-                    key.SentAt = kept;
-                }
+        // The send names its keys by their hashes alone, and a hash is kept in one
+        // table or the other, so each is looked for in both, in the order a send counts
+        // them. One of its times is taken out of the row as it then stands.
+        foreach (string table in (string[])[Destinations, Keys])
+        {
+            foreach (byte[] hashed in send.Counted.OrderBy(Convert.ToHexString, StringComparer.Ordinal))
+            {
+                _ = await ambient.Connection
+                    .ExecuteAsync(new CommandDefinition(
+                        Released(table),
+                        new { key = hashed, sent = send.SentAt },
+                        ambient.Transaction,
+                        cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
             }
         }
 
@@ -233,53 +261,44 @@ internal sealed class SendLedger(StoreContext context, IKeyRing ring)
         int credit,
         CancellationToken cancellationToken)
     {
-        byte[] hashed = Hashed(key);
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
 
-        SendGrantRecord? grant = await context.SendGrants
-            .FindAsync([hashed], cancellationToken)
+        // D-166 X3: the credit is added to the row as it stands, so two grants at once
+        // add both.
+        _ = await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                Grant,
+                new { key = Hashed(key), version = Fingerprint.CurrentVersion(ring), credit },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
             .ConfigureAwait(false);
-
-        if (grant is null)
-        {
-            context.SendGrants.Add(new SendGrantRecord
-            {
-                Key = hashed,
-                FingerprintVersion = Fingerprint.CurrentVersion(ring),
-                Credit = credit,
-            });
-
-            return;
-        }
-
-        grant.Credit += credit;
     }
 
-    private static DateTimeOffset[] Without(DateTimeOffset[] sends, DateTimeOffset one)
-    {
-        var kept = new List<DateTimeOffset>(sends.Length);
-        bool dropped = false;
+    // A key's times keep what its restriction still counts, and the send, written as one
+    // statement over the row as it stands, so sends counted at once are each kept.
+    private static string Counting(string table) =>
+        $"""
+        INSERT INTO {table} AS counter (key, fingerprint_version, sent_at)
+        VALUES (@key, @version, ARRAY[CAST(@at AS timestamptz)])
+        ON CONFLICT (key) DO UPDATE
+        SET sent_at = ARRAY(
+                SELECT kept.sent
+                FROM unnest(counter.sent_at) WITH ORDINALITY AS kept (sent, ordinal)
+                WHERE kept.sent > @since
+                ORDER BY kept.ordinal)
+            || CAST(@at AS timestamptz);
+        """;
 
-        foreach (DateTimeOffset sent in sends)
-        {
-            if (!dropped && sent == one)
-            {
-                dropped = true;
-
-                continue;
-            }
-
-            kept.Add(sent);
-        }
-
-        return [.. kept];
-    }
-
-    // A key's times keep what its restriction still counts, and the send.
-    private static DateTimeOffset[] Kept(DateTimeOffset[]? sends, TimeSpan retain, DateTimeOffset at) =>
-    [
-        .. (sends ?? []).Where(sent => sent > at - retain),
-        at,
-    ];
+    // One of a key's times taken out of the row as it stands, and the row gone with its
+    // last time.
+    private static string Released(string table) =>
+        $"""
+        UPDATE {table}
+        SET sent_at = sent_at[:array_position(sent_at, CAST(@sent AS timestamptz)) - 1]
+            || sent_at[array_position(sent_at, CAST(@sent AS timestamptz)) + 1:]
+        WHERE key = @key AND array_position(sent_at, CAST(@sent AS timestamptz)) IS NOT NULL;
+        DELETE FROM {table} WHERE key = @key AND cardinality(sent_at) = 0;
+        """;
 
     private static byte[] Named(RestrictionKey key) =>
         Encoding.UTF8.GetBytes(key.Restriction + Separator + key.Value);
@@ -290,53 +309,64 @@ internal sealed class SendLedger(StoreContext context, IKeyRing ring)
         byte[] hashed,
         CancellationToken cancellationToken) =>
         kind is RestrictionKeyKind.Destination
-            ? (await context.SendCounters.FindAsync([hashed], cancellationToken).ConfigureAwait(false))?.SentAt
-            : (await context.SendKeyCounters.FindAsync([hashed], cancellationToken).ConfigureAwait(false))?.SentAt;
-
-    private async ValueTask CountAsync(SendCount count, DateTimeOffset at, CancellationToken cancellationToken)
-    {
-        byte[] hashed = Hashed(count.Key);
-
-        if (count.Key.Kind is RestrictionKeyKind.Destination)
-        {
-            SendCounterRecord? destination = await context.SendCounters
-                .FindAsync([hashed], cancellationToken)
+            ? await context.SendCounters
+                .AsNoTracking()
+                .Where(counter => counter.Key == hashed)
+                .Select(counter => counter.SentAt)
+                .SingleOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false)
+            : await context.SendKeyCounters
+                .AsNoTracking()
+                .Where(counter => counter.Key == hashed)
+                .Select(counter => counter.SentAt)
+                .SingleOrDefaultAsync(cancellationToken)
                 .ConfigureAwait(false);
 
-            if (destination is null)
-            {
-                context.SendCounters.Add(new SendCounterRecord
-                {
-                    Key = hashed,
-                    FingerprintVersion = Fingerprint.CurrentVersion(ring),
-                    SentAt = Kept(null, count.Retain, at),
-                });
-            }
-            else
-            {
-                destination.SentAt = Kept(destination.SentAt, count.Retain, at);
-            }
+    private async ValueTask CountAsync(
+        SendCount count,
+        byte[] hashed,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
 
-            return;
-        }
+        _ = await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                Counting(count.Key.Kind is RestrictionKeyKind.Destination ? Destinations : Keys),
+                new { key = hashed, version = Fingerprint.CurrentVersion(ring), at, since = at - count.Retain },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
 
-        SendKeyCounterRecord? key = await context.SendKeyCounters
-            .FindAsync([hashed], cancellationToken)
+    // Credit support granted under one version of the key, spent by one send with the
+    // grant's row held; false where no credit stands under that version.
+    private async ValueTask<bool> SpentAsync(byte[] hashed, CancellationToken cancellationToken)
+    {
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        int? credit = await ambient.Connection
+            .ExecuteScalarAsync<int?>(new CommandDefinition(
+                Credit,
+                new { key = hashed },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
             .ConfigureAwait(false);
 
-        if (key is null)
+        if (credit is not int standing)
         {
-            context.SendKeyCounters.Add(new SendKeyCounterRecord
-            {
-                Key = hashed,
-                FingerprintVersion = Fingerprint.CurrentVersion(ring),
-                SentAt = Kept(null, count.Retain, at),
-            });
+            return false;
         }
-        else
-        {
-            key.SentAt = Kept(key.SentAt, count.Retain, at);
-        }
+
+        _ = await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                standing > 1 ? Spend : SpendLast,
+                new { key = hashed },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        return true;
     }
 
     private byte[] Hashed(RestrictionKey key) => Fingerprint.Compute(Named(key), ring);
