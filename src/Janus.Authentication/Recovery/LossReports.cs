@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Passwords;
@@ -22,6 +23,7 @@ namespace Janus.Authentication.Recovery;
 /// told.
 /// </summary>
 /// <param name="reports">Where the reports that are running are held.</param>
+/// <param name="accounts">Where the account's row is held while its credentials are judged.</param>
 /// <param name="authenticators">Where the account's credentials are read.</param>
 /// <param name="passwords">Where the account's password is read and marked.</param>
 /// <param name="recoveryCodes">Where the account's set of single-use codes is held.</param>
@@ -42,6 +44,7 @@ namespace Janus.Authentication.Recovery;
 /// </remarks>
 internal sealed class LossReports(
     ILossReportStore reports,
+    IAccountDirectory accounts,
     IAuthenticatorStore authenticators,
     IPasswordStore passwords,
     IRecoveryCodeStore recoveryCodes,
@@ -262,15 +265,24 @@ internal sealed class LossReports(
             return Result.Failure(Error.From(ErrorCodes.CredentialNotFound));
         }
 
-        Authenticator? held = await authenticators.FindAsync(credential, cancellationToken)
-            .ConfigureAwait(false);
-
         DateTimeOffset now = time.GetUtcNow();
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: the credential is read under its lock, so of a cancellation and the
+        // invalidation at the window's end only the first stands; a credential the
+        // window already invalidated has no report left to cancel.
+        Authenticator? held = await authenticators.FindForUpdateAsync(credential, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (held is not null && !Running(held, report))
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Failure(Error.From(ErrorCodes.CredentialNotFound)), Result.Failure);
         }
 
         if (held is not null)
@@ -440,19 +452,36 @@ internal sealed class LossReports(
         return 1;
     }
 
+    // A report still runs against its credential while the credential is suspended to
+    // the instant the report invalidates it; a cancellation restored it, and the
+    // invalidation left it invalidated.
+    private static bool Running(Authenticator held, LossReport report) =>
+        held is { State: AuthenticatorState.Suspended } && held.InvalidatesAt == report.InvalidatesAt;
+
     private async ValueTask<Result<int>> InvalidateAsync(
         SystemPrincipal principal,
         LossReport report,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        Authenticator? held = await authenticators.FindAsync(report.Credential, cancellationToken)
-            .ConfigureAwait(false);
-
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure<int>(notBegun);
+        }
+
+        // D-166 X3: the account's row is held, so a second step enrolled at the same
+        // moment is either seen here or waits for this to commit, and the credential is
+        // read under its own lock, so a report cancelled meanwhile invalidates nothing.
+        await accounts.HoldAsync(report.Subject, cancellationToken).ConfigureAwait(false);
+
+        Authenticator? held = await authenticators.FindForUpdateAsync(report.Credential, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (held is not null && !Running(held, report))
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Success(0), Result.Failure<int>);
         }
 
         if (held is not null)

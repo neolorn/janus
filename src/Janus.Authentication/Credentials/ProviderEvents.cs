@@ -268,7 +268,10 @@ internal sealed class ProviderEvents(
     {
         // D-166 X3: what the account keeps is judged on its credentials under their
         // locks, so a withdrawal and an unlink or a removal at once never leave it with
-        // no way in; an identity unlinked meanwhile has nothing left to withdraw.
+        // no way in; an identity unlinked meanwhile has nothing left to withdraw. The
+        // account's row is held first, as everything that holds both holds them.
+        await accounts.HoldAsync(linked.Subject, cancellationToken).ConfigureAwait(false);
+
         IReadOnlyList<Authenticator> enrolled = await authenticators
             .OfForUpdateAsync(linked.Subject, cancellationToken)
             .ConfigureAwait(false);

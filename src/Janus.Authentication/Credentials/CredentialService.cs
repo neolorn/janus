@@ -308,6 +308,10 @@ internal sealed class CredentialService(
                 .ConfigureAwait(false);
         }
 
+        // D-166 X3: a second step is enrolled under the lock on the account's row, which
+        // the invalidation of a reported credential holds while it judges what is left.
+        await accounts.HoldAsync(acting.Subject, cancellationToken).ConfigureAwait(false);
+
         AuthenticatorId enrolled = (await keys
                 .EnrolAsync(
                     acting.Subject,
@@ -449,6 +453,10 @@ internal sealed class CredentialService(
             return await RefusedAsync<EnrolledCredential>(Error.From(ErrorCodes.EnrolmentTokenInvalid), cancellationToken)
                 .ConfigureAwait(false);
         }
+
+        // D-166 X3: a second step is enrolled under the lock on the account's row, which
+        // the invalidation of a reported credential holds while it judges what is left.
+        await accounts.HoldAsync(acting.Subject, cancellationToken).ConfigureAwait(false);
 
         _ = (await generators
                 .ConfirmAsync(acting.Subject, credential, code, cancellationToken)

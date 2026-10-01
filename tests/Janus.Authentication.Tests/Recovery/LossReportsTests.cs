@@ -155,6 +155,36 @@ public sealed class LossReportsTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-RECOV-007, CONV-DESIGN-003 AC6: a cancellation committed while the window's
+    /// end waited for the credential's row is found under the lock, so the credential
+    /// stays as the cancellation left it and nothing is invalidated.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_007_ACancellationCommittedMeanwhileStandsAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        AuthenticatorId generator = await EnrolledAsync(subject);
+
+        _ = await Service.ReportAsync(
+            AccessContext.Of(subject),
+            generator,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        _clock.Advance(TimeSpan.FromDays(8));
+        _authenticators.Locking = credential => credential.Restore();
+
+        _ = await Service.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            AuthenticatorState.Active,
+            (await _authenticators.FindAsync(generator, TestContext.Current.CancellationToken))!.State);
+        Assert.DoesNotContain(_credentials.Records, record => record.Action == AuditActions.CredentialInvalidated);
+        Assert.Empty(_events.Of<CredentialInvalidated>());
+    }
+
+    /// <summary>
     /// AUTH-RECOV-007, chapter 10 section 5b: the three things that become of a
     /// reported credential are each announced, carrying what it is and, for the
     /// suspension, when the window ends.
@@ -652,6 +682,7 @@ public sealed class LossReportsTests : IAsyncDisposable
     private LossReports Service =>
         new(
             _reports,
+            _accounts,
             _authenticators,
             _passwords,
             _sets,

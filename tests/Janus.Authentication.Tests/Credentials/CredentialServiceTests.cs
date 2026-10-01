@@ -881,6 +881,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     private LossReports Losses =>
         new(
             _reports,
+            _accounts,
             _authenticators,
             _passwords,
             _sets,
