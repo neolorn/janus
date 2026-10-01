@@ -752,14 +752,6 @@ internal sealed class AccountService(
             return null;
         }
 
-        if (await stepUp
-                .PassedAsync(subject, session, StepUpAction.UsernameChange, cancellationToken)
-                .ConfigureAwait(false)
-            is Error closed)
-        {
-            return closed;
-        }
-
         if (standing is not null
             && await CoolingOffAsync(standing, now, cancellationToken).ConfigureAwait(false)
                 is Error waiting)
@@ -774,6 +766,15 @@ internal sealed class AccountService(
                 .ConfigureAwait(false))
         {
             return Error.From(ErrorCodes.UsernameTaken);
+        }
+
+        // D-178: the step-up is judged after every other refusal the change can give.
+        if (await stepUp
+                .PassedAsync(subject, session, StepUpAction.UsernameChange, cancellationToken)
+                .ConfigureAwait(false)
+            is Error closed)
+        {
+            return closed;
         }
 
         if (standing is null)

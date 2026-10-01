@@ -280,7 +280,7 @@ internal sealed class RecoveryService(
 
         // API-CONV-002, X4: the reason and the channel are free text of 1 to 1024
         // characters after trimming, refused for an in-process caller as the endpoint
-        // refuses them, and before the step-up, which is judged last.
+        // refuses them.
         if (reason.Trim() is not { Length: > 0 } stated)
         {
             return Result.Failure<ApprovedRecovery>(Error.From(ErrorCodes.RecoveryReasonRequired));
@@ -298,14 +298,6 @@ internal sealed class RecoveryService(
                 Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement("channelUsed")));
         }
 
-        if (await stepUp
-                .PassedAsync(approver, session, StepUpAction.RecoveryApprove, cancellationToken)
-                .ConfigureAwait(false)
-            is Error closed)
-        {
-            return Result.Failure<ApprovedRecovery>(closed);
-        }
-
         HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
@@ -315,6 +307,16 @@ internal sealed class RecoveryService(
         {
             return Result.Failure<ApprovedRecovery>(
                 Error.From(ErrorCodes.RecoveryChannelNotOnAccount));
+        }
+
+        // D-178, 09 section 8: the step-up is judged after every other refusal the
+        // approval can give before its transaction.
+        if (await stepUp
+                .PassedAsync(approver, session, StepUpAction.RecoveryApprove, cancellationToken)
+                .ConfigureAwait(false)
+            is Error closed)
+        {
+            return Result.Failure<ApprovedRecovery>(closed);
         }
 
         return await StandAsync(

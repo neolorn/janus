@@ -96,14 +96,6 @@ internal sealed class IdentifierService(
             return Result.Failure(Error.From(ErrorCodes.IdentifierInvalid));
         }
 
-        if (await stepUp
-                .PassedAsync(subject, session, StepUpAction.IdentifierAdd, cancellationToken)
-                .ConfigureAwait(false)
-            is Error closed)
-        {
-            return Result.Failure(closed);
-        }
-
         if (Canonical(kind, value) is not (string entered, string canonical))
         {
             return Result.Failure(Error.From(ErrorCodes.IdentifierInvalid));
@@ -131,6 +123,16 @@ internal sealed class IdentifierService(
         if (Standing(held, canonical) is null && held.OfKind(kind).Count >= maximum)
         {
             return Result.Failure(Error.From(ErrorCodes.IdentifierMaximum));
+        }
+
+        // D-178: the step-up is judged after every other refusal the addition can give
+        // before its transaction.
+        if (await stepUp
+                .PassedAsync(subject, session, StepUpAction.IdentifierAdd, cancellationToken)
+                .ConfigureAwait(false)
+            is Error closed)
+        {
+            return Result.Failure(closed);
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -642,14 +644,6 @@ internal sealed class IdentifierService(
             return Result.Failure(restricted);
         }
 
-        if (await stepUp
-                .PassedAsync(subject, session, StepUpAction.IdentifierRemove, cancellationToken)
-                .ConfigureAwait(false)
-            is Error closed)
-        {
-            return Result.Failure(closed);
-        }
-
         HeldIdentifiers held = await directory.HeldAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
@@ -667,6 +661,16 @@ internal sealed class IdentifierService(
         if (failure is not null)
         {
             return Result.Failure(failure);
+        }
+
+        // D-178: the step-up is judged after every other refusal the removal can give
+        // before its transaction.
+        if (await stepUp
+                .PassedAsync(subject, session, StepUpAction.IdentifierRemove, cancellationToken)
+                .ConfigureAwait(false)
+            is Error closed)
+        {
+            return Result.Failure(closed);
         }
 
         DateTimeOffset now = time.GetUtcNow();

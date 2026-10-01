@@ -132,6 +132,36 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-004, REG-IDENT-006, D-178: an addition of an unreadable value and the
+    /// removal of the primary are told before the step-up is asked, so a session whose
+    /// proof is no longer recent hears the refusal the change meets.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_004_TheStepUpIsJudgedAfterEveryOtherRefusalAsync()
+    {
+        IdentifierId primary = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        Assert.Equal(
+            ErrorCodes.IdentifierInvalid,
+            Refused(await Service.AddAsync(
+                Acting,
+                Stale(),
+                IdentifierKind.Email,
+                "not an address",
+                Source,
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.IdentifierPrimary,
+            Refused(await Service.RemoveAsync(
+                Acting,
+                Stale(),
+                primary,
+                Source,
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(primary, Assert.Single(await HeldAsync()).Id);
+    }
+
+    /// <summary>
     /// REG-IDENT-004 AC2: what was added waits unverified, and is in no notice set
     /// until a code settles it.
     /// </summary>

@@ -106,20 +106,21 @@ internal sealed class MembershipEnd(
             return Result.Failure(Error.From(ErrorCodes.MembershipNotFound));
         }
 
+        if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
+            is not OrganizationStanding standing)
+        {
+            return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
+        }
+
         // REG-MAIL-003: ending a membership changes another person's account, so it is
-        // the membership:end step-up action.
+        // the membership:end step-up action, judged after every other refusal (09
+        // section 8).
         if (await stepUp
                 .PassedAsync(acting, session, StepUpAction.MembershipEnd, cancellationToken)
                 .ConfigureAwait(false)
             is Error challenged)
         {
             return Result.Failure(challenged);
-        }
-
-        if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
-            is not OrganizationStanding standing)
-        {
-            return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
         }
 
         DateTimeOffset now = time.GetUtcNow();

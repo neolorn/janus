@@ -1478,6 +1478,10 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- A username change, an identifier's addition or removal, a recovery approval and the
+  end of a membership judge the step-up after every other refusal they give before
+  their transaction, so a session whose proof is no longer recent hears the refusal the
+  change meets.
 - A group change whose group was removed while it waited is refused `authz.denied`, as
   one naming no group is, rather than `api.request.malformed`.
 - A takedown refused under the account's lock answers for the state it found there,

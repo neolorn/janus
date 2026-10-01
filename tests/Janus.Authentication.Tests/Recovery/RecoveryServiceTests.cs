@@ -427,9 +427,9 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
 
     /// <summary>
     /// CONV-CODE-006 AC3 and API-CONV-002 AC3: an in-process approval is held to the
-    /// bound the endpoint holds it to, and each refusal of its free text comes before
-    /// the step-up, so a session whose proof is no longer recent is answered for the
-    /// text, and nothing is recorded.
+    /// bound the endpoint holds it to, and each refusal of its free text, and of a
+    /// channel the account does not hold, comes before the step-up (D-178), so a session
+    /// whose proof is no longer recent is answered for them, and nothing is recorded.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -449,6 +449,9 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         Assert.Equal(
             ErrorCodes.RequestMalformed,
             Refused(await Approving(approver, session, subject, Reason, "  ")));
+        Assert.Equal(
+            ErrorCodes.RecoveryChannelNotOnAccount,
+            Refused(await Approving(approver, session, subject, Reason, Elsewhere)));
         Assert.Equal(
             ErrorCodes.StepUpRequired,
             Refused(await Approving(approver, session, subject, " " + new string('r', 1024) + " ")));

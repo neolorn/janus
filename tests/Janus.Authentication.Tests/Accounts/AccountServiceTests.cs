@@ -375,6 +375,51 @@ public sealed class AccountServiceTests : IAsyncDisposable
         Assert.Equal(Taken, await UsernameAsync());
     }
 
+    /// <summary>
+    /// REG-IDENT-009, D-178: a username taken, or a change inside the cooling-off
+    /// window, is told before the step-up is asked, so a session whose proof is no
+    /// longer recent hears the refusal the change meets, and a change none refuses is
+    /// the <c>username:change</c> step-up action.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_009_TheStepUpIsJudgedAfterEveryOtherRefusalAsync()
+    {
+        _configuration.Set(Settings.IdentifiersUsernameEnabled, value: true);
+        _identifiers.Holds(Taken, Noon + Settings.RetentionConsent.Default);
+
+        SessionId stale = Stepped();
+
+        _clock.Advance(TimeSpan.FromMinutes(16));
+
+        Assert.Equal(
+            ErrorCodes.UsernameTaken,
+            Refused(await Service.EditProfileAsync(
+                Acting,
+                stale,
+                new ProfileEdit(Username: Taken),
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.StepUpRequired,
+            Refused(await Service.EditProfileAsync(
+                Acting,
+                stale,
+                new ProfileEdit(Username: Chosen),
+                TestContext.Current.CancellationToken)));
+
+        await ChosenAsync(Chosen);
+
+        stale = Stepped();
+        _clock.Advance(TimeSpan.FromMinutes(16));
+
+        Assert.Equal(
+            ErrorCodes.UsernameCoolingOff,
+            Refused(await Service.EditProfileAsync(
+                Acting,
+                stale,
+                new ProfileEdit(Username: "merlin"),
+                TestContext.Current.CancellationToken)));
+    }
+
     private static HeldProfile Profile(string? displayName, string? legalName, DateOnly? dateOfBirth)
     {
         DisplayName? shown = null;
