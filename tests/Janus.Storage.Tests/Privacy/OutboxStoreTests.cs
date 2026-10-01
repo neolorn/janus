@@ -232,6 +232,64 @@ public sealed class OutboxStoreTests(DatabaseFixture database)
         Assert.Equal([older.Id], second.Select(held => held.Id));
     }
 
+    /// <summary>
+    /// IDN-LIFE-003a, CONV-DESIGN-003 AC6: two operators closing one failed erasure at
+    /// once each decide under the lock on its row, so the second finds it closed and
+    /// one completion stands.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_003a_TwoCompletionsAtOnceCloseTheErasureOnceAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        var delivery = Delivery.Of(subject, SubjectEventKind.ErasureRequested, Noon);
+
+        delivery.Fail();
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Store(writing, Noon).AddAsync(delivery, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        bool[] closed = await Task.WhenAll(ClosedOnceAsync(delivery.Id), ClosedOnceAsync(delivery.Id));
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(1, closed.Count(answer => answer));
+        Assert.Equal(
+            ErasureStatus.Complete,
+            (await Store(reading, Noon).FindAsync(delivery.Id, TestContext.Current.CancellationToken))?.Status);
+    }
+
     private static OutboxStore Store(StoreContext context, DateTimeOffset now) =>
         new(context, new FixedTime(now));
+
+    // A completion as the service makes one: the delivery read before, then again under
+    // its row's lock, and closed only where it still stands failed.
+    private async Task<bool> ClosedOnceAsync(DeliveryId delivery)
+    {
+        await using StoreContext writing = database.Context();
+        await using var work = new UnitOfWork(writing);
+        OutboxStore store = Store(writing, Noon);
+
+        _ = await store.FindAsync(delivery, TestContext.Current.CancellationToken);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        Delivery held = Assert.IsType<Delivery>(
+            await store.FindForUpdateAsync(delivery, TestContext.Current.CancellationToken));
+
+        bool failed = held.Status is ErasureStatus.Failed;
+
+        if (failed)
+        {
+            held.CompleteManually();
+
+            await store.RecordAsync(held, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return failed;
+    }
 }

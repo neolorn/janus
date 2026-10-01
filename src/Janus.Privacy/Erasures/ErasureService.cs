@@ -146,21 +146,36 @@ internal sealed class ErasureService(
             return Result.Failure(unwritten);
         }
 
-        string[] outstanding = Outstanding(delivery);
-
-        delivery.CompleteManually();
-
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
 
-        await outbox.RecordAsync(delivery, cancellationToken).ConfigureAwait(false);
+        // D-166 X3: the delivery is closed under its row's lock, so a second operator
+        // at the same moment finds it closed and closes nothing. A ledger line the
+        // second appended as well is one line to a replay (DR-016 AC2).
+        if (await outbox.FindForUpdateAsync(delivery.Id, cancellationToken).ConfigureAwait(false)
+            is not { Status: ErasureStatus.Failed } held)
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Failure(Error.From(ErrorCodes.ErasureNotFailed)), Result.Failure);
+        }
+
+        if (delivery.Confirmed.Contains(ErasureLedgerSubscriber.Called))
+        {
+            held.Confirm(ErasureLedgerSubscriber.Called);
+        }
+
+        string[] outstanding = Outstanding(held);
+
+        held.CompleteManually();
+
+        await outbox.RecordAsync(held, cancellationToken).ConfigureAwait(false);
 
         if (erased)
         {
-            await ClosedAsync(delivery.Subject, cancellationToken).ConfigureAwait(false);
+            await ClosedAsync(held.Subject, cancellationToken).ConfigureAwait(false);
         }
 
         await audit
@@ -168,9 +183,9 @@ internal sealed class ErasureService(
                 Completed,
                 context.Acting,
                 context.BreakGlassReason,
-                delivery.Subject,
+                held.Subject,
                 time.GetUtcNow(),
-                Named(erasure, delivery.Kind, outstanding),
+                Named(erasure, held.Kind, outstanding),
                 cancellationToken)
             .ConfigureAwait(false);
 

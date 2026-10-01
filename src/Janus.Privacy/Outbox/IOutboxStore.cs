@@ -35,6 +35,16 @@ internal interface IOutboxStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads one delivery under a lock on its row held until the operation's
+    /// transaction ends, so a decision on it cannot race another (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="delivery">What it is held under.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The delivery as committed when the lock was taken, or nothing where no such row exists.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask<Delivery?> FindForUpdateAsync(DeliveryId delivery, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reads one delivery.
     /// </summary>
     /// <param name="delivery">What it is held under.</param>

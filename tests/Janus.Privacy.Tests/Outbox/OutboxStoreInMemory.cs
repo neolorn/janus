@@ -42,6 +42,27 @@ internal sealed class OutboxStoreInMemory : IOutboxStore
                 .OrderBy(delivery => delivery.RaisedAt),
         ]);
 
+    /// <summary>
+    /// Gets or sets what another transaction commits while this one waits for a
+    /// delivery's row, so a test may change it under a decision already made.
+    /// </summary>
+    public Action<Delivery>? Locking { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask<Delivery?> FindForUpdateAsync(
+        DeliveryId delivery,
+        CancellationToken cancellationToken)
+    {
+        Delivery? held = _deliveries.Find(one => one.Id == delivery);
+
+        if (held is not null)
+        {
+            Locking?.Invoke(held);
+        }
+
+        return ValueTask.FromResult(held);
+    }
+
     /// <inheritdoc/>
     public ValueTask<Delivery?> FindAsync(
         DeliveryId delivery,

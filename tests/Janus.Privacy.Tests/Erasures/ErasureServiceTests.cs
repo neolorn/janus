@@ -183,6 +183,30 @@ public sealed class ErasureServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-003a, CONV-DESIGN-003: an erasure another operator closed while this
+    /// completion waited for its row is refused as no longer failed, and nothing more
+    /// is recorded.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_003a_AnErasureClosedMeanwhileIsNotClosedTwiceAsync()
+    {
+        Delivery delivery = await ErasedAsync(Ahmed, Noon.AddHours(-1), ErasureStatus.Failed);
+
+        _outbox.Locking = held =>
+        {
+            _outbox.Locking = null;
+            held.CompleteManually();
+        };
+
+        Error refused = Refused(await CompletedAsync(Mona, new ErasureId(delivery.Id.Value)));
+
+        Assert.Equal(ErrorCodes.ErasureNotFailed, refused.Code);
+        Assert.Equal(ErasureStatus.Complete, delivery.Status);
+        Assert.Empty(_audit.Entries);
+    }
+
+    /// <summary>
     /// IDN-LIFE-003a: the manual path is for permanent failure, so an erasure the
     /// subscribers are still working through, or one already complete, is refused and
     /// nothing is recorded; the step-up is not asked for a delivery the path would not

@@ -74,6 +74,43 @@ internal sealed class OutboxStore(StoreContext context, TimeProvider time) : IOu
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<Delivery?> FindForUpdateAsync(
+        DeliveryId delivery,
+        CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A delivery's row is held only inside the operation's transaction.");
+        }
+
+        bool tracked = context.Outbox.Local.Any(row => row.Id == delivery);
+
+        DeliveryRecord? held = (await context.Outbox
+                .FromSql($"SELECT * FROM identity.outbox WHERE id = {delivery.Value} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .SingleOrDefault();
+
+        if (held is null)
+        {
+            return null;
+        }
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the decision is made on is the row as it stood when the lock was taken,
+        // with every confirmation committed by then.
+        if (tracked)
+        {
+            await context.Entry(held).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await context.Entry(held).Collection(row => row.Confirmations).LoadAsync(cancellationToken).ConfigureAwait(false);
+
+        return Read(held);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask RecordAsync(Delivery delivery, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(delivery);
