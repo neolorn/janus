@@ -23,6 +23,12 @@ internal sealed class RecoveryLinkStoreInMemory : IRecoveryLinkStore
         ValueTask.FromResult(_links.GetValueOrDefault(Key(fingerprint)));
 
     /// <inheritdoc/>
+    public ValueTask<RecoveryLink?> FindForUpdateAsync(
+        byte[] fingerprint,
+        CancellationToken cancellationToken) =>
+        FindAsync(fingerprint, cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask<RecoveryLink?> FindAsync(
         EnrolmentSessionId session,
         CancellationToken cancellationToken) =>

@@ -171,27 +171,6 @@ internal sealed class RecoveryService(
         ArgumentNullException.ThrowIfNull(source);
 
         DateTimeOffset now = time.GetUtcNow();
-        RecoveryLink? link = await FindAsync(token, cancellationToken).ConfigureAwait(false);
-
-        if (link is null || link.Purpose is not RecoveryPurpose.SelfService || link.SpentAt is not null)
-        {
-            return Result.Failure(Error.From(ErrorCodes.RecoveryTokenInvalid));
-        }
-
-        if (link.HasExpired(now))
-        {
-            return Result.Failure(Error.From(ErrorCodes.RecoveryTokenExpired));
-        }
-
-        Error? failure = null;
-
-        _ = (await SetAsync(link.Subject, password, cancellationToken).ConfigureAwait(false))
-            .Match(() => true, error => Withheld<bool>(error, ref failure));
-
-        if (failure is not null)
-        {
-            return Result.Failure(failure);
-        }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
@@ -199,16 +178,31 @@ internal sealed class RecoveryService(
             return Result.Failure(notBegun);
         }
 
-        link.Spend(session: null, now);
+        // D-166 X3: the link is read under its lock, so a second completion of it waits
+        // for this one to commit and finds it spent; the password is set under the same
+        // lock, so only the completion that spends the link sets one.
+        RecoveryLink? link = await LockedAsync(token, cancellationToken).ConfigureAwait(false);
+        Error? failure = Unopened(link, RecoveryPurpose.SelfService, ErrorCodes.RecoveryTokenInvalid, now);
 
-        await links.RecordAsync(link, cancellationToken).ConfigureAwait(false);
-
-        // D-140: recovery is the way back for an account its own holder deactivated,
-        // and finishing it is what stands it up again.
-        if (await accounts.SuspendedByAsync(link.Subject, cancellationToken).ConfigureAwait(false)
-            is SuspensionOrigin.Self)
+        if (failure is null)
         {
-            await accounts.ReinstateAsync(link.Subject, cancellationToken).ConfigureAwait(false);
+            _ = (await SetAsync(link!.Subject, password, cancellationToken).ConfigureAwait(false))
+                .Match(() => true, error => Withheld<bool>(error, ref failure));
+        }
+
+        if (failure is null)
+        {
+            link!.Spend(session: null, now);
+
+            await links.RecordAsync(link, cancellationToken).ConfigureAwait(false);
+
+            // D-140: recovery is the way back for an account its own holder deactivated,
+            // and finishing it is what stands it up again.
+            if (await accounts.SuspendedByAsync(link.Subject, cancellationToken).ConfigureAwait(false)
+                is SuspensionOrigin.Self)
+            {
+                await accounts.ReinstateAsync(link.Subject, cancellationToken).ConfigureAwait(false);
+            }
         }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
@@ -217,9 +211,14 @@ internal sealed class RecoveryService(
             return Result.Failure(notCommitted);
         }
 
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
         // IDN-LIFE-008: a changed password ends every session that was held under the
         // old one, wherever it is held.
-        _ = (await sessions.EndAccountAsync(link.Subject, cancellationToken).ConfigureAwait(false))
+        _ = (await sessions.EndAccountAsync(link!.Subject, cancellationToken).ConfigureAwait(false))
             .Match(() => true, error => Withheld<bool>(error, ref failure));
 
         if (failure is not null)
@@ -317,18 +316,6 @@ internal sealed class RecoveryService(
         ArgumentNullException.ThrowIfNull(token);
 
         DateTimeOffset now = time.GetUtcNow();
-        RecoveryLink? link = await FindAsync(token, cancellationToken).ConfigureAwait(false);
-
-        if (link is null || link.Purpose is not RecoveryPurpose.Enrolment || link.SpentAt is not null)
-        {
-            return Result.Failure<EnrolmentSession>(Error.From(ErrorCodes.EnrolmentTokenInvalid));
-        }
-
-        if (link.HasExpired(now))
-        {
-            return Result.Failure<EnrolmentSession>(Error.From(ErrorCodes.RecoveryTokenExpired));
-        }
-
         var opened = EnrolmentSessionId.New(time);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -337,9 +324,17 @@ internal sealed class RecoveryService(
             return Result.Failure<EnrolmentSession>(notBegun);
         }
 
-        link.Spend(opened, now);
+        // D-166 X3: the link is read under its lock, so a second opening of it waits for
+        // this one to commit and finds it spent.
+        RecoveryLink? link = await LockedAsync(token, cancellationToken).ConfigureAwait(false);
+        Error? failure = Unopened(link, RecoveryPurpose.Enrolment, ErrorCodes.EnrolmentTokenInvalid, now);
 
-        await links.RecordAsync(link, cancellationToken).ConfigureAwait(false);
+        if (failure is null)
+        {
+            link!.Spend(opened, now);
+
+            await links.RecordAsync(link, cancellationToken).ConfigureAwait(false);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -349,8 +344,10 @@ internal sealed class RecoveryService(
 
         // D-147: the session the link opens is capped by the link's own lifetime and
         // never given one of its own.
-        return Result.Success(
-            new EnrolmentSession(opened, link.Subject, link.ExpiresAt, link.MailboxLost));
+        return failure is not null
+            ? Result.Failure<EnrolmentSession>(failure)
+            : Result.Success(
+                new EnrolmentSession(opened, link!.Subject, link.ExpiresAt, link.MailboxLost));
     }
 
     /// <inheritdoc/>
@@ -443,12 +440,26 @@ internal sealed class RecoveryService(
     // AUTHZ-SCOPE-001: the permission is held in an organization, and an approver
     // approves for any account with the permission one of their own organizations
     // grants them. The account being recovered need belong to none.
-    private async ValueTask<RecoveryLink?> FindAsync([NeverLogged] string token, CancellationToken cancellationToken) =>
+    private async ValueTask<RecoveryLink?> LockedAsync([NeverLogged] string token, CancellationToken cancellationToken) =>
         token is { Length: > 0 }
             ? await links
-                .FindAsync(OpaqueToken.Of(token).Fingerprint(), cancellationToken)
+                .FindForUpdateAsync(OpaqueToken.Of(token).Fingerprint(), cancellationToken)
                 .ConfigureAwait(false)
             : null;
+
+    // What a link that does not open the endpoint consuming it is refused with: one
+    // spent, of the other purpose or none at all is invalid, and one past its lifetime
+    // has expired.
+    private static Error? Unopened(
+        RecoveryLink? link,
+        RecoveryPurpose purpose,
+        ErrorCode invalid,
+        DateTimeOffset now) =>
+        link is null || link.Purpose != purpose || link.SpentAt is not null
+            ? Error.From(invalid)
+            : link.HasExpired(now)
+                ? Error.From(ErrorCodes.RecoveryTokenExpired)
+                : null;
 
     // AUTH-ABUSE-002 AC3, AUTH-ABUSE-003: a recovery no link answers, because no
     // account holds the address or the account cannot be recovered by it, is answered

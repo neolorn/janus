@@ -1478,6 +1478,9 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- A recovery link and an enrolment link are spent under a lock on the link's row, so
+  one link completed or opened twice at once sets one password or opens one enrolment
+  session, and the second is refused as a spent link.
 - A credential a provider's event held is restored at a sign-in by another factor only
   where its row, read under a lock, is still held, so a credential invalidated meanwhile
   stays invalidated.

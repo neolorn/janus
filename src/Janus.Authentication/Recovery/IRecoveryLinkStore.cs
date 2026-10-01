@@ -20,6 +20,17 @@ internal interface IRecoveryLinkStore
     ValueTask<RecoveryLink?> FindAsync(byte[] fingerprint, CancellationToken cancellationToken);
 
     /// <summary>
+    /// The link a token answers to, read under a lock on its row held until the
+    /// operation's transaction ends, so a second spend of it waits for the first and
+    /// finds it spent (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="fingerprint">What the token hashes to.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The link as committed when the lock was taken, or nothing.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask<RecoveryLink?> FindForUpdateAsync(byte[] fingerprint, CancellationToken cancellationToken);
+
+    /// <summary>
     /// The link that opened one enrolment session, which is that session.
     /// </summary>
     /// <param name="session">Which session.</param>

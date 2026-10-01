@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Recovery;
@@ -31,6 +32,37 @@ internal sealed class RecoveryLinkStore(StoreContext context) : IRecoveryLinkSto
             await context.RecoveryLinks
                 .FindAsync([fingerprint], cancellationToken)
                 .ConfigureAwait(false));
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<RecoveryLink?> FindForUpdateAsync(
+        byte[] fingerprint,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(fingerprint);
+
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A recovery link's row is held only inside the operation's transaction.");
+        }
+
+        bool tracked = context.RecoveryLinks.Local.Any(record => CryptographicOperations.FixedTimeEquals(record.Token, fingerprint));
+
+        RecoveryLinkRecord? held = (await context.RecoveryLinks
+                .FromSql($"SELECT * FROM identity.recovery_links WHERE token = {fingerprint} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .SingleOrDefault();
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the decision is made on is the row as it stood when the lock was taken.
+        if (held is not null && tracked)
+        {
+            await context.Entry(held).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return Read(held);
     }
 
     /// <inheritdoc/>
