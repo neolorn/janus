@@ -61,6 +61,10 @@ internal sealed class CallbackAdmission(
                 {
                     DateTimeOffset now = time.GetUtcNow();
 
+                    // D-166 X3: counted with the source's callbacks held, so a burst is
+                    // counted one after another.
+                    await callbacks.HoldAsync(source, cancellationToken).ConfigureAwait(false);
+
                     int made = await callbacks
                         .ReceivedAsync(source, now, Minute, cancellationToken)
                         .ConfigureAwait(false);
@@ -109,6 +113,8 @@ internal sealed class CallbackAdmission(
                 async allowed =>
                 {
                     DateTimeOffset now = time.GetUtcNow();
+
+                    await callbacks.HoldAsync(source, cancellationToken).ConfigureAwait(false);
 
                     int rejected = await callbacks
                         .RejectedAsync(source, now, now - Hour, cancellationToken)

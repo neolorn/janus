@@ -191,6 +191,32 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// INT-GEN-003, CONV-DESIGN-003: a callback from the source counted while this one
+    /// waited for the source's callbacks is counted, so this one is over the limit.
+    /// </summary>
+    [Fact]
+    public async Task INT_GEN_003_ACallbackCountedMeanwhileIsCountedAsync()
+    {
+        _configuration.Set(Settings.IntegrationCallbackRateLimit, 1);
+        SendReference reference = await SentAsync();
+
+        _callbacks.Holding = source =>
+        {
+            _callbacks.Holding = null;
+            _ = _callbacks.ReceivedAsync(source, Noon, TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken).AsTask();
+        };
+
+        Assert.Equal(
+            ErrorCodes.CallbackRejected,
+            Refusal(await Reports.ReportAsync(
+                Gateway,
+                reference.Value,
+                delivered: false,
+                TestContext.Current.CancellationToken)));
+        Assert.Single(_ledger.Sends(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value)));
+    }
+
+    /// <summary>
     /// INT-GEN-003: a flood from one source is answered before any lookup, so the
     /// endpoint costs the deployment nothing beyond the count it already keeps.
     /// </summary>

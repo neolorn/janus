@@ -18,6 +18,20 @@ internal sealed class CallbackLedgerInMemory : ICallbackLedger
     /// </summary>
     public List<(string Source, DateTimeOffset At, bool Rejected)> Counted { get; } = [];
 
+    /// <summary>
+    /// Gets or sets what another transaction commits while this one waits for a
+    /// source's callbacks, so a test may count one under a count about to be taken.
+    /// </summary>
+    public Action<string>? Holding { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask HoldAsync(string source, CancellationToken cancellationToken)
+    {
+        Holding?.Invoke(source);
+
+        return ValueTask.CompletedTask;
+    }
+
     /// <inheritdoc/>
     public ValueTask<int> ReceivedAsync(
         string source,

@@ -12,6 +12,17 @@ namespace Janus.Authentication.Callbacks;
 internal interface ICallbackLedger
 {
     /// <summary>
+    /// Holds one source's callbacks against every other count of them until the
+    /// operation's transaction ends, so a count is taken on what is committed and two
+    /// callbacks at once are counted one after the other (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="source">Where they came from, which the lock names only hashed.</param>
+    /// <param name="cancellationToken">Abandons the wait.</param>
+    /// <returns>The work of holding them.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask HoldAsync(string source, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Counts one callback from a source and says how many that source has made in
     /// the window it falls in.
     /// </summary>

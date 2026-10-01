@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Authentication.Callbacks;
 using Janus.Core;
 using Microsoft.EntityFrameworkCore;
@@ -14,16 +15,49 @@ namespace Janus.Storage.Authentication.Callbacks;
 /// Where inbound callbacks are counted per source.
 /// </summary>
 /// <param name="context">The context the operation runs on.</param>
+/// <param name="connections">Where the lock statement takes its connection from.</param>
 /// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <remarks>
 /// Implements INT-GEN-003, BFF-MACH-003, OPS-SEC-003 and CONV-DESIGN-003. A callback
 /// recorded under a previous version of the fingerprint key still counts until the
 /// rotation retires it.
 /// </remarks>
-internal sealed class CallbackLedger(StoreContext context, IKeyRing ring)
+internal sealed class CallbackLedger(StoreContext context, DataConnections connections, IKeyRing ring)
     : ICallbackLedger
 {
+    // D-166 X3: a callback is admitted on the count of those committed before it, so a
+    // burst would each count without the others. The source's callbacks are held for
+    // the rest of the transaction; no read takes this lock.
+    private const string Hold =
+        """
+        SELECT pg_advisory_xact_lock(hashtextextended(
+            'identity.callbacks/' || encode(@source, 'hex'),
+            0));
+        """;
+
     private static readonly TimeSpan Kept = TimeSpan.FromHours(1);
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask HoldAsync(string source, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A source's callbacks are held only inside the operation's transaction.");
+        }
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        _ = await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                Hold,
+                new { source = Candidates(source)[0] },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
 
     /// <inheritdoc/>
     public async ValueTask<int> ReceivedAsync(
