@@ -209,10 +209,14 @@ internal sealed class SendingService(
     /// <summary>
     /// Runs one pass of the publisher over the messages no transport has taken in full.
     /// </summary>
+    /// <param name="context">The system principal the pass runs as.</param>
     /// <param name="cancellationToken">Abandons the pass.</param>
     /// <returns>How many messages are now carried in full, or the failure that stopped the pass.</returns>
-    public async ValueTask<Result<int>> RetryAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">The context is not a principal that may deliver what has been committed.</exception>
+    public async ValueTask<Result<int>> RetryAsync(AccessContext context, CancellationToken cancellationToken)
     {
+        _ = Delivering(context);
+
         DateTimeOffset now = time.GetUtcNow();
         IReadOnlyList<SendDelivery> due = await outbox.DueAsync(now, Batch, cancellationToken)
             .ConfigureAwait(false);
@@ -252,6 +256,15 @@ internal sealed class SendingService(
 
         return Result.Success(carried);
     }
+
+    // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the pass runs as a named
+    // principal that may deliver what has been committed, and never as nobody.
+    private static SystemPrincipal Delivering(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.Delivery)
+            ? principal
+            : throw new ArgumentException(
+                "The pass runs as a system principal that may deliver what has been committed.",
+                nameof(context));
 
     private static TValue Held<TValue>(Error error, ref Error? failure)
     {

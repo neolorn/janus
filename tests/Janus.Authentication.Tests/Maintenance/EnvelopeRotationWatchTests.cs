@@ -18,6 +18,9 @@ namespace Janus.Authentication.Tests.Maintenance;
 [Trait("kind", "unit")]
 public sealed class EnvelopeRotationWatchTests
 {
+    private static readonly AccessContext Watcher = AccessContext.Of(
+        SystemPrincipal.ForDeployment("envelope-rotation", "DR-009a", SystemOperation.Monitoring));
+
     private static readonly DateTimeOffset Noon = new(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);
 
     private const string Cryptoperiod = "kek-cryptoperiod";
@@ -211,7 +214,7 @@ public sealed class EnvelopeRotationWatchTests
             TestContext.Current.CancellationToken);
 
     private async Task<bool> RaisedAsync() =>
-        (await Watch.WatchAsync(TestContext.Current.CancellationToken)).Match(
+        (await Watch.WatchAsync(Watcher, TestContext.Current.CancellationToken)).Match(
             raised => raised,
             error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
 }

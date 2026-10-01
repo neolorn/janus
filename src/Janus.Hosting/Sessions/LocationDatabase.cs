@@ -48,7 +48,7 @@ internal sealed class LocationDatabase(
         // A process reads the file the first time it is asked, so a restart does not
         // wait for the next refresh; after that only the refresh reads it.
         if (!copy.Read
-            && (await RefreshAsync(cancellationToken).ConfigureAwait(false))
+            && (await RefreshedAsync(cancellationToken).ConfigureAwait(false))
                 .Match(() => (Error?)null, error => error) is Error unread)
         {
             return Result.Failure<ResolvedLocation?>(unread);
@@ -76,12 +76,31 @@ internal sealed class LocationDatabase(
     /// <summary>
     /// Reads the file again and holds it in place of the copy held before.
     /// </summary>
+    /// <param name="context">The system principal the watch runs as.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Nothing, or the failure where a refresh that failed could not be raised. A
     /// refresh that failed keeps the copy held before it, until that copy is stale.
     /// </returns>
-    public async ValueTask<Result> RefreshAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">The context is not a principal that may monitor.</exception>
+    public async ValueTask<Result> RefreshAsync(AccessContext context, CancellationToken cancellationToken)
+    {
+        _ = Monitoring(context);
+
+        return await RefreshedAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the watch runs as a named
+    // principal that may monitor, and never as nobody.
+    private static SystemPrincipal Monitoring(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.Monitoring)
+            ? principal
+            : throw new ArgumentException(
+                "The watch runs as a system principal that may monitor.",
+                nameof(context));
+
+    // The read itself, which the first address a process is asked about makes as well.
+    private async ValueTask<Result> RefreshedAsync(CancellationToken cancellationToken)
     {
         copy.Tried();
 

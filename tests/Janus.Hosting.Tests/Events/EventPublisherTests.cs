@@ -26,6 +26,9 @@ namespace Janus.Hosting.Tests.Events;
 [Trait("kind", "unit")]
 public sealed class EventPublisherTests : IAsyncDisposable
 {
+    private static readonly AccessContext Carrier = AccessContext.Of(
+        SystemPrincipal.ForDeployment("events", "IDN-LIFE-003a", SystemOperation.Delivery));
+
     private static readonly DateTimeOffset Noon = new(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);
 
     private readonly PendingEventsInMemory _events = new();
@@ -226,6 +229,6 @@ public sealed class EventPublisherTests : IAsyncDisposable
                 _work,
                 _clock,
                 _randomness)
-            .PublishAsync(TestContext.Current.CancellationToken))
+            .PublishAsync(Carrier, TestContext.Current.CancellationToken))
         .Match(published => published, error => throw new InvalidOperationException(error.Code.ToString()));
 }

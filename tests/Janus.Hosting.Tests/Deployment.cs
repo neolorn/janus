@@ -43,6 +43,7 @@ using Janus.Core.Configuration;
 using Janus.Hosting.Accounts;
 using Janus.Hosting.Alerting;
 using Janus.Hosting.Authentication;
+using Janus.Hosting.Background;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Configuration;
 using Janus.Hosting.Credentials;
@@ -722,7 +723,9 @@ internal sealed class Deployment : IAsyncDisposable
 
         return (await scope.ServiceProvider
                 .GetRequiredService<AlertDispatch>()
-                .CarryAsync(CancellationToken.None))
+                .CarryAsync(
+                    AccessContext.Of(BackgroundJobs.All.Single(job => job.Name == AlertDispatch.Job).Principal),
+                    CancellationToken.None))
             .Match(
                 carried => carried,
                 error => throw new InvalidOperationException("The alert channels refused: " + error.Code + "."));

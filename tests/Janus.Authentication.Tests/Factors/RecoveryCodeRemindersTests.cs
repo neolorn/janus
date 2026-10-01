@@ -18,6 +18,9 @@ namespace Janus.Authentication.Tests.Factors;
 [Trait("kind", "unit")]
 public sealed class RecoveryCodeRemindersTests : IAsyncDisposable
 {
+    private static readonly AccessContext Sweeper = AccessContext.Of(
+        SystemPrincipal.ForDeployment("recovery-code-reminder", "AUTH-FACT-008", SystemOperation.ExpirySweep));
+
     private const string Address = "person@example.test";
     private const string Number = "+441632960011";
 
@@ -214,6 +217,6 @@ public sealed class RecoveryCodeRemindersTests : IAsyncDisposable
             TestContext.Current.CancellationToken);
 
     private async ValueTask<int> RemindedAsync() =>
-        (await Reminders.RemindAsync(TestContext.Current.CancellationToken))
+        (await Reminders.RemindAsync(Sweeper, TestContext.Current.CancellationToken))
             .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 }

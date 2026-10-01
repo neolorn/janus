@@ -38,6 +38,9 @@ namespace Janus.Authentication.Tests.Registration;
 [Trait("kind", "unit")]
 public sealed partial class RegistrationServiceTests : IAsyncDisposable
 {
+    private static readonly AccessContext Sweeper = AccessContext.Of(
+        SystemPrincipal.ForDeployment("registration-sweep", "REG-SESS-001", SystemOperation.ExpirySweep));
+
     private const string Client = "web";
     private const string Registered = "https://app.example.test/welcome";
 
@@ -212,7 +215,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
 
         _clock.Advance(Settings.RegistrationSessionLifetime.Default + TimeSpan.FromMinutes(1));
 
-        Assert.Equal(1, await Service.SweepAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await Service.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
         Assert.Empty(_sessions.All);
     }
 
@@ -837,7 +840,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
 
         _clock.Advance(Settings.RegistrationSessionLifetime.Default + TimeSpan.FromMinutes(1));
 
-        Assert.Equal(1, await Service.SweepAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await Service.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
         Assert.Empty(_directory.Created);
     }
 

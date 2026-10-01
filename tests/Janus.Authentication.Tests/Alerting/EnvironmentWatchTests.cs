@@ -16,6 +16,9 @@ namespace Janus.Authentication.Tests.Alerting;
 [Trait("kind", "unit")]
 public sealed class EnvironmentWatchTests
 {
+    private static readonly AccessContext Watcher = AccessContext.Of(
+        SystemPrincipal.ForDeployment("clock-drift", "INF-HOST-001", SystemOperation.Monitoring));
+
     private static readonly DateTimeOffset Noon = new(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);
 
     private readonly EnvironmentInMemory _environment = new();
@@ -172,6 +175,6 @@ public sealed class EnvironmentWatchTests
             _alerts.Of<AlertRaised>().Select(alert => Alerts.Deduplication(alert.IdempotencyKey)));
     }
 
-    private static async Task WatchedAsync(Func<CancellationToken, ValueTask<Result>> watch) =>
-        Assert.Null((await watch(TestContext.Current.CancellationToken)).Match(() => (Error?)null, error => error));
+    private static async Task WatchedAsync(Func<AccessContext, CancellationToken, ValueTask<Result>> watch) =>
+        Assert.Null((await watch(Watcher, TestContext.Current.CancellationToken)).Match(() => (Error?)null, error => error));
 }

@@ -46,10 +46,14 @@ internal sealed class EventPublisher(
     /// <summary>
     /// Runs one pass.
     /// </summary>
+    /// <param name="context">The system principal the pass runs as.</param>
     /// <param name="cancellationToken">Abandons the pass.</param>
     /// <returns>How many events every consumer has now taken, or the failure that stopped the pass.</returns>
-    public async ValueTask<Result<int>> PublishAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">The context is not a principal that may deliver what has been committed.</exception>
+    public async ValueTask<Result<int>> PublishAsync(AccessContext context, CancellationToken cancellationToken)
     {
+        _ = Delivering(context);
+
         DateTimeOffset now = time.GetUtcNow();
         IReadOnlyList<PendingEvent> due = await events.DueAsync(now, Batch, cancellationToken)
             .ConfigureAwait(false);
@@ -138,6 +142,15 @@ internal sealed class EventPublisher(
 
         return Result.Success(published);
     }
+
+    // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the pass runs as a named
+    // principal that may deliver what has been committed, and never as nobody.
+    private static SystemPrincipal Delivering(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.Delivery)
+            ? principal
+            : throw new ArgumentException(
+                "The pass runs as a system principal that may deliver what has been committed.",
+                nameof(context));
 
     // A consumer that throws is a consumer that did not take the event. Letting the
     // fault out would leave the attempt uncounted, so the event would be offered at

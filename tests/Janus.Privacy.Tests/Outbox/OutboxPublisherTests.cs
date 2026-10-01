@@ -21,6 +21,9 @@ namespace Janus.Privacy.Tests.Outbox;
 [Trait("kind", "unit")]
 public sealed class OutboxPublisherTests : IAsyncDisposable
 {
+    private static readonly AccessContext Carrier = AccessContext.Of(
+        SystemPrincipal.ForDeployment("outbox", "IDN-LIFE-003a", SystemOperation.Delivery));
+
     private static readonly DateTimeOffset Noon = new(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly SubjectId Ahmed =
@@ -63,7 +66,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
 
         Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
 
-        Assert.Equal(1, await Publisher(_whole).PublishAsync(CancellationToken.None));
+        Assert.Equal(1, await Publisher(_whole).PublishAsync(Carrier, CancellationToken.None));
 
         ErasureRequested raised = Assert.IsType<ErasureRequested>(Assert.Single(host.Offered));
 
@@ -88,13 +91,13 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
 
         Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
 
-        Assert.Equal(0, await Publisher(_none).PublishAsync(CancellationToken.None));
+        Assert.Equal(0, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
         Assert.Equal(ErasureStatus.AwaitingSubscribers, delivery.Status);
         Assert.Equal(["host"], delivery.Confirmed);
 
         warehouse.Confirms = true;
 
-        Assert.Equal(1, await Publisher(_none).PublishAsync(CancellationToken.None));
+        Assert.Equal(1, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
         Assert.Equal(ErasureStatus.Complete, delivery.Status);
     }
 
@@ -110,7 +113,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
 
         Delivery delivery = await RaisedAsync(SubjectEventKind.RestrictionChanged);
 
-        await Publisher(_whole).PublishAsync(CancellationToken.None);
+        await Publisher(_whole).PublishAsync(Carrier, CancellationToken.None);
 
         Assert.Equal(ErasureStatus.AwaitingSubscribers, delivery.Status);
         Assert.Equal(1, delivery.Attempts);
@@ -134,13 +137,13 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
 
         Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
 
-        Assert.Equal(0, await Publisher(_none).PublishAsync(CancellationToken.None));
+        Assert.Equal(0, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
         Assert.Equal(ErasureStatus.AwaitingSubscribers, delivery.Status);
         Assert.Equal(["warehouse"], delivery.Confirmed);
 
         host.Faults = false;
 
-        Assert.Equal(1, await Publisher(_none).PublishAsync(CancellationToken.None));
+        Assert.Equal(1, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
         Assert.Equal(ErasureStatus.Complete, delivery.Status);
     }
 
@@ -161,8 +164,8 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
 
         Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
 
-        await Publisher(_none).PublishAsync(CancellationToken.None);
-        await Publisher(_none).PublishAsync(CancellationToken.None);
+        await Publisher(_none).PublishAsync(Carrier, CancellationToken.None);
+        await Publisher(_none).PublishAsync(Carrier, CancellationToken.None);
 
         Assert.Single(host.Offered);
         Assert.Equal(2, warehouse.Offered.Count);
@@ -186,19 +189,19 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
 
         Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
 
-        await Publisher(_whole).PublishAsync(CancellationToken.None);
+        await Publisher(_whole).PublishAsync(Carrier, CancellationToken.None);
 
         Assert.Equal(Noon.AddSeconds(30), delivery.NextAttemptAt);
 
         _clock.Advance(TimeSpan.FromMinutes(1));
 
-        await Publisher(_whole).PublishAsync(CancellationToken.None);
+        await Publisher(_whole).PublishAsync(Carrier, CancellationToken.None);
 
         Assert.Equal(Noon.AddMinutes(1).AddSeconds(60), delivery.NextAttemptAt);
 
         _clock.Advance(TimeSpan.FromMinutes(5));
 
-        await Publisher(_none).PublishAsync(CancellationToken.None);
+        await Publisher(_none).PublishAsync(Carrier, CancellationToken.None);
 
         Assert.Equal(_clock.GetUtcNow(), delivery.NextAttemptAt);
     }
@@ -216,10 +219,10 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
 
         Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
 
-        Assert.Equal(0, await Publisher(_none).PublishAsync(CancellationToken.None));
+        Assert.Equal(0, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
         Assert.Empty(_alerts.Raised);
 
-        Assert.Equal(1, await Publisher(_none).PublishAsync(CancellationToken.None));
+        Assert.Equal(1, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
         Assert.Equal(ErasureStatus.Failed, delivery.Status);
 
         PrivacyAlertRaised raised = Assert.Single(_alerts.Raised);
@@ -243,7 +246,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
 
         Delivery delivery = await RaisedAsync(SubjectEventKind.RestrictionChanged);
 
-        Assert.Equal(1, await Publisher(_none).PublishAsync(CancellationToken.None));
+        Assert.Equal(1, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
         Assert.Equal(ErasureStatus.Complete, delivery.Status);
     }
 
@@ -264,14 +267,14 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
 
         _erasures.Add(erasure);
 
-        await Publisher(_none).PublishAsync(CancellationToken.None);
+        await Publisher(_none).PublishAsync(Carrier, CancellationToken.None);
 
         Assert.Equal(1, erasure.Attempts);
         Assert.Equal(ErasureStatus.AwaitingSubscribers, erasure.Status);
 
         host.Confirms = true;
 
-        await Publisher(_none).PublishAsync(CancellationToken.None);
+        await Publisher(_none).PublishAsync(Carrier, CancellationToken.None);
 
         Assert.Equal(2, erasure.Attempts);
         Assert.Equal(ErasureStatus.Complete, erasure.Status);
@@ -295,7 +298,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
 
         _erasures.Add(erasure);
 
-        Assert.Equal(0, await Publisher(_none).PublishAsync(CancellationToken.None));
+        Assert.Equal(0, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
         Assert.Equal(ErasureStatus.AwaitingSubscribers, delivery.Status);
         Assert.Equal(ErasureStatus.AwaitingSubscribers, erasure.Status);
         Assert.Equal(["host"], delivery.Confirmed);
@@ -303,7 +306,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
 
         _ledger.Durable = true;
 
-        Assert.Equal(1, await Publisher(_none).PublishAsync(CancellationToken.None));
+        Assert.Equal(1, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
         Assert.Equal(ErasureStatus.Complete, delivery.Status);
         Assert.Equal(ErasureStatus.Complete, erasure.Status);
         Assert.Single(_ledger.Lines);
@@ -332,11 +335,11 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
                 reason: ErasureReason.MinorTakedown),
             CancellationToken.None);
 
-        await Publisher(_none).PublishAsync(CancellationToken.None);
+        await Publisher(_none).PublishAsync(Carrier, CancellationToken.None);
 
         host.Confirms = true;
 
-        await Publisher(_none).PublishAsync(CancellationToken.None);
+        await Publisher(_none).PublishAsync(Carrier, CancellationToken.None);
 
         Assert.Equal(
             ["2026-09-20T11:59:59Z 11111111-1111-4111-8111-111111111111 minor-takedown"],
@@ -357,8 +360,8 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
 
         Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
 
-        await Publisher(_none).PublishAsync(CancellationToken.None);
-        await Publisher(_none).PublishAsync(CancellationToken.None);
+        await Publisher(_none).PublishAsync(Carrier, CancellationToken.None);
+        await Publisher(_none).PublishAsync(Carrier, CancellationToken.None);
 
         Assert.Equal(ErasureStatus.Failed, delivery.Status);
 
@@ -383,7 +386,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
 
         Delivery delivery = await RaisedAsync(SubjectEventKind.RestrictionChanged);
 
-        Assert.Equal(1, await Publisher(_none).PublishAsync(CancellationToken.None));
+        Assert.Equal(1, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
         Assert.Equal(ErasureStatus.Complete, delivery.Status);
         Assert.Equal(["host"], delivery.Confirmed);
     }
@@ -408,7 +411,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
         await _outbox.AddAsync(confirmed, CancellationToken.None);
         _erasures.Add(row);
 
-        Assert.Equal(1, await Publisher(_none).PublishAsync(CancellationToken.None));
+        Assert.Equal(1, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
 
         closed.Fail();
         closed.CompleteManually();
@@ -418,14 +421,14 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
 
         _ledger = new ErasureLedgerInMemory { Durable = false };
 
-        Assert.Equal(0, await Publisher(_none).PublishAsync(CancellationToken.None));
+        Assert.Equal(0, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
         Assert.Empty(_ledger.Lines);
         Assert.DoesNotContain("erasure-ledger", confirmed.Confirmed);
 
         _ledger.Durable = true;
 
-        Assert.Equal(0, await Publisher(_none).PublishAsync(CancellationToken.None));
-        Assert.Equal(0, await Publisher(_none).PublishAsync(CancellationToken.None));
+        Assert.Equal(0, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
+        Assert.Equal(0, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
 
         Assert.Equal(
             [

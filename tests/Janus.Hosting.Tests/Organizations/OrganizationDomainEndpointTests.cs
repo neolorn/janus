@@ -22,6 +22,9 @@ namespace Janus.Hosting.Tests.Organizations;
 [Trait("kind", "unit")]
 public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
 {
+    private static readonly AccessContext Sweeper = AccessContext.Of(
+        SystemPrincipal.ForDeployment("domain-reverification", "REG-DOM-001", SystemOperation.ExpirySweep));
+
     private const string Domain = "example.test";
 
     private const string Listed = """{"domain":"example.test","reason":"Staff sign in with work addresses."}""";
@@ -122,7 +125,7 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
         _deployment.Dns.Withdraw(listed.GetProperty("recordName").GetString()!);
         _deployment.Clock.Advance(TimeSpan.FromDays(1) + TimeSpan.FromMinutes(1));
 
-        Result<int> swept = await Sweep().SweepAsync(CancellationToken.None);
+        Result<int> swept = await Sweep().SweepAsync(Sweeper, CancellationToken.None);
         LockedDomain checkedDomain = Assert.Single(_deployment.Domains.Held);
 
         Assert.Equal(1, swept.Match(count => count, _ => -1));
@@ -148,11 +151,11 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
 
         _ = await VerifiedAsync(administrator);
 
-        Assert.Equal(0, (await Sweep().SweepAsync(CancellationToken.None)).Match(count => count, _ => -1));
+        Assert.Equal(0, (await Sweep().SweepAsync(Sweeper, CancellationToken.None)).Match(count => count, _ => -1));
 
         _deployment.Clock.Advance(TimeSpan.FromDays(1) + TimeSpan.FromMinutes(1));
 
-        Assert.Equal(1, (await Sweep().SweepAsync(CancellationToken.None)).Match(count => count, _ => -1));
+        Assert.Equal(1, (await Sweep().SweepAsync(Sweeper, CancellationToken.None)).Match(count => count, _ => -1));
         Assert.True(Assert.Single(_deployment.Domains.Held).LastCheckPassed);
         Assert.Empty(_deployment.Events.Of<AlertRaised>());
     }

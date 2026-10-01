@@ -46,13 +46,17 @@ internal sealed class EnvelopeRotationWatch(
     /// <summary>
     /// Runs one look.
     /// </summary>
+    /// <param name="context">The system principal the watch runs as.</param>
     /// <param name="cancellationToken">Abandons the look.</param>
     /// <returns>
     /// Whether the operation or the cryptoperiod's end was raised as due, or the failure
     /// that stopped the look.
     /// </returns>
-    public async ValueTask<Result<bool>> WatchAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">The context is not a principal that may monitor.</exception>
+    public async ValueTask<Result<bool>> WatchAsync(AccessContext context, CancellationToken cancellationToken)
     {
+        _ = Monitoring(context);
+
         Error? failure = null;
 
         TimeSpan lead = (await configuration
@@ -88,6 +92,15 @@ internal sealed class EnvelopeRotationWatch(
         return (await CryptoperiodAsync(lead, now, cancellationToken).ConfigureAwait(false))
             .Match(ending => Result.Success(operationDue || ending), Result.Failure<bool>);
     }
+
+    // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the watch runs as a named
+    // principal that may monitor, and never as nobody.
+    private static SystemPrincipal Monitoring(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.Monitoring)
+            ? principal
+            : throw new ArgumentException(
+                "The watch runs as a system principal that may monitor.",
+                nameof(context));
 
     // DR-009a AC6: the cryptoperiod follows the key's own rotation record, so no log
     // entry ends the warning and a rotation of the fingerprint key does not either. A

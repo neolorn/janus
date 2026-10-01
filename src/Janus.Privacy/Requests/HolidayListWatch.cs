@@ -31,10 +31,14 @@ internal sealed class HolidayListWatch(
     /// <summary>
     /// Runs one look.
     /// </summary>
+    /// <param name="context">The system principal the watch runs as.</param>
     /// <param name="cancellationToken">Abandons the look.</param>
     /// <returns>Whether the list had run out, or the refusal the settings gave.</returns>
-    public async ValueTask<Result<bool>> WatchAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">The context is not a principal that may monitor.</exception>
+    public async ValueTask<Result<bool>> WatchAsync(AccessContext context, CancellationToken cancellationToken)
     {
+        _ = Monitoring(context);
+
         Error? failure = null;
 
         TimeSpan lead = (await configuration
@@ -68,6 +72,15 @@ internal sealed class HolidayListWatch(
 
         return Result.Success(true);
     }
+
+    // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the watch runs as a named
+    // principal that may monitor, and never as nobody.
+    private static SystemPrincipal Monitoring(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.Monitoring)
+            ? principal
+            : throw new ArgumentException(
+                "The watch runs as a system principal that may monitor.",
+                nameof(context));
 
     private static Dictionary<string, JsonElement> Reaching(DateTimeOffset horizon) =>
         new(capacity: 1, StringComparer.Ordinal)

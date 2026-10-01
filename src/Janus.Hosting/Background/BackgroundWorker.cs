@@ -275,7 +275,7 @@ internal sealed class BackgroundWorker(
                         return Result.Success();
                     }
 
-                    failure = (await job.RunAsync(services, cancellationToken).ConfigureAwait(false))
+                    failure = (await job.RunAsync(services, AccessContext.Of(job.Principal), cancellationToken).ConfigureAwait(false))
                         .Match(() => (Error?)null, error => error);
 
                     if (failure is not null)

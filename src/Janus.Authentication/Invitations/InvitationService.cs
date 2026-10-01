@@ -684,10 +684,14 @@ internal sealed class InvitationService(
     /// Forgets what every invitation that expired unused bound, leaving who invited
     /// into what and the mailbox it reserved (PRIV-RIGHT-005a, REG-MAIL-001).
     /// </summary>
+    /// <param name="context">The system principal the pass runs as.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>How many were swept.</returns>
-    public async ValueTask<int> SweepAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">The context is not a principal that may sweep what has expired.</exception>
+    public async ValueTask<int> SweepAsync(AccessContext context, CancellationToken cancellationToken)
     {
+        _ = Sweeping(context);
+
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
@@ -700,6 +704,15 @@ internal sealed class InvitationService(
 
         return swept;
     }
+
+    // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the pass runs as a named
+    // principal that may sweep what has expired, and never as nobody.
+    private static SystemPrincipal Sweeping(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.ExpirySweep)
+            ? principal
+            : throw new ArgumentException(
+                "The pass runs as a system principal that may sweep what has expired.",
+                nameof(context));
 
     /// <inheritdoc/>
     public ValueTask<Result> EndMembershipAsync(

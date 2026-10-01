@@ -36,6 +36,12 @@ namespace Janus.Authentication.Tests.Invitations;
 [Trait("kind", "unit")]
 public sealed class InvitationServiceTests : IAsyncDisposable
 {
+    private static readonly AccessContext Sweeper = AccessContext.Of(
+        SystemPrincipal.ForDeployment("invitation-sweep", "PRIV-RIGHT-005a", SystemOperation.ExpirySweep));
+
+    private static readonly AccessContext Carrier = AccessContext.Of(
+        SystemPrincipal.ForDeployment("mailbox-provisioning", "INT-MAIL-006a", SystemOperation.Delivery));
+
     private const string Source = "198.51.100.7";
     private const string Personal = "person@elsewhere.test";
     private const string Corporate = "person@staff.test";
@@ -223,7 +229,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Equal(Corporate, reserved.Address.Value);
         Assert.Equal(reserved.Id, _invitations.Held[0].Mailbox);
 
-        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+        _ = await Publisher.PublishAsync(Carrier, TestContext.Current.CancellationToken);
 
         MailboxPush pushed = Assert.Single(_server.Applied);
 
@@ -242,7 +248,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     public async Task IDN_LIFE_009a_AC4_TheMailboxIsEnabledByTheMembershipAndNeverByRegistrationAsync()
     {
         _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
-        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+        _ = await Publisher.PublishAsync(Carrier, TestContext.Current.CancellationToken);
 
         Assert.False(_server.Hosts(Corporate));
 
@@ -254,14 +260,14 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         _authenticators.Hold(Passkey(holder));
         _ = _mailboxes.Standing.Add(holder);
         Accepted(await OpenAsync(holder, token));
-        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+        _ = await Publisher.PublishAsync(Carrier, TestContext.Current.CancellationToken);
 
         Assert.Null(reserved.Holder);
         Assert.False(_server.Hosts(Corporate));
         Assert.Single(_server.Applied);
 
         Accepted(await AcknowledgeAsync(holder, _invitations.Held[0].Id));
-        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+        _ = await Publisher.PublishAsync(Carrier, TestContext.Current.CancellationToken);
 
         Assert.Equal(holder, reserved.Holder);
         Assert.True(_server.Hosts(Corporate));
@@ -280,7 +286,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     public async Task INT_MAIL_006_AC1_TheMailboxIsOnTheServerBeforeTheMembershipBeginsAsync()
     {
         _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
-        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+        _ = await Publisher.PublishAsync(Carrier, TestContext.Current.CancellationToken);
 
         string token = _notifications.Mail[^1].Token();
         SubjectId holder = Holder();
@@ -684,7 +690,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     {
         IssuedInvitation issued = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
 
-        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+        _ = await Publisher.PublishAsync(Carrier, TestContext.Current.CancellationToken);
 
         Accepted(await RevokeAsync(Staff, issued.Id));
         Accepted(await RevokeAsync(Staff, issued.Id));
@@ -695,7 +701,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Null(revoked.Identifiers);
         Assert.Equal(MailboxState.Removed, _mailboxes.Held[0].Owed(stands: false));
 
-        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+        _ = await Publisher.PublishAsync(Carrier, TestContext.Current.CancellationToken);
 
         Assert.Equal(MailboxState.Removed, _server.Applied[^1].State);
         Assert.Equal(
@@ -1262,7 +1268,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         _clock.Advance(Settings.LinkInvitationLifetime.Default - TimeSpan.FromDays(1));
         _work.Reset();
 
-        Assert.Equal(1, await Service.SweepAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await Service.SweepAsync(Sweeper, TestContext.Current.CancellationToken));
         Assert.Null(_invitations.Held[0].Identifiers);
         Assert.NotNull(_invitations.Held[1].Identifiers);
         Assert.True(Assert.Single(_mailboxes.Held).IsRemovable);
@@ -1413,7 +1419,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         int applied = _server.Applied.Count;
 
         _ = Accepted(await IssueAsync(Staff, Taking(FormerMailbox.Transfer, "  " + Why + " ")));
-        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+        _ = await Publisher.PublishAsync(Carrier, TestContext.Current.CancellationToken);
 
         OrganizationAuditInMemory.OrganizationChange recorded = _audit.Changes[^1];
 
@@ -1452,13 +1458,13 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Equal(reserved.Id, _invitations.Held[^1].Mailbox);
         Assert.Equal(new MailboxTakeover(FormerMailbox.Replace, Why), _audit.Changes[^1].Takeover);
 
-        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+        _ = await Publisher.PublishAsync(Carrier, TestContext.Current.CancellationToken);
 
         Assert.Equal((former.Id, MailboxState.Removed), (_server.Applied[^1].Mailbox, _server.Applied[^1].State));
         Assert.Null(_server.Hosts(Corporate));
         Assert.DoesNotContain(_server.Received, push => push.Mailbox == reserved.Id);
 
-        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+        _ = await Publisher.PublishAsync(Carrier, TestContext.Current.CancellationToken);
 
         Assert.Equal(reserved.Id, _server.Carried(Corporate));
         Assert.False(_server.Hosts(Corporate));
@@ -1526,7 +1532,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.NotSame(former, reserved);
         Assert.Null(_audit.Changes[^1].Takeover);
 
-        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+        _ = await Publisher.PublishAsync(Carrier, TestContext.Current.CancellationToken);
 
         Assert.Equal((reserved.Id, MailboxState.Disabled), (_server.Received[^1].Mailbox, _server.Received[^1].State));
         Assert.NotNull(reserved.FailedAt);
@@ -1534,7 +1540,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
         _server.Set(Corporate, enabled: null);
         _clock.Advance(TimeSpan.FromDays(1));
-        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+        _ = await Publisher.PublishAsync(Carrier, TestContext.Current.CancellationToken);
 
         Assert.Equal(reserved.Id, _server.Carried(Corporate));
         Assert.DoesNotContain(_server.Received, push => push.Mailbox == former.Id && push.State == MailboxState.Removed);
@@ -1886,7 +1892,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         (SubjectId holder, _) = await StaffMemberAsync();
 
         Accepted(await EndAsync(Staff, holder));
-        _ = await Publisher.PublishAsync(TestContext.Current.CancellationToken);
+        _ = await Publisher.PublishAsync(Carrier, TestContext.Current.CancellationToken);
 
         return (holder, Assert.Single(_mailboxes.Held));
     }

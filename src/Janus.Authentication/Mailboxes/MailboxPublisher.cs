@@ -48,10 +48,14 @@ internal sealed class MailboxPublisher(
     /// <summary>
     /// Runs one pass.
     /// </summary>
+    /// <param name="context">The system principal the pass runs as.</param>
     /// <param name="cancellationToken">Abandons the pass.</param>
     /// <returns>How many pushes the server confirmed, or the failure that stopped the pass.</returns>
-    public async ValueTask<Result<int>> PublishAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">The context is not a principal that may deliver what has been committed.</exception>
+    public async ValueTask<Result<int>> PublishAsync(AccessContext context, CancellationToken cancellationToken)
     {
+        _ = Delivering(context);
+
         if (inUse.Chosen().Match<IMailServer?>(chosen => chosen, _ => null) is not IMailServer server)
         {
             return Result.Success(0);
@@ -169,6 +173,15 @@ internal sealed class MailboxPublisher(
 
         return Result.Success(confirmed);
     }
+
+    // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the pass runs as a named
+    // principal that may deliver what has been committed, and never as nobody.
+    private static SystemPrincipal Delivering(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.Delivery)
+            ? principal
+            : throw new ArgumentException(
+                "The pass runs as a system principal that may deliver what has been committed.",
+                nameof(context));
 
     // The canonical addresses at which a mailbox is owed a removal the server has not
     // confirmed, as the pass reads them. A mailbox whose holder was erased is not read,

@@ -65,7 +65,7 @@ public sealed class ExpirySweepTests(HostFixture host) : IClassFixture<HostFixtu
 
         BackgroundJob sweep = BackgroundJobs.All.Single(job => job.Name == "expiry-sweep");
 
-        Result ran = await sweep.RunAsync(sweeping.ServiceProvider, cancellationToken);
+        Result ran = await sweep.RunAsync(sweeping.ServiceProvider, AccessContext.Of(sweep.Principal), cancellationToken);
 
         Assert.True(ran.Match(() => true, _ => false));
 
@@ -100,8 +100,9 @@ public sealed class ExpirySweepTests(HostFixture host) : IClassFixture<HostFixtu
         await using ServiceProvider services = BackgroundJobsTests.Deployed(host, now);
         await using AsyncServiceScope sweeping = services.CreateAsyncScope();
 
-        Result ran = await BackgroundJobs.All.Single(job => job.Name == "expiry-sweep")
-            .RunAsync(sweeping.ServiceProvider, cancellationToken);
+        BackgroundJob sweep = BackgroundJobs.All.Single(job => job.Name == "expiry-sweep");
+
+        Result ran = await sweep.RunAsync(sweeping.ServiceProvider, AccessContext.Of(sweep.Principal), cancellationToken);
 
         int[] swept = [.. await AbuseCountsAsync(now), .. await AbuseCountsAsync(stale)];
 

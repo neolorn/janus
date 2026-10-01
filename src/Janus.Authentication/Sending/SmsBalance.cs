@@ -42,9 +42,29 @@ internal sealed class SmsBalance(
     /// Reads the balance, keeps it, and raises the alert where the last hour drained
     /// abnormally or the floor comes within a day at the current rate.
     /// </summary>
+    /// <param name="context">The system principal the watch runs as.</param>
     /// <param name="cancellationToken">Abandons the poll.</param>
     /// <returns>What was read, or the failure where the gateway did not answer.</returns>
-    public async ValueTask<Result<decimal>> PollAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">The context is not a principal that may monitor.</exception>
+    public async ValueTask<Result<decimal>> PollAsync(AccessContext context, CancellationToken cancellationToken)
+    {
+        _ = Monitoring(context);
+
+        return await PolledAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the watch runs as a named
+    // principal that may monitor, and never as nobody.
+    private static SystemPrincipal Monitoring(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.Monitoring)
+            ? principal
+            : throw new ArgumentException(
+                "The watch runs as a system principal that may monitor.",
+                nameof(context));
+
+    // The poll itself, which a send that finds no reading inside the interval makes on
+    // its own request as well (INT-SMS-004).
+    private async ValueTask<Result<decimal>> PolledAsync(CancellationToken cancellationToken)
     {
         Error? failure = null;
 
@@ -153,7 +173,7 @@ internal sealed class SmsBalance(
         {
             // Nothing read inside the poll interval says nothing about the account, so
             // the gateway is asked rather than guessed at.
-            decimal polled = (await PollAsync(cancellationToken).ConfigureAwait(false))
+            decimal polled = (await PolledAsync(cancellationToken).ConfigureAwait(false))
                 .Match(value => value, error => Held<decimal>(error, ref failure));
 
             return failure is not null

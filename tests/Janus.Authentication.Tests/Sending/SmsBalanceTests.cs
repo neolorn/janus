@@ -15,6 +15,9 @@ namespace Janus.Authentication.Tests.Sending;
 [Trait("kind", "unit")]
 public sealed class SmsBalanceTests : IAsyncDisposable
 {
+    private static readonly AccessContext Watcher = AccessContext.Of(
+        SystemPrincipal.ForDeployment("sms-balance", "INT-SMS-004", SystemOperation.Monitoring));
+
     private static readonly DateTimeOffset Noon = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
     private readonly ConfigurationInMemory _configuration = new();
@@ -143,7 +146,7 @@ public sealed class SmsBalanceTests : IAsyncDisposable
     }
 
     private async Task<decimal> PolledAsync() =>
-        (await Balance.PollAsync(TestContext.Current.CancellationToken)).Match(
+        (await Balance.PollAsync(Watcher, TestContext.Current.CancellationToken)).Match(
             balance => balance,
             error => throw new Xunit.Sdk.XunitException($"The poll failed: {error.Code}."));
 

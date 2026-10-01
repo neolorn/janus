@@ -11816,6 +11816,8 @@ enumeration by a member for every job. Under 3:
 beside the four operations it lists, or say which of the four each of the jobs of
 INF-BG-001 runs as.
 
+**Superseded by D-166.**
+
 ---
 
 ## 305. How often the jobs run that no setting paces

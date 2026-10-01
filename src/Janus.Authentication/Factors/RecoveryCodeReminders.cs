@@ -40,10 +40,14 @@ internal sealed class RecoveryCodeReminders(
     /// <summary>
     /// Reminds the owner of every set that is owed its reminder.
     /// </summary>
+    /// <param name="context">The system principal the pass runs as.</param>
     /// <param name="cancellationToken">Abandons the pass.</param>
     /// <returns>How many sets were reminded of, or the failure that stopped the pass.</returns>
-    public async ValueTask<Result<int>> RemindAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">The context is not a principal that may sweep what has expired.</exception>
+    public async ValueTask<Result<int>> RemindAsync(AccessContext context, CancellationToken cancellationToken)
     {
+        _ = Sweeping(context);
+
         Error? failure = null;
 
         TimeSpan after = (await configuration
@@ -86,6 +90,15 @@ internal sealed class RecoveryCodeReminders(
             }
         }
     }
+
+    // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the pass runs as a named
+    // principal that may sweep what has expired, and never as nobody.
+    private static SystemPrincipal Sweeping(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.ExpirySweep)
+            ? principal
+            : throw new ArgumentException(
+                "The pass runs as a system principal that may sweep what has expired.",
+                nameof(context));
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)
     {

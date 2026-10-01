@@ -210,6 +210,38 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
     }
 
     /// <summary>
+    /// IDN-PRIN-001 AC3 (D-166, 304): every job hands the context it is run as to the
+    /// method its work runs, and that method refuses a principal whose operation is not
+    /// the job's before it reads or changes anything.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_PRIN_001_AC3_EveryJobRefusesAPrincipalOfAnotherOperationAsync()
+    {
+        await using ServiceProvider services = Deployed(host, Authorization.Deployment.Noon);
+
+        var other = AccessContext.Of(
+            SystemPrincipal.ForDeployment("bootstrap", "OPS-BOOT-001", SystemOperation.Bootstrap));
+        var refused = new List<string>();
+
+        foreach (BackgroundJob job in BackgroundJobs.All)
+        {
+            await using AsyncServiceScope scope = services.CreateAsyncScope();
+
+            try
+            {
+                _ = await job.RunAsync(scope.ServiceProvider, other, TestContext.Current.CancellationToken);
+            }
+            catch (ArgumentException refusal) when (refusal.ParamName == "context")
+            {
+                refused.Add(job.Name);
+            }
+        }
+
+        Assert.Equal(BackgroundJobs.All.Select(job => job.Name), refused);
+    }
+
+    /// <summary>
     /// INT-SMS-004: no poll succeeds without a balance read, so in a deployment that
     /// registered no SMS transport the balance poll fails, naming the transport, and no
     /// success is recorded for it; its lapse then raises <c>background-job-failed</c>.
@@ -227,7 +259,7 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
         await using ServiceProvider services = Deployed(host, Authorization.Deployment.Noon, sms: false);
         await using AsyncServiceScope scope = services.CreateAsyncScope();
 
-        Error refusal = (await poll.RunAsync(scope.ServiceProvider, cancellationToken)).Match(
+        Error refusal = (await poll.RunAsync(scope.ServiceProvider, AccessContext.Of(poll.Principal), cancellationToken)).Match(
             () => throw new Xunit.Sdk.XunitException("The poll succeeded."),
             error => error);
 

@@ -50,10 +50,14 @@ internal sealed class OutboxPublisher(
     /// <summary>
     /// Runs one pass.
     /// </summary>
+    /// <param name="context">The system principal the pass runs as.</param>
     /// <param name="cancellationToken">Abandons the pass.</param>
     /// <returns>How many deliveries the pass closed, completed or failed.</returns>
-    public async ValueTask<int> PublishAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">The context is not a principal that may deliver what has been committed.</exception>
+    public async ValueTask<int> PublishAsync(AccessContext context, CancellationToken cancellationToken)
     {
+        _ = Delivering(context);
+
         int closed = await DueAsync(cancellationToken).ConfigureAwait(false);
 
         if (ledger is not null)
@@ -63,6 +67,15 @@ internal sealed class OutboxPublisher(
 
         return closed;
     }
+
+    // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the pass runs as a named
+    // principal that may deliver what has been committed, and never as nobody.
+    private static SystemPrincipal Delivering(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.Delivery)
+            ? principal
+            : throw new ArgumentException(
+                "The pass runs as a system principal that may deliver what has been committed.",
+                nameof(context));
 
     // DR-016 AC5: an erasure completed before the ledger was registered, by hand
     // included, is written down once. Its status, its attempts and its erasures row

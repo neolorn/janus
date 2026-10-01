@@ -19,6 +19,9 @@ namespace Janus.Authentication.Tests.Mailboxes;
 [Trait("kind", "unit")]
 public sealed class MailboxPublisherTests : IAsyncDisposable
 {
+    private static readonly AccessContext Carrier = AccessContext.Of(
+        SystemPrincipal.ForDeployment("mailbox-provisioning", "INT-MAIL-006a", SystemOperation.Delivery));
+
     private const string Address = "staff@example.test";
 
     private static readonly DateTimeOffset Noon = new(2026, 9, 23, 12, 0, 0, TimeSpan.Zero);
@@ -385,7 +388,7 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
     {
         Mailbox reserved = await ReservedAsync();
 
-        int confirmed = (await Built(server: null).PublishAsync(TestContext.Current.CancellationToken))
+        int confirmed = (await Built(server: null).PublishAsync(Carrier, TestContext.Current.CancellationToken))
             .Match(count => count, _ => -1);
 
         Assert.Equal(0, confirmed);
@@ -404,7 +407,7 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
         var another = new MailServerInMemory();
         Mailbox reserved = await ReservedAsync();
 
-        int pushed = (await Built(another).PublishAsync(TestContext.Current.CancellationToken))
+        int pushed = (await Built(another).PublishAsync(Carrier, TestContext.Current.CancellationToken))
             .Match(count => count, _ => -1);
 
         Assert.Equal(1, pushed);
@@ -564,7 +567,7 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
     }
 
     private async Task<int> PassAsync() =>
-        (await Publisher.PublishAsync(TestContext.Current.CancellationToken))
+        (await Publisher.PublishAsync(Carrier, TestContext.Current.CancellationToken))
             .Match(count => count, error => throw new InvalidOperationException(error.Code.ToString()));
 
     private async Task<Mailbox> ReservedAsync()

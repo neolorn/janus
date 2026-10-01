@@ -16,6 +16,9 @@ namespace Janus.Authentication.Tests.Mailboxes;
 [Trait("kind", "unit")]
 public sealed class MailboxReconciliationTests : IDisposable
 {
+    private static readonly AccessContext Reconciler = AccessContext.Of(
+        SystemPrincipal.ForDeployment("mail-reconciliation", "INT-MAIL-007", SystemOperation.Reconciliation));
+
     private const string Address = "staff@example.test";
 
     private static readonly DateTimeOffset Noon = new(2026, 9, 23, 12, 0, 0, TimeSpan.Zero);
@@ -232,7 +235,7 @@ public sealed class MailboxReconciliationTests : IDisposable
     {
         _server.Unreachable = true;
 
-        Result<MailboxDrift> outcome = await Reconciliation.ReconcileAsync(TestContext.Current.CancellationToken);
+        Result<MailboxDrift> outcome = await Reconciliation.ReconcileAsync(Reconciler, TestContext.Current.CancellationToken);
 
         Assert.False(outcome.Match(_ => true, _ => false));
 
@@ -244,7 +247,7 @@ public sealed class MailboxReconciliationTests : IDisposable
     private MailboxReconciliation Reconciliation => new(_mailboxes, new MailServerInUseInMemory(_server), _events, _clock);
 
     private async Task<MailboxDrift> ReconciledAsync() =>
-        (await Reconciliation.ReconcileAsync(TestContext.Current.CancellationToken))
+        (await Reconciliation.ReconcileAsync(Reconciler, TestContext.Current.CancellationToken))
             .Match(drift => drift, error => throw new InvalidOperationException(error.Code.ToString()));
 
     private async Task<Mailbox> HeldAsync(bool enabledOnServer)

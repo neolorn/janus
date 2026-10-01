@@ -523,9 +523,13 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
 
         await using AsyncServiceScope scope = _deployment.Scope();
 
-        Result swept = await Janus.Hosting.Background.BackgroundJobs.All
-            .Single(job => job.Name == "privacy-deadlines")
-            .RunAsync(scope.ServiceProvider, TestContext.Current.CancellationToken);
+        Janus.Hosting.Background.BackgroundJob deadlines = Janus.Hosting.Background.BackgroundJobs.All
+            .Single(job => job.Name == "privacy-deadlines");
+
+        Result swept = await deadlines.RunAsync(
+            scope.ServiceProvider,
+            AccessContext.Of(deadlines.Principal),
+            TestContext.Current.CancellationToken);
 
         var trail = (Janus.Privacy.Tests.PrivacyAuditInMemory)scope.ServiceProvider
             .GetRequiredService<Janus.Privacy.IPrivacyAudit>();

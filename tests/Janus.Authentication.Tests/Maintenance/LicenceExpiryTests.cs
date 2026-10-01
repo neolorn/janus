@@ -16,6 +16,9 @@ namespace Janus.Authentication.Tests.Maintenance;
 [Trait("kind", "unit")]
 public sealed class LicenceExpiryTests
 {
+    private static readonly AccessContext Watcher = AccessContext.Of(
+        SystemPrincipal.ForDeployment("licence-expiry", "OPS-MAINT-001", SystemOperation.Monitoring));
+
     private static readonly DateTimeOffset Noon = new(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);
 
     private readonly MaintenanceStoreInMemory _store = new();
@@ -95,7 +98,7 @@ public sealed class LicenceExpiryTests
         new(new LicenceId(Guid.CreateVersion7(expiresAt)), kind, name, expiresAt, RenewedAt: null);
 
     private async Task<int> WarnedAsync() =>
-        (await Expiry.WarnAsync(TestContext.Current.CancellationToken)).Match(
+        (await Expiry.WarnAsync(Watcher, TestContext.Current.CancellationToken)).Match(
             warned => warned,
             error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
 }

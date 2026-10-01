@@ -34,6 +34,9 @@ namespace Janus.Hosting.Tests.Sending;
 [Trait("kind", "unit")]
 public sealed class SendingServiceTests : IAsyncDisposable
 {
+    private static readonly AccessContext Carrier = AccessContext.Of(
+        SystemPrincipal.ForDeployment("sends", "INF-BG-001", SystemOperation.Delivery));
+
     private static readonly DateTimeOffset Noon = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly EmailAddress Mailbox = Address("someone@example.test");
@@ -1188,7 +1191,7 @@ public sealed class SendingServiceTests : IAsyncDisposable
             DateTimeStyles.RoundtripKind);
 
     private async Task<int> RetriedAsync() =>
-        (await Service.RetryAsync(TestContext.Current.CancellationToken)).Match(
+        (await Service.RetryAsync(Carrier, TestContext.Current.CancellationToken)).Match(
             carried => carried,
             error => throw new Xunit.Sdk.XunitException($"The pass failed: {error.Code}."));
 

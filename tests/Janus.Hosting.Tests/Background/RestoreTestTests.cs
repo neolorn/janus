@@ -448,8 +448,11 @@ public sealed class RestoreTestTests(HostFixture host) : IClassFixture<HostFixtu
         await using ServiceProvider services = Deployed(at, instance, keys, fingerprints, time);
         await using AsyncServiceScope scope = services.CreateAsyncScope();
 
-        return await BackgroundJobs.All
-            .Single(job => job.Name == Job)
-            .RunAsync(scope.ServiceProvider, TestContext.Current.CancellationToken);
+        BackgroundJob test = BackgroundJobs.All.Single(job => job.Name == Job);
+
+        return await test.RunAsync(
+            scope.ServiceProvider,
+            AccessContext.Of(test.Principal),
+            TestContext.Current.CancellationToken);
     }
 }

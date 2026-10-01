@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -33,10 +34,14 @@ internal sealed class AlertDispatch(IRaisedAlerts alerts, AlertRouter router, IU
     /// <summary>
     /// Runs one pass.
     /// </summary>
+    /// <param name="context">The system principal the pass runs as.</param>
     /// <param name="cancellationToken">Abandons the pass.</param>
     /// <returns>How many conditions were carried, or the refusal that stopped the pass.</returns>
-    public async ValueTask<Result<int>> CarryAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">The context is not a principal that may deliver what has been committed.</exception>
+    public async ValueTask<Result<int>> CarryAsync(AccessContext context, CancellationToken cancellationToken)
     {
+        _ = Delivering(context);
+
         IReadOnlyList<RaisedAlert> waiting = await alerts.OldestAsync(Batch, cancellationToken)
             .ConfigureAwait(false);
 
@@ -74,4 +79,13 @@ internal sealed class AlertDispatch(IRaisedAlerts alerts, AlertRouter router, IU
 
         return Result.Success(carried);
     }
+
+    // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the pass runs as a named
+    // principal that may deliver what has been committed, and never as nobody.
+    private static SystemPrincipal Delivering(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.Delivery)
+            ? principal
+            : throw new ArgumentException(
+                "The pass runs as a system principal that may deliver what has been committed.",
+                nameof(context));
 }

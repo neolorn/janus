@@ -57,7 +57,10 @@ public sealed class AuditRetentionTests(HostFixture host) : IClassFixture<HostFi
             scope.ServiceProvider.GetRequiredService<IConfigurationStore>(),
             TestContext.Current.CancellationToken);
 
-        Result ran = await job.RunAsync(scope.ServiceProvider, TestContext.Current.CancellationToken);
+        Result ran = await job.RunAsync(
+            scope.ServiceProvider,
+            AccessContext.Of(job.Principal),
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(("PRIV-RET-002", true), (job.Principal.Reason, job.Principal.MayRun(SystemOperation.RetentionPurge)));
         Assert.Equal(TimeSpan.FromDays(1), interval.Match(value => value, _ => TimeSpan.Zero));
@@ -93,9 +96,12 @@ public sealed class AuditRetentionTests(HostFixture host) : IClassFixture<HostFi
         await using ServiceProvider services = Deployed(at, host.ConnectionString);
         await using AsyncServiceScope scope = services.CreateAsyncScope();
 
-        Result ran = await BackgroundJobs.All
-            .Single(job => job.Name == Job)
-            .RunAsync(scope.ServiceProvider, TestContext.Current.CancellationToken);
+        BackgroundJob purge = BackgroundJobs.All.Single(job => job.Name == Job);
+
+        Result ran = await purge.RunAsync(
+            scope.ServiceProvider,
+            AccessContext.Of(purge.Principal),
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(ErrorCodes.Denied, ran.Match(() => (ErrorCode?)null, error => error.Code));
         Assert.True(await StandingAsync(connection, "2019_06"));

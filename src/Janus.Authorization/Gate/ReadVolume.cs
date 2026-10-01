@@ -104,10 +104,14 @@ internal sealed class ReadVolume(
     /// Recomputes every person's daily mean over the window before today and forgets
     /// the counts older than the window.
     /// </summary>
+    /// <param name="context">The system principal the watch runs as.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>How many people have a mean, or the refusal the settings gave.</returns>
-    public async ValueTask<Result<int>> RebaselineAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">The context is not a principal that may monitor.</exception>
+    public async ValueTask<Result<int>> RebaselineAsync(AccessContext context, CancellationToken cancellationToken)
     {
+        _ = Monitoring(context);
+
         Result<DateOnly> today = await TodayAsync(cancellationToken).ConfigureAwait(false);
 
         if (today.Match(_ => (Error?)null, error => error) is Error unread)
@@ -141,6 +145,15 @@ internal sealed class ReadVolume(
 
         return Result.Success(baselined);
     }
+
+    // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the watch runs as a named
+    // principal that may monitor, and never as nobody.
+    private static SystemPrincipal Monitoring(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.Monitoring)
+            ? principal
+            : throw new ArgumentException(
+                "The watch runs as a system principal that may monitor.",
+                nameof(context));
 
     // OPS-ALERT-005, D-153: a day is the calendar day in the deployment's zone, the
     // same day the privacy clock counts.

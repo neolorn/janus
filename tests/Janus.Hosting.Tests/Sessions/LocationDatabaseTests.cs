@@ -20,6 +20,9 @@ namespace Janus.Hosting.Tests.Sessions;
 [Trait("kind", "unit")]
 public sealed class LocationDatabaseTests
 {
+    private static readonly AccessContext Watcher = AccessContext.Of(
+        SystemPrincipal.ForDeployment("location-database", "INT-GEN-006", SystemOperation.Monitoring));
+
     private static readonly DateTimeOffset Noon = new(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly string Listed = string.Join(
@@ -234,7 +237,7 @@ public sealed class LocationDatabaseTests
             error => throw new Xunit.Sdk.XunitException($"The resolve was refused: {error.Code}."));
 
     private async Task RefreshedAsync() =>
-        (await Database.RefreshAsync(TestContext.Current.CancellationToken)).Switch(
+        (await Database.RefreshAsync(Watcher, TestContext.Current.CancellationToken)).Switch(
             () => { },
             error => throw new Xunit.Sdk.XunitException($"The refresh was refused: {error.Code}."));
 }

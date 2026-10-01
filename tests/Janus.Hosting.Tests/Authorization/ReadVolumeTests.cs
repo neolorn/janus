@@ -20,6 +20,9 @@ namespace Janus.Hosting.Tests.Authorization;
 [Trait("kind", "unit")]
 public sealed class ReadVolumeTests : IAsyncDisposable
 {
+    private static readonly AccessContext Watcher = AccessContext.Of(
+        SystemPrincipal.ForDeployment("read-volume-baseline", "OPS-ALERT-005", SystemOperation.Monitoring));
+
     // Noon in Cairo on Thursday 24 September.
     private static readonly DateTimeOffset Noon = new(2026, 9, 24, 9, 0, 0, TimeSpan.Zero);
 
@@ -288,6 +291,6 @@ public sealed class ReadVolumeTests : IAsyncDisposable
             .Match(() => (Error?)null, error => error));
 
     private async Task<int> RebaselinedAsync() =>
-        (await Volume.RebaselineAsync(TestContext.Current.CancellationToken))
+        (await Volume.RebaselineAsync(Watcher, TestContext.Current.CancellationToken))
         .Match(value => value, error => throw new XunitException(error.Code.ToString()));
 }

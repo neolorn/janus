@@ -331,11 +331,11 @@ against the public contract of LIB-API-001.
   `Delivery` and `Monitoring` for this work, and the runs are kept in a table of their
   own.
 - Background work acts as a named system principal that states its reason, and is
-  audited as one. The passes that record what they do (the account and organization
-  erasure sweeps, the privacy-request deadline sweep and the loss-report windows) run
-  only as a principal that may sweep what has expired, and are refused to a person or to
-  a principal named for other work. What they record carries the principal's name and
-  reason where a person's action carries the acting account.
+  audited as one. Every job's pass runs only as a principal that may do the job's
+  operation (sweep what has expired, deliver, reconcile, monitor or purge), and is
+  refused to a person or to a principal named for other work. What the passes record
+  carries the principal's name and reason where a person's action carries the acting
+  account.
 - The sealed break-glass credential. `POST /admin/break-glass/generate` generates it,
   for a stepped-up system administrator or from a break-glass session, and answers the
   code once, in nine check-charactered groups of four, with the absolute `/break-glass`

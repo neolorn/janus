@@ -41,10 +41,16 @@ internal sealed class MailboxReconciliation(
     /// <summary>
     /// Compares both sides once.
     /// </summary>
+    /// <param name="context">The system principal the pass runs as.</param>
     /// <param name="cancellationToken">Abandons the comparison.</param>
     /// <returns>What differs, or the failure that stopped the comparison.</returns>
-    public async ValueTask<Result<MailboxDrift>> ReconcileAsync(CancellationToken cancellationToken)
+    /// <exception cref="ArgumentException">The context is not a principal that may reconcile.</exception>
+    public async ValueTask<Result<MailboxDrift>> ReconcileAsync(
+        AccessContext context,
+        CancellationToken cancellationToken)
     {
+        _ = Reconciling(context);
+
         if (inUse.Chosen().Match<IMailServer?>(chosen => chosen, _ => null) is not IMailServer server)
         {
             return Result.Success(new MailboxDrift([], Unknown: 0));
@@ -129,6 +135,15 @@ internal sealed class MailboxReconciliation(
                 cancellationToken)
             .ConfigureAwait(false);
     }
+
+    // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the pass runs as a named
+    // principal that may reconcile, and never as nobody.
+    private static SystemPrincipal Reconciling(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.Reconciliation)
+            ? principal
+            : throw new ArgumentException(
+                "The pass runs as a system principal that may reconcile.",
+                nameof(context));
 
     // IDN-ACCT-004: the server's address is read in its canonical form before it is
     // compared, and one that does not read is no mailbox's address.

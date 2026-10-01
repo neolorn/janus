@@ -16,6 +16,9 @@ namespace Janus.Privacy.Tests.Requests;
 [Trait("kind", "unit")]
 public sealed class HolidayListWatchTests
 {
+    private static readonly AccessContext Watcher = AccessContext.Of(
+        SystemPrincipal.ForDeployment("holiday-list", "PRIV-RIGHT-002", SystemOperation.Monitoring));
+
     // Noon in Cairo on a Thursday; thirty days on is 24 October.
     private static readonly DateTimeOffset Noon = new(2026, 9, 24, 9, 0, 0, TimeSpan.Zero);
 
@@ -99,6 +102,6 @@ public sealed class HolidayListWatchTests
         _configuration.Set<IReadOnlyList<DateOnly>>(Settings.PrivacyHolidays, holidays);
 
     private async Task<bool> WatchedAsync() =>
-        (await Watch.WatchAsync(TestContext.Current.CancellationToken))
+        (await Watch.WatchAsync(Watcher, TestContext.Current.CancellationToken))
         .Match(value => value, error => throw new XunitException(error.Code.ToString()));
 }

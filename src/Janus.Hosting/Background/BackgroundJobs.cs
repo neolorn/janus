@@ -72,7 +72,7 @@ internal static class BackgroundJobs
             "OPS-OBS-003",
             SystemOperation.ExpirySweep,
             Settings.SweepInterval,
-            (services, _, cancellationToken) => SweepExpiredAsync(services, cancellationToken)),
+            (services, context, cancellationToken) => SweepExpiredAsync(services, context, cancellationToken)),
         BackgroundJob.Every(
             "registration-sweep",
             "REG-SESS-001",
@@ -81,7 +81,7 @@ internal static class BackgroundJobs
             async (services, context, cancellationToken) =>
             {
                 _ = await services.GetRequiredService<RegistrationService>()
-                    .SweepAsync(cancellationToken)
+                    .SweepAsync(context, cancellationToken)
                     .ConfigureAwait(false);
 
                 return Result.Success();
@@ -94,7 +94,7 @@ internal static class BackgroundJobs
             async (services, context, cancellationToken) =>
             {
                 _ = await services.GetRequiredService<InvitationService>()
-                    .SweepAsync(cancellationToken)
+                    .SweepAsync(context, cancellationToken)
                     .ConfigureAwait(false);
 
                 return Result.Success();
@@ -148,18 +148,18 @@ internal static class BackgroundJobs
             "AUTH-FACT-008",
             SystemOperation.ExpirySweep,
             Daily,
-            async (services, _, cancellationToken) => Done(
+            async (services, context, cancellationToken) => Done(
                 await services.GetRequiredService<RecoveryCodeReminders>()
-                    .RemindAsync(cancellationToken)
+                    .RemindAsync(context, cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(
             "domain-reverification",
             "REG-DOM-001",
             SystemOperation.ExpirySweep,
             Settings.SweepInterval,
-            async (services, _, cancellationToken) => Done(
+            async (services, context, cancellationToken) => Done(
                 await services.GetRequiredService<DomainReverification>()
-                    .SweepAsync(cancellationToken)
+                    .SweepAsync(context, cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(
             "outbox",
@@ -169,7 +169,7 @@ internal static class BackgroundJobs
             async (services, context, cancellationToken) =>
             {
                 _ = await services.GetRequiredService<OutboxPublisher>()
-                    .PublishAsync(cancellationToken)
+                    .PublishAsync(context, cancellationToken)
                     .ConfigureAwait(false);
 
                 return Result.Success();
@@ -179,95 +179,95 @@ internal static class BackgroundJobs
             "IDN-LIFE-003a",
             SystemOperation.Delivery,
             Settings.OutboxPollInterval,
-            async (services, _, cancellationToken) => Done(
+            async (services, context, cancellationToken) => Done(
                 await services.GetRequiredService<EventPublisher>()
-                    .PublishAsync(cancellationToken)
+                    .PublishAsync(context, cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(
             "sends",
             "INF-BG-001",
             SystemOperation.Delivery,
             Settings.OutboxPollInterval,
-            async (services, _, cancellationToken) => Done(
+            async (services, context, cancellationToken) => Done(
                 await services.GetRequiredService<SendingService>()
-                    .RetryAsync(cancellationToken)
+                    .RetryAsync(context, cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(
             "mailbox-provisioning",
             "INT-MAIL-006a",
             SystemOperation.Delivery,
             Settings.OutboxPollInterval,
-            async (services, _, cancellationToken) => Done(
+            async (services, context, cancellationToken) => Done(
                 await services.GetRequiredService<MailboxPublisher>()
-                    .PublishAsync(cancellationToken)
+                    .PublishAsync(context, cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(
             AlertDispatch.Job,
             "OPS-ALERT-001",
             SystemOperation.Delivery,
             Settings.OutboxPollInterval,
-            async (services, _, cancellationToken) => Done(
+            async (services, context, cancellationToken) => Done(
                 await services.GetRequiredService<AlertDispatch>()
-                    .CarryAsync(cancellationToken)
+                    .CarryAsync(context, cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(
             "mail-reconciliation",
             "INT-MAIL-007",
             SystemOperation.Reconciliation,
             Daily,
-            async (services, _, cancellationToken) => Done(
+            async (services, context, cancellationToken) => Done(
                 await services.GetRequiredService<MailboxReconciliation>()
-                    .ReconcileAsync(cancellationToken)
+                    .ReconcileAsync(context, cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(
             "location-database",
             "INT-GEN-006",
             SystemOperation.Monitoring,
             Settings.LocationDatabaseRefresh,
-            async (services, _, cancellationToken) => await services.GetRequiredService<LocationDatabase>()
-                .RefreshAsync(cancellationToken)
+            async (services, context, cancellationToken) => await services.GetRequiredService<LocationDatabase>()
+                .RefreshAsync(context, cancellationToken)
                 .ConfigureAwait(false)),
         BackgroundJob.Every(
             "read-volume-baseline",
             "OPS-ALERT-005",
             SystemOperation.Monitoring,
             Daily,
-            async (services, _, cancellationToken) => Done(
+            async (services, context, cancellationToken) => Done(
                 await services.GetRequiredService<ReadVolume>()
-                    .RebaselineAsync(cancellationToken)
+                    .RebaselineAsync(context, cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(
             "holiday-list",
             "PRIV-RIGHT-002",
             SystemOperation.Monitoring,
             Daily,
-            async (services, _, cancellationToken) => Done(
+            async (services, context, cancellationToken) => Done(
                 await services.GetRequiredService<HolidayListWatch>()
-                    .WatchAsync(cancellationToken)
+                    .WatchAsync(context, cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(
             "emergency-credential",
             "OPS-BOOT-001",
             SystemOperation.Monitoring,
             Hourly,
-            async (services, _, cancellationToken) => await services.GetRequiredService<EmergencyCredentialWatch>()
-                .WatchAsync(cancellationToken)
+            async (services, context, cancellationToken) => await services.GetRequiredService<EmergencyCredentialWatch>()
+                .WatchAsync(context, cancellationToken)
                 .ConfigureAwait(false)),
         BackgroundJob.Every(
             "clock-drift",
             "INF-HOST-001",
             SystemOperation.Monitoring,
             Hourly,
-            async (services, _, cancellationToken) => await services.GetRequiredService<ClockDriftWatch>()
-                .WatchAsync(cancellationToken)
+            async (services, context, cancellationToken) => await services.GetRequiredService<ClockDriftWatch>()
+                .WatchAsync(context, cancellationToken)
                 .ConfigureAwait(false)),
         BackgroundJob.Every(
             "certificate-renewal",
             "INF-TLS-003",
             SystemOperation.Monitoring,
             Hourly,
-            async (services, _, cancellationToken) => await services.GetRequiredService<CertificateRenewalWatch>()
-                .WatchAsync(cancellationToken)
+            async (services, context, cancellationToken) => await services.GetRequiredService<CertificateRenewalWatch>()
+                .WatchAsync(context, cancellationToken)
                 .ConfigureAwait(false)),
         BackgroundJob.Every(
             "restore-test",
@@ -291,33 +291,36 @@ internal static class BackgroundJobs
             "OPS-MAINT-001",
             SystemOperation.Monitoring,
             Daily,
-            async (services, _, cancellationToken) => Done(
+            async (services, context, cancellationToken) => Done(
                 await services.GetRequiredService<LicenceExpiry>()
-                    .WarnAsync(cancellationToken)
+                    .WarnAsync(context, cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(
             "envelope-rotation",
             "DR-009a",
             SystemOperation.Monitoring,
             Daily,
-            async (services, _, cancellationToken) => Done(
+            async (services, context, cancellationToken) => Done(
                 await services.GetRequiredService<EnvelopeRotationWatch>()
-                    .WatchAsync(cancellationToken)
+                    .WatchAsync(context, cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(
             "sms-balance",
             "INT-SMS-004",
             SystemOperation.Monitoring,
             Settings.AbuseSmsPollInterval,
-            (services, _, cancellationToken) => PollBalanceAsync(services, cancellationToken)),
+            (services, context, cancellationToken) => PollBalanceAsync(services, context, cancellationToken)),
     ];
 
     // AUTH-KEY-003, OPS-OBS-003, IDN-PRIN-003 AC4: what has expired or been delivered
     // goes, each kind in a statement of its own, so one pass leaves nothing half removed.
     private static async ValueTask<Result> SweepExpiredAsync(
         IServiceProvider services,
+        AccessContext context,
         CancellationToken cancellationToken)
     {
+        _ = Sweeping(context);
+
         DateTimeOffset now = services.GetRequiredService<TimeProvider>().GetUtcNow();
 
         _ = await services.GetRequiredService<ISessionStore>()
@@ -381,6 +384,7 @@ internal static class BackgroundJobs
     // background-job-failed, naming the declaration the balance needs (LIB-HOST-001).
     private static async ValueTask<Result> PollBalanceAsync(
         IServiceProvider services,
+        AccessContext context,
         CancellationToken cancellationToken)
     {
         if (services.GetService<ISmsTransport>() is null)
@@ -392,9 +396,19 @@ internal static class BackgroundJobs
         }
 
         return Done(await services.GetRequiredService<SmsBalance>()
-            .PollAsync(cancellationToken)
+            .PollAsync(context, cancellationToken)
             .ConfigureAwait(false));
     }
+
+    // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the sweep, which reaches the stores
+    // itself, runs as a named principal that may sweep what has expired, and never as
+    // nobody.
+    private static SystemPrincipal Sweeping(AccessContext context) =>
+        context?.Principal is { } principal && principal.MayRun(SystemOperation.ExpirySweep)
+            ? principal
+            : throw new ArgumentException(
+                "The pass runs as a system principal that may sweep what has expired.",
+                nameof(context));
 
     private static Result Done<TValue>(Result<TValue> outcome) =>
         outcome.Match(_ => Result.Success(), Result.Failure);
