@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Passwords;
 using Janus.Core;
@@ -15,12 +16,18 @@ namespace Janus.Storage.Authentication.Factors;
 /// <c>recovery_codes</c> tables.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
+/// <param name="connections">The connection and transaction the operation holds.</param>
 /// <remarks>
 /// Implements AUTH-FACT-008, AUTH-FACT-009 and CONV-DESIGN-003. Replacing a set
 /// removes the codes of the one before it, so no code of a previous set validates.
 /// </remarks>
-internal sealed class RecoveryCodeStore(StoreContext context) : IRecoveryCodeStore
+internal sealed class RecoveryCodeStore(StoreContext context, DataConnections connections) : IRecoveryCodeStore
 {
+    private const string Hold =
+        """
+        SELECT 1 FROM identity.recovery_code_sets WHERE subject = @subject FOR UPDATE;
+        """;
+
     /// <inheritdoc/>
     public async ValueTask<RecoveryCodeSet?> FindAsync(
         SubjectId subject,
@@ -45,6 +52,41 @@ internal sealed class RecoveryCodeStore(StoreContext context) : IRecoveryCodeSto
             record.ViewedAt,
             record.ExportedAt,
             record.RemindedAt);
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is running.</exception>
+    public async ValueTask<RecoveryCodeSet?> FindForUpdateAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        if (ambient.Transaction is null)
+        {
+            throw new InvalidOperationException("A set is held only inside the operation's transaction.");
+        }
+
+        _ = await ambient.Connection
+            .ExecuteScalarAsync<int?>(new CommandDefinition(
+                Hold,
+                new { subject = subject.Value },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        // Rows the context already tracks were read before the lock, so they are read
+        // again: what the spend decides on is the set as it stood when the lock was taken.
+        foreach (object tracked in context.RecoveryCodeSets.Local
+                     .Where(record => record.Subject == subject)
+                     .Cast<object>()
+                     .Concat(context.RecoveryCodes.Local.Where(code => code.Subject == subject))
+                     .ToList())
+        {
+            await context.Entry(tracked).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return await FindAsync(subject, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

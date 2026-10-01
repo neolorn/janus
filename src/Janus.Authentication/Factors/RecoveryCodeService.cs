@@ -184,20 +184,23 @@ internal sealed class RecoveryCodeService(
         [NeverLogged] string code,
         CancellationToken cancellationToken)
     {
-        RecoveryCodeSet? held = await sets.FindAsync(subject, cancellationToken).ConfigureAwait(false);
-
-        if (held is null || !held.Spend(code, time.GetUtcNow()))
-        {
-            return Result.Failure(Error.From(ErrorCodes.CodeInvalid));
-        }
-
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
 
-        await sets.RecordAsync(held, cancellationToken).ConfigureAwait(false);
+        // D-166 X3: the set is read under its lock, so a second presentation of the
+        // same code waits for this one to commit and finds it spent.
+        RecoveryCodeSet? held = await sets.FindForUpdateAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        bool spent = held is not null && held.Spend(code, time.GetUtcNow());
+
+        if (spent)
+        {
+            await sets.RecordAsync(held!, cancellationToken).ConfigureAwait(false);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -205,7 +208,7 @@ internal sealed class RecoveryCodeService(
             return Result.Failure(notCommitted);
         }
 
-        return Result.Success();
+        return spent ? Result.Success() : Result.Failure(Error.From(ErrorCodes.CodeInvalid));
     }
 
     /// <summary>

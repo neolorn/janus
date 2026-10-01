@@ -1475,6 +1475,8 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- A recovery code is spent under a lock on its set's row, so one code presented twice at
+  once is spent once and the second presentation is refused `auth.code.invalid`.
 - A code try is decided under a lock on the code's row, so wrong codes presented at once
   are counted as the same number presented one after another, and the right code
   presented twice at once answers once. Each wrong try up to the cap is refused

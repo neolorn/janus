@@ -530,7 +530,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
             new IdentifierDirectory(Identifiers(reading), Preferences(reading)),
             new AuthenticatorStore(reading, _deployment.Ring, _deployment.Randomness),
             new PasswordStore(reading),
-            new RecoveryCodeStore(reading),
+            new RecoveryCodeStore(reading, new DataConnections(reading)),
             new DeviceStore(reading),
             new MembershipStore(reading),
             new GrantStore(reading, new DataConnections(reading)),
@@ -667,7 +667,7 @@ public sealed class ExportSourceTests(DatabaseFixture database)
 
         await using StoreContext writing = database.Context();
 
-        await new RecoveryCodeStore(writing).ReplaceAsync(set, TestContext.Current.CancellationToken);
+        await new RecoveryCodeStore(writing, new DataConnections(writing)).ReplaceAsync(set, TestContext.Current.CancellationToken);
 
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
