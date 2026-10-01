@@ -53,6 +53,8 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
     private readonly NotificationHandlerInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
+    private readonly SettingsRestrictionInMemory _restriction = new();
+
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly SubjectId _person;
@@ -75,6 +77,7 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
     private AccountLifecycle Lifecycle =>
         new(
             _directory,
+            _restriction,
             _identifiers,
             _links,
             _sessions,
@@ -402,6 +405,56 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-ACCT-007 (D-166), X5: an account takes itself down only from a state that
+    /// admits it. A restricted one is refused as the restriction refuses a modifying
+    /// action, and one deleting is refused naming its state, each before the step-up,
+    /// so a session that has not stepped up is answered for the state.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_007_ADeactivationTheStateDoesNotAdmitIsRefusedBeforeTheStepUpAsync()
+    {
+        _directory.Deleting(_person, DeletionOrigin.Self, _clock.GetUtcNow());
+
+        Result deleting = await Lifecycle.DeactivateAsync(Acting, Stale(), Source, TestContext.Current.CancellationToken);
+        Result<DateTimeOffset> again = await Lifecycle.DeleteAsync(Acting, Stale(), Source, TestContext.Current.CancellationToken);
+
+        _directory.Stands(_person, AccountState.Restricted);
+        _restriction.Restrict(_person);
+
+        Result restricted = await Lifecycle.DeactivateAsync(Acting, Stale(), Source, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.AccountStateConflict, Refused(deleting));
+        Assert.Equal("deleting", Conflicted(deleting, "state"));
+        Assert.Equal(ErrorCodes.AccountStateConflict, Refused(again));
+        Assert.Equal(ErrorCodes.Restricted, Refused(restricted));
+        Assert.Empty(_notifications.Mail);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 (D-166), CONV-DESIGN-003 AC6: an administrator's suspension committed
+    /// while a deactivation waited for the account's row is found under the lock and
+    /// named, and the account stays as the administrator left it.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ACCT_007_ASuspensionCommittedMeanwhileIsNamedToADeactivationAsync()
+    {
+        _directory.Holding = held =>
+        {
+            _directory.Holding = null;
+            _directory.Suspended(held, SuspensionOrigin.Administrator);
+        };
+
+        Result refused = await Lifecycle.DeactivateAsync(Acting, Stepped(), Source, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.AccountStateConflict, Refused(refused));
+        Assert.Equal("suspended", Conflicted(refused, "state"));
+        Assert.Equal("administrator", Conflicted(refused, "suspendedBy"));
+        Assert.Equal(
+            SuspensionOrigin.Administrator,
+            await _directory.SuspendedByAsync(_person, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// IDN-LIFE-013, IDN-LIFE-014: what the account did to itself is audited and
     /// announced, so a host acting on the standing hears of both.
     /// </summary>
@@ -464,6 +517,9 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
 
     private static void Accepted(Result outcome) =>
         outcome.Switch(() => { }, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+    private static string? Conflicted(Result outcome, string detail) =>
+        outcome.Match(() => null, error => error.Details[detail].GetString());
 
     private static ErrorCode Refused(Result outcome) =>
         outcome.Match<ErrorCode>(

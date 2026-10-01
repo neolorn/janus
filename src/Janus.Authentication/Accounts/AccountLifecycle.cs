@@ -18,6 +18,7 @@ namespace Janus.Authentication.Accounts;
 /// up, asks for its own erasure and changes its mind inside the window.
 /// </summary>
 /// <param name="directory">Where the standing is read and the transition carried.</param>
+/// <param name="restriction">The gate's answer on a restricted account's deactivation.</param>
 /// <param name="identifiers">Where the addresses a notice reaches are read.</param>
 /// <param name="links">Where the link a notice carries is held.</param>
 /// <param name="sessions">What every transition out of active ends.</param>
@@ -37,6 +38,7 @@ namespace Janus.Authentication.Accounts;
 /// </remarks>
 internal sealed class AccountLifecycle(
     IAccountDirectory directory,
+    ISettingsRestriction restriction,
     IIdentifierDirectory identifiers,
     ILifecycleLinkStore links,
     ISessionStore sessions,
@@ -90,18 +92,27 @@ internal sealed class AccountLifecycle(
             return Result.Failure(withheld);
         }
 
+        // IDN-ACCT-007 AC2, AUTHZ-GATE-006: a restricted account takes no modifying
+        // action, and the gate is where that is refused.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
+            is Error restricted)
+        {
+            return Result.Failure(restricted);
+        }
+
+        // IDN-ACCT-007, X5: the state is judged before the step-up, which is judged last.
+        if (await UnadmittedAsync(subject, deletion: false, cancellationToken).ConfigureAwait(false)
+            is Error unadmitted)
+        {
+            return Result.Failure(unadmitted);
+        }
+
         if (await stepUp
                 .PassedAsync(subject, session, StepUpAction.AccountDeactivate, cancellationToken)
                 .ConfigureAwait(false)
             is Error closed)
         {
             return Result.Failure(closed);
-        }
-
-        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
-            is not AccountState.Active)
-        {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -117,10 +128,10 @@ internal sealed class AccountLifecycle(
         // committed since the first decision is the one this one follows.
         await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
 
-        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
-            is not AccountState.Active)
+        if (await UnadmittedAsync(subject, deletion: false, cancellationToken).ConfigureAwait(false)
+            is Error moved)
         {
-            return await SettledAsync(Error.From(ErrorCodes.Denied), cancellationToken).ConfigureAwait(false);
+            return await SettledAsync(moved, cancellationToken).ConfigureAwait(false);
         }
 
         await directory.DeactivateAsync(subject, cancellationToken).ConfigureAwait(false);
@@ -269,18 +280,20 @@ internal sealed class AccountLifecycle(
             return Result.Failure<DateTimeOffset>(withheld);
         }
 
+        // IDN-ACCT-007, X5: as for a deactivation; a restricted account exercises its
+        // right to erasure.
+        if (await UnadmittedAsync(subject, deletion: true, cancellationToken).ConfigureAwait(false)
+            is Error unadmitted)
+        {
+            return Result.Failure<DateTimeOffset>(unadmitted);
+        }
+
         if (await stepUp
                 .PassedAsync(subject, session, StepUpAction.AccountDelete, cancellationToken)
                 .ConfigureAwait(false)
             is Error closed)
         {
             return Result.Failure<DateTimeOffset>(closed);
-        }
-
-        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
-            is not (AccountState.Active or AccountState.Restricted))
-        {
-            return Result.Failure<DateTimeOffset>(Error.From(ErrorCodes.Denied));
         }
 
         Error? refused = null;
@@ -307,12 +320,12 @@ internal sealed class AccountLifecycle(
         // D-166 X3: as for a deactivation.
         await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
 
-        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
-            is not (AccountState.Active or AccountState.Restricted))
+        if (await UnadmittedAsync(subject, deletion: true, cancellationToken).ConfigureAwait(false)
+            is Error moved)
         {
             return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
                 .Match(
-                    () => Result.Failure<DateTimeOffset>(Error.From(ErrorCodes.Denied)),
+                    () => Result.Failure<DateTimeOffset>(moved),
                     Result.Failure<DateTimeOffset>);
         }
 
@@ -450,6 +463,25 @@ internal sealed class AccountLifecycle(
 
         return default!;
     }
+
+    // IDN-ACCT-007 (D-166): an account takes itself down, or begins its deletion, only
+    // from a state that admits it, and any other state is named. A restriction the gate
+    // did not refuse is the restriction committed since it read the account, refused
+    // as before; an account no row bears is no person's.
+    private async ValueTask<Error?> UnadmittedAsync(
+        SubjectId subject,
+        bool deletion,
+        CancellationToken cancellationToken) =>
+        await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false) switch
+        {
+            AccountState.Active => null,
+            AccountState.Restricted => deletion ? null : Error.From(ErrorCodes.Denied),
+            AccountState.Suspended => AccountAdministration.StateConflict(
+                AccountState.Suspended,
+                await directory.SuspendedByAsync(subject, cancellationToken).ConfigureAwait(false)),
+            AccountState other => AccountAdministration.StateConflict(other, suspendedBy: null),
+            null => Error.From(ErrorCodes.Denied),
+        };
 
     private async ValueTask<Error?> ReactivationRefusedAsync(
         SubjectId subject,

@@ -508,7 +508,7 @@ internal sealed class AccountAdministration(
 
     // Chapter 10 section 1.1: the state is named as section 5.1 spells it and, where it
     // is suspended, who suspended it as section 5.12b does.
-    private static Error StateConflict(AccountState state, SuspensionOrigin? suspendedBy)
+    internal static Error StateConflict(AccountState state, SuspensionOrigin? suspendedBy)
     {
         var details = new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
         {

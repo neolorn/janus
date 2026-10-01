@@ -81,6 +81,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
         new(
             new AccountLifecycle(
                 _directory,
+                _restriction,
                 _identifiers,
                 _links,
                 _sessions,
