@@ -343,7 +343,7 @@ public sealed class LossReportsTests : IAsyncDisposable
         Assert.True(Succeeded(await Service.CancelAsync(
             AccessContext.Of(new SubjectId(Guid.NewGuid())),
             generator,
-            _notifications.Mail[^1].Values["token"],
+            _notifications.Mail[^1].Token(),
             TestContext.Current.CancellationToken)));
 
         Assert.Equal(AuthenticatorState.Active, await StateAsync(generator));
@@ -533,7 +533,7 @@ public sealed class LossReportsTests : IAsyncDisposable
             Source,
             TestContext.Current.CancellationToken);
 
-        string first = _notifications.Mail[^1].Values["token"];
+        string first = _notifications.Mail[^1].Token();
         int sent = _notifications.Mail.Count;
 
         _clock.Advance(TimeSpan.FromDays(1));
@@ -541,7 +541,7 @@ public sealed class LossReportsTests : IAsyncDisposable
         _ = await Service.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken);
 
         Assert.True(_notifications.Mail.Count > sent);
-        Assert.Equal(first, _notifications.Mail[^1].Values["token"]);
+        Assert.Equal(first, _notifications.Mail[^1].Token());
     }
 
     /// <summary>
@@ -586,6 +586,7 @@ public sealed class LossReportsTests : IAsyncDisposable
             _identifiers,
             Policies,
             _notifications,
+            Landing.Links,
             _credentials,
             _events,
             _configuration,

@@ -22,6 +22,7 @@ namespace Janus.Authentication.Accounts;
 /// <param name="links">Where the link a notice carries is held.</param>
 /// <param name="sessions">What every transition out of active ends.</param>
 /// <param name="sending">Where a notice goes out.</param>
+/// <param name="landing">Where a link the message carries lands.</param>
 /// <param name="audit">Where what the account did to itself is recorded.</param>
 /// <param name="stepUp">What the two gated operations ask of the session.</param>
 /// <param name="events">Where the lifecycle event goes.</param>
@@ -40,6 +41,7 @@ internal sealed class AccountLifecycle(
     ILifecycleLinkStore links,
     ISessionStore sessions,
     INotificationHandler sending,
+    LandingLinks landing,
     IAccountAudit audit,
     StepUpGuard stepUp,
     IEvents events,
@@ -127,7 +129,7 @@ internal sealed class AccountLifecycle(
                 subject,
                 MessageKind.DeactivationNotice,
                 source,
-                token.Value,
+                landing.Of(LinkKind.Reactivation, token.Value),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -303,7 +305,7 @@ internal sealed class AccountLifecycle(
         // removed, and the window runs with nothing of theirs still live.
         await sessions.EndAccountAsync(subject, now, cancellationToken).ConfigureAwait(false);
 
-        _ = await TellAsync(subject, MessageKind.DeletionNotice, source, token.Value, cancellationToken)
+        _ = await TellAsync(subject, MessageKind.DeletionNotice, source, landing.Of(LinkKind.DeletionCancel, token.Value), cancellationToken)
             .ConfigureAwait(false);
 
         Result published = await events
@@ -465,7 +467,7 @@ internal sealed class AccountLifecycle(
         SubjectId subject,
         MessageKind message,
         string source,
-        [NeverLogged] string token,
+        [NeverLogged] string link,
         CancellationToken cancellationToken)
     {
         HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
@@ -474,7 +476,7 @@ internal sealed class AccountLifecycle(
         string? language = await LanguageAsync(subject, cancellationToken).ConfigureAwait(false);
         var values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
         {
-            ["token"] = token,
+            ["link"] = link,
         };
 
         int told = 0;

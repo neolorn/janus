@@ -45,7 +45,7 @@ public sealed class SignInFlowTests : IAsyncDisposable
                 MessageKind.SignInLink,
                 kind,
                 Language,
-                new MessageTemplate(kind is SendKind.Email ? "link" : null, "{code} {token}"));
+                new MessageTemplate(kind is SendKind.Email ? "link" : null, "{code} {link}"));
         }
     }
 

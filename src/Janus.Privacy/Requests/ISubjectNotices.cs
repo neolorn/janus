@@ -19,12 +19,14 @@ internal interface ISubjectNotices
     /// </summary>
     /// <param name="subject">Who.</param>
     /// <param name="message">Which message.</param>
-    /// <param name="source">What is sending it, for the send ledger.</param>
+    /// <param name="source">
+    /// The address of the request that asked for it, or nothing where no request did.
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>How many channels took it.</returns>
     ValueTask<int> TellAsync(
         SubjectId subject,
         MessageKind message,
-        string source,
+        string? source,
         CancellationToken cancellationToken);
 }

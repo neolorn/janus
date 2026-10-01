@@ -11,17 +11,19 @@ using Microsoft.EntityFrameworkCore;
 namespace Janus.Storage.Authentication.Sending;
 
 /// <summary>
-/// The sending ledger over the three tables that hold what has gone out: the counter
-/// per restriction key, the credit granted to one, and the sends a delivery report
-/// can still take back.
+/// The sending ledger over the four tables that hold what has gone out: the counter per
+/// destination, the counter per other restriction key, the credit granted to a key, and
+/// the sends a delivery report can still take back.
 /// </summary>
 /// <param name="context">The context the operation runs on.</param>
 /// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <remarks>
-/// Implements AUTH-ABUSE-004, INT-SMS-005, OPS-SEC-003 and CONV-DESIGN-003. The plain key
-/// value crosses into this class and no further. What was counted or granted under a
-/// previous version of the fingerprint key still stands until the rotation retires the
-/// version; what is counted or granted now is under the current one.
+/// Implements AUTH-ABUSE-004, INT-SMS-005, PRIV-RET-005, OPS-SEC-003 and CONV-DESIGN-003.
+/// A destination is counted apart from every other key, so each table is swept by the
+/// longest interval of its own restrictions (D-166, 122). The plain key value crosses
+/// into this class and no further. What was counted or granted under a previous version
+/// of the fingerprint key still stands until the rotation retires the version; what is
+/// counted or granted now is under the current one.
 /// </remarks>
 internal sealed class SendLedger(StoreContext context, IKeyRing ring)
     : ISendLedger
@@ -31,19 +33,15 @@ internal sealed class SendLedger(StoreContext context, IKeyRing ring)
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyDictionary<RestrictionKey, SendCounter>> CountersAsync(
         IReadOnlyCollection<RestrictionKey> keys,
-        DateTimeOffset stale,
+        CounterStaleness stale,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(keys);
 
         // AUTH-ABUSE-004 AC6: a record whose newest time decides nothing holds
         // nothing, so it goes before anything is read rather than standing until the
-        // key it names is sent to again. The times are written oldest first, so the
-        // newest is the last of them and the index is over that expression.
-        _ = await context.SendCounters
-            .Where(counter => counter.SentAt[counter.SentAt.Length - 1] < stale)
-            .ExecuteDeleteAsync(cancellationToken)
-            .ConfigureAwait(false);
+        // key it names is sent to again.
+        await SweepAsync(stale, cancellationToken).ConfigureAwait(false);
 
         var standing = new Dictionary<RestrictionKey, SendCounter>();
 
@@ -55,16 +53,15 @@ internal sealed class SendLedger(StoreContext context, IKeyRing ring)
 
             foreach (byte[] hashed in Candidates(key))
             {
-                SendCounterRecord? counter = await context.SendCounters
-                    .FindAsync([hashed], cancellationToken)
+                DateTimeOffset[]? times = await TimesAsync(key.Kind, hashed, cancellationToken)
                     .ConfigureAwait(false);
 
                 SendGrantRecord? grant = await context.SendGrants
                     .FindAsync([hashed], cancellationToken)
                     .ConfigureAwait(false);
 
-                found |= counter is not null || grant is not null;
-                sent.AddRange(counter?.SentAt ?? []);
+                found |= times is not null || grant is not null;
+                sent.AddRange(times ?? []);
                 credit += grant?.Credit ?? 0;
             }
 
@@ -78,6 +75,24 @@ internal sealed class SendLedger(StoreContext context, IKeyRing ring)
         }
 
         return standing;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask SweepAsync(CounterStaleness stale, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(stale);
+
+        // The times are written oldest first, so the newest is the last of them and
+        // each table's index is over that expression.
+        _ = await context.SendCounters
+            .Where(counter => counter.SentAt[counter.SentAt.Length - 1] < stale.Destinations)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        _ = await context.SendKeyCounters
+            .Where(counter => counter.SentAt[counter.SentAt.Length - 1] < stale.Keys)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -96,31 +111,7 @@ internal sealed class SendLedger(StoreContext context, IKeyRing ring)
 
         foreach (SendCount count in counted)
         {
-            byte[] hashed = Hashed(count.Key);
-
-            SendCounterRecord? counter = await context.SendCounters
-                .FindAsync([hashed], cancellationToken)
-                .ConfigureAwait(false);
-
-            DateTimeOffset[] kept =
-            [
-                .. (counter?.SentAt ?? []).Where(sent => sent > at - count.Retain),
-                at,
-            ];
-
-            if (counter is null)
-            {
-                context.SendCounters.Add(new SendCounterRecord
-                {
-                    Key = hashed,
-                    FingerprintVersion = Fingerprint.CurrentVersion(ring),
-                    SentAt = kept,
-                });
-            }
-            else
-            {
-                counter.SentAt = kept;
-            }
+            await CountAsync(count, at, cancellationToken).ConfigureAwait(false);
 
             if (count.Retain > settles)
             {
@@ -193,26 +184,37 @@ internal sealed class SendLedger(StoreContext context, IKeyRing ring)
             return false;
         }
 
+        // The send names its keys by their hashes alone, and a hash is kept in one
+        // table or the other, so each is looked for in both.
         foreach (byte[] hashed in send.Counted)
         {
-            SendCounterRecord? counter = await context.SendCounters
-                .FindAsync([hashed], cancellationToken)
-                .ConfigureAwait(false);
-
-            if (counter is null)
+            if (await context.SendCounters.FindAsync([hashed], cancellationToken).ConfigureAwait(false)
+                is SendCounterRecord destination)
             {
-                continue;
+                DateTimeOffset[] kept = Without(destination.SentAt, send.SentAt);
+
+                if (kept.Length == 0)
+                {
+                    context.SendCounters.Remove(destination);
+                }
+                else
+                {
+                    destination.SentAt = kept;
+                }
             }
-
-            DateTimeOffset[] kept = Without(counter.SentAt, send.SentAt);
-
-            if (kept.Length == 0)
+            else if (await context.SendKeyCounters.FindAsync([hashed], cancellationToken).ConfigureAwait(false)
+                is SendKeyCounterRecord key)
             {
-                context.SendCounters.Remove(counter);
-            }
-            else
-            {
-                counter.SentAt = kept;
+                DateTimeOffset[] kept = Without(key.SentAt, send.SentAt);
+
+                if (kept.Length == 0)
+                {
+                    context.SendKeyCounters.Remove(key);
+                }
+                else
+                {
+                    key.SentAt = kept;
+                }
             }
         }
 
@@ -268,8 +270,70 @@ internal sealed class SendLedger(StoreContext context, IKeyRing ring)
         return [.. kept];
     }
 
+    // A key's times keep what its restriction still counts, and the send.
+    private static DateTimeOffset[] Kept(DateTimeOffset[]? sends, TimeSpan retain, DateTimeOffset at) =>
+    [
+        .. (sends ?? []).Where(sent => sent > at - retain),
+        at,
+    ];
+
     private static byte[] Named(RestrictionKey key) =>
         Encoding.UTF8.GetBytes(key.Restriction + Separator + key.Value);
+
+    // A destination is kept in its own table and every other key in the other.
+    private async ValueTask<DateTimeOffset[]?> TimesAsync(
+        RestrictionKeyKind kind,
+        byte[] hashed,
+        CancellationToken cancellationToken) =>
+        kind is RestrictionKeyKind.Destination
+            ? (await context.SendCounters.FindAsync([hashed], cancellationToken).ConfigureAwait(false))?.SentAt
+            : (await context.SendKeyCounters.FindAsync([hashed], cancellationToken).ConfigureAwait(false))?.SentAt;
+
+    private async ValueTask CountAsync(SendCount count, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        byte[] hashed = Hashed(count.Key);
+
+        if (count.Key.Kind is RestrictionKeyKind.Destination)
+        {
+            SendCounterRecord? destination = await context.SendCounters
+                .FindAsync([hashed], cancellationToken)
+                .ConfigureAwait(false);
+
+            if (destination is null)
+            {
+                context.SendCounters.Add(new SendCounterRecord
+                {
+                    Key = hashed,
+                    FingerprintVersion = Fingerprint.CurrentVersion(ring),
+                    SentAt = Kept(null, count.Retain, at),
+                });
+            }
+            else
+            {
+                destination.SentAt = Kept(destination.SentAt, count.Retain, at);
+            }
+
+            return;
+        }
+
+        SendKeyCounterRecord? key = await context.SendKeyCounters
+            .FindAsync([hashed], cancellationToken)
+            .ConfigureAwait(false);
+
+        if (key is null)
+        {
+            context.SendKeyCounters.Add(new SendKeyCounterRecord
+            {
+                Key = hashed,
+                FingerprintVersion = Fingerprint.CurrentVersion(ring),
+                SentAt = Kept(null, count.Retain, at),
+            });
+        }
+        else
+        {
+            key.SentAt = Kept(key.SentAt, count.Retain, at);
+        }
+    }
 
     private byte[] Hashed(RestrictionKey key) => Fingerprint.Compute(Named(key), ring);
 

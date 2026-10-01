@@ -346,7 +346,10 @@ internal static class BackgroundJobs
         _ = await services.GetRequiredService<IOpenIddictAuthorizationManager>()
             .PruneAsync(now - LongestSession, cancellationToken).ConfigureAwait(false);
 
-        return Result.Success();
+        // PRIV-RET-005 AC2: a send counter goes once it decides nothing, without
+        // waiting for its key to be sent to again.
+        return await services.GetRequiredService<SendCounterSweep>()
+            .SweepAsync(cancellationToken).ConfigureAwait(false);
     }
 
     // INT-SMS-004: no poll succeeds without a balance read, so a deployment that

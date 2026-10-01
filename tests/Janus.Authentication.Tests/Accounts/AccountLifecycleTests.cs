@@ -79,6 +79,7 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
             _links,
             _sessions,
             _notifications,
+            Landing.Links,
             _audit,
             new StepUpGuard(
                 _sessions,
@@ -452,7 +453,7 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
             error => error.Code);
 
     // The token the notice carried, read off the body the template put it in.
-    private string Link() => _notifications.Mail[^1].Values["token"];
+    private string Link() => _notifications.Mail[^1].Token();
 
     private async Task<AccountState?> StateAsync() =>
         await _directory.StateAsync(_person, TestContext.Current.CancellationToken);

@@ -11,6 +11,7 @@ using Janus.Authentication.Identifiers;
 using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Organizations;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -40,6 +41,7 @@ namespace Janus.Authentication.Invitations;
 /// with where the deployment has one.
 /// </param>
 /// <param name="sending">What carries the link.</param>
+/// <param name="landing">Where a link the message carries lands.</param>
 /// <param name="configuration">Where the lifetime and the languages are read.</param>
 /// <param name="audit">Where every issue and revocation is written down.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
@@ -71,6 +73,7 @@ internal sealed class InvitationService(
     IMailboxStore mailboxes,
     IMailServerInUse inUse,
     INotificationHandler sending,
+    LandingLinks landing,
     IConfigurationStore configuration,
     IOrganizationAudit audit,
     IUnitOfWork work,
@@ -745,19 +748,21 @@ internal sealed class InvitationService(
     {
         // IDN-ATTR-001: the person holds no account whose language is known, and the
         // request is the administrator's, so the link goes out in every language the
-        // deployment declares.
+        // deployment declares. AUTH-ABUSE-004: a link an administrator asked for answers
+        // to the restrictions a sign-in link answers to, and no notification restriction
+        // counts it.
         return (await sending
                 .SendAsync(
                     new SendRequest(
                         SendDestination.Of(linked),
                         MessageKind.InvitationLink,
-                        RestrictionPurpose.Notification,
+                        RestrictionPurpose.SignIn,
                         source,
                         Language: null)
                     {
                         Values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
                         {
-                            ["token"] = token.Value,
+                            ["link"] = landing.Of(LinkKind.Invitation, token.Value),
                         },
                     },
                     cancellationToken)

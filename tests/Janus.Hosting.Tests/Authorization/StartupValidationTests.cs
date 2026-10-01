@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication.Oidc;
 using Janus.Authentication.Tests;
 using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Mailboxes;
@@ -27,8 +28,22 @@ namespace Janus.Hosting.Tests.Authorization;
 /// </summary>
 /// <param name="host">The deployment the checks read.</param>
 [Trait("kind", "integration")]
-public sealed class StartupValidationTests(HostFixture host) : IClassFixture<HostFixture>
+public sealed class StartupValidationTests(HostFixture host) : IClassFixture<HostFixture>, IAsyncLifetime
 {
+    // API-LAND-001, LIB-HOST-001: the two applications a link lands on, each the origin
+    // of a browser client the deployment registered, the authentication one where the
+    // sign-in address is.
+    private static readonly LandingOrigins Landing = new(
+        "https://accounts.example.test",
+        "https://account.example.test");
+
+    private static readonly OidcClient[] Browsers =
+    [
+        new("accounts-application", "Accounts", OidcClientKind.BrowserApplication, "https://accounts.example.test/return", ["openid"]),
+        new("account-application", "Account", OidcClientKind.BrowserApplication, "https://account.example.test/return", ["openid"]),
+        new("elsewhere-service", "Elsewhere", OidcClientKind.Protocol, "https://elsewhere.example.test/return", ["openid"]),
+    ];
+
     private static readonly string Showing =
         Settings.OrganizationPhoto.For("2f8d4c1e-0000-7000-8000-000000000001").ToString();
 
@@ -232,6 +247,72 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// INT-SMS-003 AC3: a subscriber's name fills the <c>outstanding</c> place, so one
+    /// registered under a name outside the rule stops the deployment as it starts,
+    /// naming it and its member; one inside the rule starts.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_SMS_003_AC3_ASubscriberNamedOutsideTheRuleIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using (IHost refusedHost = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<ISubjectEventSubscriber>(new Named("Host Events"));
+                Declared(services);
+            })
+            .Build())
+        {
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await refusedHost.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+            Assert.Equal("Host Events", refused.Failure?.Details["declaration"].GetString());
+            Assert.Equal("name", refused.Failure?.Details["field"].GetString());
+        }
+
+        using IHost started = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<ISubjectEventSubscriber>(new Named("host.events_2"));
+                Declared(services);
+            })
+            .Build();
+
+        await started.StartAsync(cancellationToken);
+        await started.StopAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// INT-SMS-003 AC3: a governing document's name fills the <c>document</c> place, so
+    /// a purpose that names one outside the rule stops the deployment as it starts,
+    /// naming the purpose and its member; one inside the rule starts.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_SMS_003_AC3_AGoverningDocumentNamedOutsideTheRuleIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using (IHost refusedHost = Deployed(document: "Recommendation Terms"))
+        {
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await refusedHost.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+            Assert.Equal("recommendations", refused.Failure?.Details["declaration"].GetString());
+            Assert.Equal("document", refused.Failure?.Details["field"].GetString());
+        }
+
+        using IHost started = Deployed(document: "recommendation-terms");
+
+        await started.StartAsync(cancellationToken);
+        await started.StopAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// LIB-HOST-001, REG-PM-001: the frontend's pages are a declaration with no
     /// default, so a deployment that registered none is stopped as it starts rather
     /// than answering a password manager as a site that offers neither page.
@@ -271,6 +352,105 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
         Assert.Equal("authenticationAddresses.signIn", refused.Failure?.Details["key"].GetString());
     }
+
+    /// <summary>
+    /// LIB-HOST-001, API-LAND-001: where a link lands has no default, so a deployment
+    /// that declared no landing origins is stopped as it starts, naming the
+    /// authentication application's.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task LIB_HOST_001_ADeploymentThatDeclaredNoLandingOriginsIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using IHost deployment = Deployed(landed: false);
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("landingOrigins.authentication", refused.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// LIB-HOST-001 AC6, API-LAND-001: a landing origin no registered browser client
+    /// returns to, a protocol client's included, is no application of this deployment,
+    /// and one that is not an https origin is none at all, so either stops it as it
+    /// starts, naming the origin.
+    /// </summary>
+    /// <param name="account">The account application's origin as declared.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("https://unregistered.example.test")]
+    [InlineData("https://elsewhere.example.test")]
+    [InlineData("https://account.example.test/")]
+    [InlineData("http://account.example.test")]
+    public async Task LIB_HOST_001_AC6_ALandingOriginNoBrowserClientReturnsToIsRefusedAsync(string account)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using IHost deployment = Deployed(landing: Landing with { Account = account });
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("landingOrigins.account", refused.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// LIB-HOST-001 AC6: the authentication application is where the sign-in address
+    /// is, so an authentication origin elsewhere is refused even where a browser client
+    /// returns to it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task LIB_HOST_001_AC6_AnAuthenticationOriginThatIsNotTheSignInOriginIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using IHost deployment = Deployed(landing: Landing with { Authentication = Landing.Account });
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(cancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+        Assert.Equal("landingOrigins.authentication", refused.Failure?.Details["key"].GetString());
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask InitializeAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using IHost deployment = Deployed();
+
+        // CONV-DESIGN-007: the key ring is filled before a client's secret is wrapped,
+        // which is what its hosted service does as the deployment starts.
+        KeyRingService ring = deployment.Services.GetServices<IHostedService>().OfType<KeyRingService>().Single();
+        await ring.StartingAsync(cancellationToken);
+        await ring.StartAsync(cancellationToken);
+
+        await using AsyncServiceScope scope = deployment.Services.CreateAsyncScope();
+        IOidcClientStore clients = scope.ServiceProvider.GetRequiredService<IOidcClientStore>();
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+        await work.BeginAsync(cancellationToken);
+
+        foreach (OidcClient browser in Browsers)
+        {
+            if (await clients.FindAsync(browser.ClientId, cancellationToken) is null)
+            {
+                await clients.AddAsync(browser, RandomNumberGenerator.GetBytes(32), DateTimeOffset.UnixEpoch, cancellationToken);
+            }
+        }
+
+        await work.CommitAsync(cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
     /// <summary>
     /// BFF-SESS-006, LIB-HOST-001, D-162: which client of the provider an application
@@ -1039,7 +1219,10 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool mailTransport = true,
         bool smsTransport = true,
         bool secretSource = true,
-        bool resolver = false) =>
+        bool resolver = false,
+        string? document = null,
+        LandingOrigins? landing = null,
+        bool landed = true) =>
         new HostBuilder()
             .ConfigureServices(services => Declared(
                 services,
@@ -1056,7 +1239,10 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
                 mailTransport: mailTransport,
                 smsTransport: smsTransport,
                 secretSource: secretSource,
-                resolver: resolver))
+                resolver: resolver,
+                document: document,
+                landing: landing,
+                landed: landed))
             .Build();
 
     // The library registered over this deployment, as the host's own code registers
@@ -1077,7 +1263,10 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool mailTransport = true,
         bool smsTransport = true,
         bool secretSource = true,
-        bool resolver = false)
+        bool resolver = false,
+        string? document = null,
+        LandingOrigins? landing = null,
+        bool landed = true)
     {
         if (mailTransport)
         {
@@ -1139,6 +1328,11 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
             services.AddSingleton(new SignOnClient("this-application"));
         }
 
+        if (landed)
+        {
+            services.AddSingleton(landing ?? Landing);
+        }
+
         foreach (SocialProvider provider in providers ?? [])
         {
             services.AddSingleton(provider);
@@ -1149,7 +1343,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
             services.AddSingleton<ISecretSource>(secrets ?? HostFixture.Secrets(host.MaintenanceConnectionString));
         }
 
-        return services.AddJanus(connection ?? host.ConnectionString, HostFixture.Declaration(), ApplicationKind.Public);
+        return services.AddJanus(connection ?? host.ConnectionString, HostFixture.Declaration(document: document), ApplicationKind.Public);
     }
 
     // IDN-ATTR-002: an organization shows photos by its key, which is a settings row
@@ -1204,6 +1398,19 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         await connection.ExecuteAsync(new CommandDefinition(
             statement,
             cancellationToken: cancellationToken));
+    }
+
+    // A subscriber of the host's own under the name given, covering nothing.
+    private sealed class Named(string name) : ISubjectEventSubscriber
+    {
+        public string Name => name;
+
+        public bool Required => false;
+
+        public IReadOnlyCollection<ResourceType> Covers { get; } = [];
+
+        public ValueTask<Result> HandleAsync(SubjectEvent raised, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(Result.Success());
     }
 
     // A subscriber of the host's that took the name the erasure ledger's confirmation

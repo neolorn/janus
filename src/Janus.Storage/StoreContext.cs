@@ -266,9 +266,14 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
     public DbSet<DeviceRecord> Devices => Set<DeviceRecord>();
 
     /// <summary>
-    /// What each restriction key has had counted against it.
+    /// What each destination has had counted against it.
     /// </summary>
     public DbSet<SendCounterRecord> SendCounters => Set<SendCounterRecord>();
+
+    /// <summary>
+    /// What each account, source, global and host key has had counted against it.
+    /// </summary>
+    public DbSet<SendKeyCounterRecord> SendKeyCounters => Set<SendKeyCounterRecord>();
 
     /// <summary>
     /// The credit support has added to a restriction key.
@@ -546,6 +551,7 @@ internal sealed class StoreContext(DbContextOptions<StoreContext> options) : DbC
         modelBuilder.ApplyConfiguration<RecoveryCodeRecord>(new RecoveryCodeConfiguration());
         modelBuilder.ApplyConfiguration(new DeviceConfiguration());
         modelBuilder.ApplyConfiguration(new SendCounterConfiguration());
+        modelBuilder.ApplyConfiguration(new SendKeyCounterConfiguration());
         modelBuilder.ApplyConfiguration(new SendGrantConfiguration());
         modelBuilder.ApplyConfiguration(new SendConfiguration());
         modelBuilder.ApplyConfiguration(new ThrottleConfiguration());

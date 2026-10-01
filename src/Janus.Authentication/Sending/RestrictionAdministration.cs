@@ -133,6 +133,13 @@ internal sealed class RestrictionAdministration(
             written.Add(replacement with { Name = name });
         }
 
+        // INT-SMS-003: a set the key does not admit, a name outside the rule among it,
+        // is refused before anything is begun, since the refusal writes nothing.
+        if (Settings.Restrictions.Accept(written).Match(_ => (Error?)null, error => error) is Error refused)
+        {
+            return Result.Failure(refused);
+        }
+
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
@@ -267,7 +274,8 @@ internal sealed class RestrictionAdministration(
         }
 
         // X5, D-166: a path naming a restriction the set does not hold names no record.
-        if (!declared.Any(one => string.Equals(one.Name, name, StringComparison.Ordinal)))
+        if (declared.FirstOrDefault(one => string.Equals(one.Name, name, StringComparison.Ordinal))
+            is not Restriction granted)
         {
             return Result.Failure(Error.From(ErrorCodes.RestrictionNotFound));
         }
@@ -291,7 +299,7 @@ internal sealed class RestrictionAdministration(
         }
 
         await ledger
-            .GrantAsync(new RestrictionKey(name, keyValue), credit, cancellationToken)
+            .GrantAsync(new RestrictionKey(name, granted.Key, keyValue), credit, cancellationToken)
             .ConfigureAwait(false);
 
         DateTimeOffset now = time.GetUtcNow();

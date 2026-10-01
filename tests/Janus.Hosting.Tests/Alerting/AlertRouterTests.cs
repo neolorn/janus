@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Sending;
@@ -289,10 +291,44 @@ public sealed class AlertRouterTests : IAsyncDisposable
             message => string.Equals(message.Destination.Value, "+201009999999", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// OPS-ALERT-002, D-022: the claim that an alert is the first of its window is
+    /// committed before any message is sent, so no transport is called while the
+    /// router's transaction is open.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_002_TheClaimIsCommittedBeforeTheAlertIsSentAsync()
+    {
+        var witness = new TransactionWitness(_work);
+        var router = new AlertRouter(_configuration, witness, _alerts, _work, _log);
+
+        _ = await router.RaiseAsync(Raised(AlertCondition.RestrictionGranted), TestContext.Current.CancellationToken);
+
+        Assert.Equal(TwoAddresses.Length, witness.OpenAtSend.Count);
+        Assert.All(witness.OpenAtSend, open => Assert.Equal(0, open));
+    }
+
     private static AlertRaised Raised(AlertCondition condition) => Alerts.Of(condition, null, Noon);
 
     private async Task<AlertDelivery> RaisedAsync(AlertRaised raised) =>
         (await Router.RaiseAsync(raised, TestContext.Current.CancellationToken)).Match(
             delivered => delivered,
             error => throw new Xunit.Sdk.XunitException($"The alert was refused: {error.Code}."));
+
+    // A handler that takes every message and writes down how many transactions stood
+    // open when it was asked to.
+    private sealed class TransactionWitness(UnitOfWorkInMemory work) : INotificationHandler
+    {
+        private static readonly RandomNumberGenerator Randomness = RandomNumberGenerator.Create();
+
+        public List<int> OpenAtSend { get; } = [];
+
+        public ValueTask<Result<SendReference>> SendAsync(SendRequest request, CancellationToken cancellationToken)
+        {
+            OpenAtSend.Add(work.Opened - work.Committed);
+
+            return ValueTask.FromResult(Result.Success(SendReference.Draw(Randomness)));
+        }
+    }
 }

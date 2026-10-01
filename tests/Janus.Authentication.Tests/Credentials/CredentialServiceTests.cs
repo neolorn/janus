@@ -753,6 +753,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _identifiers,
             Policies,
             _notifications,
+            Landing.Links,
             _credentials,
             _events,
             _configuration,
@@ -777,6 +778,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             Guard,
             new AdministrativeScope(_gate, _administrative),
             _notifications,
+            Landing.Links,
             new NonExistenceNotice(
                 _configuration,
                 _notifications,

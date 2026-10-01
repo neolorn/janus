@@ -96,6 +96,7 @@ public sealed class ScreeningTests : IDisposable
             .AddSingleton(new AuthenticationAddresses(
                 "https://accounts.example.test/signin",
                 "https://accounts.example.test"))
+            .AddSingleton(Landing.Origins)
             .AddSingleton(new SignOnClient("this-application"))
             .AddJanus(Connection, HostFixture.Declaration(), ApplicationKind.Public)
             .Configure<HttpClientFactoryOptions>(

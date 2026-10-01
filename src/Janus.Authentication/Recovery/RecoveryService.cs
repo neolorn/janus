@@ -34,6 +34,7 @@ namespace Janus.Authentication.Recovery;
 /// <param name="stepUp">What the approver's session has to have proved.</param>
 /// <param name="scope">Whether the approver may approve at all.</param>
 /// <param name="sending">Where a message goes out.</param>
+/// <param name="landing">Where a link the message carries lands.</param>
 /// <param name="nonExistence">What answers an ask no link of its own answers.</param>
 /// <param name="throttle">The progressive delay.</param>
 /// <param name="alerts">Where the anomaly alerts go.</param>
@@ -64,6 +65,7 @@ internal sealed class RecoveryService(
     StepUpGuard stepUp,
     AdministrativeScope scope,
     INotificationHandler sending,
+    LandingLinks landing,
     NonExistenceNotice nonExistence,
     ThrottleService throttle,
     IAlertChannels alerts,
@@ -441,7 +443,7 @@ internal sealed class RecoveryService(
         nonExistence.AnswerAsync(
             channel.Destination,
             MessageKind.RecoveryLink,
-            RestrictionPurpose.Notification,
+            RestrictionPurpose.SignIn,
             source,
             language,
             unheld,
@@ -484,19 +486,21 @@ internal sealed class RecoveryService(
         var token = OpaqueToken.Draw(randomness);
         string? recipient = await LanguageAsync(subject, language, cancellationToken).ConfigureAwait(false);
 
+        // AUTH-ABUSE-004: a link a person asked for answers to the restrictions a
+        // sign-in link answers to, and no notification restriction counts it.
         _ = (await sending
                 .SendAsync(
                     new SendRequest(
                         channel.Destination,
                         MessageKind.RecoveryLink,
-                        RestrictionPurpose.Notification,
+                        RestrictionPurpose.SignIn,
                         source,
                         recipient)
                     {
                         Subject = subject,
                         Values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
                         {
-                            ["token"] = token.Value,
+                            ["link"] = landing.Of(LinkKind.Recovery, token.Value),
                         },
                     },
                     cancellationToken)
@@ -802,7 +806,7 @@ internal sealed class RecoveryService(
                         Subject = subject,
                         Values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
                         {
-                            ["token"] = token.Value,
+                            ["link"] = landing.Of(LinkKind.Enrolment, token.Value),
                         },
                     },
                     cancellationToken)

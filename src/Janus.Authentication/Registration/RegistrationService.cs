@@ -26,6 +26,7 @@ namespace Janus.Authentication.Registration;
 /// <param name="sessions">Where registration sessions are held.</param>
 /// <param name="directory">Where an account is looked up and created.</param>
 /// <param name="sending">What carries the codes, the links and the notices.</param>
+/// <param name="landing">Where a link the message carries lands.</param>
 /// <param name="notices">What remembers which addresses have been told.</param>
 /// <param name="passwords">What screens and hashes a password.</param>
 /// <param name="passwordStore">Where the account's password is written.</param>
@@ -57,6 +58,7 @@ internal sealed class RegistrationService(
     IRegistrationSessionStore sessions,
     IRegistrationDirectory directory,
     INotificationHandler sending,
+    LandingLinks landing,
     INoticeLedger notices,
     PasswordService passwords,
     IPasswordStore passwordStore,
@@ -1786,7 +1788,7 @@ internal sealed class RegistrationService(
                     Values = new Dictionary<string, string>(capacity: 2, StringComparer.Ordinal)
                     {
                         ["code"] = code,
-                        ["token"] = link.Value,
+                        ["link"] = landing.Of(LinkKind.Registration, link.Value),
                     },
                 },
                 cancellationToken)

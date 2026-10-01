@@ -4,6 +4,8 @@ using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
+using Janus.Authentication.Sending;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
@@ -43,11 +45,32 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
             MessageKind.InvitationLink,
             SendKind.Email,
             "en",
-            new MessageTemplate("invitation", "{token}"));
+            new MessageTemplate("invitation", "{link}"));
     }
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync() => await _deployment.DisposeAsync();
+
+    /// <summary>
+    /// AUTH-ABUSE-004: an invitation link is asked for by an administrator, so it is
+    /// counted under the purpose a sign-in link is and by no <c>notification</c>
+    /// restriction, which counts notices alone.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AnInvitationLinkIsCountedByNoNotificationRestrictionAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+
+        Assert.Equal(
+            StatusCodes.Status201Created,
+            (await administrator.SendAsync("POST", PathOf(Branch), Personal)).Status);
+
+        Assert.Empty(_deployment.SendLedger.Sends(
+            new RestrictionKey("notification.destination", RestrictionKeyKind.Destination, "invited@elsewhere.test")));
+        Assert.Single(_deployment.SendLedger.Sends(
+            new RestrictionKey("email.destination", RestrictionKeyKind.Destination, "invited@elsewhere.test")));
+    }
 
     /// <summary>
     /// IDN-LIFE-009a and REG-INV-001: an invitation binding an email answers
@@ -73,7 +96,7 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
         Assert.Equal(System.Text.Json.JsonValueKind.Null, bound.Json().GetProperty("token").ValueKind);
         Assert.Equal(
             _deployment.Invitations.Held[0].Token,
-            OpaqueToken.Of(_deployment.Mail.Taken[^1].Body.Trim()).Fingerprint());
+            OpaqueToken.Of(Landing.Token(_deployment.Mail.Taken[^1].Body)).Fingerprint());
 
         Assert.Equal(StatusCodes.Status201Created, open.Status);
         Assert.Equal(

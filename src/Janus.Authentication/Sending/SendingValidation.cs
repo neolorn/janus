@@ -19,6 +19,10 @@ namespace Janus.Authentication.Sending;
 /// The catalogue in force, the deployment's own or the one the library ships.
 /// </param>
 /// <param name="suppliers">The host-registered key suppliers.</param>
+/// <param name="places">
+/// The widths a text message's places are measured at for this deployment, or nothing
+/// where it declared no landing origins, without which no link can be measured.
+/// </param>
 /// <param name="mailTransport">
 /// What the deployment's mail leaves through, or nothing where it registered none.
 /// </param>
@@ -40,12 +44,15 @@ internal sealed class SendingValidation(
     IConfigurationStore configuration,
     IMessageTemplates templates,
     RestrictionKeySuppliers suppliers,
+    MessagePlaceholders? places,
     IMailTransport? mailTransport,
     ISmsTransport? smsTransport)
 {
     private const string MailTransport = "mailTransport";
 
     private const string SmsTransport = "smsTransport";
+
+    private const string Landing = "landingOrigins.authentication";
 
     /// <summary>
     /// Runs every check, answering with the first that fails.
@@ -62,6 +69,14 @@ internal sealed class SendingValidation(
         if (smsTransport is null)
         {
             return Result.Failure(Absent(SmsTransport));
+        }
+
+        // LIB-HOST-001: the origins are the declaration check's to read in full; this
+        // check runs first and measures a link against them, so it names the same
+        // omission the declaration check would.
+        if (places is null)
+        {
+            return Result.Failure(Absent(Landing));
         }
 
         if (await InsecureAsync(configuration, cancellationToken).ConfigureAwait(false) is Error insecure)
@@ -91,7 +106,7 @@ internal sealed class SendingValidation(
             return Result.Failure(unsupplied);
         }
 
-        return Catalogued(languages) is Error missing ? Result.Failure(missing) : Result.Success();
+        return Catalogued(languages, places) is Error missing ? Result.Failure(missing) : Result.Success();
     }
 
     private static TValue Held<TValue>(Error error, ref Error? failure)
@@ -183,7 +198,7 @@ internal sealed class SendingValidation(
         return null;
     }
 
-    private Error? Catalogued(IReadOnlyList<string> languages)
+    private Error? Catalogued(IReadOnlyList<string> languages, MessagePlaceholders measured)
     {
         foreach (MessageKind message in MessageChannels.Messages)
         {
@@ -205,13 +220,28 @@ internal sealed class SendingValidation(
                         continue;
                     }
 
-                    // One character past the budget costs a second message, which for
+                    // INT-SMS-003: the places are a closed set, and one with no width
+                    // cannot be measured, so the template is refused as written.
+                    if (measured.Unlisted(template.Text) is string unlisted)
+                    {
+                        return new Error(
+                            ErrorCodes.StartupDeclarationInvalid,
+                            new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+                            {
+                                ["declaration"] = JsonSerializer.SerializeToElement(WrittenName.Of(message)),
+                                ["field"] = JsonSerializer.SerializeToElement(unlisted),
+                            });
+                    }
+
+                    // One character past the budget costs another message, which for
                     // a non-Latin language is seventy characters in (AUTH-ABUSE-005).
                     // The template is measured with every place it names at its widest,
-                    // because nothing is measured at the moment of a send.
-                    string widest = MessagePlaceholders.Widest(template.Text);
+                    // because nothing is measured at the moment of a send, and one that
+                    // carries a link is given the two segments a link needs.
+                    string widest = measured.Widest(template.Text);
+                    bool linked = MessagePlaceholders.CarriesLink(template.Text);
 
-                    if (MessageBudget.Exceeds(widest))
+                    if (MessageBudget.Exceeds(widest, linked))
                     {
                         return new Error(
                             ErrorCodes.ConfigurationValueNotAllowed,
@@ -220,7 +250,7 @@ internal sealed class SendingValidation(
                                 ["key"] = JsonSerializer.SerializeToElement(
                                     WrittenName.Of(message) + "." + WrittenName.Of(kind) + "." + language),
                                 ["allowed"] = JsonSerializer.SerializeToElement(
-                                    MessageBudget.Of(widest)),
+                                    MessageBudget.Of(widest, linked)),
                             });
                     }
                 }

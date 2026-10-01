@@ -11,7 +11,8 @@ namespace Janus.Authentication.Sending;
 /// one of them.
 /// </summary>
 /// <remarks>
-/// Implements AUTH-ABUSE-004, OPS-CFG-002 and chapter 10 sections 5.14 to 5.16.
+/// Implements AUTH-ABUSE-004, OPS-CFG-002 and chapter 10 sections 5.14 to 5.16 and
+/// 5.15a.
 /// Every part of the decision is a function of the restriction, the times already
 /// counted and the clock, so it is decided without reaching storage.
 /// </remarks>
@@ -29,25 +30,29 @@ internal static class Restrictions
         ArgumentNullException.ThrowIfNull(restriction);
         ArgumentNullException.ThrowIfNull(request);
 
-        if (restriction.Purpose is not RestrictionPurpose.Any
-            && restriction.Purpose != request.Purpose)
+        // An alert answers to deduplication and to nothing else: an attacker able to
+        // spend any bucket an alert counted under would otherwise silence the
+        // alerting, which is the blackout two channels exist to prevent (OPS-ALERT-002,
+        // OPS-ALERT-003).
+        if (request.IsAlert)
         {
             return false;
         }
 
-        if (restriction.Key is not RestrictionKeyKind.Destination)
+        if (restriction.Channel is not RestrictionChannel.Any && !Carries(restriction.Channel, request.Kind))
         {
-            return true;
+            return false;
         }
 
-        // An alert answers to deduplication and to nothing else: an attacker able to
-        // drain the operator address would otherwise silence the alerting, which is
-        // the blackout two channels exist to prevent (OPS-ALERT-002, OPS-ALERT-003).
-        // A security notice to an address its owner holds sits outside the destination
-        // restrictions for the same reason, and answers to the one whose purpose names
-        // notifications (AUTH-ABUSE-004).
-        return !request.IsAlert
-            && (!IsNoticeToHolder(request) || restriction.Purpose is not RestrictionPurpose.Any);
+        // A security notice to an address its owner holds answers to the restrictions
+        // whose purpose names notifications and to no other, so draining a bucket
+        // cannot silence the notice that says so (AUTH-ABUSE-004).
+        if (IsNoticeToHolder(request))
+        {
+            return restriction.Purpose is RestrictionPurpose.Notification;
+        }
+
+        return restriction.Purpose is RestrictionPurpose.Any || restriction.Purpose == request.Purpose;
     }
 
     /// <summary>
@@ -145,6 +150,9 @@ internal static class Restrictions
     /// <returns>Whether the change is a loosening.</returns>
     public static bool IsLoosening(Restriction? before, Restriction? after) =>
         RestrictionSetSetting.Loosens(before, after);
+
+    private static bool Carries(RestrictionChannel channel, SendKind kind) =>
+        channel is RestrictionChannel.Sms ? kind is SendKind.Sms : kind is SendKind.Email;
 
     private static DateTimeOffset Opened(Bucket bucket, DateTimeOffset now) =>
         bucket.Window is BucketWindow.Sliding

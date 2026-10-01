@@ -26,6 +26,7 @@ namespace Janus.Authentication.SignIn;
 /// <param name="policies">What policy governs the account.</param>
 /// <param name="domainLock">Whether an email address is one a member may sign in with.</param>
 /// <param name="sending">Where a message goes out.</param>
+/// <param name="landing">Where a link the message carries lands.</param>
 /// <param name="nonExistence">What answers an ask no message of its own answers.</param>
 /// <param name="signals">What is known about a number before a text leans on it.</param>
 /// <param name="throttle">The progressive delay.</param>
@@ -49,6 +50,7 @@ internal sealed class SignInLinks(
     PolicyResolution policies,
     DomainLock domainLock,
     INotificationHandler sending,
+    LandingLinks landing,
     NonExistenceNotice nonExistence,
     PhoneSignals signals,
     ThrottleService throttle,
@@ -478,7 +480,7 @@ internal sealed class SignInLinks(
 
         if (ask.CarriesLink)
         {
-            values["token"] = token.Value;
+            values["link"] = landing.Of(LinkKind.SignIn, token.Value);
         }
 
         _ = (await sending

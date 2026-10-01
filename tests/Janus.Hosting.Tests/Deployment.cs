@@ -99,6 +99,12 @@ internal sealed class Deployment : IAsyncDisposable
         "https://identity.example.test/signin",
         "https://identity.example.test");
 
+    // LIB-HOST-001, API-LAND-001: where a link the library sends lands is a declaration
+    // no deployment starts without, so every deployment here carries one.
+    private static readonly LandingOrigins Landed = new(
+        "https://identity.example.test",
+        "https://accounts.example.test");
+
     // LIB-HOST-001, BFF-SESS-006: which client of the provider this application is
     // is a declaration no deployment starts without either.
     private static readonly SignOnClient Registered = new("this-application");
@@ -805,6 +811,8 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton(ReservedUsernames.Default);
         _ = services.AddSingleton(addresses);
         _ = services.AddSingleton(signIn);
+        _ = services.AddSingleton(Landed);
+        _ = services.AddSingleton(new LandingLinks(Landed));
         _ = services.AddSingleton(client);
         _ = services.AddSingleton(MailClient);
 

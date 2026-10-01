@@ -738,7 +738,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             [Address, Elsewhere],
             _restrictions.Drawn.Select(drawn => drawn.Destination.Canonical));
         Assert.All(_restrictions.Drawn, drawn => Assert.Equal(MessageKind.RecoveryLink, drawn.Message));
-        Assert.All(_restrictions.Drawn, drawn => Assert.Equal(RestrictionPurpose.Notification, drawn.Purpose));
+        Assert.All(_restrictions.Drawn, drawn => Assert.Equal(RestrictionPurpose.SignIn, drawn.Purpose));
         Assert.Equal(MessageKind.NoAccount, Assert.Single(_notifications.Mail).Message);
 
         var refusal = Error.From(ErrorCodes.RestrictionExceeded);
@@ -766,6 +766,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             new StepUpGuard(_live, _authenticators, _passwords, Policies, _clock),
             new AdministrativeScope(_gate, _administrative),
             _notifications,
+            Landing.Links,
             new NonExistenceNotice(
                 _configuration,
                 _notifications,
@@ -790,6 +791,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             _identifiers,
             Policies,
             _notifications,
+            Landing.Links,
             _credentials,
             _events,
             _configuration,
@@ -850,9 +852,9 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken);
 
     // The token the last message carried, which is what a person would open.
-    private string Sent() => _notifications.Mail[^1].Values["token"];
+    private string Sent() => _notifications.Mail[^1].Token();
 
-    private string Texted() => _notifications.Texts[^1].Values["token"];
+    private string Texted() => _notifications.Texts[^1].Token();
 
     private AuthenticatorId Enrolled(SubjectId subject, Factor factor)
     {

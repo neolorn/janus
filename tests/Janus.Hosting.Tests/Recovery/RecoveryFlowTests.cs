@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
@@ -38,13 +39,39 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
                     message,
                     kind,
                     Language,
-                    new MessageTemplate(kind is SendKind.Email ? "recovery" : null, "{token}"));
+                    new MessageTemplate(kind is SendKind.Email ? "recovery" : null, "{link}"));
             }
         }
     }
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync() => await _deployment.DisposeAsync();
+
+    /// <summary>
+    /// AUTH-ABUSE-004: a recovery link is asked for by a person, so it is counted under
+    /// the purpose a sign-in link is and by no <c>notification</c> restriction, which
+    /// counts notices alone.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_ARecoveryLinkIsCountedByNoNotificationRestrictionAsync()
+    {
+        _ = await RegisteredAsync();
+
+        var notified = new RestrictionKey("notification.destination", RestrictionKeyKind.Destination, Flow.Address);
+        var mailed = new RestrictionKey("email.destination", RestrictionKeyKind.Destination, Flow.Address);
+        int notices = _deployment.SendLedger.Sends(notified).Count;
+        int mails = _deployment.SendLedger.Sends(mailed).Count;
+
+        Browser browser = await ArrivedAsync();
+
+        Assert.Equal(
+            StatusCodes.Status202Accepted,
+            (await browser.SendAsync("POST", "/recovery/begin", ("identifier", Flow.Address))).Status);
+
+        Assert.Equal(notices, _deployment.SendLedger.Sends(notified).Count);
+        Assert.Equal(mails + 1, _deployment.SendLedger.Sends(mailed).Count);
+    }
 
     /// <summary>
     /// AUTH-RECOV-005 AC2: the link the address received sets the password, and the
@@ -178,7 +205,7 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
         Answer cancelled = await elsewhere.SendAsync(
             "POST",
             "/recovery/report-loss/" + credential + "/cancel",
-            ("token", _deployment.Mail.Taken[^1].Body.Trim()));
+            ("token", Landing.Token(_deployment.Mail.Taken[^1].Body)));
 
         Assert.Equal(StatusCodes.Status204NoContent, cancelled.Status);
     }
@@ -276,5 +303,5 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
             : throw new InvalidOperationException("The label is not one.");
 
     // The token the recovery message carried, which never touches any answer.
-    private string Token() => _deployment.Mail.Taken[^1].Body.Trim();
+    private string Token() => Landing.Token(_deployment.Mail.Taken[^1].Body);
 }

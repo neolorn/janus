@@ -3918,6 +3918,8 @@ at its defined width, that the widths are defined once per place beside the mess
 kinds, and that a place the library does not fill is left as it stands. `10` should carry
 the places and their widths, which are listed under "Rows for chapter 10".
 
+**Superseded by D-166.**
+
 ---
 
 ## 121. Publishing answers for itself, and the operation that made the event carries it
@@ -4039,6 +4041,8 @@ schedule behind it. D-162 asks for it there and nowhere else.
 deleted and against what, and should say whether the interval is taken over the
 destination restrictions or over all of them. PRIV-RET-005 AC2 should say that the
 retention of a counter follows the declaration as it now stands.
+
+**Superseded by D-166.**
 
 ---
 
@@ -14146,6 +14150,8 @@ yet say "this one is for mail".
 channel filter (`sms` · `email` · `any`) beside the purpose, with the shipped defaults
 filtered by the channel their names give, or say that a restriction applies across
 channels and that the shipped names are names only.
+
+**Superseded by D-166.**
 
 ---
 

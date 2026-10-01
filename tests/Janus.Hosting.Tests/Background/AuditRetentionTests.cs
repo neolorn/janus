@@ -141,6 +141,7 @@ public sealed class AuditRetentionTests(HostFixture host) : IClassFixture<HostFi
             .AddSingleton(new AuthenticationAddresses(
                 "https://accounts.example.test/signin",
                 "https://accounts.example.test"))
+            .AddSingleton(Landing.Origins)
             .AddSingleton(new SignOnClient("this-application"))
             .AddSingleton<ISecretSource>(HostFixture.Secrets(maintenance))
             .AddJanus(host.ConnectionString, HostFixture.Declaration(), ApplicationKind.Public)

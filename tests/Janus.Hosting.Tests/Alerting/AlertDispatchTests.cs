@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -73,6 +74,27 @@ public sealed class AlertDispatchTests : IAsyncDisposable
         Owned();
 
         Assert.Equal(1, await _deployment.CarryAlertsAsync());
+        Assert.Empty(_deployment.Raised.Waiting);
+    }
+
+    /// <summary>
+    /// OPS-ALERT-002, D-022: a pass commits each condition's deduplication claim before
+    /// the router carries it, so no transport is called while a transaction is open.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_002_NoAlertIsSentWhileATransactionIsOpenAsync()
+    {
+        Owned();
+
+        var open = new List<int>();
+
+        _deployment.Mail.Handed = () => open.Add(_deployment.Work.Opened - _deployment.Work.Committed);
+
+        await RaisedAsync(AlertCondition.RestrictionGranted, "first");
+
+        Assert.Equal(1, await _deployment.CarryAlertsAsync());
+        Assert.Equal([0], open);
         Assert.Empty(_deployment.Raised.Waiting);
     }
 

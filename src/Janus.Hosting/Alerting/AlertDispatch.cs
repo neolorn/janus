@@ -12,11 +12,12 @@ namespace Janus.Hosting.Alerting;
 /// </summary>
 /// <param name="alerts">Where the raised conditions wait.</param>
 /// <param name="router">What carries one to the destinations.</param>
-/// <param name="work">The one transaction each condition is carried in.</param>
+/// <param name="work">The transaction each condition leaves the table in.</param>
 /// <remarks>
 /// Implements OPS-ALERT-001, CONV-DESIGN-002 and chapter 10 section 5b. A condition
-/// leaves the table in the transaction the router records its delivery in, so one the
-/// router refused is carried on a later pass and none is carried twice.
+/// leaves the table once the router has carried it, so one the router refused is
+/// carried on a later pass, and one carried but not yet removed is deduplicated rather
+/// than carried twice.
 /// </remarks>
 internal sealed class AlertDispatch(IRaisedAlerts alerts, AlertRouter router, IUnitOfWork work)
 {
@@ -43,18 +44,21 @@ internal sealed class AlertDispatch(IRaisedAlerts alerts, AlertRouter router, IU
 
         foreach (RaisedAlert alert in waiting)
         {
-            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notBegun)
-            {
-                return Result.Failure<int>(notBegun);
-            }
-
+            // D-022: the router commits its claim and carries the condition outside any
+            // transaction; a row left behind by a pass that stops here is folded into
+            // that claim by the deduplication ledger on the next pass.
             Result<AlertDelivery> delivered = await router.RaiseAsync(alert.Raised, cancellationToken)
                 .ConfigureAwait(false);
 
             if (delivered.Match(_ => (Error?)null, error => error) is Error undelivered)
             {
                 return Result.Failure<int>(undelivered);
+            }
+
+            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notBegun)
+            {
+                return Result.Failure<int>(notBegun);
             }
 
             await alerts.RemoveAsync(alert.Id, cancellationToken).ConfigureAwait(false);

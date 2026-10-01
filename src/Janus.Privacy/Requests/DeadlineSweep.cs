@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -34,12 +35,12 @@ internal sealed class DeadlineSweep(
     IUnitOfWork work,
     TimeProvider time)
 {
-    /// <summary>
-    /// What the send ledger records a lapse message under.
-    /// </summary>
-    internal const string Source = "privacy.request.lapse";
-
     private static readonly AuditAction Lapsed = AuditActions.RequestLapsed;
+
+    // INT-SMS-003, 10 section 5.12c: the alert names the type and the status in the
+    // spelling the chapter gives them, which is the name on the member.
+    private static readonly JsonSerializerOptions Spelled =
+        new() { Converters = { new JsonStringEnumConverter() } };
 
     /// <summary>
     /// Runs one pass.
@@ -81,8 +82,8 @@ internal sealed class DeadlineSweep(
         new(capacity: 4, StringComparer.Ordinal)
         {
             ["request"] = JsonSerializer.SerializeToElement(request.Id.ToString()),
-            ["type"] = JsonSerializer.SerializeToElement(request.Type.ToString()),
-            ["status"] = JsonSerializer.SerializeToElement(request.Status.ToString()),
+            ["type"] = JsonSerializer.SerializeToElement(request.Type, Spelled),
+            ["status"] = JsonSerializer.SerializeToElement(request.Status, Spelled),
             ["decisionDue"] = JsonSerializer.SerializeToElement(request.DecisionDue),
         };
 
@@ -152,11 +153,12 @@ internal sealed class DeadlineSweep(
         {
             // Erasure cannot run without a human confirming identity, so the system
             // never erases on its own: the record persists and the subject is told
-            // honestly that the deadline passed.
+            // honestly that the deadline passed. No request asked for the message, so
+            // it carries no source (AUTH-ABUSE-004, chapter 10 section 5.14).
             request.DeemRefusedByLapse(now);
 
             _ = await notices
-                .TellAsync(request.Subject, MessageKind.PrivacyRequestLapsed, Source, cancellationToken)
+                .TellAsync(request.Subject, MessageKind.PrivacyRequestLapsed, source: null, cancellationToken)
                 .ConfigureAwait(false);
         }
 
