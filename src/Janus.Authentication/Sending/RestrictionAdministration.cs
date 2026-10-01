@@ -91,27 +91,10 @@ internal sealed class RestrictionAdministration(
             return Result.Failure(StepUpRefusal.Of(challenge));
         }
 
-        Error? failure = null;
-
-        IReadOnlyList<Restriction> declared = (await configuration
-                .ReadAsync(Settings.Restrictions, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, error => Held<IReadOnlyList<Restriction>>(error, ref failure));
-
-        if (failure is not null)
-        {
-            return Result.Failure(failure);
-        }
-
-        Restriction? before = declared.FirstOrDefault(one =>
-            string.Equals(one.Name, name, StringComparison.Ordinal));
-
         if (replacement is not null && Unsupplied(replacement) is Error unsupplied)
         {
             return Result.Failure(unsupplied);
         }
-
-        bool loosening = Restrictions.IsLoosening(before, replacement);
 
         // OPS-CFG-008: an edit of the set is a change to a runtime setting, and every
         // such change carries its reason whichever way it moves.
@@ -125,17 +108,10 @@ internal sealed class RestrictionAdministration(
 
         string stated = reason!.Trim();
 
-        List<Restriction> written =
-            [.. declared.Where(one => !string.Equals(one.Name, name, StringComparison.Ordinal))];
-
-        if (replacement is not null)
-        {
-            written.Add(replacement with { Name = name });
-        }
-
         // INT-SMS-003: a set the key does not admit, a name outside the rule among it,
         // is refused before anything is begun, since the refusal writes nothing.
-        if (Settings.Restrictions.Accept(written).Match(_ => (Error?)null, error => error) is Error refused)
+        if ((await ReplacedAsync(name, replacement, cancellationToken).ConfigureAwait(false))
+            .Match(_ => (Error?)null, error => error) is Error refused)
         {
             return Result.Failure(refused);
         }
@@ -146,6 +122,25 @@ internal sealed class RestrictionAdministration(
             return Result.Failure(notBegun);
         }
 
+        // D-166 X3: the set is read again under its row's lock and the edit made on what
+        // is committed, so an edit of another restriction at the same moment is kept
+        // rather than written over with the set as it stood before it.
+        await administration.HoldAsync(Settings.Restrictions, cancellationToken).ConfigureAwait(false);
+
+        Error? failure = null;
+
+        Replaced replaced = (await ReplacedAsync(name, replacement, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<Replaced>(error, ref failure));
+
+        if (failure is Error unread)
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Failure(unread), Result.Failure);
+        }
+
+        Restriction? before = replaced.Before;
+        bool loosening = Restrictions.IsLoosening(before, replacement);
+
         // OPS-CFG-002, OPS-CFG-005: every runtime write goes through the one operation
         // that classifies it, gates it and writes it down. The restriction set carries
         // its own direction, so a tightening passes here as it does at this method's
@@ -153,7 +148,7 @@ internal sealed class RestrictionAdministration(
         Result changed = await administration
             .ChangeAsync(
                 Settings.Restrictions,
-                written,
+                replaced.Written,
                 stated,
                 challenge,
                 context,
@@ -349,6 +344,23 @@ internal sealed class RestrictionAdministration(
         return Result.Success();
     }
 
+    private static Result<Replaced> Accepted(IReadOnlyList<Restriction> declared, string name, Restriction? replacement)
+    {
+        List<Restriction> written =
+            [.. declared.Where(one => !string.Equals(one.Name, name, StringComparison.Ordinal))];
+
+        if (replacement is not null)
+        {
+            written.Add(replacement with { Name = name });
+        }
+
+        return Settings.Restrictions.Accept(written).Match(
+            _ => Result.Success(new Replaced(
+                declared.FirstOrDefault(one => string.Equals(one.Name, name, StringComparison.Ordinal)),
+                written)),
+            Result.Failure<Replaced>);
+    }
+
     private static TValue Held<TValue>(Error error, ref Error? failure)
     {
         failure = error;
@@ -373,6 +385,19 @@ internal sealed class RestrictionAdministration(
             ["restriction"] = JsonSerializer.SerializeToElement(restriction),
         };
 
+    // The set in force with the one restriction replaced or deleted, and what that
+    // restriction was, or why the set the edit would leave is not one the key admits.
+    private async ValueTask<Result<Replaced>> ReplacedAsync(
+        string name,
+        Restriction? replacement,
+        CancellationToken cancellationToken) =>
+        (await configuration
+            .ReadAsync(Settings.Restrictions, cancellationToken)
+            .ConfigureAwait(false))
+            .Match(
+                declared => Accepted(declared, name, replacement),
+                Result.Failure<Replaced>);
+
     // Chapter 09 section 8: a host key no supplier answers for is a value the set does
     // not admit, refused where it is edited (422) rather than as the startup fault the
     // same absence is when a deployment declares it (LIB-HOST-001).
@@ -387,4 +412,7 @@ internal sealed class RestrictionAdministration(
                     ["supplier"] = JsonSerializer.SerializeToElement(replacement.HostKeyName ?? string.Empty),
                 })
             : null;
+
+    // One edit of the set: the restriction it replaces, and the set it leaves.
+    private sealed record Replaced(Restriction? Before, IReadOnlyList<Restriction> Written);
 }

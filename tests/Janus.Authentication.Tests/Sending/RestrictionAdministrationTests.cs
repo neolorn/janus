@@ -155,6 +155,40 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-CFG-002 AC6, CONV-DESIGN-003: another restriction tightened while the edit
+    /// waited for the set's row stays tightened, as the edit is made on the set as
+    /// committed rather than as it was read before.
+    /// </summary>
+    [Fact]
+    public async Task OPS_CFG_002_AC6_ARestrictionTightenedMeanwhileStaysTightenedAsync()
+    {
+        Restriction tightened = new(
+            "email.destination",
+            RestrictionKeyKind.Destination,
+            null,
+            RestrictionPurpose.Any,
+            [new Bucket(1, TimeSpan.FromHours(24), BucketWindow.Sliding)]);
+
+        _configuration.Holding = key =>
+        {
+            _configuration.Holding = null;
+            _configuration.Set<IReadOnlyList<Restriction>>(
+                Settings.Restrictions,
+                [.. Settings.Restrictions.Default.Where(one => one.Name != tightened.Name), tightened]);
+        };
+
+        await EditedAsync("sms.destination", Tightened(), "an incident");
+
+        IReadOnlyList<Restriction> declared = (await Administration
+            .AllAsync(TestContext.Current.CancellationToken)).Match(
+            value => value,
+            error => throw new Xunit.Sdk.XunitException($"The set was refused: {error.Code}."));
+
+        Assert.Equal(tightened.Buckets, declared.Single(one => one.Name == tightened.Name).Buckets);
+        Assert.Equal(Tightened().Buckets, declared.Single(one => one.Name == "sms.destination").Buckets);
+    }
+
+    /// <summary>
     /// OPS-CFG-008 AC4: an edit to a restriction is a runtime change like any other.
     /// The entry carries what the restriction was and what it became, and a loosening
     /// raises the Normal alert.

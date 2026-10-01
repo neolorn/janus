@@ -31,10 +31,17 @@ internal sealed class ConfigurationInMemory : IConfigurationStore, IConfiguratio
     /// </summary>
     public List<ConfigurationKey> Held { get; } = [];
 
+    /// <summary>
+    /// Gets or sets what another transaction commits while this one waits for a key's
+    /// row, so a test may change a value under a decision about to be made.
+    /// </summary>
+    public Action<ConfigurationKey>? Holding { get; set; }
+
     /// <inheritdoc/>
     public ValueTask HoldAsync(ConfigurationKey key, CancellationToken cancellationToken)
     {
         Held.Add(key);
+        Holding?.Invoke(key);
 
         return ValueTask.CompletedTask;
     }

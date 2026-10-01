@@ -1478,6 +1478,8 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- An edit of one sending restriction is made on the set read again under its row's
+  lock, so an edit of another restriction at the same moment is never written over.
 - A refresh of a materialised derivation is made with the organization's tree of
   records held, so two refreshes at once write each grant once.
 - An export is counted against the hour and recorded with its actor's exports held,
