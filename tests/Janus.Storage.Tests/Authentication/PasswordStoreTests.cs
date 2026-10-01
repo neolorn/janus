@@ -128,9 +128,11 @@ public sealed class PasswordStoreTests(DatabaseFixture database)
             Password held = Assert.IsType<Password>(await new PasswordStore(rehashing)
                 .FindAsync(subject, TestContext.Current.CancellationToken));
 
+            PasswordHash verified = held.Hash;
+
             held.Rehash(Hash("a horse outstanding in its field", new Argon2StrengthClass(47104, 3)));
 
-            await new PasswordStore(rehashing).RehashAsync(held, TestContext.Current.CancellationToken);
+            await new PasswordStore(rehashing).RehashAsync(held, verified, TestContext.Current.CancellationToken);
             await rehashing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
@@ -144,6 +146,44 @@ public sealed class PasswordStoreTests(DatabaseFixture database)
             read.Hash));
         Assert.True(read.MeetsSingleFactorFloor);
         Assert.Equal(Noon, read.SetAt);
+    }
+
+    /// <summary>
+    /// AUTH-PASS-007 AC2, CONV-DESIGN-003 AC6: a rehash computed from a password read
+    /// before another was set changes nothing, so a sign-in with the old password never
+    /// writes it back over the new one.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_PASS_007_AC2_ARehashOfAPasswordSetSinceChangesNothingAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+
+        await WrittenAsync(Password.Set(subject, Hash("an old horse in its field"), meetsSingleFactorFloor: true, Noon));
+
+        await using StoreContext rehashing = database.Context();
+        Password held = Assert.IsType<Password>(await new PasswordStore(rehashing)
+            .FindAsync(subject, TestContext.Current.CancellationToken));
+        PasswordHash read = held.Hash;
+
+        await using (StoreContext changing = database.Context())
+        {
+            Password replaced = Assert.IsType<Password>(await new PasswordStore(changing)
+                .FindAsync(subject, TestContext.Current.CancellationToken));
+
+            replaced.Change(Hash("a new horse in its field"), meetsSingleFactorFloor: true, Noon + TimeSpan.FromHours(1));
+
+            await new PasswordStore(changing).SetAsync(replaced, TestContext.Current.CancellationToken);
+            await changing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        held.Rehash(Hash("an old horse in its field", new Argon2StrengthClass(47104, 3)));
+        await new PasswordStore(rehashing).RehashAsync(held, read, TestContext.Current.CancellationToken);
+
+        await using StoreContext reading = database.Context();
+        Password stored = Assert.IsType<Password>(
+            await new PasswordStore(reading).FindAsync(subject, TestContext.Current.CancellationToken));
+
+        Assert.True(Argon2idHasher.Verify(Encoding.UTF8.GetBytes("a new horse in its field"), stored.Hash));
     }
 
     /// <summary>

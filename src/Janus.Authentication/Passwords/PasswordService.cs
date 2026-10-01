@@ -261,8 +261,10 @@ internal sealed class PasswordService(
                 return Result.Failure<PasswordVerification>(notBegun);
             }
 
+            PasswordHash read = held.Hash;
+
             held.Rehash(hasher.Hash(password, parameters, parallelism));
-            await passwords.RehashAsync(held, cancellationToken).ConfigureAwait(false);
+            await passwords.RehashAsync(held, read, cancellationToken).ConfigureAwait(false);
 
             if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
                 .Match<Error?>(() => null, error => error) is Error notCommitted)

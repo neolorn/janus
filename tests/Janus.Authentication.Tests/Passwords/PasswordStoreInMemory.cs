@@ -47,8 +47,15 @@ internal sealed class PasswordStoreInMemory : IPasswordStore
     }
 
     /// <inheritdoc/>
-    public ValueTask RehashAsync(Password password, CancellationToken cancellationToken)
+    public ValueTask RehashAsync(Password password, PasswordHash read, CancellationToken cancellationToken)
     {
+        // A password set since the read replaced the one held, so the rehash finds the
+        // row no longer holding what it verified against and changes nothing.
+        if (!ReferenceEquals(_passwords.GetValueOrDefault(password.Subject), password))
+        {
+            return ValueTask.CompletedTask;
+        }
+
         _passwords[password.Subject] = password;
         Rehashed++;
 
