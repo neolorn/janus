@@ -69,7 +69,7 @@ internal sealed class CallbackReferences(
     /// <exception cref="ArgumentNullException">The callback is absent.</exception>
     public async ValueTask<bool> RecognisesAsync(
         string callback,
-        string? presented,
+        [NeverLogged] string? presented,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(callback);
@@ -84,5 +84,5 @@ internal sealed class CallbackReferences(
             .ConfigureAwait(false);
     }
 
-    private static byte[] Hashed(string reference) => SHA256.HashData(Encoding.UTF8.GetBytes(reference));
+    private static byte[] Hashed([NeverLogged] string reference) => SHA256.HashData(Encoding.UTF8.GetBytes(reference));
 }

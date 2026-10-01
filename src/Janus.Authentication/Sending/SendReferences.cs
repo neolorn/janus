@@ -22,7 +22,7 @@ internal static class SendReferences
     /// <param name="presented">What the callback carried.</param>
     /// <returns>Its hash.</returns>
     /// <exception cref="ArgumentNullException">The value is absent.</exception>
-    public static byte[] Of(string presented)
+    public static byte[] Of([NeverLogged] string presented)
     {
         ArgumentNullException.ThrowIfNull(presented);
 

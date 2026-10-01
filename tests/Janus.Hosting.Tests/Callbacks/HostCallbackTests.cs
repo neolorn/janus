@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Callbacks;
@@ -132,7 +133,11 @@ public sealed class HostCallbackTests : IAsyncDisposable
 
         Assert.All(
             new[] { unsigned, misSigned, altered },
-            context => Assert.Equal(StatusCodes.Status429TooManyRequests, context.Response.StatusCode));
+            context =>
+            {
+                Assert.Equal(StatusCodes.Status422UnprocessableEntity, context.Response.StatusCode);
+                Assert.Equal(0, context.Response.Headers.RetryAfter.Count);
+            });
         Assert.Equal(0, _signed.Parsed);
         Assert.Equal(0, _reached);
     }
@@ -150,7 +155,7 @@ public sealed class HostCallbackTests : IAsyncDisposable
             Body,
             SignedHostCallback.Signing(Body, Noon - TimeSpan.FromMinutes(6), Secret));
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, replayed.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, replayed.Response.StatusCode);
         Assert.Equal(0, _reached);
 
         HttpContext timely = await SentAsync(
@@ -203,6 +208,56 @@ public sealed class HostCallbackTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// BFF-MACH-002 AC3: a delivery whose route never finished, because its process
+    /// ended inside the route, left its claim unsettled; the provider's next delivery
+    /// of the event, once <c>integration.callback.claimtimeout</c> has passed at its
+    /// default, takes the claim over, is carried, and settles it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task BFF_MACH_002_AC3_ADeliveryWhoseRouteNeverFinishedIsCarriedAfterFiveMinutesAsync()
+    {
+        await AbandonedAsync();
+
+        _clock.Advance(Settings.IntegrationCallbackClaimTimeout.Default);
+
+        HttpContext again = await SentAsync(Events, Body, SignedHostCallback.Signing(Body, _clock.GetUtcNow(), Secret));
+        HttpContext after = await SentAsync(Events, Body, SignedHostCallback.Signing(Body, _clock.GetUtcNow(), Secret));
+
+        Assert.Equal(TimeSpan.FromMinutes(5), Settings.IntegrationCallbackClaimTimeout.Default);
+        Assert.Equal(StatusCodes.Status200OK, again.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status200OK, after.Response.StatusCode);
+        Assert.Equal(1, _reached);
+        Assert.Equal(1, _claims.Settled);
+    }
+
+    /// <summary>
+    /// BFF-MACH-002 AC3: a delivery meeting a claim still being carried, younger than
+    /// <c>integration.callback.claimtimeout</c>, is answered 409
+    /// <c>integration.callback.inprogress</c> so the provider delivers it again; it
+    /// does not reach the route, is logged at Information and is not counted as a
+    /// rejection.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task BFF_MACH_002_AC3_ADeliveryMeetingOneInProgressIsNotAcknowledgedAsync()
+    {
+        await AbandonedAsync();
+
+        _clock.Advance(Settings.IntegrationCallbackClaimTimeout.Default - TimeSpan.FromSeconds(1));
+
+        HttpContext meeting = await SentAsync(Events, Body, SignedHostCallback.Signing(Body, _clock.GetUtcNow(), Secret));
+        using var answered = JsonDocument.Parse(((MemoryStream)meeting.Response.Body).ToArray());
+
+        Assert.Equal(StatusCodes.Status409Conflict, meeting.Response.StatusCode);
+        Assert.Equal(ErrorCodes.CallbackInProgress.ToString(), answered.RootElement.GetProperty("code").GetString());
+        Assert.Equal(0, _reached);
+        Assert.Equal(0, _claims.Settled);
+        Assert.DoesNotContain(_callbacks.Counted, counted => counted.Rejected);
+        Assert.Contains(_signedLog.Entries, entry => entry is (LogLevel.Information, 4));
+    }
+
+    /// <summary>
     /// BFF-MACH-002 AC4: the signature is compared by the framework's fixed-time
     /// comparison, against every live secret whichever matches, and never by an
     /// ordinary comparison.
@@ -244,7 +299,7 @@ public sealed class HostCallbackTests : IAsyncDisposable
             later,
             SignedHostCallback.Signing(later, Noon + TimeSpan.FromHours(2), "the-next-secret"));
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, expired.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, expired.Response.StatusCode);
         Assert.Equal(StatusCodes.Status200OK, current.Response.StatusCode);
         Assert.Equal(2, _reached);
     }
@@ -261,7 +316,7 @@ public sealed class HostCallbackTests : IAsyncDisposable
 
         HttpContext unverified = await SentAsync(Events, Body, SignedHostCallback.Signing(Body, Noon, Secret));
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, unverified.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, unverified.Response.StatusCode);
         Assert.Equal(0, _signed.Parsed);
         Assert.Equal(0, _reached);
     }
@@ -279,7 +334,7 @@ public sealed class HostCallbackTests : IAsyncDisposable
 
         HttpContext refused = await SentAsync(Events, unkeyed, SignedHostCallback.Signing(unkeyed, Noon, Secret));
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, refused.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Response.StatusCode);
         Assert.Equal(1, _signed.Parsed);
         Assert.Equal(0, _claims.Held);
         Assert.Equal(0, _reached);
@@ -333,7 +388,7 @@ public sealed class HostCallbackTests : IAsyncDisposable
 
         HttpContext outside = await SentAsync(Events, Body, SignedHostCallback.Signing(Body, Noon, Secret));
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, outside.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, outside.Response.StatusCode);
         Assert.Equal(0, _reached);
 
         _signed.Sources = [IPNetwork.Parse("203.0.113.0/24")];
@@ -359,7 +414,7 @@ public sealed class HostCallbackTests : IAsyncDisposable
 
         HttpContext unconfirmed = await SentAsync(Status, "{}", headers: [], query: "?reference=" + reference);
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, unconfirmed.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, unconfirmed.Response.StatusCode);
         Assert.Equal(0, _reached);
 
         _unsigned.Confirms = true;
@@ -395,8 +450,10 @@ public sealed class HostCallbackTests : IAsyncDisposable
             query: "?reference=" + Base64Url.EncodeToString(guessed));
         HttpContext misdirected = await SentAsync(Status, "{}", headers: [], query: "?reference=" + elsewhere);
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, forged.Response.StatusCode);
-        Assert.Equal(StatusCodes.Status429TooManyRequests, misdirected.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, forged.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, misdirected.Response.StatusCode);
+        Assert.Equal(0, forged.Response.Headers.RetryAfter.Count);
+        Assert.Equal(0, misdirected.Response.Headers.RetryAfter.Count);
         Assert.Equal(2, _unsignedLog.Entries.Count(entry => entry is (LogLevel.Warning, 1)));
         Assert.Equal(0, _unsigned.Asked);
         Assert.Equal(0, _reached);
@@ -465,6 +522,16 @@ public sealed class HostCallbackTests : IAsyncDisposable
             SHA256.HashData(Encoding.UTF8.GetBytes(reference)),
             Assert.Single(_references.Kept));
     }
+
+    // The claim a delivery committed before its process ended inside the host's route,
+    // which nothing settled or gave back.
+    private async Task AbandonedAsync() =>
+        _ = await _claims.ClaimAsync(
+            _signed.Name,
+            SHA256.HashData(Encoding.UTF8.GetBytes("evt-0001")),
+            Noon,
+            Noon - Settings.IntegrationCallbackClaimTimeout.Default,
+            TestContext.Current.CancellationToken);
 
     private async Task<string> IssuedAsync() =>
         (await new CallbackReferences(_references, _work, _randomness, _clock)

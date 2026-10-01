@@ -67,8 +67,8 @@ public sealed class IntegrationBoundaryTests
     ];
 
     // The secrets managers a deployment might read its keys and the maintenance
-    // credential from through the secret source. "AWS" is left out because it is in
-    // "draws" and "withdraws", and the vendor's other names stand for it.
+    // credential from through the secret source. "AWS" is read apart, as a whole word
+    // in capitals, because it is in "draws" and "withdraws".
     private static readonly string[] SecretSources =
     [
         "HashiCorp",
@@ -90,6 +90,9 @@ public sealed class IntegrationBoundaryTests
         "Delinea",
         "Thycotic",
     ];
+
+    // The one vendor name that is also the inside of ordinary words.
+    private static readonly Regex Aws = new(@"\bAWS\b", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     // The one schema the library owns, and the catalogue PostgreSQL answers its own
     // questions from.
@@ -145,7 +148,8 @@ public sealed class IntegrationBoundaryTests
 
         IEnumerable<string> naming = core
             .Where(file => products.Any(product =>
-                File.ReadAllText(file).Contains(product, StringComparison.OrdinalIgnoreCase)))
+                    File.ReadAllText(file).Contains(product, StringComparison.OrdinalIgnoreCase))
+                || Aws.IsMatch(File.ReadAllText(file)))
             .Select(Path.GetFileName)
             .Select(name => name!);
 

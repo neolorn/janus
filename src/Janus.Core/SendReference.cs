@@ -12,6 +12,7 @@ namespace Janus.Core;
 /// Implements AUTH-ABUSE-007, INT-GEN-003 and INT-SMS-005. A callback is hostile
 /// input, so the reference is unguessable and a dump of the table yields none.
 /// </remarks>
+[NeverLogged]
 public readonly record struct SendReference
 {
     private const int Length = 16;

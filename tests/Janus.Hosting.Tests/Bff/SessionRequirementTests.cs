@@ -188,13 +188,35 @@ public sealed class SessionRequirementTests : IAsyncDisposable
 
         _deployment.Clock.Advance(TimeSpan.FromDays(100));
 
-        Answer begun = await browser.SendAsync(
-            "POST",
-            "/auth/begin",
-            ("identifier", Flow.Address),
-            ("clientId", "web"));
+        Answer begun = await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
 
-        Assert.NotEqual(StatusCodes.Status401Unauthorized, begun.Status);
+        Assert.Equal(StatusCodes.Status200OK, begun.Status);
+        Assert.NotEmpty(begun.Text("challengeId"));
+    }
+
+    /// <summary>
+    /// BFF-ORDER-001 stage 5: once the ended session's row has been swept, the token
+    /// the browser carries was bound to a session nothing holds, so the step refuses it
+    /// once with a fresh pair and answers the retry.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ORDER_001_ASweptSessionIsRefusedOnceAndTheRetrySucceedsAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.Clock.Advance(TimeSpan.FromDays(400));
+        _ = await _deployment.Sessions.SweepAsync(
+            _deployment.Clock.GetUtcNow(),
+            TestContext.Current.CancellationToken);
+
+        Answer refused = await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
+        Answer begun = await browser.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.SessionCsrfInvalid.ToString(), refused.Text("code"));
+        Assert.Equal(StatusCodes.Status200OK, begun.Status);
+        Assert.NotEmpty(begun.Text("challengeId"));
     }
 
     /// <summary>

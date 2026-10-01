@@ -4,6 +4,7 @@ using Janus.Core;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Tests.Oidc;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Net.Http.Headers;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Sending;
@@ -58,9 +59,11 @@ public sealed class DeliveryReportEndpointTests
         Answer forged = await machine.CallAsync("/callbacks/sms/dlr?reference=AAAAAAAAAAAAAAAAAAAAAA&status=failed");
         Answer unreadable = await machine.CallAsync("/callbacks/sms/dlr?reference=AAAAAAAAAAAAAAAAAAAAAA");
 
-        Assert.Equal(StatusCodes.Status429TooManyRequests, forged.Status);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, forged.Status);
         Assert.Equal(ErrorCodes.CallbackRejected.ToString(), forged.Text("code"));
-        Assert.Equal(StatusCodes.Status429TooManyRequests, unreadable.Status);
+        Assert.Null(forged.Header(HeaderNames.RetryAfter));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, unreadable.Status);
+        Assert.Null(unreadable.Header(HeaderNames.RetryAfter));
         Assert.Single(deployment.SendLedger.Sends(destination));
     }
 

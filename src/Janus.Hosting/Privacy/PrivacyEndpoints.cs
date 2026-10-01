@@ -393,7 +393,7 @@ internal static class PrivacyEndpoints
     private static async Task<IResult> FulfilAsync(
         IPrivacyRequests requests,
         RequestSession browser,
-        Guid request,
+        PrivacyRequestId request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(requests);
@@ -405,7 +405,7 @@ internal static class PrivacyEndpoints
                 .FulfilAsync(
                     holder,
                     browser.Required.Id,
-                    new PrivacyRequestId(request),
+                    request,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
@@ -415,7 +415,7 @@ internal static class PrivacyEndpoints
         PrivacyDecisionBody body,
         IPrivacyRequests requests,
         RequestSession browser,
-        Guid request,
+        PrivacyRequestId request,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -430,7 +430,7 @@ internal static class PrivacyEndpoints
 
         return Answers.Of(
             await requests
-                .RefuseAsync(holder, new PrivacyRequestId(request), reason, cancellationToken)
+                .RefuseAsync(holder, request, reason, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }

@@ -43,6 +43,10 @@ public sealed class RequestLoggingTests : IAsyncDisposable
     // what the fault names and the answer withholds.
     private const string Ledger = "erasure-ledger";
 
+    // The head every library logger's category carries, read from the core's
+    // namespace so no string spells the product name (CONV-NAME-001).
+    private static readonly string Library = typeof(Result).Namespace!.Split('.')[0] + ".";
+
     private static readonly OrganizationId Company =
         new(Guid.Parse("33333333-3333-4333-8333-333333333333"));
 
@@ -133,7 +137,7 @@ public sealed class RequestLoggingTests : IAsyncDisposable
         Assert.Contains(resolved, line => line.Contains(ErrorCodes.Denied.ToString(), StringComparison.Ordinal));
         Assert.Equal(resolved, [.. written.Where(line => line.Contains(correlation, StringComparison.Ordinal))]);
         Assert.All(
-            written.Where(line => line.StartsWith("Janus.", StringComparison.Ordinal)),
+            written.Where(line => line.StartsWith(Library, StringComparison.Ordinal)),
             line => Assert.Contains(correlation, line, StringComparison.Ordinal));
         Assert.DoesNotContain(
             Resolved(other.Text("correlationId")),

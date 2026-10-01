@@ -39,7 +39,7 @@ internal sealed class DeliveryReports(
     /// <exception cref="ArgumentNullException">The source is absent.</exception>
     public async ValueTask<Result> ReportAsync(
         string source,
-        string? reference,
+        [NeverLogged] string? reference,
         bool delivered,
         CancellationToken cancellationToken)
     {

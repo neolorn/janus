@@ -295,7 +295,7 @@ internal static class AccountEndpoints
     }
 
     private static async Task<IResult> VerifyIdentifierAsync(
-        Guid id,
+        IdentifierId id,
         VerifyIdentifierRequest request,
         IIdentifiers identifiers,
         SessionService sessions,
@@ -340,13 +340,13 @@ internal static class AccountEndpoints
                 ? Nobody()
                 : Answers.Of(
                     await identifiers
-                        .VerifyAsync(enrolment, new IdentifierId(id), code, source, cancellationToken)
+                        .VerifyAsync(enrolment, id, code, source, cancellationToken)
                         .ConfigureAwait(false),
                     Nothing);
         }
 
         Result verified = await identifiers
-            .VerifyAsync(browser.Asking, typing.Id, new IdentifierId(id), code, source, cancellationToken)
+            .VerifyAsync(browser.Asking, typing.Id, id, code, source, cancellationToken)
             .ConfigureAwait(false);
 
         return verified.Match(() => true, _ => false)
@@ -356,7 +356,7 @@ internal static class AccountEndpoints
     }
 
     private static async Task<IResult> MakePrimaryAsync(
-        Guid id,
+        IdentifierId id,
         IIdentifiers identifiers,
         RequestSession browser,
         HttpContext context,
@@ -371,7 +371,7 @@ internal static class AccountEndpoints
             await identifiers
                 .MakePrimaryAsync(
                     holder,
-                    new IdentifierId(id),
+                    id,
                     RequestOrigin.Source(context.Request),
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -490,7 +490,7 @@ internal static class AccountEndpoints
     }
 
     private static async Task<IResult> RemoveIdentifierAsync(
-        Guid id,
+        IdentifierId id,
         IIdentifiers identifiers,
         SessionService sessions,
         BrowserSessionCookies cookies,
@@ -509,7 +509,7 @@ internal static class AccountEndpoints
             .RemoveAsync(
                 holder,
                 browser.Required.Id,
-                new IdentifierId(id),
+                id,
                 RequestOrigin.Source(context.Request),
                 cancellationToken)
             .ConfigureAwait(false);
@@ -542,7 +542,7 @@ internal static class AccountEndpoints
     // REG-IDENT-006: link-borne, because after a hostile removal the account has no
     // session that could reach this on its own.
     private static async Task<IResult> UndoIdentifierAsync(
-        Guid id,
+        IdentifierId id,
         LinkTokenRequest request,
         IIdentifiers identifiers,
         HttpContext context,
@@ -562,7 +562,7 @@ internal static class AccountEndpoints
     }
 
     private static async Task<IResult> ReplaceIdentifierAsync(
-        Guid id,
+        IdentifierId id,
         ReplaceIdentifierRequest request,
         IIdentifiers identifiers,
         RequestSession browser,
@@ -590,7 +590,7 @@ internal static class AccountEndpoints
                     await identifiers
                         .ReplaceAsync(
                             enrolment,
-                            new IdentifierId(id),
+                            id,
                             value,
                             source,
                             cancellationToken)
@@ -603,7 +603,7 @@ internal static class AccountEndpoints
                 .ReplaceAsync(
                     holder,
                     browser.Live.Id,
-                    new IdentifierId(id),
+                    id,
                     value,
                     source,
                     cancellationToken)
@@ -614,7 +614,7 @@ internal static class AccountEndpoints
     // REG-SESS-003: the ending control of a link opened in another browser, which
     // needs no session and answers the same way whatever the token resolves to.
     private static async Task<IResult> AbandonIdentifierAsync(
-        Guid id,
+        IdentifierId id,
         LinkTokenRequest request,
         IIdentifiers identifiers,
         CancellationToken cancellationToken)
@@ -648,7 +648,7 @@ internal static class AccountEndpoints
     }
 
     private static async Task<IResult> LabelCredentialAsync(
-        Guid id,
+        AuthenticatorId id,
         LabelRequest request,
         IAccount accounts,
         RequestSession browser,
@@ -663,7 +663,7 @@ internal static class AccountEndpoints
             ? Answers.Malformed("label")
             : Answers.Of(
                 await accounts
-                    .LabelCredentialAsync(holder, new AuthenticatorId(id), label, cancellationToken)
+                    .LabelCredentialAsync(holder, id, label, cancellationToken)
                     .ConfigureAwait(false),
                 Nothing);
     }
@@ -709,7 +709,7 @@ internal static class AccountEndpoints
     }
 
     private static async Task<IResult> EndSessionAsync(
-        Guid id,
+        SessionId id,
         ISessions sessions,
         RequestSession browser,
         CancellationToken cancellationToken)
@@ -720,7 +720,7 @@ internal static class AccountEndpoints
 
         return Answers.Of(
             await sessions
-                .EndAsync(holder, new SessionId(id), cancellationToken)
+                .EndAsync(holder, id, cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
     }

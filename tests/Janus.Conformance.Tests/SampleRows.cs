@@ -31,7 +31,8 @@ internal sealed class SampleRows<TResource>(
     public FilterSources<TResource> Sources { get; } =
         new FilterSources<TResource>(context.Ancestry, context.Grants, identifier)
             .Relationship(SampleHost.Keeper, context.Keepers)
-            .Relationship(SampleHost.Steward, context.Stewards);
+            .Relationship(SampleHost.Steward, context.Stewards)
+            .Relationship(SampleHost.Borrower, context.Borrowers);
 
     /// <inheritdoc/>
     public async ValueTask WriteAsync(
@@ -79,6 +80,10 @@ internal sealed class SampleRows<TResource>(
 
             case SampleHost.Steward:
                 context.Stewards.Add(new BinderSteward { BinderId = id, Steward = subject });
+                break;
+
+            case SampleHost.Borrower:
+                context.Borrowers.Add(new BinderBorrower { BinderId = id, Borrower = subject });
                 break;
 
             default:

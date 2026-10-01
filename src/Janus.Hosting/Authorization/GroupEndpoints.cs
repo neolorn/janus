@@ -120,7 +120,7 @@ internal static class GroupEndpoints
         [FromBody] GroupRemovalBody body,
         IGroups groups,
         RequestSession browser,
-        Guid id,
+        GroupId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -136,7 +136,7 @@ internal static class GroupEndpoints
             await groups
                 .RemoveAsync(
                     browser.Asking,
-                    new GroupId(id),
+                    id,
                     reason,
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -147,7 +147,7 @@ internal static class GroupEndpoints
         MemberBody body,
         IGroups groups,
         RequestSession browser,
-        Guid id,
+        GroupId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -171,7 +171,7 @@ internal static class GroupEndpoints
                 .AddMemberAsync(
                     browser.Asking,
                     browser.Required.Id,
-                    new GroupId(id),
+                    id,
                     joining,
                     reason,
                     cancellationToken)
@@ -185,7 +185,7 @@ internal static class GroupEndpoints
         [FromBody] MemberBody body,
         IGroups groups,
         RequestSession browser,
-        Guid id,
+        GroupId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -209,7 +209,7 @@ internal static class GroupEndpoints
                 .RemoveMemberAsync(
                     browser.Asking,
                     browser.Required.Id,
-                    new GroupId(id),
+                    id,
                     leaving,
                     reason,
                     cancellationToken)

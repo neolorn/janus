@@ -24,7 +24,10 @@ namespace Janus.Conformance;
 /// <remarks>
 /// Implements LIB-TEST-001 AC2, AUTHZ-TEST-001 and AUTHZ-PRIN-001. A case that decides
 /// otherwise than the table says, through either path, is a finding: a list screen
-/// showing what a check would refuse is a silent leak rather than a crash.
+/// showing what a check would refuse is a silent leak rather than a crash. A derived
+/// case runs once for each derivation declared at the level it uses, each in an
+/// organization of its own, so a derivation the first one hides is still asked about;
+/// its finding names the derivation's relationship.
 /// </remarks>
 internal sealed class TruthTable<TResource>(
     IServiceProvider services,
@@ -71,13 +74,18 @@ internal sealed class TruthTable<TResource>(
 
         foreach (TruthTableCase row in cases)
         {
-            Written written = await WriteAsync(row, chain, cancellationToken).ConfigureAwait(false);
-            bool checks = await ChecksAsync(written, row.Permission, cancellationToken).ConfigureAwait(false);
-            bool admits = await AdmitsAsync(written, row.Permission, cancellationToken).ConfigureAwait(false);
-
-            if (checks != row.Allowed || admits != row.Allowed)
+            foreach (Derived? derived in Derivations(row.Scenario, chain))
             {
-                findings.Add(new ConformanceFinding(ConformanceCheck.TruthTable, Disagreement(row, checks, admits)));
+                Written written = await WriteAsync(row, chain, derived, cancellationToken).ConfigureAwait(false);
+                bool checks = await ChecksAsync(written, row.Permission, cancellationToken).ConfigureAwait(false);
+                bool admits = await AdmitsAsync(written, row.Permission, cancellationToken).ConfigureAwait(false);
+
+                if (checks != row.Allowed || admits != row.Allowed)
+                {
+                    findings.Add(new ConformanceFinding(
+                        ConformanceCheck.TruthTable,
+                        Disagreement(row, derived, checks, admits)));
+                }
             }
         }
 
@@ -116,6 +124,26 @@ internal sealed class TruthTable<TResource>(
             _ => true,
         };
 
+    // LIB-TEST-001 AC2, entry 355: a derived scenario is written once for each
+    // derivation declared at the level it uses; any other scenario once, deriving
+    // nothing.
+    private static IReadOnlyList<Derived?> Derivations(
+        TruthTableScenario scenario,
+        IReadOnlyList<ResourceTypeDeclaration> chain)
+    {
+        int? level = scenario switch
+        {
+            TruthTableScenario.DerivedGrant => 0,
+            TruthTableScenario.DerivedGrantOnContainer => Deriving(chain, 1),
+            TruthTableScenario.DenyOverDerivedGrant => Deriving(chain, 0),
+            _ => null,
+        };
+
+        return level is int at
+            ? [.. chain[at].Derivations.Select(declared => (Derived?)new Derived(at, declared))]
+            : [null];
+    }
+
     // The nearest level of the chain, from the one given outward, whose type declares
     // a derivation; the scenario was checked writable before anything was written.
     private static int Deriving(IReadOnlyList<ResourceTypeDeclaration> chain, int from)
@@ -141,6 +169,7 @@ internal sealed class TruthTable<TResource>(
     private async ValueTask<Written> WriteAsync(
         TruthTableCase row,
         IReadOnlyList<ResourceTypeDeclaration> chain,
+        Derived? derived,
         CancellationToken cancellationToken)
     {
         OrganizationId organization = await library.OrganizationAsync(cancellationToken).ConfigureAwait(false);
@@ -195,7 +224,7 @@ internal sealed class TruthTable<TResource>(
 
         var standing = new Standing(organization, granter, account, role, placed, sibling);
 
-        await StandAsync(row, chain, standing, cancellationToken).ConfigureAwait(false);
+        await StandAsync(row, derived, standing, cancellationToken).ConfigureAwait(false);
 
         return new Written(organization, account, placed[0]);
     }
@@ -204,7 +233,7 @@ internal sealed class TruthTable<TResource>(
     // after every record it names is registered.
     private async ValueTask StandAsync(
         TruthTableCase row,
-        IReadOnlyList<ResourceTypeDeclaration> chain,
+        Derived? derived,
         Standing standing,
         CancellationToken cancellationToken)
     {
@@ -286,17 +315,12 @@ internal sealed class TruthTable<TResource>(
                 break;
 
             case TruthTableScenario.DerivedGrant:
-                await RelateAsync(chain, 0, standing, row.Permission, cancellationToken).ConfigureAwait(false);
-                break;
-
             case TruthTableScenario.DerivedGrantOnContainer:
-                await RelateAsync(chain, Deriving(chain, 1), standing, row.Permission, cancellationToken)
-                    .ConfigureAwait(false);
+                await RelateAsync(Of(derived), standing, row.Permission, cancellationToken).ConfigureAwait(false);
                 break;
 
             case TruthTableScenario.DenyOverDerivedGrant:
-                await RelateAsync(chain, Deriving(chain, 0), standing, row.Permission, cancellationToken)
-                    .ConfigureAwait(false);
+                await RelateAsync(Of(derived), standing, row.Permission, cancellationToken).ConfigureAwait(false);
                 await GrantAsync(standing.Grant(holder, record) with { Deny = true }, cancellationToken).ConfigureAwait(false);
                 break;
 
@@ -305,6 +329,10 @@ internal sealed class TruthTable<TResource>(
         }
     }
 
+    // A derived scenario is always written with the derivation it runs for.
+    private static Derived Of(Derived? derived) =>
+        derived ?? throw new InvalidOperationException("A derived scenario was written without its derivation.");
+
     private async ValueTask GrantAsync(CaseGrant grant, CancellationToken cancellationToken) =>
         await library.GrantAsync(grant, cancellationToken).ConfigureAwait(false);
 
@@ -312,14 +340,13 @@ internal sealed class TruthTable<TResource>(
     // derivation is materialised, the host's write refreshes it in the same unit of
     // work, which is what the suite does in its place.
     private async ValueTask RelateAsync(
-        IReadOnlyList<ResourceTypeDeclaration> chain,
-        int level,
+        Derived derived,
         Standing standing,
         Permission permission,
         CancellationToken cancellationToken)
     {
-        DerivationDeclaration derivation = chain[level].Derivations[0];
-        ResourceReference on = standing.Placed[level];
+        DerivationDeclaration derivation = derived.Declaration;
+        ResourceReference on = standing.Placed[derived.Level];
 
         await library.AllowAsync(derivation.Role, permission, cancellationToken).ConfigureAwait(false);
         await rows.RelateAsync(derivation.Relationship, on, standing.Account, cancellationToken).ConfigureAwait(false);
@@ -424,18 +451,29 @@ internal sealed class TruthTable<TResource>(
             identifier.Parameters);
     }
 
-    private Error Disagreement(TruthTableCase row, bool checks, bool admits) =>
-        new(
-            ErrorCodes.TruthTableDisagreement,
-            new Dictionary<string, JsonElement>(StringComparer.Ordinal)
-            {
-                ["type"] = JsonSerializer.SerializeToElement(rows.Type.ToString()),
-                ["scenario"] = JsonSerializer.SerializeToElement(row.Scenario, Named),
-                ["permission"] = JsonSerializer.SerializeToElement(row.Permission.ToString()),
-                ["expected"] = JsonSerializer.SerializeToElement(row.Allowed),
-                ["check"] = JsonSerializer.SerializeToElement(checks),
-                ["filter"] = JsonSerializer.SerializeToElement(admits),
-            });
+    private Error Disagreement(TruthTableCase row, Derived? derived, bool checks, bool admits)
+    {
+        var details = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+        {
+            ["type"] = JsonSerializer.SerializeToElement(rows.Type.ToString()),
+            ["scenario"] = JsonSerializer.SerializeToElement(row.Scenario, Named),
+            ["permission"] = JsonSerializer.SerializeToElement(row.Permission.ToString()),
+            ["expected"] = JsonSerializer.SerializeToElement(row.Allowed),
+            ["check"] = JsonSerializer.SerializeToElement(checks),
+            ["filter"] = JsonSerializer.SerializeToElement(admits),
+        };
+
+        if (derived is not null)
+        {
+            details["derivation"] = JsonSerializer.SerializeToElement(derived.Declaration.Relationship);
+        }
+
+        return new Error(ErrorCodes.TruthTableDisagreement, details);
+    }
+
+    // The derivation a derived case is written for, and the level of the chain it is
+    // declared at.
+    private sealed record Derived(int Level, DerivationDeclaration Declaration);
 
     // What a case wrote that its question is asked of.
     private sealed record Written(OrganizationId Organization, SubjectId Account, ResourceReference Record);

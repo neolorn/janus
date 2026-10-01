@@ -6190,6 +6190,8 @@ requires, is unchanged); and the double-migration gate's worktree folder, now
 reads, and that the solution file and the lock files' lower-case identifiers count as
 project and package identifiers.
 
+**Superseded by D-166.**
+
 ---
 
 ## 168. A takedown is identified by the outbox record its trigger writes
@@ -10367,6 +10369,8 @@ declarations carry the marker (types, members and parameters), that session
 identifiers include the fingerprints they are found by, and that locals cannot carry
 it.
 
+**Superseded by D-166.**
+
 ---
 
 ## 273. Where the required keys are checked, and when the register counts as generated
@@ -10630,6 +10634,8 @@ what a repeated delivery is answered; BFF-MACH-003 could name the reference issu
 the confirmation a host supplies; 10 section 1 could give `integration.callback.rejected`
 429 for every cause; 04 or 06 could give `callback_events` and `callback_references` a
 retention.
+
+**Superseded by D-166.**
 
 ---
 
@@ -14757,6 +14763,8 @@ from opening one.
 table in the library's scenarios, and list them; OPS-DATA-002 could say whether the
 conformance package is the service layer its AC2 speaks of.
 
+**Superseded by D-166.**
+
 ---
 
 ## 356. The provider probe a host runs asks what a registered client can be refused
@@ -15661,6 +15669,8 @@ after live flows, since the rotations exist only as commands.
 
 *Chapter text that should change.* None.
 
+**Superseded by D-166.**
+
 ---
 
 ## 378. The destructive-operation report reads what the added migrations' Up runs, and reports more than the chapter's list
@@ -15716,6 +15726,8 @@ exclusion, the range, the unset and the invalid variable, and the message.
 *Chapter text that should change.* `08` section 1b could list the constraint forms of
 OPS-DEP-001 beside `ADD CONSTRAINT`, and say which `DROP` forms count. OPS-DEP-001
 could say what an unset variable means.
+
+**Superseded by D-166.**
 
 ---
 
@@ -15981,6 +15993,8 @@ contract method's refusals.
 *Tests that pin it.* `LibraryStructureTests.CONV_ERR_001_AC1_NoDenialIsSignalledByAnException`.
 
 *Chapter text that should change.* None.
+
+**Superseded by D-166.**
 
 ---
 
@@ -16320,6 +16334,8 @@ and port. The chapter does not say where in the pipeline the fault is caught.
 
 *Chapter text that should change.* BFF-ERR-002 AC2 could say that the detail kept is
 the fault's type, since CONV-LOG-003 keeps its message out of the log.
+
+**Superseded by D-166.**
 
 ---
 

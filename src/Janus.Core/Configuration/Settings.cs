@@ -339,6 +339,13 @@ public static class Settings
     public static IntegerSetting IntegrationCallbackRateLimit { get; } =
         new("integration.callback.ratelimit", SettingScope.Runtime, 60, loosening: SettingDirection.Increase);
 
+    /// <summary>
+    /// How long an unsettled claim on a host callback's event stands before a delivery
+    /// of the event takes it over.
+    /// </summary>
+    public static DurationSetting IntegrationCallbackClaimTimeout { get; } =
+        new("integration.callback.claimtimeout", SettingScope.Runtime, "PT5M", floor: "PT1M");
+
     /// <summary>The named restriction set governing every send.</summary>
     public static RestrictionSetSetting Restrictions { get; } =
         new("restrictions", SettingScope.Runtime, ShippedRestrictions);
@@ -977,6 +984,7 @@ public static class Settings
         AbuseSourceRateLimit,
         AbuseBotDefenceRepeatedAttempts,
         IntegrationCallbackRateLimit,
+        IntegrationCallbackClaimTimeout,
         IntegrationMailEndpoint,
         IntegrationSmsEndpoint,
         IntegrationMailServerEndpoint,

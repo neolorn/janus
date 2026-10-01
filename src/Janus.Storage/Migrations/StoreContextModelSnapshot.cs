@@ -219,6 +219,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("claimed_at");
 
+                b.Property<DateTimeOffset?>("SettledAt")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("settled_at");
+
                 b.HasKey("Callback", "Identifier")
                     .HasName("pk_callback_events");
 

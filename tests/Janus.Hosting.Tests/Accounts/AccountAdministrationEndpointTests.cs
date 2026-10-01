@@ -77,6 +77,25 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-004 AC2: a subject is bound at the edge as the identifier it is, so a
+    /// route naming the max UUID, which no subject is issued, is malformed and reaches
+    /// no operation.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_004_AC2_ARouteNamingTheMaxUuidAsASubjectIsMalformedAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Administration, Permissions.AccountManage);
+
+        Answer refused = await browser.SendAsync("POST", "/admin/accounts/ffffffff-ffff-ffff-ffff-ffffffffffff/suspend");
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), refused.Text("code"));
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-004 AC2 (D-166): the lift is stepped up, so a session that has proved
     /// itself makes a restricted account active, a second finds no restriction to lift,
     /// which is a conflict with the state, and once the proof is no longer recent a

@@ -133,7 +133,7 @@ internal sealed class MailboxReconciliation(
     // IDN-ACCT-004: the server's address is read in its canonical form before it is
     // compared, and one that does not read is no mailbox's address.
     private static bool Addresses(HostedMailbox account, Mailbox mailbox) =>
-        EmailAddress.TryParse(account.Address, out EmailAddress listed)
+        account.Address is EmailAddress listed
         && string.Equals(listed.Value, mailbox.Address.Value, StringComparison.Ordinal);
 
     private static TValue Withheld<TValue>(Error error, ref Error? failure)

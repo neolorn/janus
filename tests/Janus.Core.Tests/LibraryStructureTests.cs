@@ -147,7 +147,6 @@ public sealed class LibraryStructureTests
         "Dapper",
         "Fido2",
         "Konscious.Security.Cryptography.Argon2",
-        "Microsoft.AspNetCore.Authentication.OpenIdConnect",
         "Microsoft.CodeAnalysis.Analyzers",
         "Microsoft.CodeAnalysis.CSharp",
         "Microsoft.CodeAnalysis.PublicApiAnalyzers",
@@ -426,8 +425,9 @@ public sealed class LibraryStructureTests
         TimeSpan.FromSeconds(5));
 
     // CONV-ERR-001 AC1: the families of the catalogue a denial is spelled in, the
-    // authentication and the authorization refusals.
-    private static readonly string[] Refusals = ["auth.", "authz."];
+    // authentication, the authorization and the consent refusals, which the gate
+    // answers too.
+    private static readonly string[] Refusals = ["auth.", "authz.", "privacy.consent."];
 
     // CONV-ERR-003 AC2: the head of a catch clause, up to the brace that opens its block.
     private static readonly Regex Catch = new(
@@ -552,7 +552,9 @@ public sealed class LibraryStructureTests
 
     /// <summary>
     /// CONV-LAYOUT-002 AC1: the only grants of internal visibility are the ones the
-    /// item permits.
+    /// item permits, by a source project and by a test project alike: the test projects
+    /// of authentication, authorization and privacy open their fakes to
+    /// <c>Janus.Hosting.Tests</c>, and no other test project grants anything.
     /// </summary>
     [Fact]
     public void CONV_LAYOUT_002_AC1_InternalsAreVisibleOnlyWhereThePermittedGrantsSay()
@@ -561,6 +563,23 @@ public sealed class LibraryStructureTests
         {
             Assert.Equal(PermittedGrants(project), Grants(project));
         }
+
+        string[] tests =
+        [
+            .. Directory
+                .EnumerateFiles(Path.Combine(Repository.Root, "tests"), "*.csproj", SearchOption.AllDirectories)
+                .Where(file => !IsBuildOutput(file)),
+        ];
+
+        Assert.NotEmpty(tests);
+        Assert.All(tests, file =>
+        {
+            string project = Path.GetFileNameWithoutExtension(file);
+
+            Assert.Equal(
+                project + ": " + string.Join(", ", PermittedTestGrants(project)),
+                project + ": " + string.Join(", ", GrantsOf(file)));
+        });
     }
 
     /// <summary>
@@ -994,6 +1013,42 @@ public sealed class LibraryStructureTests
             BelowError(Repository.ReadText(".editorconfig")));
 
     /// <summary>
+    /// CONV-SETUP-004 AC3, the suppressions: the .editorconfig marks as generated code
+    /// exactly the files EF Core's migration tool writes, each migration's designer file
+    /// and the model snapshot, and every other file that disables a warning justifies it
+    /// on the same line.
+    /// </summary>
+    [Fact]
+    public void CONV_SETUP_004_AC3_OnlyTheMigrationToolsFilesAreGeneratedAndEverySuppressionIsJustified()
+    {
+        string[] generated = Generated(Repository.ReadText(".editorconfig"));
+        string[] sources =
+        [
+            .. Sources().Select(file => Path.GetRelativePath(Repository.Root, file).Replace('\\', '/')),
+        ];
+        IEnumerable<string> written = sources.Where(file =>
+            file.StartsWith("src/Janus.Storage/Migrations/", StringComparison.Ordinal)
+            && (file.EndsWith(".Designer.cs", StringComparison.Ordinal)
+                || file.EndsWith("/StoreContextModelSnapshot.cs", StringComparison.Ordinal)));
+        IEnumerable<string> unjustified = sources
+            .Where(file => !generated.Any(section => Covers(section, file)))
+            .SelectMany(file => Repository
+                .ReadText(file)
+                .ReplaceLineEndings("\n")
+                .Split('\n')
+                .Where(line => line.TrimStart().StartsWith("#pragma warning disable", StringComparison.Ordinal)
+                    && !line.Contains("//", StringComparison.Ordinal))
+                .Select(line => file + ": " + line.Trim()));
+
+        Assert.Equal(
+            ["src/Janus.Storage/Migrations/*.Designer.cs", "src/Janus.Storage/Migrations/StoreContextModelSnapshot.cs"],
+            generated);
+        Assert.NotEmpty(written);
+        Assert.All(written, file => Assert.Contains(generated, section => Covers(section, file)));
+        Assert.Empty(unjustified);
+    }
+
+    /// <summary>
     /// CONV-VCS-005 AC2: no project, props or targets file states a version, and the
     /// version comes from MinVer, which every project inherits.
     /// </summary>
@@ -1071,8 +1126,9 @@ public sealed class LibraryStructureTests
 
     /// <summary>
     /// CONV-ERR-001 AC1: no file of the library raises or makes an exception that
-    /// carries an authentication or authorization code of the catalogue, or whose type
-    /// is itself a refusal of access, so every denial reaches its caller as a result.
+    /// carries an authentication, authorization or consent code of the catalogue, or
+    /// whose type is itself a refusal of access, so every denial reaches its caller as a
+    /// result.
     /// </summary>
     [Fact]
     public void CONV_ERR_001_AC1_NoDenialIsSignalledByAnException()
@@ -1105,7 +1161,9 @@ public sealed class LibraryStructureTests
                     .Select(raised => Path.GetFileName(file) + ":" + LineOf(code, raised.Index));
             });
 
-        Assert.NotEmpty(denials);
+        Assert.Contains(nameof(ErrorCodes.ConsentRequired), denials);
+        Assert.Contains(nameof(ErrorCodes.ConsentSuperseded), denials);
+        Assert.Contains(nameof(ErrorCodes.ConsentWrittenRequired), denials);
         Assert.Empty(thrown);
     }
 
@@ -1519,6 +1577,37 @@ public sealed class LibraryStructureTests
         return [.. below];
     }
 
+    // The sections of an .editorconfig that mark their files generated code, in the
+    // order the file holds them.
+    private static string[] Generated(string configuration)
+    {
+        var marked = new List<string>();
+        string section = string.Empty;
+
+        foreach (string line in configuration.ReplaceLineEndings("\n").Split('\n').Select(entry => entry.Trim()))
+        {
+            if (line.StartsWith('[') && line.EndsWith(']'))
+            {
+                section = line[1..^1];
+            }
+            else if (Regex.IsMatch(line, @"^generated_code\s*=\s*true$", RegexOptions.None, TimeSpan.FromSeconds(5)))
+            {
+                marked.Add(section);
+            }
+        }
+
+        return [.. marked];
+    }
+
+    // Whether a section of the .editorconfig reaches a file, for the sections that
+    // name a folder and a file name with at most a wildcard in it.
+    private static bool Covers(string section, string file) =>
+        Regex.IsMatch(
+            file,
+            "^" + Regex.Escape(section).Replace(@"\*", "[^/]*", StringComparison.Ordinal) + "$",
+            RegexOptions.None,
+            TimeSpan.FromSeconds(5));
+
     // The source files of the test projects, as code with the comments taken out.
     private static IEnumerable<(string File, string Code)> TestSources() =>
         Directory
@@ -1598,9 +1687,11 @@ public sealed class LibraryStructureTests
             .Order(StringComparer.Ordinal)
             .ToArray();
 
-    private static string[] Grants(string project) =>
+    private static string[] Grants(string project) => GrantsOf(Project(project));
+
+    private static string[] GrantsOf(string file) =>
         XDocument
-            .Parse(File.ReadAllText(Project(project)))
+            .Parse(File.ReadAllText(file))
             .Descendants("InternalsVisibleTo")
             .Select(grant => grant.Attribute("Include")!.Value)
             .Order(StringComparer.Ordinal)
@@ -1662,4 +1753,11 @@ public sealed class LibraryStructureTests
 
         return [.. permitted.Order(StringComparer.Ordinal)];
     }
+
+    // CONV-LAYOUT-002 AC1: three test projects open their fakes to the test project that
+    // uses them at the browser boundary, and no test project grants anything else.
+    private static string[] PermittedTestGrants(string project) =>
+        project is "Janus.Authentication.Tests" or "Janus.Authorization.Tests" or "Janus.Privacy.Tests"
+            ? ["Janus.Hosting.Tests"]
+            : [];
 }

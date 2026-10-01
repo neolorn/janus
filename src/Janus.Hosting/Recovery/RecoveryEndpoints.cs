@@ -146,7 +146,7 @@ internal static class RecoveryEndpoints
     // AUTH-RECOV-007, D-141: a session of the account cancels, and so does the link
     // every notice carried, which is what somebody locked out is holding.
     private static async Task<IResult> CancelLossAsync(
-        Guid id,
+        AuthenticatorId id,
         CancelLossRequest request,
         IRecovery recovery,
         RequestSession browser,
@@ -160,7 +160,7 @@ internal static class RecoveryEndpoints
             await recovery
                 .CancelLossAsync(
                     browser.Context,
-                    new AuthenticatorId(id),
+                    id,
                     request.Token,
                     cancellationToken)
                 .ConfigureAwait(false),

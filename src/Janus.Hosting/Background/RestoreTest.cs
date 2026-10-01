@@ -31,7 +31,7 @@ namespace Janus.Hosting.Background;
 /// <param name="alerts">Where a failed run goes.</param>
 /// <param name="work">The transaction the record and the alert share.</param>
 /// <param name="time">The clock the run is timed and stamped by.</param>
-/// <param name="log">Where a step that threw is written down, by the type of what it threw.</param>
+/// <param name="log">Where a step that threw is written down, by the fault log entry of what it threw.</param>
 /// <remarks>
 /// Implements DR-007, DR-008 and OPS-ALERT-001, as entry 334 of the decisions pending
 /// review settles them. No person runs it and no person watches it. The restored
@@ -164,9 +164,10 @@ internal sealed class RestoreTest(
         };
 
     // AUTH-PRIN-001 AC3: a step that throws is a step that failed, written down by the
-    // type of what it threw and by what its failure is read as. A cancellation is the
-    // worker's own only when the worker is stopping; one the objective threw fails the
-    // step like any other fault, and the time taken judges the run.
+    // fault log entry of what it threw and by what its failure is read as. A
+    // cancellation is the worker's own only when the worker is stopping; one the
+    // objective threw fails the step like any other fault, and the time taken judges
+    // the run.
     private async ValueTask<Result<TValue>> ContainedAsync<TValue>(
         string failedAs,
         Func<ValueTask<Result<TValue>>> step,
@@ -178,12 +179,14 @@ internal sealed class RestoreTest(
         }
         catch (Exception fault) when (fault is not OperationCanceledException || !stopping.IsCancellationRequested)
         {
-            BackgroundLog.RestoreTestFaulted(log, failedAs, fault.GetType().Name);
+            string entry = FaultLog.Of(fault);
+
+            BackgroundLog.RestoreTestFaulted(log, failedAs, entry);
 
             return Result.Failure<TValue>(Error.From(
                 ErrorCodes.SystemFault,
                 "fault",
-                JsonSerializer.SerializeToElement(fault.GetType().Name)));
+                JsonSerializer.SerializeToElement(entry)));
         }
     }
 

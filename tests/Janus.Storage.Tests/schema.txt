@@ -207,6 +207,7 @@ table callback_events
   column callback text not null
   column identifier bytea not null
   column claimed_at timestamp with time zone not null
+  column settled_at timestamp with time zone
   constraint pk_callback_events PRIMARY KEY (callback, identifier)
 table callback_references
   column reference bytea not null

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json.Serialization;
@@ -17,7 +18,7 @@ namespace Janus.Core;
 /// RFC 9562 is the deployment's data key's row of the subject-key table, which no
 /// subject is issued, so no subject can be made from it (D-174).
 /// </remarks>
-public readonly record struct SubjectId
+public readonly record struct SubjectId : IParsable<SubjectId>
 {
     /// <summary>
     /// Reads the identifier of an account.
@@ -63,6 +64,40 @@ public readonly record struct SubjectId
         bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
 
         return new SubjectId(new Guid(bytes, bigEndian: true));
+    }
+
+    /// <summary>
+    /// Reads an identifier as a route or a query carries it.
+    /// </summary>
+    /// <param name="s">The identifier as text.</param>
+    /// <param name="provider">Unused: an identifier is written one way.</param>
+    /// <returns>The identifier.</returns>
+    /// <exception cref="FormatException">The text is not a subject's identifier.</exception>
+    public static SubjectId Parse(string s, IFormatProvider? provider) =>
+        TryParse(s, provider, out SubjectId subject)
+            ? subject
+            : throw new FormatException("The text is not a subject's identifier.");
+
+    /// <summary>
+    /// Reads an identifier as a route or a query carries it, refusing the max UUID, which
+    /// no subject is issued.
+    /// </summary>
+    /// <param name="s">The identifier as text.</param>
+    /// <param name="provider">Unused: an identifier is written one way.</param>
+    /// <param name="result">The identifier, where the text is one.</param>
+    /// <returns>Whether the text is a subject's identifier.</returns>
+    public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out SubjectId result)
+    {
+        result = default;
+
+        if (!Guid.TryParse(s, provider, out Guid value) || value == Guid.AllBitsSet)
+        {
+            return false;
+        }
+
+        result = new SubjectId(value);
+
+        return true;
     }
 
     /// <inheritdoc/>
