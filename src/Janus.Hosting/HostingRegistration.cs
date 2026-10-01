@@ -133,7 +133,8 @@ public static class HostingRegistration
         services.AddScoped<ISessionGates, RequestGates>();
         services.AddScoped(services => new StepUpGates(
             services.GetRequiredService<ISessionGates>(),
-            services.GetService<IAssuranceProvider>()));
+            services.GetService<IAssuranceProvider>(),
+            services.GetRequiredService<TimeProvider>()));
 
         // OPS-ALERT-006: an export is gated, limited and recorded inside the gate, so no
         // host path exercises one around it.

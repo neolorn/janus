@@ -195,6 +195,19 @@ Janus.Core.AttachedInvitation.OrganizationName.get -> string!
 Janus.Core.AttachedInvitation.OrganizationName.init -> void
 Janus.Core.AttachedInvitation.Roles.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RoleName>!
 Janus.Core.AttachedInvitation.Roles.init -> void
+Janus.Core.AttainedAssurance
+Janus.Core.AttainedAssurance.<Clone>$() -> Janus.Core.AttainedAssurance!
+Janus.Core.AttainedAssurance.AttainedAssurance(Janus.Core.AssuranceLevel Level, bool PhishingResistant, System.DateTimeOffset AttainedAt, Janus.Core.AssuranceLevel Reachable) -> void
+Janus.Core.AttainedAssurance.AttainedAt.get -> System.DateTimeOffset
+Janus.Core.AttainedAssurance.AttainedAt.init -> void
+Janus.Core.AttainedAssurance.Deconstruct(out Janus.Core.AssuranceLevel Level, out bool PhishingResistant, out System.DateTimeOffset AttainedAt, out Janus.Core.AssuranceLevel Reachable) -> void
+Janus.Core.AttainedAssurance.Equals(Janus.Core.AttainedAssurance? other) -> bool
+Janus.Core.AttainedAssurance.Level.get -> Janus.Core.AssuranceLevel
+Janus.Core.AttainedAssurance.Level.init -> void
+Janus.Core.AttainedAssurance.PhishingResistant.get -> bool
+Janus.Core.AttainedAssurance.PhishingResistant.init -> void
+Janus.Core.AttainedAssurance.Reachable.get -> Janus.Core.AssuranceLevel
+Janus.Core.AttainedAssurance.Reachable.init -> void
 Janus.Core.AuditAction
 Janus.Core.AuditAction.AuditAction() -> void
 Janus.Core.AuditAction.Equals(Janus.Core.AuditAction other) -> bool
@@ -1188,7 +1201,7 @@ Janus.Core.IAppPasswords.CreateAsync(Janus.Core.AccessContext! context, Janus.Co
 Janus.Core.IAppPasswords.ListAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.AppPassword!>!>>
 Janus.Core.IAppPasswords.RevokeAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, string! id, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAssuranceProvider
-Janus.Core.IAssuranceProvider.LevelAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AssuranceLevel>>
+Janus.Core.IAssuranceProvider.AttainedAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AttainedAssurance!>>
 Janus.Core.IAuditTrail
 Janus.Core.IAuditTrail.OfSubjectAsync(Janus.Core.AccessContext! context, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.AuditEntry!>!>>
 Janus.Core.IAuthentication
@@ -2872,6 +2885,9 @@ override Janus.Core.ApprovedRecovery.ToString() -> string!
 override Janus.Core.AttachedInvitation.Equals(object? obj) -> bool
 override Janus.Core.AttachedInvitation.GetHashCode() -> int
 override Janus.Core.AttachedInvitation.ToString() -> string!
+override Janus.Core.AttainedAssurance.Equals(object? obj) -> bool
+override Janus.Core.AttainedAssurance.GetHashCode() -> int
+override Janus.Core.AttainedAssurance.ToString() -> string!
 override Janus.Core.AuditAction.GetHashCode() -> int
 override Janus.Core.AuditAction.ToString() -> string!
 override Janus.Core.AuditEntry.Equals(object? obj) -> bool
@@ -3447,6 +3463,8 @@ static Janus.Core.ApprovedRecovery.operator !=(Janus.Core.ApprovedRecovery? left
 static Janus.Core.ApprovedRecovery.operator ==(Janus.Core.ApprovedRecovery? left, Janus.Core.ApprovedRecovery? right) -> bool
 static Janus.Core.AttachedInvitation.operator !=(Janus.Core.AttachedInvitation? left, Janus.Core.AttachedInvitation? right) -> bool
 static Janus.Core.AttachedInvitation.operator ==(Janus.Core.AttachedInvitation? left, Janus.Core.AttachedInvitation? right) -> bool
+static Janus.Core.AttainedAssurance.operator !=(Janus.Core.AttainedAssurance? left, Janus.Core.AttainedAssurance? right) -> bool
+static Janus.Core.AttainedAssurance.operator ==(Janus.Core.AttainedAssurance? left, Janus.Core.AttainedAssurance? right) -> bool
 static Janus.Core.AuditAction.Parse(string! value) -> Janus.Core.AuditAction
 static Janus.Core.AuditAction.operator !=(Janus.Core.AuditAction left, Janus.Core.AuditAction right) -> bool
 static Janus.Core.AuditAction.operator ==(Janus.Core.AuditAction left, Janus.Core.AuditAction right) -> bool

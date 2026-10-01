@@ -156,10 +156,49 @@ internal sealed class StepUpGuard(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(gate);
 
-        return Enum.GetValues<StepUpAction>().Where(action => WrittenName.Of(action) == gate).ToArray() is [StepUpAction named]
-            ? ChallengedAsync(subject, session, named, enrolling: null, cancellationToken)
-            : ChallengedAsync(subject, session, action: null, enrolling: null, cancellationToken);
+        return ChallengedAsync(subject, session, Named(gate), enrolling: null, cancellationToken);
     }
+
+    /// <summary>
+    /// What a named gate costs under the principal's policy, which a gate judged from a
+    /// host's report of the caller's session reads (LIB-HOST-004).
+    /// </summary>
+    /// <param name="subject">The principal.</param>
+    /// <param name="gate">The gate's name.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The gate's three values, a gate the host names costing what the dearest gate of
+    /// the policy costs (AUTHZ-GATE-005, D-160), or the failure where the policy cannot
+    /// be read or names no such gate.
+    /// </returns>
+    public async ValueTask<Result<Gate>> CostAsync(
+        SubjectId subject,
+        string gate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(gate);
+
+        Error? failure = null;
+
+        Policy policy = (await policies.ForAsync(subject, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Policy>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<Gate>(failure);
+        }
+
+        return Costs(policy, Named(gate)) is Gate cost
+            ? Result.Success(cost)
+            : Result.Failure<Gate>(Error.From(ErrorCodes.StepUpRequired));
+    }
+
+    // A name chapter 10 section 5a lists is that action's gate; any other is one the
+    // host bound its own action to.
+    private static StepUpAction? Named(string gate) =>
+        Enum.GetValues<StepUpAction>().Where(action => WrittenName.Of(action) == gate).ToArray() is [StepUpAction named]
+            ? named
+            : null;
 
     private async ValueTask<Error?> JudgedAsync(
         SubjectId subject,
