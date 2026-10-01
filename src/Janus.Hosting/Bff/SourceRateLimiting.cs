@@ -1,5 +1,4 @@
 using System;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -73,8 +72,5 @@ internal sealed class SourceRateLimiting(
     }
 
     private static Task ThrottledAsync(HttpContext context, DateTimeOffset lifts) =>
-        Refusal.WriteAsync(
-            context,
-            Error.From(ErrorCodes.Throttled, "retryAt", JsonSerializer.SerializeToElement(lifts)),
-            context.RequestAborted);
+        Refusal.WriteAsync(context, Error.Throttled(lifts), context.RequestAborted);
 }

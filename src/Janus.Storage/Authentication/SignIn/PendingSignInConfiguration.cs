@@ -37,6 +37,9 @@ internal sealed class PendingSignInConfiguration : IEntityTypeConfiguration<Pend
                 "ck_signin_links_browser",
                 $"browser IS NULL OR octet_length(browser) = {Fingerprint.Length}");
             table.HasCheckConstraint(
+                "ck_signin_links_challenge",
+                $"challenge IS NULL OR octet_length(challenge) = {Fingerprint.Length}");
+            table.HasCheckConstraint(
                 "ck_signin_links_factor",
                 Vocabulary.Admits<Factor>("factor"));
             table.HasCheckConstraint("ck_signin_links_wrong_attempts", "wrong_attempts >= 0");
@@ -68,6 +71,10 @@ internal sealed class PendingSignInConfiguration : IEntityTypeConfiguration<Pend
 
         builder.Property(pending => pending.Browser)
             .HasColumnName("browser")
+            .HasMaxLength(Fingerprint.Length);
+
+        builder.Property(pending => pending.Challenge)
+            .HasColumnName("challenge")
             .HasMaxLength(Fingerprint.Length);
 
         builder.Property(pending => pending.IssuedAt).HasColumnName("issued_at");

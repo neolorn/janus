@@ -63,8 +63,9 @@ public sealed class VerificationCodesTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-FACT-004 AC3: the try that reaches the cap ends the code, the right code
-    /// after it is refused, and the replacement leaves the dead one dead.
+    /// AUTH-FACT-004 AC3: each of five wrong tries is refused as wrong, the one that
+    /// reaches the cap ending the code; the right code after it is refused as expired,
+    /// and the replacement leaves the dead one dead.
     /// </summary>
     [Fact]
     public async Task AUTH_FACT_004_AC3_TheCapEndsTheCodeAndAReplacementLeavesItDeadAsync()
@@ -73,12 +74,12 @@ public sealed class VerificationCodesTests : IAsyncDisposable
 
         string right = Drawn(await Service.IssueAsync(Holder, TestContext.Current.CancellationToken));
 
-        for (int attempt = 0; attempt < 4; attempt++)
+        for (int attempt = 0; attempt < 5; attempt++)
         {
             Assert.Equal(ErrorCodes.CodeInvalid, await RefusalAsync(Wrong(right)));
         }
 
-        Assert.Equal(ErrorCodes.CodeExpired, await RefusalAsync(Wrong(right)));
+        Assert.Empty(_codes.All);
         Assert.Equal(ErrorCodes.CodeExpired, await RefusalAsync(right));
         Assert.Empty(_codes.All);
 

@@ -90,6 +90,22 @@ internal sealed class AuthenticatorStoreInMemory : IAuthenticatorStore
     }
 
     /// <inheritdoc/>
+    public ValueTask<bool> LabelHeldAsync(
+        SubjectId subject,
+        Factor factor,
+        CredentialLabel label,
+        AuthenticatorId? except,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_held.Values.Any(credential =>
+            credential.Subject == subject
+            && credential.Factor == factor
+            && credential.Id != except
+            && string.Equals(
+                CanonicalForm.Of(credential.Label.Value),
+                CanonicalForm.Of(label.Value),
+                StringComparison.Ordinal)));
+
+    /// <inheritdoc/>
     public ValueTask RemoveAsync(AuthenticatorId id, CancellationToken cancellationToken)
     {
         _held.Remove(id);

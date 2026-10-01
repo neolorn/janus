@@ -263,12 +263,14 @@ internal sealed class WebAuthnService(
     /// </summary>
     /// <param name="answered">What the browser sent back.</param>
     /// <param name="challenge">The value the sign-in was opened with.</param>
+    /// <param name="identified">Whether the ceremony was opened for an account it named.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The credential that answered, or the refusal.</returns>
     /// <exception cref="ArgumentNullException">The answer is absent.</exception>
     public async ValueTask<Result<Authenticator>> AssertAsync(
         AuthenticatorAssertion answered,
         string challenge,
+        bool identified,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(answered);
@@ -300,13 +302,14 @@ internal sealed class WebAuthnService(
 
         return refusal is not null
             ? Result.Failure<Authenticator>(refusal)
-            : await PresentAsync(assertion, cancellationToken).ConfigureAwait(false);
+            : await PresentAsync(assertion, identified, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
     /// Judges an assertion against the credential it names.
     /// </summary>
     /// <param name="assertion">What the ceremony produced.</param>
+    /// <param name="identified">Whether the ceremony was opened for an account it named.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The credential that answered, or the failure where it is unusable, was enrolled
@@ -316,6 +319,7 @@ internal sealed class WebAuthnService(
     /// <exception cref="ArgumentNullException">The assertion is absent.</exception>
     public async ValueTask<Result<Authenticator>> PresentAsync(
         WebAuthnAssertion assertion,
+        bool identified,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(assertion);
@@ -334,6 +338,15 @@ internal sealed class WebAuthnService(
         // naming another account, or none the library ever issued, is refused exactly
         // as a wrong credential is: whose it is is not disclosed.
         if (assertion.UserHandle is { Length: > 0 } returned && Named(returned) != held.Subject.Value)
+        {
+            return Result.Failure<Authenticator>(Error.From(ErrorCodes.FactorRejected));
+        }
+
+        // REG-PM-001 AC4, WebAuthn Level 3 section 7.2: where the ceremony named no
+        // account, the handle is the only thing that names one, so an assertion
+        // returning none is refused. A second-step key answering a ceremony opened for
+        // a named account returns none and is judged as before.
+        if (!identified && assertion.UserHandle is not { Length: > 0 })
         {
             return Result.Failure<Authenticator>(Error.From(ErrorCodes.FactorRejected));
         }

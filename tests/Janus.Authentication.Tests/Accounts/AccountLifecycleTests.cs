@@ -86,6 +86,8 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
                 _authenticators,
                 _passwords,
                 new PolicyResolution(_memberships, _configuration, _raises),
+                _identifiers,
+                new PhoneSignals(null, new PhoneSignalAuditInMemory(), _work, _clock),
                 _clock),
             _events,
             _configuration,

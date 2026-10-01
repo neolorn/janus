@@ -70,4 +70,18 @@ internal sealed class RequestGates(RequestSession request, StepUpGuard guard) : 
 
         return outstanding;
     }
+
+    /// <inheritdoc/>
+    public async ValueTask<Result<Gate>> CostAsync(
+        AccessContext context,
+        string gate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentException.ThrowIfNullOrWhiteSpace(gate);
+
+        return context is { IsSystem: false, Acting: SubjectId acting }
+            ? await guard.CostAsync(acting, gate, cancellationToken).ConfigureAwait(false)
+            : Result.Failure<Gate>(Error.From(ErrorCodes.StepUpRequired));
+    }
 }

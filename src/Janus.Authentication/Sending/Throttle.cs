@@ -46,11 +46,12 @@ internal static class Throttle
 
     /// <summary>
     /// How much of the delay a scope's last failure earned is still to run: the delay
-    /// runs from that failure, so an attempt made once it has run is looked at.
+    /// is the one the count that failure wrote earns, and it runs from that failure, so
+    /// an attempt made once it has run is looked at.
     /// </summary>
     /// <param name="counter">What was counted, or nothing where none was.</param>
     /// <param name="now">The clock.</param>
-    /// <param name="terms">The threshold, the delays and the decay.</param>
+    /// <param name="terms">The threshold and the delays.</param>
     /// <param name="cap">The most this scope's delay may reach.</param>
     /// <returns>What is left, zero where nothing is.</returns>
     /// <exception cref="ArgumentNullException">The terms are absent.</exception>
@@ -67,7 +68,9 @@ internal static class Throttle
             return TimeSpan.Zero;
         }
 
-        TimeSpan left = counted.At + Delay(Standing(counted, now, terms.Decay), terms, cap) - now;
+        // Decay forgives failures still to come, never a delay already running
+        // (AUTH-ABUSE-001).
+        TimeSpan left = counted.At + Delay(counted.Failures, terms, cap) - now;
 
         return left > TimeSpan.Zero ? left : TimeSpan.Zero;
     }

@@ -1353,7 +1353,11 @@ against the public contract of LIB-API-001.
   and the recovery approval limits) carries `retryAt` in its details and a matching
   `Retry-After` header. The progressive delay runs from the failure that earned it and
   grows when failures follow one another, so `retryAt` is the instant the next attempt
-  is looked at.
+  is looked at. The delay is the one the count that failure wrote earns: decay forgives
+  failures still to come and never shortens a delay already running.
+- `Error.Throttled` in `Janus.Core` builds the `auth.throttled` refusal, its one detail
+  `retryAt` the instant in UTC. Every throttle of the library answers through it, the
+  export limits and the per-source request limit included.
 - `auth.stepup.required` carries `required` (`level`, `phishingResistant`, `maxAge` in
   seconds), `outcome`, `options` and `pendingUntil` on every gated operation, as the API
   contract gives them, and nothing else.
@@ -1367,7 +1371,11 @@ against the public contract of LIB-API-001.
   account holds it, so a held and an unheld address are delayed alike from any source;
   a success clears only the account's count. Only a remembered or trusted browser token
   that resolves to the account exempts a browser, through `IAuthentication.BeginAsync`,
-  and never from the source's delay. A throttled source reaches no sign-in provider.
+  and never from the source's delay; the exemption spares it from being held, not from
+  being counted, so its failures still hold other browsers and raise the account's
+  alert. Every token a browser carries is looked up whether or not the identifier
+  resolves. `IAuthentication.BeginAsync` has one form, which takes both tokens; an
+  in-process caller passes neither. A throttled source reaches no sign-in provider.
 - A sign-in link, email code or recovery ask that sends nothing is judged and counted
   against the sending restrictions as its message would be, so it is answered as a sent
   one is, whether or not an account holds the address.
@@ -1410,6 +1418,57 @@ against the public contract of LIB-API-001.
   canary record no answer.
 - Finding who holds access to a record reads the live grants on its ancestors through
   their index, and `organization_domains.domain` carries the `identity_ci` collation.
+- `groups.name` and `authenticators.label` carry the `identity_ci` collation, so an
+  organization's groups sort without regard to case and a credential label held in
+  other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
+  a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- A code try is decided under a lock on the code's row, so wrong codes presented at once
+  are counted as the same number presented one after another, and the right code
+  presented twice at once answers once. Each wrong try up to the cap is refused
+  `auth.code.invalid`, the one reaching it ending the code, and whatever follows is
+  refused `auth.code.expired`. The `emailCode` sign-in code and the code a sign-in link
+  shows are authentication codes: capped by the new key `code.signin.attempts` (5,
+  ceiling 10), the first living the new key `code.signin.lifetime` (10 minutes, ceiling
+  30) and sent by mail alone as the new message kind `sign-in-code`, the second living
+  as long as its link.
+- A registration is held to the progressive delay as a sign-in is: a refused code is
+  counted against the session's source and the identifier, and while the delay stands a
+  code or a further ask for a code is refused `auth.throttled` with `retryAt`.
+- A refused code of the new-device check is recorded as `auth.authentication.failed`
+  with details `{"verification":"device"}` and no factor; a pressed link token that
+  opens nothing is recorded against no account under the link factor the request
+  named and counted against its source, so `IAuthentication.LandAsync` takes that
+  factor and `/auth/factor` refuses a `linkToken` under any other factor
+  `api.request.malformed` naming `factor`. A throttled provider return carries
+  `retryAt` beside `error`.
+- A sign-in link or email code sent to an address the account has removed since, and a
+  sign-in opened with such an address, no longer signs in: the factor is refused
+  `auth.factor.rejected`, recorded and counted. A held address that does not parse is
+  judged by a domain lock as a domain that does not read, so every lock refuses it.
+- The `phoneCode` second step is sent: `POST /auth/factor` or `/auth/step-up` naming
+  `phoneCode` with no `value` answers 202 and texts a code as `secondstep-code` under the
+  purpose `secondfactor`, living `code.signin.lifetime` and capped by
+  `code.signin.attempts`, which answers only the sign-in or step-up it was asked for.
+  The carrier's SIM-change or porting signal is now asked before that code, before a
+  recovery link by text and for the combinations a step-up offers: on `risk` nothing is
+  texted, the step-up withholds the text factors, and `POST /auth/link` and
+  `/recovery/begin` answer 202 as for any number instead of refusing.
+- The credential events are written in the transaction that makes them true, so an
+  event that cannot be written fails the operation and nothing of it stands: a report
+  or removal suspends nothing, and an enrolment enrols nothing. A password set on an
+  existing account, in a session, through an enrolment session or by recovery, raises
+  `CredentialEnrolled` with the kind `password` and no `Credential`, which is now
+  nullable. `CredentialSuspended` names who reported the loss or asked for the
+  removal as its `Actor`; `CredentialRestored` names the session's `Actor` and
+  `Effective`, and nobody when cancelled from the link.
+- `IAssuranceProvider.AttainedAsync` replaces `LevelAsync` and reports an
+  `AttainedAssurance`: the level, whether it was phishing-resistant, when it was
+  attained and the most the account can reach. A step-up gate judged from a host's
+  report is met only where all four meet what the acting person's policy says the gate
+  costs, and is otherwise refused `auth.stepup.required` with the gate it asks for.
+- `concurrent-sessions-implausible` now compares a place whose country is known: two
+  sessions whose countries differ raise it whatever their cities, and the distance is
+  measured only where both places name a city.
 - A value the library reads from text under a rule, left unset (such as its `default`),
   throws `InvalidOperationException` where its text is read, so no such value reaches a
   row.
@@ -2019,6 +2078,10 @@ against the public contract of LIB-API-001.
   it answering nothing. The session list marks the one asking and says no more about
   where each was used than the city. A credential given a label or renamed is audited
   as `auth.credential.labelled`.
+- `PUT /account/secondstep/preferred` takes the member `method`, the identifier of a
+  second factor enrolled on the account; a method the account has not enrolled, or one
+  that is no active second step, is 422 `api.request.invalid` naming `method` and leaves
+  the preference as it was.
 - A profile field the deployment has switched off is neither accepted from a request nor
   carried in an answer, and the date of birth is never the person's to change. A
   preference key the host never declared is refused and never returned. A username, once

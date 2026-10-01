@@ -681,11 +681,11 @@ internal static class AccountEndpoints
 
         AccessContext holder = Asking(browser);
 
-        return request.Credential is not Guid credential
-            ? Answers.Malformed("credential")
+        return request.Method is not Guid method
+            ? Answers.Malformed("method")
             : Answers.Of(
                 await accounts
-                    .PreferSecondStepAsync(holder, new AuthenticatorId(credential), cancellationToken)
+                    .PreferSecondStepAsync(holder, new AuthenticatorId(method), cancellationToken)
                     .ConfigureAwait(false),
                 Nothing);
     }

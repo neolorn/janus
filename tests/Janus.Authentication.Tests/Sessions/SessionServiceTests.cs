@@ -801,6 +801,34 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-ALERT-007: a place is compared when its country is known, so a session placed
+    /// in one country with no city raises against a session in another, and two sessions
+    /// in one country, one of them without a city, raise nothing.
+    /// </summary>
+    [Fact]
+    public async Task OPS_ALERT_007_APlaceWithACountryAndNoCityIsComparedByItsCountryAsync()
+    {
+        SubjectId subject = Subject();
+        SubjectId other = Subject();
+        Placed();
+        _locations.Holds("203.0.113.71", new SessionLocation(City: null, "EG"));
+        _locations.Holds("203.0.113.72", new SessionLocation(City: null, "GB"));
+
+        _ = await BegunFromAsync(subject, CairoAddress);
+        _ = await BegunFromAsync(subject, "203.0.113.71");
+
+        Assert.Empty(_alerts.Of<AlertRaised>());
+
+        _ = await BegunFromAsync(other, CairoAddress);
+        _ = await BegunFromAsync(other, "203.0.113.72");
+
+        AlertRaised raised = Assert.Single(_alerts.Of<AlertRaised>());
+
+        Assert.Equal(AlertCondition.ConcurrentSessionsImplausible, raised.Condition);
+        Assert.Equal(other.ToString(), raised.Details["subject"].GetString());
+    }
+
+    /// <summary>
     /// INT-GEN-006 and CONV-DESIGN-005 AC1: a resolver that could not report what it
     /// had to report fails the sign-in, because the degradation it exists to raise is
     /// the deployment's only sight of an absent database.

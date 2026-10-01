@@ -507,6 +507,17 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
+    /// AUTH-ABUSE-002 AC2: the throttled refusal has one builder, so every throttle of
+    /// the library communicates the remaining delay in one shape. No file of the library
+    /// reads the code but the builder and the map of statuses.
+    /// </summary>
+    [Fact]
+    public void AUTH_ABUSE_002_AC2_OnlyTheBuilderAndTheStatusMapReadTheThrottledCode() =>
+        Assert.Equal(
+            ["ApiStatus.cs", "Error.cs"],
+            Named(code => code.Contains("ErrorCodes.Throttled", StringComparison.Ordinal)));
+
+    /// <summary>
     /// CONV-LAYOUT-001 AC3: every project's library dependencies are exactly the ones
     /// the table gives, so a dependency pointing outward does not build.
     /// </summary>

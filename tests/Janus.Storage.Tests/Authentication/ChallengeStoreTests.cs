@@ -63,14 +63,15 @@ public sealed class ChallengeStoreTests(DatabaseFixture database)
 
         Assert.Equal(
             Deployment.FingerprintKeys.CurrentVersion,
-            await connection.QuerySingleAsync<int?>(
+            await connection.QuerySingleAsync<int>(
                 "SELECT fingerprint_version FROM identity.signin_challenges WHERE handle = @Handle;",
                 new { Handle = opened.Fingerprint }));
     }
 
     /// <summary>
-    /// OPS-SEC-003: a hash is held only beside the version it was computed under, and
-    /// only at the length a hash has, so the rotation meets no hash it cannot place.
+    /// OPS-SEC-003: every sign-in holds a hash, only beside the version it was computed
+    /// under and only at the length a hash has, so the rotation meets no hash it cannot
+    /// place and no sign-in escapes the identifier's count.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -82,13 +83,18 @@ public sealed class ChallengeStoreTests(DatabaseFixture database)
             async () => await WrittenAsync(connection, RandomNumberGenerator.GetBytes(Fingerprint.Length), version: null));
         PostgresException unhashed = await Assert.ThrowsAsync<PostgresException>(
             async () => await WrittenAsync(connection, identifier: null, version: 1));
+        PostgresException neither = await Assert.ThrowsAsync<PostgresException>(
+            async () => await WrittenAsync(connection, identifier: null, version: null));
         PostgresException truncated = await Assert.ThrowsAsync<PostgresException>(
             async () => await WrittenAsync(connection, RandomNumberGenerator.GetBytes(16), version: 1));
 
-        Assert.All(
-            new[] { unversioned, unhashed, truncated },
-            refused => Assert.Equal("ck_signin_challenges_identifier", refused.ConstraintName));
-        Assert.Equal(1, await WrittenAsync(connection, identifier: null, version: null));
+        Assert.Equal(PostgresErrorCodes.NotNullViolation, unversioned.SqlState);
+        Assert.Equal("fingerprint_version", unversioned.ColumnName);
+        Assert.Equal(PostgresErrorCodes.NotNullViolation, unhashed.SqlState);
+        Assert.Equal("identifier", unhashed.ColumnName);
+        Assert.Equal(PostgresErrorCodes.NotNullViolation, neither.SqlState);
+        Assert.Equal("ck_signin_challenges_identifier", truncated.ConstraintName);
+        Assert.Equal(1, await WrittenAsync(connection, RandomNumberGenerator.GetBytes(Fingerprint.Length), version: 1));
     }
 
     /// <inheritdoc/>

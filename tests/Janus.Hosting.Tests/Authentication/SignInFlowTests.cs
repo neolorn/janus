@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Janus.Authentication.Factors;
 using Janus.Authentication.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -201,6 +202,147 @@ public sealed class SignInFlowTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, landed.Status);
         Assert.Equal(ErrorCodes.CodeExpired.ToString(), landed.Text("code"));
         Assert.False(browser.Cookies.ContainsKey(Session));
+    }
+
+    /// <summary>
+    /// CONV-LOG-005 AC1: a link token presented under a factor that is not a link is
+    /// refused naming the factor before the service is reached, so a refused press is
+    /// only ever recorded under the link factor the request named.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_LOG_005_AC1_ALinkTokenUnderAnotherFactorIsRefusedAsMalformedAsync()
+    {
+        await RegisteredAsync();
+
+        var browser = new Browser(_deployment);
+        string challenge = await BegunAsync(browser);
+
+        Answer landed = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "password"),
+            ("linkToken", "nothing-answers-to-this"),
+            ("press", true));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, landed.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), landed.Text("code"));
+        Assert.Equal("factor", landed.Json().GetProperty("details").GetProperty("member").GetString());
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC4 and AC6: the text code is asked for at the second step by
+    /// naming it with no value, which is answered 202; the code it sends, presented,
+    /// completes the sign-in at AAL2.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AC4_ATextCodeAskedForAndPresentedCompletesAtAal2Async()
+    {
+        _deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+        _deployment.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
+            });
+        _deployment.Templates.Set(
+            MessageKind.SecondStepCode,
+            SendKind.Sms,
+            Language,
+            new MessageTemplate(null, "{code}"));
+
+        await RegisteredAsync();
+
+        _deployment.Authenticators.Hold(Authenticator.Existing(
+            AuthenticatorId.New(_deployment.Clock),
+            _deployment.Directory.Created[^1].Subject,
+            Factor.PhoneCode,
+            CredentialLabel.TryParse("Phone", out CredentialLabel label)
+                ? label
+                : throw new InvalidOperationException("The label does not read."),
+            AuthenticatorState.Active,
+            _deployment.Clock.GetUtcNow(),
+            null,
+            null,
+            confirmed: true,
+            null,
+            null,
+            isPreferred: false));
+
+        var browser = new Browser(_deployment);
+        string challenge = await BegunAsync(browser);
+        int sent = _deployment.Sms.Taken.Count;
+
+        Answer first = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "password"),
+            ("value", Flow.Password));
+        Answer asked = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "phoneCode"));
+        Answer completed = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "phoneCode"),
+            ("value", _deployment.Sms.Taken[^1].Text));
+
+        Assert.Equal("factorRequired", first.Text("status"));
+        Assert.Equal(StatusCodes.Status202Accepted, asked.Status);
+        Assert.Equal(sent + 1, _deployment.Sms.Taken.Count);
+        Assert.Equal(StatusCodes.Status200OK, completed.Status);
+        Assert.Equal("complete", completed.Text("status"));
+        Assert.Equal("aal2", completed.Text("assuranceLevel"));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6 and AUTH-ABUSE-003 AC1: a sign-in link asked for by text to a
+    /// number the carrier reports a recent change for is not sent, and the ask is
+    /// answered 202 in the bytes an ask for a number no account holds is answered in.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_ALinkByTextToAReportedNumberIsAnsweredAsAnyAskAsync()
+    {
+        await using var risky = new Deployment(
+            signals: new PhoneSignalProvider((_, _) => ValueTask.FromResult(PhoneSignal.Risk)));
+
+        Flow.Prepare(risky);
+
+        risky.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneLink]),
+            });
+        risky.Templates.Set(
+            MessageKind.SignInLink,
+            SendKind.Sms,
+            Language,
+            new MessageTemplate(null, "{code} {token}"));
+
+        _ = await Flow.SignedInAsync(risky);
+
+        risky.Clock.Advance(TimeSpan.FromMinutes(5));
+
+        int sent = risky.Sms.Taken.Count;
+        var browser = new Browser(risky);
+
+        _ = await browser.SendAsync("GET", "/auth/session");
+
+        Answer held = await browser.SendAsync("POST", "/auth/link", ("identifier", Flow.Number));
+        Answer nobodys = await browser.SendAsync("POST", "/auth/link", ("identifier", "+441632960099"));
+
+        Assert.Equal(StatusCodes.Status202Accepted, held.Status);
+        Assert.Equal(held.Status, nobodys.Status);
+        Assert.Equal(held.Body, nobodys.Body);
+        Assert.Equal(sent, risky.Sms.Taken.Count);
     }
 
     /// <summary>

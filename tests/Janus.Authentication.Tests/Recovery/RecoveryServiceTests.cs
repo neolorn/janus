@@ -76,8 +76,10 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     private readonly SendingRestrictionsInMemory _restrictions = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
+    private readonly PhoneSignalAuditInMemory _considered = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
+    private PhoneSignalProvider? _provider;
 
     /// <summary>
     /// A deployment that can send.
@@ -93,6 +95,35 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     {
         await _work.DisposeAsync();
         _randomness.Dispose();
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6 and AUTH-ABUSE-003 AC1: a number the carrier reports a recent
+    /// change of SIM or of network for is sent no recovery link; the ask is answered
+    /// as every ask is, in the same bytes for a number no account holds, and each ask
+    /// records its one consideration.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_AReportedChangeSendsNoRecoveryLinkByTextAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        _provider = new PhoneSignalProvider((_, _) => ValueTask.FromResult(PhoneSignal.Risk));
+
+        Result held = await Service.BeginAsync(Number, Language, Source, TestContext.Current.CancellationToken);
+        Result nobodys = await Service.BeginAsync(
+            "+441632960099",
+            Language,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(Succeeded(held));
+        Assert.True(Succeeded(nobodys));
+        Assert.Empty(_notifications.Texts);
+        Assert.Equal(
+            [(Factor.PhoneLink, (PhoneSignal?)PhoneSignal.Risk, (SubjectId?)subject), (Factor.PhoneLink, PhoneSignal.Risk, null)],
+            _considered.Records);
     }
 
     /// <summary>
@@ -122,6 +153,33 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         Assert.Equal(
             AuthenticatorState.Active,
             (await _authenticators.FindAsync(passkey, TestContext.Current.CancellationToken))!.State);
+    }
+
+    /// <summary>
+    /// AUTH-STEP-007 AC4: the password recovery set is announced as an enrolment of the
+    /// catalogue entry <c>password</c> with no credential identifier, naming the account
+    /// and nobody as its actor, since the link names nobody.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_STEP_007_ARecoveredPasswordIsAnnouncedAsync()
+    {
+        SubjectId subject = await AccountAsync(password: false);
+
+        _ = await Service.BeginAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+
+        Assert.True(Succeeded(await Service.CompleteAsync(
+            Sent(),
+            Secret,
+            Source,
+            TestContext.Current.CancellationToken)));
+
+        CredentialEnrolled announced = Assert.Single(_events.Of<CredentialEnrolled>());
+
+        Assert.Null(announced.Credential);
+        Assert.Equal(FactorCatalogue.Password, announced.Kind);
+        Assert.Equal(subject, announced.Subject);
+        Assert.Null(announced.Actor);
     }
 
     /// <summary>
@@ -763,7 +821,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             Passwords,
             Policies,
             Sessions,
-            new StepUpGuard(_live, _authenticators, _passwords, Policies, _clock),
+            new StepUpGuard(_live, _authenticators, _passwords, Policies, _identifiers, Signals, _clock),
             new AdministrativeScope(_gate, _administrative),
             _notifications,
             Landing.Links,
@@ -775,6 +833,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
                 _work,
                 _events,
                 _clock),
+            Signals,
             Throttle,
             _events,
             _configuration,
@@ -801,6 +860,8 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
 
     private PolicyResolution Policies => new(_memberships, _configuration, _raises);
 
+    private PhoneSignals Signals => new(_provider, _considered, _work, _clock);
+
     private SessionService Sessions =>
         new(
             _live,
@@ -824,6 +885,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             _passwords,
             new PasswordScreening(_corpus, _words, _configuration, _screening, _events, _clock),
             new Argon2idHasher(_randomness),
+            _events,
             _configuration,
             _work,
             _clock);
@@ -918,6 +980,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
                 presented,
                 [],
                 AssuranceLevel.Aal1,
+                actor: null,
                 TestContext.Current.CancellationToken);
         }
 

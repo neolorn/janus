@@ -84,13 +84,6 @@ internal sealed class AuthenticationService(
     TimeProvider time,
     RandomNumberGenerator randomness) : IAuthentication
 {
-    /// <inheritdoc/>
-    public ValueTask<Result<SignInChallenge>> BeginAsync(
-        string identifier,
-        string source,
-        CancellationToken cancellationToken) =>
-        BeginAsync(identifier, source, remembered: null, trusted: null, cancellationToken);
-
     /// <summary>
     /// Opens a sign-in for an identifier, with the tokens only the browser boundary
     /// can read.
@@ -230,6 +223,73 @@ internal sealed class AuthenticationService(
             .ConfigureAwait(false))
         .Match(outcome => Result.Success(outcome.Progress), Result.Failure<SignInProgress>);
 
+    /// <summary>
+    /// Whether an entry is a code the library texts when it is asked for, as a second
+    /// step, rather than one the person already holds.
+    /// </summary>
+    /// <param name="factor">The entry.</param>
+    /// <returns>Whether it is asked for.</returns>
+    public static bool Asks(Factor factor) =>
+        FactorCatalogue.Delivered.Contains(factor) && FactorCatalogue.Of(factor).CanBeSecondFactor;
+
+    /// <summary>
+    /// Asks for the code of a second step the library texts, for a sign-in a first
+    /// factor has been accepted for or for a step-up of the asking account's own.
+    /// </summary>
+    /// <param name="challenge">The handle the sign-in or step-up opened with.</param>
+    /// <param name="factor">The second step asked for.</param>
+    /// <param name="stepping">The account stepping up, or nothing at a sign-in.</param>
+    /// <param name="source">The address the ask came from.</param>
+    /// <param name="language">The language the ask was made in.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Nothing, or the refusal of the send.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    /// <remarks>
+    /// Implements AUTH-FACT-002 AC6. An ask is answered alike whatever it finds, so a
+    /// handle that opens nothing, a sign-in no first factor has been accepted for, an
+    /// account holding no such credential and a policy that does not permit it are sent
+    /// nothing and answered as the rest.
+    /// </remarks>
+    public async ValueTask<Result> AskAsync(
+        string challenge,
+        Factor factor,
+        SubjectId? stepping,
+        string source,
+        string language,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(language);
+
+        Challenge? open = await OpenAsync(challenge, cancellationToken).ConfigureAwait(false);
+
+        if (!Asks(factor)
+            || open?.Subject is not SubjectId subject
+            || (stepping is SubjectId asking ? asking != subject : open.Presented.Count is 0)
+            || await accounts.StateAsync(subject, cancellationToken).ConfigureAwait(false) is not AccountState.Active
+            || !(await authenticators.OfAsync(subject, cancellationToken).ConfigureAwait(false))
+                .Any(credential => credential.IsUsable && credential.Factor == factor))
+        {
+            return Result.Success();
+        }
+
+        Error? failure = null;
+
+        Policy policy = (await policies.ForAsync(subject, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Policy>(error, ref failure));
+
+        // IDN-LIFE-009b: a second step the policy in force does not permit would be
+        // refused when presented, so nothing is sent for it.
+        if (failure is not null || !policy.LoginFactors.Contains(factor))
+        {
+            return failure is null ? Result.Success() : Result.Failure(failure);
+        }
+
+        return await links
+            .SendSecondStepAsync(open.Fingerprint, subject, factor, source, language, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     /// <inheritdoc/>
     public ValueTask<Result> SendLinkAsync(
         string identifier,
@@ -252,6 +312,7 @@ internal sealed class AuthenticationService(
         string challenge,
         string? browser,
         [NeverLogged] string linkToken,
+        Factor factor,
         bool press,
         DeviceDescription device,
         string source,
@@ -260,6 +321,7 @@ internal sealed class AuthenticationService(
                 challenge,
                 browser,
                 linkToken,
+                factor,
                 press,
                 new SessionOrigin(source, device),
                 remembered: null,
@@ -455,11 +517,13 @@ internal sealed class AuthenticationService(
                 ?? Error.From(ErrorCodes.FactorRejected));
         }
 
-        Error? refusal = null;
+        Error? refusal = await GivenUpAsync(open, subject, cancellationToken).ConfigureAwait(false)
+            ? Error.From(ErrorCodes.FactorRejected)
+            : null;
 
-        bool changeRequired = (await AcceptsAsync(open, subject, presented, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, error => Withheld<bool>(error, ref refusal));
+        bool changeRequired = refusal is null
+            && (await AcceptsAsync(open, subject, presented, cancellationToken).ConfigureAwait(false))
+                .Match(value => value, error => Withheld<bool>(error, ref refusal));
 
         if (refusal is not null)
         {
@@ -523,13 +587,13 @@ internal sealed class AuthenticationService(
             return Result.Failure<SignInOutcome>(held);
         }
 
-        // CONV-LOG-005: the code went to the primary email and is refused as an email
-        // code is, recorded and counted against the delay, a handle that opens nothing
-        // included.
+        // CONV-LOG-005: a refused code of the new-device check is recorded as the
+        // verification it is, naming no factor, and counted against the delay, a
+        // handle that opens nothing included.
         if (open?.Subject is not SubjectId subject)
         {
             return Result.Failure<SignInOutcome>(
-                await CountedAsync(attempt, Factor.EmailCode, null, null, cancellationToken).ConfigureAwait(false)
+                await CountedAsync(attempt, presented: null, null, null, cancellationToken).ConfigureAwait(false)
                 ?? Error.From(ErrorCodes.CodeExpired));
         }
 
@@ -546,7 +610,7 @@ internal sealed class AuthenticationService(
         if (refused is not null)
         {
             return Result.Failure<SignInOutcome>(
-                await CountedAsync(attempt, Factor.EmailCode, subject, null, cancellationToken).ConfigureAwait(false)
+                await CountedAsync(attempt, presented: null, subject, null, cancellationToken).ConfigureAwait(false)
                 ?? refused);
         }
 
@@ -700,6 +764,7 @@ internal sealed class AuthenticationService(
     /// <param name="challenge">The handle the sign-in began with.</param>
     /// <param name="browser">What the asking browser carries, or nothing.</param>
     /// <param name="linkToken">The token the message carried.</param>
+    /// <param name="factor">The link factor the request named.</param>
     /// <param name="press">Whether the person pressed the control.</param>
     /// <param name="origin">Where the request came from.</param>
     /// <param name="remembered">
@@ -712,6 +777,7 @@ internal sealed class AuthenticationService(
         string challenge,
         string? browser,
         [NeverLogged] string linkToken,
+        Factor factor,
         bool press,
         SessionOrigin origin,
         string? remembered,
@@ -725,7 +791,11 @@ internal sealed class AuthenticationService(
 
         if (held is null)
         {
-            return Result.Failure<LandedSignIn>(Error.From(ErrorCodes.CodeExpired));
+            return Result.Failure<LandedSignIn>(
+                press
+                    ? await GoneAsync(new ThrottleAttempt(origin.Address, null), factor, cancellationToken)
+                        .ConfigureAwait(false)
+                    : Error.From(ErrorCodes.CodeExpired));
         }
 
         bool sameBrowser = held.SameBrowser(SignInLinks.Fingerprint(browser));
@@ -755,18 +825,28 @@ internal sealed class AuthenticationService(
             return Result.Failure<LandedSignIn>(delayed);
         }
 
-        // CONV-LOG-005: a pressed link that lands on no sign-in of its account is a
-        // refused factor, recorded and counted as one.
-        if (open is null || open.Subject != held.Subject)
+        // CONV-LOG-005: a pressed link that lands on no sign-in of its account, or on
+        // one opened with an address the account has given up since, is a refused
+        // factor, recorded and counted as one (REG-IDENT-006 AC6).
+        if (open is null
+            || open.Subject != held.Subject
+            || await GivenUpAsync(open, held.Subject, cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure<LandedSignIn>(
                 await CountedAsync(attempt, held.Factor, held.Subject, null, cancellationToken).ConfigureAwait(false)
                 ?? Error.From(ErrorCodes.FactorRejected));
         }
 
+        // A link sent to an address given up since is refused and counted as one that
+        // lands on no sign-in; a lock's refusal is only told (REG-IDENT-006 AC6).
         if (await links.LockedAsync(held, cancellationToken).ConfigureAwait(false) is Error locked)
         {
-            return Result.Failure<LandedSignIn>(locked);
+            return Result.Failure<LandedSignIn>(
+                locked.Code == ErrorCodes.FactorRejected
+                    ? await CountedAsync(attempt, held.Factor, held.Subject, null, cancellationToken)
+                        .ConfigureAwait(false)
+                        ?? locked
+                    : locked);
         }
 
         open.Accepted(held.Factor);
@@ -859,14 +939,14 @@ internal sealed class AuthenticationService(
 
     // AUTH-ABUSE-001 AC5: a browser is recognised by a token that resolves, stands for
     // the account being signed into and has not lapsed; asking changes nothing about the
-    // token, so a stolen one is not refreshed by being tried.
-    private async ValueTask<bool> RecognisedAsync(
+    // token, so a stolen one is not refreshed by being tried. The tokens are looked up
+    // whether or not the identifier resolved (AUTH-ABUSE-003).
+    private ValueTask<bool> RecognisedAsync(
         SubjectId? subject,
         [NeverLogged] string? remembered,
         [NeverLogged] string? trusted,
         CancellationToken cancellationToken) =>
-        subject is SubjectId account
-            && await devices.RecognisesAsync(account, remembered, trusted, cancellationToken).ConfigureAwait(false);
+        devices.RecognisesAsync(subject, remembered, trusted, cancellationToken);
 
     private async ValueTask<Error?> DelayedAsync(ThrottleAttempt attempt, CancellationToken cancellationToken)
     {
@@ -880,7 +960,7 @@ internal sealed class AuthenticationService(
             return failure;
         }
 
-        return delay > TimeSpan.Zero ? ThrottleService.Refusal(time.GetUtcNow() + delay) : null;
+        return delay > TimeSpan.Zero ? Error.Throttled(time.GetUtcNow() + delay) : null;
     }
 
     private async ValueTask<Challenge?> OpenAsync(string handle, CancellationToken cancellationToken)
@@ -1041,7 +1121,7 @@ internal sealed class AuthenticationService(
         Error? refusal = null;
 
         Authenticator answered = (await webAuthn
-                .AssertAsync(presented.Assertion, open.WebAuthn, cancellationToken)
+                .AssertAsync(presented.Assertion, open.WebAuthn, identified: true, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<Authenticator>(error, ref refusal));
 
@@ -1072,7 +1152,9 @@ internal sealed class AuthenticationService(
             .FindAsync(subject, presented.Factor, cancellationToken)
             .ConfigureAwait(false);
 
-        if (held is null)
+        // AUTH-FACT-002 AC4: a code issued for another sign-in or step-up is no code of
+        // this one.
+        if (held is null || !held.Answers(open.Fingerprint))
         {
             return Result.Failure<bool>(Error.From(ErrorCodes.CodeExpired));
         }
@@ -1251,35 +1333,32 @@ internal sealed class AuthenticationService(
         HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        // An address the account gave up while the sign-in was open is no longer one
-        // a lock can be judged on.
-        if (held.Find(email) is not HeldIdentifier opened
-            || !EmailAddress.TryParse(opened.Canonical, out EmailAddress address))
-        {
-            return null;
-        }
-
-        return await domainLock.RefusedAsync(subject, address, cancellationToken).ConfigureAwait(false);
+        // REG-IDENT-006 AC6: an address the account gave up while the sign-in was open
+        // signs nothing in.
+        return held.Find(email) is HeldIdentifier opened
+            ? await domainLock.RefusedAsync(subject, opened.Canonical, cancellationToken).ConfigureAwait(false)
+            : Error.From(ErrorCodes.FactorRejected);
     }
+
+    // REG-IDENT-006 AC6: whether the sign-in was opened with an address the account
+    // has given up since, which no factor presented to it signs in with.
+    private async ValueTask<bool> GivenUpAsync(Challenge open, SubjectId subject, CancellationToken cancellationToken) =>
+        open.Email is IdentifierId email
+        && (await identifiers.HeldAsync(subject, cancellationToken).ConfigureAwait(false)).Find(email) is null;
 
     // AUTH-FACT-002b: the entry rides the number the account would be texted at, so
     // it is that number the signal is asked about.
     private async ValueTask<bool> TextableAsync(
         SubjectId subject,
         Factor carried,
-        CancellationToken cancellationToken)
-    {
-        HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken)
+        CancellationToken cancellationToken) =>
+        await signals
+            .AllowsAsync(
+                carried,
+                await identifiers.HeldAsync(subject, cancellationToken).ConfigureAwait(false),
+                subject,
+                cancellationToken)
             .ConfigureAwait(false);
-        IReadOnlyList<HeldIdentifier> numbers = held.OfKind(IdentifierKind.Phone);
-        HeldIdentifier? texted = numbers.FirstOrDefault(number => number.IsPrimary)
-            ?? (numbers.Count is 0 ? null : numbers[0]);
-
-        return texted is null
-            || await signals
-                .AllowsAsync(carried, texted.Canonical, subject, cancellationToken)
-                .ConfigureAwait(false);
-    }
 
     private async ValueTask<bool> HasPasswordAsync(
         SubjectId subject,
@@ -1598,9 +1677,11 @@ internal sealed class AuthenticationService(
     // identifier that resolved to nothing reaches this point as one that resolved to
     // an account does, so the record costs the one what it costs the other
     // (AUTH-ABUSE-003).
+    // The refused value is a factor, or, where none is named, the new-device check's
+    // code, which is recorded as that verification (CONV-LOG-005).
     private async ValueTask<Error?> CountedAsync(
         ThrottleAttempt attempt,
-        Factor presented,
+        Factor? presented,
         SubjectId? subject,
         string? trusted,
         CancellationToken cancellationToken)
@@ -1611,7 +1692,15 @@ internal sealed class AuthenticationService(
             return notBegun;
         }
 
-        await audit.FailedAsync(attempt.Account, presented, time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        if (presented is Factor factor)
+        {
+            await audit.FailedAsync(attempt.Account, factor, time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            await audit.DeviceVerificationFailedAsync(attempt.Account, time.GetUtcNow(), cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -1636,6 +1725,18 @@ internal sealed class AuthenticationService(
 
         return failure ?? revoked;
     }
+
+    // CONV-LOG-005, AUTH-ABUSE-001: a pressed link token that opens nothing, unknown or
+    // expired, is held to the delay its source has earned; outside it the press is a
+    // refused factor against no account, recorded under the factor the request named and
+    // counted against the source.
+    private async ValueTask<Error> GoneAsync(
+        ThrottleAttempt attempt,
+        Factor factor,
+        CancellationToken cancellationToken) =>
+        await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false)
+            ?? await CountedAsync(attempt, factor, null, null, cancellationToken).ConfigureAwait(false)
+            ?? Error.From(ErrorCodes.CodeExpired);
 
     // CONV-LOG-005: a factor refused at a step-up is written to the trail against the
     // session it was presented on, whatever the log level, and is then counted against

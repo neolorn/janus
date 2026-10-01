@@ -123,6 +123,8 @@ public sealed class AccountServiceTests : IAsyncDisposable
         _authenticators,
         _passwords,
         new PolicyResolution(_memberships, _configuration, _raises),
+        _identifiers,
+        new PhoneSignals(null, new PhoneSignalAuditInMemory(), _work, _clock),
         _clock);
 
     private AccessContext Acting => AccessContext.Of(_person);
@@ -500,28 +502,71 @@ public sealed class AccountServiceTests : IAsyncDisposable
     /// <summary>
     /// IDN-ATTR-008 AC2: the preference names a second step the account holds, so a
     /// credential of another account, and one that is no second step, are refused
-    /// alike.
+    /// alike as a body referring to what cannot be acted on, naming <c>method</c>, and
+    /// the preference stands as it was.
     /// </summary>
     [Fact]
     public async Task IDN_ATTR_008_AC2_AMethodTheAccountDoesNotHoldIsRefusedAsync()
     {
+        Authenticator marked = SecondStepKey("The marked one", Noon);
         Authenticator passkey = Passkey();
 
+        _authenticators.Hold(marked);
+        _authenticators.Hold(passkey);
+
+        Error unheld = Failure(await Service.PreferSecondStepAsync(
+            Acting,
+            AuthenticatorId.New(_clock),
+            TestContext.Current.CancellationToken));
+        Error notASecondStep = Failure(await Service.PreferSecondStepAsync(
+            Acting,
+            passkey.Id,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.RequestInvalid, unheld.Code);
+        Assert.Equal("method", unheld.Details["member"].GetString());
+        Assert.Equal(ErrorCodes.RequestInvalid, notASecondStep.Code);
+        Assert.Equal("method", notASecondStep.Details["member"].GetString());
+        Assert.Equal(marked.Id, await PreferredAsync());
+    }
+
+    /// <summary>
+    /// AUTH-FACT-001 AC5: a label is held once per kind per account without regard to
+    /// case, as the database's index holds it; a credential keeps its own label in other
+    /// capitals, and a credential of another kind may carry the same one.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_001_AC5_ALabelHeldInOtherCapitalsIsRefusedAsync()
+    {
+        Authenticator older = SecondStepKey("The old one", Noon);
+        Authenticator newer = SecondStepKey("The new one", Noon.AddDays(1));
+        Authenticator passkey = Passkey();
+
+        _authenticators.Hold(older);
+        _authenticators.Hold(newer);
         _authenticators.Hold(passkey);
 
         Assert.Equal(
-            ErrorCodes.CredentialNotFound,
-            Refused(await Service.PreferSecondStepAsync(
+            ErrorCodes.CredentialLabelInvalid,
+            Refused(await Service.LabelCredentialAsync(
                 Acting,
-                AuthenticatorId.New(_clock),
+                newer.Id,
+                "THE OLD ONE",
                 TestContext.Current.CancellationToken)));
 
-        Assert.Equal(
-            ErrorCodes.CredentialNotFound,
-            Refused(await Service.PreferSecondStepAsync(
-                Acting,
-                passkey.Id,
-                TestContext.Current.CancellationToken)));
+        Accepted(await Service.LabelCredentialAsync(
+            Acting,
+            older.Id,
+            "the OLD one",
+            TestContext.Current.CancellationToken));
+        Accepted(await Service.LabelCredentialAsync(
+            Acting,
+            newer.Id,
+            "this LAPTOP",
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(Labelled("the OLD one"), older.Label);
+        Assert.Equal(Labelled("this LAPTOP"), newer.Label);
     }
 
     /// <summary>

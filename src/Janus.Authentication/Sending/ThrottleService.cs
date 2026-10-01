@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
@@ -58,7 +57,7 @@ internal sealed class ThrottleService(
         DateTimeOffset now = time.GetUtcNow();
         TimeSpan standing = TimeSpan.Zero;
 
-        foreach ((ThrottleScope scope, string key) in Scopes(attempt))
+        foreach ((ThrottleScope scope, string key) in Holding(attempt))
         {
             ThrottleCounter? counted = await ledger
                 .FindAsync(scope, key, cancellationToken)
@@ -105,17 +104,6 @@ internal sealed class ThrottleService(
     }
 
     /// <summary>
-    /// The refusal a standing delay produces, which says when the next attempt is
-    /// looked at and nothing about whether the account exists. Every throttle of the
-    /// library answers in this one shape, which the boundary turns into
-    /// <c>Retry-After</c> (AUTH-ABUSE-002, BFF-ABUSE-001).
-    /// </summary>
-    /// <param name="lifts">When the delay has run.</param>
-    /// <returns>The failure.</returns>
-    public static Error Refusal(DateTimeOffset lifts) =>
-        Error.From(ErrorCodes.Throttled, "retryAt", JsonSerializer.SerializeToElement(lifts));
-
-    /// <summary>
     /// Counts one failed attempt against every scope it belongs to.
     /// </summary>
     /// <param name="attempt">Who attempted what, from where.</param>
@@ -151,7 +139,7 @@ internal sealed class ThrottleService(
             return Result.Failure(notBegun);
         }
 
-        foreach ((ThrottleScope scope, string key) in Scopes(attempt))
+        foreach ((ThrottleScope scope, string key) in Counting(attempt))
         {
             ThrottleCounter? counted = await ledger
                 .FindAsync(scope, key, cancellationToken)
@@ -224,16 +212,20 @@ internal sealed class ThrottleService(
         return default!;
     }
 
-    private static IEnumerable<(ThrottleScope Scope, string Key)> Scopes(ThrottleAttempt attempt)
+    // The scopes whose delay holds an attempt. A browser the account already knows is
+    // not the attack, so the components an attacker can raise from anywhere do not hold
+    // it; the source always does (AUTH-ABUSE-001).
+    private static IEnumerable<(ThrottleScope Scope, string Key)> Holding(ThrottleAttempt attempt) =>
+        attempt.Recognised
+            ? [(ThrottleScope.Source, attempt.Source)]
+            : Counting(attempt);
+
+    // The scopes a failure is counted against: every one it belongs to, a recognised
+    // browser's included, so its failures still raise the account's alert and hold
+    // other browsers (AUTH-ABUSE-001 AC10).
+    private static IEnumerable<(ThrottleScope Scope, string Key)> Counting(ThrottleAttempt attempt)
     {
         yield return (ThrottleScope.Source, attempt.Source);
-
-        // A browser the account already knows is not the attack, so the components an
-        // attacker can raise from anywhere do not hold it (AUTH-ABUSE-001).
-        if (attempt.Recognised)
-        {
-            yield break;
-        }
 
         if (attempt.Account is SubjectId account)
         {

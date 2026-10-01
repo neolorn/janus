@@ -398,16 +398,13 @@ internal sealed class AccountService(
             return Result.Failure(Error.From(ErrorCodes.CredentialNotFound));
         }
 
-        // AUTH-FACT-001 AC5: a label is held once per kind per account. The database
-        // holds it too, but a refusal the person can read beats a failed commit.
-        foreach (Authenticator candidate in enrolled)
+        // AUTH-FACT-001 AC5: a label is held once per kind per account, compared as the
+        // database compares it, so the refusal falls exactly where its index would.
+        if (await authenticators
+            .LabelHeldAsync(subject, held.Factor, named, credential, cancellationToken)
+            .ConfigureAwait(false))
         {
-            if (candidate.Id != credential
-                && candidate.Factor == held.Factor
-                && candidate.Label == named)
-            {
-                return Result.Failure(Error.From(ErrorCodes.CredentialLabelInvalid));
-            }
+            return Result.Failure(Error.From(ErrorCodes.CredentialLabelInvalid));
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -470,10 +467,14 @@ internal sealed class AccountService(
         }
 
         // IDN-ATTR-008 AC2: the preference names something the account holds, and a
-        // credential that is not a second step is not one of them.
+        // credential that is not a second step is not one of them. The body refers to
+        // what cannot be acted on, so the refusal names the member (API-CONV-003).
         if (chosen is null || chosen.State is not AuthenticatorState.Active)
         {
-            return Result.Failure(Error.From(ErrorCodes.CredentialNotFound));
+            return Result.Failure(Error.From(
+                ErrorCodes.RequestInvalid,
+                "member",
+                JsonSerializer.SerializeToElement("method")));
         }
 
         DateTimeOffset now = time.GetUtcNow();

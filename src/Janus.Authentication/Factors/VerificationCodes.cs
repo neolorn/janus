@@ -19,7 +19,9 @@ namespace Janus.Authentication.Factors;
 /// <remarks>
 /// Implements AUTH-FACT-004. A code lives <c>code.verification.lifetime</c> whatever
 /// issued it, dies after <c>code.verification.attempts</c> wrong tries, and is spent by
-/// the first right one, so the same digits never answer twice.
+/// the first right one, so the same digits never answer twice. Every try is decided
+/// under a lock on the code's row, so concurrent tries count as the same number of
+/// sequential ones and the right code answers once.
 /// </remarks>
 internal sealed class VerificationCodes(
     IVerificationCodeStore codes,
@@ -89,9 +91,9 @@ internal sealed class VerificationCodes(
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Nothing where the code was the one outstanding, which spends it;
-    /// <c>auth.code.invalid</c> where it was wrong and tries remain;
-    /// <c>auth.code.expired</c> where none is outstanding, where it has run out of
-    /// life or where this wrong try was the last one it had.
+    /// <c>auth.code.invalid</c> where it was wrong, the try that reaches the cap
+    /// included, which ends the code; <c>auth.code.expired</c> where none is
+    /// outstanding or it has run out of life.
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public async ValueTask<Result> PresentAsync(
@@ -114,48 +116,33 @@ internal sealed class VerificationCodes(
             return Result.Failure(failure);
         }
 
-        VerificationCode? outstanding = await codes.FindAsync(holder, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (outstanding is null)
-        {
-            return Expired();
-        }
-
-        if (!outstanding.IsLive(time.GetUtcNow()))
-        {
-            await EndAsync(holder, cancellationToken).ConfigureAwait(false);
-
-            return Expired();
-        }
-
-        if (outstanding.Is(entered))
-        {
-            // AUTH-FACT-004 AC3: the code is spent by the try that answered it, so the
-            // same digits never answer a second time.
-            await EndAsync(holder, cancellationToken).ConfigureAwait(false);
-
-            return Result.Success();
-        }
-
-        _ = outstanding.Missed();
-
-        // Enough wrong tries end the code, and a correct one afterwards is refused
-        // with it: what the person does next is ask for another (AUTH-FACT-004).
-        if (outstanding.Exhausted(cap))
-        {
-            await EndAsync(holder, cancellationToken).ConfigureAwait(false);
-
-            return Expired();
-        }
-
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
 
-        await codes.RecordAsync(outstanding, cancellationToken).ConfigureAwait(false);
+        // AUTH-FACT-004 AC4: the row is read under its lock, so a second try waits for
+        // this one to commit and decides on what it left.
+        VerificationCode? outstanding = await codes.FindForUpdateAsync(holder, cancellationToken)
+            .ConfigureAwait(false);
+
+        DateTimeOffset now = time.GetUtcNow();
+        Result answer = Judged(outstanding, entered, now);
+
+        if (outstanding is not null)
+        {
+            // The right code is spent by the try it answered, and a code out of life or
+            // out of tries is ended with the try that found it so (AUTH-FACT-004 AC3).
+            if (answer.Match(() => true, _ => false) || !outstanding.IsLive(now) || outstanding.Exhausted(cap))
+            {
+                await codes.RemoveAsync(holder, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                await codes.RecordAsync(outstanding, cancellationToken).ConfigureAwait(false);
+            }
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -163,7 +150,45 @@ internal sealed class VerificationCodes(
             return Result.Failure(notCommitted);
         }
 
-        return Result.Failure(Error.From(ErrorCodes.CodeInvalid));
+        return answer;
+    }
+
+    /// <summary>
+    /// The digits outstanding against something, which the landing page opened away
+    /// from the browser that asked for them shows (REG-SESS-003).
+    /// </summary>
+    /// <param name="holder">What the code was issued against.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The code as the person reads it, or nothing where none is live.</returns>
+    /// <exception cref="ArgumentNullException">The holder is absent.</exception>
+    public async ValueTask<string?> ShownAsync(
+        byte[] holder,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(holder);
+
+        VerificationCode? outstanding = await codes.FindAsync(holder, cancellationToken)
+            .ConfigureAwait(false);
+
+        return outstanding is not null && outstanding.IsLive(time.GetUtcNow())
+            ? VerificationCode.Read(outstanding.Code)
+            : null;
+    }
+
+    /// <summary>
+    /// Ends whatever code is outstanding against something, inside the transaction the
+    /// caller opened: what it was issued against was proved another way, changed or
+    /// given up.
+    /// </summary>
+    /// <param name="holder">What the code was issued against.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Nothing.</returns>
+    /// <exception cref="ArgumentNullException">The holder is absent.</exception>
+    public ValueTask EndAsync(byte[] holder, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(holder);
+
+        return codes.RemoveAsync(holder, cancellationToken);
     }
 
     /// <summary>
@@ -188,19 +213,33 @@ internal sealed class VerificationCodes(
 
     private static Result Expired() => Result.Failure(Error.From(ErrorCodes.CodeExpired));
 
+    // AUTH-FACT-004 AC3: each wrong try is refused as wrong, the one that reaches the
+    // cap included; whatever is presented once the code is gone or out of life is
+    // refused as expired, the right code included.
+    private static Result Judged(
+        VerificationCode? outstanding,
+        [NeverLogged] string entered,
+        DateTimeOffset now)
+    {
+        if (outstanding is null || !outstanding.IsLive(now))
+        {
+            return Expired();
+        }
+
+        if (outstanding.Is(entered))
+        {
+            return Result.Success();
+        }
+
+        _ = outstanding.Missed();
+
+        return Result.Failure(Error.From(ErrorCodes.CodeInvalid));
+    }
+
     private static TValue Withheld<TValue>(Error error, ref Error? failure)
     {
         failure = error;
 
         return default!;
-    }
-
-    private async ValueTask EndAsync(byte[] holder, CancellationToken cancellationToken)
-    {
-        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
-        await codes.RemoveAsync(holder, cancellationToken).ConfigureAwait(false);
-        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }
 }

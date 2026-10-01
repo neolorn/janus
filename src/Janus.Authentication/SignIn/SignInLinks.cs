@@ -155,8 +155,18 @@ internal sealed class SignInLinks(
     /// <param name="held">The pending sign-in.</param>
     /// <param name="entered">What was typed.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Success, or what the code produced.</returns>
+    /// <returns>
+    /// Success, which spends it; <c>auth.code.invalid</c> where the code was wrong, the
+    /// try that reaches <c>code.signin.attempts</c> included, which ends it;
+    /// <c>auth.code.expired</c> where it is gone or has lapsed.
+    /// </returns>
     /// <exception cref="ArgumentNullException">The pending sign-in is absent.</exception>
+    /// <remarks>
+    /// Implements AUTH-FACT-004. The code is an authentication code, held to its own
+    /// cap, and every try is decided under a lock on the pending sign-in's row, so
+    /// concurrent tries count as the same number of sequential ones and the right code
+    /// answers once.
+    /// </remarks>
     public async ValueTask<Result> SpendCodeAsync(
         PendingSignIn held,
         [NeverLogged] string entered,
@@ -167,7 +177,7 @@ internal sealed class SignInLinks(
         Error? failure = null;
 
         int attempts = (await configuration
-                .ReadAsync(Settings.CodeVerificationAttempts, cancellationToken)
+                .ReadAsync(Settings.CodeSigninAttempts, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<int>(error, ref failure));
 
@@ -176,44 +186,33 @@ internal sealed class SignInLinks(
             return Result.Failure(failure);
         }
 
-        if (!held.Matches(entered))
-        {
-            held.Missed();
-
-            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notBegunAgain)
-            {
-                return Result.Failure(notBegunAgain);
-            }
-
-            // Enough wrong codes end the link, which is what stops a six-digit code
-            // being guessed at leisure (AUTH-FACT-004).
-            if (held.WrongAttempts >= attempts)
-            {
-                await pending.RemoveAsync(held.Fingerprint, cancellationToken).ConfigureAwait(false);
-            }
-            else
-            {
-                await pending.RecordAsync(held, cancellationToken).ConfigureAwait(false);
-            }
-
-            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
-            {
-                return Result.Failure(notCommittedAgain);
-            }
-
-            return Result.Failure(
-                Error.From(held.WrongAttempts >= attempts ? ErrorCodes.CodeExpired : ErrorCodes.CodeInvalid));
-        }
-
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
 
-        await pending.RemoveAsync(held.Fingerprint, cancellationToken).ConfigureAwait(false);
+        PendingSignIn? locked = await pending
+            .FindForUpdateAsync(held.Fingerprint, cancellationToken)
+            .ConfigureAwait(false);
+
+        DateTimeOffset now = time.GetUtcNow();
+        Result answer = Spent(locked, entered, now);
+
+        if (locked is not null && !locked.HasExpired(now))
+        {
+            // The right code is spent by the try it answered, and enough wrong codes end
+            // the link, which is what stops a six-digit code being guessed at leisure
+            // (AUTH-FACT-004 AC3).
+            if (answer.Match(() => true, _ => false) || locked.WrongAttempts >= attempts)
+            {
+                await pending.RemoveAsync(locked.Fingerprint, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                await pending.RecordAsync(locked, cancellationToken).ConfigureAwait(false);
+            }
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -221,7 +220,7 @@ internal sealed class SignInLinks(
             return Result.Failure(notCommitted);
         }
 
-        return Result.Success();
+        return answer;
     }
 
     /// <summary>
@@ -245,11 +244,127 @@ internal sealed class SignInLinks(
         HeldIdentifiers standing = await identifiers.HeldAsync(held.Subject, cancellationToken)
             .ConfigureAwait(false);
 
-        // An address the account has given up since is judged on nothing.
+        // REG-IDENT-006 AC6: what went to an address the account has given up since
+        // signs nothing in.
         return standing.Find(email) is HeldIdentifier sent
-            && EmailAddress.TryParse(sent.Canonical, out EmailAddress address)
-                ? await domainLock.RefusedAsync(held.Subject, address, cancellationToken).ConfigureAwait(false)
-                : null;
+            ? await domainLock.RefusedAsync(held.Subject, sent.Canonical, cancellationToken).ConfigureAwait(false)
+            : Error.From(ErrorCodes.FactorRejected);
+    }
+
+    /// <summary>
+    /// Texts the code of a second step to the account's number, issued for the one
+    /// sign-in or step-up it was asked for.
+    /// </summary>
+    /// <param name="challenge">What the handle of that sign-in or step-up hashes to.</param>
+    /// <param name="subject">Whose account.</param>
+    /// <param name="factor">The second step the code is.</param>
+    /// <param name="source">The address the ask came from.</param>
+    /// <param name="language">The language the ask was made in.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Nothing, or the refusal of the send.</returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    /// <remarks>
+    /// Implements AUTH-FACT-002 AC6, AUTH-FACT-002b AC6 and AUTH-FACT-004. The code is an
+    /// authentication code, living <c>code.signin.lifetime</c> and capped by
+    /// <c>code.signin.attempts</c>, and it goes out as <c>secondstep-code</c> under the
+    /// purpose <c>secondfactor</c>. Where the carrier reports a recent change of SIM or
+    /// of network for the number, nothing is issued and nothing goes out, the
+    /// consideration is recorded, and the ask is answered as every ask is.
+    /// </remarks>
+    public async ValueTask<Result> SendSecondStepAsync(
+        [NeverLogged] byte[] challenge,
+        SubjectId subject,
+        Factor factor,
+        string source,
+        string language,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(challenge);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(language);
+
+        Error? failure = null;
+
+        TimeSpan lifetime = (await configuration
+                .ReadAsync(Settings.CodeSigninLifetime, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Withheld<TimeSpan>(error, ref failure));
+
+        IReadOnlyList<string> languages = (await configuration
+                .ReadAsync(Settings.NotificationLanguages, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Withheld<IReadOnlyList<string>>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
+        HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        if (held.Texted() is not HeldIdentifier number
+            || !PhoneNumber.TryParse(number.Canonical, out PhoneNumber texted)
+            || !await signals.AllowsAsync(factor, number.Canonical, subject, cancellationToken)
+                .ConfigureAwait(false))
+        {
+            return Result.Success();
+        }
+
+        string? settled = await identifiers.LanguageAsync(subject, cancellationToken).ConfigureAwait(false);
+        string code = VerificationCode.Draw(randomness);
+
+        _ = (await sending
+                .SendAsync(
+                    new SendRequest(
+                        SendDestination.Of(texted),
+                        MessageKind.SecondStepCode,
+                        RestrictionPurpose.SecondFactor,
+                        source,
+                        RecipientLanguage.Of(settled, language, languages))
+                    {
+                        Subject = subject,
+                        Values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
+                        {
+                            ["code"] = code,
+                        },
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match(_ => true, error => Withheld<bool>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        await pending
+            .ReplaceAsync(
+                PendingSignIn.Issue(
+                    OpaqueToken.Draw(randomness),
+                    subject,
+                    factor,
+                    email: null,
+                    code,
+                    browser: null,
+                    challenge,
+                    time.GetUtcNow(),
+                    lifetime),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
+
+        return Result.Success();
     }
 
     /// <summary>
@@ -300,7 +415,9 @@ internal sealed class SignInLinks(
 
     // What each kind of ask sends, and on which channels. The email code is a code to
     // type and carries no link; a link carries both, because the browser that opened
-    // it elsewhere shows the code (REG-SESS-003).
+    // it elsewhere shows the code (REG-SESS-003). Both codes are authentication codes:
+    // the email code lives code.signin.lifetime and the code a link shows lives as long
+    // as its link (AUTH-FACT-004).
     private static readonly Ask Links = new(
         [IdentifierKind.Email, IdentifierKind.Phone],
         MessageKind.SignInLink,
@@ -309,8 +426,8 @@ internal sealed class SignInLinks(
 
     private static readonly Ask Codes = new(
         [IdentifierKind.Email],
-        MessageKind.VerificationCode,
-        Settings.CodeVerificationLifetime,
+        MessageKind.SignInCode,
+        Settings.CodeSigninLifetime,
         CarriesLink: false);
 
     private sealed record Ask(
@@ -364,7 +481,7 @@ internal sealed class SignInLinks(
 
         if (delay > TimeSpan.Zero)
         {
-            return Result.Failure(ThrottleService.Refusal(time.GetUtcNow() + delay));
+            return Result.Failure(Error.Throttled(time.GetUtcNow() + delay));
         }
 
         if (channel is null)
@@ -372,17 +489,19 @@ internal sealed class SignInLinks(
             return Result.Success();
         }
 
-        // AUTH-FACT-002b: a sign-in link by text is the whole of the sign-in, so a
-        // number the carrier reports a recent change of SIM or of network for is
-        // refused rather than carrying it. The question is asked of the number and
-        // never of the account, so a number no account holds is answered the same way
-        // and nothing about existence is told either way (AUTH-ABUSE-003 AC1).
+        // AUTH-FACT-002b AC6: a sign-in link by text is the whole of the sign-in, so
+        // nothing goes to a number the carrier reports a recent change of SIM or of
+        // network for, and the ask is answered as every ask is. The question is asked
+        // of the number and never of the account, so a number no account holds is
+        // answered the same way and nothing about existence is told either way
+        // (AUTH-ABUSE-003 AC1).
         if (channel.Kind is IdentifierKind.Phone
             && !await signals
                 .AllowsAsync(channel.Factor, channel.Canonical, owner, cancellationToken)
                 .ConfigureAwait(false))
         {
-            return Result.Failure(Error.From(ErrorCodes.FactorRejected));
+            return await WithheldAsync(channel, language, source, ask, unheld: false, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         // Everything from here answers the caller the same way. What differs is what
@@ -454,8 +573,7 @@ internal sealed class SignInLinks(
         // An address a domain lock refuses is sent nothing, as a factor the policy has
         // not enabled is (REG-DOM-001, AUTH-ABUSE-003).
         if (email is not null
-            && EmailAddress.TryParse(channel.Canonical, out EmailAddress address)
-            && await domainLock.RefusedAsync(subject, address, cancellationToken).ConfigureAwait(false)
+            && await domainLock.RefusedAsync(subject, channel.Canonical, cancellationToken).ConfigureAwait(false)
                 is Error locked)
         {
             return locked.Code == ErrorCodes.IdentifierDomainNotAllowed
@@ -519,6 +637,7 @@ internal sealed class SignInLinks(
                     email,
                     code,
                     Fingerprint(browser),
+                    challenge: null,
                     time.GetUtcNow(),
                     lifetime),
                 cancellationToken)
@@ -531,6 +650,26 @@ internal sealed class SignInLinks(
         }
 
         return Result.Success();
+    }
+
+    // AUTH-FACT-004 AC3: each wrong try is refused as wrong, the one that reaches the
+    // cap included; whatever is presented once the code is gone or has lapsed is refused
+    // as expired, the right code included.
+    private static Result Spent(PendingSignIn? locked, [NeverLogged] string entered, DateTimeOffset now)
+    {
+        if (locked is null || locked.HasExpired(now))
+        {
+            return Result.Failure(Error.From(ErrorCodes.CodeExpired));
+        }
+
+        if (locked.Matches(entered))
+        {
+            return Result.Success();
+        }
+
+        locked.Missed();
+
+        return Result.Failure(Error.From(ErrorCodes.CodeInvalid));
     }
 
     private sealed record Channel(

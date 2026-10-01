@@ -35,6 +35,12 @@ internal sealed class PendingSignInRecord
     /// <summary>The <c>browser</c> column: what the asking browser carried.</summary>
     public byte[]? Browser { get; set; }
 
+    /// <summary>
+    /// The <c>challenge</c> column: what the handle of the sign-in or step-up a second
+    /// step's code was issued for hashes to.
+    /// </summary>
+    public byte[]? Challenge { get; set; }
+
     /// <summary>The <c>issued_at</c> column.</summary>
     public DateTimeOffset IssuedAt { get; set; }
 

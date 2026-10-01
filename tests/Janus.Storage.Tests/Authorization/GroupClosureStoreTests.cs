@@ -247,15 +247,40 @@ public sealed class GroupClosureStoreTests(DatabaseFixture database)
                 .Select(group => group.Id));
     }
 
+    /// <summary>
+    /// OPS-DB-001: a group's name sorts under the case-insensitive collation, so two names
+    /// that differ only in capitals are one place in the order, the older group first,
+    /// wherever the capital falls.
+    /// </summary>
+    [Fact]
+    public async Task OPS_DB_001_AnOrganizationsGroupsSortWithoutRegardToCaseAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        GroupId capital = await GroupAsync(organization, "Beta", new FixedTime(Noon));
+        GroupId lower = await GroupAsync(organization, "beta", new FixedTime(Noon.AddSeconds(1)));
+        GroupId first = await GroupAsync(organization, "alpha", new FixedTime(Noon.AddSeconds(2)));
+        GroupId last = await GroupAsync(organization, "Gamma", new FixedTime(Noon.AddSeconds(3)));
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(
+            [first, capital, lower, last],
+            (await Store(reading).InAsync(organization, TestContext.Current.CancellationToken))
+                .Select(group => group.Id));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
     private static GroupStore Store(StoreContext context) =>
         new(context, new DataConnections(context));
 
-    private async Task<GroupId> GroupAsync(OrganizationId organization, string name)
+    private Task<GroupId> GroupAsync(OrganizationId organization, string name) =>
+        GroupAsync(organization, name, TimeProvider.System);
+
+    private async Task<GroupId> GroupAsync(OrganizationId organization, string name, TimeProvider time)
     {
-        var id = GroupId.New(TimeProvider.System);
+        var id = GroupId.New(time);
 
         await using StoreContext writing = database.Context();
         await using var transaction = new UnitOfWork(writing);

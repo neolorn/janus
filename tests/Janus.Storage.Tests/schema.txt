@@ -1046,10 +1046,10 @@ table signin_challenges
   column expires_at timestamp with time zone not null
   column presented text[] not null
   column email uuid
-  column fingerprint_version integer
-  column identifier bytea
+  column fingerprint_version integer not null
+  column identifier bytea not null
   constraint ck_signin_challenges_handle CHECK ((octet_length(handle) = 32))
-  constraint ck_signin_challenges_identifier CHECK ((((identifier IS NULL) = (fingerprint_version IS NULL)) AND ((identifier IS NULL) OR (octet_length(identifier) = 32))))
+  constraint ck_signin_challenges_identifier CHECK ((octet_length(identifier) = 32))
   constraint ck_signin_challenges_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint fk_signin_challenges_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
   constraint pk_signin_challenges PRIMARY KEY (handle)
@@ -1065,7 +1065,9 @@ table signin_links
   column expires_at timestamp with time zone not null
   column wrong_attempts integer not null
   column email uuid
+  column challenge bytea
   constraint ck_signin_links_browser CHECK (((browser IS NULL) OR (octet_length(browser) = 32)))
+  constraint ck_signin_links_challenge CHECK (((challenge IS NULL) OR (octet_length(challenge) = 32)))
   constraint ck_signin_links_factor CHECK ((factor = ANY (ARRAY['apple'::text, 'breakGlass'::text, 'emailCode'::text, 'emailLink'::text, 'google'::text, 'passkey'::text, 'password'::text, 'phoneCode'::text, 'phoneLink'::text, 'recoveryCodes'::text, 'securityKey'::text, 'totp'::text])))
   constraint ck_signin_links_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_signin_links_token CHECK ((octet_length(token) = 32))

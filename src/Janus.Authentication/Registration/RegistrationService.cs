@@ -40,6 +40,7 @@ namespace Janus.Authentication.Registration;
 /// <param name="locks">Whether the inviting organization's domain lock admits an address.</param>
 /// <param name="issuing">What issues the session the person is signed in on.</param>
 /// <param name="devices">What remembers the registering browser.</param>
+/// <param name="throttle">The progressive delay a registration's asks and tries are held to.</param>
 /// <param name="capture">Where the consent controls the person ticked are recorded.</param>
 /// <param name="configuration">Where the registration settings are read.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
@@ -48,8 +49,8 @@ namespace Janus.Authentication.Registration;
 /// <param name="randomness">Where the codes and the tokens are drawn from.</param>
 /// <remarks>
 /// Implements REG-SESS-001 to REG-SESS-008, REG-PROF-002, REG-IDENT-010, REG-INV-001,
-/// REG-INV-002, REG-MAIL-001, REG-DOM-001, IDN-LIFE-009a, API-REDIR-002, AUTH-FACT-004
-/// and AUTH-ABUSE-003. Every answer is the same whether or not the identifier presented
+/// REG-INV-002, REG-MAIL-001, REG-DOM-001, IDN-LIFE-009a, API-REDIR-002, AUTH-FACT-004,
+/// AUTH-ABUSE-001 and AUTH-ABUSE-003. Every answer is the same whether or not the identifier presented
 /// belongs to an account already: the lookup decides only whether a code goes out and
 /// whether the holder is told. The one exception is the email an invitation binds,
 /// whose link only its mailbox received.
@@ -72,6 +73,7 @@ internal sealed class RegistrationService(
     DomainLock locks,
     SessionService issuing,
     DeviceService devices,
+    ThrottleService throttle,
     IConsents capture,
     IConfigurationStore configuration,
     IUnitOfWork work,
@@ -357,6 +359,11 @@ internal sealed class RegistrationService(
             return OutOfStep();
         }
 
+        if (await DelayedAsync(Attempt(live, value), cancellationToken).ConfigureAwait(false) is Error delayed)
+        {
+            return Result.Failure<RegistrationState>(delayed);
+        }
+
         if (live.Bound(kind) is StagedIdentity bound)
         {
             return await ResentAsync(live, bound, value, cancellationToken).ConfigureAwait(false);
@@ -459,6 +466,11 @@ internal sealed class RegistrationService(
             return Result.Failure<RegistrationState>(Error.From(ErrorCodes.IdentifierMaximum));
         }
 
+        if (await DelayedAsync(Attempt(live, value), cancellationToken).ConfigureAwait(false) is Error delayed)
+        {
+            return Result.Failure<RegistrationState>(delayed);
+        }
+
         return await CollectAsync(live, kind, value, isExtra: true, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -483,6 +495,11 @@ internal sealed class RegistrationService(
         if (live.Identity(identifier) is not StagedIdentity staged)
         {
             return OutOfStep();
+        }
+
+        if (await DelayedAsync(Attempt(live, value), cancellationToken).ConfigureAwait(false) is Error delayed)
+        {
+            return Result.Failure<RegistrationState>(delayed);
         }
 
         if (staged.IsLocked)
@@ -597,6 +614,15 @@ internal sealed class RegistrationService(
             return OutOfStep();
         }
 
+        // REG-SESS-003 AC6: a try is held to the delay the source and the identifier have
+        // earned, and every refused one is counted towards it.
+        ThrottleAttempt attempt = Attempt(live, staged.Canonical);
+
+        if (await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false) is Error delayed)
+        {
+            return Result.Failure<RegistrationState>(delayed);
+        }
+
         Error? failure = null;
 
         int cap = (await configuration
@@ -612,14 +638,16 @@ internal sealed class RegistrationService(
         // AC3), which is the answer a code that was never outstanding also gets.
         if (staged.IsVerified || staged.Code is not byte[] held || staged.CodeSpent)
         {
-            return Result.Failure<RegistrationState>(Error.From(ErrorCodes.CodeInvalid));
+            return await CountedAsync(attempt, Error.From(ErrorCodes.CodeInvalid), cancellationToken)
+                .ConfigureAwait(false);
         }
 
         DateTimeOffset now = time.GetUtcNow();
 
         if (staged.CodeExpiresAt <= now)
         {
-            return Result.Failure<RegistrationState>(Error.From(ErrorCodes.CodeExpired));
+            return await CountedAsync(attempt, Error.From(ErrorCodes.CodeExpired), cancellationToken)
+                .ConfigureAwait(false);
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -640,7 +668,8 @@ internal sealed class RegistrationService(
                 return Result.Failure<RegistrationState>(notCommittedAgain);
             }
 
-            return Result.Failure<RegistrationState>(Error.From(ErrorCodes.CodeInvalid));
+            return await CountedAsync(attempt, Error.From(ErrorCodes.CodeInvalid), cancellationToken)
+                .ConfigureAwait(false);
         }
 
         staged.Verify(now);
@@ -1304,6 +1333,37 @@ internal sealed class RegistrationService(
 
     private static IntegerSetting Maximum(IdentifierKind kind) =>
         kind is IdentifierKind.Email ? Settings.IdentifiersEmailMax : Settings.IdentifiersPhoneMax;
+
+    // AUTH-ABUSE-001, REG-SESS-003 AC6: a registration's asks and tries are held to the
+    // delay the session's source and the identifier's keyed hash have earned, as a
+    // sign-in's are, and nothing about any account is part of it.
+    private ThrottleAttempt Attempt(RegistrationSession session, string identifier) =>
+        new(session.Source, throttle.Identify(identifier, usernames: false));
+
+    private async ValueTask<Error?> DelayedAsync(ThrottleAttempt attempt, CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        TimeSpan delay = (await throttle.DelayAsync(attempt, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<TimeSpan>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return failure;
+        }
+
+        return delay > TimeSpan.Zero ? Error.Throttled(time.GetUtcNow() + delay) : null;
+    }
+
+    // The refusal is counted against the delay after it is decided, and answers as it
+    // was decided unless the count itself failed.
+    private async ValueTask<Result<RegistrationState>> CountedAsync(
+        ThrottleAttempt attempt,
+        Error refusal,
+        CancellationToken cancellationToken) =>
+        Result.Failure<RegistrationState>(
+            (await throttle.FailedAsync(attempt, cancellationToken).ConfigureAwait(false))
+                .Match(() => refusal, error => error));
 
     private static StagedIdentity? Sent(RegistrationSession session, byte[] fingerprint)
     {

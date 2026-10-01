@@ -3,6 +3,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Authentication.SignIn;
 using Janus.Core;
 using Janus.Privacy.SubjectKeys;
@@ -18,8 +19,9 @@ namespace Janus.Storage.Authentication.SignIn;
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <param name="randomness">The randomness each initialisation vector is drawn from.</param>
+/// <param name="connections">The connection and transaction the operation holds.</param>
 /// <remarks>
-/// Implements AUTH-FACT-003, PRIV-RIGHT-005a and CONV-DESIGN-003. Asking again
+/// Implements AUTH-FACT-003, AUTH-FACT-004, PRIV-RIGHT-005a and CONV-DESIGN-003. Asking again
 /// replaces what the account had outstanding of that kind, which is what stops an
 /// older message being a second way in. The code is held rather than fingerprinted,
 /// because a link opened away from the asking browser has to show it (REG-SESS-003),
@@ -28,8 +30,14 @@ namespace Janus.Storage.Authentication.SignIn;
 internal sealed class PendingSignInStore(
     StoreContext context,
     IKeyRing ring,
-    RandomNumberGenerator randomness) : IPendingSignInStore
+    RandomNumberGenerator randomness,
+    DataConnections connections) : IPendingSignInStore
 {
+    private const string Hold =
+        """
+        SELECT 1 FROM identity.signin_links WHERE token = @token FOR UPDATE;
+        """;
+
     /// <inheritdoc/>
     public async ValueTask<PendingSignIn?> FindAsync(
         byte[] fingerprint,
@@ -43,6 +51,41 @@ internal sealed class PendingSignInStore(
                     .ConfigureAwait(false),
                 cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is running.</exception>
+    public async ValueTask<PendingSignIn?> FindForUpdateAsync(
+        byte[] fingerprint,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(fingerprint);
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        if (ambient.Transaction is null)
+        {
+            throw new InvalidOperationException("A pending sign-in is held only inside the operation's transaction.");
+        }
+
+        _ = await ambient.Connection
+            .ExecuteScalarAsync<int?>(new CommandDefinition(
+                Hold,
+                new { token = fingerprint },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the try decides on is the row as it stood when the lock was taken.
+        if (context.SignInLinks.Local
+                .FirstOrDefault(record => CryptographicOperations.FixedTimeEquals(record.Token, fingerprint))
+            is PendingSignInRecord tracked)
+        {
+            await context.Entry(tracked).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return await FindAsync(fingerprint, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -85,6 +128,7 @@ internal sealed class PendingSignInStore(
                     Email = pending.Email,
                     Code = await HeldAsync(pending, cancellationToken).ConfigureAwait(false),
                     Browser = pending.Browser,
+                    Challenge = pending.Challenge,
                     IssuedAt = pending.IssuedAt,
                     ExpiresAt = pending.ExpiresAt,
                     WrongAttempts = pending.WrongAttempts,
@@ -179,6 +223,7 @@ internal sealed class PendingSignInStore(
             record.Email,
             code,
             record.Browser,
+            record.Challenge,
             record.IssuedAt,
             record.ExpiresAt,
             record.WrongAttempts);

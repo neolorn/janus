@@ -85,6 +85,36 @@ internal sealed class AuthenticatorStore(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<bool> LabelHeldAsync(
+        SubjectId subject,
+        Factor factor,
+        CredentialLabel label,
+        AuthenticatorId? except,
+        CancellationToken cancellationToken)
+    {
+        string spelled = label.Value;
+
+        // The column's collation decides the comparison, so the answer is the one the
+        // unique index gives (OPS-DB-001).
+        return except is AuthenticatorId renamed
+            ? await context.Authenticators
+                .AnyAsync(
+                    credential => credential.Subject == subject
+                        && credential.Factor == factor
+                        && credential.Label == spelled
+                        && credential.Id != renamed,
+                    cancellationToken)
+                .ConfigureAwait(false)
+            : await context.Authenticators
+                .AnyAsync(
+                    credential => credential.Subject == subject
+                        && credential.Factor == factor
+                        && credential.Label == spelled,
+                    cancellationToken)
+                .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<Authenticator>> OfAsync(
         SubjectId subject,
         CancellationToken cancellationToken)
