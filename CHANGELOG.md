@@ -1478,6 +1478,9 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- Recovery approvals are counted against `recovery.ratelimit.account` and
+  `recovery.ratelimit.approver` under one hold on the approvals, so approvals given at
+  once never pass a day limit that approvals given one after another would reach.
 - An enrolment session is held under a lock on its link from the start of the
   transaction that completes it and ended in that transaction, so two completions under
   one session at once write one credential and the second is refused

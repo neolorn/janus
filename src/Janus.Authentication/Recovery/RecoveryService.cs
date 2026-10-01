@@ -748,6 +748,16 @@ internal sealed class RecoveryService(
         DateTimeOffset now = time.GetUtcNow();
         DateTimeOffset since = now - Day;
 
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<ApprovedRecovery>(notBegun);
+        }
+
+        // D-166 X3: the approvals are counted under their hold, so approvals given at
+        // once are counted against both day limits as approvals given one after another.
+        await approvals.HoldAsync(cancellationToken).ConfigureAwait(false);
+
         IReadOnlyList<DateTimeOffset> drawn = await approvals.ForAsync(subject, since, cancellationToken)
             .ConfigureAwait(false);
 
@@ -756,13 +766,10 @@ internal sealed class RecoveryService(
 
         if (Later(Lifts(drawn, perAccount, now), Lifts(given, perApprover, now)) is DateTimeOffset lifts)
         {
-            return Result.Failure<ApprovedRecovery>(Error.Throttled(lifts));
-        }
-
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
-        {
-            return Result.Failure<ApprovedRecovery>(notBegun);
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(
+                    () => Result.Failure<ApprovedRecovery>(Error.Throttled(lifts)),
+                    Result.Failure<ApprovedRecovery>);
         }
 
         await approvals

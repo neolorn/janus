@@ -22,6 +22,9 @@ internal sealed class RecoveryApprovalStoreInMemory : IRecoveryApprovalStore
     public IReadOnlyList<RecoveryApproval> All => _given;
 
     /// <inheritdoc/>
+    public ValueTask HoldAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
+
+    /// <inheritdoc/>
     public ValueTask AddAsync(RecoveryApproval approval, CancellationToken cancellationToken)
     {
         _given.Add(approval);

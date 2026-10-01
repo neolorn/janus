@@ -245,7 +245,8 @@ internal static class StorageRegistration
         services.AddScoped<IRecoveryApprovalStore>(provider => new RecoveryApprovalStore(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<IKeyRing>(),
-            provider.GetRequiredService<RandomNumberGenerator>()));
+            provider.GetRequiredService<RandomNumberGenerator>(),
+            provider.GetRequiredService<DataConnections>()));
         services.AddScoped<ILossReportStore>(provider => new LossReportStore(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<IKeyRing>(),

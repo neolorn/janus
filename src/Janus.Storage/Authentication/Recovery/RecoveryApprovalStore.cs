@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Authentication.Recovery;
 using Janus.Core;
 using Janus.Privacy.SubjectKeys;
@@ -20,16 +21,33 @@ namespace Janus.Storage.Authentication.Recovery;
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <param name="ring">The key ring the keys are borrowed from at each use.</param>
 /// <param name="randomness">The randomness each initialisation vector is drawn from.</param>
+/// <param name="connections">The connection and transaction the operation holds.</param>
 /// <remarks>
 /// Implements AUTH-RECOV-002, AUTH-RECOV-003, PRIV-RIGHT-005a and CONV-DESIGN-003.
 /// Both day limits count rows and not the standing set, so an approval the link has
-/// already spent still counts against the day it was given.
+/// already spent still counts against the day it was given. The hold is one
+/// transaction-scoped advisory lock for every approval, so the two limits, which cross
+/// accounts and approvers, are never taken in two orders.
 /// </remarks>
 internal sealed class RecoveryApprovalStore(
     StoreContext context,
     IKeyRing ring,
-    RandomNumberGenerator randomness) : IRecoveryApprovalStore
+    RandomNumberGenerator randomness,
+    DataConnections connections) : IRecoveryApprovalStore
 {
+    private const string Hold =
+        "SELECT pg_advisory_xact_lock(hashtext('identity.recovery_approvals'));";
+
+    /// <inheritdoc/>
+    public async ValueTask HoldAsync(CancellationToken cancellationToken)
+    {
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        _ = await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(Hold, transaction: ambient.Transaction, cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
+
     /// <inheritdoc/>
     public async ValueTask AddAsync(RecoveryApproval approval, CancellationToken cancellationToken)
     {
