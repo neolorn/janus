@@ -143,10 +143,7 @@ internal sealed class SendLedger(StoreContext context, IKeyRing ring)
             }
         }
 
-        await context.Sends
-            .Where(send => send.SettlesAt < at)
-            .ExecuteDeleteAsync(cancellationToken)
-            .ConfigureAwait(false);
+        await SweepSettledAsync(at, cancellationToken).ConfigureAwait(false);
 
         context.Sends.Add(new SendRecord
         {
@@ -157,6 +154,13 @@ internal sealed class SendLedger(StoreContext context, IKeyRing ring)
             SettlesAt = at + settles,
         });
     }
+
+    /// <inheritdoc/>
+    public async ValueTask SweepSettledAsync(DateTimeOffset now, CancellationToken cancellationToken) =>
+        _ = await context.Sends
+            .Where(send => send.SettlesAt < now)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
 
     /// <inheritdoc/>
     public async ValueTask<bool> HoldsAsync(byte[] reference, CancellationToken cancellationToken)

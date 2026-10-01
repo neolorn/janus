@@ -40,4 +40,13 @@ internal interface ICallbackLedger
         DateTimeOffset at,
         DateTimeOffset from,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Forgets, under every version of the fingerprint key, each callback older than the
+    /// hour its rejections are counted over (D-166, 318).
+    /// </summary>
+    /// <param name="now">The clock.</param>
+    /// <param name="cancellationToken">Abandons the write.</param>
+    /// <returns>The work of forgetting them.</returns>
+    ValueTask SweepAsync(DateTimeOffset now, CancellationToken cancellationToken);
 }

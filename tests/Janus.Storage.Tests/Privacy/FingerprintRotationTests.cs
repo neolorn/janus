@@ -15,6 +15,7 @@ using Janus.Core;
 using Janus.Identity.Identifiers;
 using Janus.Privacy;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage.Authentication.Callbacks;
 using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Authentication.Sending;
@@ -49,6 +50,9 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
 
     private static readonly byte[] Next = RandomNumberGenerator.GetBytes(32);
 
+    // Chapter 10 section 4: the default half-life of a throttle counter.
+    private static readonly TimeSpan Decay = TimeSpan.FromMinutes(10);
+
     // What the application and the command hold once the new version is current.
     private static readonly FingerprintKeys Rotating = new(
         2,
@@ -70,7 +74,9 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
             """
             TRUNCATE identity.key_rotations, identity.accounts, identity.subject_keys, identity.identifiers,
                 identity.identifier_removals, identity.authenticators, identity.mailboxes, identity.username_holds,
-                identity.throttle_counters CASCADE;
+                identity.throttle_counters, identity.callbacks, identity.nonexistence_notices,
+                identity.registration_sources, identity.send_counters, identity.send_key_counters,
+                identity.sends CASCADE;
             DELETE FROM identity.audit_records WHERE action LIKE 'ops.keyrotation.%';
             """);
     }
@@ -261,13 +267,14 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
 
     /// <summary>
     /// OPS-SEC-003 AC6: a held username is a fingerprint no value stands behind, so the
-    /// previous version is not retired while one is held under it; once it is released,
-    /// the retirement forgets it with the ledger lines hashed under that version, and
-    /// keeps those hashed under the new one.
+    /// previous version is not retired while one is held under it, nor while a throttle
+    /// counter under it still stands; once the username is released and the sweep has
+    /// removed the counter that decayed, the retirement forgets the hold and keeps what
+    /// is counted under the new version.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_SEC_003_AC6_RetirementWaitsForAHeldUsernameAndForgetsWhatTheVersionHashedAsync()
+    public async Task OPS_SEC_003_AC6_RetirementWaitsForAHeldUsernameAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         DateTimeOffset releases = Noon.AddDays(1);
@@ -279,7 +286,7 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
             await new ThrottleLedger(counting, Deployment.Fingerprints)
                 .FailedAsync(ThrottleScope.Source, "192.0.2.1", standing: 0, Noon, cancellationToken);
             await new ThrottleLedger(counting, Ring(Rotating))
-                .FailedAsync(ThrottleScope.Source, "192.0.2.2", standing: 0, Noon, cancellationToken);
+                .FailedAsync(ThrottleScope.Source, "192.0.2.2", standing: 0, releases, cancellationToken);
             await counting.SaveChangesAsync(cancellationToken);
         }
 
@@ -288,7 +295,12 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
         Error refused = Refusal(await RetiredAsync(new FixedTime(Noon), cancellationToken));
 
         Assert.Equal(ErrorCodes.RotationNotReady, refused.Code);
-        Assert.Equal(1, refused.Details["pending"].GetInt32());
+        Assert.Equal(2, refused.Details["pending"].GetInt32());
+
+        await using (StoreContext sweeping = database.Context())
+        {
+            await new ThrottleLedger(sweeping, Ring(Rotating)).SweepAsync(releases, Decay, cancellationToken);
+        }
 
         KeyRetirement retirement = Retirement(await RetiredAsync(new FixedTime(releases), cancellationToken));
 
@@ -300,6 +312,120 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
         Assert.Equal(
             [2],
             await connection.QueryAsync<int>("SELECT fingerprint_version FROM identity.throttle_counters"));
+    }
+
+    /// <summary>
+    /// OPS-SEC-003 AC6 (D-166, 318): an abuse count under the previous version still
+    /// counts, so the retirement waits on every one of them, a line of each ledger, and
+    /// goes ahead once the expiry sweep has found that no check reads them any more.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_003_AC6_RetirementWaitsWhileAnAbuseCountUnderThePreviousVersionStillCountsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        DateTimeOffset later = Noon.AddDays(2);
+
+        await using (StoreContext counting = database.Context())
+        {
+            await new ThrottleLedger(counting, Deployment.Fingerprints)
+                .FailedAsync(ThrottleScope.Source, "192.0.2.9", standing: 0, Noon, cancellationToken);
+            await new SendLedger(counting, Deployment.Fingerprints).RecordAsync(
+                RandomNumberGenerator.GetBytes(32),
+                [
+                    new SendCount(
+                        new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, "+201001234579"),
+                        TimeSpan.FromDays(1)),
+                    new SendCount(
+                        new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.9"),
+                        TimeSpan.FromDays(1)),
+                ],
+                [],
+                Noon,
+                cancellationToken);
+            await new RegistrationSourceLedger(counting, Deployment.Fingerprints)
+                .RecordAsync("198.51.100.9", Noon, cancellationToken);
+            _ = await new NoticeLedger(counting, Deployment.Fingerprints)
+                .FirstAsync("nobody@example.test", Noon, TimeSpan.FromHours(1), cancellationToken);
+            _ = await new CallbackLedger(counting, Deployment.Fingerprints)
+                .ReceivedAsync("203.0.113.9", Noon, TimeSpan.FromMinutes(1), cancellationToken);
+            await counting.SaveChangesAsync(cancellationToken);
+        }
+
+        Completed(await RecomputedAsync(new FixedTime(Noon), cancellationToken));
+
+        Error refused = Refusal(await RetiredAsync(new FixedTime(Noon), cancellationToken));
+
+        Assert.Equal(ErrorCodes.RotationNotReady, refused.Code);
+        Assert.Equal(7, refused.Details["pending"].GetInt32());
+
+        await using (StoreContext sweeping = database.Context())
+        {
+            var sends = new SendLedger(sweeping, Ring(Rotating));
+
+            await new ThrottleLedger(sweeping, Ring(Rotating)).SweepAsync(later, Decay, cancellationToken);
+            await sends.SweepSettledAsync(later, cancellationToken);
+            await sends.SweepAsync(new CounterStaleness(later.AddDays(-1), later.AddDays(-1)), cancellationToken);
+            await new RegistrationSourceLedger(sweeping, Ring(Rotating)).SweepAsync(later, cancellationToken);
+            await new NoticeLedger(sweeping, Ring(Rotating)).SweepAsync(later, TimeSpan.FromHours(1), cancellationToken);
+            await new CallbackLedger(sweeping, Ring(Rotating)).SweepAsync(later, cancellationToken);
+        }
+
+        Assert.Equal([1], Retirement(await RetiredAsync(new FixedTime(later), cancellationToken)).Retired);
+    }
+
+    /// <summary>
+    /// OPS-SEC-003 AC6, AUTH-ABUSE-001 (D-166, 318): the sweep forgets a throttle counter
+    /// once its standing has decayed to nothing and not a second before, the database
+    /// deciding as <see cref="Throttle.Standing"/> does.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_003_AC6_TheSweepForgetsAThrottleCounterOnceItStandsAtNothingAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        DateTimeOffset now = Noon.AddDays(1);
+        List<(string Key, ThrottleCounter Counter)> written = [];
+
+        await using (StoreContext counting = database.Context())
+        {
+            var ledger = new ThrottleLedger(counting, Ring(Rotating));
+
+            foreach (int failures in new[] { 1, 3, 8 })
+            {
+                TimeSpan nothing = Decay * Math.Log2(2.0 * failures);
+
+                foreach (TimeSpan age in new[] { nothing - TimeSpan.FromSeconds(1), nothing + TimeSpan.FromSeconds(1) })
+                {
+                    var counter = new ThrottleCounter(failures, now - age);
+                    string key = $"192.0.2.{written.Count + 10}";
+
+                    await ledger.FailedAsync(ThrottleScope.Source, key, failures - 1, counter.At, cancellationToken);
+                    written.Add((key, counter));
+                }
+            }
+
+            await counting.SaveChangesAsync(cancellationToken);
+        }
+
+        await using (StoreContext sweeping = database.Context())
+        {
+            await new ThrottleLedger(sweeping, Ring(Rotating)).SweepAsync(now, Decay, cancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        var read = new ThrottleLedger(reading, Ring(Rotating));
+        List<bool> kept = [];
+
+        foreach ((string key, ThrottleCounter _) in written)
+        {
+            kept.Add(await read.FindAsync(ThrottleScope.Source, key, cancellationToken) is not null);
+        }
+
+        Assert.Equal([true, false, true, false, true, false], kept);
+        Assert.Equal(
+            kept,
+            written.Select(line => Throttle.Standing(line.Counter, now, Decay) > 0));
     }
 
     /// <summary>

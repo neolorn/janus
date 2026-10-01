@@ -50,6 +50,16 @@ internal interface IThrottleLedger
     ValueTask ClearAsync(ThrottleScope scope, string key, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Forgets, under every version of the fingerprint key, each counter whose standing
+    /// has decayed to nothing, which no attempt reads again (D-166, 318).
+    /// </summary>
+    /// <param name="now">The clock.</param>
+    /// <param name="halfLife">How long the accumulation takes to halve.</param>
+    /// <param name="cancellationToken">Abandons the write.</param>
+    /// <returns>The work of forgetting them.</returns>
+    ValueTask SweepAsync(DateTimeOffset now, TimeSpan halfLife, CancellationToken cancellationToken);
+
+    /// <summary>
     /// The keyed hash an identifier is counted under, which a sign-in carries in the
     /// identifier's place so that a factor refused against it is counted against the
     /// identifier that opened it.

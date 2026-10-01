@@ -70,6 +70,15 @@ internal interface ISendLedger
     ValueTask<bool> HoldsAsync(byte[] reference, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Forgets, under every version of the fingerprint key, each send whose settling time
+    /// has passed, which no delivery report can take back (D-166, 318).
+    /// </summary>
+    /// <param name="now">The clock.</param>
+    /// <param name="cancellationToken">Abandons the write.</param>
+    /// <returns>The work of forgetting them.</returns>
+    ValueTask SweepSettledAsync(DateTimeOffset now, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Takes one send back out of every bucket it counted against, which a delivery
     /// report indicating failure causes and nothing else does.
     /// </summary>

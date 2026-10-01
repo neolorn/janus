@@ -245,10 +245,11 @@ against the public contract of LIB-API-001.
   resumes where it stopped, and prints the new version's escrow copy. Once the copy is
   sealed, `rotate-fingerprint-key --sealed` retires the previous versions and prints
   `keepUntil` as `rotate-kek` does; it refuses with `model.rotation.notready` while a
-  username held after an erasure, or an address an erased account gave up, is
-  still reserved under one of them. Retirement forgets the throttle and sending counts
-  kept under a previous version, so any of those not touched since the new version
-  became current start again from nothing. A social sign-in link also holds the
+  username held after an erasure, an address an erased account gave up, or an abuse
+  count (a throttle counter, a send or its counter, a registration start, a notice or a
+  callback) is still standing under one of them. The expiry sweep removes, under every
+  version, each such count once its own check no longer reads it, so a retirement waits
+  on nothing that has stopped counting. A social sign-in link also holds the
   provider's subject encrypted under the account's key.
 - Every value the library encrypts that belongs to no subject (an invitation's
   identifiers, a mailbox reserved for nobody, a registration session, a queued message,

@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.BreakGlass;
+using Janus.Authentication.Callbacks;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Events;
 using Janus.Authentication.Factors;
@@ -345,6 +346,29 @@ internal static class BackgroundJobs
             .PruneAsync(now - LongestSession, cancellationToken).ConfigureAwait(false);
         _ = await services.GetRequiredService<IOpenIddictAuthorizationManager>()
             .PruneAsync(now - LongestSession, cancellationToken).ConfigureAwait(false);
+
+        // D-166, 318: every ledger line its own check no longer reads goes, under every
+        // version of the fingerprint key, so a retirement waits only on what still counts.
+        await services.GetRequiredService<ISendLedger>()
+            .SweepSettledAsync(now, cancellationToken).ConfigureAwait(false);
+        await services.GetRequiredService<IRegistrationSources>()
+            .SweepAsync(now, cancellationToken).ConfigureAwait(false);
+        await services.GetRequiredService<ICallbackLedger>()
+            .SweepAsync(now, cancellationToken).ConfigureAwait(false);
+
+        if ((await services.GetRequiredService<ThrottleService>()
+                .SweepAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error throttles)
+        {
+            return Result.Failure(throttles);
+        }
+
+        if ((await services.GetRequiredService<NonExistenceNotice>()
+                .SweepAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notices)
+        {
+            return Result.Failure(notices);
+        }
 
         // PRIV-RET-005 AC2: a send counter goes once it decides nothing, without
         // waiting for its key to be sent to again.

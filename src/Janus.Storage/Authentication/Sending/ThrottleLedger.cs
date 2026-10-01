@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Sending;
 using Janus.Core;
+using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Authentication.Sending;
 
@@ -91,6 +93,22 @@ internal sealed class ThrottleLedger(StoreContext context, IKeyRing ring)
                 context.ThrottleCounters.Remove(counter);
             }
         }
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask SweepAsync(DateTimeOffset now, TimeSpan halfLife, CancellationToken cancellationToken)
+    {
+        double halfLives = halfLife.TotalSeconds;
+
+        // Throttle.Standing rounds the decayed count, so a counter stands at nothing once
+        // it has halved below one half: after log2(2 * failures) half-lives. Read as a
+        // logarithm, the age never overflows however long the counter has stood.
+        _ = await context.ThrottleCounters
+            .Where(counter => counter.Failures <= 0
+                || (halfLives > 0
+                    && (now - counter.At).TotalSeconds > halfLives * Math.Log(2.0 * counter.Failures) / Math.Log(2.0)))
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

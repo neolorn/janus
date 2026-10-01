@@ -36,6 +36,13 @@ internal sealed class CallbackLedgerInMemory : ICallbackLedger
     }
 
     /// <inheritdoc/>
+    public ValueTask SweepAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        Counted.RemoveAll(callback => callback.At < now - TimeSpan.FromHours(1));
+
+        return ValueTask.CompletedTask;
+    }
+
     public ValueTask<int> RejectedAsync(
         string source,
         DateTimeOffset at,

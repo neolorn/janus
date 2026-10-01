@@ -33,4 +33,14 @@ internal interface INoticeLedger
     /// <param name="cancellationToken">Abandons the read.</param>
     /// <returns>The count.</returns>
     ValueTask<int> SinceAsync(DateTimeOffset from, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Forgets, under every version of the fingerprint key, each notice older than both
+    /// the window and the hour the probe alert counts over (D-166, 318).
+    /// </summary>
+    /// <param name="now">The clock.</param>
+    /// <param name="window">How long one address is told once.</param>
+    /// <param name="cancellationToken">Abandons the write.</param>
+    /// <returns>The work of forgetting them.</returns>
+    ValueTask SweepAsync(DateTimeOffset now, TimeSpan window, CancellationToken cancellationToken);
 }

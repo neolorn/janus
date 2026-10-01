@@ -42,6 +42,32 @@ internal sealed class NonExistenceNotice(
     private static readonly TimeSpan Hour = TimeSpan.FromHours(1);
 
     /// <summary>
+    /// The expiry sweep's pass over the notices: each one neither the window nor the
+    /// probe alert reads again goes, whatever version of the fingerprint key it is under
+    /// (D-166, 318).
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the pass.</param>
+    /// <returns>Success, or the failure to read the window.</returns>
+    public async ValueTask<Result> SweepAsync(CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        TimeSpan window = (await configuration
+                .ReadAsync(Settings.AbuseNonexistentWindow, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<TimeSpan>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
+        await ledger.SweepAsync(time.GetUtcNow(), window, cancellationToken).ConfigureAwait(false);
+
+        return Result.Success();
+    }
+
+    /// <summary>
     /// Answers one ask whose message is not going out.
     /// </summary>
     /// <param name="destination">The address or number that was asked about.</param>
