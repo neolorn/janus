@@ -907,6 +907,46 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-007 AC2, CONV-DESIGN-003 AC6: the displaced address confirms on the
+    /// verification as read under its lock, so a change abandoned while the
+    /// confirmation waited for it is not applied.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC2_AChangeAbandonedMeanwhileIsNotAppliedAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        await VerifiedAsync(email);
+
+        SendRequest asked = _notifications.Mail.Last(
+            sent => sent.Message is MessageKind.IdentifierChangeConfirm);
+
+        _pending.Locking = identifier =>
+            _ = _pending.RemoveAsync(identifier, TestContext.Current.CancellationToken).AsTask();
+
+        Assert.Equal(
+            ErrorCodes.CodeInvalid,
+            Refused(await Service.LandAsync(
+                session: null,
+                asked.Token(),
+                press: true,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(Primary, Named(await HeldAsync(), Primary).Canonical);
+    }
+
+    /// <summary>
     /// REG-IDENT-007 AC3 and AUTH-RECOV-002: within the enrolment session an approver
     /// opened for a lost mailbox, the swap applies when the new address verifies and
     /// the displaced one is never asked.
@@ -1229,5 +1269,10 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private static ErrorCode Refused(Result outcome) =>
         outcome.Match<ErrorCode>(
             () => throw new Xunit.Sdk.XunitException("The operation was admitted."),
+            error => error.Code);
+
+    private static ErrorCode Refused<TValue>(Result<TValue> outcome) =>
+        outcome.Match<ErrorCode>(
+            _ => throw new Xunit.Sdk.XunitException("The operation was admitted."),
             error => error.Code);
 }

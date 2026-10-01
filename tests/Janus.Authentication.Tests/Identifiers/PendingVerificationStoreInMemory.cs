@@ -27,6 +27,22 @@ internal sealed class PendingVerificationStoreInMemory : IPendingVerificationSto
         CancellationToken cancellationToken) =>
         ValueTask.FromResult(_pending.GetValueOrDefault(identifier));
 
+    /// <summary>
+    /// What another transaction committed on a verification while this one waited for
+    /// its lock, applied as the lock is taken.
+    /// </summary>
+    public Action<IdentifierId>? Locking { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask<PendingVerification?> FindForUpdateAsync(
+        IdentifierId identifier,
+        CancellationToken cancellationToken)
+    {
+        Locking?.Invoke(identifier);
+
+        return FindAsync(identifier, cancellationToken);
+    }
+
     /// <inheritdoc/>
     public ValueTask<PendingVerification?> FindByLinkAsync(
         byte[] fingerprint,

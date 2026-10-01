@@ -26,6 +26,19 @@ internal interface IPendingVerificationStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// The verification outstanding against an identifier, read under a lock on its row
+    /// held until the operation's transaction ends, so a code, a link or a confirmation
+    /// judged on it cannot race another (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="identifier">Which identifier.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The verification as committed when the lock was taken, or nothing.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask<PendingVerification?> FindForUpdateAsync(
+        IdentifierId identifier,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// The verification a link answers to, whichever of its two links it is.
     /// </summary>
     /// <param name="fingerprint">The fingerprint of the token the link carried.</param>

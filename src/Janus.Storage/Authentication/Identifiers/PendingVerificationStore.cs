@@ -44,6 +44,35 @@ internal sealed class PendingVerificationStore(
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<PendingVerification?> FindForUpdateAsync(
+        IdentifierId identifier,
+        CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A verification's row is held only inside the operation's transaction.");
+        }
+
+        bool tracked = context.IdentifierVerifications.Local.Any(record => record.Identifier == identifier);
+
+        PendingVerificationRecord? held = (await context.IdentifierVerifications
+                .FromSql($"SELECT * FROM identity.identifier_verifications WHERE identifier_id = {identifier.Value} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .SingleOrDefault();
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the decision is made on is the row as it stood when the lock was taken.
+        if (held is not null && tracked)
+        {
+            await context.Entry(held).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return held is null ? null : await ReadAsync(held, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<PendingVerification?> FindByLinkAsync(
         byte[] fingerprint,
         CancellationToken cancellationToken)

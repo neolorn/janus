@@ -227,28 +227,32 @@ internal sealed class IdentifierService(
         string source,
         CancellationToken cancellationToken)
     {
+        DateTimeOffset now = time.GetUtcNow();
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: the verification is read under its lock, so every wrong code of many
+        // at once is counted, and of two right ones only the first proves it.
         PendingVerification? waiting = await pending
-            .FindAsync(identifier, cancellationToken)
+            .FindForUpdateAsync(identifier, cancellationToken)
             .ConfigureAwait(false);
 
-        if (waiting is null || waiting.Subject != subject || waiting.Staged.IsVerified)
+        if (waiting is null
+            || waiting.Subject != subject
+            || waiting.Staged is { IsVerified: true } or { CodeExpiresAt: null } or { Code: null })
         {
-            return Result.Failure(Error.From(ErrorCodes.CodeInvalid));
+            return await SettledAsync(Error.From(ErrorCodes.CodeInvalid), cancellationToken).ConfigureAwait(false);
         }
 
         StagedIdentity staged = waiting.Staged;
 
-        if (staged.CodeExpiresAt is not DateTimeOffset expires
-            || staged.Code is not byte[] outstanding)
+        if (now >= staged.CodeExpiresAt)
         {
-            return Result.Failure(Error.From(ErrorCodes.CodeInvalid));
-        }
-
-        DateTimeOffset now = time.GetUtcNow();
-
-        if (now >= expires)
-        {
-            return Result.Failure(Error.From(ErrorCodes.CodeExpired));
+            return await SettledAsync(Error.From(ErrorCodes.CodeExpired), cancellationToken).ConfigureAwait(false);
         }
 
         Error? failure = null;
@@ -259,34 +263,16 @@ internal sealed class IdentifierService(
 
         if (failure is not null)
         {
-            return Result.Failure(failure);
+            return await SettledAsync(failure, cancellationToken).ConfigureAwait(false);
         }
 
-        if (staged.CodeSpent || !VerificationCode.Matches(outstanding, code))
+        if (staged.CodeSpent || !VerificationCode.Matches(staged.Code!, code))
         {
-            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notBegunAgain)
-            {
-                return Result.Failure(notBegunAgain);
-            }
-
             staged.Missed(cap);
 
             await pending.RecordAsync(waiting, cancellationToken).ConfigureAwait(false);
 
-            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
-            {
-                return Result.Failure(notCommittedAgain);
-            }
-
-            return Result.Failure(Error.From(ErrorCodes.CodeInvalid));
-        }
-
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
-        {
-            return Result.Failure(notBegun);
+            return await SettledAsync(Error.From(ErrorCodes.CodeInvalid), cancellationToken).ConfigureAwait(false);
         }
 
         staged.Verify(now);
@@ -343,6 +329,18 @@ internal sealed class IdentifierService(
                 return Result.Failure<LinkLanding>(notBegunAgain);
             }
 
+            // D-166 X3: the confirmation is written on the verification as read under its
+            // lock, so a code proved at the same moment is seen and the change is applied
+            // by whichever of the two comes second; one settled meanwhile has no row.
+            if (await pending.FindForUpdateAsync(waiting.Identifier, cancellationToken).ConfigureAwait(false)
+                is not PendingVerification confirming)
+            {
+                return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                    .Match(() => Result.Failure<LinkLanding>(Error.From(ErrorCodes.CodeInvalid)), Result.Failure<LinkLanding>);
+            }
+
+            waiting = confirming;
+
             waiting.ConfirmOld(now);
 
             // IDN-LIFE-008 AC1: the displaced address confirms from no session of the
@@ -386,6 +384,24 @@ internal sealed class IdentifierService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure<LinkLanding>(notBegun);
+        }
+
+        // D-166 X3: as for the displaced address's confirmation; a press that finds the
+        // value proved meanwhile changes nothing, as the press would have before it.
+        if (await pending.FindForUpdateAsync(waiting.Identifier, cancellationToken).ConfigureAwait(false)
+            is not PendingVerification pressing)
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Failure<LinkLanding>(Error.From(ErrorCodes.CodeInvalid)), Result.Failure<LinkLanding>);
+        }
+
+        waiting = pressing;
+        staged = waiting.Staged;
+
+        if (staged.IsVerified)
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Success(new LinkLanding(Verified: false, sameBrowser, Code: null)), Result.Failure<LinkLanding>);
         }
 
         staged.Verify(now);
