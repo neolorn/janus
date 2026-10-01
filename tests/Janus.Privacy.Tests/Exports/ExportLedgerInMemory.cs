@@ -20,6 +20,20 @@ internal sealed class ExportLedgerInMemory : IExportLedger
     /// </summary>
     public IReadOnlyList<(SubjectId Subject, DateTimeOffset At)> Taken => _taken;
 
+    /// <summary>
+    /// Gets or sets what another transaction commits while this one waits for the
+    /// subject's exports, so a test may count one under a count about to be made.
+    /// </summary>
+    public Action? Holding { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        Holding?.Invoke();
+
+        return ValueTask.CompletedTask;
+    }
+
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<DateTimeOffset>> SinceAsync(
         SubjectId subject,

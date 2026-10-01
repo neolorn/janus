@@ -91,6 +91,19 @@ internal sealed class ExportService(
             return Result.Failure<SubjectExport>(notBegun);
         }
 
+        // D-166 X3: the window is counted again with the subject's exports held, so
+        // exports at the same moment are each counted against the ones before them.
+        await ledger.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        if (await SpentAsync(subject, now, cancellationToken).ConfigureAwait(false)
+            is DateTimeOffset spentUntil)
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(
+                    () => Result.Failure<SubjectExport>(Error.Throttled(spentUntil)),
+                    Result.Failure<SubjectExport>);
+        }
+
         await ledger.RecordAsync(subject, now, cancellationToken).ConfigureAwait(false);
 
         // PRIV-RIGHT-005b: the host holds the half the library cannot produce, and is

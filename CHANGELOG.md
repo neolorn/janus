@@ -1478,6 +1478,8 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- A subject's export is counted against `privacy.export.ratelimit` with the subject's
+  exports held, so exports at once never pass the limit together.
 - A privacy request is queued with the subject's requests of its type held, so two
   submitted or entered at once queue one and send one receipt.
 - A privacy request is fulfilled, refused or carried by the deadline sweep under a

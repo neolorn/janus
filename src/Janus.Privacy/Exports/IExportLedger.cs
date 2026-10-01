@@ -18,6 +18,17 @@ namespace Janus.Privacy.Exports;
 internal interface IExportLedger
 {
     /// <summary>
+    /// Holds the subject's exports against every other export of theirs until the
+    /// operation's transaction ends, so the window is counted on what is committed and
+    /// two exports at once are counted one after the other (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    /// <param name="cancellationToken">Abandons the wait.</param>
+    /// <returns>The work of holding them.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
     /// When each of the subject's exports since an instant was assembled.
     /// </summary>
     /// <param name="subject">Whose.</param>
