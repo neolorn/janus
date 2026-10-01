@@ -110,6 +110,7 @@ internal static class ApiStatus
         [ErrorCodes.RegistrationSignedIn] = StatusCodes.Status409Conflict,
         [ErrorCodes.NoticeUnpublished] = StatusCodes.Status409Conflict,
         [ErrorCodes.InvitationMailboxHeld] = StatusCodes.Status409Conflict,
+        [ErrorCodes.CallbackInProgress] = StatusCodes.Status409Conflict,
 
         // Well formed, and refused on what it says.
         [ErrorCodes.AffirmationRequired] = StatusCodes.Status422UnprocessableEntity,

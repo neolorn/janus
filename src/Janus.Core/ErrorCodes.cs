@@ -889,6 +889,14 @@ public static class ErrorCodes
     public static ErrorCode CallbackRejected { get; } = ErrorCode.Parse("integration.callback.rejected");
 
     /// <summary>
+    /// A delivery of an event whose earlier delivery is still being carried. Not a
+    /// rejection; deliver it again once <c>integration.callback.claimtimeout</c> has
+    /// passed.
+    /// </summary>
+    /// <remarks>Implements BFF-MACH-002 AC3, chapter 10 section 1.6.</remarks>
+    public static ErrorCode CallbackInProgress { get; } = ErrorCode.Parse("integration.callback.inprogress");
+
+    /// <summary>
     /// Startup: an integration endpoint is not TLS. The details name the integration
     /// under <c>integration</c> and the setting under <c>key</c>; give it an
     /// <c>https</c> endpoint.
