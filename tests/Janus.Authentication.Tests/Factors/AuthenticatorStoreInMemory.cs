@@ -40,6 +40,12 @@ internal sealed class AuthenticatorStoreInMemory : IAuthenticatorStore
         ValueTask.FromResult(_held.GetValueOrDefault(id));
 
     /// <inheritdoc/>
+    public ValueTask<Authenticator?> FindForUpdateAsync(
+        AuthenticatorId id,
+        CancellationToken cancellationToken) =>
+        FindAsync(id, cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask<Authenticator?> ByCredentialAsync(
         ReadOnlyMemory<byte> credentialId,
         CancellationToken cancellationToken) =>

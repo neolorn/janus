@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -7,7 +8,10 @@ using Janus.Authentication.Factors;
 using Janus.Core;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Factors;
+using Janus.Storage.Authentication.Passwords;
+using Janus.Storage.Settings;
 using Microsoft.EntityFrameworkCore;
+using OtpNet;
 using Xunit;
 
 namespace Janus.Storage.Tests.Authentication;
@@ -218,6 +222,31 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// AUTH-FACT-005 AC3, CONV-DESIGN-003 AC6: the same valid code presented twice at once
+    /// is accepted once and refused as replayed once, the second presentation waiting for
+    /// the first on the credential's row.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_005_AC3_TheSameCodeTwiceAtOnceSucceedsOnceAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        var id = AuthenticatorId.New(TimeProvider.System);
+        byte[] secret = Secret();
+        var generator = Authenticator.EnrollingTotp(id, subject, Label("this phone"), secret, Noon);
+
+        generator.Confirm(Noon);
+        await WrittenAsync(generator);
+
+        string code = new Totp(secret, TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(DateTime.UtcNow);
+
+        ErrorCode?[] answers = await Task.WhenAll(PresentedAsync(subject, code), PresentedAsync(subject, code));
+
+        Assert.Equal(1, answers.Count(answer => answer is null));
+        Assert.Equal(1, answers.Count(answer => answer == ErrorCodes.CodeReplayed));
+    }
+
+    /// <summary>
     /// An account's credentials are every credential it holds, whatever state they
     /// stand in, which is what the reachable-assurance rule reads.
     /// </summary>
@@ -376,6 +405,24 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
 
         await Store(writing).AddAsync(credential, TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    // Each presentation is its own request: its own context, connection and transaction.
+    private async Task<ErrorCode?> PresentedAsync(SubjectId subject, string code)
+    {
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+
+        var codes = new TotpService(
+            Store(context),
+            new PasswordStore(context),
+            new ConfigurationStore(context, new DataConnections(context)),
+            work,
+            TimeProvider.System,
+            _deployment.Randomness);
+
+        return (await codes.PresentAsync(subject, code, TestContext.Current.CancellationToken))
+            .Match<ErrorCode?>(_ => null, error => error.Code);
     }
 
     private AuthenticatorStore Store(StoreContext context) =>

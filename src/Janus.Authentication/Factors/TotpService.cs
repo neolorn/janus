@@ -201,7 +201,7 @@ internal sealed class TotpService(
 
         foreach (Authenticator generator in generators)
         {
-            if (TotpCodes.Accepts(generator.Totp!, code, now, drift) is not long step)
+            if (TotpCodes.Accepts(generator.Totp!, code, now, drift) is null)
             {
                 continue;
             }
@@ -212,9 +212,20 @@ internal sealed class TotpService(
                 return Result.Failure<AuthenticatorId>(notBegun);
             }
 
-            generator.Consumed(step);
-            generator.Used(now);
-            await authenticators.RecordAsync(generator, cancellationToken).ConfigureAwait(false);
+            // D-166 X3: the step is judged again on the row under its lock, so the same
+            // code presented twice at once is accepted once and replayed once.
+            Authenticator? locked = await authenticators.FindForUpdateAsync(generator.Id, cancellationToken)
+                .ConfigureAwait(false);
+            long? consumed = locked is { IsUsable: true, Totp: not null }
+                ? TotpCodes.Accepts(locked.Totp, code, now, drift)
+                : null;
+
+            if (consumed is long accepted)
+            {
+                locked!.Consumed(accepted);
+                locked.Used(now);
+                await authenticators.RecordAsync(locked, cancellationToken).ConfigureAwait(false);
+            }
 
             if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
                 .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -222,7 +233,9 @@ internal sealed class TotpService(
                 return Result.Failure<AuthenticatorId>(notCommitted);
             }
 
-            return Result.Success(generator.Id);
+            return consumed is null
+                ? Result.Failure<AuthenticatorId>(Error.From(Refusal(generators, code, now, drift)))
+                : Result.Success(generator.Id);
         }
 
         return Result.Failure<AuthenticatorId>(Error.From(Refusal(generators, code, now, drift)));

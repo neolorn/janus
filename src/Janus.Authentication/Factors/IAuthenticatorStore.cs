@@ -22,6 +22,16 @@ internal interface IAuthenticatorStore
     ValueTask<Authenticator?> FindAsync(AuthenticatorId id, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads one credential under a lock on its row, held until the operation's
+    /// transaction ends, so a decision made on what it carries is made alone (D-166 X3).
+    /// </summary>
+    /// <param name="id">Which credential.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The credential as it stands once the lock is taken, or nothing.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask<Authenticator?> FindForUpdateAsync(AuthenticatorId id, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reads the credential an authenticator answered with, which is how a
     /// discoverable credential is resolved: the browser names the credential and not
     /// the account.

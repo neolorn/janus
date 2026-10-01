@@ -45,6 +45,35 @@ internal sealed class AuthenticatorStore(
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<Authenticator?> FindForUpdateAsync(
+        AuthenticatorId id,
+        CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A credential's row is held only inside the operation's transaction.");
+        }
+
+        bool tracked = context.Authenticators.Local.Any(record => record.Id == id);
+
+        AuthenticatorRecord? held = (await context.Authenticators
+                .FromSql($"SELECT * FROM identity.authenticators WHERE id = {id.Value} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .SingleOrDefault();
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the decision is made on is the row as it stood when the lock was taken.
+        if (held is not null && tracked)
+        {
+            await context.Entry(held).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return held is null ? null : await ReadAsync(held, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<Authenticator?> ByCredentialAsync(
         ReadOnlyMemory<byte> credentialId,
         CancellationToken cancellationToken)
