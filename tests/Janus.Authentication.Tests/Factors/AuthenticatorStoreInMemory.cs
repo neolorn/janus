@@ -33,6 +33,12 @@ internal sealed class AuthenticatorStoreInMemory : IAuthenticatorStore
         _held[authenticator.Id] = authenticator;
     }
 
+    /// <summary>
+    /// What another transaction committed on a credential's row while this one waited
+    /// for its lock, applied as the lock is taken.
+    /// </summary>
+    public Action<Authenticator>? Locking { get; set; }
+
     /// <inheritdoc/>
     public ValueTask<Authenticator?> FindAsync(
         AuthenticatorId id,
@@ -42,8 +48,15 @@ internal sealed class AuthenticatorStoreInMemory : IAuthenticatorStore
     /// <inheritdoc/>
     public ValueTask<Authenticator?> FindForUpdateAsync(
         AuthenticatorId id,
-        CancellationToken cancellationToken) =>
-        FindAsync(id, cancellationToken);
+        CancellationToken cancellationToken)
+    {
+        if (_held.GetValueOrDefault(id) is Authenticator held)
+        {
+            Locking?.Invoke(held);
+        }
+
+        return FindAsync(id, cancellationToken);
+    }
 
     /// <inheritdoc/>
     public ValueTask<Authenticator?> ByCredentialAsync(

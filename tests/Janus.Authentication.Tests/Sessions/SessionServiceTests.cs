@@ -170,6 +170,28 @@ public sealed class SessionServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-012a, CONV-DESIGN-003 AC6: a held credential invalidated by another
+    /// transaction after the sign-in read it is judged again under its lock and stays
+    /// invalidated, and no restoration is recorded.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_012a_AHoldEndedSinceTheReadIsNotRestoredAsync()
+    {
+        SubjectId subject = Subject();
+        Assert.True(CredentialLabel.TryParse("Linked", out CredentialLabel label));
+        var held = Authenticator.Linked(AuthenticatorId.New(_clock), subject, Factor.Google, label, Noon);
+
+        held.Hold();
+        _authenticators.Hold(held);
+        _authenticators.Locking = credential => credential.Invalidate();
+
+        _ = await BegunAsync(subject, [Factor.Password]);
+
+        Assert.Equal(AuthenticatorState.Invalidated, held.State);
+        Assert.Empty(_credentials.Records);
+    }
+
+    /// <summary>
     /// AUTH-SESS-003 AC3: the cookie value is opaque, yielding no information when
     /// decoded and nothing the record can be found by.
     /// </summary>

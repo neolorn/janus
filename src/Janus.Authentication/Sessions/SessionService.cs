@@ -1014,9 +1014,18 @@ internal sealed class SessionService(
             .OfAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        foreach (Authenticator held in enrolled.Where(credential =>
-                     credential.IsHeldByProvider && !presented.Contains(credential.Factor)))
+        foreach (Authenticator candidate in enrolled
+                     .Where(credential => credential.IsHeldByProvider && !presented.Contains(credential.Factor))
+                     .ToList())
         {
+            // D-166 X3: the hold is judged again on the row under its lock, so a credential
+            // invalidated or restored since the read is not made usable again here.
+            if (await authenticators.FindForUpdateAsync(candidate.Id, cancellationToken).ConfigureAwait(false)
+                is not { IsHeldByProvider: true } held)
+            {
+                continue;
+            }
+
             held.Restore();
 
             await authenticators.RecordAsync(held, cancellationToken).ConfigureAwait(false);

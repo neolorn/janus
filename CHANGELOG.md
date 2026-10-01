@@ -1478,6 +1478,9 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- A credential a provider's event held is restored at a sign-in by another factor only
+  where its row, read under a lock, is still held, so a credential invalidated meanwhile
+  stays invalidated.
 - A failed sign-in on a trusted browser is counted under a lock on the browser's row, so
   failures made at once are all counted and as many as
   `factor.trusteddevice.failurelimit` revoke its trust; a sign-in on it is judged again
