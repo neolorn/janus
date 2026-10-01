@@ -1103,9 +1103,6 @@ internal sealed class IdentifierService(
         return waiting is null ? null : (waiting, fingerprint);
     }
 
-    // IDN-ATTR-001: a message goes out in the language the account settled on, and in
-    // every language the deployment declares where it has settled none; the operations
-    // here carry no locale of the person's request.
     // A refusal decided under the set's lock ends the transaction that took the lock.
     private async ValueTask<Result> SettledAsync(Error refusal, CancellationToken cancellationToken) =>
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
@@ -1136,6 +1133,9 @@ internal sealed class IdentifierService(
         return await RequiredAsync(going, held, cancellationToken).ConfigureAwait(false);
     }
 
+    // IDN-ATTR-001: a message goes out in the language the account settled on, and in
+    // every language the deployment declares where it has settled none; the operations
+    // here carry no locale of the person's request.
     private async ValueTask<string?> LanguageAsync(SubjectId subject, CancellationToken cancellationToken)
     {
         string? settled = await directory.LanguageAsync(subject, cancellationToken)
