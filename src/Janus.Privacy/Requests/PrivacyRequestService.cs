@@ -468,15 +468,17 @@ internal sealed class PrivacyRequestService(
                     return Result.Success(false);
                 }
 
-                return await accounts
-                        .BeginDeletionAsync(
-                            request.Subject,
-                            DeletionOrigin.OutOfBandRequest,
-                            now,
-                            cancellationToken)
-                        .ConfigureAwait(false)
-                    ? Result.Success(true)
-                    : Result.Failure<bool>(Error.From(ErrorCodes.AccountStateConflict));
+                // D-166 X3: under the account's lock the window is begun only from a
+                // state that admits it, so a refusal there is a window another
+                // transaction began, or an erasure it finished, since the read above,
+                // which the request is recorded fulfilled against as above.
+                return Result.Success(await accounts
+                    .BeginDeletionAsync(
+                        request.Subject,
+                        DeletionOrigin.OutOfBandRequest,
+                        now,
+                        cancellationToken)
+                    .ConfigureAwait(false));
 
             // Rectification of data the subject cannot edit is the correction itself,
             // which is the deployment's own record and not the library's: what the

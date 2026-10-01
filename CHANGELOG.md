@@ -1478,6 +1478,9 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- An erasure fulfilled while the account enters its deletion window by another road is
+  recorded fulfilled against that window, as one found already deleting is, rather
+  than refused `identity.account.stateconflict`.
 - A privacy request entered out of band refuses a `detail` given blank or past 1024
   characters after trimming, and keeps one within the bound trimmed.
 - A maintenance log entry's `note`, where one is given, is 1 to 1024 characters after

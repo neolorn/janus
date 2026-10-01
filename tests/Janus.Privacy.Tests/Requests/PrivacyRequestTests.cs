@@ -409,6 +409,33 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-RIGHT-001, IDN-LIFE-003, CONV-DESIGN-003: an account that entered its window
+    /// while the fulfilment waited for its row has the erasure recorded fulfilled
+    /// against that window, as one found already deleting has.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001_AnAccountDeletingMeanwhileKeepsItsRunningWindowAsync()
+    {
+        DateTimeOffset began = Noon - TimeSpan.FromMinutes(1);
+
+        _accounts.Holding = subject =>
+        {
+            _accounts.Holding = null;
+            _accounts.Deletes(subject, DeletionOrigin.Self, began);
+        };
+
+        Result fulfilled = await ErasedAsync();
+
+        AccountStanding? standing = await _accounts.StandingAsync(Ahmed, CancellationToken.None);
+
+        Assert.Null(fulfilled.Match(() => (Error?)null, error => error));
+        Assert.Equal(DeletionOrigin.Self, standing?.DeletingBy);
+        Assert.Equal(began, standing?.DeletingSince);
+        Assert.Equal(PrivacyRequestStatus.Fulfilled, Assert.Single(_requests.Queue).Status);
+    }
+
+    /// <summary>
     /// IDN-LIFE-003 (D-166, message kinds (3)): a fulfilled out-of-band erasure that
     /// starts the window tells the security-notice set with the out-of-band deletion
     /// notice, which carries no cancel link, and never with the self-service one.

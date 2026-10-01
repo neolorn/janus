@@ -76,6 +76,12 @@ internal sealed class AccountStatesInMemory : IAccountStates
         return true;
     }
 
+    /// <summary>
+    /// Gets or sets what another transaction commits while a deletion waits for the
+    /// account's row, so a test may move the account under a decision about to be taken.
+    /// </summary>
+    public Action<SubjectId>? Holding { get; set; }
+
     /// <inheritdoc/>
     public ValueTask<bool> BeginDeletionAsync(
         SubjectId subject,
@@ -83,6 +89,8 @@ internal sealed class AccountStatesInMemory : IAccountStates
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
+        Holding?.Invoke(subject);
+
         // IDN-LIFE-003: a suspended account enters the window only on a request that
         // arrived out of band, holding the suspension for a cancellation to return.
         bool suspended = origin is DeletionOrigin.OutOfBandRequest
