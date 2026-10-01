@@ -130,7 +130,7 @@ internal sealed class LossReports(
             return Result.Failure<LossReported>(Error.From(ErrorCodes.CredentialSuspended));
         }
 
-        return await SuspendAsync(held, source, cancellationToken).ConfigureAwait(false);
+        return await SuspendAsync(context, held, source, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -138,16 +138,19 @@ internal sealed class LossReports(
     /// a loss report and a removal that would lower reachable assurance both do
     /// (AUTH-RECOV-007).
     /// </summary>
+    /// <param name="context">Who reported the loss or asked for the removal.</param>
     /// <param name="held">The credential.</param>
     /// <param name="source">The address the request came from.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>When the window ends, or what refused it.</returns>
-    /// <exception cref="ArgumentNullException">The credential is absent.</exception>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
     public async ValueTask<Result<LossReported>> SuspendAsync(
+        AccessContext context,
         Authenticator held,
         string source,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(held);
 
         Error? failure = null;
@@ -180,6 +183,26 @@ internal sealed class LossReports(
             .RecordedAsync(Reported, held.Subject, held.Id, now, cancellationToken)
             .ConfigureAwait(false);
 
+        // CONV-DESIGN-002: the suspension is announced in the transaction that makes it,
+        // naming who reported it, so a row that cannot be written leaves the credential
+        // as it was and nobody is told of a report that does not stand.
+        if (await AnnouncedAsync(
+                new CredentialSuspended(
+                    now,
+                    Key(Opened, held.Id, now),
+                    held.Id,
+                    held.Factor,
+                    report.InvalidatesAt)
+                {
+                    Subject = held.Subject,
+                    Actor = context.Acting,
+                },
+                cancellationToken)
+            .ConfigureAwait(false) is Error unannounced)
+        {
+            return Result.Failure<LossReported>(unannounced);
+        }
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
@@ -202,22 +225,6 @@ internal sealed class LossReports(
             .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
         {
             return Result.Failure<LossReported>(notCommittedAgain);
-        }
-
-        if (await AnnouncedAsync(
-                new CredentialSuspended(
-                    now,
-                    Key(Opened, held.Id, now),
-                    held.Id,
-                    held.Factor,
-                    report.InvalidatesAt)
-                {
-                    Subject = held.Subject,
-                },
-                cancellationToken)
-            .ConfigureAwait(false) is Error unannounced)
-        {
-            return Result.Failure<LossReported>(unannounced);
         }
 
         return Result.Success(new LossReported(held.Id, report.InvalidatesAt));
@@ -278,14 +285,12 @@ internal sealed class LossReports(
             .RecordedAsync(Cancelled, report.Subject, credential, now, cancellationToken)
             .ConfigureAwait(false);
 
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure(notCommitted);
-        }
-
         // AUTH-RECOV-007: a report is cancelled whether or not the credential is
-        // still there to restore, and the event states what was restored.
+        // still there to restore, and the event states what was restored, in the
+        // transaction that restores it (CONV-DESIGN-002). A session names who
+        // cancelled; a link names nobody.
+        AccessContext? cancelling = holder ? context : null;
+
         if (held is not null
             && await AnnouncedAsync(
                 new CredentialRestored(
@@ -295,12 +300,19 @@ internal sealed class LossReports(
                     held.Factor)
                 {
                     Subject = report.Subject,
-                    Actor = context?.Effective,
+                    Actor = cancelling?.Acting,
+                    Effective = cancelling?.Effective,
                 },
                 cancellationToken)
             .ConfigureAwait(false) is Error unannounced)
         {
             return Result.Failure(unannounced);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
         }
 
         return Result.Success();
@@ -482,14 +494,9 @@ internal sealed class LossReports(
             .RecordedAsync(Invalidated, principal, report.Subject, report.Credential, now, cancellationToken)
             .ConfigureAwait(false);
 
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure<int>(notCommitted);
-        }
-
         // AUTH-RECOV-007: invalidation is the one point at which the account's
-        // reachable assurance is recomputed, so it is the one a consumer hears about.
+        // reachable assurance is recomputed, so it is the one a consumer hears about,
+        // in the transaction that invalidates (CONV-DESIGN-002).
         if (held is not null
             && await AnnouncedAsync(
                 new CredentialInvalidated(
@@ -504,6 +511,12 @@ internal sealed class LossReports(
             .ConfigureAwait(false) is Error unannounced)
         {
             return Result.Failure<int>(unannounced);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<int>(notCommitted);
         }
 
         return Result.Success(1);

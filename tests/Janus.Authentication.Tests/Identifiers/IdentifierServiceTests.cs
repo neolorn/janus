@@ -92,6 +92,8 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
                 _authenticators,
                 _passwords,
                 new PolicyResolution(_memberships, _configuration, _raises),
+                _directory,
+                new PhoneSignals(null, new PhoneSignalAuditInMemory(), _work, _clock),
                 _clock),
             new EnrolmentSessions(_links, _work, _clock),
             _configuration,

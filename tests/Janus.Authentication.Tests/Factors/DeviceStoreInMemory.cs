@@ -27,12 +27,21 @@ internal sealed class DeviceStoreInMemory : IDeviceStore
     /// </summary>
     public int Found { get; private set; }
 
+    /// <summary>
+    /// How many times a browser has been looked up by the fingerprint of a token.
+    /// </summary>
+    public int LookedUp { get; private set; }
+
     /// <inheritdoc/>
     public ValueTask<Device?> FindByFingerprintAsync(
         byte[] fingerprint,
-        CancellationToken cancellationToken) =>
-        ValueTask.FromResult(
+        CancellationToken cancellationToken)
+    {
+        LookedUp++;
+
+        return ValueTask.FromResult(
             _tokens.TryGetValue(Key(fingerprint), out DeviceId id) ? _devices[id] : null);
+    }
 
     /// <inheritdoc/>
     public ValueTask<Device?> FindAsync(DeviceId id, CancellationToken cancellationToken)

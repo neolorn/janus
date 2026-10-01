@@ -59,7 +59,7 @@ internal sealed class ChallengeStore(StoreContext context, IKeyRing ring) : ICha
                     Subject = challenge.Subject,
                     Email = challenge.Email,
                     Identifier = challenge.Identifier,
-                    FingerprintVersion = challenge.Identifier is null ? null : Fingerprint.CurrentVersion(ring),
+                    FingerprintVersion = Fingerprint.CurrentVersion(ring),
                     WebAuthn = challenge.WebAuthn,
                     CreatedAt = challenge.CreatedAt,
                     ExpiresAt = challenge.ExpiresAt,

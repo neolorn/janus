@@ -1,7 +1,9 @@
 using System;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Authentication.Factors;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,9 +13,16 @@ namespace Janus.Storage.Authentication.Factors;
 /// The codes outstanding, over the <c>verification_codes</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
-/// <remarks>Implements AUTH-FACT-004 AC2 and CONV-DESIGN-003.</remarks>
-internal sealed class VerificationCodeStore(StoreContext context) : IVerificationCodeStore
+/// <param name="connections">The connection and transaction the operation holds.</param>
+/// <remarks>Implements AUTH-FACT-004 AC2, AUTH-FACT-004 AC4 and CONV-DESIGN-003.</remarks>
+internal sealed class VerificationCodeStore(StoreContext context, DataConnections connections)
+    : IVerificationCodeStore
 {
+    private const string Hold =
+        """
+        SELECT 1 FROM identity.verification_codes WHERE holder = @holder FOR UPDATE;
+        """;
+
     /// <inheritdoc/>
     public async ValueTask<VerificationCode?> FindAsync(
         byte[] holder,
@@ -33,6 +42,41 @@ internal sealed class VerificationCodeStore(StoreContext context) : IVerificatio
                 record.IssuedAt,
                 record.ExpiresAt,
                 record.Attempts);
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is running.</exception>
+    public async ValueTask<VerificationCode?> FindForUpdateAsync(
+        byte[] holder,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(holder);
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        if (ambient.Transaction is null)
+        {
+            throw new InvalidOperationException("A code is held only inside the operation's transaction.");
+        }
+
+        _ = await ambient.Connection
+            .ExecuteScalarAsync<int?>(new CommandDefinition(
+                Hold,
+                new { holder },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the try decides on is the row as it stood when the lock was taken.
+        if (context.VerificationCodes.Local
+                .FirstOrDefault(record => CryptographicOperations.FixedTimeEquals(record.Holder, holder))
+            is VerificationCodeRecord tracked)
+        {
+            await context.Entry(tracked).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return await FindAsync(holder, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

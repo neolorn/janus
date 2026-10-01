@@ -146,4 +146,11 @@ public enum MessageKind
     /// </summary>
     [JsonStringEnumMemberName("recovery-codes-reminder")]
     RecoveryCodesReminder = 20,
+
+    /// <summary>
+    /// The <c>emailCode</c> sign-in code, an authentication code and never a
+    /// verification code (AUTH-FACT-004).
+    /// </summary>
+    [JsonStringEnumMemberName("sign-in-code")]
+    SignInCode = 21,
 }

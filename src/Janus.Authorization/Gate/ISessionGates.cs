@@ -34,4 +34,18 @@ internal interface ISessionGates
     /// costs and what the person can present.
     /// </returns>
     ValueTask<Error?> OutstandingAsync(AccessContext context, string gate, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// What the named gate costs under the acting person's policy, where no session of
+    /// the library carries the request and a host reports what the caller proved.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="gate">The gate's name: one of chapter 10 section 5a, or one the host names.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The gate's three values: a section 5a gate as the policy states it, and one the
+    /// host names at the dearest gate of that policy; or the failure where no person
+    /// acts or the policy cannot be read.
+    /// </returns>
+    ValueTask<Result<Core.Gate>> CostAsync(AccessContext context, string gate, CancellationToken cancellationToken);
 }

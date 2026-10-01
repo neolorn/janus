@@ -267,6 +267,7 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             ErrorCodes.WebAuthnUserVerificationRequired,
             Refusal(await Service.PresentAsync(
                 Assertion() with { UserVerified = false },
+                identified: true,
                 TestContext.Current.CancellationToken)));
     }
 
@@ -285,6 +286,7 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             ErrorCodes.WebAuthnCounterMismatch,
             Refusal(await Service.PresentAsync(
                 Assertion() with { Counter = 8 },
+                identified: true,
                 TestContext.Current.CancellationToken)));
 
         (AuditAction action, SubjectId audited, AuthenticatorId credential) =
@@ -309,6 +311,7 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             ErrorCodes.WebAuthnCounterMismatch,
             Refusal(await Service.PresentAsync(
                 Assertion() with { Counter = 9 },
+                identified: true,
                 TestContext.Current.CancellationToken)));
     }
 
@@ -324,9 +327,11 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
 
         Assert.Null(Refusal(await Service.PresentAsync(
             Assertion() with { Counter = 0 },
+            identified: true,
             TestContext.Current.CancellationToken)));
         Assert.Null(Refusal(await Service.PresentAsync(
             Assertion() with { Counter = 0 },
+            identified: true,
             TestContext.Current.CancellationToken)));
     }
 
@@ -341,6 +346,7 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
 
         Assert.Null(Refusal(await Service.PresentAsync(
             Assertion() with { Counter = 10 },
+            identified: true,
             TestContext.Current.CancellationToken)));
 
         Authenticator held =
@@ -423,6 +429,7 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             ErrorCodes.WebAuthnRelyingPartyChanged,
             Refusal(await Service.PresentAsync(
                 Assertion() with { RelyingPartyId = "example.net" },
+                identified: true,
                 TestContext.Current.CancellationToken)));
     }
 
@@ -530,13 +537,61 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
 
         Assert.Null(Refusal(await Service.PresentAsync(
             Assertion() with { UserHandle = WebAuthnService.Handle(subject) },
+            identified: true,
             TestContext.Current.CancellationToken)));
 
         Assert.Equal(
             ErrorCodes.FactorRejected,
             Refusal(await Service.PresentAsync(
                 Assertion() with { UserHandle = WebAuthnService.Handle(Without()) },
+                identified: true,
                 TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// REG-PM-001 AC4: where the ceremony was opened for no named account, an assertion
+    /// that returns no user handle names nobody and is refused, where the same
+    /// assertion returning the handle is accepted.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_PM_001_AnAssertionWithNoHandleIsRefusedWhereNoAccountWasNamedAsync()
+    {
+        SubjectId subject = Subject();
+
+        await EnrolledAsync(subject, Registration());
+
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            Refusal(await Service.PresentAsync(
+                Assertion(),
+                identified: false,
+                TestContext.Current.CancellationToken)));
+        Assert.Null(Refusal(await Service.PresentAsync(
+            Assertion() with { UserHandle = WebAuthnService.Handle(subject), Counter = 0 },
+            identified: false,
+            TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// REG-PM-001 AC4: a second-step security key answers a ceremony opened for the
+    /// account the sign-in named and returns no handle, and is judged as it was.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_PM_001_ASecondStepKeyWithNoHandleIsJudgedAsBeforeAsync()
+    {
+        _ = Value(await Service.CompleteAsync(
+            Subject(),
+            Factor.SecurityKey,
+            Label(),
+            Registration(),
+            TestContext.Current.CancellationToken));
+
+        Assert.Null(Refusal(await Service.PresentAsync(
+            Assertion(),
+            identified: true,
+            TestContext.Current.CancellationToken)));
     }
 
     /// <summary>
@@ -553,6 +608,7 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             ErrorCodes.FactorRejected,
             Refusal(await Service.PresentAsync(
                 Assertion() with { UserHandle = "not-a-handle" },
+                identified: true,
                 TestContext.Current.CancellationToken)));
     }
 
@@ -570,6 +626,7 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             ErrorCodes.FactorRejected,
             Refusal(await Service.PresentAsync(
                 Assertion() with { UserHandle = Base64Url.EncodeToString(Guid.AllBitsSet.ToByteArray(bigEndian: true)) },
+                identified: true,
                 TestContext.Current.CancellationToken)));
     }
 
@@ -594,6 +651,7 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
             ErrorCodes.FactorRejected,
             Refusal(await Service.PresentAsync(
                 Assertion(),
+                identified: true,
                 TestContext.Current.CancellationToken)));
 
     /// <summary>

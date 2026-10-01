@@ -24,7 +24,8 @@ namespace Janus.Authentication.Organizations;
 /// binds is a member's the moment the membership attaches. Each organization's lock is
 /// judged on its own, so an account in two is held to both. A domain removed from a lock
 /// goes on refusing until it is listed anew, which is what stops new sign-ins with
-/// addresses in it even where the removal left the lock empty.
+/// addresses in it even where the removal left the lock empty. An address that does not
+/// parse has a domain that does not read, which every lock refuses.
 /// </remarks>
 internal sealed class DomainLock(
     IMembershipLookup memberships,
@@ -35,25 +36,30 @@ internal sealed class DomainLock(
     /// Judges one address for one account.
     /// </summary>
     /// <param name="subject">Whose address it is.</param>
-    /// <param name="address">The address.</param>
+    /// <param name="canonical">The address's canonical form, as the account holds it.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Nothing where every lock the account is under admits the address, or the
     /// refusal: <c>identity.identifier.domainnotallowed</c>, or the failure that kept a
     /// lock from being read.
     /// </returns>
+    /// <exception cref="ArgumentNullException">The address is absent.</exception>
     public async ValueTask<Error?> RefusedAsync(
         SubjectId subject,
-        EmailAddress address,
+        string canonical,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(canonical);
+
         IReadOnlyList<OrganizationId> organizations = await memberships
             .OfAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
+        string? domain = EmailAddress.TryParse(canonical, out EmailAddress address) ? Domain(address) : null;
+
         foreach (OrganizationId organization in organizations)
         {
-            if (await RefusedInAsync(organization, address, cancellationToken).ConfigureAwait(false)
+            if (await JudgedAsync(organization, domain, cancellationToken).ConfigureAwait(false)
                 is Error refused)
             {
                 return refused;
@@ -75,9 +81,19 @@ internal sealed class DomainLock(
     /// <c>identity.identifier.domainnotallowed</c>, or the failure that kept the lock
     /// from being read.
     /// </returns>
-    public async ValueTask<Error?> RefusedInAsync(
+    public ValueTask<Error?> RefusedInAsync(
         OrganizationId organization,
         EmailAddress address,
+        CancellationToken cancellationToken) =>
+        JudgedAsync(organization, Domain(address), cancellationToken);
+
+    // The domain an address is judged under, or nothing where it does not read.
+    private static string? Domain(EmailAddress address) =>
+        DomainName.TryReadOf(address, out string domain) ? domain : null;
+
+    private async ValueTask<Error?> JudgedAsync(
+        OrganizationId organization,
+        string? domain,
         CancellationToken cancellationToken)
     {
         Error? failure = null;
@@ -96,9 +112,7 @@ internal sealed class DomainLock(
             .OfAsync(organization, cancellationToken)
             .ConfigureAwait(false);
 
-        bool reads = DomainName.TryReadOf(address, out string domain);
-
-        return Admits(stated.EmailDomains ?? [], held, reads ? domain : null)
+        return Admits(stated.EmailDomains ?? [], held, domain)
             ? null
             : Error.From(ErrorCodes.IdentifierDomainNotAllowed);
     }

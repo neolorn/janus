@@ -80,6 +80,35 @@ public sealed class AccountFlowTests : IAsyncDisposable
         Assert.Equal(Without(nobody), Without(somebody));
     }
 
+    /// <summary>
+    /// IDN-ATTR-008 AC2: the preferred second step is named by the member <c>method</c>;
+    /// a method the account has not enrolled is 422 <c>api.request.invalid</c> naming it,
+    /// and a body without it is 400 <c>api.request.malformed</c> naming it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ATTR_008_AC2_AMethodNotEnrolledIsInvalidOverTheWireAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        Answer unheld = await browser.SendAsync(
+            "PUT",
+            "/account/secondstep/preferred",
+            ("method", Guid.NewGuid()));
+
+        Answer unnamed = await browser.SendAsync(
+            "PUT",
+            "/account/secondstep/preferred",
+            ("credential", Guid.NewGuid()));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, unheld.Status);
+        Assert.Equal(ErrorCodes.RequestInvalid.ToString(), unheld.Text("code"));
+        Assert.Equal("method", unheld.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Equal(StatusCodes.Status400BadRequest, unnamed.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), unnamed.Text("code"));
+        Assert.Equal("method", unnamed.Json().GetProperty("details").GetProperty("member").GetString());
+    }
+
     // The body without the correlation identifier, which differs between any two
     // requests by design (API-CONV-002 AC2).
     private static string Without(Answer answer) =>

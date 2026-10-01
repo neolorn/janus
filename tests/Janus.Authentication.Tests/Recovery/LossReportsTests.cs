@@ -4,6 +4,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using Janus.Authentication.Events;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
@@ -62,6 +63,7 @@ public sealed class LossReportsTests : IAsyncDisposable
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
+    private IEvents? _outbox;
 
     /// <summary>
     /// A deployment that can send the notices the window carries.
@@ -204,6 +206,75 @@ public sealed class LossReportsTests : IAsyncDisposable
         Assert.Equal(generator, invalidated.Credential);
         Assert.Equal(FactorCatalogue.Generated, invalidated.Kind);
         Assert.Equal(subject, invalidated.Subject);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007, CONV-DESIGN-002: the suspension's event row is written in the
+    /// transaction that suspends the credential, opens the report and records it, so a
+    /// row that cannot be written fails the report before that transaction commits:
+    /// nothing of it stands once the unit of work is disposed, and no notice of a
+    /// report that does not stand goes out.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_007_ASuspensionWhoseEventRowFailsLeavesTheCredentialActiveAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        AuthenticatorId generator = await EnrolledAsync(subject);
+        int sent = _notifications.Sent.Count;
+
+        _outbox = new EventOutbox(new PendingEventsUnwritable(), _work);
+        _work.Reset();
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () => await Service.ReportAsync(
+            AccessContext.Of(subject),
+            generator,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(sent, _notifications.Sent.Count);
+        Assert.Empty(_events.Of<CredentialSuspended>());
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-007, chapter 10 section 5b: a suspension names who reported it; a
+    /// cancellation from a session names who cancelled and whose identity they acted
+    /// under, and one from the link a notice carried names nobody.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_007_AReportNamesWhoMadeItAsync()
+    {
+        SubjectId own = await AccountAsync();
+        AuthenticatorId owned = await EnrolledAsync(own);
+        SubjectId other = await AccountAsync();
+        AuthenticatorId others = await EnrolledAsync(other);
+        var acting = new SubjectId(Guid.NewGuid());
+
+        _ = await Service.ReportAsync(AccessContext.Of(own), owned, Source, TestContext.Current.CancellationToken);
+
+        string token = _notifications.Mail[^1].Token();
+
+        _ = await Service.ReportAsync(
+            AccessContext.Of(acting, other),
+            others,
+            Source,
+            TestContext.Current.CancellationToken);
+        _ = await Service.CancelAsync(null, owned, token, TestContext.Current.CancellationToken);
+        _ = await Service.CancelAsync(
+            AccessContext.Of(acting, other),
+            others,
+            cancelToken: null,
+            TestContext.Current.CancellationToken);
+
+        IReadOnlyList<CredentialSuspended> suspended = _events.Of<CredentialSuspended>();
+        IReadOnlyList<CredentialRestored> restored = _events.Of<CredentialRestored>();
+
+        Assert.Equal(((SubjectId?)own, (SubjectId?)own), (suspended[0].Subject, suspended[0].Actor));
+        Assert.Equal(((SubjectId?)other, (SubjectId?)acting), (suspended[1].Subject, suspended[1].Actor));
+        Assert.Equal(((SubjectId?)own, (SubjectId?)null, (SubjectId?)null), (restored[0].Subject, restored[0].Actor, restored[0].Effective));
+        Assert.Equal(((SubjectId?)other, (SubjectId?)acting, (SubjectId?)other), (restored[1].Subject, restored[1].Actor, restored[1].Effective));
     }
 
     /// <summary>
@@ -588,7 +659,7 @@ public sealed class LossReportsTests : IAsyncDisposable
             _notifications,
             Landing.Links,
             _credentials,
-            _events,
+            _outbox ?? _events,
             _configuration,
             _work,
             _clock,
@@ -613,6 +684,7 @@ public sealed class LossReportsTests : IAsyncDisposable
             _passwords,
             new PasswordScreening(_corpus, _words, _configuration, _screening, _events, _clock),
             new Argon2idHasher(_randomness),
+            _events,
             _configuration,
             _work,
             _clock);
@@ -691,6 +763,7 @@ public sealed class LossReportsTests : IAsyncDisposable
             presented,
             [],
             AssuranceLevel.Aal2,
+            actor: null,
             TestContext.Current.CancellationToken);
 
         await _work.CommitAsync(TestContext.Current.CancellationToken);

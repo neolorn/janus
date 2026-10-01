@@ -58,6 +58,25 @@ internal interface IAuthenticatorStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Whether the account already holds a credential of this kind under this label,
+    /// compared as the database compares the column, without regard to case, and as its
+    /// unique index would refuse it.
+    /// </summary>
+    /// <param name="subject">Whose credentials.</param>
+    /// <param name="factor">Which kind.</param>
+    /// <param name="label">The label asked for.</param>
+    /// <param name="except">The credential being renamed, which does not hold against itself.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Whether the label is held.</returns>
+    /// <remarks>Implements AUTH-FACT-001 AC5 and OPS-DB-001.</remarks>
+    ValueTask<bool> LabelHeldAsync(
+        SubjectId subject,
+        Factor factor,
+        CredentialLabel label,
+        AuthenticatorId? except,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Records a newly enrolled credential.
     /// </summary>
     /// <param name="authenticator">The credential.</param>

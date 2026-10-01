@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Factors;
@@ -311,6 +312,8 @@ public sealed class AppPasswordsTests : IAsyncDisposable
                 _authenticators,
                 _passwords,
                 new PolicyResolution(_memberships, _configuration, _raises),
+                _identifiers,
+                new PhoneSignals(null, new PhoneSignalAuditInMemory(), _work, _clock),
                 _clock),
             _identifiers,
             _notifications,

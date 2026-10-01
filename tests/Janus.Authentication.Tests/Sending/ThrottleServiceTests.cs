@@ -161,6 +161,30 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-001: the delay a failure earns is the one the count it wrote earns,
+    /// so decay does not shorten a delay already running: a source at nine failures is
+    /// held the whole sixty seconds, and the instant it is next looked at is the one the
+    /// refusal names.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_ASourceAtNineFailuresIsHeldTheWholeDelayItEarnedAsync()
+    {
+        var attempt = new ThrottleAttempt("198.51.100.7", null);
+        DateTimeOffset failed = _clock.GetUtcNow();
+
+        await FailedAsync(attempt, times: 9);
+        _clock.Advance(TimeSpan.FromSeconds(59));
+
+        TimeSpan left = await DelayAsync(attempt);
+
+        _clock.Advance(left);
+
+        Assert.Equal(TimeSpan.FromSeconds(1), left);
+        Assert.Equal(failed + TimeSpan.FromSeconds(60), _clock.GetUtcNow());
+        Assert.Equal(TimeSpan.Zero, await DelayAsync(attempt));
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-001 AC3: an attack spread across addresses raises no source
     /// counter above the threshold, and is caught by the account component.
     /// </summary>
@@ -236,6 +260,36 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-001 AC5 and AC10: a recognised browser's failures are counted against
+    /// every component, so they hold other browsers and raise the account's alert, while
+    /// the browser itself is held by its source alone.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AC5_ARecognisedBrowsersFailuresCountAgainstTheAccountAsync()
+    {
+        _configuration.Set(Settings.AlertingAuthFailuresThreshold, 5);
+
+        var account = SubjectId.New(_randomness);
+        byte[] identifier = Typed("someone@example.test");
+
+        await FailedAsync(
+            new ThrottleAttempt("198.51.100.7", identifier) { Account = account, Recognised = true },
+            times: 5);
+
+        TimeSpan elsewhere = await DelayAsync(
+            new ThrottleAttempt("203.0.113.9", identifier) { Account = account });
+        TimeSpan returning = await DelayAsync(
+            new ThrottleAttempt("203.0.113.10", identifier) { Account = account, Recognised = true });
+        TimeSpan sameSource = await DelayAsync(
+            new ThrottleAttempt("198.51.100.7", identifier) { Account = account, Recognised = true });
+
+        Assert.Equal(TimeSpan.FromSeconds(4), elsewhere);
+        Assert.Equal(TimeSpan.Zero, returning);
+        Assert.Equal(TimeSpan.FromSeconds(4), sameSource);
+        Assert.Single(_events.Of<AlertRaised>());
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-001 AC6: the identifier component answers to the account
     /// component's cap and has no key of its own.
     /// </summary>
@@ -272,22 +326,6 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
         await FailedAsync(unheld, times: 5);
 
         Assert.Equal(await DelayAsync(unheld), await DelayAsync(held));
-    }
-
-    /// <summary>
-    /// AUTH-ABUSE-002 AC2: the refusal says when the next attempt is looked at, as the
-    /// one <c>retryAt</c> every throttle of the library answers with, and nothing else.
-    /// </summary>
-    [Fact]
-    public void AUTH_ABUSE_002_AC2_TheRemainingDelayIsCommunicated()
-    {
-        DateTimeOffset lifts = Noon.AddSeconds(4.2);
-
-        Error refusal = ThrottleService.Refusal(lifts);
-
-        Assert.Equal(ErrorCodes.Throttled, refusal.Code);
-        Assert.Equal("retryAt", Assert.Single(refusal.Details).Key);
-        Assert.Equal(lifts, Assert.Single(refusal.Details).Value.GetDateTimeOffset());
     }
 
     /// <summary>

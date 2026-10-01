@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -22,6 +23,13 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
     public int Committed { get; private set; }
 
     /// <summary>
+    /// How many outermost transactions were committed. A transaction opened inside
+    /// another joins it and its commit is the outer one's to make, as the store's is
+    /// (CONV-DESIGN-003).
+    /// </summary>
+    public int OutermostCommitted { get; private set; }
+
+    /// <summary>
     /// The failure the next opening answers, where a test sets one.
     /// </summary>
     public Error? RefusesBegin { get; set; }
@@ -30,6 +38,8 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
     /// The failure the next commit answers, where a test sets one.
     /// </summary>
     public Error? RefusesCommit { get; set; }
+
+    private int _depth;
 
     /// <inheritdoc/>
     public ValueTask<Result> BeginAsync(CancellationToken cancellationToken)
@@ -42,6 +52,7 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
         }
 
         Opened++;
+        _depth++;
 
         return ValueTask.FromResult(Result.Success());
     }
@@ -57,6 +68,12 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
         }
 
         Committed++;
+        _depth = Math.Max(_depth - 1, 0);
+
+        if (_depth is 0)
+        {
+            OutermostCommitted++;
+        }
 
         return ValueTask.FromResult(Result.Success());
     }
@@ -68,6 +85,8 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
     {
         Opened = 0;
         Committed = 0;
+        OutermostCommitted = 0;
+        _depth = 0;
     }
 
     /// <inheritdoc/>

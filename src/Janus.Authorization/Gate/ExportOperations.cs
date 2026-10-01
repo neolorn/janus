@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authorization.Model;
@@ -122,10 +121,7 @@ internal sealed class ExportOperations(
         {
             DateTimeOffset retryAt = limit <= 0 ? now + Window : taken[^limit] + Window;
 
-            return Result.Failure(Error.From(
-                ErrorCodes.Throttled,
-                "retryAt",
-                JsonSerializer.SerializeToElement(retryAt)));
+            return Result.Failure(Error.Throttled(retryAt));
         }
 
         await ledger

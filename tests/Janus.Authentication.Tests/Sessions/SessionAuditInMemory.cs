@@ -25,6 +25,12 @@ internal sealed class SessionAuditInMemory : ISessionAudit
     public List<(SubjectId? Subject, Factor Presented)> Failed { get; } = [];
 
     /// <summary>
+    /// Each refused code of the new-device check, with the account whose sign-in it
+    /// would have completed where there was one, in the order it was recorded.
+    /// </summary>
+    public List<SubjectId?> DeviceVerificationsFailed { get; } = [];
+
+    /// <summary>
     /// Each factor refused at a step-up, in the order it was recorded.
     /// </summary>
     public List<(SessionId Session, SubjectId Subject, Factor Presented, string? BreakGlassReason)> StepUpsFailed { get; } = [];
@@ -51,6 +57,17 @@ internal sealed class SessionAuditInMemory : ISessionAudit
         CancellationToken cancellationToken)
     {
         Failed.Add((subject, presented));
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask DeviceVerificationFailedAsync(
+        SubjectId? subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        DeviceVerificationsFailed.Add(subject);
 
         return ValueTask.CompletedTask;
     }

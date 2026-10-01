@@ -118,9 +118,10 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
     /// INF-DB-001 AC3: database-level case-insensitive comparison applies to the
     /// plaintext columns, read from the catalogue. The columns that carry the collation
     /// are exactly the ones OPS-DB-001 names, the plaintext a person spells and the
-    /// library compares: organization names and locked domain names. No other column
-    /// carries it, since identifiers are fingerprints whose case-insensitivity comes from
-    /// canonicalisation before the keyed function.
+    /// library compares or sorts: organization names, locked domain names, group names
+    /// and credential labels. No other column carries it, since identifiers are
+    /// fingerprints whose case-insensitivity comes from canonicalisation before the keyed
+    /// function.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -147,7 +148,9 @@ public sealed class SchemaTests(DatabaseFixture database) : IClassFixture<Databa
             new { schema = StoreContext.Schema, name = StoreContext.CaseInsensitiveCollation },
             cancellationToken: TestContext.Current.CancellationToken));
 
-        Assert.Equal(["organization_domains.domain", "organizations.name"], collated);
+        Assert.Equal(
+            ["authenticators.label", "groups.name", "organization_domains.domain", "organizations.name"],
+            collated);
     }
 
     /// <summary>

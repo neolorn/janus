@@ -5147,6 +5147,8 @@ question is asked of the number and that the answer to an ask is the same whethe
 an account holds it, so AUTH-ABUSE-003 AC1 still holds. `09` section 3 should add
 `auth.factor.rejected` to what `POST /auth/link` can answer.
 
+**Superseded by D-166.**
+
 ---
 
 ## 147. A purpose names the document that governs its consent
@@ -13017,6 +13019,8 @@ record are one session, and that the alert names the sessions and not the places
 AUTH-SESS-013 could say that the place kept under the person's key includes where the
 city lies.
 
+**Superseded by D-166.**
+
 ---
 
 ## 327. Where read volume is counted from, and how a person's normal is kept
@@ -16736,6 +16740,8 @@ could name these as failed authentication.
 
 **Revised by entry 422.**
 
+**Superseded by D-166.**
+
 ---
 
 ## 403. The rows REF-001 counts are chapter 10's live rows and the ledger's owed rows, and the boundary's codes are the literals parsed
@@ -17392,6 +17398,8 @@ description:
   the other.
 - AUTH-FACT-001 AC5 could say whether a label is unique regardless of case.
 
+**Superseded by D-166.**
+
 ---
 
 ## 418. A default instance of a value with rules gives no text, and fails where it is first read
@@ -17623,6 +17631,8 @@ first read.
 - It could say the exemption covers the identifier component as well as the account
   component, and never the source.
 
+**Superseded by D-166.**
+
 ---
 
 ## 422. A provider's return asks the source delay before the code is traded
@@ -17659,6 +17669,8 @@ first read.
 
 - AUTH-ABUSE-001 could say that a provider's return asks the source's delay before the
   code is traded.
+
+**Superseded by D-166.**
 
 ---
 

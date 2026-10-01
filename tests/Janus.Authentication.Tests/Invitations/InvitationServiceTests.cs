@@ -11,6 +11,7 @@ using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Organizations;
 using Janus.Authentication.Policies;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Factors;
@@ -1701,7 +1702,14 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private InvitationService Serving(IMailServer? server)
     {
         PolicyResolution policies = Policies;
-        var stepUp = new StepUpGuard(_sessions, _authenticators, _passwords, policies, _clock);
+        var stepUp = new StepUpGuard(
+            _sessions,
+            _authenticators,
+            _passwords,
+            policies,
+            _identifiers,
+            new PhoneSignals(null, new PhoneSignalAuditInMemory(), _work, _clock),
+            _clock);
 
         return new(
             _gate,

@@ -140,6 +140,10 @@ internal sealed class Deployment : IAsyncDisposable
     /// <param name="resolver">
     /// Whether the host registers a DNS resolver; it does, unless it says otherwise.
     /// </param>
+    /// <param name="signals">
+    /// What the carrier reports about a number, where the host declared something to
+    /// ask (AUTH-FACT-002b); nothing, unless it says otherwise.
+    /// </param>
     public Deployment(
         ApplicationKind application = ApplicationKind.Public,
         PasskeyAddresses? addresses = null,
@@ -149,7 +153,8 @@ internal sealed class Deployment : IAsyncDisposable
         SignOnClient? client = null,
         IReadOnlyList<SocialProvider>? providers = null,
         LogLevel logging = LogLevel.Trace,
-        bool resolver = true)
+        bool resolver = true,
+        PhoneSignalProvider? signals = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
@@ -186,6 +191,11 @@ internal sealed class Deployment : IAsyncDisposable
             client ?? Registered,
             providers ?? [SocialProviders.Google, SocialProviders.Apple],
             resolver);
+
+        if (signals is not null)
+        {
+            _ = builder.Services.AddSingleton(signals);
+        }
 
         _application = builder.Build();
 

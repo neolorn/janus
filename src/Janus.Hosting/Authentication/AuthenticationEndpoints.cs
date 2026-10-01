@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
+using Janus.Authentication.Factors;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.SignIn;
 using Janus.Core;
@@ -119,12 +120,20 @@ internal static class AuthenticationEndpoints
 
         if (request.LinkToken is { Length: > 0 } token)
         {
+            // A link token is answered only under a link factor, which is what a press
+            // that opens nothing is recorded under (CONV-LOG-005).
+            if (!FactorCatalogue.Sent.Any(sent => sent.Key.CarriesLink && sent.Value == request.Factor))
+            {
+                return Answers.Malformed("factor");
+            }
+
             return await LandedAsync(
                     await authentication
                         .LandAsync(
                             challenge,
                             Carried(context.Request, BrowserCookies.PreAuthentication),
                             token,
+                            request.Factor,
                             request.Press,
                             origin,
                             Carried(context.Request, BrowserCookies.Browser),
@@ -136,6 +145,21 @@ internal static class AuthenticationEndpoints
                     context,
                     cancellationToken)
                 .ConfigureAwait(false);
+        }
+
+        if (Asking(request))
+        {
+            return Answers.Of(
+                await authentication
+                    .AskAsync(
+                        challenge,
+                        request.Factor,
+                        stepping: null,
+                        origin.Address,
+                        RequestOrigin.Language(context.Request),
+                        cancellationToken)
+                    .ConfigureAwait(false),
+                Accepted);
         }
 
         return await ReachedAsync(
@@ -215,6 +239,21 @@ internal static class AuthenticationEndpoints
         if (request.ChallengeId is not { Length: > 0 } challenge)
         {
             return Answers.Malformed("challengeId");
+        }
+
+        if (Asking(request))
+        {
+            return Answers.Of(
+                await authentication
+                    .AskAsync(
+                        challenge,
+                        request.Factor,
+                        holder.Effective,
+                        RequestOrigin.Source(context.Request),
+                        RequestOrigin.Language(context.Request),
+                        cancellationToken)
+                    .ConfigureAwait(false),
+                Accepted);
         }
 
         return await ReachedAsync(
@@ -391,6 +430,13 @@ internal static class AuthenticationEndpoints
                 .ConfigureAwait(false),
             Nothing);
     }
+
+    // AUTH-FACT-002 AC6: a second step the library texts is asked for by naming it with
+    // nothing to present, and the ask is answered 202 whatever it finds (D-166).
+    private static bool Asking(PresentFactorRequest request) =>
+        request.Value is not { Length: > 0 }
+        && request.Assertion is null
+        && AuthenticationService.Asks(request.Factor);
 
     private static FactorPresentation Presented(PresentFactorRequest request) =>
         new(request.Factor)

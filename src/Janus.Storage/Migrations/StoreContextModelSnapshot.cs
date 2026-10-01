@@ -515,7 +515,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .IsRequired()
                     .HasMaxLength(64)
                     .HasColumnType("character varying(64)")
-                    .HasColumnName("label");
+                    .HasColumnName("label")
+                    .UseCollation("identity_ci");
 
                 b.Property<DateTimeOffset?>("LastUsedAt")
                     .HasColumnType("timestamp with time zone")
@@ -2258,11 +2259,12 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("expires_at");
 
-                b.Property<int?>("FingerprintVersion")
+                b.Property<int>("FingerprintVersion")
                     .HasColumnType("integer")
                     .HasColumnName("fingerprint_version");
 
                 b.Property<byte[]>("Identifier")
+                    .IsRequired()
                     .HasMaxLength(32)
                     .HasColumnType("bytea")
                     .HasColumnName("identifier");
@@ -2294,7 +2296,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     {
                         t.HasCheckConstraint("ck_signin_challenges_handle", "octet_length(handle) = 32");
 
-                        t.HasCheckConstraint("ck_signin_challenges_identifier", "(identifier IS NULL) = (fingerprint_version IS NULL) AND (identifier IS NULL OR octet_length(identifier) = 32)");
+                        t.HasCheckConstraint("ck_signin_challenges_identifier", "octet_length(identifier) = 32");
 
                         t.HasCheckConstraint("ck_signin_challenges_subject_not_max_uuid", "subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
                     });
@@ -2311,6 +2313,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasMaxLength(32)
                     .HasColumnType("bytea")
                     .HasColumnName("browser");
+
+                b.Property<byte[]>("Challenge")
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("challenge");
 
                 b.Property<byte[]>("Code")
                     .IsRequired()
@@ -2355,6 +2362,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.ToTable("signin_links", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_signin_links_browser", "browser IS NULL OR octet_length(browser) = 32");
+
+                        t.HasCheckConstraint("ck_signin_links_challenge", "challenge IS NULL OR octet_length(challenge) = 32");
 
                         t.HasCheckConstraint("ck_signin_links_factor", "factor IN ('apple', 'breakGlass', 'emailCode', 'emailLink', 'google', 'passkey', 'password', 'phoneCode', 'phoneLink', 'recoveryCodes', 'securityKey', 'totp')");
 
@@ -2640,7 +2649,8 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<string>("Name")
                     .IsRequired()
                     .HasColumnType("text")
-                    .HasColumnName("name");
+                    .HasColumnName("name")
+                    .UseCollation("identity_ci");
 
                 b.Property<Guid>("Organization")
                     .HasColumnType("uuid")

@@ -1,3 +1,5 @@
+using System;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Authorization.Gate;
 using Janus.Authorization.Model;
@@ -30,7 +32,7 @@ public sealed class StepUpGatesTests
     [Fact]
     public async Task AUTH_STEP_001_AC1_ExercisingABoundPermissionAsksForStepUpAsync()
     {
-        var gates = new StepUpGates(sessions: null, new AssuranceProviderInMemory(AssuranceLevel.Aal1));
+        var gates = new StepUpGates(sessions: null, new AssuranceProviderInMemory(Reported(AssuranceLevel.Aal1)), TimeProvider.System);
 
         Assert.Equal(ErrorCodes.StepUpRequired, await OutstandingAsync(gates, Bound));
         Assert.Null(await OutstandingAsync(gates, Unbound));
@@ -44,8 +46,8 @@ public sealed class StepUpGatesTests
     [Fact]
     public async Task AUTH_STEP_001_AC2_SplittingAnApplicationChangesNothingAsync()
     {
-        var one = new StepUpGates(sessions: null, new AssuranceProviderInMemory(AssuranceLevel.Aal1));
-        var other = new StepUpGates(sessions: null, new AssuranceProviderInMemory(AssuranceLevel.Aal1));
+        var one = new StepUpGates(sessions: null, new AssuranceProviderInMemory(Reported(AssuranceLevel.Aal1)), TimeProvider.System);
+        var other = new StepUpGates(sessions: null, new AssuranceProviderInMemory(Reported(AssuranceLevel.Aal1)), TimeProvider.System);
 
         Assert.Equal(await OutstandingAsync(one, Bound), await OutstandingAsync(other, Bound));
         Assert.Equal(await OutstandingAsync(one, Unbound), await OutstandingAsync(other, Unbound));
@@ -62,7 +64,7 @@ public sealed class StepUpGatesTests
     public async Task AUTH_STEP_002_AC3_ASessionThatMeetsAHostsGateIsNotChallengedAsync()
     {
         var sessions = new SessionGatesInMemory(_holder);
-        var gates = new StepUpGates(sessions, assurance: null);
+        var gates = new StepUpGates(sessions, assurance: null, TimeProvider.System);
 
         Error refused = Assert.IsType<Error>(await gates.OutstandingAsync(
             AccessContext.Of(_holder),
@@ -90,7 +92,7 @@ public sealed class StepUpGatesTests
         var sessions = new SessionGatesInMemory(Identifiers.Subject());
         sessions.Meets(Gate);
 
-        var gates = new StepUpGates(sessions, assurance: null);
+        var gates = new StepUpGates(sessions, assurance: null, TimeProvider.System);
 
         Assert.Equal(ErrorCodes.StepUpUnavailable, await OutstandingAsync(gates, Bound));
         Assert.Empty(sessions.Asked);
@@ -103,7 +105,7 @@ public sealed class StepUpGatesTests
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task AUTH_STEP_003_AC1_WithNoAssuranceProviderABoundPermissionIsDeniedAsync() =>
-        Assert.NotNull(await OutstandingAsync(new StepUpGates(sessions: null, assurance: null), Bound));
+        Assert.NotNull(await OutstandingAsync(new StepUpGates(sessions: null, assurance: null, TimeProvider.System), Bound));
 
     /// <summary>
     /// AUTH-STEP-003 AC2: the denial carries its own code, so a deployment that
@@ -116,17 +118,107 @@ public sealed class StepUpGatesTests
     {
         Assert.Equal(
             ErrorCodes.StepUpUnavailable,
-            await OutstandingAsync(new StepUpGates(sessions: null, assurance: null), Bound));
+            await OutstandingAsync(new StepUpGates(sessions: null, assurance: null, TimeProvider.System), Bound));
         Assert.Equal(
             ErrorCodes.StepUpRequired,
             await OutstandingAsync(
-                new StepUpGates(sessions: null, new AssuranceProviderInMemory(AssuranceLevel.Aal1)),
+                new StepUpGates(sessions: null, new AssuranceProviderInMemory(Reported(AssuranceLevel.Aal1)), TimeProvider.System),
                 Bound));
     }
+
+    /// <summary>
+    /// LIB-HOST-004 AC3: where no session of the library carries the request, the gate
+    /// costs what the acting person's policy says, and a provider reporting a proof that
+    /// reaches the level, recently enough, admits the action; a gate asking for what the
+    /// account can reach reads the reachable level the provider reports.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_HOST_004_AProviderReportingTheGateMetAdmitsTheActionAsync()
+    {
+        var sessions = new SessionGatesInMemory(Identifiers.Subject());
+
+        sessions.Costs(Gate, new Core.Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(5)));
+
+        Assert.Null(await OutstandingAsync(Reporting(sessions, Reported(AssuranceLevel.Aal2)), Bound));
+
+        sessions.Costs(Gate, new Core.Gate(GateLevel.Reachable, PhishingResistant: false, TimeSpan.FromMinutes(5)));
+
+        Assert.Null(await OutstandingAsync(Reporting(sessions, Reported(AssuranceLevel.Aal1)), Bound));
+        Assert.Equal(
+            ErrorCodes.StepUpRequired,
+            await OutstandingAsync(
+                Reporting(sessions, Reported(AssuranceLevel.Aal1) with { Reachable = AssuranceLevel.Aal2 }),
+                Bound));
+        Assert.Empty(sessions.Asked);
+    }
+
+    /// <summary>
+    /// LIB-HOST-004 AC3: a proof older than the gate's maximum age meets nothing, and the
+    /// refusal carries the gate, the outcome <c>present</c>, no options and no pending
+    /// instant; a report that cannot be read is refused the same way.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_HOST_004_AProviderReportingAnOlderProofIsRefusedWithTheGateAsync()
+    {
+        var sessions = new SessionGatesInMemory(Identifiers.Subject());
+
+        sessions.Costs(Gate, new Core.Gate(GateLevel.Aal2, PhishingResistant: false, TimeSpan.FromMinutes(5)));
+
+        Error refused = Assert.IsType<Error>(await RefusalAsync(Reporting(
+            sessions,
+            Reported(AssuranceLevel.Aal2) with { AttainedAt = TimeProvider.System.GetUtcNow() - TimeSpan.FromMinutes(10) })));
+
+        Assert.Equal(ErrorCodes.StepUpRequired, refused.Code);
+        Assert.Equal(
+            "{\"level\":\"aal2\",\"phishingResistant\":false,\"maxAge\":300}",
+            refused.Details["required"].GetRawText());
+        Assert.Equal("present", refused.Details["outcome"].GetString());
+        Assert.Equal(0, refused.Details["options"].GetArrayLength());
+        Assert.Equal(JsonValueKind.Null, refused.Details["pendingUntil"].ValueKind);
+        Assert.Equal(
+            ErrorCodes.StepUpRequired,
+            await OutstandingAsync(Reporting(sessions, attained: null), Bound));
+    }
+
+    /// <summary>
+    /// LIB-HOST-004 AC3: a gate asking for phishing resistance is not met by a proof the
+    /// provider reports was not phishing-resistant, whatever level it reached.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_HOST_004_AProviderReportingNoPhishingResistanceMeetsNoPhishingResistantGateAsync()
+    {
+        var sessions = new SessionGatesInMemory(Identifiers.Subject());
+
+        sessions.Costs(Gate, new Core.Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5)));
+
+        Error refused = Assert.IsType<Error>(await RefusalAsync(Reporting(sessions, Reported(AssuranceLevel.Aal2))));
+
+        Assert.Equal(ErrorCodes.StepUpRequired, refused.Code);
+        Assert.True(refused.Details["required"].GetProperty("phishingResistant").GetBoolean());
+        Assert.Null(await OutstandingAsync(
+            Reporting(sessions, Reported(AssuranceLevel.Aal2) with { PhishingResistant = true }),
+            Bound));
+    }
+
+    // What a host reports of a proof made a minute ago, reaching no further than it.
+    private static AttainedAssurance Reported(AssuranceLevel level) =>
+        new(level, PhishingResistant: false, TimeProvider.System.GetUtcNow() - TimeSpan.FromMinutes(1), level);
+
+    private static StepUpGates Reporting(SessionGatesInMemory sessions, AttainedAssurance? attained) =>
+        new(sessions, new AssuranceProviderInMemory(attained), TimeProvider.System);
 
     private static AuthorizationModel Model() => AuthorizationModel.Of(HostDomain.Declared()
         .StepUpGate(Bound.ToString(), Gate)
         .Build());
+
+    private async Task<Error?> RefusalAsync(StepUpGates gates) =>
+        await gates.OutstandingAsync(
+            AccessContext.Of(_holder),
+            Model().GateOf(Bound),
+            TestContext.Current.CancellationToken);
 
     // The gate the host bound the permission to, as the access gate reads it.
     private async Task<ErrorCode?> OutstandingAsync(StepUpGates gates, Permission permission) =>

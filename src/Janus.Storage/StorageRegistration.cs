@@ -238,7 +238,8 @@ internal static class StorageRegistration
         services.AddScoped<IPendingSignInStore>(provider => new PendingSignInStore(
             provider.GetRequiredService<StoreContext>(),
             provider.GetRequiredService<IKeyRing>(),
-            provider.GetRequiredService<RandomNumberGenerator>()));
+            provider.GetRequiredService<RandomNumberGenerator>(),
+            provider.GetRequiredService<DataConnections>()));
         services.AddScoped<IPolicyRaiseStore, PolicyRaiseStore>();
         services.AddScoped<IRecoveryLinkStore, RecoveryLinkStore>();
         services.AddScoped<IRecoveryApprovalStore>(provider => new RecoveryApprovalStore(

@@ -106,7 +106,8 @@ internal sealed class AuthenticatorConfiguration : IEntityTypeConfiguration<Auth
 
         builder.Property(credential => credential.Label)
             .HasColumnName("label")
-            .HasMaxLength(LabelLength);
+            .HasMaxLength(LabelLength)
+            .UseCollation(StoreContext.CaseInsensitiveCollation);
 
         builder.Property(credential => credential.State)
             .HasColumnName("state")
