@@ -1478,6 +1478,10 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- A sign-in or a step-up is completed under a lock on its challenge's row, from before
+  the session is issued or raised until the challenge is removed, so one challenge
+  completed twice at once issues one session and the second is refused
+  `auth.factor.rejected`.
 - Recovery approvals are counted against `recovery.ratelimit.account` and
   `recovery.ratelimit.approver` under one hold on the approvals, so approvals given at
   once never pass a day limit that approvals given one after another would reach.

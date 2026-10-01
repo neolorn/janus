@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.SignIn;
@@ -33,17 +34,38 @@ internal sealed class ChallengeStore(StoreContext context, IKeyRing ring) : ICha
             .FindAsync([fingerprint], cancellationToken)
             .ConfigureAwait(false);
 
-        return record is null
-            ? null
-            : Challenge.Existing(
-                record.Handle,
-                record.Subject,
-                record.Email,
-                record.Identifier,
-                record.WebAuthn,
-                record.CreatedAt,
-                record.ExpiresAt,
-                [.. record.Presented.Select(VocabularyConverter<Factor>.Read)]);
+        return Read(record);
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<Challenge?> FindForUpdateAsync(
+        byte[] fingerprint,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(fingerprint);
+
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A sign-in's row is held only inside the operation's transaction.");
+        }
+
+        bool tracked = context.SignInChallenges.Local.Any(record => CryptographicOperations.FixedTimeEquals(record.Handle, fingerprint));
+
+        ChallengeRecord? held = (await context.SignInChallenges
+                .FromSql($"SELECT * FROM identity.signin_challenges WHERE handle = {fingerprint} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .SingleOrDefault();
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the decision is made on is the row as it stood when the lock was taken.
+        if (held is not null && tracked)
+        {
+            await context.Entry(held).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return Read(held);
     }
 
     /// <inheritdoc/>
@@ -103,6 +125,19 @@ internal sealed class ChallengeStore(StoreContext context, IKeyRing ring) : ICha
             .Where(challenge => challenge.ExpiresAt <= now)
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
+
+    private static Challenge? Read(ChallengeRecord? record) =>
+        record is null
+            ? null
+            : Challenge.Existing(
+                record.Handle,
+                record.Subject,
+                record.Email,
+                record.Identifier,
+                record.WebAuthn,
+                record.CreatedAt,
+                record.ExpiresAt,
+                [.. record.Presented.Select(VocabularyConverter<Factor>.Read)]);
 
     private static string[] Spellings(Challenge challenge) =>
         [.. challenge.Presented.Select(VocabularyConverter<Factor>.Write)];

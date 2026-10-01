@@ -20,6 +20,10 @@ internal sealed class ChallengeStoreInMemory : IChallengeStore
         ValueTask.FromResult(_challenges.GetValueOrDefault(Key(fingerprint)));
 
     /// <inheritdoc/>
+    public ValueTask<Challenge?> FindForUpdateAsync(byte[] fingerprint, CancellationToken cancellationToken) =>
+        FindAsync(fingerprint, cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask AddAsync(Challenge challenge, CancellationToken cancellationToken)
     {
         _challenges[Key(challenge.Fingerprint)] = challenge;

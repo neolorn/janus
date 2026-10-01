@@ -717,30 +717,43 @@ internal sealed class AuthenticationService(
 
         await throttle.SucceededAsync(attempt, cancellationToken).ConfigureAwait(false);
 
-        Error? failure = null;
-
-        IssuedSession raised = (await sessions
-                .PresentAsync(live, open.Presented, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(value => value, error => Withheld<IssuedSession>(error, ref failure));
-
-        if (failure is not null)
-        {
-            return Result.Failure<SignInOutcome>(failure);
-        }
-
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure<SignInOutcome>(notBegun);
         }
 
-        await challenges.RemoveAsync(open.Fingerprint, cancellationToken).ConfigureAwait(false);
+        // D-166 X3: the challenge is held under its lock from before the session is
+        // raised until it is removed, so a second raise on it waits and is refused.
+        Error? failure = await challenges.FindForUpdateAsync(open.Fingerprint, cancellationToken)
+                .ConfigureAwait(false) is null
+            ? Error.From(ErrorCodes.FactorRejected)
+            : null;
+
+        IssuedSession? raised = null;
+
+        if (failure is null)
+        {
+            raised = (await sessions
+                    .PresentAsync(live, open.Presented, cancellationToken)
+                    .ConfigureAwait(false))
+                .Match(value => (IssuedSession?)value, error => Withheld<IssuedSession?>(error, ref failure));
+        }
+
+        if (failure is null)
+        {
+            await challenges.RemoveAsync(open.Fingerprint, cancellationToken).ConfigureAwait(false);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
             return Result.Failure<SignInOutcome>(notCommitted);
+        }
+
+        if (failure is not null || raised is null)
+        {
+            return Result.Failure<SignInOutcome>(failure ?? Error.From(ErrorCodes.FactorRejected));
         }
 
         return Result.Success(new SignInOutcome(
@@ -1490,32 +1503,38 @@ internal sealed class AuthenticationService(
         string? trusted,
         CancellationToken cancellationToken)
     {
-        Result<SignInOutcome> completed = await IssueAsync(
-                subject,
-                open.Presented,
-                origin,
-                trustDevice,
-                changeRequired,
-                remembered,
-                trusted,
-                cancellationToken)
-            .ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<SignInOutcome>(notBegun);
+        }
+
+        // D-166 X3: the challenge is held under its lock from before the session is
+        // issued until it is removed, so a second completion of it waits for this one
+        // and is refused as a handle that opens nothing.
+        Result<SignInOutcome> completed = await challenges.FindForUpdateAsync(open.Fingerprint, cancellationToken)
+                .ConfigureAwait(false) is null
+            ? Result.Failure<SignInOutcome>(Error.From(ErrorCodes.FactorRejected))
+            : await IssueAsync(
+                    subject,
+                    open.Presented,
+                    origin,
+                    trustDevice,
+                    changeRequired,
+                    remembered,
+                    trusted,
+                    cancellationToken)
+                .ConfigureAwait(false);
 
         if (completed.Match(_ => true, _ => false))
         {
-            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notBegun)
-            {
-                return Result.Failure<SignInOutcome>(notBegun);
-            }
-
             await challenges.RemoveAsync(open.Fingerprint, cancellationToken).ConfigureAwait(false);
+        }
 
-            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notCommitted)
-            {
-                return Result.Failure<SignInOutcome>(notCommitted);
-            }
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<SignInOutcome>(notCommitted);
         }
 
         return completed;

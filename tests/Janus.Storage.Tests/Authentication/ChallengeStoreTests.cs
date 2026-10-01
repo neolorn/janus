@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
@@ -97,8 +98,61 @@ public sealed class ChallengeStoreTests(DatabaseFixture database)
         Assert.Equal(1, await WrittenAsync(connection, RandomNumberGenerator.GetBytes(Fingerprint.Length), version: 1));
     }
 
+    /// <summary>
+    /// CONV-DESIGN-003 AC6: two completions of one sign-in at once read its challenge
+    /// under its lock, so the second waits for the first to remove it, finds nothing,
+    /// and one session is issued.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC6_TwoCompletionsOfOneSignInAtOnceCompleteOnceAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var opened = Challenge.Open(
+            OpaqueToken.Draw(_randomness),
+            subject: null,
+            email: null,
+            RandomNumberGenerator.GetBytes(Fingerprint.Length),
+            "a-value-an-assertion-signs",
+            Noon,
+            TimeSpan.FromMinutes(10));
+
+        await using (StoreContext writing = database.Context())
+        {
+            await new ChallengeStore(writing, Deployment.Fingerprints).AddAsync(opened, cancellationToken);
+            _ = await writing.SaveChangesAsync(cancellationToken);
+        }
+
+        bool[] completed = await Task.WhenAll(CompletedAsync(opened), CompletedAsync(opened));
+
+        Assert.Equal(1, completed.Count(answer => answer));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _randomness.Dispose();
+
+    // Each completion is its own request, holding the challenge and removing it as the
+    // sign-in does around the session it issues.
+    private async Task<bool> CompletedAsync(Challenge opened)
+    {
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+        var challenges = new ChallengeStore(context, Deployment.Fingerprints);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        bool held = await challenges.FindForUpdateAsync(opened.Fingerprint, TestContext.Current.CancellationToken)
+            is not null;
+
+        if (held)
+        {
+            await challenges.RemoveAsync(opened.Fingerprint, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return held;
+    }
 
     private static Task<int> WrittenAsync(NpgsqlConnection connection, byte[]? identifier, int? version) =>
         connection.ExecuteAsync(
