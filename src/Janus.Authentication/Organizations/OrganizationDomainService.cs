@@ -69,7 +69,7 @@ internal sealed class OrganizationDomainService(
 
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false) is null)
         {
-            return Result.Failure<IReadOnlyList<OrganizationDomain>>(Malformed("id"));
+            return Result.Failure<IReadOnlyList<OrganizationDomain>>(Error.From(ErrorCodes.OrganizationNotFound));
         }
 
         IReadOnlyList<LockedDomain> held = await domains.OfAsync(organization, cancellationToken)
@@ -112,6 +112,20 @@ internal sealed class OrganizationDomainService(
             }
 
             return Result.Success(listed.Answered());
+        }
+
+        // REG-DOM-001, X6 of D-166: a listed domain is verified and re-verified by its
+        // TXT record, which the library reads through the resolver the deployment
+        // declares, so without one no domain is listed.
+        if (dns is null)
+        {
+            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
+            {
+                return Result.Failure<OrganizationDomain>(notCommittedAgain);
+            }
+
+            return Result.Failure<OrganizationDomain>(Unresolvable);
         }
 
         // 10 section 4.1a: adding a domain is a loosening, which also asks the
@@ -187,9 +201,11 @@ internal sealed class OrganizationDomainService(
             return Result.Failure<OrganizationDomain>(refused);
         }
 
+        // API-CONV-003: a domain never listed, or removed, is a record the organization
+        // does not hold.
         if (read.Listed is not LockedDomain listed)
         {
-            return Result.Failure<OrganizationDomain>(Malformed("domain"));
+            return Result.Failure<OrganizationDomain>(Error.From(ErrorCodes.DomainNotFound));
         }
 
         if (listed.VerifiedAt is not null)
@@ -364,12 +380,16 @@ internal sealed class OrganizationDomainService(
             ["domain"] = JsonSerializer.SerializeToElement(domain),
         };
 
+    private static Error Unresolvable { get; } = new(
+        ErrorCodes.ConfigurationValueNotAllowed,
+        new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+        {
+            ["field"] = JsonSerializer.SerializeToElement("emailDomains"),
+            ["requires"] = JsonSerializer.SerializeToElement("dnsResolver"),
+        });
+
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
-
-    // API-CONV-002: a free-text field is 1 to 1024 characters after trimming.
-    private static string? Stated(string text) =>
-        text?.Trim() is { Length: > 0 and <= 1024 } stated ? stated : null;
 
     private static TValue Held<TValue>(Error error, ref Error? failure)
     {
@@ -409,14 +429,20 @@ internal sealed class OrganizationDomainService(
             return Change.Refused(acting, Malformed("domain"));
         }
 
-        if (Stated(reason) is not string stated)
+        // 09 section 8a: every change to the list is a configuration change of the
+        // organization's policy key, so a blank reason is refused as a change without
+        // one is.
+        if (ConfigurationAdministration.Unexplained(Settings.OrganizationPolicy.For(organization.ToString()), reason)
+            is Error unexplained)
         {
-            return Change.Refused(acting, Malformed("reason"));
+            return Change.Refused(acting, unexplained);
         }
+
+        string stated = reason.Trim();
 
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false) is null)
         {
-            return Change.Refused(acting, Malformed("id"));
+            return Change.Refused(acting, Error.From(ErrorCodes.OrganizationNotFound));
         }
 
         if (holding)

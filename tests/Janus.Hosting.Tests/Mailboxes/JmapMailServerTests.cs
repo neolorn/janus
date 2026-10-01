@@ -463,7 +463,7 @@ public sealed class JmapMailServerTests : IDisposable
         Assert.IsType<JmapMailServer>(started.Server);
         Assert.Contains("mailServerSecret", started.Secrets.Asked);
 
-        _configuration.Set(Settings.IntegrationMailServerEndpoint, string.Empty);
+        _configuration.Forget(Settings.IntegrationMailServerEndpoint);
 
         Assert.Same(started.Server, Chosen(started.Services));
         Assert.True(Succeeded(await Chosen(started.Services)!.ProvisionAsync(Push(MailboxState.Disabled), cancellationToken)));
@@ -484,7 +484,7 @@ public sealed class JmapMailServerTests : IDisposable
     {
         if (!hosted)
         {
-            _configuration.Set(Settings.IntegrationMailServerEndpoint, string.Empty);
+            _configuration.Forget(Settings.IntegrationMailServerEndpoint);
         }
 
         var host = new HostedServerInMemory();

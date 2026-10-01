@@ -24,7 +24,6 @@ public sealed class ErasureLedgerLineTests
     [Theory]
     [InlineData(ErasureReason.ErasureRequest, "erasure-request")]
     [InlineData(ErasureReason.MinorTakedown, "minor-takedown")]
-    [InlineData(ErasureReason.OrganizationErasure, "organization-erasure")]
     public void DR_016_ALineIsReadAsTheErasureItWasWrittenFor(ErasureReason reason, string spelled)
     {
         var line = new ErasureLedgerLine(

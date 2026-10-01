@@ -288,7 +288,6 @@ public sealed class RelyingPartyTests
     {
         ConfigurationInMemory configuration = new();
 
-        configuration.Set(Settings.WebAuthnRelyingPartyId, string.Empty);
         configuration.Set(
             Settings.WebAuthnOrigins,
             (IReadOnlyList<string>)["https://app.example.com", "https://id.example.com"]);

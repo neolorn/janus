@@ -20,14 +20,25 @@ internal sealed class ConfigurationInMemory : IConfigurationStore
     private readonly Dictionary<ConfigurationKey, object> _values = [];
 
     /// <summary>
+    /// The key whose every read throws, as a store that has gone away does; nothing
+    /// while every key reads.
+    /// </summary>
+    public ConfigurationKey? Unreachable { get; set; }
+
+    /// <summary>
     /// Names a value for a key, as a deployment does.
     /// </summary>
     /// <typeparam name="TValue">The type of the setting's value.</typeparam>
     /// <param name="setting">The setting.</param>
     /// <param name="value">The value.</param>
+    /// <exception cref="InvalidOperationException">
+    /// The setting does not take the value, which no deployment could then hold.
+    /// </exception>
     public void Set<TValue>(Setting<TValue> setting, TValue value)
         where TValue : notnull =>
-        _values[setting.Key] = value;
+        _values[setting.Key] = setting.Accept(value).Match(
+            admitted => (object)admitted,
+            refused => throw new InvalidOperationException(refused.Code.ToString()));
 
     /// <summary>
     /// Takes a key back, leaving it as a deployment that never named it.
@@ -39,7 +50,9 @@ internal sealed class ConfigurationInMemory : IConfigurationStore
     public ValueTask<Result<TValue>> ReadAsync<TValue>(
         Setting<TValue> setting,
         CancellationToken cancellationToken) =>
-        ValueTask.FromResult(Read(setting));
+        setting.Key.Equals(Unreachable)
+            ? throw new InvalidOperationException("The settings table at db.internal:5432 could not be reached.")
+            : ValueTask.FromResult(Read(setting));
 
     /// <inheritdoc/>
     public ValueTask<Result<TValue>> ReadAsync<TValue>(

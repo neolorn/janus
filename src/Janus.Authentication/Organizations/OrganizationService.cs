@@ -166,7 +166,7 @@ internal sealed class OrganizationService(
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
             is not OrganizationStanding standing)
         {
-            return Result.Failure(Malformed("id"));
+            return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
         }
 
         // IDN-ORG-004: the refusal is the domain's, answered before anything else is
@@ -252,7 +252,7 @@ internal sealed class OrganizationService(
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
             is not OrganizationStanding standing)
         {
-            return Result.Failure(Malformed("id"));
+            return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
         }
 
         if (standing.DeletionRequestedAt is not DateTimeOffset requestedAt)
@@ -319,7 +319,7 @@ internal sealed class OrganizationService(
 
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false) is null)
         {
-            return Result.Failure<OrganizationPolicy>(Malformed("id"));
+            return Result.Failure<OrganizationPolicy>(Error.From(ErrorCodes.OrganizationNotFound));
         }
 
         Error? failure = null;
@@ -365,10 +365,15 @@ internal sealed class OrganizationService(
             return Result.Failure(refused);
         }
 
-        if (Stated(reason) is not string stated)
+        // 09 section 8a: a replacement is a configuration change of the organization's
+        // policy key, so a blank reason is refused as a change without one is.
+        if (ConfigurationAdministration.Unexplained(Settings.OrganizationPolicy.For(organization.ToString()), reason)
+            is Error unexplained)
         {
-            return Result.Failure(Malformed("reason"));
+            return Result.Failure(unexplained);
         }
+
+        string stated = reason.Trim();
 
         // Chapter 10 section 4.1a: the domain lock is written only through the domain
         // operations, never through the policy.
@@ -380,7 +385,7 @@ internal sealed class OrganizationService(
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
             is not OrganizationStanding standing)
         {
-            return Result.Failure(Malformed("id"));
+            return Result.Failure(Error.From(ErrorCodes.OrganizationNotFound));
         }
 
         // OPS-CFG-002 AC6, X3: the direction, the system's floor and the lock the change

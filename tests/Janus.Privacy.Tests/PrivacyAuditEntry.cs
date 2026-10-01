@@ -27,4 +27,9 @@ internal sealed record PrivacyAuditEntry(
     /// made in the session it opened, or nothing.
     /// </summary>
     public string? BreakGlassReason { get; init; }
+
+    /// <summary>
+    /// The organization the entry is filed under, where it names one.
+    /// </summary>
+    public OrganizationId? Organization { get; init; }
 }

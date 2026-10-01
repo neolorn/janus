@@ -247,8 +247,7 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
 
     /// <summary>
     /// IDN-ORG-002 and API-CONV-002: a change names a name and a reason of 1 to 1024
-    /// characters and an organization the deployment holds; anything else is a
-    /// malformed request naming the field.
+    /// characters; anything else is a malformed request naming the field.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -271,16 +270,35 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
             "/admin/organizations",
             ("name", "Southern branch"));
         Answer silent = await RequestedAsync(administrator, Branch, reason: " ");
-        Answer unheld = await RequestedAsync(administrator, new OrganizationId(Guid.NewGuid()));
-        Answer unknown = await CancelledAsync(administrator, new OrganizationId(Guid.NewGuid()));
 
         Assert.Equal("name", Member(unnamed));
         Assert.Equal("name", Member(overlong));
         Assert.Equal("reason", Member(unreasoned));
         Assert.Equal("reason", Member(silent));
-        Assert.Equal("id", Member(unheld));
-        Assert.Equal("id", Member(unknown));
         Assert.Empty(_deployment.OrganizationChanges.Changes);
+    }
+
+    /// <summary>
+    /// IDN-ORG-003 AC13 and 09 section 8a: a deletion request or cancellation whose path
+    /// names no organization the deployment holds is <c>404</c>
+    /// <c>identity.organization.notfound</c>, and nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_AC13_AnOrganizationTheDeploymentDoesNotHoldIsNotFoundAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Administration);
+        var unheld = new OrganizationId(Guid.NewGuid());
+
+        Answer requested = await RequestedAsync(administrator, unheld);
+        Answer cancelled = await CancelledAsync(administrator, unheld);
+
+        Assert.Equal(StatusCodes.Status404NotFound, requested.Status);
+        Assert.Equal(ErrorCodes.OrganizationNotFound.ToString(), requested.Text("code"));
+        Assert.Equal(StatusCodes.Status404NotFound, cancelled.Status);
+        Assert.Equal(ErrorCodes.OrganizationNotFound.ToString(), cancelled.Text("code"));
+        Assert.Empty(_deployment.OrganizationChanges.Changes);
+        Assert.Empty(_deployment.Changes.Written);
     }
 
     /// <summary>

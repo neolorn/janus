@@ -909,7 +909,6 @@ Janus.Core.ErasureProgress.Subscribers.init -> void
 Janus.Core.ErasureReason
 Janus.Core.ErasureReason.ErasureRequest = 0 -> Janus.Core.ErasureReason
 Janus.Core.ErasureReason.MinorTakedown = 1 -> Janus.Core.ErasureReason
-Janus.Core.ErasureReason.OrganizationErasure = 2 -> Janus.Core.ErasureReason
 Janus.Core.ErasureRequested
 Janus.Core.ErasureRequested.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.ErasureReason Reason) -> void
 Janus.Core.ErasureRequested.Equals(Janus.Core.ErasureRequested? other) -> bool
@@ -1279,7 +1278,7 @@ Janus.Core.IIdentifiers.VerifyAsync(Janus.Core.EnrolmentSessionId enrolment, Jan
 Janus.Core.IInvitations
 Janus.Core.IInvitations.AcknowledgeAsync(Janus.Core.AccessContext! context, Janus.Core.InvitationId invitation, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IInvitations.AttachedAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AttachedInvitation!>>
-Janus.Core.IInvitations.EndMembershipAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, Janus.Core.SubjectId member, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IInvitations.EndMembershipAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.SubjectId member, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IInvitations.IssueAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.OrganizationId organization, Janus.Core.InvitationRequest! request, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.IssuedInvitation!>>
 Janus.Core.IInvitations.RevokeAsync(Janus.Core.AccessContext! context, Janus.Core.OrganizationId organization, Janus.Core.InvitationId invitation, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IKeyRing
@@ -2702,6 +2701,7 @@ Janus.Core.StepUpAction.IdentifierRemove = 2 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.InvitationIssue = 15 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.MailCredentialCreate = 7 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.MailCredentialRevoke = 8 -> Janus.Core.StepUpAction
+Janus.Core.StepUpAction.MembershipEnd = 31 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.OrganizationDelete = 29 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.PasswordSet = 0 -> Janus.Core.StepUpAction
 Janus.Core.StepUpAction.PolicyChange = 24 -> Janus.Core.StepUpAction
@@ -3859,6 +3859,7 @@ static Janus.Core.ErrorCodes.IdentifierMaximum.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierMixedScript.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.IdentifierPrimary.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.InvitationExpired.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.InvitationAddressRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.InvitationIdentifierMismatch.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.InvitationMailboxHeld.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.InvitationNotFound.get -> Janus.Core.ErrorCode
@@ -3867,9 +3868,13 @@ static Janus.Core.ErrorCodes.LossReportNotPermitted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.LossReportPending.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.MailServerConflict.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.MailboxNotFound.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.MailboxTaken.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.MembershipLimitReached.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.MembershipNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.NoticeGoverningTextMissing.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.NoticeUnpublished.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.DomainNotFound.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.OrganizationNotFound.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.OrganizationProtected.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PasswordBlocklisted.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.PasswordTooLong.get -> Janus.Core.ErrorCode

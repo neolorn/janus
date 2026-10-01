@@ -51,6 +51,12 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
     private static readonly OrganizationId Customer = new(Guid.NewGuid());
 
+    private static readonly PolicyOverride Aal2WithPasskey = PolicyOverride.None with
+    {
+        RequiredAssurance = AssuranceLevel.Aal2,
+        LoginFactors = new HashSet<Factor> { Factor.Passkey, Factor.Totp },
+    };
+
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly AccessGateInMemory _gate = new();
     private readonly AdministrativeOrganizationInMemory _administrative = new() { Organization = Staff };
@@ -91,7 +97,6 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         _organizations.Seed(Customer, name: "Northern branch");
 
         _configuration.Set(Settings.NotificationLanguages, English);
-        _configuration.Set(Settings.RegistrationPhone, AttributeRequirement.Optional);
 
         _inviter = SubjectId.New(_randomness);
         _passwords.Hold(_inviter, Noon);
@@ -191,10 +196,10 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Error same = Failure(await IssueAsync(Staff, Request(email: Corporate, corporate: Corporate)));
         Error withoutCorporate = Failure(await IssueAsync(Staff, Request(email: Personal)));
 
-        Assert.Equal(ErrorCodes.IdentifierInvalid, withoutPersonal.Code);
+        Assert.Equal(ErrorCodes.InvitationAddressRequired, withoutPersonal.Code);
         Assert.Equal("email", Member(withoutPersonal));
-        Assert.Equal((ErrorCodes.IdentifierInvalid, "email"), (same.Code, Member(same)));
-        Assert.Equal(ErrorCodes.IdentifierInvalid, withoutCorporate.Code);
+        Assert.Equal((ErrorCodes.InvitationAddressRequired, "email"), (same.Code, Member(same)));
+        Assert.Equal(ErrorCodes.InvitationAddressRequired, withoutCorporate.Code);
         Assert.Equal("corporateEmail", Member(withoutCorporate));
         Assert.Empty(_invitations.Held);
         Assert.Empty(_mailboxes.Held);
@@ -335,7 +340,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
     /// <summary>
     /// REG-MAIL-001: an address an open invitation already stands over, or one a
-    /// member holds, is not reserved a second time.
+    /// member holds, is not reserved a second time: it is taken, naming the member.
     /// </summary>
     [Fact]
     public async Task REG_MAIL_001_AnAddressAlreadyTakenIsRefusedAsync()
@@ -351,9 +356,9 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
         Error member = Failure(await IssueAsync(Staff, Request(email: Personal, corporate: "held@staff.test")));
 
-        Assert.Equal(ErrorCodes.RequestMalformed, open.Code);
+        Assert.Equal(ErrorCodes.MailboxTaken, open.Code);
         Assert.Equal("corporateEmail", Member(open));
-        Assert.Equal(ErrorCodes.RequestMalformed, member.Code);
+        Assert.Equal(ErrorCodes.MailboxTaken, member.Code);
         Assert.Equal("corporateEmail", Member(member));
         Assert.Single(_invitations.Held);
     }
@@ -402,6 +407,112 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-INV-001: an invitation grants what its inviter may grant when it is
+    /// acknowledged, so an inviter who lost <c>membership:manage</c>, <c>grant:manage</c>
+    /// for a role named, or the permission to administer the deployment for a role
+    /// carrying it, leaves an invitation that is expired and grants nothing; once the
+    /// inviter holds them again it attaches.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_001_AnInviterWhoLostTheRightToGrantGrantsNothingAsync()
+    {
+        RoleName root = _roles.Define("root", Permissions.SystemAdminister);
+
+        _gate.Grant(_inviter, Customer, Permissions.GrantManage);
+        _gate.Grant(_inviter, Staff, Permissions.SystemAdminister);
+
+        string token = Accepted(await IssueAsync(Customer, Request(phone: Number, roles: [root]))).Token!;
+        SubjectId holder = Holder();
+        InvitationId invitation = _invitations.Held[0].Id;
+
+        _ = _identifiers.Verified(holder, IdentifierKind.Phone, Number);
+        _authenticators.Hold(Passkey(holder));
+        Accepted(await OpenAsync(holder, token));
+
+        (Permission Permission, OrganizationId Organization)[] rights =
+        [
+            (Permissions.MembershipManage, Customer),
+            (Permissions.GrantManage, Customer),
+            (Permissions.SystemAdminister, Staff),
+        ];
+
+        foreach ((Permission permission, OrganizationId organization) in rights)
+        {
+            _gate.Revoke(_inviter, organization, permission);
+            _work.Reset();
+
+            Assert.Equal(ErrorCodes.InvitationExpired, Failure(await AcknowledgeAsync(holder, invitation)).Code);
+            Assert.Empty(_attachments.Attached);
+            Assert.Equal(0, _work.Opened);
+
+            _gate.Grant(_inviter, organization, permission);
+        }
+
+        Accepted(await AcknowledgeAsync(holder, invitation));
+        Assert.Equal([root], Assert.Single(_attachments.Attached).Roles);
+    }
+
+    /// <summary>
+    /// REG-DOM-001: at acknowledgement the lock is judged as it then stands on the
+    /// address the member will sign in with: the corporate address where one is taken
+    /// on, else the bound email, else a verified email the account holds, of which one
+    /// the lock admits is enough. A refusal attaches nothing.
+    /// </summary>
+    [Fact]
+    public async Task REG_DOM_001_AnOpenInvitationIsAcknowledgedOnlyWithAnAddressTheLockAdmitsAsync()
+    {
+        const string boundEmail = "bound@elsewhere.test";
+
+        await LockedAsync(Staff, "staff.test");
+
+        _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+
+        string corporateToken = _notifications.Mail[^1].Values["token"];
+
+        _ = Accepted(await IssueAsync(Customer, Request(email: boundEmail)));
+
+        string boundToken = _notifications.Mail[^1].Values["token"];
+        string phoneToken = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+
+        SubjectId corporate = await OpenedAsync(IdentifierKind.Email, Personal, corporateToken);
+        SubjectId bound = await OpenedAsync(IdentifierKind.Email, boundEmail, boundToken);
+        SubjectId phoned = await OpenedAsync(IdentifierKind.Phone, Number, phoneToken);
+
+        _ = _identifiers.Verified(phoned, IdentifierKind.Email, "phoned@elsewhere.test");
+
+        await LockedAsync(Staff, "other.test");
+        await LockedAsync(Customer, "staff.test");
+
+        foreach (SubjectId holder in (SubjectId[])[corporate, bound, phoned])
+        {
+            Assert.Equal(
+                ErrorCodes.IdentifierDomainNotAllowed,
+                Failure(await AcknowledgeAsync(holder, Opened(holder))).Code);
+        }
+
+        Assert.Empty(_attachments.Attached);
+
+        _ = _identifiers.Verified(phoned, IdentifierKind.Email, "phoned@staff.test");
+
+        Accepted(await AcknowledgeAsync(phoned, Opened(phoned)));
+        Assert.Equal(Customer, Assert.Single(_attachments.Attached).Organization);
+
+        async Task<SubjectId> OpenedAsync(IdentifierKind kind, string value, string token)
+        {
+            SubjectId holder = Holder();
+
+            _ = _identifiers.Verified(holder, kind, value);
+            _authenticators.Hold(Passkey(holder));
+            Accepted(await OpenAsync(holder, token));
+
+            return holder;
+        }
+
+        InvitationId Opened(SubjectId holder) =>
+            _invitations.Held.Single(invitation => invitation.Invitee == holder).Id;
+    }
+
+    /// <summary>
     /// REG-INV-001: an identifier that does not read, or whose words mix scripts, is
     /// refused naming the member it was entered in.
     /// </summary>
@@ -415,20 +526,6 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Equal((ErrorCodes.IdentifierInvalid, "email"), (email.Code, Member(email)));
         Assert.Equal((ErrorCodes.IdentifierInvalid, "phone"), (phone.Code, Member(phone)));
         Assert.Equal((ErrorCodes.IdentifierMixedScript, "email"), (mixed.Code, Member(mixed)));
-    }
-
-    /// <summary>
-    /// REG-INV-001: a phone the deployment does not collect is not a phone a
-    /// registration could take, so it is not bound.
-    /// </summary>
-    [Fact]
-    public async Task REG_INV_001_APhoneIsNotBoundWhereTheDeploymentCollectsNoneAsync()
-    {
-        _configuration.Set(Settings.RegistrationPhone, AttributeRequirement.Off);
-
-        Error refused = Failure(await IssueAsync(Customer, Request(phone: Number)));
-
-        Assert.Equal((ErrorCodes.RequestMalformed, "phone"), (refused.Code, Member(refused)));
     }
 
     /// <summary>
@@ -464,20 +561,51 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-INV-001: a document the deployment never published cannot be shown.
+    /// REG-INV-001: an invitation naming a role is also the <c>grant:manage</c> step-up
+    /// action, judged after <c>invitation:issue</c>, so a session that meets the issue's
+    /// gate and not the grant's issues nothing; one naming no role asks only the issue's.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_001_ARoleAsksTheGrantGateAsWellAsync()
+    {
+        RoleName clerk = _roles.Define("clerk", Permissions.MembershipManage);
+        var gates = Core.Policies.SystemDefault.Gates.ToDictionary();
+
+        gates[StepUpAction.GrantManage] = new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5));
+        _configuration.Set(Settings.PolicyDefault, Core.Policies.SystemDefault with { Gates = gates });
+        _gate.Grant(_inviter, Customer, Permissions.GrantManage);
+
+        Error challenged = Failure(await IssueAsync(Customer, Request(email: Personal, roles: [clerk])));
+
+        Assert.Equal(ErrorCodes.StepUpRequired, challenged.Code);
+        Assert.Empty(_invitations.Held);
+        Assert.Empty(_notifications.Sent);
+
+        _ = Accepted(await IssueAsync(Customer, Request(email: Personal)));
+
+        Assert.Empty(Assert.Single(_invitations.Held).Roles);
+    }
+
+    /// <summary>
+    /// REG-INV-001 and API-CONV-003: a document the deployment never published cannot be
+    /// shown, which is a request refused on its meaning; a blank name is one that does
+    /// not read. Nothing is issued.
     /// </summary>
     [Fact]
     public async Task REG_INV_001_AnUnpublishedDocumentIsRefusedAsync()
     {
         Error refused = Failure(await IssueAsync(Customer, Request(email: Personal, documents: ["unwritten"])));
+        Error blank = Failure(await IssueAsync(Customer, Request(email: Personal, documents: [" "])));
 
-        Assert.Equal((ErrorCodes.RequestMalformed, "documents"), (refused.Code, Member(refused)));
+        Assert.Equal((ErrorCodes.RequestInvalid, "documents"), (refused.Code, Member(refused)));
+        Assert.Equal((ErrorCodes.RequestMalformed, "documents"), (blank.Code, Member(blank)));
+        Assert.Empty(_invitations.Held);
     }
 
     /// <summary>
-    /// IDN-LIFE-009a: issuing is <c>membership:manage</c> in the organization and the
-    /// <c>invitation:issue</c> step-up action, and an organization on its way out
-    /// takes no invitation.
+    /// IDN-LIFE-009a and IDN-ORG-003 AC12: issuing is <c>membership:manage</c> in the
+    /// organization and the <c>invitation:issue</c> step-up action, and an organization
+    /// on its way out takes no invitation, refused as the gate refuses.
     /// </summary>
     [Fact]
     public async Task IDN_LIFE_009a_IssuingIsGatedAndSteppedUpAsync()
@@ -490,9 +618,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         _gate.Grant(_inviter, closing, Permissions.MembershipManage);
 
         Assert.Equal(ErrorCodes.Denied, Failure(await IssueAsync(elsewhere, Request(email: Personal))).Code);
-        Assert.Equal(
-            (ErrorCodes.RequestMalformed, "id"),
-            Coded(Failure(await IssueAsync(closing, Request(email: Personal)))));
+        Assert.Equal(ErrorCodes.Denied, Failure(await IssueAsync(closing, Request(email: Personal))).Code);
         Assert.Equal(
             ErrorCodes.StepUpRequired,
             Failure(await Service.IssueAsync(
@@ -504,6 +630,31 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)).Code);
         Assert.Empty(_invitations.Held);
         Assert.Empty(_notifications.Sent);
+    }
+
+    /// <summary>
+    /// REG-INV-001, IDN-MEM-001 and 09 section 8: issuing, revoking and ending a
+    /// membership under an organization the deployment does not hold is refused with
+    /// <c>identity.organization.notfound</c> before the permission is asked, which no
+    /// grant could meet there, and nothing is written.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_001_AnOrganizationTheDeploymentDoesNotHoldIsNotFoundAsync()
+    {
+        var unheld = new OrganizationId(Guid.NewGuid());
+        SubjectId holder = Holder();
+
+        IssuedInvitation issued = Accepted(await IssueAsync(Customer, Request(email: Personal)));
+
+        Assert.Equal(
+            ErrorCodes.OrganizationNotFound,
+            Failure(await IssueAsync(unheld, Request(email: Personal))).Code);
+        Assert.Equal(ErrorCodes.OrganizationNotFound, Failure(await RevokeAsync(unheld, issued.Id)).Code);
+        Assert.Equal(ErrorCodes.OrganizationNotFound, Failure(await EndAsync(unheld, holder)).Code);
+        Assert.True(Assert.Single(_invitations.Held).Stands);
+        Assert.Empty(_ending.Ended);
+        Assert.Single(_audit.Changes);
+        Assert.Equal(1, _work.Committed);
     }
 
     /// <summary>
@@ -574,8 +725,8 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-009a: an invitation the organization did not issue is not one it can
-    /// revoke, and an acknowledged one is used.
+    /// IDN-LIFE-009a: an invitation the organization did not issue, or none, is not
+    /// found, naming nothing, and an acknowledged one is used.
     /// </summary>
     [Fact]
     public async Task IDN_LIFE_009a_OnlyAnUnacknowledgedInvitationOfTheOrganizationIsRevokedAsync()
@@ -600,15 +751,17 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             revokedAt: null));
 
         Assert.Equal(
-            (ErrorCodes.RequestMalformed, "invitationId"),
+            (ErrorCodes.InvitationNotFound, null),
             Coded(Failure(await RevokeAsync(Staff, issued.Id))));
         Assert.Equal(
-            (ErrorCodes.RequestMalformed, "invitationId"),
+            (ErrorCodes.InvitationNotFound, null),
             Coded(Failure(await RevokeAsync(Customer, InvitationId.New(_clock)))));
         Assert.Equal(
             ErrorCodes.InvitationExpired,
             Failure(await RevokeAsync(Customer, _invitations.Held[1].Id)).Code);
-        Assert.Equal(ErrorCodes.Denied, Failure(await RevokeAsync(new OrganizationId(Guid.NewGuid()), issued.Id)).Code);
+        Assert.Equal(
+            ErrorCodes.OrganizationNotFound,
+            Failure(await RevokeAsync(new OrganizationId(Guid.NewGuid()), issued.Id)).Code);
         Assert.True(_invitations.Held[0].Stands);
     }
 
@@ -687,6 +840,30 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Equal(
             ErrorCodes.InvitationNotFound,
             Failure(await AttachedAsync(SubjectId.New(_randomness))).Code);
+    }
+
+    /// <summary>
+    /// REG-INV-002 and 09 section 6a: an inviter whose account shows no display name is
+    /// shown by their primary email, and by nothing where they hold none either.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_001_AnInviterWithNoDisplayNameIsShownByTheirPrimaryEmailAsync()
+    {
+        _accounts.Holds(_inviter, new HeldProfile(DisplayName: null, LegalName: null, DateOfBirth: null, PhotoUpdatedAt: null));
+
+        string token = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+        var holder = SubjectId.New(_randomness);
+
+        Accepted(await OpenAsync(holder, token));
+
+        AttachedInvitation unnamed = Accepted(await AttachedAsync(holder));
+
+        _ = _identifiers.Verified(_inviter, IdentifierKind.Email, "inviter@staff.test");
+
+        AttachedInvitation addressed = Accepted(await AttachedAsync(holder));
+
+        Assert.Null(unnamed.InvitedBy);
+        Assert.Equal("inviter@staff.test", addressed.InvitedBy);
     }
 
     /// <summary>
@@ -837,8 +1014,10 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.StepUpRequired, held.Code);
         Assert.Equal("enrol", held.Details["outcome"].GetString());
-        Assert.Equal("requiredAssurance", held.Details["field"].GetString());
-        Assert.Equal("aal2", held.Details["value"].GetString());
+        Assert.Equal("requiredAssurance", held.Details["policyRequirement"].GetProperty("field").GetString());
+        Assert.Equal("aal2", held.Details["policyRequirement"].GetProperty("value").GetString());
+        Assert.False(held.Details.ContainsKey("field"));
+        Assert.False(held.Details["policyRequirement"].TryGetProperty("deadline", out _));
         Assert.Empty(_attachments.Attached);
         Assert.Null(invitation.AcknowledgedAt);
 
@@ -873,8 +1052,9 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Error held = Failure(await AcknowledgeAsync(holder, _invitations.Held[0].Id));
 
         Assert.Equal(ErrorCodes.StepUpRequired, held.Code);
-        Assert.Equal("credentialRedundancy", held.Details["field"].GetString());
-        Assert.Equal("enforced", held.Details["value"].GetString());
+        Assert.Equal("credentialRedundancy", held.Details["policyRequirement"].GetProperty("field").GetString());
+        Assert.Equal("enforced", held.Details["policyRequirement"].GetProperty("value").GetString());
+        Assert.False(held.Details["policyRequirement"].TryGetProperty("deadline", out _));
         Assert.Empty(_attachments.Attached);
     }
 
@@ -962,6 +1142,59 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 Source,
                 TestContext.Current.CancellationToken)).Code);
         Assert.Empty(_attachments.Attached);
+    }
+
+    /// <summary>
+    /// REG-INV-002 and 09 section 6a: a refusal no enrolment could meet is told before
+    /// the credential policy, so an account at its membership limit and below the
+    /// organization's assurance is refused for the limit and not sent to enrol.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_002_TheMembershipLimitComesBeforeTheCredentialPolicyAsync()
+    {
+        _configuration.Set(Settings.OrganizationPolicy, Customer.ToString(), Aal2WithPasskey);
+
+        string token = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+        SubjectId holder = Holder();
+
+        _ = _identifiers.Verified(holder, IdentifierKind.Phone, Number);
+        _memberships.Place(holder, Staff);
+        Accepted(await OpenAsync(holder, token));
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.MembershipLimitReached,
+            Failure(await AcknowledgeAsync(holder, _invitations.Held[0].Id)).Code);
+        Assert.True(_invitations.Held[0].Stands);
+        Assert.Empty(_attachments.Attached);
+        Assert.Equal(0, _work.Opened);
+    }
+
+    /// <summary>
+    /// REG-INV-002 and 09 section 6a: the email maximum is told before the credential
+    /// policy as the membership limit is, so an account holding as many emails as it may
+    /// is not sent to enrol for a corporate address it cannot take.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_002_TheEmailMaximumComesBeforeTheCredentialPolicyAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        _configuration.Set(Settings.OrganizationPolicy, Staff.ToString(), Aal2WithPasskey);
+
+        _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+
+        string token = _notifications.Mail[^1].Values["token"];
+        SubjectId holder = Holder();
+
+        _ = _identifiers.Verified(holder, IdentifierKind.Email, Personal);
+        Accepted(await OpenAsync(holder, token));
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.IdentifierMaximum,
+            Failure(await AcknowledgeAsync(holder, _invitations.Held[0].Id)).Code);
+        Assert.Empty(_attachments.Attached);
+        Assert.Equal(0, _work.Opened);
     }
 
     /// <summary>
@@ -1058,6 +1291,56 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
         Assert.Same(mailbox, Assert.Single(_mailboxes.Held));
         Assert.Null(mailbox.Holder);
+    }
+
+    /// <summary>
+    /// REG-INV-001 AC4 and entry 248 of D-166: taking the corporate address on at the
+    /// acknowledgement announces it as added, keyed by the address and the instant, in
+    /// the transaction that adds it, beside its becoming the primary.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_001_AC4_TheCorporateAddressIsAnnouncedAsAddedAsync()
+    {
+        (SubjectId holder, _) = await StaffMemberAsync();
+
+        HeldIdentifier corporate = (await _identifiers.HeldAsync(holder, TestContext.Current.CancellationToken))
+            .OfKind(IdentifierKind.Email)
+            .Single(identifier => identifier.Canonical == Corporate);
+        IdentifierAdded added = Assert.Single(_events.Of<IdentifierAdded>());
+        IdentifierPrimaryChanged promoted = Assert.Single(_events.Of<IdentifierPrimaryChanged>());
+        DateTimeOffset now = _clock.GetUtcNow();
+
+        Assert.Equal((corporate.Id, IdentifierKind.Email, holder), (added.Identifier, added.Kind, added.Subject));
+        Assert.Equal($"{corporate.Id.Value}@{now.UtcTicks}", added.IdempotencyKey);
+        Assert.Equal(corporate.Id, promoted.Identifier);
+        Assert.True(
+            _events.Published.IndexOf(added) < _events.Published.IndexOf(promoted),
+            "The address is announced as added before it is announced as the primary.");
+    }
+
+    /// <summary>
+    /// REG-MAIL-003 and entry 251 of D-166: ending the membership announces the corporate
+    /// address as removed, keyed by the address and the instant, beside the new primary.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_003_TheRetiredCorporateAddressIsAnnouncedAsRemovedAsync()
+    {
+        (SubjectId holder, _) = await StaffMemberAsync();
+        HeldIdentifier corporate = (await _identifiers.HeldAsync(holder, TestContext.Current.CancellationToken))
+            .OfKind(IdentifierKind.Email)
+            .Single(identifier => identifier.Canonical == Corporate);
+
+        _clock.Advance(TimeSpan.FromDays(30));
+        _events.Published.Clear();
+
+        Accepted(await EndAsync(Staff, holder));
+
+        IdentifierRemoved removed = Assert.Single(_events.Of<IdentifierRemoved>());
+        DateTimeOffset now = _clock.GetUtcNow();
+
+        Assert.Equal((corporate.Id, IdentifierKind.Email, holder), (removed.Identifier, removed.Kind, removed.Subject));
+        Assert.Equal($"{corporate.Id.Value}@{now.UtcTicks}", removed.IdempotencyKey);
+        Assert.Equal(now, removed.RaisedAt);
     }
 
     /// <summary>
@@ -1285,6 +1568,55 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-MEM-001 and X9 of D-166: an account holding no current membership of the
+    /// organization is not found, a second end included, with no transaction begun, so a
+    /// later operation in the same scope begins and commits its own.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_AnAccountHoldingNoMembershipThereIsNotFoundAsync()
+    {
+        SubjectId holder = Holder();
+
+        _memberships.Place(holder, Customer);
+        Accepted(await EndAsync(Customer, holder));
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.MembershipNotFound, Failure(await EndAsync(Customer, holder)).Code);
+        Assert.Equal(ErrorCodes.MembershipNotFound, Failure(await EndAsync(Customer, Holder())).Code);
+        Assert.Single(_ending.Ended);
+        Assert.Equal((0, 0), (_work.Opened, _work.Committed));
+
+        _memberships.Place(holder, Customer);
+        Accepted(await EndAsync(Customer, holder));
+
+        Assert.Equal((1, 1), (_work.Opened, _work.Committed));
+    }
+
+    /// <summary>
+    /// IDN-MEM-001 and REG-MAIL-003: ending a membership changes another person's
+    /// account, so it is the <c>membership:end</c> step-up action; a session whose proof
+    /// is stale ends nothing and begins no transaction.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_EndingAMembershipAsksForStepUpAsync()
+    {
+        SubjectId holder = Holder();
+
+        _memberships.Place(holder, Customer);
+        _work.Reset();
+
+        Error challenged = Failure(await EndAsync(Customer, holder, Stale()));
+
+        Assert.Equal(ErrorCodes.StepUpRequired, challenged.Code);
+        Assert.Empty(_ending.Ended);
+        Assert.Equal(0, _work.Opened);
+
+        Accepted(await EndAsync(Customer, holder, Stepped()));
+
+        Assert.Single(_ending.Ended);
+    }
+
+    /// <summary>
     /// IDN-MEM-001: ending a membership asks <c>membership:manage</c> in the
     /// organization and a person to ask it, and only a current membership is ended;
     /// anything else is refused with nothing written.
@@ -1301,6 +1633,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             ErrorCodes.Denied,
             Failure(await Service.EndMembershipAsync(
                 AccessContext.Of(stranger),
+                Stepped(),
                 Customer,
                 holder,
                 Source,
@@ -1309,18 +1642,19 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             ErrorCodes.Denied,
             Failure(await Service.EndMembershipAsync(
                 AccessContext.Of(SystemPrincipal.ForOrganization("sweep", "expiry", Customer)),
+                Stepped(),
                 Customer,
                 holder,
                 Source,
                 TestContext.Current.CancellationToken)).Code);
-        Assert.Equal((ErrorCodes.RequestMalformed, "subject"), Coded(Failure(await EndAsync(Staff, holder))));
-        Assert.Equal((ErrorCodes.RequestMalformed, "subject"), Coded(Failure(await EndAsync(Customer, stranger))));
+        Assert.Equal(ErrorCodes.MembershipNotFound, Failure(await EndAsync(Staff, holder)).Code);
+        Assert.Equal(ErrorCodes.MembershipNotFound, Failure(await EndAsync(Customer, stranger)).Code);
         Assert.Empty(_ending.Ended);
         Assert.Equal(0, _work.Committed);
 
         Accepted(await EndAsync(Customer, holder));
 
-        Assert.Equal((ErrorCodes.RequestMalformed, "subject"), Coded(Failure(await EndAsync(Customer, holder))));
+        Assert.Equal(ErrorCodes.MembershipNotFound, Failure(await EndAsync(Customer, holder)).Code);
         Assert.Single(_ending.Ended);
         Assert.Single(_audit.Changes);
     }
@@ -1367,24 +1701,30 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private InvitationService Serving(IMailServer? server)
     {
         PolicyResolution policies = Policies;
+        var stepUp = new StepUpGuard(_sessions, _authenticators, _passwords, policies, _clock);
 
         return new(
             _gate,
             new AdministrativeScope(_gate, _administrative),
-            new StepUpGuard(_sessions, _authenticators, _passwords, policies, _clock),
+            stepUp,
             _organizations,
             _roles,
             _documents,
             new DomainLock(_memberships, _configuration, _domains),
             _invitations,
             _accounts,
+            _identifiers,
             new InvitationAcknowledgement(
+                _gate,
+                new AdministrativeScope(_gate, _administrative),
+                _roles,
                 _invitations,
                 _organizations,
                 _identifiers,
                 _authenticators,
                 _passwords,
                 policies,
+                new DomainLock(_memberships, _configuration, _domains),
                 _attachments,
                 _mailboxes,
                 _notifications,
@@ -1395,6 +1735,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 _clock),
             new MembershipEnd(
                 _gate,
+                stepUp,
                 _organizations,
                 _ending,
                 _identifiers,
@@ -1472,8 +1813,12 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken);
 
     private ValueTask<Result> EndAsync(OrganizationId organization, SubjectId member) =>
+        EndAsync(organization, member, Stepped());
+
+    private ValueTask<Result> EndAsync(OrganizationId organization, SubjectId member, SessionId session) =>
         Service.EndMembershipAsync(
             AccessContext.Of(_inviter),
+            session,
             organization,
             member,
             Source,

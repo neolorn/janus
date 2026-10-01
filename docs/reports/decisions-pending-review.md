@@ -5629,6 +5629,8 @@ them. `10` section 5b already names `OrganizationErased`; the row should say it 
 the organization and the count of memberships ended and no subject. `10` section 5 needs
 the new audit action `identity.organization.erased` (listed under "Rows for chapter 10").
 
+**Superseded by D-166.**
+
 ---
 
 ## 156. The shipped lawful bases and sensitive categories exist
@@ -7458,6 +7460,8 @@ The configuration route already takes a reason on every change (D-147).
 *Chapter text that should change.* 09 section 8a could say whether a tightening is
 stepped up, in the same words as 10 section 5a.
 
+**Superseded by D-166.**
+
 ---
 
 ## 201. A loosening of an organization's policy also needs `system:administer`
@@ -7751,6 +7755,8 @@ failure is about the domain's proof.
 
 *Chapter text that should change.* 10 section 1.1 needs the row for
 `identity.domain.unverified` (below, under the rows for chapter 10).
+
+**Superseded by D-166.**
 
 ---
 
@@ -8242,6 +8248,8 @@ disabled. Where the mail is not integrated, `corporateEmail` is
 *Chapter text that should change.* 09 section 8a could name the members `email`,
 `phone`, `corporateEmail`, `roles` and `documents`, and the 422 code.
 
+**Superseded by D-166.**
+
 ---
 
 ## 224. Which address the domain lock judges at issue, and what a refusal names
@@ -8304,6 +8312,8 @@ none never would, so the membership step would be unreachable.
 
 *Chapter text that should change.* REG-INV-001 could say a phone is bound only where
 `registration.phone` is not `off`.
+
+**Superseded by D-166.**
 
 ---
 
@@ -8402,6 +8412,8 @@ the store implements over the roles tables.
 *Chapter text that should change.* 09 section 8a could name `roles` and say that
 naming one asks `grant:manage`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 229. The documents an invitation attaches, at the version current when it is issued
@@ -8430,6 +8442,8 @@ after it. A document never published, or a blank name, is
 
 *Chapter text that should change.* 09 section 8a could name `documents` and say the
 version is fixed at issue.
+
+**Superseded by D-166.**
 
 ---
 
@@ -8485,6 +8499,8 @@ neither revoked nor acknowledged, holds it whatever a service does.
 
 *Chapter text that should change.* REG-MAIL-001 could say re-inviting revokes the
 expired invitation.
+
+**Superseded by D-166.**
 
 ---
 
@@ -8542,6 +8558,8 @@ where nobody ever held it (entry 221).
 
 *Chapter text that should change.* 09 section 8a could define unused as not yet
 acknowledged, and give the `204` and the refusals.
+
+**Superseded by D-166.**
 
 ---
 
@@ -8906,6 +8924,8 @@ carries both.
 `identity.invitation.notfound` for the 404, and say which invitation is read.
 Chapter 10 section 1.1 could add the row for `identity.invitation.notfound`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 243. How the account keeps the personal email through the membership
@@ -9032,6 +9052,8 @@ registration, and both are already enforced where they are used.
 *Chapter text that should change.* Chapter 09 section 6a could read "a bound identifier
 is not verified on the account accepting, or the corporate address is already held".
 
+**Superseded by D-166.**
+
 ---
 
 ## 246. How the credential policy is met before the membership attaches
@@ -9100,6 +9122,8 @@ of the issue explains the grant; the words are the frontend's (CONV-CONTENT-001)
 *Chapter text that should change.* REG-INV-001 could state the scope, the grantor and
 the reason of the grants an invitation attaches.
 
+**Superseded by D-166.**
+
 ---
 
 ## 248. What the corporate address does at the acknowledgement
@@ -9127,6 +9151,8 @@ events of chapter 09 are the only ones published.
 
 *Chapter text that should change.* REG-MAIL-001 could say that the security-notice set
 is told of the corporate address when it is taken on.
+
+**Superseded by D-166.**
 
 ---
 
@@ -9205,6 +9231,8 @@ actions).
 *Chapter text that should change.* Chapter 09 section 8a could give the endpoint its
 answers, and chapter 10 could hold the audit action row below.
 
+**Superseded by D-166.**
+
 ---
 
 ## 251. What the end of a membership does to the corporate address
@@ -9252,6 +9280,8 @@ account holds more than one.
 *Chapter text that should change.* REG-MAIL-003 could say that the security-notice set
 as it stands after the change is told once, and that only the end of the administrative
 organization's membership retires the address.
+
+**Superseded by D-166.**
 
 ---
 
@@ -17168,6 +17198,8 @@ chapters do not say:
 - IDN-ACCT-005 could list organization names among what it judges.
 - OPS-MIG-005 could name the contract step that makes `canonical_name` not null in a
   later release.
+
+**Superseded by D-166.**
 
 ---
 

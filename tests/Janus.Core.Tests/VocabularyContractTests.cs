@@ -34,6 +34,7 @@ public sealed class VocabularyContractTests
         "provider:unlink",
         "recovery:approve",
         "invitation:issue",
+        "membership:end",
         "grant:manage",
         "account:suspend",
         "account:reactivate",
@@ -228,7 +229,7 @@ public sealed class VocabularyContractTests
             ["awaiting-subscribers", "complete", "failed"],
             WireNames<ErasureStatus>());
         Assert.Equal(
-            ["erasure-request", "minor-takedown", "organization-erasure"],
+            ["erasure-request", "minor-takedown"],
             WireNames<ErasureReason>());
     }
 

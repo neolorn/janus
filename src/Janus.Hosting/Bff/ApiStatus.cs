@@ -81,6 +81,8 @@ internal static class ApiStatus
         [ErrorCodes.ErasureNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.InvitationNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.MailboxNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.OrganizationNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.DomainNotFound] = StatusCodes.Status404NotFound,
 
         // A conflict with what is already there, or a precondition the state fails.
         [ErrorCodes.ChangePending] = StatusCodes.Status409Conflict,
@@ -93,6 +95,7 @@ internal static class ApiStatus
         [ErrorCodes.UsernameCoolingOff] = StatusCodes.Status409Conflict,
         [ErrorCodes.LinkLastCredential] = StatusCodes.Status409Conflict,
         [ErrorCodes.MembershipLimitReached] = StatusCodes.Status409Conflict,
+        [ErrorCodes.MembershipNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.OrganizationProtected] = StatusCodes.Status409Conflict,
         [ErrorCodes.GrantDuplicate] = StatusCodes.Status409Conflict,
         [ErrorCodes.GrantExpired] = StatusCodes.Status409Conflict,
@@ -110,6 +113,7 @@ internal static class ApiStatus
         [ErrorCodes.RegistrationSignedIn] = StatusCodes.Status409Conflict,
         [ErrorCodes.NoticeUnpublished] = StatusCodes.Status409Conflict,
         [ErrorCodes.InvitationMailboxHeld] = StatusCodes.Status409Conflict,
+        [ErrorCodes.MailboxTaken] = StatusCodes.Status409Conflict,
 
         // Well formed, and refused on what it says.
         [ErrorCodes.AffirmationRequired] = StatusCodes.Status422UnprocessableEntity,
@@ -121,6 +125,7 @@ internal static class ApiStatus
         [ErrorCodes.IdentifierMixedScript] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.InvitationExpired] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.InvitationIdentifierMismatch] = StatusCodes.Status422UnprocessableEntity,
+        [ErrorCodes.InvitationAddressRequired] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ProfileInvalid] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ProfileNotAccepted] = StatusCodes.Status422UnprocessableEntity,
         [ErrorCodes.ProfileUnderage] = StatusCodes.Status422UnprocessableEntity,

@@ -2,10 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Core;
 using Janus.Identity.Organizations;
 using Janus.Storage.Identity.Organizations;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Storage.Tests;
@@ -184,6 +186,26 @@ public sealed class OrganizationStoreTests(DatabaseFixture database)
         Assert.Equal(shouted, readSecond.Name);
         Assert.Equal(key, readFirst.CanonicalName);
         Assert.Equal(key, readSecond.CanonicalName);
+    }
+
+    /// <summary>
+    /// IDN-ACCT-004 AC3: the comparison key is not optional. A row written without it,
+    /// by anything other than the store, is refused by the database itself.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_004_AC3_AnOrganizationWithoutItsKeyIsRefusedByTheDatabaseAsync()
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        PostgresException refusal = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await connection.ExecuteAsync(new CommandDefinition(
+                "INSERT INTO identity.organizations (id, name, created_at) VALUES (@id, 'Acme', now())",
+                new { id = Guid.NewGuid() },
+                cancellationToken: TestContext.Current.CancellationToken)));
+
+        Assert.Equal(PostgresErrorCodes.NotNullViolation, refusal.SqlState);
+        Assert.Equal("canonical_name", refusal.ColumnName);
     }
 
     /// <summary>

@@ -230,11 +230,34 @@ public static class ErrorCodes
     public static ErrorCode MembershipLimitReached { get; } = ErrorCode.Parse("identity.membership.limitreached");
 
     /// <summary>
+    /// The account holds no current membership of the organization: it never held one,
+    /// or it has ended. Name an account that is a member of the organization now.
+    /// </summary>
+    /// <remarks>Implements IDN-MEM-001 and API-CONV-003, chapter 10 section 1.1.</remarks>
+    public static ErrorCode MembershipNotFound { get; } = ErrorCode.Parse("identity.membership.notfound");
+
+    /// <summary>
     /// The organization named is the administrative one, which is not deletable.
     /// Delete another organization, or none.
     /// </summary>
     /// <remarks>Implements IDN-ORG-004, chapter 10 section 1.1.</remarks>
     public static ErrorCode OrganizationProtected { get; } = ErrorCode.Parse("identity.organization.protected");
+
+    /// <summary>
+    /// The path names no organization the deployment holds. Name an organization the
+    /// deployment holds.
+    /// </summary>
+    /// <remarks>
+    /// Implements IDN-ORG-003, IDN-MEM-001 and API-CONV-003, chapter 10 section 1.1.
+    /// </remarks>
+    public static ErrorCode OrganizationNotFound { get; } = ErrorCode.Parse("identity.organization.notfound");
+
+    /// <summary>
+    /// The organization does not list the domain: it was never listed, or it was
+    /// removed. List the domain first.
+    /// </summary>
+    /// <remarks>Implements REG-DOM-001 and API-CONV-003, chapter 10 section 1.1.</remarks>
+    public static ErrorCode DomainNotFound { get; } = ErrorCode.Parse("identity.domain.notfound");
 
     /// <summary>
     /// The username fails the PRECIS UsernameCaseMapped profile, its length bounds, or
@@ -416,12 +439,28 @@ public static class ErrorCodes
     public static ErrorCode InvitationNotFound { get; } = ErrorCode.Parse("identity.invitation.notfound");
 
     /// <summary>
+    /// The invitation is into an organization whose mail is integrated and names no
+    /// personal email, no corporate address, or the corporate address as the personal
+    /// one. Name both, and different. The details name the member at fault.
+    /// </summary>
+    /// <remarks>Implements REG-INV-001 and REG-MAIL-001, chapter 10 section 1.1.</remarks>
+    public static ErrorCode InvitationAddressRequired { get; } = ErrorCode.Parse("identity.invitation.addressrequired");
+
+    /// <summary>
     /// The corporate address names a mailbox someone has held, and the invitation does
     /// not say what becomes of it. Name <c>formerMailbox</c>, <c>transfer</c> or
     /// <c>replace</c>, with a reason.
     /// </summary>
     /// <remarks>Implements REG-MAIL-001, REG-MAIL-003 and INT-MAIL-006, chapter 10 section 1.1.</remarks>
     public static ErrorCode InvitationMailboxHeld { get; } = ErrorCode.Parse("identity.invitation.mailboxheld");
+
+    /// <summary>
+    /// The corporate address is held by a member, or reserved by a standing invitation
+    /// that has not expired. Revoke that invitation first, or name another address. The
+    /// details name <c>corporateEmail</c>.
+    /// </summary>
+    /// <remarks>Implements REG-MAIL-001 and INT-MAIL-006, chapter 10 section 1.1.</remarks>
+    public static ErrorCode MailboxTaken { get; } = ErrorCode.Parse("identity.mailbox.taken");
 
     /// <summary>
     /// The account holds no mailbox the mail server is told to enable, or the deployment

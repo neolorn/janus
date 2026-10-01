@@ -92,7 +92,7 @@ public sealed class ErasureTests
     [Fact]
     public void CompleteManually_AnErasureThatNeverFailed_Throws()
     {
-        var erasure = Erasure.Begun(Ahmed, Noon, ErasureReason.OrganizationErasure);
+        var erasure = Erasure.Begun(Ahmed, Noon, ErasureReason.MinorTakedown);
 
         Assert.Throws<InvalidOperationException>(erasure.CompleteManually);
     }
@@ -107,7 +107,7 @@ public sealed class ErasureTests
         var erasure = Erasure.Existing(
             Ahmed,
             Noon,
-            ErasureReason.OrganizationErasure,
+            ErasureReason.MinorTakedown,
             ErasureStatus.Failed,
             attempts: 5);
 

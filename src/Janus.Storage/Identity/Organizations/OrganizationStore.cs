@@ -64,7 +64,7 @@ internal sealed class OrganizationStore(StoreContext context) : IOrganizationSto
 
         // IDN-ORG-003: the erasure is the one change that touches the name, which it
         // replaces with the identifier the row goes on resolving under. The key follows
-        // the name, and a row written before the key was takes it here (IDN-ACCT-004).
+        // the name (IDN-ACCT-004).
         record.Name = organization.Name;
         record.CanonicalName = organization.CanonicalName;
         record.DeletionRequestedAt = organization.DeletionRequestedAt;

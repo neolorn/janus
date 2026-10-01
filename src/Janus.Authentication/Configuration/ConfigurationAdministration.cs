@@ -439,10 +439,22 @@ internal sealed class ConfigurationAdministration(
         return Unexplained(key, reason);
     }
 
-    // API-CONV-002: a free-text field is 1 to 1024 characters after trimming. A blank
-    // reason is the refusal 10 names for a change; one past the limit is a request the
-    // boundary does not read.
-    private static Error? Unexplained(ConfigurationKey key, string? reason) =>
+    /// <summary>
+    /// Judges the reason a change of a key carries.
+    /// </summary>
+    /// <param name="key">The key the change writes.</param>
+    /// <param name="reason">The reason it carries, as it came.</param>
+    /// <returns>
+    /// Nothing where the reason reads, or the refusal: <c>config.change.reasonrequired</c>
+    /// naming the key where it is absent or blank, <c>api.request.malformed</c> naming
+    /// <c>reason</c> where it is past 1024 characters.
+    /// </returns>
+    /// <remarks>
+    /// API-CONV-002: a free-text field is 1 to 1024 characters after trimming. A blank
+    /// reason is the refusal 10 names for a change; one past the limit is a request the
+    /// boundary does not read.
+    /// </remarks>
+    internal static Error? Unexplained(ConfigurationKey key, string? reason) =>
         (reason?.Trim().Length ?? 0) switch
         {
             0 => Error.From(

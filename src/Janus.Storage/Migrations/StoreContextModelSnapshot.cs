@@ -3185,6 +3185,11 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.HasIndex("Subject")
                     .HasDatabaseName("ix_memberships_subject");
 
+                b.HasIndex("Subject", "Organization")
+                    .IsUnique()
+                    .HasDatabaseName("ux_memberships_current")
+                    .HasFilter("ended_at IS NULL");
+
                 b.ToTable("memberships", "identity", t =>
                     {
                         t.HasCheckConstraint("ck_memberships_acknowledged", "(acknowledged_at IS NULL) = (acknowledged_documents IS NULL)");
@@ -3202,6 +3207,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnName("id");
 
                 b.Property<string>("CanonicalName")
+                    .IsRequired()
                     .HasColumnType("text")
                     .HasColumnName("canonical_name");
 
@@ -3533,7 +3539,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     {
                         t.HasCheckConstraint("ck_erasures_attempts", "attempts >= 0");
 
-                        t.HasCheckConstraint("ck_erasures_reason", "reason IN ('erasure-request', 'minor-takedown', 'organization-erasure')");
+                        t.HasCheckConstraint("ck_erasures_reason", "reason IN ('erasure-request', 'minor-takedown')");
 
                         t.HasCheckConstraint("ck_erasures_status", "status IN ('awaiting-subscribers', 'complete', 'failed')");
 
@@ -3648,7 +3654,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                         t.HasCheckConstraint("ck_outbox_kind", "kind IN ('erasure-requested', 'export-requested', 'restriction-changed', 'takedown-executed')");
 
-                        t.HasCheckConstraint("ck_outbox_reason", "reason IN ('erasure-request', 'minor-takedown', 'organization-erasure')");
+                        t.HasCheckConstraint("ck_outbox_reason", "reason IN ('erasure-request', 'minor-takedown')");
 
                         t.HasCheckConstraint("ck_outbox_status", "status IN ('awaiting-subscribers', 'complete', 'failed')");
 

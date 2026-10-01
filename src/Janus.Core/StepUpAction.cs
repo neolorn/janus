@@ -228,4 +228,11 @@ public enum StepUpAction
     /// <remarks>Named <c>privacyrequest:fulfil</c>.</remarks>
     [JsonStringEnumMemberName("privacyrequest:fulfil")]
     PrivacyRequestFulfil = 30,
+
+    /// <summary>
+    /// End a membership, which retires the corporate address and the mailbox it gave.
+    /// </summary>
+    /// <remarks>Named <c>membership:end</c>.</remarks>
+    [JsonStringEnumMemberName("membership:end")]
+    MembershipEnd = 31,
 }

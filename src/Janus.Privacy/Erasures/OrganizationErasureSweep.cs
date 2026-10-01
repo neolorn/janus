@@ -20,11 +20,12 @@ namespace Janus.Privacy.Erasures;
 /// <param name="work">The one transaction each organization is carried in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements IDN-ORG-003, IDN-ORG-005, IDN-MEM-001 and INF-BG-002. Nothing here waits
-/// on a human: the window is the whole of the decision, and an organization that
-/// reaches its end without a cancellation is erased. One organization per transaction,
-/// so a deployment that falls over mid-pass has erased whole organizations and begun
-/// none.
+/// Implements IDN-ORG-003, IDN-ORG-005, IDN-MEM-001, INF-BG-002 and CONV-DESIGN-002.
+/// Nothing here waits on a human: the window is the whole of the decision, and an
+/// organization that reaches its end without a cancellation is erased. One organization
+/// per transaction, carrying the erasure, its audit record and its events, so a
+/// deployment that falls over mid-pass has erased whole organizations and begun none. A
+/// window that cannot be read is a fault, and the pass erases nothing (X2 of D-166).
 /// </remarks>
 internal sealed class OrganizationErasureSweep(
     IOrganizationStates organizations,
@@ -104,24 +105,20 @@ internal sealed class OrganizationErasureSweep(
             .EraseAsync(deletion.Organization, now, grace, cancellationToken)
             .ConfigureAwait(false);
 
+        // IDN-ORG-005: the record is filed under the organization it erased.
         await audit
             .RecordedAsync(
                 AuditActions.OrganizationErased,
                 principal,
                 subject: null,
+                deletion.Organization,
                 now,
                 Named(deletion, ended.Count),
                 cancellationToken)
             .ConfigureAwait(false);
 
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return notCommitted;
-        }
-
-        // The erasure has committed, so the announcements are the outstanding work and
-        // a consumer that refuses one stops the pass rather than the erasure.
+        // X1 of D-166: each event is a row written in the erasure's transaction, so a
+        // row that cannot be written fails the erasure and nothing commits.
         foreach (EndedMembership membership in ended)
         {
             if ((await events
@@ -143,7 +140,7 @@ internal sealed class OrganizationErasureSweep(
             }
         }
 
-        return (await events
+        if ((await events
                 .PublishAsync(
                     new OrganizationErased(
                         now,
@@ -152,7 +149,13 @@ internal sealed class OrganizationErasureSweep(
                         ended.Count),
                     cancellationToken)
                 .ConfigureAwait(false))
-            .Match(() => (Error?)null, failure => failure);
+            .Match(() => (Error?)null, failure => failure) is Error unannounced)
+        {
+            return unannounced;
+        }
+
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error);
     }
 
     private static string Key(OrganizationId organization, DateTimeOffset at) =>

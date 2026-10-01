@@ -91,7 +91,34 @@ internal sealed class Membership
         IEnumerable<Membership> held,
         bool multiple,
         DateTimeOffset createdAt,
-        MembershipAcknowledgement? acknowledgement = null)
+        MembershipAcknowledgement? acknowledgement = null) =>
+        Refused(subject, organization, held, multiple) is Error refused
+            ? Result.Failure<Membership>(refused)
+            : Result.Success(new Membership(id, subject, organization, createdAt)
+            {
+                Acknowledgement = acknowledgement,
+            });
+
+    /// <summary>
+    /// Whether the account may hold one more membership, of the organization named.
+    /// </summary>
+    /// <param name="subject">Whose it would be.</param>
+    /// <param name="organization">Which organization it would be of.</param>
+    /// <param name="held">
+    /// Every membership the account already holds, ended ones included.
+    /// </param>
+    /// <param name="multiple">What <c>organization.multiplememberships</c> allows.</param>
+    /// <returns>
+    /// Nothing where it may, or <c>identity.membership.limitreached</c>, naming the
+    /// organization where the account is already a member of it.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The memberships held are absent.</exception>
+    /// <exception cref="ArgumentException">One of them belongs to another account.</exception>
+    public static Error? Refused(
+        SubjectId subject,
+        OrganizationId organization,
+        IEnumerable<Membership> held,
+        bool multiple)
     {
         ArgumentNullException.ThrowIfNull(held);
 
@@ -115,19 +142,16 @@ internal sealed class Membership
 
             if (membership.Organization == organization)
             {
-                return Result.Failure<Membership>(Error.From(
+                return Error.From(
                     ErrorCodes.MembershipLimitReached,
                     "organization",
-                    JsonSerializer.SerializeToElement(organization.Value)));
+                    JsonSerializer.SerializeToElement(organization.Value));
             }
         }
 
         return current is not 0 && !multiple
-            ? Result.Failure<Membership>(Error.From(ErrorCodes.MembershipLimitReached))
-            : Result.Success(new Membership(id, subject, organization, createdAt)
-            {
-                Acknowledgement = acknowledgement,
-            });
+            ? Error.From(ErrorCodes.MembershipLimitReached)
+            : null;
     }
 
     /// <summary>
