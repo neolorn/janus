@@ -229,6 +229,17 @@ internal sealed class InvitationService(
             return Result.Failure<IssuedInvitation>(notBegun);
         }
 
+        // D-166 X3: IDN-ORG-003 AC12 is judged again on the organization's row under its
+        // lock, which a deletion's request holds too.
+        if ((await directory.HoldAsync(organization, cancellationToken).ConfigureAwait(false))?.DeletionRequestedAt
+            is not null)
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(
+                    () => Result.Failure<IssuedInvitation>(Error.From(ErrorCodes.Denied)),
+                    Result.Failure<IssuedInvitation>);
+        }
+
         if (reservation is not null)
         {
             await ReserveAsync(reservation, acting, context.BreakGlassReason, now, cancellationToken).ConfigureAwait(false);

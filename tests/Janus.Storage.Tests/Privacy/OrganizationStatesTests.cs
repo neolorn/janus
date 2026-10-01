@@ -96,7 +96,7 @@ public sealed class OrganizationStatesTests(DatabaseFixture database)
         await PlaceAsync(second, organization, until: null);
         await PlaceAsync(gone, organization, Noon.AddDays(1));
 
-        IReadOnlyList<EndedMembership> ended = await EraseAsync(organization, Noon + Window);
+        IReadOnlyList<EndedMembership> ended = Assert.IsAssignableFrom<IReadOnlyList<EndedMembership>>(await EraseAsync(organization, Noon + Window));
 
         Assert.Equal(2, ended.Count);
         Assert.Contains(ended, membership => membership.Subject == first);
@@ -158,15 +158,14 @@ public sealed class OrganizationStatesTests(DatabaseFixture database)
 
     /// <summary>
     /// IDN-ORG-003 AC3: the erasure does not execute before the window elapses, so a
-    /// caller that asks for one a day early writes nothing.
+    /// caller that asks for one a day early is answered nothing and writes nothing.
     /// </summary>
     [Fact]
     public async Task IDN_ORG_003_AC3_AnErasureBeforeTheWindowElapsesWritesNothingAsync()
     {
         OrganizationId organization = await DeletingAsync(Noon);
 
-        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await EraseAsync(organization, Noon + Window - TimeSpan.FromDays(1)));
+        Assert.Null(await EraseAsync(organization, Noon + Window - TimeSpan.FromDays(1)));
 
         await using StoreContext reading = database.Context();
         Organization read = Assert.IsType<Organization>(
@@ -177,10 +176,29 @@ public sealed class OrganizationStatesTests(DatabaseFixture database)
         Assert.Null(read.ErasedAt);
     }
 
+    /// <summary>
+    /// IDN-ORG-003 AC2, CONV-DESIGN-003 AC6: a cancellation and the erasure at once each
+    /// decide on the organization's row under its lock, so either the window was
+    /// cancelled and nothing is erased, or the erasure stands with its window.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ORG_003_AC2_ACancellationAndTheErasureAtOnceDoNotBothStandAsync()
+    {
+        OrganizationId organization = await DeletingAsync(Noon);
+
+        await Task.WhenAll(EraseAsync(organization, Noon + Window).AsTask(), CancelledAsync(organization));
+
+        await using StoreContext reading = database.Context();
+        Organization read = Assert.IsType<Organization>(
+            await new OrganizationStore(reading).FindAsync(organization, TestContext.Current.CancellationToken));
+
+        Assert.Equal(read.ErasedAt is null, read.DeletionRequestedAt is null);
+    }
+
     private static OrganizationStates States(StoreContext context) =>
         new(context, new OrganizationStore(context), new MembershipStore(context));
 
-    private async ValueTask<IReadOnlyList<EndedMembership>> EraseAsync(
+    private async ValueTask<IReadOnlyList<EndedMembership>?> EraseAsync(
         OrganizationId organization,
         DateTimeOffset at)
     {
@@ -188,7 +206,7 @@ public sealed class OrganizationStatesTests(DatabaseFixture database)
         await using var work = new UnitOfWork(writing);
         await work.BeginAsync(TestContext.Current.CancellationToken);
 
-        IReadOnlyList<EndedMembership> ended = await States(writing).EraseAsync(
+        IReadOnlyList<EndedMembership>? ended = await States(writing).EraseAsync(
             organization,
             at,
             Window,
@@ -197,6 +215,29 @@ public sealed class OrganizationStatesTests(DatabaseFixture database)
         await work.CommitAsync(TestContext.Current.CancellationToken);
 
         return ended;
+    }
+
+    // The cancellation is its own request, deciding on the row under its lock as the
+    // organization service does.
+    private async Task CancelledAsync(OrganizationId organization)
+    {
+        await using StoreContext writing = database.Context();
+        await using var work = new UnitOfWork(writing);
+        var store = new OrganizationStore(writing);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        Organization held = Assert.IsType<Organization>(
+            await store.FindForUpdateAsync(organization, TestContext.Current.CancellationToken));
+
+        if (held is { DeletionRequestedAt: not null, ErasedAt: null })
+        {
+            held.CancelDeletion();
+
+            await store.RecordAsync(held, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
     }
 
     private async ValueTask<OrganizationId> CreateAsync()

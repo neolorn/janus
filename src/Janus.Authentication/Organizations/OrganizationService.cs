@@ -197,6 +197,15 @@ internal sealed class OrganizationService(
             return Result.Failure(notBegun);
         }
 
+        // D-166 X3: decided again on the organization's row under its lock, so a second
+        // request at the same moment finds the first and answers as it would after it.
+        if ((await directory.HoldAsync(organization, cancellationToken).ConfigureAwait(false))?.DeletionRequestedAt
+            is not null)
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(Result.Success, Result.Failure);
+        }
+
         if ((await directory.RequestDeletionAsync(organization, now, cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error protectedOrganization)
         {
@@ -287,6 +296,21 @@ internal sealed class OrganizationService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: decided again on the organization's row under its lock, which the
+        // erasure at the window's end holds too, so of the two only the first stands.
+        OrganizationStanding held = await directory.HoldAsync(organization, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("An organization's row is never removed.");
+
+        if (held.DeletionRequestedAt is null || held.ErasedAt is not null)
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(
+                    () => held.ErasedAt is null
+                        ? Result.Success()
+                        : Result.Failure(Error.From(ErrorCodes.DeletionWindowElapsed)),
+                    Result.Failure);
         }
 
         await directory.CancelDeletionAsync(organization, cancellationToken).ConfigureAwait(false);

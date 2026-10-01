@@ -58,16 +58,23 @@ internal sealed class OrganizationStates(
     }
 
     /// <inheritdoc/>
-    public async ValueTask<IReadOnlyList<EndedMembership>> EraseAsync(
+    public async ValueTask<IReadOnlyList<EndedMembership>?> EraseAsync(
         OrganizationId organization,
         DateTimeOffset at,
         TimeSpan window,
         CancellationToken cancellationToken)
     {
         Organization erasing = await organizations
-                .FindAsync(organization, cancellationToken)
+                .FindForUpdateAsync(organization, cancellationToken)
                 .ConfigureAwait(false)
             ?? throw new InvalidOperationException("No such organization.");
+
+        if (erasing.ErasedAt is not null
+            || erasing.DeletionRequestedAt is not DateTimeOffset requestedAt
+            || at < requestedAt + window)
+        {
+            return null;
+        }
 
         IReadOnlyList<EndedMembership> ended = await EndedAsync(organization, at, cancellationToken)
             .ConfigureAwait(false);

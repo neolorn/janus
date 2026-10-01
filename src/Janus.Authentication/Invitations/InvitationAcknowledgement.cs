@@ -200,6 +200,17 @@ internal sealed class InvitationAcknowledgement(
         // only the first attaches.
         Invitation? standing = await invitations.FindForUpdateAsync(id, cancellationToken).ConfigureAwait(false);
 
+        // D-166 X3: the organization is read again under its lock, so a deletion
+        // requested or an erasure executed meanwhile takes no new member; one that waits
+        // for this to commit ends the membership with the others.
+        if (standing is not null
+            && await directory.HoldAsync(standing.Organization, cancellationToken).ConfigureAwait(false)
+                is not { DeletionRequestedAt: null, ErasedAt: null })
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Failure(Error.From(ErrorCodes.InvitationExpired)), Result.Failure);
+        }
+
         if (standing is null || standing.Invitee != invitee || !standing.Stands)
         {
             ErrorCode refused = standing is null || standing.Invitee != invitee

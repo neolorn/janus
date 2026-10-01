@@ -641,6 +641,20 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-ORG-003 AC12, CONV-DESIGN-003 AC6: the organization is read again under its
+    /// lock as the invitation is written, so a deletion requested meanwhile takes none.
+    /// </summary>
+    [Fact]
+    public async Task IDN_ORG_003_AC12_ADeletionRequestedMeanwhileTakesNoInvitationAsync()
+    {
+        _organizations.Holding = organization =>
+            _organizations.Seed(organization, deletionRequestedAt: Noon, name: _organizations.NameOf(organization));
+
+        Assert.Equal(ErrorCodes.Denied, Failure(await IssueAsync(Customer, Request(email: Personal))).Code);
+        Assert.Empty(_invitations.Held);
+    }
+
+    /// <summary>
     /// REG-INV-001, IDN-MEM-001 and 09 section 8: issuing, revoking and ending a
     /// membership under an organization the deployment does not hold is refused with
     /// <c>identity.organization.notfound</c> before the permission is asked, which no

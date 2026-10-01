@@ -1478,6 +1478,10 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- An organization's deletion, its cancellation, its erasure at the window's end, an
+  invitation's issue and an acknowledgement into it are decided on its row under a
+  lock, so a cancellation and the erasure never both stand and an organization on
+  its way out takes no new invitation or member.
 - An invitation's opening, revocation, acknowledgement and registration are decided
   on its row under a lock, so its link attaches to one account or registration, a
   revocation and an acknowledgement at once never both succeed, and a registration

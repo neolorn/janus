@@ -100,6 +100,26 @@ public sealed class OrganizationErasureSweepTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-ORG-003 AC2, CONV-DESIGN-003 AC6: a cancellation committed after the pass
+    /// read its list is the one the organization follows, so nothing is erased, counted,
+    /// recorded or announced for it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ORG_003_AC2_AWindowCancelledMeanwhileIsLeftBeAsync()
+    {
+        _organizations.Deletes(Acme, Noon, members: 2);
+        _organizations.Locking = _organizations.Cancels;
+
+        _clock.Advance(Settings.OrganizationDeletionGrace.Default);
+
+        Assert.Equal(0, await ErasedAsync());
+        Assert.Empty(_organizations.Erased);
+        Assert.Empty(_audit.Entries);
+        Assert.Empty(_events.Published);
+    }
+
+    /// <summary>
     /// IDN-ORG-003: the erasure is announced in its own transaction, naming the
     /// organization, how many memberships it ended and nobody at all.
     /// </summary>

@@ -65,15 +65,15 @@ internal sealed class OrganizationErasureSweep(
 
         foreach (PendingOrganizationDeletion deletion in elapsed)
         {
-            Error? refusal = await ErasedAsync(principal, deletion, grace, now, cancellationToken)
+            Result<int> done = await ErasedAsync(principal, deletion, grace, now, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (refusal is not null)
+            if (done.Match<Error?>(_ => null, error => error) is Error refusal)
             {
                 return Result.Failure<int>(refusal);
             }
 
-            erased++;
+            erased += done.Match(count => count, _ => 0);
         }
 
         return Result.Success(erased);
@@ -88,7 +88,7 @@ internal sealed class OrganizationErasureSweep(
                 "The pass runs as a system principal that may sweep what has expired.",
                 nameof(context));
 
-    private async ValueTask<Error?> ErasedAsync(
+    private async ValueTask<Result<int>> ErasedAsync(
         SystemPrincipal principal,
         PendingOrganizationDeletion deletion,
         TimeSpan grace,
@@ -98,12 +98,17 @@ internal sealed class OrganizationErasureSweep(
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
-            return notBegun;
+            return Result.Failure<int>(notBegun);
         }
 
-        IReadOnlyList<EndedMembership> ended = await organizations
-            .EraseAsync(deletion.Organization, now, grace, cancellationToken)
-            .ConfigureAwait(false);
+        // D-166 X3: a cancellation committed since the pass read its list is the one
+        // the organization follows, and the erasure leaves it be.
+        if (await organizations.EraseAsync(deletion.Organization, now, grace, cancellationToken).ConfigureAwait(false)
+            is not IReadOnlyList<EndedMembership> ended)
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Success(0), Result.Failure<int>);
+        }
 
         // IDN-ORG-005: the record is filed under the organization it erased.
         await audit
@@ -136,7 +141,7 @@ internal sealed class OrganizationErasureSweep(
                     .ConfigureAwait(false))
                 .Match(() => (Error?)null, failure => failure) is Error refused)
             {
-                return refused;
+                return Result.Failure<int>(refused);
             }
         }
 
@@ -151,11 +156,11 @@ internal sealed class OrganizationErasureSweep(
                 .ConfigureAwait(false))
             .Match(() => (Error?)null, failure => failure) is Error unannounced)
         {
-            return unannounced;
+            return Result.Failure<int>(unannounced);
         }
 
         return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error);
+            .Match(() => Result.Success(1), Result.Failure<int>);
     }
 
     private static string Key(OrganizationId organization, DateTimeOffset at) =>
