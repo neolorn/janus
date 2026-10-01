@@ -88,12 +88,14 @@ internal static class GroupEndpoints
             return Answers.Malformed("organization");
         }
 
-        if (body.Name is not { Length: > 0 } name)
+        // API-CONV-002, X4: free text is 1 to 1024 characters after trimming, refused
+        // before the service is called (CONV-CODE-006 AC2).
+        if (body.Name?.Trim() is not { Length: > 0 and <= 1024 } name)
         {
             return Answers.Malformed("name");
         }
 
-        if (body.Reason is not { Length: > 0 } reason)
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
             return Answers.Malformed("reason");
         }
@@ -127,7 +129,7 @@ internal static class GroupEndpoints
         ArgumentNullException.ThrowIfNull(groups);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (body.Reason is not { Length: > 0 } reason)
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
             return Answers.Malformed("reason");
         }
@@ -161,7 +163,7 @@ internal static class GroupEndpoints
             return Answers.Malformed(member);
         }
 
-        if (body.Reason is not { Length: > 0 } reason)
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
             return Answers.Malformed("reason");
         }
@@ -199,7 +201,7 @@ internal static class GroupEndpoints
             return Answers.Malformed(member);
         }
 
-        if (body.Reason is not { Length: > 0 } reason)
+        if (body.Reason?.Trim() is not { Length: > 0 and <= 1024 } reason)
         {
             return Answers.Malformed("reason");
         }

@@ -105,9 +105,17 @@ internal static class GrantEndpoints
         ArgumentNullException.ThrowIfNull(grants);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (body.Reason is not { Length: > 0 } reason)
+        // API-CONV-002, X4: a reason absent or blank is refused with its own code, and one
+        // past 1024 characters after trimming is malformed, both before the service is
+        // called (CONV-CODE-006 AC2).
+        if (body.Reason?.Trim() is not { Length: > 0 } reason)
         {
             return Answers.Refused(Unreasoned);
+        }
+
+        if (reason.Length > 1024)
+        {
+            return Answers.Malformed("reason");
         }
 
         (GrantRequest? request, string member) = body.Read(reason);
@@ -145,9 +153,14 @@ internal static class GrantEndpoints
         ArgumentNullException.ThrowIfNull(grants);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (body.Reason is not { Length: > 0 } reason)
+        if (body.Reason?.Trim() is not { Length: > 0 } reason)
         {
             return Answers.Refused(Unreasoned);
+        }
+
+        if (reason.Length > 1024)
+        {
+            return Answers.Malformed("reason");
         }
 
         return Answers.Of(

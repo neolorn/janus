@@ -554,6 +554,37 @@ public sealed class GroupEndpointTests : IAsyncLifetime
         Assert.Empty(_deployment.GroupChanges.Changes);
     }
 
+    /// <summary>
+    /// CONV-CODE-006 AC3 and API-CONV-002 AC3: a name or a reason past 1024 characters
+    /// after trimming is malformed before the service is reached, so a caller without
+    /// the permission is answered for the body.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC3_FreeTextOutsideTheBoundIsRefusedBeforeTheServiceAsync()
+    {
+        (Browser caller, _) = await AuthorisedAsync(Branch);
+        string overlong = " " + new string('r', 1025) + " ";
+        var group = new GroupId(Guid.NewGuid());
+
+        Answer named = await CreatedAsync(caller, overlong);
+        Answer created = await CreatedAsync(caller, "Auditors", reason: overlong);
+        Answer removed = await caller.SendAsync("DELETE", "/admin/groups/" + group, ("reason", overlong));
+        Answer added = await AddedAsync(caller, group, User, reason: overlong);
+        Answer left = await caller.SendAsync(
+            "DELETE",
+            "/admin/groups/" + group + "/members",
+            ("subjectType", "user"),
+            ("subjectId", Holder),
+            ("reason", overlong));
+
+        Assert.Equal("name", Member(named));
+        Assert.Equal("reason", Member(created));
+        Assert.Equal("reason", Member(removed));
+        Assert.Equal("reason", Member(added));
+        Assert.Equal("reason", Member(left));
+    }
+
     private static GrantSubject User => GrantSubject.Of(new SubjectId(Holder));
 
     private static string Member(Answer answer)

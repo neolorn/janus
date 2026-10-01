@@ -747,6 +747,29 @@ public sealed class GrantEndpointTests : IAsyncLifetime
         Assert.Empty(await HeldAsync(Branch));
     }
 
+    /// <summary>
+    /// CONV-CODE-006 AC3 and API-CONV-002 AC3: a reason past 1024 characters after
+    /// trimming is malformed, and a blank one refused with its own code, before the
+    /// service is reached, so a caller without the permission is answered for the body.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_CODE_006_AC3_AReasonOutsideTheBoundIsRefusedBeforeTheServiceAsync()
+    {
+        (Browser caller, _) = await AuthorisedAsync(Branch);
+        string overlong = " " + new string('r', 1025) + " ";
+
+        Answer longer = await GrantedAsync(caller, "document", "d-1", reason: overlong);
+        Answer blank = await GrantedAsync(caller, "document", "d-1", reason: "   ");
+        Answer unrevoked = await caller.SendAsync("DELETE", "/admin/grants/" + Guid.NewGuid(), ("reason", overlong));
+
+        Assert.Equal("reason", Member(longer));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, blank.Status);
+        Assert.Equal(ErrorCodes.GrantReasonRequired.ToString(), blank.Text("code"));
+        Assert.Equal("reason", Member(unrevoked));
+        Assert.Empty(await HeldAsync(Branch));
+    }
+
     private static Task<Answer> ReadAsync(Browser administrator, string subjectType, string subjectId) =>
         administrator.SendAsync(
             "GET",
