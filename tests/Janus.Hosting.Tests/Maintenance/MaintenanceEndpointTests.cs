@@ -46,19 +46,15 @@ public sealed class MaintenanceEndpointTests : IAsyncDisposable
         Answer replaced = await browser.SendAsync(
             "PUT",
             "/admin/compliance/licences",
-            (
-                "licences",
-                new object[]
+            Listed(
+                new { id = Operating, kind = "licence", name = "Operating licence", expiresAt = now.AddYears(2) },
+                new
                 {
-                    new { id = Operating, kind = "licence", name = "Operating licence", expiresAt = now.AddYears(2) },
-                    new
-                    {
-                        id = Premises,
-                        kind = "permit",
-                        name = "Premises permit",
-                        expiresAt = now.AddMonths(5),
-                        renewedAt = now.AddMonths(-7),
-                    },
+                    id = Premises,
+                    kind = "permit",
+                    name = "Premises permit",
+                    expiresAt = now.AddMonths(5),
+                    renewedAt = now.AddMonths(-7),
                 }));
 
         Assert.Equal(StatusCodes.Status204NoContent, replaced.Status);
@@ -124,7 +120,7 @@ public sealed class MaintenanceEndpointTests : IAsyncDisposable
         Answer unnamed = await browser.SendAsync(
             "PUT",
             "/admin/compliance/licences",
-            ("licences", new object[] { new { id = Operating, kind = "lease", name = "Lease", expiresAt = now } }));
+            Listed(new { id = Operating, kind = "lease", name = "Lease", expiresAt = now }));
 
         Assert.Equal(StatusCodes.Status400BadRequest, unnamed.Status);
         Assert.Equal("kind", unnamed.Json().GetProperty("details").GetProperty("member").GetString());
@@ -157,13 +153,9 @@ public sealed class MaintenanceEndpointTests : IAsyncDisposable
         Answer restated = await browser.SendAsync(
             "PUT",
             "/admin/compliance/licences",
-            (
-                "licences",
-                new object[]
-                {
-                    new { id = Operating, kind = "licence", name = "Operating licence", expiresAt = now.AddYears(2) },
-                    new { id = Operating, kind = "licence", name = "Restated", expiresAt = now.AddYears(3) },
-                }));
+            Listed(
+                new { id = Operating, kind = "licence", name = "Operating licence", expiresAt = now.AddYears(2) },
+                new { id = Operating, kind = "licence", name = "Restated", expiresAt = now.AddYears(3) }));
 
         Answer ahead = await browser.SendAsync(
             "POST",
@@ -171,7 +163,7 @@ public sealed class MaintenanceEndpointTests : IAsyncDisposable
             ("task", "approver-review"),
             ("performedAt", now.AddDays(1)));
 
-        foreach ((Answer answer, string member) in new[] { (restated, "licences"), (ahead, "performedAt") })
+        foreach ((Answer answer, string member) in new[] { (restated, "id"), (ahead, "performedAt") })
         {
             JsonElement body = answer.Json();
 
@@ -203,7 +195,7 @@ public sealed class MaintenanceEndpointTests : IAsyncDisposable
             (await browser.SendAsync(
                 "PUT",
                 "/admin/compliance/licences",
-                ("licences", Array.Empty<object>()))).Status);
+                Listed())).Status);
         Assert.Equal(
             StatusCodes.Status403Forbidden,
             (await browser.SendAsync("GET", "/admin/compliance/maintenance")).Status);
@@ -228,4 +220,7 @@ public sealed class MaintenanceEndpointTests : IAsyncDisposable
 
         return browser;
     }
+
+    // 09 section 8a: the body of the route is the list of records itself.
+    private static string Listed(params object[] licences) => JsonSerializer.Serialize(licences);
 }

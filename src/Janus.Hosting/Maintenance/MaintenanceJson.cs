@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace Janus.Hosting.Maintenance;
@@ -8,7 +9,7 @@ namespace Janus.Hosting.Maintenance;
 /// </summary>
 /// <remarks>Implements API-CONV-002 and CONV-DESIGN-006.</remarks>
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
-[JsonSerializable(typeof(LicencesBody))]
+[JsonSerializable(typeof(IReadOnlyList<LicenceBody>))]
 [JsonSerializable(typeof(LicencesView))]
 [JsonSerializable(typeof(MaintenanceEntryBody))]
 [JsonSerializable(typeof(MaintenanceEntryView))]

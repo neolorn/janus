@@ -7,6 +7,7 @@ using Janus.Core;
 using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 
 namespace Janus.Hosting.Maintenance;
@@ -60,8 +61,9 @@ internal static class MaintenanceEndpoints
                 StatusCodes.Status200OK));
     }
 
+    // 09 section 8a: the body is the list of records itself.
     private static async Task<IResult> ReplaceAsync(
-        LicencesBody body,
+        [FromBody] IReadOnlyList<LicenceBody?> body,
         IMaintenanceRecords records,
         RequestSession browser,
         CancellationToken cancellationToken)
@@ -70,7 +72,7 @@ internal static class MaintenanceEndpoints
         ArgumentNullException.ThrowIfNull(records);
         ArgumentNullException.ThrowIfNull(browser);
 
-        (IReadOnlyList<Licence>? licences, string member) = body.Read();
+        (IReadOnlyList<Licence>? licences, string member) = LicenceBody.Read(body);
 
         if (licences is null)
         {

@@ -67,7 +67,7 @@ internal sealed class MaintenanceRecords(
         // them stands is not the library's to choose (D-166, 323).
         if (licences.DistinctBy(licence => licence.Id).Count() != licences.Count)
         {
-            return Result.Failure(Invalid("licences"));
+            return Result.Failure(Invalid("id"));
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))

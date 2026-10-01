@@ -34,8 +34,8 @@ public interface IMaintenanceRecords
     /// <param name="licences">What now stands.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Nothing, or the refusal: <c>api.request.malformed</c> naming <c>licences</c>
-    /// where two entries share an identifier.
+    /// Nothing, or the refusal: <c>api.request.invalid</c> naming <c>id</c> where two
+    /// entries share an identifier.
     /// </returns>
     ValueTask<Result> ReplaceLicencesAsync(
         AccessContext context,

@@ -1478,6 +1478,8 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- `PUT /admin/compliance/licences` takes the list of records itself as its body, and
+  two records under one identifier are refused `api.request.invalid` naming `id`.
 - A session begun from a sign-in holds the account while it begins, so an account
   suspended or set to deletion at the same moment is left with no session begun after
   its sessions were ended.
