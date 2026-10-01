@@ -561,6 +561,32 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// AUTHZ-GRANT-001, CONV-DESIGN-003: a group removed while the grant waited for the
+    /// organization's groups is no group to give it to, so nothing is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_001_AGroupRemovedMeanwhileIsGivenNothingAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GrantManage);
+        var tellers = Group.Create(new GroupId(Guid.NewGuid()), Branch, "Tellers");
+
+        await _deployment.Groups.CreateAsync(tellers, CancellationToken.None);
+
+        _deployment.Groups.Holding = held =>
+            _ = _deployment.Groups.RemoveAsync(tellers.Id, CancellationToken.None).AsTask();
+
+        Answer given = await GrantedAsync(administrator, "document", "d-1", group: tellers.Id);
+
+        Assert.Equal("subjectId", Unresolved(given));
+        Assert.Empty(await _deployment.AccessGrants.HeldByAsync(
+            [GrantSubject.Of(tellers.Id)],
+            Branch,
+            _deployment.Clock.GetUtcNow(),
+            CancellationToken.None));
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-003 AC3: the live grants one user holds in its own name are read
     /// oldest first, each with who granted it, when and why; an organization-wide grant
     /// names the organization, and revoked, expired and group grants are left out.

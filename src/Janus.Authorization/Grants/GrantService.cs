@@ -381,18 +381,32 @@ internal sealed class GrantService(
             return Result.Failure<GrantId>(notBegun);
         }
 
+        // D-166 X3: a group is given a grant with its organization's groups held, which
+        // its removal holds too, so the group still stands and its removal finds the
+        // grant. They are held before the role, as a change of members holds them.
+        bool standing = grant.Subject.Type != SubjectType.Group;
+
+        if (!standing)
+        {
+            await groups.HoldAsync(grant.Organization, cancellationToken).ConfigureAwait(false);
+
+            standing = await HolderAsync(grant.Subject, grant.Organization, cancellationToken).ConfigureAwait(false);
+        }
+
         // D-166 X3: the role is read under its row's lock, which a definition and a
         // removal hold too, so OPS-CFG-007 is judged on what the role allows as
         // committed; and two grants of one role at once are written one after the other,
         // so the second finds the first.
         Role? role = await roles.FindForUpdateAsync(grant.Role, cancellationToken).ConfigureAwait(false);
 
-        Error? refused = role is null
-            ? Unresolved("role")
-            : await AdministeringRefusedAsync(context, role, cancellationToken).ConfigureAwait(false)
-                ?? (await grants.ExistsAsync(grant, now, cancellationToken).ConfigureAwait(false)
-                    ? Error.From(ErrorCodes.GrantDuplicate)
-                    : null);
+        Error? refused = !standing
+            ? Unresolved("subjectId")
+            : role is null
+                ? Unresolved("role")
+                : await AdministeringRefusedAsync(context, role, cancellationToken).ConfigureAwait(false)
+                    ?? (await grants.ExistsAsync(grant, now, cancellationToken).ConfigureAwait(false)
+                        ? Error.From(ErrorCodes.GrantDuplicate)
+                        : null);
 
         if (refused is not null)
         {

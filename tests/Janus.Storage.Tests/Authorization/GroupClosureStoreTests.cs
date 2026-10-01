@@ -269,6 +269,31 @@ public sealed class GroupClosureStoreTests(DatabaseFixture database)
                 .Select(group => group.Id));
     }
 
+    /// <summary>
+    /// AUTHZ-GROUP-001, CONV-DESIGN-003 AC6: two groups nested in each other at once are
+    /// each judged with the organization's groups held, so the second finds the first
+    /// and no cycle is written.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_GROUP_001_TwoNestingsAtOnceCloseNoCycleAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        GroupId department = await GroupAsync(organization, "Department");
+        GroupId team = await GroupAsync(organization, "Team");
+
+        bool[] nested = await Task.WhenAll(
+            NestedOnceAsync(organization, department, team),
+            NestedOnceAsync(organization, team, department));
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(1, nested.Count(answer => answer));
+        Assert.Equal(
+            1,
+            (await Store(reading).MembersAsync(department, TestContext.Current.CancellationToken)).Count
+                + (await Store(reading).MembersAsync(team, TestContext.Current.CancellationToken)).Count);
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
@@ -303,6 +328,30 @@ public sealed class GroupClosureStoreTests(DatabaseFixture database)
 
         await Store(writing).AddMemberAsync(group, member, TestContext.Current.CancellationToken);
         await transaction.CommitAsync(TestContext.Current.CancellationToken);
+    }
+
+    // A nesting as the service makes one: the organization's groups held, the cycle
+    // judged, and the edge written only where none would close.
+    private async Task<bool> NestedOnceAsync(OrganizationId organization, GroupId group, GroupId member)
+    {
+        await using StoreContext writing = database.Context();
+        await using var work = new UnitOfWork(writing);
+        GroupStore store = Store(writing);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        await store.HoldAsync(organization, TestContext.Current.CancellationToken);
+
+        bool open = !await store.ReachesAsync(member, GrantSubject.Of(group), TestContext.Current.CancellationToken);
+
+        if (open)
+        {
+            await store.AddMemberAsync(group, GrantSubject.Of(member), TestContext.Current.CancellationToken);
+        }
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return open;
     }
 
     private async Task RemoveAsync(GroupId group, GrantSubject member)

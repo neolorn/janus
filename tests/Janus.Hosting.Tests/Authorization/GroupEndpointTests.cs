@@ -149,6 +149,29 @@ public sealed class GroupEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// AUTHZ-GROUP-001, CONV-DESIGN-003: a nesting made while the change waited for the
+    /// organization's groups is judged with the rest, so the change that would close a
+    /// cycle through it is refused and writes nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GROUP_001_ANestingMadeMeanwhileIsJudgedForACycleAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
+        GroupId department = Id(await CreatedAsync(administrator, "Department"));
+        GroupId team = Id(await CreatedAsync(administrator, "Team"));
+
+        _deployment.Groups.Holding = held =>
+            _ = _deployment.Groups.AddMemberAsync(team, GrantSubject.Of(department), CancellationToken.None).AsTask();
+
+        Answer around = await AddedAsync(administrator, department, GrantSubject.Of(team));
+
+        Assert.Equal(StatusCodes.Status409Conflict, around.Status);
+        Assert.Equal(ErrorCodes.GroupCycle.ToString(), around.Text("code"));
+        Assert.Empty(await _deployment.Groups.MembersAsync(department, CancellationToken.None));
+    }
+
+    /// <summary>
     /// AUTHZ-SCOPE-001 and AUTHZ-CONCEAL-005: <c>group:manage</c> is asked in the
     /// organization the group belongs to, so holding it in another organization reads
     /// and changes nothing here.
@@ -270,6 +293,46 @@ public sealed class GroupEndpointTests : IAsyncLifetime
         Assert.Equal(empty, change.Group);
         Assert.Equal("No longer used.", change.Reason);
         Assert.Equal(actor, change.Actor);
+    }
+
+    /// <summary>
+    /// AUTHZ-GRANT-003 AC3, CONV-DESIGN-003: a grant given to a group while its removal
+    /// waited for the organization's groups is found by the removal, so the group stays.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GRANT_003_AC3_AGroupGivenAGrantMeanwhileIsNotRemovedAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
+        GroupId readers = Id(await CreatedAsync(administrator, "Readers"));
+
+        _deployment.Groups.Holding = held => _ = GivenAsync(readers, Reader, Branch);
+
+        Answer refused = await RemovedAsync(administrator, readers);
+
+        Assert.Equal(StatusCodes.Status409Conflict, refused.Status);
+        Assert.Equal(ErrorCodes.GroupInUse.ToString(), refused.Text("code"));
+        Assert.NotNull(await _deployment.Groups.FindAsync(readers, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// OPS-CFG-007 AC1, CONV-DESIGN-003: a group that came to hold system administration
+    /// while the change waited for the organization's groups is judged as it now stands,
+    /// so a member is not added by an administrator without it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_007_AC1_AGroupThatCameToAdministerMeanwhileGainsNoMemberAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Administration, Permissions.GroupManage);
+        GroupId operators = Id(await CreatedAsync(administrator, "Operators", Administration));
+
+        _deployment.Groups.Holding = held => _ = GivenAsync(operators, SystemAdministrator, Administration);
+
+        Answer refused = await AddedAsync(administrator, operators, User);
+
+        Denied(refused);
+        Assert.Empty(await _deployment.Groups.MembersAsync(operators, CancellationToken.None));
     }
 
     /// <summary>
