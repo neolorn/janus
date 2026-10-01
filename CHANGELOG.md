@@ -1320,8 +1320,9 @@ against the public contract of LIB-API-001.
 - The operator is alerted when the conditions of the operations chapter fire, once per
   sustained attack rather than once per attempt, by email and, for the severe ones or
   where email reached nobody, by text message. Changing where those alerts go tells the
-  previous destinations first. A condition is written in the transaction that raised it
-  and carried after that transaction commits, oldest first and once, so one raised by an
+  previous destinations first. A condition is written in the transaction of the
+  operation that raised it, and one that cannot be written fails that operation; it is
+  carried after that transaction commits, oldest first and once, so one raised by an
   operation that then fails is never sent.
 - A text message is refused before it is sent when the gateway balance is at the floor,
   alerts excepted, and a balance that is draining faster than it has been raises its own

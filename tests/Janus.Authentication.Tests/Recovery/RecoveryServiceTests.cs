@@ -576,6 +576,27 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-002 and OPS-ALERT-001: the alert an approval reaches is written in
+    /// the transaction that records the approval, so an alert row that cannot be
+    /// written fails the approval before anything of it commits, and no link goes out.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AnApprovalWhoseAlertCannotBeWrittenCommitsNothingAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId approver, SessionId session) = await ApproverAsync();
+
+        _configuration.Set(Settings.AlertingRecoveryAccountThreshold, 1);
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.SystemFault, Refused(await Approving(approver, session, subject, Reason)));
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Empty(_notifications.Mail);
+    }
+
+    /// <summary>
     /// AUTH-RECOV-002 AC6 and AUTH-RECOV-003 AC1: a channel the requester supplies is
     /// refused, and only one the account already holds is accepted.
     /// </summary>

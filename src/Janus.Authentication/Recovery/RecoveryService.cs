@@ -761,12 +761,8 @@ internal sealed class RecoveryService(
             .ApprovedAsync(approver, breakGlassReason, subject, reason, channel.Kind, now, cancellationToken)
             .ConfigureAwait(false);
 
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure<ApprovedRecovery>(notCommitted);
-        }
-
+        // CONV-DESIGN-002: the alert's row is written in the transaction that records
+        // the approval it counts, so an alert that cannot be written records nothing.
         Result raised = await RaiseAsync(
                 subject,
                 approver,
@@ -779,6 +775,12 @@ internal sealed class RecoveryService(
         if (raised.Match(() => (Error?)null, error => error) is Error unraised)
         {
             return Result.Failure<ApprovedRecovery>(unraised);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<ApprovedRecovery>(notCommitted);
         }
 
         if (await StandingAsync(subject, now - lifetime, cancellationToken).ConfigureAwait(false)
