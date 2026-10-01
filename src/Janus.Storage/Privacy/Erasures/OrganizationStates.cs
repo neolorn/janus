@@ -105,8 +105,10 @@ internal sealed class OrganizationStates(
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
+        // D-166 X3: each membership is read under its row's lock, so one an
+        // administrator ends at the same moment is ended once.
         IReadOnlyList<Membership> held = await memberships
-            .FindByOrganizationAsync(organization, cancellationToken)
+            .FindByOrganizationForUpdateAsync(organization, cancellationToken)
             .ConfigureAwait(false);
 
         List<EndedMembership> ended = [];

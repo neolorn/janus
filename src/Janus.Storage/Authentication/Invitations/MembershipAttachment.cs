@@ -86,7 +86,7 @@ internal sealed class MembershipAttachment(
             .ConfigureAwait(false);
 
         IReadOnlyList<Membership> held = await memberships
-            .FindBySubjectAsync(subject, cancellationToken)
+            .FindBySubjectForUpdateAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
         Error? failure = null;

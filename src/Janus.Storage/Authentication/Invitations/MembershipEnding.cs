@@ -33,7 +33,10 @@ internal sealed class MembershipEnding(IMembershipStore memberships) : IMembersh
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        if (await CurrentAsync(subject, organization, cancellationToken).ConfigureAwait(false)
+        // D-166 X3: the membership is read under its row's lock, so a second end, or the
+        // organization's erasure, at the same moment finds it ended and ends nothing.
+        if ((await memberships.FindBySubjectForUpdateAsync(subject, cancellationToken).ConfigureAwait(false))
+            .SingleOrDefault(membership => membership.IsCurrent && membership.Organization == organization)
             is not Membership current)
         {
             return null;

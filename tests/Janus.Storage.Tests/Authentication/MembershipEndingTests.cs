@@ -74,6 +74,25 @@ public sealed class MembershipEndingTests(DatabaseFixture database)
         Assert.Equal(before, await StandingAsync(subject));
     }
 
+    /// <summary>
+    /// IDN-MEM-001, CONV-DESIGN-003 AC6: two ends of one membership at once each read
+    /// it under its row's lock, so it ends once and the second finds nothing to end.
+    /// </summary>
+    [Fact]
+    public async Task IDN_MEM_001_TwoEndsAtOnceEndTheMembershipOnceAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+
+        _ = await AttachAsync(subject, organization, Noon);
+
+        MembershipId?[] ended = await Task.WhenAll(
+            EndAsync(subject, organization, Noon.AddDays(1)),
+            EndAsync(subject, organization, Noon.AddDays(1)));
+
+        Assert.Single(ended, end => end is not null);
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
@@ -119,11 +138,17 @@ public sealed class MembershipEndingTests(DatabaseFixture database)
     private async Task<MembershipId?> EndAsync(SubjectId subject, OrganizationId organization, DateTimeOffset at)
     {
         await using StoreContext writing = database.Context();
+        await using UnitOfWork work = new(writing);
+        var ending = new MembershipEnding(new MembershipStore(writing));
 
-        MembershipId? ended = await new MembershipEnding(new MembershipStore(writing))
-            .EndAsync(subject, organization, at, TestContext.Current.CancellationToken);
+        // The end is read before the transaction and ended inside it, as the operation does.
+        _ = await ending.FindAsync(subject, organization, TestContext.Current.CancellationToken);
 
-        await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        MembershipId? ended = await ending.EndAsync(subject, organization, at, TestContext.Current.CancellationToken);
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
 
         return ended;
     }
