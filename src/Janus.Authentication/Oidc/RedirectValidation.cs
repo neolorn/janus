@@ -78,6 +78,21 @@ internal sealed class RedirectValidation(IOidcClientStore clients, IConfiguratio
             || (string.Equals(parsed.Scheme, Uri.UriSchemeHttp, StringComparison.Ordinal)
                 && parsed.Host is "127.0.0.1" or "[::1]"));
 
+    /// <summary>
+    /// Where a person a client sent is returned: the origin of its registered address,
+    /// its scheme, host and port, which startup has read as an absolute address with a
+    /// host (API-REDIR-002, REG-SESS-008).
+    /// </summary>
+    /// <param name="client">The client.</param>
+    /// <returns>The origin.</returns>
+    /// <exception cref="ArgumentNullException">The client is absent.</exception>
+    public static string Landing(OidcClient client)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+
+        return new Uri(client.Redirect).GetLeftPart(UriPartial.Authority);
+    }
+
     private static bool Lands(IReadOnlyList<OidcClient> registered, string named)
     {
         foreach (OidcClient client in registered)

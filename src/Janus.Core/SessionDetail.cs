@@ -10,6 +10,11 @@ namespace Janus.Core;
 /// <param name="PhishingResistant">Whether what attained it resists phishing.</param>
 /// <param name="LastStrongAuthAt">When the level was last attained.</param>
 /// <param name="ExpiresAt">The earlier of the idle and the absolute expiry.</param>
+/// <param name="Landing">
+/// The origin (scheme, host and port) of the registered address of the client a
+/// registration captured, kept on the session its terms step established; nothing on
+/// any other session (REG-SESS-008, API-REDIR-002).
+/// </param>
 /// <remarks>
 /// Implements AUTH-SESS-002 and AUTHZ-CACHE-002. No organization is returned:
 /// authorization resolves one from the resource and never from the session
@@ -20,4 +25,5 @@ public sealed record SessionDetail(
     AssuranceLevel AssuranceLevel,
     bool PhishingResistant,
     DateTimeOffset LastStrongAuthAt,
-    DateTimeOffset ExpiresAt);
+    DateTimeOffset ExpiresAt,
+    string? Landing);

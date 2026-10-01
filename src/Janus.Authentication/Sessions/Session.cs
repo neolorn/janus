@@ -109,6 +109,12 @@ internal sealed class Session
     public string? BreakGlassReason { get; }
 
     /// <summary>
+    /// The client a registration captured, which the session its terms step establishes
+    /// carries, and nothing on any other session (REG-SESS-008, API-REDIR-002).
+    /// </summary>
+    public string? Client { get; private set; }
+
+    /// <summary>
     /// The record an authentication creates.
     /// </summary>
     /// <param name="id">The identifier issued for it.</param>
@@ -172,6 +178,7 @@ internal sealed class Session
     /// <param name="endedAt">When it ended, or nothing while it stands.</param>
     /// <param name="satisfiesEveryGate">Whether it passes every gate while it lasts.</param>
     /// <param name="breakGlassReason">The reason given at the credential's use, where one was.</param>
+    /// <param name="client">The client a registration captured, where it established the session.</param>
     /// <returns>The session.</returns>
     /// <exception cref="ArgumentNullException">An origin is absent.</exception>
     public static Session Existing(
@@ -191,7 +198,8 @@ internal sealed class Session
         DateTimeOffset absoluteExpiry,
         DateTimeOffset? endedAt,
         bool satisfiesEveryGate,
-        string? breakGlassReason)
+        string? breakGlassReason,
+        string? client)
     {
         ArgumentNullException.ThrowIfNull(origin);
         ArgumentNullException.ThrowIfNull(lastSeen);
@@ -215,7 +223,21 @@ internal sealed class Session
             LastSeen = lastSeen,
             IdleExpiry = idleExpiry,
             EndedAt = endedAt,
+            Client = client,
         };
+    }
+
+    /// <summary>
+    /// Keeps the client a registration captured on the session its terms step
+    /// establishes, which is where the done step reads its return from (REG-SESS-008).
+    /// </summary>
+    /// <param name="client">The client the registration captured.</param>
+    /// <exception cref="ArgumentException">The client is blank.</exception>
+    public void Capture(string client)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(client);
+
+        Client = client;
     }
 
     /// <summary>

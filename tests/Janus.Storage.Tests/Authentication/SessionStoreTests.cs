@@ -132,6 +132,33 @@ public sealed class SessionStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// REG-SESS-008 (D-166, 145): the session a registration's terms step established
+    /// keeps the client the registration captured, read back from the durable store, and
+    /// what derives from it keeps none.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_008_TheSessionKeepsTheClientTheRegistrationCapturedAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        Session record = Record(subject);
+
+        record.Capture("web");
+
+        Session derived = Derived(record, SessionType.PerApp);
+
+        await WrittenAsync(record, derived);
+
+        await using StoreContext reading = database.Context();
+        Session read = Assert.IsType<Session>(
+            await Store(reading).FindAsync(record.Id, TestContext.Current.CancellationToken));
+        Session readDerived = Assert.IsType<Session>(
+            await Store(reading).FindAsync(derived.Id, TestContext.Current.CancellationToken));
+
+        Assert.Equal("web", read.Client);
+        Assert.Null(readDerived.Client);
+    }
+
+    /// <summary>
     /// AUTH-SESS-013 AC4: the address and the city are held under the person's key, so
     /// destroying that key leaves the location of every session unreadable.
     /// </summary>

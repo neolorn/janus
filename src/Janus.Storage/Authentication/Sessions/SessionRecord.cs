@@ -86,4 +86,10 @@ internal sealed class SessionRecord
 
     /// <summary>The <c>breakglass_reason</c> column.</summary>
     public string? BreakGlassReason { get; set; }
+
+    /// <summary>
+    /// The <c>client</c> column: the client a registration captured, on the session its
+    /// terms step established (REG-SESS-008).
+    /// </summary>
+    public string? Client { get; set; }
 }

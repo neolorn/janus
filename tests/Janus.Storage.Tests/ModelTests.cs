@@ -798,12 +798,14 @@ public sealed class ModelTests
             "sends.settles_at",
 
             // Sessions: the spine of AUTH-SESS-001, what it reached (AUTH-SESS-002), the
-            // fingerprint of its secret (AUTH-SESS-003), and where it was used from with
-            // the place under the key (AUTH-SESS-013).
+            // fingerprint of its secret (AUTH-SESS-003), where it was used from with
+            // the place under the key (AUTH-SESS-013), and the client a registration
+            // captured (REG-SESS-008).
             "sessions.absolute_expiry",
             "sessions.attained",
             "sessions.attained_at",
             "sessions.breakglass_reason",
+            "sessions.client",
             "sessions.created_at",
             "sessions.csrf_fingerprint",
             "sessions.ended_at",

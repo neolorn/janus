@@ -12,6 +12,7 @@ using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Identifiers;
+using Janus.Authentication.Tests.Oidc;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
 using Janus.Authentication.Tests.Sending;
@@ -78,6 +79,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
             _accounts,
             _locations,
             new ConcurrentSessions(_sessions, _configuration, _alerts),
+            new OidcClientStoreInMemory(),
             _work,
             _clock,
             _randomness);

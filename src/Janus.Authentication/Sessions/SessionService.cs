@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Oidc;
 using Janus.Authentication.Policies;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -29,6 +30,7 @@ namespace Janus.Authentication.Sessions;
 /// <param name="directory">Whether the account whose sessions an administrator ends exists.</param>
 /// <param name="locations">What the address a session was used from resolves to.</param>
 /// <param name="concurrent">The watch over sessions used implausibly far apart at once.</param>
+/// <param name="clients">Where the client a registration captured is read, for the return it answers.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <param name="randomness">Where a session secret is drawn from.</param>
@@ -50,6 +52,7 @@ internal sealed class SessionService(
     IAccountDirectory directory,
     ILocationResolver locations,
     ConcurrentSessions concurrent,
+    IOidcClientStore clients,
     IUnitOfWork work,
     TimeProvider time,
     RandomNumberGenerator randomness) : ISessions
@@ -72,7 +75,29 @@ internal sealed class SessionService(
         IReadOnlyCollection<Factor> presented,
         SessionOrigin origin,
         CancellationToken cancellationToken) =>
-        BeginAsync(subject, presented, origin, Admission.Held, breakGlassReason: null, cancellationToken);
+        BeginAsync(subject, presented, origin, Admission.Held, breakGlassReason: null, client: null, cancellationToken);
+
+    /// <summary>
+    /// Begins the session a registration's terms step signs the person in on, which
+    /// keeps the client the registration captured (REG-SESS-008, API-REDIR-002).
+    /// </summary>
+    /// <param name="subject">Who registered.</param>
+    /// <param name="presented">What they presented.</param>
+    /// <param name="origin">Where from.</param>
+    /// <param name="client">The client the registration captured, or nothing where none was.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The session and its secret, or the failure <see cref="BeginAsync(SubjectId, IReadOnlyCollection{Factor}, SessionOrigin, CancellationToken)"/>
+    /// answers.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public ValueTask<Result<IssuedSession>> BeginRegisteredAsync(
+        SubjectId subject,
+        IReadOnlyCollection<Factor> presented,
+        SessionOrigin origin,
+        string? client,
+        CancellationToken cancellationToken) =>
+        BeginAsync(subject, presented, origin, Admission.Held, breakGlassReason: null, client, cancellationToken);
 
     /// <summary>
     /// Begins a session that passes every gate and the stated floor for its lifetime,
@@ -101,7 +126,7 @@ internal sealed class SessionService(
     {
         ArgumentNullException.ThrowIfNull(breakGlassReason);
 
-        return BeginAsync(subject, presented, origin, Admission.Exempt, breakGlassReason, cancellationToken);
+        return BeginAsync(subject, presented, origin, Admission.Exempt, breakGlassReason, client: null, cancellationToken);
     }
 
     /// <summary>
@@ -130,6 +155,7 @@ internal sealed class SessionService(
             origin,
             Admission.WithinTheRunUp,
             breakGlassReason: null,
+            client: null,
             cancellationToken);
 
     /// <summary>
@@ -554,12 +580,19 @@ internal sealed class SessionService(
             return Result.Failure<SessionDetail>(Error.From(ErrorCodes.SessionExpired));
         }
 
+        // REG-SESS-008, API-REDIR-002: the return is read from the client the session
+        // kept, never from a request.
+        OidcClient? captured = live.Client is string named
+            ? await clients.FindAsync(named, cancellationToken).ConfigureAwait(false)
+            : null;
+
         return Result.Success(new SessionDetail(
             live.Subject,
             live.Attained,
             live.PhishingResistant,
             live.AttainedAt,
-            live.IdleExpiry < live.AbsoluteExpiry ? live.IdleExpiry : live.AbsoluteExpiry));
+            live.IdleExpiry < live.AbsoluteExpiry ? live.IdleExpiry : live.AbsoluteExpiry,
+            captured is null ? null : RedirectValidation.Landing(captured)));
     }
 
     /// <inheritdoc/>
@@ -875,6 +908,7 @@ internal sealed class SessionService(
         SessionOrigin origin,
         Admission admission,
         string? breakGlassReason,
+        string? client,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(presented);
@@ -931,6 +965,12 @@ internal sealed class SessionService(
             inactivity,
             absolute,
             breakGlassReason);
+
+        if (client is not null)
+        {
+            session.Capture(client);
+        }
+
         var secret = OpaqueToken.Draw(randomness);
         var token = OpaqueToken.Draw(randomness);
 

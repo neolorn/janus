@@ -156,6 +156,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 new AccountDirectoryInMemory(PreferenceDeclarations.None),
                 _locations,
                 new ConcurrentSessions(_live, _configuration, _events),
+                _clients,
                 _work,
                 _clock,
                 _randomness),

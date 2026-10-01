@@ -5085,6 +5085,8 @@ carry no code. API-REDIR-002 AC2 should say that the default is the configured c
 and that a deployment naming none stores nothing. `10` section 4 should carry
 `redirect.defaultclient` and section 1.5 `model.startup.redirectclient`, both below.
 
+**Superseded by D-166.**
+
 ---
 
 ## 146. A reported change of SIM withholds the entry that rides the number
@@ -10791,6 +10793,8 @@ sends the code nowhere but the registered destination. Under it:
 *Chapter text that should change.* 02 AUTH-OIDC-006 could say that a `request_uri` is
 spent by the first answer it is given; 09 section 9 could say that API-REDIR-001's
 replacement applies at `POST /oidc/par`.
+
+**Superseded by D-166.**
 
 ---
 

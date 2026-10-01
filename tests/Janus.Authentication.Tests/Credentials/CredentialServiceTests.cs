@@ -16,6 +16,7 @@ using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Identifiers;
+using Janus.Authentication.Tests.Oidc;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
 using Janus.Authentication.Tests.Recovery;
@@ -869,6 +870,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _accounts,
             _locations,
             new ConcurrentSessions(_live, _configuration, _events),
+            new OidcClientStoreInMemory(),
             _work,
             _clock,
             _randomness);

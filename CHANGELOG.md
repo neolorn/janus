@@ -937,6 +937,10 @@ against the public contract of LIB-API-001.
   the protected key `redirect.defaultclient` and read against the registry at startup,
   so the completion returns the person to it. A deployment that names no default starts,
   and such a completion returns nothing.
+- The session a registration's terms step signs the person in on keeps the client the
+  registration captured, and `GET /auth/session` and `ISessions.ReadAsync` answer its
+  return as `landing` (`SessionDetail.Landing`), absent on every other session, so the
+  done step reads it from the session and never from a request.
 - An account shows a photo. `GET`, `PUT` and `DELETE /account/photo` read it, replace it
   and give it up, and the image is served through the session gate as `image/jpeg` from
   no address a cache could share. Availability is the organization's, held in the key

@@ -2545,15 +2545,17 @@ Janus.Core.SessionDetail
 Janus.Core.SessionDetail.<Clone>$() -> Janus.Core.SessionDetail!
 Janus.Core.SessionDetail.AssuranceLevel.get -> Janus.Core.AssuranceLevel
 Janus.Core.SessionDetail.AssuranceLevel.init -> void
-Janus.Core.SessionDetail.Deconstruct(out Janus.Core.SubjectId Subject, out Janus.Core.AssuranceLevel AssuranceLevel, out bool PhishingResistant, out System.DateTimeOffset LastStrongAuthAt, out System.DateTimeOffset ExpiresAt) -> void
+Janus.Core.SessionDetail.Deconstruct(out Janus.Core.SubjectId Subject, out Janus.Core.AssuranceLevel AssuranceLevel, out bool PhishingResistant, out System.DateTimeOffset LastStrongAuthAt, out System.DateTimeOffset ExpiresAt, out string? Landing) -> void
 Janus.Core.SessionDetail.Equals(Janus.Core.SessionDetail? other) -> bool
 Janus.Core.SessionDetail.ExpiresAt.get -> System.DateTimeOffset
 Janus.Core.SessionDetail.ExpiresAt.init -> void
+Janus.Core.SessionDetail.Landing.get -> string?
+Janus.Core.SessionDetail.Landing.init -> void
 Janus.Core.SessionDetail.LastStrongAuthAt.get -> System.DateTimeOffset
 Janus.Core.SessionDetail.LastStrongAuthAt.init -> void
 Janus.Core.SessionDetail.PhishingResistant.get -> bool
 Janus.Core.SessionDetail.PhishingResistant.init -> void
-Janus.Core.SessionDetail.SessionDetail(Janus.Core.SubjectId Subject, Janus.Core.AssuranceLevel AssuranceLevel, bool PhishingResistant, System.DateTimeOffset LastStrongAuthAt, System.DateTimeOffset ExpiresAt) -> void
+Janus.Core.SessionDetail.SessionDetail(Janus.Core.SubjectId Subject, Janus.Core.AssuranceLevel AssuranceLevel, bool PhishingResistant, System.DateTimeOffset LastStrongAuthAt, System.DateTimeOffset ExpiresAt, string? Landing) -> void
 Janus.Core.SessionDetail.Subject.get -> Janus.Core.SubjectId
 Janus.Core.SessionDetail.Subject.init -> void
 Janus.Core.SessionId

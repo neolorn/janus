@@ -120,6 +120,7 @@ internal sealed class SessionConfiguration : IEntityTypeConfiguration<SessionRec
         builder.Property(session => session.EndedAt).HasColumnName("ended_at");
         builder.Property(session => session.SatisfiesEveryGate).HasColumnName("satisfies_every_gate");
         builder.Property(session => session.BreakGlassReason).HasColumnName("breakglass_reason");
+        builder.Property(session => session.Client).HasColumnName("client");
 
         // AUTH-SESS-003: the cookie is looked up by what it fingerprints to, and two
         // sessions never share one.

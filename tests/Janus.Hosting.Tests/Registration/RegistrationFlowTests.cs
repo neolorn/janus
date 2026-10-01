@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -47,6 +48,51 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync() => await _deployment.DisposeAsync();
+
+    /// <summary>
+    /// REG-SESS-008, API-REDIR-002 (D-166, 145): the session the terms step established
+    /// keeps the client the registration captured, and the done step reads its return
+    /// from the session as <c>landing</c>, the origin of that client's registered
+    /// address and nothing more of it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_SESS_008_TheDoneStepReadsItsReturnFromTheSessionAsync()
+    {
+        await _deployment.Clients.AddAsync(
+            new OidcClient(
+                "web",
+                "web",
+                OidcClientKind.BrowserApplication,
+                "https://app.example.test:8443/signin/callback",
+                ["openid"]),
+            Encoding.UTF8.GetBytes("a-secret-the-deployment-set"),
+            _deployment.Clock.GetUtcNow(),
+            TestContext.Current.CancellationToken);
+
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        Answer read = await browser.SendAsync("GET", "/auth/session");
+
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+        Assert.Equal("https://app.example.test:8443", read.Text("landing"));
+    }
+
+    /// <summary>
+    /// REG-SESS-008: a registration that captured no client the registry holds leaves
+    /// nothing on its session, so the session answers no <c>landing</c> at all.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_SESS_008_ASessionThatCapturedNoClientAnswersNoLandingAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        Answer read = await browser.SendAsync("GET", "/auth/session");
+
+        Assert.Equal(StatusCodes.Status200OK, read.Status);
+        Assert.False(read.Json().TryGetProperty("landing", out _));
+    }
 
     /// <summary>
     /// REG-IDENT-006 AC2, REG-SESS-005: an address its owner removed is held out of

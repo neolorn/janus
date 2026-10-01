@@ -896,11 +896,9 @@ internal sealed class RegistrationService(
             return string.Empty;
         }
 
-        // API-REDIR-002: the origin of the registered address, scheme, host and port,
-        // which startup has read as an absolute address with a host.
         return await clients.FindAsync(live.Client, cancellationToken).ConfigureAwait(false)
             is OidcClient originating
-            ? new Uri(originating.Redirect).GetLeftPart(UriPartial.Authority)
+            ? RedirectValidation.Landing(originating)
             : string.Empty;
     }
 
@@ -1043,10 +1041,11 @@ internal sealed class RegistrationService(
         }
 
         IssuedSession issued = (await issuing
-                .BeginAsync(
+                .BeginRegisteredAsync(
                     live.Provisional,
                     SecurityStep.Presented(live, policy.LoginFactors),
                     new SessionOrigin(live.Source, device),
+                    live.Client.Length > 0 ? live.Client : null,
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Held<IssuedSession>(error, ref failure));
