@@ -589,7 +589,7 @@ public sealed class LossReportsTests : IAsyncDisposable
 
     /// <summary>
     /// AUTH-RECOV-007 and D-153: the notice repeats across the window, and every one of
-    /// them carries the link that ends the report.
+    /// them is the credential-suspended message carrying the link that ends the report.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -613,6 +613,7 @@ public sealed class LossReportsTests : IAsyncDisposable
 
         Assert.True(_notifications.Mail.Count > sent);
         Assert.Equal(first, _notifications.Mail[^1].Token());
+        Assert.All(_notifications.Mail, notice => Assert.Equal(MessageKind.CredentialSuspended, notice.Message));
     }
 
     /// <summary>

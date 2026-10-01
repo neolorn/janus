@@ -24,14 +24,14 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
     private readonly Deployment _deployment = new();
 
     /// <summary>
-    /// A deployment that can send, whose recovery message carries the token as the
-    /// shipped template does.
+    /// A deployment that can send, whose recovery message and suspension notice carry
+    /// the token as the shipped templates do.
     /// </summary>
     public RecoveryFlowTests()
     {
         Flow.Prepare(_deployment);
 
-        foreach (MessageKind message in new[] { MessageKind.RecoveryLink, MessageKind.SecurityNotice })
+        foreach (MessageKind message in new[] { MessageKind.RecoveryLink, MessageKind.SecurityNotice, MessageKind.CredentialSuspended })
         {
             foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
             {

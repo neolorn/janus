@@ -286,6 +286,7 @@ public sealed class VocabularyContractTests
                 "account-exists",
                 "alert",
                 "credential-enrolled",
+                "credential-suspended",
                 "deactivation-notice",
                 "deletion-notice",
                 "enrolment-link",

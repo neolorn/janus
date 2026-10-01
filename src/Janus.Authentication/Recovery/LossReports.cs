@@ -551,7 +551,7 @@ internal sealed class LossReports(
                 .SendAsync(
                     new SendRequest(
                         destination,
-                        MessageKind.SecurityNotice,
+                        MessageKind.CredentialSuspended,
                         RestrictionPurpose.Notification,
                         source,
                         language)

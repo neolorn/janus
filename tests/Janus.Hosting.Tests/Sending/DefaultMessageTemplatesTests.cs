@@ -42,6 +42,7 @@ public sealed class DefaultMessageTemplatesTests
         [MessageKind.IdentifierRemoved] = LinkKind.Undo,
         [MessageKind.DeletionNotice] = LinkKind.DeletionCancel,
         [MessageKind.DeactivationNotice] = LinkKind.Reactivation,
+        [MessageKind.CredentialSuspended] = LinkKind.LossReport,
     };
 
     /// <summary>

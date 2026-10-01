@@ -1720,6 +1720,7 @@ Janus.Core.MessageKind
 Janus.Core.MessageKind.AccountExists = 7 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.Alert = 5 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.CredentialEnrolled = 12 -> Janus.Core.MessageKind
+Janus.Core.MessageKind.CredentialSuspended = 23 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.DeactivationNotice = 17 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.DeletionNotice = 18 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.EnrolmentLink = 4 -> Janus.Core.MessageKind

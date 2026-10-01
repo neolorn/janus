@@ -93,6 +93,16 @@ internal sealed class DefaultMessageTemplates : IMessageTemplates
                 "حدث تغيير في حسابك. إن لم يكن منك فسجل الدخول وأمن حسابك.",
                 "حدث تغيير في حسابك. إن لم يكن منك فأمن حسابك.")),
         (
+            MessageKind.CredentialSuspended,
+            new Words(
+                "A sign-in method on your account was suspended",
+                "A sign-in method on your account was suspended and will stop working. If this was not you, cancel it here: {link}",
+                "A sign-in method was suspended. Not you? Cancel: {link}"),
+            new Words(
+                "تم تعليق وسيلة دخول في حسابك",
+                "تم تعليق وسيلة دخول في حسابك وستتوقف عن العمل. إن لم يكن هذا منك فألغه من هنا: {link}",
+                "عُلقت وسيلة دخول. لست أنت؟ ألغه: {link}")),
+        (
             MessageKind.EnrolmentLink,
             new Words(
                 "Your enrolment link",

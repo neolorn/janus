@@ -1476,6 +1476,9 @@ against the public contract of LIB-API-001.
   replaced go out as the new message kind `verification-link`, whose templates name
   `{code}` and `{link}`; `verification-code` is the new-device check's code alone. A
   deployment that registers its own `IMessageTemplates` words the new kind too.
+- The notices of a loss report, and of a removal that would lower the account's
+  reachable assurance, go out as the new message kind `credential-suspended`, whose
+  templates name `{link}`, the link that cancels the suspension.
 - A registration is held to the progressive delay as a sign-in is: a refused code is
   counted against the session's source and the identifier, and while the delay stands a
   code or a further ask for a code is refused `auth.throttled` with `retryAt`.

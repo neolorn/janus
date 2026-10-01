@@ -4101,6 +4101,8 @@ that a deployment which registers no catalogue is answered out of the shipped on
 LIB-HOST-001 should not list a message catalogue among the declarations a deployment
 must make.
 
+**Superseded by D-166.**
+
 ---
 
 ## 124. Every runtime setting is written through one operation, which classifies it, gates it, requires a reason and writes it down

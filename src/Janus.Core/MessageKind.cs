@@ -160,4 +160,12 @@ public enum MessageKind
     /// </summary>
     [JsonStringEnumMemberName("verification-link")]
     VerificationLink = 22,
+
+    /// <summary>
+    /// A credential was suspended by a loss report, or by a removal that would lower the
+    /// account's reachable assurance; every notice of the window carries the cancel link
+    /// (AUTH-RECOV-007).
+    /// </summary>
+    [JsonStringEnumMemberName("credential-suspended")]
+    CredentialSuspended = 23,
 }
