@@ -53,7 +53,7 @@ internal static class AccountAdministrationEndpoints
     private static async Task<IResult> SuspendAsync(
         IAccounts accounts,
         RequestSession browser,
-        Guid subject,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
@@ -64,7 +64,7 @@ internal static class AccountAdministrationEndpoints
                 .SuspendAsync(
                     browser.Asking,
                     browser.Required.Id,
-                    new SubjectId(subject),
+                    subject,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
@@ -73,7 +73,7 @@ internal static class AccountAdministrationEndpoints
     private static async Task<IResult> ReactivateAsync(
         IAccounts accounts,
         RequestSession browser,
-        Guid subject,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
@@ -84,7 +84,7 @@ internal static class AccountAdministrationEndpoints
                 .ReactivateAsync(
                     browser.Asking,
                     browser.Required.Id,
-                    new SubjectId(subject),
+                    subject,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
@@ -93,7 +93,7 @@ internal static class AccountAdministrationEndpoints
     private static async Task<IResult> LiftRestrictionAsync(
         IAccounts accounts,
         RequestSession browser,
-        Guid subject,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
@@ -103,7 +103,7 @@ internal static class AccountAdministrationEndpoints
             await accounts
                 .LiftRestrictionAsync(
                     browser.Asking,
-                    new SubjectId(subject),
+                    subject,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
@@ -112,7 +112,7 @@ internal static class AccountAdministrationEndpoints
     private static async Task<IResult> CancelDeletionAsync(
         IAccounts accounts,
         RequestSession browser,
-        Guid subject,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
@@ -122,7 +122,7 @@ internal static class AccountAdministrationEndpoints
             await accounts
                 .CancelDeletionAsync(
                     browser.Asking,
-                    new SubjectId(subject),
+                    subject,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
@@ -132,7 +132,7 @@ internal static class AccountAdministrationEndpoints
         IAccounts accounts,
         RequestSession browser,
         HttpContext context,
-        Guid subject,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
@@ -147,7 +147,7 @@ internal static class AccountAdministrationEndpoints
             await accounts
                 .ReadPhotoAsync(
                     browser.Asking,
-                    new SubjectId(subject),
+                    subject,
                     cancellationToken)
                 .ConfigureAwait(false),
             image => image.IsEmpty

@@ -44,7 +44,7 @@ internal static class TakedownEndpoints
         TakedownBody body,
         ITakedowns takedowns,
         RequestSession browser,
-        Guid subject,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -66,7 +66,7 @@ internal static class TakedownEndpoints
                 .ExecuteAsync(
                     browser.Asking,
                     browser.Required.Id,
-                    new SubjectId(subject),
+                    subject,
                     trigger,
                     reason,
                     cancellationToken)
@@ -81,7 +81,7 @@ internal static class TakedownEndpoints
     private static async Task<IResult> ReadAsync(
         ITakedowns takedowns,
         RequestSession browser,
-        Guid subject,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(takedowns);
@@ -91,7 +91,7 @@ internal static class TakedownEndpoints
             await takedowns
                 .ReadAsync(
                     browser.Asking,
-                    new SubjectId(subject),
+                    subject,
                     cancellationToken)
                 .ConfigureAwait(false),
             progress => TypedResults.Json(
@@ -105,7 +105,7 @@ internal static class TakedownEndpoints
         TakedownReversalBody body,
         ITakedowns takedowns,
         RequestSession browser,
-        Guid subject,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -122,7 +122,7 @@ internal static class TakedownEndpoints
                 .ReverseAsync(
                     browser.Asking,
                     browser.Required.Id,
-                    new SubjectId(subject),
+                    subject,
                     reason,
                     cancellationToken)
                 .ConfigureAwait(false),

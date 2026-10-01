@@ -104,7 +104,7 @@ internal static class OrganizationEndpoints
         OrganizationReasonBody body,
         IOrganizations organizations,
         RequestSession browser,
-        Guid id,
+        OrganizationId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -121,7 +121,7 @@ internal static class OrganizationEndpoints
                 .RequestDeletionAsync(
                     browser.Asking,
                     browser.Required.Id,
-                    new OrganizationId(id),
+                    id,
                     reason,
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -132,7 +132,7 @@ internal static class OrganizationEndpoints
         OrganizationReasonBody body,
         IOrganizations organizations,
         RequestSession browser,
-        Guid id,
+        OrganizationId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -149,7 +149,7 @@ internal static class OrganizationEndpoints
                 .CancelDeletionAsync(
                     browser.Asking,
                     browser.Required.Id,
-                    new OrganizationId(id),
+                    id,
                     reason,
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -159,7 +159,7 @@ internal static class OrganizationEndpoints
     private static async Task<IResult> PolicyAsync(
         IOrganizations organizations,
         RequestSession browser,
-        Guid id,
+        OrganizationId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(organizations);
@@ -167,7 +167,7 @@ internal static class OrganizationEndpoints
 
         return Answers.Of(
             await organizations
-                .PolicyAsync(browser.Asking, new OrganizationId(id), cancellationToken)
+                .PolicyAsync(browser.Asking, id, cancellationToken)
                 .ConfigureAwait(false),
             policy => TypedResults.Json(
                 OrganizationPolicyView.Of(policy),
@@ -180,16 +180,15 @@ internal static class OrganizationEndpoints
         JsonElement body,
         IOrganizations organizations,
         RequestSession browser,
-        Guid id,
+        OrganizationId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(organizations);
         ArgumentNullException.ThrowIfNull(browser);
 
-        var organization = new OrganizationId(id);
         Error? failure = null;
         (PolicyOverride replacement, string reason) = OrganizationPolicyBody
-            .Read(body, organization)
+            .Read(body, id)
             .Match(read => read, error => Withheld<(PolicyOverride, string)>(error, ref failure));
 
         if (failure is not null)
@@ -202,7 +201,7 @@ internal static class OrganizationEndpoints
                 .ReplacePolicyAsync(
                     browser.Asking,
                     browser.Required.Id,
-                    organization,
+                    id,
                     replacement,
                     reason,
                     cancellationToken)
@@ -213,7 +212,7 @@ internal static class OrganizationEndpoints
     private static async Task<IResult> DomainsAsync(
         IOrganizationDomains domains,
         RequestSession browser,
-        Guid id,
+        OrganizationId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(domains);
@@ -221,7 +220,7 @@ internal static class OrganizationEndpoints
 
         return Answers.Of(
             await domains
-                .DomainsAsync(browser.Asking, new OrganizationId(id), cancellationToken)
+                .DomainsAsync(browser.Asking, id, cancellationToken)
                 .ConfigureAwait(false),
             held => TypedResults.Json<IReadOnlyList<OrganizationDomainView>>(
                 [.. held.Select(OrganizationDomainView.Of)],
@@ -236,7 +235,7 @@ internal static class OrganizationEndpoints
         OrganizationDomainBody body,
         IOrganizationDomains domains,
         RequestSession browser,
-        Guid id,
+        OrganizationId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -258,7 +257,7 @@ internal static class OrganizationEndpoints
                 .AddDomainAsync(
                     browser.Asking,
                     browser.Required.Id,
-                    new OrganizationId(id),
+                    id,
                     domain,
                     reason,
                     cancellationToken)
@@ -274,7 +273,7 @@ internal static class OrganizationEndpoints
         OrganizationReasonBody body,
         IOrganizationDomains domains,
         RequestSession browser,
-        Guid id,
+        OrganizationId id,
         string domain,
         CancellationToken cancellationToken)
     {
@@ -292,7 +291,7 @@ internal static class OrganizationEndpoints
                 .VerifyDomainAsync(
                     browser.Asking,
                     browser.Required.Id,
-                    new OrganizationId(id),
+                    id,
                     domain,
                     reason,
                     cancellationToken)
@@ -310,7 +309,7 @@ internal static class OrganizationEndpoints
         [FromBody] OrganizationReasonBody body,
         IOrganizationDomains domains,
         RequestSession browser,
-        Guid id,
+        OrganizationId id,
         string domain,
         CancellationToken cancellationToken)
     {
@@ -328,7 +327,7 @@ internal static class OrganizationEndpoints
                 .RemoveDomainAsync(
                     browser.Asking,
                     browser.Required.Id,
-                    new OrganizationId(id),
+                    id,
                     domain,
                     reason,
                     cancellationToken)
@@ -341,7 +340,7 @@ internal static class OrganizationEndpoints
         IInvitations invitations,
         RequestSession browser,
         HttpContext context,
-        Guid id,
+        OrganizationId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -361,7 +360,7 @@ internal static class OrganizationEndpoints
                 .IssueAsync(
                     browser.Asking,
                     browser.Required.Id,
-                    new OrganizationId(id),
+                    id,
                     request,
                     RequestOrigin.Source(context.Request),
                     cancellationToken)
@@ -376,8 +375,8 @@ internal static class OrganizationEndpoints
     private static async Task<IResult> RevokeInvitationAsync(
         IInvitations invitations,
         RequestSession browser,
-        Guid id,
-        Guid invitationId,
+        OrganizationId id,
+        InvitationId invitationId,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(invitations);
@@ -387,8 +386,8 @@ internal static class OrganizationEndpoints
             await invitations
                 .RevokeAsync(
                     browser.Asking,
-                    new OrganizationId(id),
-                    new InvitationId(invitationId),
+                    id,
+                    invitationId,
                     cancellationToken)
                 .ConfigureAwait(false),
             Nothing);
@@ -398,8 +397,8 @@ internal static class OrganizationEndpoints
         IInvitations invitations,
         RequestSession browser,
         HttpContext context,
-        Guid id,
-        Guid subject,
+        OrganizationId id,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(invitations);
@@ -410,8 +409,8 @@ internal static class OrganizationEndpoints
             await invitations
                 .EndMembershipAsync(
                     browser.Asking,
-                    new OrganizationId(id),
-                    new SubjectId(subject),
+                    id,
+                    subject,
                     RequestOrigin.Source(context.Request),
                     cancellationToken)
                 .ConfigureAwait(false),
