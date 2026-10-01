@@ -39,6 +39,12 @@ internal sealed class KeyRotationStore(
             AND NOT pg_has_role(current_user, 'identity_app', 'MEMBER');
         """;
 
+    // D-166 X3: a run decides on the progress it reads, and a first start has no row to
+    // lock, so the kind's progress is held as one for the rest of the transaction; no
+    // read takes this lock.
+    private const string Hold =
+        "SELECT pg_advisory_xact_lock(hashtextextended('identity.key_rotations/' || CAST(@kind AS text), 0));";
+
     private const string Wrapping =
         """
         SELECT DISTINCT key_version FROM identity.subject_keys WHERE format_marker = @marker;
@@ -91,6 +97,33 @@ internal sealed class KeyRotationStore(
                 transaction: ambient.Transaction,
                 cancellationToken: cancellationToken))
             .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask HoldAsync(KeyRotationKind kind, CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A rotation's progress is held only inside the operation's transaction.");
+        }
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        _ = await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                Hold,
+                new { kind = kind.ToString() },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the run decides on is the progress as committed.
+        foreach (KeyRotationRecord row in context.KeyRotations.Local.Where(row => row.Kind == kind).ToList())
+        {
+            await context.Entry(row).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc/>

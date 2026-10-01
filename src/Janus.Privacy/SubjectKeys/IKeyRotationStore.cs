@@ -26,6 +26,18 @@ internal interface IKeyRotationStore
     ValueTask<bool> UnderMaintenanceCredentialAsync(CancellationToken cancellationToken);
 
     /// <summary>
+    /// Holds the progress of the kind's rotations against every other run of it until
+    /// the operation's transaction ends, so the progress is read as committed and two
+    /// runs at once start, take each batch and complete one after the other
+    /// (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="kind">Which key.</param>
+    /// <param name="cancellationToken">Abandons the wait.</param>
+    /// <returns>The work of holding it.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask HoldAsync(KeyRotationKind kind, CancellationToken cancellationToken);
+
+    /// <summary>
     /// The rotation of the kind to the highest version, where one was ever started.
     /// </summary>
     /// <param name="kind">Which key.</param>

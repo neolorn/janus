@@ -500,6 +500,59 @@ public sealed class KeyRotationTests(DatabaseFixture database) : IClassFixture<D
     }
 
     /// <summary>
+    /// OPS-SEC-003 AC2, AC5, CONV-DESIGN-003 AC6: two runs at once each read the rotation
+    /// with its progress held, so it is started once and resumed by the other, each key
+    /// is counted once, and the completion is recorded once.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_003_AC2_TwoRunsAtOnceStartAndCompleteTheRotationOnceAsync()
+    {
+        await using NpgsqlConnection connection = await ResetAsync();
+        await SeedAsync(connection, 3);
+
+        Invocation[] runs = await Task.WhenAll(
+            Invocation.PipedAsync([Command], Rotating()),
+            Invocation.PipedAsync([Command], Rotating()));
+
+        Assert.All(runs, run => Assert.Equal((0, """{"version":2,"processed":3}"""), (run.ExitCode, Lines(run)[1])));
+        Assert.Equal(3, await UnderAsync(connection, 2));
+
+        IReadOnlyList<(string Action, int Processed)> recorded = await RecordedAsync(connection);
+
+        Assert.Equal(("ops.keyrotation.started", 0), recorded[0]);
+        Assert.Equal(
+            ["ops.keyrotation.completed", "ops.keyrotation.resumed"],
+            recorded.Skip(1).Select(row => row.Action).Order(StringComparer.Ordinal));
+        Assert.Contains(("ops.keyrotation.completed", 3), recorded);
+    }
+
+    /// <summary>
+    /// OPS-SEC-003 AC4, CONV-DESIGN-003 AC6: two confirmations of the seal at once each
+    /// retire with the progress held, so one retires the rotation and the other finds it
+    /// retired and is refused.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_003_AC4_TwoSealsAtOnceRetireTheRotationOnceAsync()
+    {
+        await using NpgsqlConnection connection = await ResetAsync();
+        await SeedAsync(connection, 3);
+
+        Assert.Equal(0, (await Invocation.PipedAsync([Command], Rotating())).ExitCode);
+
+        Invocation[] seals = await Task.WhenAll(
+            Invocation.PipedAsync([Command, Sealed], Rotating()),
+            Invocation.PipedAsync([Command, Sealed], Rotating()));
+
+        Assert.Equal([0, 1], seals.Select(seal => seal.ExitCode).Order());
+        Assert.Equal(
+            """{"code":"model.rotation.notready","details":{}}""",
+            Assert.Single(seals, seal => seal.ExitCode == 1).Error.Trim());
+        Assert.Single(await RecordedAsync(connection), row => row.Item1 == "ops.keyrotation.retired");
+    }
+
+    /// <summary>
     /// OPS-SEC-003 AC3: while something still wraps under the previous version, which is
     /// an application not yet handed the new one, the seal is refused and the version
     /// stays; what was found is re-wrapped, and once nothing more appears the seal

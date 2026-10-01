@@ -499,6 +499,69 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// OPS-SEC-003 AC2, AC6, CONV-DESIGN-003 AC6: two runs at once each read the rotation
+    /// with its progress held, so it is started once and resumed by the other, each
+    /// fingerprint is counted once, and the completion is recorded once.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_003_AC6_TwoRunsAtOnceStartAndCompleteTheRotationOnceAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        await SeedAsync();
+
+        Result<KeyRotationProgress>[] runs = await Task.WhenAll(
+            RecomputedAsync(new FixedTime(Noon), cancellationToken),
+            RecomputedAsync(new FixedTime(Noon), cancellationToken));
+
+        Assert.All(runs, run => Assert.Equal(5, Completed(run).Processed));
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        Assert.Equal(
+            [("ops.keyrotation.completed", 5), ("ops.keyrotation.resumed", 1), ("ops.keyrotation.started", 1)],
+            (await connection.QueryAsync<(string Action, int Processed)>(
+                """
+                SELECT action, (details->>'processed')::int
+                FROM identity.audit_records
+                WHERE action LIKE 'ops.keyrotation.%' AND details->>'kind' = 'fingerprint-key'
+                """))
+                .GroupBy(row => row.Action, StringComparer.Ordinal)
+                .Select(rows => (rows.Key, rows.Key == "ops.keyrotation.completed" ? rows.Single().Processed : rows.Count()))
+                .OrderBy(row => row.Key, StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// OPS-SEC-003 AC4, AC6, CONV-DESIGN-003 AC6: two confirmations of the seal at once
+    /// each retire with the progress held, so one retires the rotation and the other
+    /// finds it retired and is refused.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_003_AC6_TwoSealsAtOnceRetireTheRotationOnceAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        Completed(await RecomputedAsync(new FixedTime(Noon), cancellationToken));
+
+        Result<KeyRetirement>[] seals = await Task.WhenAll(
+            RetiredAsync(new FixedTime(Noon), cancellationToken),
+            RetiredAsync(new FixedTime(Noon), cancellationToken));
+
+        Assert.Equal(
+            ErrorCodes.RotationNotReady,
+            Assert.Single(seals, seal => seal.Match(_ => false, _ => true)).Match(_ => default, error => error.Code));
+        Assert.Equal([1], Retirement(Assert.Single(seals, seal => seal.Match(_ => true, _ => false))).Retired);
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        Assert.Equal(
+            1,
+            await connection.ExecuteScalarAsync<int>(
+                "SELECT count(*)::int FROM identity.audit_records WHERE action = 'ops.keyrotation.retired'"));
+    }
+
+    /// <summary>
     /// OPS-SEC-003 AC6: a stored fingerprint its own value does not compute under its
     /// version is a defect the rotation stops on rather than replaces.
     /// </summary>

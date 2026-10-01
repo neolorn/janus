@@ -77,6 +77,10 @@ internal sealed class KeyRotation(
             return Result.Failure<KeyRotationProgress>(notBegun);
         }
 
+        // D-166 X3: the rotation is read and started with its progress held, so two runs
+        // at once start it once and the second resumes it.
+        await store.HoldAsync(Kind, cancellationToken).ConfigureAwait(false);
+
         KeyRotationProgress? latest = await store.LatestAsync(Kind, cancellationToken).ConfigureAwait(false);
         IReadOnlySet<int> wrapping = await store.WrappingVersionsAsync(cancellationToken).ConfigureAwait(false);
 
@@ -125,10 +129,10 @@ internal sealed class KeyRotation(
 
         if (progress.CompletedAt is null)
         {
-            await PassAsync(progress, cancellationToken).ConfigureAwait(false);
+            progress = await PassAsync(progress, cancellationToken).ConfigureAwait(false);
         }
 
-        await SweepAsync(progress, cancellationToken).ConfigureAwait(false);
+        progress = (await SweepAsync(progress, cancellationToken).ConfigureAwait(false)).Progress;
 
         if (progress.CompletedAt is null)
         {
@@ -137,6 +141,19 @@ internal sealed class KeyRotation(
             {
                 return Result.Failure<KeyRotationProgress>(notBegunAgain);
             }
+
+            // D-166 X3: completed once, by the run that finds it still open.
+            KeyRotationProgress? open = await CommittedAsync(progress, cancellationToken).ConfigureAwait(false);
+
+            if (open is not { CompletedAt: null })
+            {
+                KeyRotationProgress reached = open ?? progress;
+
+                return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                    .Match(() => Result.Success(reached), Result.Failure<KeyRotationProgress>);
+            }
+
+            progress = open;
 
             DateTimeOffset completed = time.GetUtcNow();
             progress.Complete(completed);
@@ -203,7 +220,7 @@ internal sealed class KeyRotation(
         // A value wrapped under a previous version since the rotation completed means
         // something still wraps under it, and retiring that version would strand what it
         // wraps next. The values found are re-wrapped all the same.
-        int pending = await SweepAsync(latest, cancellationToken).ConfigureAwait(false);
+        int pending = (await SweepAsync(latest, cancellationToken).ConfigureAwait(false)).Swept;
 
         if (pending > 0)
         {
@@ -216,13 +233,21 @@ internal sealed class KeyRotation(
             return Result.Failure<KeyRetirement>(notBegunAgain);
         }
 
+        // D-166 X3: retired once, by the run that finds it completed and standing.
+        if (await CommittedAsync(latest, cancellationToken).ConfigureAwait(false)
+            is not { CompletedAt: not null, RetiredAt: null } standing)
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Failure<KeyRetirement>(SealRefused(pending: null)), Result.Failure<KeyRetirement>);
+        }
+
         DateTimeOffset now = time.GetUtcNow();
-        latest.Retire(now);
+        standing.Retire(now);
 
-        int[] retired = [.. held.Versions.Where(version => version != latest.Version).Order()];
+        int[] retired = [.. held.Versions.Where(version => version != standing.Version).Order()];
 
-        await store.RecordAsync(latest, cancellationToken).ConfigureAwait(false);
-        await RecordedAsync(AuditActions.KeyRotationRetired, latest, now, retired, cancellationToken).ConfigureAwait(false);
+        await store.RecordAsync(standing, cancellationToken).ConfigureAwait(false);
+        await RecordedAsync(AuditActions.KeyRotationRetired, standing, now, retired, cancellationToken).ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
@@ -230,7 +255,7 @@ internal sealed class KeyRotation(
             return Result.Failure<KeyRetirement>(notCommittedAgain);
         }
 
-        return Result.Success(new KeyRetirement(latest, retired));
+        return Result.Success(new KeyRetirement(standing, retired));
     }
 
     private static Error KeysUnavailable() =>
@@ -245,12 +270,27 @@ internal sealed class KeyRotation(
 
     // The ordered pass: the subject-key rows in order after the last one reached, a batch to a
     // transaction, each committing with the point it reached.
-    private async ValueTask PassAsync(KeyRotationProgress progress, CancellationToken cancellationToken)
+    private async ValueTask<KeyRotationProgress> PassAsync(
+        KeyRotationProgress progress,
+        CancellationToken cancellationToken)
     {
         while (true)
         {
             (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
                 .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+
+            // D-166 X3: each batch starts from the point committed, with the progress
+            // held, so two runs at once take each batch once and count it once.
+            if (await CommittedAsync(progress, cancellationToken).ConfigureAwait(false)
+                is not { CompletedAt: null } committed)
+            {
+                (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                    .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+
+                return progress;
+            }
+
+            progress = committed;
 
             KeyRotationBatch batch = await store
                 .ReWrapSubjectKeysAfterAsync(progress.LastKey, BatchSize, cancellationToken)
@@ -261,7 +301,7 @@ internal sealed class KeyRotation(
                 (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
                     .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
-                return;
+                return progress;
             }
 
             progress.Passed(last, batch.Processed);
@@ -274,7 +314,9 @@ internal sealed class KeyRotation(
 
     // What the ordered pass cannot reach: subject keys written under a previous version
     // behind the point it had reached. Returns how many were re-wrapped.
-    private async ValueTask<int> SweepAsync(KeyRotationProgress progress, CancellationToken cancellationToken)
+    private async ValueTask<(KeyRotationProgress Progress, int Swept)> SweepAsync(
+        KeyRotationProgress progress,
+        CancellationToken cancellationToken)
     {
         int swept = 0;
         int taken;
@@ -283,6 +325,18 @@ internal sealed class KeyRotation(
         {
             (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
                 .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+
+            // D-166 X3: counted on the progress as committed, with it held.
+            if (await CommittedAsync(progress, cancellationToken).ConfigureAwait(false)
+                is not { RetiredAt: null } committed)
+            {
+                (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                    .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+
+                return (progress, swept);
+            }
+
+            progress = committed;
 
             taken = await store.ReWrapRemainingSubjectKeysAsync(BatchSize, cancellationToken).ConfigureAwait(false);
             progress.Swept(taken);
@@ -295,7 +349,21 @@ internal sealed class KeyRotation(
         }
         while (taken == BatchSize);
 
-        return swept;
+        return (progress, swept);
+    }
+
+    // The rotation as committed, read with its progress held for the rest of the
+    // transaction, or nothing where the rotation standing is no longer this run's.
+    private async ValueTask<KeyRotationProgress?> CommittedAsync(
+        KeyRotationProgress progress,
+        CancellationToken cancellationToken)
+    {
+        await store.HoldAsync(Kind, cancellationToken).ConfigureAwait(false);
+
+        return await store.LatestAsync(Kind, cancellationToken).ConfigureAwait(false) is { } latest
+            && latest.Version == progress.Version
+                ? latest
+                : null;
     }
 
     private async ValueTask RecordedAsync(
