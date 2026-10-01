@@ -43,7 +43,8 @@ public interface IPrivacyRequests
     /// <returns>
     /// The receipt, or the refusal: <c>api.request.malformed</c> naming <c>channel</c>
     /// or <c>identityConfirmation</c> where either is blank or longer than 1024
-    /// characters after trimming, <c>privacy.request.receivedfuture</c> for a date
+    /// characters after trimming, or <c>detail</c> where one is given and is,
+    /// <c>privacy.request.receivedfuture</c> for a date
     /// later than today in the deployment's zone, <c>privacy.request.duplicate</c>
     /// where an identical request is already open.
     /// </returns>

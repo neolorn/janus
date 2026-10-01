@@ -737,6 +737,38 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// API-CONV-002 AC3, CONV-CODE-006 AC3: an entry's detail is optional, and one given
+    /// blank or longer than 1024 characters after trimming is malformed; one within the
+    /// bound is kept trimmed.
+    /// </summary>
+    /// <param name="character">What the detail is written of.</param>
+    /// <param name="length">How many of it.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(" ", 2)]
+    [InlineData("d", 1025)]
+    public async Task API_CONV_002_AnEntryWithABlankOrOverlongDetailIsMalformedAsync(string character, int length)
+    {
+        PrivacyRequestEntry entry = Entry(PrivacyRequestType.Erasure, new DateOnly(2026, 9, 18));
+
+        Result<PrivacyRequestReceipt> refused = await Requests.EnterAsync(
+            AccessContext.Of(Mona),
+            entry with { Detail = Written(character, length) },
+            CancellationToken.None);
+
+        Assert.Equal(ErrorCodes.RequestMalformed, refused.Match(_ => default, error => error.Code));
+        Assert.Equal("detail", Member(refused));
+        Assert.Empty(_requests.Queue);
+
+        _ = await Requests.EnterAsync(
+            AccessContext.Of(Mona),
+            entry with { Detail = " a letter " },
+            CancellationToken.None);
+
+        Assert.Equal("a letter", Assert.Single(_requests.Queue).Detail);
+    }
+
+    /// <summary>
     /// API-CONV-002 AC3: the reason a refusal records is free text, and one that is
     /// blank or longer than 1024 characters after trimming decides nothing.
     /// </summary>

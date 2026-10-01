@@ -125,6 +125,15 @@ internal sealed class PrivacyRequestService(
             return Result.Failure<PrivacyRequestReceipt>(denied);
         }
 
+        // 09 section 8a: an entry's detail is optional, empty where none was given,
+        // and one given is held to the bound of API-CONV-002.
+        string detail = entry.Detail.Trim();
+
+        if (entry.Detail.Length > 0 && Stated(detail) is null)
+        {
+            return Result.Failure<PrivacyRequestReceipt>(Malformed("detail"));
+        }
+
         if (Stated(entry.Channel) is not string channel)
         {
             return Result.Failure<PrivacyRequestReceipt>(Malformed("channel"));
@@ -170,7 +179,7 @@ internal sealed class PrivacyRequestService(
             ? Result.Failure<PrivacyRequestReceipt>(failure)
             : await QueuedAsync(
                     QueuedRequest.Entered(
-                        entry with { Channel = channel, IdentityConfirmation = confirmation },
+                        entry with { Detail = detail, Channel = channel, IdentityConfirmation = confirmation },
                         now,
                         deadline),
                     Entered,

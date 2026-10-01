@@ -362,6 +362,15 @@ internal static class PrivacyEndpoints
             return Answers.Malformed("receivedAt");
         }
 
+        // 09 section 8a: the detail is optional, and one given is 1 to 1024 characters
+        // after trimming, as the channel and the confirmation are (API-CONV-002).
+        string? detail = body.Detail?.Trim();
+
+        if (detail is { Length: 0 or > 1024 })
+        {
+            return Answers.Malformed("detail");
+        }
+
         if (body.Channel?.Trim() is not { Length: > 0 and <= 1024 } channel)
         {
             return Answers.Malformed("channel");
@@ -381,7 +390,7 @@ internal static class PrivacyEndpoints
                     new PrivacyRequestEntry(
                         new SubjectId(subject),
                         type,
-                        body.Detail ?? string.Empty,
+                        detail ?? string.Empty,
                         receivedAt,
                         channel,
                         confirmation),

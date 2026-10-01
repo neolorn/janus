@@ -262,6 +262,39 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// API-CONV-002 AC3, CONV-CODE-006 AC3: an entry's detail given blank, or longer
+    /// than 1024 characters after trimming, is refused naming it before the service is
+    /// reached, so a caller without the permission is answered for the body.
+    /// </summary>
+    /// <param name="character">What the detail is written of.</param>
+    /// <param name="length">How many of it.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(' ', 3)]
+    [InlineData('d', 1025)]
+    public async Task API_CONV_002_AnEntryWithADetailOutsideTheBoundIsRefusedBeforeTheServiceAsync(
+        char character,
+        int length)
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+
+        Answer entered = await browser.SendAsync(
+            "POST",
+            "/admin/privacy/requests/",
+            ("subject", subject.Value.ToString()),
+            ("type", "erasure"),
+            ("detail", new string(character, length)),
+            ("receivedAt", "2026-02-27"),
+            ("channel", "letter"),
+            ("identityConfirmation", "national identity card seen"));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, entered.Status);
+        Assert.Equal("detail", entered.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Empty(_deployment.Requests.Queue);
+    }
+
+    /// <summary>
     /// API-CONV-002 AC3: a refusal whose reason is blank after trimming is refused
     /// naming it, and the request stays open.
     /// </summary>
