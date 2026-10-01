@@ -51,7 +51,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
         await using StoreContext reading = database.Context();
 
         ConsentRecord held = Assert.Single(
-            await new ConsentStore(reading)
+            await new ConsentStore(reading, new DataConnections(reading))
                 .ConsentsAsync(subject, TestContext.Current.CancellationToken));
 
         Assert.Equal(Recommendations, held.Purpose);
@@ -85,7 +85,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
         await using StoreContext reading = database.Context();
 
         ConsentRecord held = Assert.Single(
-            await new ConsentStore(reading)
+            await new ConsentStore(reading, new DataConnections(reading))
                 .ConsentsAsync(subject, TestContext.Current.CancellationToken));
 
         Assert.Equal(Noon.AddDays(1), held.WithdrawnAt);
@@ -119,7 +119,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
 
         await using StoreContext reading = database.Context();
 
-        IReadOnlyList<HeldConsent> held = await new ConsentStore(reading)
+        IReadOnlyList<HeldConsent> held = await new ConsentStore(reading, new DataConnections(reading))
             .LiveAgainstAnotherAsync([Recommendations], Notice, "2", TestContext.Current.CancellationToken);
 
         SubjectId[] mine = [asked, current, withdrawn];
@@ -150,7 +150,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
 
         await using StoreContext reading = database.Context();
 
-        IReadOnlyList<HeldConsent> held = await new ConsentStore(reading).LiveAgainstAnotherAsync(
+        IReadOnlyList<HeldConsent> held = await new ConsentStore(reading, new DataConnections(reading)).LiveAgainstAnotherAsync(
             [Recommendations],
             "newsletter-terms",
             "2",
@@ -190,7 +190,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
         await using StoreContext reading = database.Context();
 
         ObjectionRecord held = Assert.Single(
-            await new ConsentStore(reading)
+            await new ConsentStore(reading, new DataConnections(reading))
                 .ObjectionsAsync(subject, TestContext.Current.CancellationToken));
 
         Assert.Equal("security", held.Purpose);
@@ -224,11 +224,69 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
         return subject;
     }
 
+    /// <summary>
+    /// PRIV-CONS-008 AC5, CONV-DESIGN-003 AC6: two withdrawals of one consent at once are
+    /// each decided with the subject's records held, so the second finds the consent
+    /// withdrawn and one withdrawal is made.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_008_AC5_TwoWithdrawalsAtOnceWithdrawOnceAsync()
+    {
+        SubjectId subject = await RegisteredAsync();
+
+        await WritingAsync(async store => await store.RecordAsync(
+            subject,
+            new ConsentRecord(
+                Recommendations,
+                Notice,
+                "1",
+                ConsentMechanism.Dashboard,
+                ConsentKind.Written,
+                Noon,
+                WithdrawnAt: null,
+                SupersededAt: null),
+            TestContext.Current.CancellationToken));
+
+        bool[] withdrawn = await Task.WhenAll(
+            WithdrawnOnceAsync(subject, Noon.AddDays(1)),
+            WithdrawnOnceAsync(subject, Noon.AddDays(2)));
+
+        Assert.Equal(1, withdrawn.Count(answer => answer));
+    }
+
+    // A withdrawal as the service makes one: the consent read before, then again with
+    // the subject's records held, and withdrawn only where it still stands.
+    private async Task<bool> WithdrawnOnceAsync(SubjectId subject, DateTimeOffset at)
+    {
+        await using StoreContext writing = database.Context();
+        await using var work = new UnitOfWork(writing);
+        var store = new ConsentStore(writing, new DataConnections(writing));
+
+        _ = await store.ConsentsAsync(subject, TestContext.Current.CancellationToken);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        await store.HoldAsync(subject, TestContext.Current.CancellationToken);
+
+        ConsentRecord held = Assert.Single(await store.ConsentsAsync(subject, TestContext.Current.CancellationToken));
+        bool standing = held.WithdrawnAt is null;
+
+        if (standing)
+        {
+            await store.RecordAsync(subject, held with { WithdrawnAt = at }, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return standing;
+    }
+
     private async Task WritingAsync(Func<ConsentStore, Task> write)
     {
         await using StoreContext writing = database.Context();
 
-        await write(new ConsentStore(writing));
+        await write(new ConsentStore(writing, new DataConnections(writing)));
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 }

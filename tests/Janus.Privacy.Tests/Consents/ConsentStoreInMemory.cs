@@ -20,6 +20,20 @@ internal sealed class ConsentStoreInMemory : IConsentStore
     private readonly Dictionary<(SubjectId Subject, string Purpose), ObjectionRecord> _objections =
         [];
 
+    /// <summary>
+    /// Gets or sets what another transaction commits while this one waits for the
+    /// subject's records, so a test may change one under a decision already made.
+    /// </summary>
+    public Action? Holding { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        Holding?.Invoke();
+
+        return ValueTask.CompletedTask;
+    }
+
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<ConsentRecord>> ConsentsAsync(
         SubjectId subject,

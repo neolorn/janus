@@ -205,6 +205,32 @@ public sealed class ConsentTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-CONS-008 AC5, CONV-DESIGN-003: a consent withdrawn while this withdrawal
+    /// waited for the subject's records is withdrawn already, so this one announces and
+    /// records nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_008_AC5_AConsentWithdrawnMeanwhileIsWithdrawnOnceAsync()
+    {
+        await GrantAsync(Recommendations);
+
+        ConsentRecord given = Assert.Single(await HeldAsync());
+        int announced = _events.Of<ConsentChanged>().Count;
+
+        _consents.Holding = () =>
+        {
+            _consents.Holding = null;
+            _ = _consents.RecordAsync(Ahmed, given with { WithdrawnAt = Noon }, CancellationToken.None).AsTask();
+        };
+
+        Assert.True(await WithdrawAsync(Recommendations));
+        Assert.Equal(announced, _events.Of<ConsentChanged>().Count);
+        Assert.DoesNotContain(_audit.Entries, entry => entry.Action.Equals(AuditActions.ConsentWithdrawn));
+        Assert.Equal(Noon, Assert.Single(await HeldAsync()).WithdrawnAt);
+    }
+
+    /// <summary>
     /// PRIV-SENS-002a AC1: withdrawing the consent-based purpose of a record announces
     /// that purpose alone, so a handler the host registered for the contractual
     /// purpose of the same record is never invoked by it.

@@ -101,6 +101,8 @@ internal sealed class ConsentService(
             return Result.Failure(notBegun);
         }
 
+        await consents.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
         // PRIV-CONS-001, PRIV-CONS-007: a grant from the subject's own pages over a
         // consent a material revision ended, and the subject never took back, is the
         // answer to being asked again. It is judged here, on the record as the grant's
@@ -181,7 +183,7 @@ internal sealed class ConsentService(
         // PRIV-CONS-008 AC5: a consent the subject does not hold is withdrawn already,
         // so the answer is the withdrawal's and nothing is written, announced or
         // recorded.
-        if (Of(held, purpose) is not ConsentRecord consent || consent.WithdrawnAt is not null)
+        if (Of(held, purpose) is not { WithdrawnAt: null })
         {
             return Result.Success();
         }
@@ -192,6 +194,16 @@ internal sealed class ConsentService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: the consent is read again with the subject's records held, so a
+        // withdrawal at the same moment is announced and recorded once.
+        await consents.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        if (Of(await consents.ConsentsAsync(subject, cancellationToken).ConfigureAwait(false), purpose)
+            is not { WithdrawnAt: null } consent)
+        {
+            return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
 
         await consents
@@ -332,7 +344,7 @@ internal sealed class ConsentService(
 
         // PRIV-RIGHT-001a AC6: an objection the subject has not made is withdrawn
         // already, so the answer is the withdrawal's and nothing is written.
-        if (Of(held, purpose) is not ObjectionRecord objection || objection.WithdrawnAt is not null)
+        if (Of(held, purpose) is not { WithdrawnAt: null })
         {
             return Result.Success();
         }
@@ -343,6 +355,15 @@ internal sealed class ConsentService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: read again with the subject's records held, as for a consent.
+        await consents.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        if (Of(await consents.ObjectionsAsync(subject, cancellationToken).ConfigureAwait(false), purpose)
+            is not { WithdrawnAt: null } objection)
+        {
+            return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
 
         await consents

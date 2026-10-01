@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Core;
 using Janus.Privacy.Consents;
 using Microsoft.EntityFrameworkCore;
@@ -14,13 +15,52 @@ namespace Janus.Storage.Privacy.Consents;
 /// <c>objections</c> tables.
 /// </summary>
 /// <param name="context">The context the operation's reads and writes run on.</param>
+/// <param name="connections">Where the lock statement takes its connection from.</param>
 /// <remarks>
 /// Implements PRIV-CONS-001, PRIV-RIGHT-001a and CONV-DESIGN-003. Nothing here
 /// deletes: a withdrawal writes a timestamp onto the row that is there, because the
 /// record is the evidence the law asks for.
 /// </remarks>
-internal sealed class ConsentStore(StoreContext context) : IConsentStore
+internal sealed class ConsentStore(StoreContext context, DataConnections connections) : IConsentStore
 {
+    // D-166 X3: a withdrawal is decided on the record it reads, and a first grant has
+    // no row to lock, so the subject's records are held as one for the rest of the
+    // transaction; no read takes this lock.
+    private const string Hold =
+        "SELECT pg_advisory_xact_lock(hashtextextended('identity.consents/' || CAST(@subject AS text), 0));";
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A subject's consents are held only inside the operation's transaction.");
+        }
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        _ = await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                Hold,
+                new { subject = subject.Value },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+
+        // A record the context already tracks was read before the lock, so it is read
+        // again: what the change is decided on is the record as committed.
+        foreach (ConsentRecordRow row in context.Consents.Local.Where(row => row.Subject == subject).ToList())
+        {
+            await context.Entry(row).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        foreach (ObjectionRecordRow row in context.Objections.Local.Where(row => row.Subject == subject).ToList())
+        {
+            await context.Entry(row).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<ConsentRecord>> ConsentsAsync(
         SubjectId subject,

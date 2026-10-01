@@ -17,6 +17,18 @@ namespace Janus.Privacy.Consents;
 internal interface IConsentStore
 {
     /// <summary>
+    /// Holds one subject's consents and objections against every other change of them
+    /// until the operation's transaction ends, so what the subject holds is read as
+    /// committed and two changes at once are made one after the other
+    /// (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    /// <param name="cancellationToken">Abandons the wait.</param>
+    /// <returns>The work of holding them.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Every consent record one subject holds.
     /// </summary>
     /// <param name="subject">Whose.</param>

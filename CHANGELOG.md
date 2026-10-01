@@ -1478,6 +1478,8 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- A consent's grant and withdrawal and an objection's withdrawal are decided with the
+  subject's records held, so two withdrawals at once announce and record one.
 - A failed delivery is completed by hand under a lock on its row, so two operators at
   once close it once and record one completion.
 - A subject's export is counted against `privacy.export.ratelimit` with the subject's
