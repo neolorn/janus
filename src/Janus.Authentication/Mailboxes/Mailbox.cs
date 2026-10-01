@@ -342,7 +342,7 @@ internal sealed class Mailbox
         }
 
         return FailedAt is null && (NextAttemptAt is null || NextAttemptAt <= now)
-            ? new MailboxPush(Id, PendingKey.Value, Address.Value, owed)
+            ? new MailboxPush(Id, PendingKey.Value, Address, owed)
             : null;
     }
 

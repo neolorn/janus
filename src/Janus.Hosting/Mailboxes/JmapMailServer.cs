@@ -49,15 +49,10 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
     {
         ArgumentNullException.ThrowIfNull(push);
 
-        int at = push.Address.LastIndexOf('@');
-
-        if (at <= 0 || at == push.Address.Length - 1)
-        {
-            return Result.Failure(Fault());
-        }
-
-        string local = push.Address[..at];
-        string domain = push.Address[(at + 1)..];
+        string address = push.Address.Value;
+        int at = address.LastIndexOf('@');
+        string local = address[..at];
+        string domain = address[(at + 1)..];
         Error? failure = null;
 
         string token = Managed().Match(value => value, error => Withheld<string>(error, ref failure));
@@ -162,7 +157,10 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
                 return Result.Failure<IReadOnlyList<HostedMailbox>>(Fault());
             }
 
-            hosted.Add(new HostedMailbox(Carried(account), address, enabled));
+            hosted.Add(new HostedMailbox(
+                Carried(account),
+                EmailAddress.TryParse(address, out EmailAddress listed) ? listed : null,
+                enabled));
         }
 
         return Result.Success<IReadOnlyList<HostedMailbox>>(hosted);

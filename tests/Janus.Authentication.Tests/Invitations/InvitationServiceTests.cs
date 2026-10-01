@@ -220,7 +220,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
         MailboxPush pushed = Assert.Single(_server.Applied);
 
-        Assert.Equal(Corporate, pushed.Address);
+        Assert.Equal(Corporate, pushed.Address.Value);
         Assert.Equal(MailboxState.Disabled, pushed.State);
         Assert.Equal(Personal, Assert.Single(_notifications.Mail).Destination.Canonical);
     }
@@ -289,7 +289,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Accepted(await AcknowledgeAsync(holder, _invitations.Held[0].Id));
 
         Assert.Equal(Staff, Assert.Single(_attachments.Attached).Organization);
-        Assert.Equal(Corporate, Assert.Single(_server.Applied).Address);
+        Assert.Equal(Corporate, Assert.Single(_server.Applied).Address.Value);
     }
 
     /// <summary>
