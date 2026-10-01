@@ -928,10 +928,11 @@ against the public contract of LIB-API-001.
   return address is read at startup, and a deployment holding one that is not an
   absolute `https` address with a host, or `http` on a loopback IP literal (`127.0.0.1`,
   `[::1]`), does not start, failing `model.startup.redirectclient` naming the client;
-  `register-client` refuses such an address the same way. Registration resolves the client identifier it is
-  given against the registry as it takes it, and what a completed registration reports
-  as the return is the address that client registered; no step after the first takes a
-  destination at all. An identifier the registry does not hold registers the person
+  `register-client` refuses such an address the same way. Registration resolves the
+  client identifier it is given against the registry as it takes it, and what a
+  completed registration reports as the return is the origin (scheme, host and port) of
+  the address that client registered; no step after the first takes a destination at
+  all. An identifier the registry does not hold registers the person
   exactly as a registered one does and stores the deployment's default client, named in
   the protected key `redirect.defaultclient` and read against the registry at startup,
   so the completion returns the person to it. A deployment that names no default starts,

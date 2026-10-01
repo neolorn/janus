@@ -896,9 +896,11 @@ internal sealed class RegistrationService(
             return string.Empty;
         }
 
+        // API-REDIR-002: the origin of the registered address, scheme, host and port,
+        // which startup has read as an absolute address with a host.
         return await clients.FindAsync(live.Client, cancellationToken).ConfigureAwait(false)
             is OidcClient originating
-            ? originating.Redirect
+            ? new Uri(originating.Redirect).GetLeftPart(UriPartial.Authority)
             : string.Empty;
     }
 

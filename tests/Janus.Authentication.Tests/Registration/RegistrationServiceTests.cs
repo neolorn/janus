@@ -40,6 +40,9 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
 {
     private const string Client = "web";
     private const string Registered = "https://app.example.test/welcome";
+
+    // API-REDIR-002 (D-166, 145): what the completion answers of the registered address.
+    private const string Origin = "https://app.example.test";
     private const string Language = "en";
 
     private static readonly string[] Arabic = ["ar"];
@@ -1160,7 +1163,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
 
         Assert.Equal(completed.Subject, signedIn.Subject);
         Assert.Equal(completed.Session, signedIn.Id);
-        Assert.Equal(Registered, completed.Landing);
+        Assert.Equal(Origin, completed.Landing);
     }
 
     /// <summary>
@@ -1203,7 +1206,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 "fallback",
                 "fallback",
                 OidcClientKind.BrowserApplication,
-                "https://fallback.example.test/welcome",
+                "https://fallback.example.test:8443/welcome",
                 ["openid"]),
             Encoding.UTF8.GetBytes("a-secret-the-deployment-set"),
             DateTimeOffset.MinValue,
@@ -1214,13 +1217,13 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         RegistrationSessionId session = await SecuredAsync();
 
         Assert.Equal("fallback", Live(session).Client);
-        Assert.Equal("https://fallback.example.test/welcome", Ok(await AcceptedAsync(session)).Landing);
+        Assert.Equal("https://fallback.example.test:8443", Ok(await AcceptedAsync(session)).Landing);
     }
 
     /// <summary>
     /// API-REDIR-002 AC4: the return is resolved from the client the session stored,
-    /// so a deployment holding several clients returns the person to the one that
-    /// began the registration.
+    /// so a deployment holding several clients returns the person to the origin of the
+    /// one that began the registration, and to nothing more of its address (D-166, 145).
     /// </summary>
     [Fact]
     public async Task API_REDIR_002_AC4_TheReturnIsTheStoredClientsAndNoOthersAsync()
@@ -1237,7 +1240,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             DateTimeOffset.MinValue,
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(Registered, Ok(await AcceptedAsync(await SecuredAsync())).Landing);
+        Assert.Equal(Origin, Ok(await AcceptedAsync(await SecuredAsync())).Landing);
     }
 
     /// <summary>
