@@ -54,6 +54,33 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<Grant?> FindForUpdateAsync(GrantId id, CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A grant's row is held only inside the operation's transaction.");
+        }
+
+        bool tracked = context.Grants.Local.Any(record => record.Id == id);
+
+        GrantRecord? held = (await context.Grants
+                .FromSql($"SELECT * FROM identity.grants WHERE id = {id.Value} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .SingleOrDefault();
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the decision is made on is the row as it stood when the lock was taken.
+        if (held is not null && tracked)
+        {
+            await context.Entry(held).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return held is null ? null : Read(held);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<OrganizationId?> ScopeOfAsync(GrantId id, CancellationToken cancellationToken)
     {
         IReadOnlyList<OrganizationId> scoped = await context.Grants

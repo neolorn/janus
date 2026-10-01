@@ -26,6 +26,17 @@ internal interface IGrantStore
     ValueTask<Grant?> FindAsync(GrantId id, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads one grant, revoked or not, under a lock on its row held until the
+    /// operation's transaction ends, so a revocation decided on it cannot race another
+    /// (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="id">Which grant.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The grant as committed when the lock was taken, or nothing.</returns>
+    /// <exception cref="System.InvalidOperationException">No transaction is open.</exception>
+    ValueTask<Grant?> FindForUpdateAsync(GrantId id, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reads which organization one grant is scoped to, and nothing else of it, revoked
     /// or not.
     /// </summary>

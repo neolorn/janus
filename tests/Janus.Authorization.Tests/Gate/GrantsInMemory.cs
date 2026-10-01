@@ -39,6 +39,10 @@ internal sealed class GrantsInMemory : IGrantStore
         _versions[subject] = _versions.GetValueOrDefault(subject) + 1;
 
     /// <inheritdoc/>
+    public ValueTask<Grant?> FindForUpdateAsync(GrantId id, CancellationToken cancellationToken) =>
+        FindAsync(id, cancellationToken);
+
+    /// <inheritdoc/>
     public ValueTask<Grant?> FindAsync(GrantId id, CancellationToken cancellationToken)
     {
         Found++;

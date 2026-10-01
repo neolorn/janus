@@ -146,7 +146,7 @@ internal sealed class InvitationService(
             return Result.Failure<IssuedInvitation>(failure);
         }
 
-        IReadOnlyList<RoleName> attached = (await RolesAsync(context, organization, request.Roles, cancellationToken)
+        IReadOnlyList<RoleName> attached = (await RolesAsync(context, organization, request.Roles, held: false, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<IReadOnlyList<RoleName>>(error, ref failure));
 
@@ -238,6 +238,13 @@ internal sealed class InvitationService(
                 .Match(
                     () => Result.Failure<IssuedInvitation>(Error.From(ErrorCodes.Denied)),
                     Result.Failure<IssuedInvitation>);
+        }
+
+        if ((await RolesAsync(context, organization, attached, held: true, cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(_ => null, error => error) is Error unnamed)
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Failure<IssuedInvitation>(unnamed), Result.Failure<IssuedInvitation>);
         }
 
         if (reservation is not null)
@@ -495,6 +502,7 @@ internal sealed class InvitationService(
         AccessContext context,
         OrganizationId organization,
         IReadOnlyList<RoleName>? named,
+        bool held,
         CancellationToken cancellationToken)
     {
         if (named is null)
@@ -518,11 +526,19 @@ internal sealed class InvitationService(
 
         bool administering = false;
 
-        foreach (RoleName role in distinct)
+        // D-166 X3: under the transaction the rows are locked in one order, so a removal or
+        // a redefinition at the same moment is judged before or after the invitation.
+        List<RoleName> order = held ? [.. distinct.OrderBy(name => name.ToString(), StringComparer.Ordinal)] : distinct;
+
+        foreach (RoleName role in order)
         {
+            DefinedRole? found = held
+                ? await roles.FindForUpdateAsync(role, cancellationToken).ConfigureAwait(false)
+                : await roles.FindAsync(role, cancellationToken).ConfigureAwait(false);
+
             // REG-INV-001: a role the deployment does not hold reads well and means
             // nothing, as a grant naming one does.
-            if (await roles.FindAsync(role, cancellationToken).ConfigureAwait(false) is not DefinedRole defined)
+            if (found is not DefinedRole defined)
             {
                 return Result.Failure<IReadOnlyList<RoleName>>(Named(ErrorCodes.GrantUnresolved, "roles"));
             }

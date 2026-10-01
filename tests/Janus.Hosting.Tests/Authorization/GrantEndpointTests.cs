@@ -383,6 +383,27 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// OPS-CFG-007 AC1, CONV-DESIGN-003 AC6: the role is read again under its lock as the
+    /// grant is written, so one that came to carry system administration meanwhile is
+    /// not conferred by an administrator without it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_CFG_007_AC1_ARoleThatCameToAdministerMeanwhileIsNotConferredAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Administration, Permissions.GrantManage);
+
+        _deployment.Roles.Locking = name =>
+            _ = _deployment.Roles.RecordAsync(Role.Of(name, Permissions.All), CancellationToken.None).AsTask();
+
+        Answer conferred = await GrantedAsync(administrator, "organization", Administration.ToString(), role: Reader);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, conferred.Status);
+        Assert.Equal(ErrorCodes.Denied.ToString(), conferred.Text("code"));
+        Assert.Empty(await HeldAsync(Administration));
+    }
+
+    /// <summary>
     /// OPS-CFG-007: revoking system administration requires system administration.
     /// </summary>
     /// <returns>The work of the test.</returns>

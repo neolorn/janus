@@ -107,7 +107,9 @@ internal sealed class RoleService(
             return Result.Failure<bool>(notBegun);
         }
 
-        Role? held = await roles.FindAsync(role.Name, cancellationToken).ConfigureAwait(false);
+        // D-166 X3: the role is read under its row's lock, so two definitions at once are
+        // made one after the other and the second is judged on what the first left.
+        Role? held = await roles.FindForUpdateAsync(role.Name, cancellationToken).ConfigureAwait(false);
         var defined = Role.Of(role.Name, role.Permissions);
 
         if (await AdministeringRefusedAsync(context, [held, defined], cancellationToken).ConfigureAwait(false)
@@ -194,7 +196,9 @@ internal sealed class RoleService(
 
         // X5, D-166: a path naming a role the deployment does not hold names no record,
         // and under /admin nothing is concealed.
-        if (await roles.FindAsync(role, cancellationToken).ConfigureAwait(false) is not Role held)
+        // D-166 X3: as for a definition; an invitation's issue and a grant hold the row
+        // too, so none comes to name a role removed meanwhile.
+        if (await roles.FindForUpdateAsync(role, cancellationToken).ConfigureAwait(false) is not Role held)
         {
             return await EndedAsync(Error.From(ErrorCodes.RoleNotFound), cancellationToken).ConfigureAwait(false);
         }

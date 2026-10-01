@@ -1478,6 +1478,10 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- A role's definition and removal, a grant's writing and revocation, and an
+  invitation's issue are decided under a lock on the role's row, so two definitions at
+  once never merge, a grant is judged on what its role allows as committed, two grants
+  saying one thing at once write one, and nothing comes to name a removed role.
 - A membership's end, its attachment and the erasure of its organization read the
   memberships under locks on their rows, so two ends at once end a membership once
   and announce it once.

@@ -433,6 +433,32 @@ public sealed class GrantStoreTests(DatabaseFixture database)
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
+    /// <summary>
+    /// AUTHZ-GRANT-002, CONV-DESIGN-003 AC6: two grants saying the same thing at once
+    /// are each written under the lock on their role's row, so the second finds the
+    /// first and one grant stands.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_GRANT_002_TwoGrantsSayingOneThingAtOnceWriteOneAsync()
+    {
+        OrganizationId organization = await _deployment.OrganizationAsync(Noon);
+        SubjectId account = await _deployment.AccountAsync(Noon);
+        ResourceReference record = Reference("document");
+
+        await RoleAsync();
+
+        bool[] written = await Task.WhenAll(
+            WrittenOnceAsync(GrantSubject.Of(account), organization, record, account),
+            WrittenOnceAsync(GrantSubject.Of(account), organization, record, account));
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(1, written.Count(answer => answer));
+        Assert.Equal(
+            1,
+            await reading.Grants.CountAsync(row => row.Organization == organization, TestContext.Current.CancellationToken));
+    }
+
     private static GrantStore Store(StoreContext context) =>
         new(context, new DataConnections(context));
 
@@ -505,6 +531,36 @@ public sealed class GrantStoreTests(DatabaseFixture database)
         await transaction.CommitAsync(TestContext.Current.CancellationToken);
 
         return grant.Id;
+    }
+
+    // Each grant is its own request, judging the duplicate under the role's lock as the
+    // grant service does.
+    private async Task<bool> WrittenOnceAsync(
+        GrantSubject subject,
+        OrganizationId organization,
+        ResourceReference on,
+        SubjectId grantedBy)
+    {
+        Grant grant = Written(subject, organization, on, null, grantedBy);
+
+        await using StoreContext writing = database.Context();
+        await using var work = new UnitOfWork(writing);
+        GrantStore store = Store(writing);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        Assert.NotNull(await new RoleStore(writing).FindForUpdateAsync(grant.Role, TestContext.Current.CancellationToken));
+
+        bool fresh = !await store.ExistsAsync(grant, Noon, TestContext.Current.CancellationToken);
+
+        if (fresh)
+        {
+            await store.CreateAsync(grant, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return fresh;
     }
 
     private async Task<ResourceReference> RegisterAsync(

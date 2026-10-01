@@ -150,7 +150,7 @@ internal sealed class GrantService(
                 now,
                 request.Reason)
             .Match(
-                grant => WrittenAsync(grant, now, cancellationToken),
+                grant => WrittenAsync(context, grant, now, cancellationToken),
                 refused => ValueTask.FromResult(Result.Failure<GrantId>(refused)))
             .ConfigureAwait(false);
     }
@@ -219,11 +219,25 @@ internal sealed class GrantService(
             return Result.Failure(notBegun);
         }
 
-        if (held.Revoke(acting, time.GetUtcNow(), reason).Match<Error?>(() => null, error => error)
-            is Error refused)
+        // D-166 X3: the role and then the grant are read under their rows' locks, in the
+        // order a grant's writing takes them, so a second revocation finds the first and
+        // OPS-CFG-007 is judged on what the role allows as committed.
+        Role? role = await roles.FindForUpdateAsync(held.Role, cancellationToken).ConfigureAwait(false);
+
+        Grant? standing = await grants.FindForUpdateAsync(grant, cancellationToken).ConfigureAwait(false);
+
+        Error? moved = standing is not { Kind: GrantKind.Stored, RevokedAt: null }
+            ? Error.From(ErrorCodes.GrantNotFound)
+            : await AdministeringRefusedAsync(context, role, cancellationToken).ConfigureAwait(false)
+                ?? standing.Revoke(acting, time.GetUtcNow(), reason).Match<Error?>(() => null, error => error);
+
+        if (moved is not null)
         {
-            return Result.Failure(refused);
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Failure(moved), Result.Failure);
         }
+
+        held = standing!;
 
         await grants.RecordAsync(held, cancellationToken).ConfigureAwait(false);
 
@@ -356,6 +370,7 @@ internal sealed class GrantService(
                 .ConfigureAwait(false);
 
     private async ValueTask<Result<GrantId>> WrittenAsync(
+        AccessContext context,
         Grant grant,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -366,9 +381,23 @@ internal sealed class GrantService(
             return Result.Failure<GrantId>(notBegun);
         }
 
-        if (await grants.ExistsAsync(grant, now, cancellationToken).ConfigureAwait(false))
+        // D-166 X3: the role is read under its row's lock, which a definition and a
+        // removal hold too, so OPS-CFG-007 is judged on what the role allows as
+        // committed; and two grants of one role at once are written one after the other,
+        // so the second finds the first.
+        Role? role = await roles.FindForUpdateAsync(grant.Role, cancellationToken).ConfigureAwait(false);
+
+        Error? refused = role is null
+            ? Unresolved("role")
+            : await AdministeringRefusedAsync(context, role, cancellationToken).ConfigureAwait(false)
+                ?? (await grants.ExistsAsync(grant, now, cancellationToken).ConfigureAwait(false)
+                    ? Error.From(ErrorCodes.GrantDuplicate)
+                    : null);
+
+        if (refused is not null)
         {
-            return Result.Failure<GrantId>(Error.From(ErrorCodes.GrantDuplicate));
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Failure<GrantId>(refused), Result.Failure<GrantId>);
         }
 
         await grants.CreateAsync(grant, cancellationToken).ConfigureAwait(false);
