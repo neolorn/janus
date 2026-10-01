@@ -35,7 +35,7 @@ internal sealed class ClaimsAnswer(IOidc oidc)
 
         OidcClaims claims = (await oidc
                 .ClaimsAsync(
-                    new SubjectId(value),
+                    AccessContext.Of(new SubjectId(value)),
                     string.Join(' ', context.AccessTokenPrincipal.GetScopes()),
                     context.CancellationToken)
                 .ConfigureAwait(false))

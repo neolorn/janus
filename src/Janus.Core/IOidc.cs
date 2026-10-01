@@ -18,14 +18,18 @@ namespace Janus.Core;
 public interface IOidc
 {
     /// <summary>
-    /// What a token covering these scopes says about the person.
+    /// What a token covering these scopes says about the person whose identity the
+    /// context carries, and about nobody else (LIB-API-005).
     /// </summary>
-    /// <param name="subject">Whose account.</param>
+    /// <param name="context">Who is asking: the effective identity is whose claims are answered.</param>
     /// <param name="scope">What the token covers, space separated.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The claims, or the refusal where the account no longer answers.</returns>
+    /// <returns>
+    /// The claims, or <c>authz.denied</c> where the context names no effective identity
+    /// or the account no longer answers.
+    /// </returns>
     ValueTask<Result<OidcClaims>> ClaimsAsync(
-        SubjectId subject,
+        AccessContext context,
         string scope,
         CancellationToken cancellationToken);
 

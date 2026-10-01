@@ -124,6 +124,7 @@ public sealed class PublicSurfaceTests
         nameof(IExports) + "." + nameof(IExports.AssembleAsync),
         nameof(IInvitations) + "." + nameof(IInvitations.AcknowledgeAsync),
         nameof(IInvitations) + "." + nameof(IInvitations.AttachedAsync),
+        nameof(IOidc) + "." + nameof(IOidc.ClaimsAsync),
         nameof(IPrivacyRequests) + "." + nameof(IPrivacyRequests.SubmitAsync),
         nameof(IRecovery) + "." + nameof(IRecovery.ReportLossAsync),
         nameof(ISessions) + "." + nameof(ISessions.EndAsync),

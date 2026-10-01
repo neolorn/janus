@@ -214,8 +214,8 @@ public sealed class OidcServiceTests : IAsyncDisposable
     {
         SubjectId subject = await AccountAsync();
 
-        OidcClaims held = Value(await Service.ClaimsAsync(subject, "openid", Cancellation))!;
-        OidcClaims withEmail = Value(await Service.ClaimsAsync(subject, "openid email", Cancellation))!;
+        OidcClaims held = Value(await Service.ClaimsAsync(AccessContext.Of(subject), "openid", Cancellation))!;
+        OidcClaims withEmail = Value(await Service.ClaimsAsync(AccessContext.Of(subject), "openid email", Cancellation))!;
 
         Assert.Null(held.Email);
         Assert.Equal(Address, withEmail.Email);
@@ -236,8 +236,32 @@ public sealed class OidcServiceTests : IAsyncDisposable
         _accounts.Stands(restricted, AccountState.Restricted);
         _accounts.Stands(suspended, AccountState.Suspended);
 
-        Assert.Equal(Address, Value(await Service.ClaimsAsync(restricted, "openid email", Cancellation))!.Email);
-        Assert.Equal(ErrorCodes.Denied, Refused(await Service.ClaimsAsync(suspended, "openid email", Cancellation)));
+        Assert.Equal(Address, Value(await Service.ClaimsAsync(AccessContext.Of(restricted), "openid email", Cancellation))!.Email);
+        Assert.Equal(ErrorCodes.Denied, Refused(await Service.ClaimsAsync(AccessContext.Of(suspended), "openid email", Cancellation)));
+    }
+
+    /// <summary>
+    /// LIB-API-005 (D-166, 160): a caller in process reads the claims of the identity its
+    /// context carries and no other account's, and a context naming no person reads
+    /// nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_API_005_ClaimsAnswerOnlyTheEffectiveSubjectAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        SubjectId other = await AccountAsync();
+
+        OidcClaims own = Value(await Service.ClaimsAsync(AccessContext.Of(subject), "openid", Cancellation))!;
+        OidcClaims effective = Value(await Service.ClaimsAsync(AccessContext.Of(other, subject), "openid", Cancellation))!;
+        ErrorCode principal = Refused(await Service.ClaimsAsync(
+            AccessContext.Of(SystemPrincipal.ForDeployment("claims-reader", "LIB-API-005", SystemOperation.Configuration)),
+            "openid",
+            Cancellation));
+
+        Assert.Equal(subject, own.Subject);
+        Assert.Equal(subject, effective.Subject);
+        Assert.Equal(ErrorCodes.Denied, principal);
     }
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;

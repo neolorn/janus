@@ -113,11 +113,19 @@ internal sealed class OidcService(
 
     /// <inheritdoc/>
     public async ValueTask<Result<OidcClaims>> ClaimsAsync(
-        SubjectId subject,
+        AccessContext context,
         string scope,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(scope);
+
+        // LIB-API-005 (D-166, 160): a caller in process reads the claims of the identity
+        // it carries and of no other account.
+        if (context.Effective is not SubjectId subject)
+        {
+            return Result.Failure<OidcClaims>(Error.From(ErrorCodes.Denied));
+        }
 
         // IDN-ACCT-007: a restricted account signs on and reads its mail, as an active
         // one does.
