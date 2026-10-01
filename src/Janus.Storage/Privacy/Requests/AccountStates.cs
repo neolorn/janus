@@ -30,7 +30,9 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        Account? account = await accounts.FindBySubjectAsync(subject, cancellationToken)
+        // CONV-DESIGN-003: each transition here is decided on the row under its lock,
+        // as the reversal of a takedown is, so two at once end as one after the other.
+        Account? account = await accounts.HoldAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
         switch (account)
@@ -69,7 +71,7 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
     {
         // IDN-LIFE-003: a suspended account begins its deletion only on a request that
         // arrived out of band, holding the suspension.
-        Account? account = await accounts.FindBySubjectAsync(subject, cancellationToken)
+        Account? account = await accounts.HoldAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
         if (account is null
@@ -128,7 +130,7 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
     {
         // IDN-LIFE-003: a takedown finds an account in any state but a takedown of its
         // own and an erasure, and holds the one it found.
-        if (await accounts.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false)
+        if (await accounts.HoldAsync(subject, cancellationToken).ConfigureAwait(false)
             is not { IsEmergency: false } account
             || account is { State: AccountState.Deleted }
             or { State: AccountState.Deleting, DeletingBy: DeletionOrigin.Takedown })

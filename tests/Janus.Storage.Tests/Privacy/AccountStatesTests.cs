@@ -194,19 +194,26 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
         await using (StoreContext restricting = database.Context())
         {
+            await using var work = new UnitOfWork(restricting);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
             Assert.True(await States(restricting).RestrictAsync(
                 subject,
                 Noon,
                 TestContext.Current.CancellationToken));
-            await restricting.SaveChangesAsync(TestContext.Current.CancellationToken);
+            await work.CommitAsync(TestContext.Current.CancellationToken);
         }
 
         await using (StoreContext again = database.Context())
         {
+            await using var work = new UnitOfWork(again);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
             Assert.False(await States(again).RestrictAsync(
                 subject,
                 Noon,
                 TestContext.Current.CancellationToken));
+            await work.CommitAsync(TestContext.Current.CancellationToken);
         }
 
         Assert.True(await ReversedAsync(subject));
@@ -227,12 +234,15 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
         await using (StoreContext deleting = database.Context())
         {
+            await using var work = new UnitOfWork(deleting);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
             Assert.True(await States(deleting).BeginDeletionAsync(
                 subject,
                 DeletionOrigin.Self,
                 began,
                 TestContext.Current.CancellationToken));
-            await deleting.SaveChangesAsync(TestContext.Current.CancellationToken);
+            await work.CommitAsync(TestContext.Current.CancellationToken);
         }
 
         await TakenDownAsync(subject);
@@ -244,10 +254,14 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
         await using (StoreContext again = database.Context())
         {
+            await using var work = new UnitOfWork(again);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
             Assert.False(await States(again).TakeDownAsync(
                 subject,
                 Noon,
                 TestContext.Current.CancellationToken));
+            await work.CommitAsync(TestContext.Current.CancellationToken);
         }
 
         Assert.True(await ReversedAsync(subject));
@@ -282,6 +296,9 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
         await using (StoreContext deleting = database.Context())
         {
+            await using var work = new UnitOfWork(deleting);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
             Assert.False(await States(deleting).BeginDeletionAsync(
                 subject,
                 DeletionOrigin.Self,
@@ -292,7 +309,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
                 DeletionOrigin.OutOfBandRequest,
                 Noon,
                 TestContext.Current.CancellationToken));
-            await deleting.SaveChangesAsync(TestContext.Current.CancellationToken);
+            await work.CommitAsync(TestContext.Current.CancellationToken);
         }
 
         AccountStanding begun = await StandingAsync(subject);
@@ -507,10 +524,14 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
         await using (StoreContext taking = database.Context())
         {
+            await using var work = new UnitOfWork(taking);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
             Assert.False(await States(taking).TakeDownAsync(
                 reserved,
                 Noon,
                 TestContext.Current.CancellationToken));
+            await work.CommitAsync(TestContext.Current.CancellationToken);
         }
 
         await using StoreContext reading = database.Context();
@@ -534,6 +555,39 @@ public sealed class AccountStatesTests(DatabaseFixture database)
         Assert.Equal(
             "ux_accounts_emergency",
             Assert.IsType<PostgresException>(refusal.InnerException).ConstraintName);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-003, CONV-DESIGN-003 AC6: two takedowns of one account at once decide on
+    /// its row under the lock, so the second finds the first and takes nothing down.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_003_TwoTakedownsAtOnceTakeTheAccountDownOnceAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+
+        bool[] taken = await Task.WhenAll(TakenAsync(subject), TakenAsync(subject));
+
+        Assert.Equal(1, taken.Count(answer => answer));
+        Assert.Equal(DeletionOrigin.Takedown, (await StandingAsync(subject)).DeletingBy);
+    }
+
+    // Each takedown is its own request: its own context, connection and transaction.
+    private async Task<bool> TakenAsync(SubjectId subject)
+    {
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+
+        bool taken = await States(context).TakeDownAsync(
+            subject,
+            Noon + TimeSpan.FromHours(1),
+            TestContext.Current.CancellationToken);
+
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+
+        return taken;
     }
 
     private static async Task<bool> SuspendedAsync(StoreContext context, UnitOfWork work, SubjectId subject) =>
