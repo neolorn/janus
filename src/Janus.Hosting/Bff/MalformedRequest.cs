@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -54,7 +55,66 @@ internal sealed class MalformedRequest(ILogger<MalformedRequest> log) : IMiddlew
     // The reader's path names the member it stopped at and nothing of the value it was
     // reading; where it failed before any member, the refusal carries the code alone.
     private static string? Member(BadHttpRequestException unreadable) =>
-        unreadable.InnerException is JsonException { Path: { Length: > 0 } member } ? member : null;
+        unreadable.InnerException is JsonException { Path: { Length: > 0 } path } ? Member(path) : null;
+
+    /// <summary>
+    /// The member a reader's path stopped at, named as the request writes it.
+    /// </summary>
+    /// <param name="path">The path, from the <c>$</c> root.</param>
+    /// <returns>The member, or nothing where the path names none.</returns>
+    /// <remarks>
+    /// API-CONV-002 AC4 (D-179): no <c>$</c> root and no list index; a member inside
+    /// another by the names from the body's top joined by dots; an element of a list,
+    /// or a member inside one, by the list's name; a member inside an element of a body
+    /// that is itself a list by the names from that element's top.
+    /// </remarks>
+    internal static string? Member(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+
+        var names = new List<string>();
+        int at = path.StartsWith('$') ? 1 : 0;
+        bool top = true;
+
+        while (at < path.Length)
+        {
+            if (path[at] == '.')
+            {
+                int end = path.IndexOfAny(['.', '['], at + 1);
+                names.Add(path[(at + 1)..(end < 0 ? path.Length : end)]);
+                at = end < 0 ? path.Length : end;
+            }
+            else if (path[at] == '[' && at + 1 < path.Length && path[at + 1] == '\'')
+            {
+                int end = path.IndexOf("']", at + 2, StringComparison.Ordinal);
+
+                if (end < 0)
+                {
+                    break;
+                }
+
+                names.Add(path[(at + 2)..end]);
+                at = end + 2;
+            }
+            else if (path[at] == '[' && !top)
+            {
+                break;
+            }
+            else if (path[at] == '[')
+            {
+                int end = path.IndexOf(']', at);
+                at = end < 0 ? path.Length : end + 1;
+            }
+            else
+            {
+                break;
+            }
+
+            top = false;
+        }
+
+        return names.Count == 0 ? null : string.Join('.', names);
+    }
 
     private static Error Malformed(string? member) =>
         member is null

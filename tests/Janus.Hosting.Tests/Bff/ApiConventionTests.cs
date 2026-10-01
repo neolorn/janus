@@ -106,6 +106,24 @@ public sealed class ApiConventionTests
     }
 
     /// <summary>
+    /// API-CONV-002 AC4 (D-179): the member the reader stopped at is named as the request
+    /// writes it, with no <c>$</c> root and no list index, for each shape a body takes.
+    /// </summary>
+    [Fact]
+    public void API_CONV_002_AC4_AnUnreadableMemberIsNamedAsTheRequestWritesIt()
+    {
+        Assert.Equal("name", Stopped<Dictionary<string, int>>("""{"name":"five"}"""));
+        Assert.Equal(
+            "inner.count",
+            Stopped<Dictionary<string, Dictionary<string, int>>>("""{"inner":{"count":"many"}}"""));
+        Assert.Equal(
+            "items",
+            Stopped<Dictionary<string, List<Dictionary<string, int>>>>("""{"items":[{"id":"one"}]}"""));
+        Assert.Equal("items", Stopped<Dictionary<string, List<int>>>("""{"items":["one"]}"""));
+        Assert.Equal("id", Stopped<List<Dictionary<string, int>>>("""[{"id":"one"}]"""));
+    }
+
+    /// <summary>
     /// BFF-ERR-001 AC1: no body the pipeline or an endpoint writes carries a sentence
     /// for a person to read, whichever of them refused the request.
     /// </summary>
@@ -450,4 +468,13 @@ public sealed class ApiConventionTests
         typeof(IdentityEndpoints).Assembly
             .GetTypes()
             .Where(request => request.Name.EndsWith("Request", StringComparison.Ordinal));
+
+    // The member the shared reader names for a body that does not read as the type.
+    private static string? Stopped<TBody>(string body)
+    {
+        JsonException unreadable = Assert.Throws<JsonException>(
+            () => JsonSerializer.Deserialize<TBody>(body, JsonSerializerOptions.Web));
+
+        return MalformedRequest.Member(unreadable.Path ?? string.Empty);
+    }
 }

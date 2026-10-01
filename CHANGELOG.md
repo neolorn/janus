@@ -1394,7 +1394,10 @@ against the public contract of LIB-API-001.
   through nothing else. A request the library cannot read is answered with the same body
   as every other refusal: `api.request.malformed`, a correlation identifier, and a
   `details.member` naming the member the reader stopped at or the one the endpoint
-  required, so a caller traces it as it traces any other.
+  required, so a caller traces it as it traces any other. The member is named as the
+  request writes it, with no `$` root and no list index: a member inside another by the
+  names from the body's top joined by dots, and an element of a list, or a member inside
+  one, by the list's name.
 - The browser profile admits each source address `abuse.source.ratelimit` requests a
   minute (300 by default, sliding) and answers the rest 429 `auth.throttled` with
   `retryAt`, before any session is looked up. Each instance of a deployment counts on

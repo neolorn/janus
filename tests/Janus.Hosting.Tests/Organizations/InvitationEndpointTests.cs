@@ -352,6 +352,7 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.InvitationMailboxHeld.ToString(), held.Text("code"));
         Assert.Equal(StatusCodes.Status400BadRequest, unreadable.Status);
         Assert.Equal(ErrorCodes.RequestMalformed.ToString(), unreadable.Text("code"));
+        Assert.Equal("formerMailbox", unreadable.Json().GetProperty("details").GetProperty("member").GetString());
         Assert.Equal(StatusCodes.Status422UnprocessableEntity, invalid.Status);
         Assert.Equal(ErrorCodes.RequestInvalid.ToString(), invalid.Text("code"));
         Assert.Equal("formerMailbox", invalid.Json().GetProperty("details").GetProperty("member").GetString());
