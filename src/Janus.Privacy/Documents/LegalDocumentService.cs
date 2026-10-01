@@ -80,13 +80,18 @@ internal sealed class LegalDocumentService(
         // carrying only translations publishes nothing (PRIV-CONS-006).
         if (string.IsNullOrWhiteSpace(publication.Text))
         {
-            await alerts
+            Result raised = await alerts
                 .RaiseAsync(
                     AlertCondition.GoverningTextMissing,
                     publication.DocumentName,
                     Named(publication.DocumentName),
                     cancellationToken)
                 .ConfigureAwait(false);
+
+            if (raised.Match(() => (Error?)null, error => error) is Error unraised)
+            {
+                return Result.Failure<DocumentVersion>(unraised);
+            }
 
             return Result.Failure<DocumentVersion>(Error.From(
                 ErrorCodes.NoticeGoverningTextMissing,

@@ -226,6 +226,32 @@ public sealed class LegalDocumentTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-002, PRIV-CONS-006 AC3: a condition whose row cannot be written is
+    /// what the publication is answered with, so no refusal claims a raise that did
+    /// not happen.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_002_ARaiseThatCannotBeWrittenIsTheAnswerAsync()
+    {
+        Permit();
+
+        _alerts.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Result<DocumentVersion> refused = await Documents.PublishAsync(
+            Acting,
+            new DocumentPublication(
+                Notice,
+                string.Empty,
+                "ar",
+                [new DocumentTranslation("en", "The text")],
+                Material: false),
+            CancellationToken.None);
+
+        Assert.Equal(ErrorCodes.SystemFault, refused.Match(_ => default, error => error.Code));
+        Assert.Empty(_store.Versions);
+    }
+
+    /// <summary>
     /// PRIV-CONS-005 AC3: the governing text and every attached translation come back
     /// together, from a read that is told no interface language at all.
     /// </summary>

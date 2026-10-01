@@ -276,6 +276,25 @@ public sealed class ReadVolumeTests : IAsyncDisposable
     }
 
     // The person read the same count on each of the thirty days before today.
+    /// <summary>
+    /// CONV-DESIGN-002, OPS-ALERT-005: an anomaly whose row cannot be written is what
+    /// the count is answered with, so no caller is told a raise happened that did not.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AnAnomalyThatCannotBeWrittenIsTheAnswerAsync()
+    {
+        var clerk = SubjectId.New(_randomness);
+        await ReadDailyAsync(clerk, 100);
+
+        _alerts.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            (await Volume.ReturnedAsync(AccessContext.Of(clerk), 600, TestContext.Current.CancellationToken))
+                .Match(() => (ErrorCode?)null, error => error.Code));
+    }
+
     private async Task ReadDailyAsync(SubjectId actor, long records)
     {
         for (int day = 1; day <= 30; day++)

@@ -83,7 +83,7 @@ internal sealed class ReadVolume(
 
         if (alerting && counted > minimum && counted > factor * mean)
         {
-            await alerts
+            return await alerts
                 .RaiseAsync(
                     AlertCondition.ReadVolumeAnomaly,
                     actor.ToString(),

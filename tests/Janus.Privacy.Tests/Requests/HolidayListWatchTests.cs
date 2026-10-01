@@ -98,6 +98,22 @@ public sealed class HolidayListWatchTests
         Assert.Equal(AlertCondition.HolidayListExhausted, Assert.Single(_alerts.Raised).Condition);
     }
 
+    /// <summary>
+    /// CONV-DESIGN-002, OPS-ALERT-001: a condition whose row cannot be written fails
+    /// the watch, which says so rather than reporting a raise that did not happen.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_ARaiseThatCannotBeWrittenFailsTheWatchAsync()
+    {
+        _alerts.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            (await Watch.WatchAsync(Watcher, TestContext.Current.CancellationToken))
+                .Match(_ => default, error => error.Code));
+    }
+
     private void Listed(params DateOnly[] holidays) =>
         _configuration.Set<IReadOnlyList<DateOnly>>(Settings.PrivacyHolidays, holidays);
 

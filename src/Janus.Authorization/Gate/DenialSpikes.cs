@@ -53,16 +53,17 @@ internal sealed class DenialSpikes(
 
         if (denials > threshold)
         {
-            await alerts
-                .RaiseAsync(
-                    AlertCondition.DenialSpike,
-                    denial.Acting?.ToString(),
-                    new Dictionary<string, JsonElement>(StringComparer.Ordinal)
-                    {
-                        ["denials"] = JsonSerializer.SerializeToElement(denials),
-                    },
-                    cancellationToken)
-                .ConfigureAwait(false);
+            (await alerts
+                    .RaiseAsync(
+                        AlertCondition.DenialSpike,
+                        denial.Acting?.ToString(),
+                        new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+                        {
+                            ["denials"] = JsonSerializer.SerializeToElement(denials),
+                        },
+                        cancellationToken)
+                    .ConfigureAwait(false))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         }
     }
 

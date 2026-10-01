@@ -226,13 +226,14 @@ internal sealed class OutboxPublisher(
         // failures go quietly, so it is raised the moment it is recorded.
         if (spent)
         {
-            await alerts
-                .RaiseAsync(
-                    AlertCondition.ErasureDeliveryExhausted,
-                    scope: null,
-                    Exhausted(delivery, registered),
-                    cancellationToken)
-                .ConfigureAwait(false);
+            (await alerts
+                    .RaiseAsync(
+                        AlertCondition.ErasureDeliveryExhausted,
+                        scope: null,
+                        Exhausted(delivery, registered),
+                        cancellationToken)
+                    .ConfigureAwait(false))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         }
 
         return satisfied || spent;

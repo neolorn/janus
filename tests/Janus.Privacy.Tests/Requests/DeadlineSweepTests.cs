@@ -126,6 +126,27 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-002, PRIV-RIGHT-002 AC2: the warning's row is written in the
+    /// transaction that marks the request warned, so a row that cannot be written fails
+    /// the pass and the request is not marked.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AWarningThatCannotBeWrittenFailsThePassAsync()
+    {
+        _ = await SubmittedAsync(PrivacyRequestType.Restriction);
+
+        _clock.Advance(new DateTimeOffset(2026, 9, 23, 22, 0, 0, TimeSpan.Zero) - Noon);
+        _alerts.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await Sweep.SweepAsync(Sweeper, CancellationToken.None));
+
+        Assert.Equal(0, _work.Committed);
+    }
+
+    /// <summary>
     /// INT-SMS-003: the alert names the request's type and status as chapter 10 section
     /// 5.12c spells them, which is what the operator's message is measured and filled
     /// with.

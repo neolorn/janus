@@ -66,11 +66,10 @@ internal sealed class HolidayListWatch(
             return Result.Success(false);
         }
 
-        await alerts
-            .RaiseAsync(AlertCondition.HolidayListExhausted, scope: null, Reaching(horizon), cancellationToken)
-            .ConfigureAwait(false);
-
-        return Result.Success(true);
+        return (await alerts
+                .RaiseAsync(AlertCondition.HolidayListExhausted, scope: null, Reaching(horizon), cancellationToken)
+                .ConfigureAwait(false))
+            .Match(() => Result.Success(true), Result.Failure<bool>);
     }
 
     // INF-BG-002 AC1, IDN-PRIN-001 AC3 (D-166, 304): the watch runs as a named

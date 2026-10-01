@@ -178,11 +178,12 @@ internal sealed class DeadlineSweep(
         AlertCondition condition,
         QueuedRequest request,
         CancellationToken cancellationToken) =>
-        await alerts
-            .RaiseAsync(
-                condition,
-                request.Id.ToString(),
-                Named(request),
-                cancellationToken)
-            .ConfigureAwait(false);
+        (await alerts
+                .RaiseAsync(
+                    condition,
+                    request.Id.ToString(),
+                    Named(request),
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 }

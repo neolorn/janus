@@ -18,15 +18,26 @@ internal sealed class PrivacyAlertsInMemory : IPrivacyAlerts
     /// </summary>
     public IReadOnlyList<PrivacyAlertRaised> Raised => _raised;
 
+    /// <summary>
+    /// What a raise answers with instead of writing its row, where a test stands in
+    /// for a row that cannot be written.
+    /// </summary>
+    public Error? Refusal { get; set; }
+
     /// <inheritdoc/>
-    public ValueTask RaiseAsync(
+    public ValueTask<Result> RaiseAsync(
         AlertCondition condition,
         string? scope,
         IReadOnlyDictionary<string, JsonElement> details,
         CancellationToken cancellationToken)
     {
+        if (Refusal is Error refused)
+        {
+            return ValueTask.FromResult(Result.Failure(refused));
+        }
+
         _raised.Add(new PrivacyAlertRaised(condition, scope, details));
 
-        return ValueTask.CompletedTask;
+        return ValueTask.FromResult(Result.Success());
     }
 }
