@@ -1478,6 +1478,10 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- A failed sign-in on a trusted browser is counted under a lock on the browser's row, so
+  failures made at once are all counted and as many as
+  `factor.trusteddevice.failurelimit` revoke its trust; a sign-in on it is judged again
+  under the same lock.
 - The silent rehash of a password onto raised parameters writes only where the row
   still holds the hash it verified against, so a sign-in with the old password never
   writes it back over a password set meanwhile.

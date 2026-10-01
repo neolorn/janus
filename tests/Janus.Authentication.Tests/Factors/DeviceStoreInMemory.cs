@@ -44,6 +44,10 @@ internal sealed class DeviceStoreInMemory : IDeviceStore
     }
 
     /// <inheritdoc/>
+    public ValueTask<Device?> FindForUpdateAsync(DeviceId id, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_devices.GetValueOrDefault(id));
+
+    /// <inheritdoc/>
     public ValueTask<Device?> FindAsync(DeviceId id, CancellationToken cancellationToken)
     {
         Found++;

@@ -41,6 +41,33 @@ internal sealed class DeviceStore(StoreContext context) : IDeviceStore
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask<Device?> FindForUpdateAsync(DeviceId id, CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A browser's row is held only inside the operation's transaction.");
+        }
+
+        bool tracked = context.Devices.Local.Any(record => record.Id == id);
+
+        DeviceRecord? held = (await context.Devices
+                .FromSql($"SELECT * FROM identity.devices WHERE id = {id.Value} FOR UPDATE")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .SingleOrDefault();
+
+        // A row the context already tracks was read before the lock, so it is read again:
+        // what the count is decided on is the row as it stood when the lock was taken.
+        if (held is not null && tracked)
+        {
+            await context.Entry(held).ReloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return held is null ? null : Read(held);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<Device>> StandingOfAsync(
         SubjectId subject,
         DateTimeOffset now,

@@ -286,8 +286,14 @@ internal sealed class DeviceService(
             return Result.Failure(notBegun);
         }
 
-        device.Failed(limit);
-        await devices.RecordAsync(device, cancellationToken).ConfigureAwait(false);
+        // D-166 X3: the failure is counted on the row under its lock, so failures made at
+        // once are counted as failures made one after another.
+        if (await devices.FindForUpdateAsync(device.Id, cancellationToken).ConfigureAwait(false)
+            is Device locked)
+        {
+            locked.Failed(limit);
+            await devices.RecordAsync(locked, cancellationToken).ConfigureAwait(false);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -500,12 +506,22 @@ internal sealed class DeviceService(
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
-        device.Used(time.GetUtcNow());
-        await devices.RecordAsync(device, cancellationToken).ConfigureAwait(false);
+        // D-166 X3: the browser is judged again on its row under the lock, so a trust
+        // revoked by failures counted meanwhile is not used.
+        DateTimeOffset now = time.GetUtcNow();
+        Device? locked = await devices.FindForUpdateAsync(device.Id, cancellationToken).ConfigureAwait(false);
+        bool stands = Stands(locked, subject, kind, now);
+
+        if (stands)
+        {
+            locked!.Used(now);
+            await devices.RecordAsync(locked, cancellationToken).ConfigureAwait(false);
+        }
+
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
-        return true;
+        return stands;
     }
 
     private static bool Stands(Device? device, SubjectId subject, DeviceKind kind, DateTimeOffset now) =>
