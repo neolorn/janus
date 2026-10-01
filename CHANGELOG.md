@@ -1472,6 +1472,10 @@ against the public contract of LIB-API-001.
   ceiling 10), the first living the new key `code.signin.lifetime` (10 minutes, ceiling
   30) and sent by mail alone as the new message kind `sign-in-code`, the second living
   as long as its link.
+- The code and link that verify an address or a number being registered, added or
+  replaced go out as the new message kind `verification-link`, whose templates name
+  `{code}` and `{link}`; `verification-code` is the new-device check's code alone. A
+  deployment that registers its own `IMessageTemplates` words the new kind too.
 - A registration is held to the progressive delay as a sign-in is: a refused code is
   counted against the session's source and the identifier, and while the delay stands a
   code or a further ask for a code is refused `auth.throttled` with `retryAt`.

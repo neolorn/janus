@@ -305,6 +305,7 @@ public sealed class VocabularyContractTests
                 "sign-in-code",
                 "signin-link",
                 "verification-code",
+                "verification-link",
             ],
             WireNames<MessageKind>());
         Assert.Equal(["email", "sms"], WireNames<SendKind>());

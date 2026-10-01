@@ -49,15 +49,19 @@ internal static class Flow
         deployment.Configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         deployment.Configuration.Set(Settings.NotificationLanguages, [Language]);
 
-        foreach (MessageKind message in new[] { MessageKind.VerificationCode, MessageKind.AccountExists })
+        foreach (MessageKind message in new[] { MessageKind.VerificationCode, MessageKind.VerificationLink, MessageKind.AccountExists })
         {
+            // The new-device check sends a code alone, and a template names only what
+            // its message carries.
+            string text = message is MessageKind.VerificationCode ? "{code}" : "{code} {link}";
+
             foreach (SendKind kind in new[] { SendKind.Email, SendKind.Sms })
             {
                 deployment.Templates.Set(
                     message,
                     kind,
                     Language,
-                    new MessageTemplate(kind is SendKind.Email ? "code" : null, "{code} {link}"));
+                    new MessageTemplate(kind is SendKind.Email ? "code" : null, text));
             }
         }
     }
@@ -197,7 +201,7 @@ internal static class Flow
     {
         ArgumentNullException.ThrowIfNull(deployment);
 
-        return Sent(deployment, kind).Split(' ')[0];
+        return Sent(deployment, kind, linked: false).Split(' ')[0];
     }
 
     /// <summary>
@@ -211,7 +215,7 @@ internal static class Flow
     {
         ArgumentNullException.ThrowIfNull(deployment);
 
-        return Landing.Token(Sent(deployment, kind).Split(' ')[1]);
+        return Landing.Token(Sent(deployment, kind, linked: true).Split(' ')[1]);
     }
 
     /// <summary>
@@ -238,9 +242,10 @@ internal static class Flow
 
     private static string Named(IdentifierKind kind) => kind is IdentifierKind.Email ? "email" : "phone";
 
-    // The last message written from the verification template, which is the one
-    // carrying a code and a token; the notices that follow a change carry neither.
-    private static string Sent(Deployment deployment, IdentifierKind kind)
+    // The last message written from a verification template, which is the one
+    // carrying a code, and a token where it is linked; the notices that follow a change
+    // carry neither.
+    private static string Sent(Deployment deployment, IdentifierKind kind, bool linked)
     {
         IEnumerable<string> written = kind is IdentifierKind.Email
             ? deployment.Mail.Taken.Select(sent => sent.Body)
@@ -248,7 +253,10 @@ internal static class Flow
 
         foreach (string body in written.Reverse())
         {
-            if (body.Split(' ') is [{ Length: 6 } code, { Length: > 0 }] && code.All(char.IsAsciiDigit))
+            string[] parts = body.Split(' ');
+
+            if (parts is [{ Length: 6 } code, ..] && code.All(char.IsAsciiDigit)
+                && (parts is [_, { Length: > 0 }] || (!linked && parts is [_])))
             {
                 return body;
             }

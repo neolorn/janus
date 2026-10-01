@@ -419,6 +419,23 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-SESS-003 (D-166, message kinds (1)): the message that verifies an address
+    /// being registered is the one worded with a code and a link, and carries both.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_003_ARegistrationMessageCarriesItsCodeAndItsLinkAsync()
+    {
+        _ = await AwaitingAsync();
+
+        SendRequest sent = Assert.Single(_notifications.Mail);
+
+        Assert.Equal(MessageKind.VerificationLink, sent.Message);
+        Assert.Equal(["code", "link"], sent.Values.Keys.Order(StringComparer.Ordinal));
+        Assert.Matches("^[0-9]+$", sent.Values["code"]);
+        Assert.NotEmpty(sent.Token());
+    }
+
+    /// <summary>
     /// REG-SESS-003 AC1: a press in the browser that started the registration
     /// verifies; a plain open, which is what a scanner does, changes nothing.
     /// </summary>

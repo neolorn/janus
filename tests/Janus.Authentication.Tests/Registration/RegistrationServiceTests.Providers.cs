@@ -103,7 +103,7 @@ public sealed partial class RegistrationServiceTests
 
         Assert.False(Identity(session, IdentifierKind.Email).IsVerified);
         Assert.Equal(
-            MessageKind.VerificationCode,
+            MessageKind.VerificationLink,
             Assert.Single(_notifications.Mail).Message);
 
         await VerifiedAsync(session, IdentifierKind.Email);

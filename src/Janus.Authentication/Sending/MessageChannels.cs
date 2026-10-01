@@ -27,6 +27,7 @@ internal static class MessageChannels
     public static IReadOnlyList<MessageKind> Messages { get; } =
     [
         MessageKind.VerificationCode,
+        MessageKind.VerificationLink,
         MessageKind.SignInLink,
         MessageKind.SecondStepCode,
         MessageKind.SecurityNotice,

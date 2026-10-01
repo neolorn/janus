@@ -1244,7 +1244,7 @@ internal sealed class IdentifierService(
             .SendAsync(
                 new SendRequest(
                     Destination(staged.Kind, staged.Canonical),
-                    MessageKind.VerificationCode,
+                    MessageKind.VerificationLink,
                     RestrictionPurpose.Verification,
                     source,
                     await LanguageAsync(waiting.Subject, cancellationToken).ConfigureAwait(false))

@@ -43,6 +43,16 @@ internal sealed class DefaultMessageTemplates : IMessageTemplates
                 "رمز التحقق الخاص بك هو {code}. ينتهي بعد قليل. إن لم تطلبه فتجاهل هذه الرسالة.",
                 "رمز التحقق هو {code}.")),
         (
+            MessageKind.VerificationLink,
+            new Words(
+                "Your verification code",
+                "Your verification code is {code}. Or confirm with this: {link}. It expires shortly. If you did not ask for it, ignore this message.",
+                "Your verification code is {code}. Or confirm with this: {link}"),
+            new Words(
+                "رمز التحقق",
+                "رمز التحقق الخاص بك هو {code}. أو أكد بهذا: {link}. ينتهي بعد قليل. إن لم تطلبه فتجاهل هذه الرسالة.",
+                "رمز التحقق {code} أو أكد بهذا: {link}")),
+        (
             MessageKind.SignInLink,
             new Words(
                 "Your sign-in link",

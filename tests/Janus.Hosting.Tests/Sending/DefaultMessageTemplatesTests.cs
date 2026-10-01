@@ -34,6 +34,7 @@ public sealed class DefaultMessageTemplatesTests
     private static readonly Dictionary<MessageKind, LinkKind> Linked = new()
     {
         [MessageKind.SignInLink] = LinkKind.SignIn,
+        [MessageKind.VerificationLink] = LinkKind.Registration,
         [MessageKind.EnrolmentLink] = LinkKind.Enrolment,
         [MessageKind.RecoveryLink] = LinkKind.Recovery,
         [MessageKind.InvitationLink] = LinkKind.Invitation,
@@ -111,6 +112,30 @@ public sealed class DefaultMessageTemplatesTests
                     Assert.False(MessageBudget.Exceeds(Measured.Widest(text), linked: true));
                 }
             });
+
+    /// <summary>
+    /// REG-SESS-003 (D-166, message kinds (1)): the message of a registration, and of an
+    /// identifier being added or replaced, is worded with its code and its link on every
+    /// channel in every language carried.
+    /// </summary>
+    [Fact]
+    public void REG_SESS_003_AVerificationLinkRendersItsCodeAndItsLink()
+    {
+        string link = Landing.Links.Of(LinkKind.Registration, new string('t', OpaqueToken.Width));
+        var values = new Dictionary<string, string>(StringComparer.Ordinal) { ["code"] = "418273", ["link"] = link };
+        var held = Every().Where(one => one.Message is MessageKind.VerificationLink).ToList();
+
+        Assert.NotEmpty(held);
+        Assert.All(
+            held,
+            one =>
+            {
+                string rendered = MessageRendering.Fill(Found(one).Text, values);
+
+                Assert.Contains("418273", rendered, StringComparison.Ordinal);
+                Assert.Contains(link, rendered, StringComparison.Ordinal);
+            });
+    }
 
     /// <summary>
     /// API-LAND-001 AC4: the place a bare token went in is retired, so no shipped

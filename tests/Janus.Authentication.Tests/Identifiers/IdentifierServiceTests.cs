@@ -155,6 +155,23 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-SESS-003 (D-166, message kinds (1)): an identifier being added is sent the
+    /// message worded with a code and a link, and it carries both.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_003_AnAddedIdentifierIsSentItsCodeAndItsLinkAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        await AddedAsync(Third);
+
+        SendRequest sent = _notifications.Mail.Single(one => one.Destination.Canonical == Third);
+
+        Assert.Equal(MessageKind.VerificationLink, sent.Message);
+        Assert.Equal(["code", "link"], sent.Values.Keys.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
     /// REG-IDENT-004 AC3: every member of the set as it stands hears of the
     /// addition, once each.
     /// </summary>

@@ -1899,7 +1899,7 @@ internal sealed class RegistrationService(
             .SendAsync(
                 new SendRequest(
                     Destination(staged),
-                    MessageKind.VerificationCode,
+                    MessageKind.VerificationLink,
                     RestrictionPurpose.Verification,
                     session.Source,
                     RecipientLanguage.Found(session.Language, languages))

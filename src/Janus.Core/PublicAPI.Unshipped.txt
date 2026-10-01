@@ -1739,6 +1739,7 @@ Janus.Core.MessageKind.SecurityNotice = 3 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.SignInCode = 21 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.SignInLink = 1 -> Janus.Core.MessageKind
 Janus.Core.MessageKind.VerificationCode = 0 -> Janus.Core.MessageKind
+Janus.Core.MessageKind.VerificationLink = 22 -> Janus.Core.MessageKind
 Janus.Core.MessageTemplate
 Janus.Core.MessageTemplate.<Clone>$() -> Janus.Core.MessageTemplate!
 Janus.Core.MessageTemplate.Deconstruct(out string? Subject, out string! Text) -> void

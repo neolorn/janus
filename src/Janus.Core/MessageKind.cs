@@ -11,7 +11,7 @@ namespace Janus.Core;
 public enum MessageKind
 {
     /// <summary>
-    /// A code that proves control of an address or a number.
+    /// A code alone that proves control of an address: the new-device check.
     /// </summary>
     [JsonStringEnumMemberName("verification-code")]
     VerificationCode = 0,
@@ -153,4 +153,11 @@ public enum MessageKind
     /// </summary>
     [JsonStringEnumMemberName("sign-in-code")]
     SignInCode = 21,
+
+    /// <summary>
+    /// A code and a link that prove control of an address or a number being
+    /// registered, added or replaced (REG-SESS-003).
+    /// </summary>
+    [JsonStringEnumMemberName("verification-link")]
+    VerificationLink = 22,
 }
