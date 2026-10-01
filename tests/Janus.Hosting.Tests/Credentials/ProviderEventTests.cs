@@ -245,6 +245,40 @@ public sealed class ProviderEventTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-012a AC2, IDN-LIFE-013, CONV-DESIGN-003 AC6: a deletion begun while the
+    /// withdrawal waited for the account's row is found under the lock, so the account
+    /// is left to its deletion and no suspension is made or announced.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_LIFE_012a_AC2_ADeletionBegunMeanwhileIsLeftToItAsync()
+    {
+        var subject = SubjectId.New(_randomness);
+
+        _deployment.Accounts.Stands(subject, AccountState.Active);
+        _deployment.Identifiers.Reads(subject, Language);
+        _ = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, "only-apple-deleting@example.test");
+
+        Authenticator linked = await LinkAsync(subject, Factor.Apple, AppleSubject);
+
+        _deployment.Accounts.Holding = held => _deployment.Accounts.Stands(held, AccountState.Deleting);
+
+        Answer answered = await DeliveredAsync(
+            Apple,
+            Wrapped(_deployment.SocialProviders.Signed(
+                Factor.Apple,
+                "evt-1",
+                AppleEvent("consent-revoked", AppleSubject))));
+
+        Assert.Equal(StatusCodes.Status200OK, answered.Status);
+        Assert.Equal(AccountState.Deleting, await StateAsync(subject));
+        Assert.Empty(_deployment.Events.Of<AccountSuspended>());
+        Assert.Equal(
+            (AuditActions.ProviderEventTaken, linked.Id, "consent-revoked", ProviderEventOutcome.Recorded),
+            Assert.Single(_deployment.CredentialAudit.ProviderEvents));
+    }
+
+    /// <summary>
     /// IDN-LIFE-012a AC2 (D-166, 286): where the account's other way in is a credential a
     /// provider's event holds, nothing usable may begin a sign-in without the withdrawn
     /// identity, so the credential stays and the account is suspended instead.

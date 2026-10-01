@@ -1478,6 +1478,9 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- The suspension a provider's withdrawal makes is decided on the account's row under a
+  lock, so a deletion begun or a suspension made at the same moment is the one it
+  follows and is never written over.
 - A credential's removal, an unlink and a provider's withdrawal decide what the account
   keeps on its credentials read under a lock on each row, so two at once never leave
   the account with no way in, nor reaching less without the notified window.

@@ -305,6 +305,10 @@ internal sealed class ProviderEvents(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        // D-166 X3: what the account stands in is read on its row under the lock, so a
+        // deletion begun or a suspension made meanwhile is the one this follows.
+        await accounts.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
         AccountState? state = await accounts.StateAsync(subject, cancellationToken).ConfigureAwait(false);
 
         if (state is null or AccountState.Deleting or AccountState.Deleted)
