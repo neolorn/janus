@@ -994,6 +994,39 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-MAIL-001, REG-IDENT-004, CONV-DESIGN-003 AC6: the corporate address is taken
+    /// on under the lock on the account's identifiers, so an address the account
+    /// proved while the acknowledgement waited for it is in the set that hears of it.
+    /// </summary>
+    [Fact]
+    public async Task REG_MAIL_001_AnAddressProvedMeanwhileHearsOfTheCorporateAddressAsync()
+    {
+        _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+
+        string token = _notifications.Mail[^1].Token();
+        SubjectId holder = Holder();
+        _ = _identifiers.Verified(holder, IdentifierKind.Email, Personal);
+        Invitation invitation = _invitations.Held[0];
+
+        _authenticators.Hold(Passkey(holder));
+        Accepted(await OpenAsync(holder, token));
+        _notifications.Sent.Clear();
+
+        _identifiers.Holding = subject =>
+        {
+            _ = _identifiers.Verified(subject, IdentifierKind.Email, "meanwhile@elsewhere.test");
+
+            return ValueTask.CompletedTask;
+        };
+
+        Accepted(await AcknowledgeAsync(holder, invitation.Id));
+
+        Assert.Equal(
+            ["meanwhile@elsewhere.test", Personal],
+            _notifications.Sent.Select(told => told.Destination.Canonical).Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
     /// REG-IDENT-002 and REG-MAIL-001: the corporate address counts against
     /// <c>identifiers.email.max</c> as any added email does, so an account already
     /// holding as many as it may is refused and nothing attaches.

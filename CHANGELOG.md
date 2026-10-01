@@ -1478,6 +1478,10 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- An integrated acknowledgement's corporate address and its retirement at the
+  membership's end are taken on and given up under the lock on the account's
+  identifiers, so a promotion at the same moment never leaves two primaries and the
+  set told of the change is the set as it then stands.
 - An identifier's addition, promotion, removal, undo and backup setting, and a
   username's choice, are decided again on the account's identifiers under a lock, so
   two changes at once leave one primary of a kind and no more of a kind than the

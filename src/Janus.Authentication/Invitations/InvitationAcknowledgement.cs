@@ -493,6 +493,13 @@ internal sealed class InvitationAcknowledgement(
         string source,
         CancellationToken cancellationToken)
     {
+        // D-166 X3: the corporate address is taken on under the lock on the account's
+        // identifiers, so a promotion the person makes at the same moment either comes
+        // first and is moved, or waits and moves the role itself; never two primaries.
+        await identifiers.HoldAsync(invitee, cancellationToken).ConfigureAwait(false);
+
+        held = await identifiers.HeldAsync(invitee, cancellationToken).ConfigureAwait(false);
+
         string corporate = bound.CorporateEmail
             ?? throw new InvalidOperationException("The invitation names no corporate address.");
         HeldIdentifier personal = (bound.Email is string email ? Holding(held, IdentifierKind.Email, email) : null)

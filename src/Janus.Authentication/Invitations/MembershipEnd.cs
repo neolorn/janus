@@ -227,6 +227,9 @@ internal sealed class MembershipEnd(
         string source,
         CancellationToken cancellationToken)
     {
+        // D-166 X3: as for the corporate address's taking on.
+        await identifiers.HoldAsync(member, cancellationToken).ConfigureAwait(false);
+
         HeldIdentifiers held = await identifiers.HeldAsync(member, cancellationToken).ConfigureAwait(false);
         IdentifierId retired = held.OfKind(IdentifierKind.Email)
                 .FirstOrDefault(identifier =>
