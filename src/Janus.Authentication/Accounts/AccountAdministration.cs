@@ -70,28 +70,12 @@ internal sealed class AccountAdministration(
             return Result.Failure(refused);
         }
 
-        AccountState? state = await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false);
+        (Error? refusal, AccountState? state) = await SuspendableAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
 
-        // OPS-BOOT-002: the break-glass session's account is never suspended, since it is
-        // the way in an emergency leaves.
-        if (state is not null
-            && await emergency.FindAsync(cancellationToken).ConfigureAwait(false) == subject)
+        if (refusal is not null || state is null)
         {
-            return Result.Failure(Error.From(ErrorCodes.Denied));
-        }
-
-        switch (state)
-        {
-            case null:
-                return Result.Failure(Error.From(ErrorCodes.AccountNotFound));
-            case AccountState.Deleting or AccountState.Deleted:
-                return Result.Failure(StateConflict(state.Value, suspendedBy: null));
-            case AccountState.Suspended
-                when await directory.SuspendedByAsync(subject, cancellationToken).ConfigureAwait(false)
-                    is SuspensionOrigin.Administrator:
-                return Result.Success();
-            default:
-                break;
+            return refusal is null ? Result.Success() : Result.Failure(refusal);
         }
 
         if (await stepUp
@@ -108,6 +92,17 @@ internal sealed class AccountAdministration(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: decided again on the account's row under its lock, so a transition
+        // committed since the first decision is the one this one follows.
+        await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        (refusal, state) = await SuspendableAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        if (refusal is not null || state is null)
+        {
+            return await SettledAsync(refusal, cancellationToken).ConfigureAwait(false);
         }
 
         await directory.SuspendAsync(subject, cancellationToken).ConfigureAwait(false);
@@ -169,21 +164,9 @@ internal sealed class AccountAdministration(
             return Result.Failure(refused);
         }
 
-        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
-            is not AccountState state)
+        if (await ReactivationRefusedAsync(subject, cancellationToken).ConfigureAwait(false) is Error refusal)
         {
-            return Result.Failure(Error.From(ErrorCodes.AccountNotFound));
-        }
-
-        // IDN-LIFE-013: the two suspensions are reversed differently, and what its owner
-        // deactivated is theirs to stand back up.
-        SuspensionOrigin? suspendedBy = state is AccountState.Suspended
-            ? await directory.SuspendedByAsync(subject, cancellationToken).ConfigureAwait(false)
-            : null;
-
-        if (suspendedBy is not SuspensionOrigin.Administrator)
-        {
-            return Result.Failure(StateConflict(state, suspendedBy));
+            return Result.Failure(refusal);
         }
 
         if (await stepUp
@@ -200,6 +183,14 @@ internal sealed class AccountAdministration(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: as for a suspension.
+        await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        if (await ReactivationRefusedAsync(subject, cancellationToken).ConfigureAwait(false) is Error moved)
+        {
+            return await SettledAsync(moved, cancellationToken).ConfigureAwait(false);
         }
 
         await directory.ReinstateAsync(subject, cancellationToken).ConfigureAwait(false);
@@ -252,21 +243,9 @@ internal sealed class AccountAdministration(
             return Result.Failure(refused);
         }
 
-        switch (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false))
+        if (await LiftRefusedAsync(subject, cancellationToken).ConfigureAwait(false) is Error refusal)
         {
-            case null:
-                return Result.Failure(Error.From(ErrorCodes.AccountNotFound));
-
-            // PRIV-RIGHT-004: a restriction held while the account is suspended or
-            // deleting stays until the account is back in the restricted state.
-            case AccountState.Suspended:
-                return Result.Failure(StateConflict(
-                    AccountState.Suspended,
-                    await directory.SuspendedByAsync(subject, cancellationToken).ConfigureAwait(false)));
-            case not AccountState.Restricted and AccountState other:
-                return Result.Failure(StateConflict(other, suspendedBy: null));
-            default:
-                break;
+            return Result.Failure(refusal);
         }
 
         if (await stepUp
@@ -283,6 +262,14 @@ internal sealed class AccountAdministration(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: as for a suspension.
+        await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        if (await LiftRefusedAsync(subject, cancellationToken).ConfigureAwait(false) is Error moved)
+        {
+            return await SettledAsync(moved, cancellationToken).ConfigureAwait(false);
         }
 
         await directory.LiftRestrictionAsync(subject, now, cancellationToken).ConfigureAwait(false);
@@ -319,36 +306,14 @@ internal sealed class AccountAdministration(
             return Result.Failure(refused);
         }
 
-        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
-            is not AccountState state)
-        {
-            return Result.Failure(Error.From(ErrorCodes.AccountNotFound));
-        }
-
-        if (await directory.DeletingAsync(subject, cancellationToken).ConfigureAwait(false)
-            is not HeldDeletion deleting)
-        {
-            return Result.Failure(StateConflict(
-                state,
-                state is AccountState.Suspended
-                    ? await directory.SuspendedByAsync(subject, cancellationToken).ConfigureAwait(false)
-                    : null));
-        }
-
-        // IDN-LIFE-003: a takedown is reversed through its own operation, never cancelled.
-        if (deleting.By is DeletionOrigin.Takedown)
-        {
-            return Result.Failure(Error.From(ErrorCodes.TakedownActive));
-        }
-
-        TimeSpan grace = (await configuration
-                .ReadAsync(Settings.AccountDeletionGrace, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
         DateTimeOffset now = time.GetUtcNow();
 
-        if (now >= deleting.Since + grace)
+        (Error? refusal, HeldDeletion? deleting) = await CancellableAsync(subject, now, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (refusal is not null)
         {
-            return Result.Failure(Error.From(ErrorCodes.DeletionWindowElapsed));
+            return Result.Failure(refusal);
         }
 
         if (await stepUp
@@ -359,17 +324,27 @@ internal sealed class AccountAdministration(
             return Result.Failure(challenged);
         }
 
-        // IDN-LIFE-003: the cancellation of a window an out-of-band request began is
-        // recorded against that request.
-        PrivacyRequestId? request = deleting.By is DeletionOrigin.OutOfBandRequest
-            ? await directory.ErasureRequestAsync(subject, deleting.Since, cancellationToken).ConfigureAwait(false)
-            : null;
-
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
+
+        // D-166 X3: as for a suspension.
+        await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        (refusal, deleting) = await CancellableAsync(subject, now, cancellationToken).ConfigureAwait(false);
+
+        if (refusal is not null || deleting is null)
+        {
+            return await SettledAsync(refusal, cancellationToken).ConfigureAwait(false);
+        }
+
+        // IDN-LIFE-003: the cancellation of a window an out-of-band request began is
+        // recorded against that request.
+        PrivacyRequestId? request = deleting.By is DeletionOrigin.OutOfBandRequest
+            ? await directory.ErasureRequestAsync(subject, deleting.Since, cancellationToken).ConfigureAwait(false)
+            : null;
 
         await directory.CancelDeletionAsync(subject, cancellationToken).ConfigureAwait(false);
         await links.RemoveAsync(subject, cancellationToken).ConfigureAwait(false);
@@ -420,6 +395,113 @@ internal sealed class AccountAdministration(
             ? Result.Failure<ReadOnlyMemory<byte>>(Error.From(ErrorCodes.AccountNotFound))
             : await photos.ReadOfAsync(subject, cancellationToken).ConfigureAwait(false);
     }
+
+    // What a suspension is refused with, where it is; an account an administrator
+    // already suspended is settled with nothing to do, which is a refusal of nothing
+    // and no state; otherwise the state it is suspended from.
+    private async ValueTask<(Error? Refusal, AccountState? State)> SuspendableAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        AccountState? state = await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        // OPS-BOOT-002: the break-glass session's account is never suspended, since it is
+        // the way in an emergency leaves.
+        if (state is not null
+            && await emergency.FindAsync(cancellationToken).ConfigureAwait(false) == subject)
+        {
+            return (Error.From(ErrorCodes.Denied), null);
+        }
+
+        return state switch
+        {
+            null => (Error.From(ErrorCodes.AccountNotFound), null),
+            AccountState.Deleting or AccountState.Deleted => (StateConflict(state.Value, suspendedBy: null), null),
+            AccountState.Suspended
+                when await directory.SuspendedByAsync(subject, cancellationToken).ConfigureAwait(false)
+                    is SuspensionOrigin.Administrator => (null, null),
+            _ => (null, state),
+        };
+    }
+
+    private async ValueTask<Error?> ReactivationRefusedAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not AccountState state)
+        {
+            return Error.From(ErrorCodes.AccountNotFound);
+        }
+
+        // IDN-LIFE-013: the two suspensions are reversed differently, and what its owner
+        // deactivated is theirs to stand back up.
+        SuspensionOrigin? suspendedBy = state is AccountState.Suspended
+            ? await directory.SuspendedByAsync(subject, cancellationToken).ConfigureAwait(false)
+            : null;
+
+        return suspendedBy is SuspensionOrigin.Administrator ? null : StateConflict(state, suspendedBy);
+    }
+
+    private async ValueTask<Error?> LiftRefusedAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+        await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false) switch
+        {
+            null => Error.From(ErrorCodes.AccountNotFound),
+
+            // PRIV-RIGHT-004: a restriction held while the account is suspended or
+            // deleting stays until the account is back in the restricted state.
+            AccountState.Suspended => StateConflict(
+                AccountState.Suspended,
+                await directory.SuspendedByAsync(subject, cancellationToken).ConfigureAwait(false)),
+            not AccountState.Restricted and AccountState other => StateConflict(other, suspendedBy: null),
+            _ => null,
+        };
+
+    // What a cancellation is refused with, where it is, or the deletion it cancels.
+    private async ValueTask<(Error? Refusal, HeldDeletion? Deleting)> CancellableAsync(
+        SubjectId subject,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not AccountState state)
+        {
+            return (Error.From(ErrorCodes.AccountNotFound), null);
+        }
+
+        if (await directory.DeletingAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not HeldDeletion deleting)
+        {
+            return (StateConflict(
+                state,
+                state is AccountState.Suspended
+                    ? await directory.SuspendedByAsync(subject, cancellationToken).ConfigureAwait(false)
+                    : null), null);
+        }
+
+        // IDN-LIFE-003: a takedown is reversed through its own operation, never cancelled.
+        if (deleting.By is DeletionOrigin.Takedown)
+        {
+            return (Error.From(ErrorCodes.TakedownActive), null);
+        }
+
+        TimeSpan grace = (await configuration
+                .ReadAsync(Settings.AccountDeletionGrace, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        return now >= deleting.Since + grace
+            ? (Error.From(ErrorCodes.DeletionWindowElapsed), null)
+            : (null, deleting);
+    }
+
+    // CONV-DESIGN-003: a decision taken again under the lock that settles the operation
+    // before its write commits the transaction with nothing in it, so the unit of work
+    // is left clean; a refusal of nothing is the success of an operation already done.
+    private async ValueTask<Result> SettledAsync(Error? refusal, CancellationToken cancellationToken) =>
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match(() => refusal is null ? Result.Success() : Result.Failure(refusal), Result.Failure);
 
     private static string Key(SubjectId subject, DateTimeOffset at) =>
         string.Create(CultureInfo.InvariantCulture, $"{subject.Value}@{at.UtcTicks}");

@@ -164,8 +164,78 @@ public sealed class AccountDirectoryTests(DatabaseFixture database)
         Assert.Equal(request.ToString(), read.Details["request"].GetString());
     }
 
+    /// <summary>
+    /// IDN-LIFE-013, CONV-DESIGN-003 AC6: an owner's reactivation link and an
+    /// administrator's suspension reaching a deactivated account at once each decide on
+    /// its row under the lock, so whichever runs second follows the first and the
+    /// account ends suspended by the administrator.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_LIFE_013_AReactivationAndASuspensionAtOnceLeaveTheAdministratorsAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+
+        await using (StoreContext deactivating = database.Context())
+        {
+            await using var work = new UnitOfWork(deactivating);
+
+            await work.BeginAsync(TestContext.Current.CancellationToken);
+            await Directory(deactivating).DeactivateAsync(subject, TestContext.Current.CancellationToken);
+            await work.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await Task.WhenAll(ReactivatedAsync(subject), SuspendedAsync(subject));
+
+        await using StoreContext reading = database.Context();
+        Account read = Assert.IsType<Account>(
+            await new AccountStore(reading).FindBySubjectAsync(subject, TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            (AccountState.Suspended, SuspensionOrigin.Administrator),
+            (read.State, read.SuspendedBy));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
+
+    // The owner's link, as the lifecycle decides it: only a deactivation is stood up.
+    private async Task ReactivatedAsync(SubjectId subject)
+    {
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+        AccountDirectory directory = Directory(context);
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+        await directory.HoldAsync(subject, TestContext.Current.CancellationToken);
+
+        if (await directory.SuspendedByAsync(subject, TestContext.Current.CancellationToken)
+            is SuspensionOrigin.Self)
+        {
+            await directory.ReinstateAsync(subject, TestContext.Current.CancellationToken);
+        }
+
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+    }
+
+    // The administrator's suspension, as the administration decides it.
+    private async Task SuspendedAsync(SubjectId subject)
+    {
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+        AccountDirectory directory = Directory(context);
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+        await directory.HoldAsync(subject, TestContext.Current.CancellationToken);
+
+        if (await directory.SuspendedByAsync(subject, TestContext.Current.CancellationToken)
+            is not SuspensionOrigin.Administrator)
+        {
+            await directory.SuspendAsync(subject, TestContext.Current.CancellationToken);
+        }
+
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+    }
 
     private static QueuedRequest Requested(SubjectId subject, PrivacyRequestType type) =>
         QueuedRequest.Entered(

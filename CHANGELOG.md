@@ -1478,6 +1478,11 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- An account's suspension, reactivation, deactivation, deletion, the lift of its
+  restriction, the cancellation of its deletion and its reinstatement at recovery are
+  decided again on the account's row under a lock, so two transitions at once end as
+  they would one after the other and a link never stands up an account an administrator
+  suspended meanwhile.
 - A registration's age answer and its verification codes are decided on the session's
   row under a lock, so wrong codes presented at once are all counted towards
   `code.verification.attempts` and a refused date of birth is never lost to an answer

@@ -187,6 +187,32 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-013, CONV-DESIGN-003 AC6: an administrator's suspension committed while
+    /// the link waited for the account's row is found under the lock, so the link is
+    /// refused and the suspension stands.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_013_ASuspensionCommittedMeanwhileIsNotReversedByALinkAsync()
+    {
+        Accepted(await Lifecycle.DeactivateAsync(
+            Acting,
+            Stepped(),
+            Source,
+            TestContext.Current.CancellationToken));
+
+        _directory.Holding = held => _directory.Suspended(held, SuspensionOrigin.Administrator);
+
+        Assert.Equal(
+            ErrorCodes.AccountAdministrativelySuspended,
+            Refused(await Lifecycle.ReactivateAsync(Link(), TestContext.Current.CancellationToken)));
+
+        Assert.Equal(AccountState.Suspended, await StateAsync());
+        Assert.Equal(
+            SuspensionOrigin.Administrator,
+            await _directory.SuspendedByAsync(_person, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// IDN-LIFE-013: deactivation is a step-up action, and a session that has not
     /// stepped up takes nothing down.
     /// </summary>

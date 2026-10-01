@@ -197,7 +197,11 @@ internal sealed class RecoveryService(
             await links.RecordAsync(link, cancellationToken).ConfigureAwait(false);
 
             // D-140: recovery is the way back for an account its own holder deactivated,
-            // and finishing it is what stands it up again.
+            // and finishing it is what stands it up again; who suspended it is read on
+            // the account's row under its lock (D-166 X3), so an administrator's
+            // suspension committed meanwhile is not stood up.
+            await accounts.HoldAsync(link.Subject, cancellationToken).ConfigureAwait(false);
+
             if (await accounts.SuspendedByAsync(link.Subject, cancellationToken).ConfigureAwait(false)
                 is SuspensionOrigin.Self)
             {

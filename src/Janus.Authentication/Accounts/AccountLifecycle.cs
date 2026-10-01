@@ -113,6 +113,16 @@ internal sealed class AccountLifecycle(
             return Result.Failure(notBegun);
         }
 
+        // D-166 X3: decided again on the account's row under its lock, so a transition
+        // committed since the first decision is the one this one follows.
+        await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not AccountState.Active)
+        {
+            return await SettledAsync(Error.From(ErrorCodes.Denied), cancellationToken).ConfigureAwait(false);
+        }
+
         await directory.DeactivateAsync(subject, cancellationToken).ConfigureAwait(false);
 
         await links
@@ -180,16 +190,9 @@ internal sealed class AccountLifecycle(
             return Result.Failure(Error.From(ErrorCodes.ReactivationTokenInvalid));
         }
 
-        // IDN-LIFE-013: the two suspensions are reversed differently, and a link
-        // cannot stand up an account an administrator took down.
-        switch (await directory.SuspendedByAsync(link.Subject, cancellationToken).ConfigureAwait(false))
+        if (await ReactivationRefusedAsync(link.Subject, cancellationToken).ConfigureAwait(false) is Error refusal)
         {
-            case SuspensionOrigin.Administrator:
-                return Result.Failure(Error.From(ErrorCodes.AccountAdministrativelySuspended));
-            case null:
-                return Result.Failure(Error.From(ErrorCodes.ReactivationTokenInvalid));
-            default:
-                break;
+            return Result.Failure(refusal);
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -198,6 +201,14 @@ internal sealed class AccountLifecycle(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: as for a deactivation.
+        await directory.HoldAsync(link.Subject, cancellationToken).ConfigureAwait(false);
+
+        if (await ReactivationRefusedAsync(link.Subject, cancellationToken).ConfigureAwait(false) is Error moved)
+        {
+            return await SettledAsync(moved, cancellationToken).ConfigureAwait(false);
         }
 
         await directory.ReinstateAsync(link.Subject, cancellationToken).ConfigureAwait(false);
@@ -293,6 +304,18 @@ internal sealed class AccountLifecycle(
             return Result.Failure<DateTimeOffset>(notBegun);
         }
 
+        // D-166 X3: as for a deactivation.
+        await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
+            is not (AccountState.Active or AccountState.Restricted))
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(
+                    () => Result.Failure<DateTimeOffset>(Error.From(ErrorCodes.Denied)),
+                    Result.Failure<DateTimeOffset>);
+        }
+
         await directory.BeginDeletionAsync(subject, now, cancellationToken).ConfigureAwait(false);
 
         await links
@@ -354,24 +377,9 @@ internal sealed class AccountLifecycle(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        HeldDeletion? deleting = link is null
-            ? null
-            : await directory.DeletingAsync(link.Subject, cancellationToken).ConfigureAwait(false);
-
-        // IDN-LIFE-003: a takedown is not the subject's to cancel, and says so rather
-        // than answering as a window that has run out.
-        if (deleting?.By is DeletionOrigin.Takedown)
+        if (await CancellationRefusedAsync(link, cancellationToken).ConfigureAwait(false) is Error refusal)
         {
-            return Result.Failure(Error.From(ErrorCodes.TakedownActive));
-        }
-
-        if (link is null
-            || deleting is null
-            || await ElapsedAsync(deleting, cancellationToken).ConfigureAwait(false))
-        {
-            // A token that answers to nothing and a window that has run out are the
-            // same answer: neither says whether a deletion was ever asked for.
-            return Result.Failure(Error.From(ErrorCodes.DeletionWindowElapsed));
+            return Result.Failure(refusal);
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -380,6 +388,14 @@ internal sealed class AccountLifecycle(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // D-166 X3: as for a deactivation.
+        await directory.HoldAsync(link!.Subject, cancellationToken).ConfigureAwait(false);
+
+        if (await CancellationRefusedAsync(link, cancellationToken).ConfigureAwait(false) is Error moved)
+        {
+            return await SettledAsync(moved, cancellationToken).ConfigureAwait(false);
         }
 
         await directory.CancelDeletionAsync(link.Subject, cancellationToken).ConfigureAwait(false);
@@ -434,6 +450,50 @@ internal sealed class AccountLifecycle(
 
         return default!;
     }
+
+    private async ValueTask<Error?> ReactivationRefusedAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken) =>
+
+        // IDN-LIFE-013: the two suspensions are reversed differently, and a link
+        // cannot stand up an account an administrator took down.
+        await directory.SuspendedByAsync(subject, cancellationToken).ConfigureAwait(false) switch
+        {
+            SuspensionOrigin.Administrator => Error.From(ErrorCodes.AccountAdministrativelySuspended),
+            null => Error.From(ErrorCodes.ReactivationTokenInvalid),
+            _ => null,
+        };
+
+    private async ValueTask<Error?> CancellationRefusedAsync(
+        LifecycleLink? link,
+        CancellationToken cancellationToken)
+    {
+        HeldDeletion? deleting = link is null
+            ? null
+            : await directory.DeletingAsync(link.Subject, cancellationToken).ConfigureAwait(false);
+
+        // IDN-LIFE-003: a takedown is not the subject's to cancel, and says so rather
+        // than answering as a window that has run out.
+        if (deleting?.By is DeletionOrigin.Takedown)
+        {
+            return Error.From(ErrorCodes.TakedownActive);
+        }
+
+        // A token that answers to nothing and a window that has run out are the same
+        // answer: neither says whether a deletion was ever asked for.
+        return link is null
+            || deleting is null
+            || await ElapsedAsync(deleting, cancellationToken).ConfigureAwait(false)
+            ? Error.From(ErrorCodes.DeletionWindowElapsed)
+            : null;
+    }
+
+    // CONV-DESIGN-003: a decision taken again under the lock that refuses the operation
+    // before its write commits the transaction with nothing in it, so the unit of work
+    // is left clean.
+    private async ValueTask<Result> SettledAsync(Error refusal, CancellationToken cancellationToken) =>
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match(() => Result.Failure(refusal), Result.Failure);
 
     private async ValueTask<LifecycleLink?> PresentedAsync(
         [NeverLogged] string linkToken,
