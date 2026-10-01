@@ -127,8 +127,12 @@ internal sealed class ConsentService(
             SupersededAt: null);
 
         await consents.RecordAsync(subject, granted, cancellationToken).ConfigureAwait(false);
-        await AnnouncedAsync(subject, purpose, ConsentChange.Granted, now, cancellationToken)
-            .ConfigureAwait(false);
+        if (await AnnouncedAsync(subject, purpose, ConsentChange.Granted, now, cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            return Result.Failure(unannounced);
+        }
+
         await audit
             .RecordedAsync(
                 Granted,
@@ -193,8 +197,12 @@ internal sealed class ConsentService(
         await consents
             .RecordAsync(subject, consent with { WithdrawnAt = now }, cancellationToken)
             .ConfigureAwait(false);
-        await AnnouncedAsync(subject, purpose, ConsentChange.Withdrawn, now, cancellationToken)
-            .ConfigureAwait(false);
+        if (await AnnouncedAsync(subject, purpose, ConsentChange.Withdrawn, now, cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            return Result.Failure(unannounced);
+        }
+
         await audit
             .RecordedAsync(
                 Withdrawn,
@@ -270,8 +278,12 @@ internal sealed class ConsentService(
         }
 
         await consents.RecordAsync(subject, objection, cancellationToken).ConfigureAwait(false);
-        await ObjectedAsync(subject, purpose, objecting: true, now, cancellationToken)
-            .ConfigureAwait(false);
+        if (await ObjectedAsync(subject, purpose, objecting: true, now, cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            return Result.Failure(unannounced);
+        }
+
         await audit
             .RecordedAsync(
                 Objected,
@@ -336,8 +348,12 @@ internal sealed class ConsentService(
         await consents
             .RecordAsync(subject, objection with { WithdrawnAt = now }, cancellationToken)
             .ConfigureAwait(false);
-        await ObjectedAsync(subject, purpose, objecting: false, now, cancellationToken)
-            .ConfigureAwait(false);
+        if (await ObjectedAsync(subject, purpose, objecting: false, now, cancellationToken)
+                .ConfigureAwait(false) is Error unannounced)
+        {
+            return Result.Failure(unannounced);
+        }
+
         await audit
             .RecordedAsync(
                 Resumed,
@@ -403,37 +419,39 @@ internal sealed class ConsentService(
         (await documents.CurrentAsync(document ?? Notice, cancellationToken).ConfigureAwait(false))
         ?.Version;
 
-    private async ValueTask AnnouncedAsync(
+    private async ValueTask<Error?> AnnouncedAsync(
         SubjectId subject,
         string purpose,
         ConsentChange change,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
-        await events
-            .PublishAsync(
-                new ConsentChanged(at, Key(subject, purpose, change.ToString(), at), purpose, change)
-                {
-                    Subject = subject,
-                },
-                cancellationToken)
-            .ConfigureAwait(false);
+        (await events
+                .PublishAsync(
+                    new ConsentChanged(at, Key(subject, purpose, change.ToString(), at), purpose, change)
+                    {
+                        Subject = subject,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error);
 
-    private async ValueTask ObjectedAsync(
+    private async ValueTask<Error?> ObjectedAsync(
         SubjectId subject,
         string purpose,
         bool objecting,
         DateTimeOffset at,
         CancellationToken cancellationToken) =>
-        await events
-            .PublishAsync(
-                new ObjectionChanged(
-                    at,
-                    Key(subject, purpose, objecting ? "objecting" : "resumed", at),
-                    purpose,
-                    objecting)
-                {
-                    Subject = subject,
-                },
-                cancellationToken)
-            .ConfigureAwait(false);
+        (await events
+                .PublishAsync(
+                    new ObjectionChanged(
+                        at,
+                        Key(subject, purpose, objecting ? "objecting" : "resumed", at),
+                        purpose,
+                        objecting)
+                    {
+                        Subject = subject,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error);
 }

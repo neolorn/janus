@@ -260,6 +260,29 @@ public sealed class ConsentTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-002, PRIV-CONS-008 AC4, PRIV-RIGHT-001a AC2: a grant, a withdrawal
+    /// and an objection whose event row cannot be written fail with that failure and
+    /// commit nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AChangeWhoseEventCannotBeWrittenCommitsNothingAsync()
+    {
+        await GrantAsync(Recommendations);
+
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.SystemFault, await RefusedGrantAsync(Marketing));
+        Assert.Equal(ErrorCodes.SystemFault, await RefusedWithdrawalAsync(Recommendations));
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            (await Consents.ObjectAsync(Acting, Security, ConsentMechanism.Dashboard, CancellationToken.None))
+                .Match(() => default(ErrorCode?), error => error.Code));
+        Assert.Equal(0, _work.Committed);
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-001a AC5: a purpose whose basis is not objectable is refused with
     /// the code that says so.
     /// </summary>
