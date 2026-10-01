@@ -1478,6 +1478,10 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- An invitation's opening, revocation, acknowledgement and registration are decided
+  on its row under a lock, so its link attaches to one account or registration, a
+  revocation and an acknowledgement at once never both succeed, and a registration
+  completing never writes a revocation over.
 - A code, a link's press and the displaced address's confirmation of an identifier's
   change are judged on the verification under a lock on its row, so every wrong code
   of many at once is counted, a code and a confirmation at once apply the change, and

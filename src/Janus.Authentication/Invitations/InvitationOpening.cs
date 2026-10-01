@@ -67,6 +67,18 @@ internal sealed class InvitationOpening(
             return Result.Failure(notBegun);
         }
 
+        // D-166 X3: the link is judged again on the invitation under its lock, so of two
+        // presses at once, or a press and a revocation, only the first stands.
+        if (await invitations.FindForUpdateAsync(invitation.Id, cancellationToken).ConfigureAwait(false)
+            is not Invitation unopened
+            || !unopened.Opens(now))
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Failure(Error.From(ErrorCodes.InvitationExpired)), Result.Failure);
+        }
+
+        invitation = unopened;
+
         invitation.AttachTo(invitee, now);
 
         await invitations.RecordAsync(invitation, cancellationToken).ConfigureAwait(false);

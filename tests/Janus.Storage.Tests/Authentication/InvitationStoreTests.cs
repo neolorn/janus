@@ -321,8 +321,56 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
         Assert.False(await references.NamedAsync(acknowledged, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// IDN-LIFE-009a AC2, CONV-DESIGN-003 AC6: two accounts pressing one link at once
+    /// each judge it on the invitation under its lock, so it attaches to one of them.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_LIFE_009a_AC2_TwoPressesAtOnceAttachTheInvitationOnceAsync()
+    {
+        Invitation issued = await IssuedAsync("pressed@example.test");
+        SubjectId first = await _deployment.AccountAsync(Noon);
+        SubjectId second = await _deployment.AccountAsync(Noon);
+
+        bool[] opened = await Task.WhenAll(OpenedAsync(issued.Id, first), OpenedAsync(issued.Id, second));
+
+        await using StoreContext reading = database.Context();
+        Invitation read = (await Store(reading).FindAsync(issued.Id, TestContext.Current.CancellationToken))!;
+
+        Assert.Equal(1, opened.Count(answer => answer));
+        Assert.Equal(opened[0] ? first : second, read.Invitee);
+    }
+
     private InvitationStore Store(StoreContext context) =>
         new(context, _deployment.DataKey(context), _deployment.Randomness);
+
+    // Each press is its own request, judging the link on the invitation as read before
+    // its transaction and again under the lock, as the opening does.
+    private async Task<bool> OpenedAsync(InvitationId id, SubjectId invitee)
+    {
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+        InvitationStore store = Store(context);
+
+        _ = await store.FindAsync(id, TestContext.Current.CancellationToken);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        Invitation held = (await store.FindForUpdateAsync(id, TestContext.Current.CancellationToken))!;
+        bool opens = held.Opens(Noon.AddHours(1));
+
+        if (opens)
+        {
+            held.AttachTo(invitee, Noon.AddHours(1));
+
+            await store.RecordAsync(held, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return opens;
+    }
 
     private async Task<int> SweptAsync(DateTimeOffset now)
     {

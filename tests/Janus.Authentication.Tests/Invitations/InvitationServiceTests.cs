@@ -954,6 +954,28 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-INV-001, CONV-DESIGN-003 AC6: the acknowledgement reads the invitation again
+    /// under its lock, so one revoked while it waited attaches nothing.
+    /// </summary>
+    [Fact]
+    public async Task REG_INV_001_AnInvitationRevokedMeanwhileAttachesNothingAsync()
+    {
+        string token = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+        SubjectId holder = Holder();
+        Invitation invitation = _invitations.Held[0];
+
+        _ = _identifiers.Verified(holder, IdentifierKind.Phone, Number);
+        Accepted(await OpenAsync(holder, token));
+
+        _invitations.Locking = held => held.Revoke(Noon.AddMinutes(1));
+
+        Assert.Equal(ErrorCodes.InvitationExpired, Failure(await AcknowledgeAsync(holder, invitation.Id)).Code);
+        Assert.Empty(_attachments.Attached);
+        Assert.Empty(_events.Of<MembershipChanged>());
+        Assert.Null(invitation.AcknowledgedAt);
+    }
+
+    /// <summary>
     /// REG-INV-001 AC4, REG-MAIL-001 AC1 and AC5, IDN-LIFE-009a AC4: acknowledging an
     /// invitation into an organization whose mail is integrated makes the corporate
     /// address the primary email, verified and locked, keeps the personal email

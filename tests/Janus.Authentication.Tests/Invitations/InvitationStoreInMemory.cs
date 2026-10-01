@@ -28,6 +28,25 @@ internal sealed class InvitationStoreInMemory : IInvitationStore
     public ValueTask<Invitation?> FindAsync(InvitationId id, CancellationToken cancellationToken) =>
         ValueTask.FromResult(Held.FirstOrDefault(invitation => invitation.Id == id));
 
+    /// <summary>
+    /// What another transaction committed on an invitation while this one waited for
+    /// its lock, applied as the lock is taken.
+    /// </summary>
+    public Action<Invitation>? Locking { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask<Invitation?> FindForUpdateAsync(InvitationId id, CancellationToken cancellationToken)
+    {
+        Invitation? held = Held.FirstOrDefault(invitation => invitation.Id == id);
+
+        if (held is not null)
+        {
+            Locking?.Invoke(held);
+        }
+
+        return ValueTask.FromResult(held);
+    }
+
     /// <inheritdoc/>
     public ValueTask<Invitation?> FindByTokenAsync(byte[] token, CancellationToken cancellationToken) =>
         ValueTask.FromResult(Held.FirstOrDefault(invitation => invitation.Token.AsSpan().SequenceEqual(token)));

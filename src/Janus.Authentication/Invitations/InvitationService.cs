@@ -314,6 +314,22 @@ internal sealed class InvitationService(
             return Result.Failure(notBegun);
         }
 
+        // D-166 X3: decided again on the invitation under its lock, so an acknowledgement
+        // committed meanwhile is never reported revoked, and a second revocation finds
+        // the first.
+        held = await invitations.FindForUpdateAsync(invitation, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("An invitation's row is never removed.");
+
+        if (!held.Stands)
+        {
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(
+                    () => held.IsAcknowledged
+                        ? Result.Failure(Error.From(ErrorCodes.InvitationExpired))
+                        : Result.Success(),
+                    Result.Failure);
+        }
+
         await WithdrawnAsync(held, acting, context.BreakGlassReason, now, cancellationToken).ConfigureAwait(false);
 
         // REG-MAIL-001: a reservation nobody ever took is given up with the invitation

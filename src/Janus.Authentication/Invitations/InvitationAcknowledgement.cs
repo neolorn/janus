@@ -195,6 +195,23 @@ internal sealed class InvitationAcknowledgement(
             return Result.Failure(notBegun);
         }
 
+        // D-166 X3: the invitation is read again under its lock, so a revocation
+        // committed meanwhile stops the membership, and of two acknowledgements at once
+        // only the first attaches.
+        Invitation? standing = await invitations.FindForUpdateAsync(id, cancellationToken).ConfigureAwait(false);
+
+        if (standing is null || standing.Invitee != invitee || !standing.Stands)
+        {
+            ErrorCode refused = standing is null || standing.Invitee != invitee
+                ? ErrorCodes.InvitationNotFound
+                : ErrorCodes.InvitationExpired;
+
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Failure(Error.From(refused)), Result.Failure);
+        }
+
+        invitation = standing;
+
         MembershipId membership = (await memberships
                 .AttachAsync(
                     invitee,

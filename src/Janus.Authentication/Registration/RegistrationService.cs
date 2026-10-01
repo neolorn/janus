@@ -150,6 +150,24 @@ internal sealed class RegistrationService(
             return Result.Failure<RegistrationSessionId>(notBegun);
         }
 
+        // D-166 X3: the link is judged again on the invitation under its lock, so of two
+        // presses at once, or a press and a revocation, only the first stands.
+        if (invitation is not null)
+        {
+            if (await invitations.FindForUpdateAsync(invitation.Id, cancellationToken).ConfigureAwait(false)
+                is not Invitation unopened
+                || !unopened.Opens(now))
+            {
+                return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                    .Match(
+                        () => Result.Failure<RegistrationSessionId>(Error.From(ErrorCodes.InvitationExpired)),
+                        Result.Failure<RegistrationSessionId>);
+            }
+
+            unopened.AttachTo(session.Id, now);
+            invitation = unopened;
+        }
+
         await sessions.AddAsync(session, cancellationToken).ConfigureAwait(false);
 
         if (invitation is not null)
@@ -182,8 +200,8 @@ internal sealed class RegistrationService(
         return Result.Failure<RegistrationSessionId>(unopened ?? Error.From(ErrorCodes.RegistrationSignedIn));
     }
 
-    // REG-INV-001 and REG-MAIL-001: the token is single use, so pressing it attaches the
-    // invitation to this registration and to no other. The link went to the email the
+    // REG-INV-001 and REG-MAIL-001: the token is single use, so the invitation it opens
+    // is attached, under its lock, to this registration and to no other. The link went to the email the
     // invitation binds and nowhere else, so the press is that address's verification,
     // and only its mailbox can learn that an account holds it already (REG-INV-002). A
     // bound phone is staged locked and verified by its code at the phone step.
@@ -225,7 +243,6 @@ internal sealed class RegistrationService(
             session.Stage(Locked(IdentifierKind.Phone, phone));
         }
 
-        invitation.AttachTo(session.Id, now);
         session.Invited(invitation.Id);
 
         return Result.Success(invitation);
@@ -1041,7 +1058,10 @@ internal sealed class RegistrationService(
 
         // REG-INV-001: until the person acknowledges it at the membership step, the
         // account holds the invitation and nothing of its organization.
-        if (await InvitationAsync(live, cancellationToken).ConfigureAwait(false) is { } invitation
+        // D-166 X3: read under its lock, so a revocation committed meanwhile is carried
+        // and not written over.
+        if (live.Invitation is InvitationId invited
+            && await invitations.FindForUpdateAsync(invited, cancellationToken).ConfigureAwait(false) is { } invitation
             && invitation.Session == live.Id)
         {
             invitation.Registered(live.Provisional);
