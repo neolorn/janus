@@ -136,6 +136,15 @@ internal static class OidcRegistration
                         .UseScopedHandler<AuthorizationErrorAnswer>()
                         .SetOrder(AuthorizationErrorAnswer.Order));
 
+                // LIB-API-003 AC1: every error an endpoint the provider serves answers
+                // carries the protocol's code alone.
+                ErrorAlone<OpenIddictServerEvents.ApplyAuthorizationResponseContext>(options);
+                ErrorAlone<OpenIddictServerEvents.ApplyPushedAuthorizationResponseContext>(options);
+                ErrorAlone<OpenIddictServerEvents.ApplyTokenResponseContext>(options);
+                ErrorAlone<OpenIddictServerEvents.ApplyUserInfoResponseContext>(options);
+                ErrorAlone<OpenIddictServerEvents.ApplyJsonWebKeySetResponseContext>(options);
+                ErrorAlone<OpenIddictServerEvents.ApplyConfigurationResponseContext>(options);
+
                 _ = options.AddEventHandler<OpenIddictServerEvents.HandleTokenRequestContext>(
                     handler => handler.UseScopedHandler<TokenIssue>());
                 _ = options.AddEventHandler<OpenIddictServerEvents.HandleUserInfoRequestContext>(
@@ -199,4 +208,11 @@ internal static class OidcRegistration
 
         return services;
     }
+
+    private static void ErrorAlone<TContext>(OpenIddictServerBuilder options)
+        where TContext : OpenIddictServerEvents.BaseRequestContext =>
+        _ = options.AddEventHandler<TContext>(
+            handler => handler
+                .UseScopedHandler<ProtocolErrorAlone<TContext>>()
+                .SetOrder(ProtocolErrorAlone<TContext>.Order));
 }

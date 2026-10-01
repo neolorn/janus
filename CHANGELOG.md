@@ -1545,6 +1545,9 @@ against the public contract of LIB-API-001.
   answered to the browser in the error envelope rather than as the provider's text:
   400 `api.request.malformed` with the protocol's code in `details.error`, or 500
   `system.fault`.
+- Every error the OpenID Connect provider answers carries the protocol's `error` code
+  alone: no `error_description` or `error_uri` in the body, the `WWW-Authenticate`
+  header or the address a client is sent back to.
 - Every session carries a synchronizer token of its own, bound to that session and to no
   other, and reissued whenever the session's secret is. Neither value is ever read back:
   the record holds only what each fingerprints to.

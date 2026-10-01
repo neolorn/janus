@@ -807,6 +807,59 @@ public sealed class OidcFlowTests
         Assert.Equal(LogLevel.Warning, Assert.Single(deployment.OidcLog.Entries).Level);
     }
 
+    /// <summary>
+    /// LIB-API-003 AC1 (D-166, 394): every error the provider answers carries the
+    /// protocol's code alone, and no description or documentation address, in its body,
+    /// its <c>WWW-Authenticate</c> header or the address the client is sent back to.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_API_003_AC1_NoProviderErrorCarriesADescriptionAsync()
+    {
+        await using var deployment = new Deployment();
+
+        Browser browser = await RelyingParty.PreparedAsync(deployment);
+        var machine = new Machine(deployment);
+        string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Application);
+
+        _ = await machine.PostAsync("/oidc/token", RelyingParty.Code(code, RelyingParty.Application));
+
+        Answer spent = await machine.PostAsync("/oidc/token", RelyingParty.Code(code, RelyingParty.Application));
+        Answer anonymous = await RelyingParty.PushAsync(
+            deployment,
+            RelyingParty.With(
+                RelyingParty.Request(RelyingParty.Application, silent: true, RelyingParty.Destination, "openid"),
+                "client_id",
+                null));
+        Answer unread = await machine.GetAsync("/oidc/userinfo", "not-a-token-the-provider-issued");
+        Answer returned = await new Browser(deployment)
+            .SendAsync(
+                "GET",
+                await RelyingParty.AuthorizeAsync(deployment, RelyingParty.Application, silent: true));
+
+        string[] carried =
+        [
+            spent.Body,
+            anonymous.Body,
+            unread.Body,
+            unread.Header("WWW-Authenticate") ?? string.Empty,
+            RelyingParty.Where(returned),
+        ];
+
+        Assert.Equal(
+            ["invalid_grant", "invalid_request", "invalid_token", "login_required"],
+            [
+                spent.Text("error"),
+                anonymous.Text("error"),
+                unread.Header("WWW-Authenticate")!.Contains("invalid_token", StringComparison.Ordinal)
+                    ? "invalid_token"
+                    : string.Empty,
+                RelyingParty.Returned(returned, "error"),
+            ]);
+        Assert.All(carried, text => Assert.DoesNotContain("error_description", text, StringComparison.Ordinal));
+        Assert.All(carried, text => Assert.DoesNotContain("error_uri", text, StringComparison.Ordinal));
+    }
+
     private static (string Name, string? Value)[] Refresh(string token) =>
     [
         ("grant_type", "refresh_token"),

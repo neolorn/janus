@@ -16390,6 +16390,8 @@ could change:
 - LIB-API-003 could note that the OAuth error JSON at the back channel is the
   protocol's and not a user-facing error.
 
+**Superseded by D-166.**
+
 ---
 
 ## 395. A prefix reaches every composed address through the request's base path or the declared provider address, and nothing composes one otherwise
