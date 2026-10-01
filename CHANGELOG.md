@@ -1478,6 +1478,8 @@ against the public contract of LIB-API-001.
   organization's groups sort without regard to case and a credential label held in
   other capitals for the same kind is refused with `auth.credential.labelinvalid`, at
   a rename and at an enrolment alike, exactly where the unique index would refuse it.
+- A refresh of a materialised derivation is made with the organization's tree of
+  records held, so two refreshes at once write each grant once.
 - An export is counted against the hour and recorded with its actor's exports held,
   so exports at once never pass `exfiltration.export.ratelimit` together.
 - A change of a group's members, a group's removal and a grant to a group are decided

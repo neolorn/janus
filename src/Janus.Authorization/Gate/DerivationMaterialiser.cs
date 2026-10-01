@@ -17,6 +17,7 @@ namespace Janus.Authorization.Gate;
 /// <param name="model">The host's declaration, read for what a relationship confers.</param>
 /// <param name="records">Where the records a container reaches are read.</param>
 /// <param name="grants">Where the rows the derivation was precomputed into are read and written.</param>
+/// <param name="work">The caller's transaction, which the refresh joins.</param>
 /// <param name="time">The clock liveness is read against.</param>
 /// <remarks>
 /// Implements AUTHZ-DERIVE-005 and AUTHZ-DERIVE-002 (D-161). The grant is written on
@@ -29,6 +30,7 @@ internal sealed class DerivationMaterialiser(
     AuthorizationModel model,
     IResourceStore records,
     IGrantStore grants,
+    IUnitOfWork work,
     TimeProvider time) : IDerivationMaterialiser
 {
     /// <inheritdoc/>
@@ -70,6 +72,17 @@ internal sealed class DerivationMaterialiser(
             return Result.Success(new DerivationRefresh(0, 0));
         }
 
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<DerivationRefresh>(notBegun);
+        }
+
+        // D-166 X3: the rows already written and the records beneath are read with the
+        // organization's tree held, which a move and a second refresh hold too, so two
+        // refreshes at once never both write one grant or each revoke the other's.
+        await records.HoldAsync(registered.Organization, cancellationToken).ConfigureAwait(false);
+
         IReadOnlySet<SubjectId> holders =
             await HoldersAsync(relationship, resource, sources, cancellationToken).ConfigureAwait(false);
 
@@ -90,7 +103,10 @@ internal sealed class DerivationMaterialiser(
             revoked += changed.Revoked;
         }
 
-        return Result.Success(new DerivationRefresh(written, revoked));
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match(
+                () => Result.Success(new DerivationRefresh(written, revoked)),
+                Result.Failure<DerivationRefresh>);
     }
 
     // AUTHZ-GRANT-002: every grant records why it was granted. A materialised grant was

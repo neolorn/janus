@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -197,6 +198,28 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
         Assert.False(await AdmitsAsync(deployment, reviewed));
 
         Assert.False((await RefreshAsync(deployment, reviewed)).Drifted);
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-005 AC1, CONV-DESIGN-003 AC6: two refreshes of one record at once
+    /// are each made with the organization's tree held, so the second finds what the
+    /// first wrote and the grant is written once.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_005_AC1_TwoRefreshesAtOnceWriteTheGrantOnceAsync()
+    {
+        Reviewed reviewed = await ReviewedAsync();
+
+        await using ServiceProvider deployment = Materialised();
+
+        DerivationRefresh[] refreshed = await Task.WhenAll(
+            RefreshAsync(deployment, reviewed),
+            RefreshAsync(deployment, reviewed));
+
+        Assert.Equal(1, refreshed.Sum(refresh => refresh.Written));
+        Assert.Equal(0, refreshed.Sum(refresh => refresh.Revoked));
+        Assert.True(await AdmitsAsync(deployment, reviewed));
     }
 
     /// <summary>
