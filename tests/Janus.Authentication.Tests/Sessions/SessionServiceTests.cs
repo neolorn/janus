@@ -1197,6 +1197,8 @@ public sealed class SessionServiceTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.FactorRejected, Refusal(begun));
         Assert.Empty(_sessions.All);
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
     }
 
     /// <summary>
@@ -1209,6 +1211,119 @@ public sealed class SessionServiceTests : IAsyncDisposable
 
         Assert.Equal(1, _work.Opened);
         Assert.Equal(1, _work.Committed);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a session whose condition could not be raised begins
+    /// nothing, and its transaction is rolled back and left closed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ABeginningWhoseConditionIsNotRaisedIsRolledBackAsync()
+    {
+        SubjectId subject = Subject();
+        Placed();
+
+        _ = await BegunFromAsync(subject, CairoAddress);
+        _alerts.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Result<IssuedSession> begun = await Service.BeginAsync(
+            subject,
+            [Factor.Password],
+            From(LondonAddress),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, Refusal(begun));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a use whose condition could not be raised is refused, and
+    /// its transaction is rolled back and left closed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AUseWhoseConditionIsNotRaisedIsRolledBackAsync()
+    {
+        SubjectId subject = Subject();
+        Placed();
+
+        IssuedSession first = await BegunFromAsync(subject, CairoAddress);
+        _ = await BegunFromAsync(subject, CairoAddress);
+        _alerts.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Result<Session> resolved = await Service.ResolveAsync(
+            first.Secret,
+            From(LondonAddress),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, Refusal(resolved));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a restoration whose condition could not be raised is
+    /// refused, and its transaction is rolled back and left closed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ARestorationWhoseConditionIsNotRaisedIsRolledBackAsync()
+    {
+        SubjectId subject = Staff();
+        Placed();
+
+        IssuedSession lapsed = Value(await Service.BeginAsync(
+            subject,
+            [Factor.Passkey],
+            From(LondonAddress),
+            TestContext.Current.CancellationToken));
+
+        _clock.Advance(TimeSpan.FromHours(2));
+
+        _ = Value(await Service.BeginAsync(
+            subject,
+            [Factor.Passkey],
+            From(CairoAddress),
+            TestContext.Current.CancellationToken));
+        _alerts.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Result<IssuedSession> restored = await Service.RestoreAsync(
+            lapsed.Secret,
+            [Factor.Passkey],
+            From(LondonAddress),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, Refusal(restored));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a derived session whose condition could not be raised is
+    /// refused, and its transaction is rolled back and left closed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ADerivationWhoseConditionIsNotRaisedIsRolledBackAsync()
+    {
+        SubjectId subject = Subject();
+        Placed();
+
+        IssuedSession record = await BegunFromAsync(subject, CairoAddress);
+        _ = await BegunFromAsync(subject, CairoAddress);
+        _alerts.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Result<IssuedSession> derived = await Service.DeriveAsync(
+            record.Id,
+            SessionType.PerApp,
+            From(LondonAddress),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, Refusal(derived));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
     }
 
     /// <summary>
