@@ -130,12 +130,18 @@ following from that file and SHALL NOT override them: `Nullable` enable, `Implic
 disable, `TreatWarningsAsErrors` true, `AnalysisLevel` latest-all,
 `EnforceCodeStyleInBuild` true, `Deterministic` true, `GenerateDocumentationFile` true.
 
-*Source: D-149*
+The SDK SHALL be fixed in a committed `global.json` at a release of that .NET version's
+SDK, with `rollForward` `latestPatch`: a later patch of the same feature band is taken
+and nothing beyond it, and the feature band moves only by a decision-log entry.
+
+*Source: D-149, D-184*
 
 **Acceptance criteria**
 1. No project file sets a target framework or any of the listed properties, except
    `Janus.Analyzers`, which sets `netstandard2.0` (CONV-LAYOUT-001).
 2. A warning of any analyser fails the build.
+3. `global.json` names an SDK of the .NET release the solution targets, with
+   `rollForward` `latestPatch`.
 
 ---
 
@@ -143,7 +149,12 @@ disable, `TreatWarningsAsErrors` true, `AnalysisLevel` latest-all,
 `Directory.Packages.props` (Central Package Management) with a committed lockfile per
 project (`RestorePackagesWithLockFile`); restore SHALL run in locked mode in the pipeline.
 
-*Source: CONV-DEP-001, D-149*
+The repository's one .NET tool is `dotnet-ef`, which writes the migrations and builds
+the migration bundle (CONV-DESIGN-003); it is pinned in the committed tool manifest
+(`.config/dotnet-tools.json`) at the version of `Microsoft.EntityFrameworkCore`
+(CONV-DESIGN-008).
+
+*Source: CONV-DEP-001, D-149, D-184*
 
 **Acceptance criteria**
 1. No project file carries a package version.
@@ -618,17 +629,22 @@ references it.
 
 | Purpose | Package | Why this one |
 |---|---|---|
-| Relational access | `Microsoft.EntityFrameworkCore`, `Npgsql.EntityFrameworkCore.PostgreSQL`, `Microsoft.EntityFrameworkCore.Design` (Storage only, for the migration bundle), `Dapper` | OPS-DATA-001 |
+| Relational access | `Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.Relational` (Storage only, at the version of `Microsoft.EntityFrameworkCore`), `Npgsql.EntityFrameworkCore.PostgreSQL`, `Microsoft.EntityFrameworkCore.Design` (Storage only, for the migration bundle), `Dapper` | OPS-DATA-001; `Microsoft.EntityFrameworkCore.Relational` is referenced directly so that every project that references `Janus.Storage` resolves it at EF Core's version, not at the lower floor the provider declares |
 | Cache | `StackExchange.Redis` | INF-CACHE-001; the reference client |
 | Password hashing | `Konscious.Security.Cryptography.Argon2` | Argon2id is absent from the base class library; managed implementation, MIT licence (package listing inspected 2026-09-18) |
-| WebAuthn | `Fido2` (Fido2NetLib) | The maintained .NET attestation and assertion library; MIT; 4.0.1 targets net8.0 and runs on net10.0 (package listing inspected 2026-09-18) |
+| WebAuthn | `Fido2` (Fido2NetLib) | The maintained .NET attestation and assertion library; MIT; 4.2.0 targets net8.0 and net10.0 (package listing inspected 2026-10-03) |
 | TOTP | `Otp.NET` | RFC 6238 defaults; small |
 | OIDC provider | `OpenIddict.AspNetCore`, `OpenIddict.Server`, `OpenIddict.Validation`; stores are hand-written in `Janus.Storage` over the single `DbContext` (no `OpenIddict.EntityFrameworkCore`) | The maintained free OpenID Connect server for ASP.NET Core; a hand-written provider is a security risk this library does not take; hand-written stores keep one `DbContext` (CONV-DESIGN-003) |
 | OIDC client (Google, Apple) | None: the round trip is the library's own (IDN-LIFE-012); the identity token is validated with `Microsoft.IdentityModel.JsonWebTokens`, which `OpenIddict.Server` and `OpenIddict.Validation` bring, and the provider's discovery and key-set documents are read through the document and configuration retrievers of `Microsoft.IdentityModel.Protocols`, which `OpenIddict.Validation` brings | The handler and OpenIddict's client each bind the round trip with a `SameSite=None` cookie, which BFF-SESS-002 and BFF-CSRF-005 AC3 forbid and which Apple's form-post return needs |
 | Public surface tracking | `Microsoft.CodeAnalysis.PublicApiAnalyzers` | CONV-SETUP-003 |
-| Analyser authoring (`Janus.Analyzers` only) | `Microsoft.CodeAnalysis.CSharp`, `Microsoft.CodeAnalysis.Analyzers` | The five rules the gates rely on (CONV-CODE-008) |
+| Analyser authoring (`Janus.Analyzers` only) | `Microsoft.CodeAnalysis.CSharp`, `Microsoft.CodeAnalysis.Analyzers` | The six rules the gates rely on (CONV-CODE-008); the analysers ship as a package of their own that a build loads (`07` LIB-PKG-001), and a compiler older than the one they were built against refuses them, so these two move only by a decision-log entry (CONV-DEP-004) |
 | Versioning | `MinVer` | Version from the git tag, nothing to maintain (CONV-VCS-005) |
 | Tests | `xunit.v3`, `Microsoft.Testing.Platform` (as xunit.v3's runner), `Testcontainers.PostgreSql`, `Testcontainers.Redis` | CONV-TEST-002 |
+
+`Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.Relational`,
+`Microsoft.EntityFrameworkCore.Design` and the `dotnet-ef` tool (CONV-SETUP-002) SHALL
+carry one version and move together; `Npgsql.EntityFrameworkCore.PostgreSQL` takes its
+own latest stable release of the same major version, whose floor may trail theirs.
 
 **Banned**, whatever the reason offered: mediator and pipeline libraries, object
 mappers, third-party result or functional libraries, mocking frameworks (hand-written
@@ -639,7 +655,7 @@ shared framework of .NET is not a package: a project takes the container's abstr
 through the reference to `Microsoft.AspNetCore.App` (CONV-DESIGN-007), and their package
 is never referenced.
 
-*Source: CONV-DEP-003, D-149, D-166, D-183*
+*Source: CONV-DEP-003, D-149, D-166, D-183, D-184*
 
 **Acceptance criteria**
 1. The set of direct package references, read from `Directory.Packages.props`, equals
@@ -647,6 +663,10 @@ is never referenced.
    package brings (`Microsoft.IdentityModel.JsonWebTokens`,
    `Microsoft.IdentityModel.Protocols`), which are not referenced directly.
 2. A pull request adding a package not in the table fails a check.
+3. `Directory.Packages.props` gives `Microsoft.EntityFrameworkCore`,
+   `Microsoft.EntityFrameworkCore.Relational` and `Microsoft.EntityFrameworkCore.Design`
+   one version, the tool manifest gives `dotnet-ef` that version, and no project's build
+   reports an assembly version conflict (MSB3277).
 
 ---
 
@@ -1422,13 +1442,18 @@ author trusted with full application privilege.
 **CONV-DEP-004** — Security updates SHALL be applied promptly; other updates SHALL be
 taken **as they arrive**, merged when checks pass. Neither is a calendar task.
 
-*Source: D-046, D-110*
+*Source: D-046, D-110, D-184*
 
 Vulnerability alerting opens a change when an advisory lands; routine updates arrive
 as they are published. Acting on them is a habit at the point of a pull request, not a
 recurring entry — which is what keeps the accepted recurring human tasks at two
 (`06` §9). Never updating accumulates known holes; chasing releases by the calendar is
 churn.
+
+Two kinds of update are not taken one by one as they arrive: the packages and the tool
+CONV-DESIGN-008 holds at one version move together in one change, and the
+analyser-authoring packages move only by a decision-log entry, since the analysers must
+load in the compiler of every build that uses them.
 
 **Acceptance criteria**
 1. Security alerts are actioned rather than accumulating.

@@ -2255,6 +2255,8 @@ goal is that it is neither casual nor invisible.
 
 ## D-046 — Dependency supply chain
 
+> **Amended.** Applying updates: the EF Core packages and the `dotnet-ef` tool move together in one change, and the analyser-authoring packages move only by a decision-log entry (D-184).
+
 **Date:** 2026-08-25 · **Status:** accepted · **Closes:** threat model §6.3
 
 **TL;DR.** The system will use 30–40 third-party packages. If one is compromised, its
@@ -6090,6 +6092,8 @@ live there now, closing R-A13 early, is left for the user to raise if wanted.
 
 ## D-110 — The quarterly restore test is automated; dependency updates are event-driven; the human exceptions stay at two
 
+> **Amended.** Dependency updates: the EF Core packages and the `dotnet-ef` tool move together in one change, and the analyser-authoring packages move only by a decision-log entry (D-184).
+
 **Date:** 2026-09-03 · **Status:** accepted · **Amends:** D-044, D-046 · **Resolves:** final review, finding 9
 
 **TL;DR.** DR-007's quarterly timed restore and CONV-DEP-004's "updates on a schedule"
@@ -7880,6 +7884,8 @@ dashes) · `10` (sections 1, 3, 4.1a, 4.3, 5.15, 5a) · `11` (sections 3, 4, 7) 
 ---
 
 ## D-149 — Every design and code choice is fixed; the implementer decides nothing
+
+> **Amended.** Item 9: the permitted packages gain `Microsoft.EntityFrameworkCore.Relational`, which `Janus.Storage` references at the version of `Microsoft.EntityFrameworkCore` (D-184).
 
 **Date:** 2026-09-18 · **Status:** accepted · **Amends:** D-135 (`InternalsVisibleTo` grants), CONV-LAYOUT-001 (Storage dependencies) · **Extends:** D-017, D-026.4, D-046, D-106
 
@@ -13200,6 +13206,80 @@ REG-SESS-001, REG-SESS-003, REG-SESS-005, REG-SESS-007, REG-IDENT-007, REG-DOM-0
 
 ---
 
+## D-184 — Corrections-4 question 67: the EF Core relational layer at EF Core's version, and the toolchain at its current releases
+
+**Date:** 2026-10-03 · **Status:** accepted · **Amends:** D-149 (item 9, the permitted packages gain `Microsoft.EntityFrameworkCore.Relational`), D-046 and D-110 (two kinds of update are not taken one by one as they arrive) · **Extends:** D-149 (item 1, the SDK in `global.json` and the tool manifest)
+
+**TL;DR.** The provider `Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.3 asks for EF Core's
+relational layer at 10.0.4 or later, so when `Microsoft.EntityFrameworkCore` moved to
+10.0.12 every project that references `Janus.Storage` resolved the relational layer at
+10.0.4 beside EF Core 10.0.12. `Janus.Storage` now references
+`Microsoft.EntityFrameworkCore.Relational` directly, at the version of
+`Microsoft.EntityFrameworkCore`, and the EF Core packages and the `dotnet-ef` tool always
+carry one version. The entry also records the move of the SDK and the packages to their
+current releases on 2026-10-03, before that day's run built anything, and the rules that
+keep the toolchain in step: the SDK fixed in `global.json`, the one tool pinned in its
+manifest, the analyser-authoring packages moved only by an entry.
+
+**The question (Tier 2).** Question 67 of the corrections-4 report
+(`docs/reports/corrections-4.md`). After the move, the build reports MSB3277 in seven
+projects, and the output of `Janus.Storage.Tests` holds the relational layer 10.0.4.0
+beside EF Core 10.0.12.0. `Janus.Storage` alone resolves 10.0.12, through
+`Microsoft.EntityFrameworkCore.Design`, whose assets are private. CONV-DESIGN-008 does not
+name the relational layer, and no stable provider newer than 10.0.3 exists. Question 66
+was withdrawn in the report and needs no answer.
+
+**Decision.**
+
+- **67. One version of EF Core.** `Janus.Storage` references
+  `Microsoft.EntityFrameworkCore.Relational` directly; its version in
+  `Directory.Packages.props` is that of `Microsoft.EntityFrameworkCore`. The reference
+  names a package the project already uses (its table mappings and migrations are the
+  relational layer's API) and already resolves through the provider, so it adds no new
+  author (CONV-DEP-003); it comes in a commit of its own that states why. No other project
+  references it: `Janus.Hosting`, whose `MapAuthorizationTables` also uses the relational
+  layer's mapping API, takes it through `Janus.Storage` at the same version.
+  `Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.Relational`,
+  `Microsoft.EntityFrameworkCore.Design` and the `dotnet-ef` tool always carry one version
+  and move together; the provider takes its own latest stable release of the same major
+  version, whose floor may trail theirs. A new criterion checks it. *Rejected:* central
+  transitive pinning (it applies to every package `Directory.Packages.props` lists,
+  wherever one appears transitively in any project, and writes each pinned package into
+  the dependencies of the library's package; NuGet's documentation of Central Package
+  Management, read 2026-10-03, asks a library author to weigh it carefully because it can
+  bring dependencies nobody chose); EF Core held at 10.0.4 until a provider declares a
+  later floor (a provider's floor trails EF Core's patches, so the same split would return
+  at every EF Core release, against CONV-DEP-004).
+- **The toolchain from 2026-10-03.** On the owner's decision of that day, before the run
+  built anything, `global.json` names SDK 10.0.401 with `rollForward` `latestPatch`, which
+  rolls forward only within a feature band (the 10.0.3xx band had no release in September
+  2026; that month's release shipped 10.0.401 and 10.0.112), and every package in
+  `Directory.Packages.props` but the two below moved to its latest stable release within
+  its major version. No package had a newer stable major. `Microsoft.CodeAnalysis.CSharp`
+  and `Microsoft.CodeAnalysis.Analyzers` stay at 5.6.0 (the latest stable is 5.9.0),
+  pending a decision of their own: the analysers ship as a package of their own that a
+  build loads (LIB-PKG-001), and a compiler older than the one an analyser was built
+  against refuses to load it (CS9057).
+- **The rules that keep it in step.** The SDK is fixed in a committed `global.json` with
+  `rollForward` `latestPatch`, and its feature band moves only by a decision-log entry
+  (CONV-SETUP-001). `dotnet-ef` is the repository's one .NET tool, pinned in the committed
+  tool manifest at EF Core's version (CONV-SETUP-002). Two kinds of update are not taken
+  one by one as they arrive: the EF Core family moves together in one change, and the
+  analyser-authoring packages move only by a decision-log entry (CONV-DEP-004).
+- **The analyser count.** The analyser row of CONV-DESIGN-008 and phase 0 of the plan
+  still counted five rules after JAN0006 (D-150) made six. The row now says six, and the
+  plan refers to them without a count.
+- **The Fido2 row.** The package listing, inspected 2026-10-03: the current release is
+  4.2.0, MIT, targeting net8.0 and net10.0. The row says so.
+
+**Propagated to:** `08` CONV-SETUP-001 (the SDK in `global.json`, criterion 3),
+CONV-SETUP-002 (the tool manifest), CONV-DESIGN-008 (the relational access row, the
+analyser row and its count, the WebAuthn row, the one-version rule, criterion 3),
+CONV-DEP-004 (two kinds of update not taken one by one as they arrive);
+`guide/implementation-plan.md` section 3 (phase 0's analyser rules).
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -13393,6 +13473,7 @@ REG-SESS-001, REG-SESS-003, REG-SESS-005, REG-SESS-007, REG-IDENT-007, REG-DOM-0
 | Corrections-4 question 20: how a replaced signing credential leaves the provider | D-181 |
 | Questions park their item, not the run; independent parts run in parallel | D-182 |
 | Corrections-4 questions 21 to 65, and three Tier 1 records | D-183 |
+| Corrections-4 question 67: the EF Core relational layer at EF Core's version, and the toolchain at its current releases | D-184 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 
