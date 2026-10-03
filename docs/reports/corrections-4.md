@@ -945,7 +945,7 @@ and none carries a `$` root, a list index or a nested path written otherwise.
 | X3 at S1, the admission half | Open question 63 | Question 63 |
 | X3 at S5, `AlertDestinationChange` | Open question 64 | Question 64 |
 | X4 at `PUT /admin/compliance/assessments` (`dataOwner`, `organisationalSecurityMeasures`) | Open question 65 | Question 65 |
-| 209 (2), the IDNA mapping | It needs `IdnaMappingTable.txt`, and its download waits on the owner's approval | The owner's approval of the download |
+| 209 (2), the IDNA mapping | The download is approved and made; the parameters of the processing are not stated | Question 68 |
 
 **Slips.** None is rewritten; each commit is green on the fast checks unless said.
 - `30b1c4bc` carries only the changelog line of 323; its code and tests are in `5db004f4`. The two are one change split in two commits.
@@ -2276,6 +2276,29 @@ part of 389 (3) and waits with 389 on question 48.
   2. The two packages stay at 10.0.4 until a provider declares a later floor.
 - **Parked.** The build and the fast checks of the version step, and so every item after
   it.
+- **Answer:** pending.
+
+**68. Tier 3. D-166 209 (2), REG-DOM-001 and IDN-ACCT-004: which checks of UTS #46 the library's own processing applies.**
+
+- **Item.** 209 (2), the ASCII form of a domain from the library's own UTS #46 tables.
+- **What the code needs.** The value of each parameter of UTS #46 ToASCII: CheckHyphens,
+  CheckBidi, CheckJoiners, VerifyDnsLength and Transitional_Processing, beside
+  UseSTD3ASCIIRules.
+- **What the specification says.** REG-DOM-001 and `01` name the STD3 rules, the mapping
+  table of the pinned version and RFC 3492, and no other parameter. D-166 209 (2) asks
+  for a test that the form is the same whatever ICU the machine holds.
+- **What the present code does.** `IdnMapping` with `UseStd3AsciiRules`, on this machine
+  (Windows, .NET 10.0.401): a label with a hyphen at both its third and fourth place
+  (`ab--c.example`) is accepted; a leading or trailing hyphen is refused; a label mixing
+  a right-to-left letter with a left-to-right one (U+05D0 `b1`) is accepted; a digit
+  before a right-to-left letter is accepted; U+200C and U+200D between Latin letters are
+  refused; a label of 64 octets, an empty label, a leading combining mark, an underscore
+  and `xn--a` are refused; `xn--bcher-KVA` is answered in the case it came. So the
+  present answers are not one set of parameters the chapters could be read to keep.
+- **Parked.** 209 (2), with its tests and its ledger line. `IdnaMappingTable.txt` of
+  Unicode 17.0.0 is downloaded (SHA-256
+  `87f05505dc026fdb2bff16132bdc68a8014675836882a9a2b1844540ad3be382`) and kept outside
+  the repository until the item is built.
 - **Answer:** pending.
 
 ## 5. Gate result
