@@ -15,7 +15,7 @@
   </ItemGroup>
 
   <ItemGroup Label="Cache">
-    <PackageVersion Include="StackExchange.Redis" Version="3.3.0" />
+    <PackageVersion Include="StackExchange.Redis" Version="3.3.1" />
   </ItemGroup>
 
   <ItemGroup Label="Cryptography and authentication">
