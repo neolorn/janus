@@ -602,6 +602,295 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 - Section G: every "Superseded by D-166" line section G names is present but for the 23 entries whose items are parked (section 2); the "Revised by entry" lines are present.
 - Observed, outside the sweeps: the analyser JAN0005 inspects expression statements only, so an expression-bodied member that discards a `Result` through `=> await X()` escapes it.
 
+### The section C sweeps, place by place
+
+For each sweep: each place changed, each place reviewed and left with the reason, and what is parked (D-166 section C).
+
+#### X2
+
+- Changed: AuthenticationService.HeldAsync (PolicyEnforcementGrace read returned null on
+  failure); RecoveryService.RaiseAsync (two threshold reads returned success on failure).
+  Tests: the existing fault tests of each area cover the throw idiom.
+- Reviewed, left: ReadVolume.TodayAsync (zone refusal is returned, not a fallback);
+  WorkingCalendar, RestoreTest, SignOn matches (after a checked failure, or not a
+  configuration read).
+
+#### X1
+
+- Changed: RecoveryService.StandAsync (RecoveryClustering and ApproverVolume raised
+  before the commit), test RecoveryServiceTests.CONV_DESIGN_002_AnApprovalWhoseAlertCannotBeWrittenCommitsNothingAsync.
+- Changed: IPrivacyAlerts.RaiseAsync and IAccessAlerts.RaiseAsync return Result; the
+  callers LegalDocumentService.PublishAsync, HolidayListWatch, DeadlineSweep.RaisedAsync,
+  DenialSpikes.WatchAsync and ReadVolume.ReturnedAsync fail on a raise that cannot be
+  written. Tests: HolidayListWatchTests, DeadlineSweepTests, LegalDocumentTests and
+  ReadVolumeTests, each CONV_DESIGN_002_*.
+- Changed: OutboxPublisher.DeliveredAsync (ErasureDeliveryExhausted raised before the
+  commit that records the spent delivery), test
+  OutboxPublisherTests.CONV_DESIGN_002_AnExhaustionThatCannotBeRaisedCommitsNothingAsync.
+- Changed: ConsentService.AnnouncedAsync and ObjectedAsync (a refused event write failed
+  nothing), test ConsentTests.CONV_DESIGN_002_AChangeWhoseEventCannotBeWrittenCommitsNothingAsync.
+- Changed: AlertDestinationChange.ChangeAsync (AlertRaised published after the setting's
+  own commit; now one transaction), test
+  AlertDestinationChangeTests.CONV_DESIGN_002_TheChangeAndItsEventCommitTogetherAsync.
+- Reviewed, left (event in the fact's transaction): AccountAdministration,
+  AccountLifecycle, AlertChannels, DeploymentBootstrap.JoinAsync, CredentialService,
+  ProviderEvents, DeviceService, IdentifierService, InvitationAcknowledgement,
+  MembershipEnd, PasswordService, LossReports, RegistrationService,
+  RestrictionAdministration, Supersession, OrganizationErasureSweep, TakedownService,
+  ProtectedConfiguration, OrganizationDomainService, CallbackAdmission,
+  ConcurrentSessions (inside their callers' transactions).
+- Reviewed, left: BreakGlassService.LimitReachedAsync raises in its own transaction, as
+  D-166 292 orders.
+- Parked: SendingService.CarryAsync publishes NotificationRequested after the send's
+  commit (118, 119 (1): question 27, question 38).
+- Parked: DenialSpikes.WatchAsync raise joins the caller's transaction while 321 commits
+  the denial outside it (question 59).
+
+#### X7
+
+- Changed: admin-assisted recovery enrolment link sent under the sign-in purpose
+  (049f31a6, 119 (7)).
+- Parked: identifier-change-confirm purpose (question 60); every path that needs the
+  after-commit registration of 119 (1) (question 27, question 38).
+
+#### X3 (one lock primitive per row kind, a two-connection storage test each)
+
+- 8328a0a1 RecoveryCodeService spend; 41e3a302 TOTP code; 0417bb1d security key counter;
+  102ba717 password rehash; 0286c0ee trusted browser failures.
+- 3344326a F5 SessionService.RestoreAsync, FindForUpdateAsync per held credential.
+- 492a5ede R1/R2 RecoveryService.CompleteAsync, BeginEnrolmentAsync
+  (IRecoveryLinkStore.FindForUpdateAsync by fingerprint).
+- 1d363161 R3 CredentialService CompleteKey, ConfirmGenerator, SetPassword (link lock by
+  enrolment session).
+- 66d2dea9 R4 RecoveryService.StandAsync (advisory lock on the approval counts).
+- 22730c01 R5 AuthenticationService.CompleteAsync, RaiseAsync (challenge row).
+- 216b93c1 R6 RegistrationService.RecordAgeAsync, VerifyAsync (session row).
+- c4a6233c C1 AccountAdministration and AccountLifecycle transitions; RecoveryService
+  holds the account (IAccountDirectory.HoldAsync).
+- 2b1ae54a C2 AccountStates.RestrictAsync, BeginDeletionAsync, TakeDownAsync.
+- 0d3b91c3 C3 CredentialService.RemoveAsync, UnlinkAsync; ProviderEvents.WithdrawnAsync
+  (IAuthenticatorStore.OfForUpdateAsync).
+- e31030fd C4 ProviderEvents.SuspendedAsync. 7733c787 C5 CredentialService.LinkAsync.
+- af4d915b C6 LossReports.InvalidateAsync, CancelAsync; enrolment holds the account.
+- c37dff7d C7 IdentifierService Add, MakePrimary, SetBackup, Remove, Undo;
+  AccountService.ChooseAsync (IIdentifierStore.HoldAsync: account row, tracked set
+  reloaded). 522fdd19 InvitationAcknowledgement.CorporateAsync, MembershipEnd.RetiredAsync.
+- 1944081d C8 IdentifierService.ProvedAsync, LandAsync (verification row).
+- f7eb2ba7 O1 InvitationOpening.OpenAsync, InvitationService.RevokeAsync,
+  InvitationAcknowledgement.AcknowledgeAsync, RegistrationService open and Registered.
+- 13d5b76e O2 OrganizationService request and cancel, OrganizationStates.EraseAsync
+  (nothing where the window no longer runs), InvitationService.IssueAsync,
+  acknowledgement (organization row).
+- 85a3457e O3 MembershipEnding.EndAsync, MembershipAttachment, organization erasure
+  (membership rows).
+- ec6680df O4/O5 GrantService grant and revoke, RoleService define and remove,
+  InvitationService.IssueAsync roles (role row, sorted by name; grant row after it).
+- 5548eff0 O6 GroupService add member, remove member, remove; GrantService for a group
+  holder; role rows in the administering check (per-organization advisory lock on the
+  groups, taken before any role row).
+- 5905a80b O7 ExportOperations.AdmitAsync (per-actor advisory lock; the admission now
+  runs in a unit of work, nested in the caller's where one is open).
+- 0c930b9a O8 DerivationMaterialiser.RefreshAsync (ResourceStore's tree lock; nested
+  unit of work; holders read after the lock).
+- b621d5f7 O9 RestrictionAdministration.EditAsync (set re-read and rebuilt under the
+  settings row lock). The lock primitive is the existing settings row lock with its own
+  storage test (178); the new test is the service one.
+- ecfd7be5 V1 PrivacyRequestService fulfil and refuse, DeadlineSweep.ReachedAsync
+  (request row; the sweep re-reads under the lock and leaves a decided request).
+- 9f4b4d88 V2 PrivacyRequestService.QueuedAsync (advisory lock per subject and type).
+- a4a4d32e V3 ExportService.AssembleAsync (advisory lock per subject; window counted again).
+- e0394974 V4 ErasureService.CompleteAsync (outbox row; confirmations reloaded).
+- 1920008e V5 ConsentService grant, withdraw, withdraw objection (advisory lock per
+  subject; tracked consents and objections reloaded).
+- 1cc74763 V6 KeyRotation and FingerprintKeyRotation start, pass, sweep, completion and
+  retirement (advisory lock per kind; tracked progress reloaded; each batch starts from
+  the committed point). Tests in Cli KeyRotationTests and Storage FingerprintRotationTests.
+- 2835ce2f S1 SendLedger counting half: counter upsert in one statement, credit spent under
+  the grant row's lock, grant added in SQL, release under the send row's lock; reads
+  untracked. e664d897 tracked reference compared in constant time (CONV-CODE-007 gate).
+  Tests SendLedgerTests AUTH_ABUSE_004_* (four, two connections each).
+- 5cc54446 S2 ThrottleService.FailedAsync and SucceededAsync (IThrottleLedger.HoldAsync,
+  advisory lock per scope and current hash; tracked counters reloaded). Storage test
+  ThrottleLedgerTests (new).
+- 325262a0 S3 NonExistenceNotice, IdentifierService.TellHolderAsync,
+  RegistrationService.TellHolderAsync (INoticeLedger.HoldAsync per address). Storage test
+  NoticeLedgerTests (new).
+- f026502d S4 CallbackAdmission.AdmitAsync and RejectAsync (ICallbackLedger.HoldAsync per
+  source). Storage test CallbackLedgerTests (new).
+- e282fb1c A-wide SessionService.BeginAsync holds the account and refuses
+  auth.factor.rejected for a suspended, deleting or deleted account (the sign-in's answer);
+  the break-glass path (Admission.Exempt) is left: it judges no account state of its own.
+  The lock primitive is the account row lock with its storage test (C1); the new test is
+  the service one.
+- Reviewed, left (D-181 and the conditional write): SigningKeyStore.AddAsync (ON CONFLICT,
+  one next and one current by unique partial indexes), PromoteAsync (conditional on the
+  key still current with the lifetime read, the next still next), LengthenAsync (never
+  lowers, only while current), RetireAsync and RemoveAsync (conditional on the stored
+  times); SigningKeys.ChangeAsync runs in a unit of work of its own. Its return without a
+  commit where another process made the change is X9 (question 58).
+- Reviewed, left: AccountAdministration, AccountLifecycle and OrganizationService
+  CancelDeletionAsync hold the row before the directory write (C1, O2).
+- Reviewed, left: registration wizard steps other than age and code send codes inside the
+  transaction (119, parked); a double completion is stopped by the accounts key.
+  Recovery approvals at quorum may send two links; ReplaceAsync keeps one.
+  PresentAsync's factor accumulation can lose an update and fails closed.
+  ProviderEvents.EndedAsync holds on a stale read, harmless.
+- Residual: two definitions of a new role at once meet the primary key and the second
+  fails closed. A grant revoked from a group while a member is added is judged on the
+  grant as read under the group lock (revocation takes no group lock; it only narrows).
+- Residual: the takedown's reported erasure date is computed from the standing read before
+  the lock. InvitationAcknowledgement checks the personal email and the email maximum on
+  the set read before the lock; a change meanwhile makes the domain throw and the
+  transaction roll back (fails closed). InvitationService.IssueAsync sends its link before
+  the transaction (119, parked), so a refusal under the lock leaves a sent link that opens
+  nothing.
+- Parked: C9, the restriction read before the transaction (question 62). V7 and S6 (question 61).
+- Residual (S1): the admission half (a send judged on counters read outside any
+  transaction, counted after the transport took it) is parked on question 63.
+- Residual (S4): the source's callbacks stay held to the end of the request's
+  transaction, which in ProviderEventIntake includes the provider key check.
+- Parked: S5, the alert destination change notified before its lock (question 64).
+- Residual (V5): Supersession writes SupersededAt without the consent hold; ObjectAsync
+  takes no hold (it decides on nothing it reads).
+
+#### X4 and X5 (re-check with the details.member correction, 9fcc85ec)
+
+details.member: the shared reader (MalformedRequest.Member, 9fcc85ec) names a member as the
+request writes it; every hand-named member was listed (grep of Malformed/Invalid/"member")
+and none carries a `$` root, a list index or a nested path written otherwise.
+
+- 9933a94a PUT /admin/compliance/licences: the body is the list itself (09 8a, D-178),
+  LicencesBody removed, LicenceBody.Read; duplicate identifiers name `id`
+  (MaintenanceRecords.ReplaceLicencesAsync). Test MaintenanceEndpointTests.
+- 264fe2bb GrantEndpoints.GrantAsync, RevokeAsync (blank reason trimmed to its code, past
+  1024 malformed); GroupEndpoints.CreateAsync (name, reason), RemoveAsync, AddMemberAsync,
+  RemoveMemberAsync. Tests CONV_CODE_006_AC3_* (caller without the permission).
+- 00b686d0 OrganizationEndpoints.CreateAsync (name, reason), RequestDeletionAsync,
+  CancelDeletionAsync; InvitationBody.Read (reason only with formerMailbox, bounded).
+- bab1a3ba RecoveryEndpoints.ApproveAsync (reason, channelUsed); RecoveryService.ApproveAsync
+  (bound for in-process callers, judged before the step-up).
+- 8467b119 MaintenanceEndpoints.RecordAsync and MaintenanceRecords.RecordAsync (note
+  optional, bounded when given, kept trimmed); IMaintenanceRecords doc (invalid, not
+  malformed, for performedAt).
+- e747407f PrivacyEndpoints.EnterAsync and PrivacyRequestService.EnterAsync (detail
+  optional, bounded when given, kept trimmed).
+- 0dca93eb PrivacyRequestService.DoneAsync: an erasure fulfilled while the account entered
+  its window under the lock is recorded fulfilled (09 8a), not 409 without details.state.
+- 95e0a12a AccountLifecycle.DeactivateAsync, DeleteAsync: a state that does not admit the
+  operation is identity.account.stateconflict naming it (IDN-ACCT-007, D-166), a restricted
+  deactivation is authz.restricted from the gate (AUTHZ-GATE-006 AC2), both before the
+  step-up; AccountAdministration.StateConflict made internal and shared.
+- 5d60664d TakedownService.ExecuteAsync: refused under the lock, answered for the state
+  found there (takedown.active, stateconflict); the reserved account stays authz.denied
+  (OPS-BOOT-002).
+- da61ef1c GroupService: a group gone between the scope read and the lock is refused as one
+  no row names (09 section 8, authz.denied through the gate), not 400 `id`.
+- Reviewed, left: ConfigurationEndpoints, RoleEndpoints, BreakGlassEndpoints,
+  TakedownEndpoints, PrivacyEndpoints submit and refuse, OrganizationEndpoints policy and
+  domain routes (Unexplained), RestrictionEndpoints grant (already bounded); restriction
+  edit and delete (a blank reason goes to the service, which alone knows whether the
+  change loosens); services GrantService, GroupService, RoleService, OrganizationService,
+  OrganizationDomainService, InvitationService, BreakGlassService,
+  ConfigurationAdministration, RestrictionAdministration, PrivacyRequestService,
+  TakedownService (already bounded).
+- Reviewed, left (authz.denied settled): DeploymentBootstrap on a stood-up deployment
+  (OPS-BOOT-001 AC1); InvitationService into an organization whose deletion was requested
+  (09 8a); reserved-account refusals in GrantService, GroupService, AccountAdministration
+  (OPS-BOOT-002); maintenance-credential refusals (no person acts); AccountService.ReadAsync
+  and every `Acting`/`Effective is not SubjectId` refusal (no person acts).
+- Reviewed, left (malformed settled): corporateEmail where the mail is not integrated (09
+  8a), emailDomains through the policy (10 4.1a), an unreadable domain, documents absent or
+  blank.
+- Profile displayName and legalName have their own bound and code (09 PUT
+  /account/profile); credential labels theirs (auth.credential.labelinvalid); not X4.
+- Parked: dataOwner and organisationalSecurityMeasures of PUT /admin/compliance/assessments
+  (question 65).
+- Residual: AccountLifecycle under the lock answers a restriction committed since the
+  gate's read with authz.denied, as before (the C9 window, question 62).
+- Residual: TakedownService and the other returns after BeginAsync without a commit are
+  X9 (question 58).
+
+#### X6 (photos and imageCodec, the domain lock and dnsResolver)
+
+- Domain half reviewed, nothing owed: the edit refuses a domain the resolver cannot
+  read before the step-up (OrganizationDomainService), startup refuses a listed domain
+  without `dnsResolver` (DeclarationCoverage), bootstrap writes EmailDomains null. Tests
+  OrganizationDomainEndpointTests, StartupValidationTests.
+- Photos half parked on question 25: the code still carries the `photo.enabled` family where
+  the spec has the policy `photos` field; the startup and edit checks follow from it.
+
+#### X8 (step-up after every other refusal; 09 8 and 8a against 10 5a)
+
+- a9964c20 AccountService username (after cooling-off and taken), IdentifierService add
+  (after invalid, mixedscript, maximum) and remove (after unremovable), RecoveryService
+  approve (after the channel check), MembershipEnd (standing read before the step-up,
+  ScopeOfAsync kept first for CONV-DESIGN-002 AC3). Tests
+  REG_IDENT_009_TheStepUpIsJudgedAfterEveryOtherRefusalAsync,
+  REG_IDENT_004_TheStepUpIsJudgedAfterEveryOtherRefusalAsync, the channel assertion in
+  the recovery AC3 test.
+- The three gates have their 403 auth.stepup.required test:
+  SessionRevocationEndpointTests AUTH_SESS_011_OneAccountsRevocationAsksForStepUpAsync
+  (account:sessionsrevoke), AUTH_SESS_009_EveryRevocationAsksForStepUpAsync
+  (session:revokeall), PrivacyRequestEndpointTests
+  PRIV_RIGHT_001_AC5_AFulfilmentWithoutStepUpIsRefusedAsync (privacyrequest:fulfil).
+- 10 5a against 09 8 and 8a: all 36 gate names are spent in src (StepUpAction members,
+  each used at its route; roles under grant:manage in RoleService). The ungated /admin
+  writes are 5a's Not gated list plus POST /admin/groups, DELETE /admin/groups/{id}
+  (a group nothing names, 409 authz.group.inuse otherwise) and POST
+  /admin/privacy/requests (entry; the fulfil is gated): none touches an account or
+  loosens a control, so none is owed a gate.
+- Residual, left: AppPasswords.RevokeAsync (the server's refusal comes from the act),
+  IdentifierService.StageAsync (a send refused inside the transaction),
+  OrganizationService policy (write and alert failures after the step-up); none is a
+  refusal of the request that could be judged first.
+- Defect: a9964c20's footer line is 84 characters, over the 72 of CONV-VCS-003; it cannot
+  be fixed without rewriting history.
+
+#### Section F (chapter 10 rows against the code)
+
+- Codes new, renamed, retired: every new code is an ErrorCodes member with the status 09
+  gives it (ApiStatus); the two renamed codes carry the new names; no retired code or
+  member remains (SignInStatus.DeviceVerificationRequired is the sign-in status of 5.33,
+  not the retired code). Statuses corrected: identity.registration.incomplete 409,
+  identity.identifier.invalid 422, integration.callback.rejected 429 only with
+  details.retryAt, else 422 (ApiStatus). Meanings widened: covered by X4, X5, X6 above.
+- Keys new and changed: code.signin.lifetime, code.signin.attempts,
+  integration.mailserver.endpoint (P), integration.callback.claimtimeout,
+  outbox.poll.interval ceiling, backup.restoretest.interval as the rows say. Retired keys
+  absent. abuse.source.sitelimit: parked on question 48 (389 whole). The policy `photos` field and
+  the photo.enabled family: parked on question 25.
+- Protected list: SettingsCatalogueTests holds it against 4.8 (integration.mailserver.endpoint
+  protected).
+- Step-up actions new: all seven are StepUpAction members spent at their routes (X8).
+- Alert condition breakglass-generated: High, past alerting.owner.enabled (Alerts,
+  AlertRouter), raised by BreakGlassService.
+- Restriction shape: channel sms, email, any (default any); the shipped restrictions carry
+  sms, sms, email, any as section 4.5 gives them.
+- Vocabularies (compared in both directions): every member of
+  5.1 to 5.49 that a surface carries is spelled as 10 spells it, except:
+  - 402e6a1c RegisterFinding `organisational-measures-missing` spelled
+    `organizational-measures-missing` (member OrganizationalMeasuresMissing). Tests
+    ProcessingRecordsTests and ProcessingRecordsEndpointTests PRIV_ROPA_001_AC2_*.
+  - System principal `derivation-driftcheck`: parked on question 22 (265).
+  - Degradation component `registration-channel`: parked on question 23 (143).
+- Reviewed, left: 5.8 data subject rights is no wire vocabulary (no surface names a right);
+  LifecycleLinkKind's stored `deletion-cancellation` is a row value, the link kind on the
+  wire is LinkKind `deletion-cancel`; StepUpOutcome, RecoveryPurpose, BackupChoice,
+  SubjectEventKind are spelled by their own chapters, not section 5. The assessments body
+  member `organisationalSecurityMeasures` is named by no chapter; left with question 65.
+
+#### Section G (the ledger)
+
+- d9a8ecb5: the "Revised by entry" lines G owes and no code commit carries: 144 (315), 175
+  (194 and 205), 190 (411), 280 (356), 284 (318), 367 (400, beside 402). 283 (343 and 349)
+  was present as "Revised by entries 343 and 349".
+- Every "Superseded by D-166" line G names is present except these, each waiting on its
+  parked item: 115 (question 31), 118 (question 27), 119 (question 38), 129 (question 42), 133 and 147 (question 29, question 30), 136
+  (question 34), 143 (question 23), 144 (question 25), 152 (question 40), 227 and 322 (with 119, question 38), 235 and 335 (question 27),
+  246 (with 242 (3) and (4), question 41, question 36), 265 (question 22), 306 (question 31), 317 (question 26), 318 (question 33), 328
+  (question 46), 382 (question 50, question 51), 389 (question 48), 419 (question 32).
+- The lines already present stand: 139, 151, 262, 186, 328 (399), 367 (402), 400, 402.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
