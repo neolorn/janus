@@ -228,6 +228,33 @@ public sealed class TotpServiceTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)));
     }
 
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a code another presentation spent while this one waited
+    /// for the lock is refused as replayed, and the refusal ends the unit of work it
+    /// was decided in with nothing committed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ACodeSpentMeanwhileRollsBackAsync()
+    {
+        SubjectId subject = Subject();
+        TotpEnrolment enrolment = await EnrolledAsync(subject);
+        string code = Code(enrolment, Now);
+
+        _authenticators.Locking = credential =>
+            credential.Consumed(TotpCodes.Accepts(credential.Totp!, code, Now, 1)!.Value);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.CodeReplayed,
+            Refusal(await Service.PresentAsync(
+                subject,
+                code,
+                TestContext.Current.CancellationToken)));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
     private static CredentialLabel Label() =>
         CredentialLabel.Of(new DeviceDescription("Firefox", "Fedora"));
 

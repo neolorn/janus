@@ -220,12 +220,16 @@ internal sealed class TotpService(
                 ? TotpCodes.Accepts(locked.Totp, code, now, drift)
                 : null;
 
-            if (consumed is long accepted)
+            if (consumed is not long accepted)
             {
-                locked!.Consumed(accepted);
-                locked.Used(now);
-                await authenticators.RecordAsync(locked, cancellationToken).ConfigureAwait(false);
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure<AuthenticatorId>(Error.From(Refusal(generators, code, now, drift)));
             }
+
+            locked!.Consumed(accepted);
+            locked.Used(now);
+            await authenticators.RecordAsync(locked, cancellationToken).ConfigureAwait(false);
 
             if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
                 .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -233,9 +237,7 @@ internal sealed class TotpService(
                 return Result.Failure<AuthenticatorId>(notCommitted);
             }
 
-            return consumed is null
-                ? Result.Failure<AuthenticatorId>(Error.From(Refusal(generators, code, now, drift)))
-                : Result.Success(generator.Id);
+            return Result.Success(generator.Id);
         }
 
         return Result.Failure<AuthenticatorId>(Error.From(Refusal(generators, code, now, drift)));

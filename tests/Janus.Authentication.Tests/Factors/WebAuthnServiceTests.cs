@@ -282,6 +282,8 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
         SubjectId subject = Subject();
         AuthenticatorId id = await EnrolledAsync(subject, Registration() with { Counter = 9 });
 
+        _work.Reset();
+
         Assert.Equal(
             ErrorCodes.WebAuthnCounterMismatch,
             Refusal(await Service.PresentAsync(
@@ -295,6 +297,40 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
         Assert.Equal("auth.credential.countermismatch", action.ToString());
         Assert.Equal(subject, audited);
         Assert.Equal(id, credential);
+
+        // The refusal's record is committed, and the stored counter is left as it was.
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Committed);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(
+            9u,
+            (await _authenticators.FindAsync(id, TestContext.Current.CancellationToken))!.WebAuthn!.Counter);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a credential invalidated while its assertion waited for
+    /// the lock is refused, and the refusal ends the unit of work it was decided in
+    /// with nothing committed.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ACredentialInvalidatedMeanwhileRollsBackAsync()
+    {
+        await EnrolledAsync(Subject(), Registration());
+
+        _authenticators.Locking = credential => credential.Invalidate();
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            Refusal(await Service.PresentAsync(
+                Assertion(),
+                identified: true,
+                TestContext.Current.CancellationToken)));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_audit.Records);
     }
 
     /// <summary>

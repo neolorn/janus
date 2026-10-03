@@ -105,6 +105,28 @@ public sealed class VerificationCodesTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC5, AUTH-FACT-004: a wrong try is refused with its count
+    /// committed, and the count is all the refusal wrote.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AWrongTryCommitsItsCountAsync()
+    {
+        string right = Drawn(await Service.IssueAsync(Holder, TestContext.Current.CancellationToken));
+
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.CodeInvalid, await RefusalAsync(Wrong(right)));
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Committed);
+        Assert.Equal(0, _work.RolledBack);
+
+        VerificationCode held = Assert.Single(_codes.All);
+
+        Assert.Equal(1, held.Attempts);
+        Assert.True(held.Is(right));
+    }
+
+    /// <summary>
     /// AUTH-FACT-004: a fresh code displaces whatever the holder had outstanding, so a
     /// person who asks for another has one code and not two.
     /// </summary>
