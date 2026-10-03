@@ -183,6 +183,8 @@ internal sealed class NonExistenceNotice(
 
         if (sent.Match(_ => (Error?)null, error => error) is Error refused)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(refused);
         }
 
@@ -196,6 +198,8 @@ internal sealed class NonExistenceNotice(
 
             if (published.Match(() => (Error?)null, error => error) is Error unpublished)
             {
+                await work.RollbackAsync().ConfigureAwait(false);
+
                 return Result.Failure(unpublished);
             }
         }

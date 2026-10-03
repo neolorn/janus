@@ -4,6 +4,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication.Oidc;
+using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using Xunit;
@@ -459,6 +460,30 @@ public sealed class SigningKeysTests : IAsyncDisposable
         Assert.Equal(2, _keys.Count);
         Assert.Equal(Published(made), Published(read));
         Assert.Equal(KeyId(made.Signing), KeyId(read.Signing));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5, AUTH-KEY-001 AC7: a change another process made first answers
+    /// success with nothing of this one committed, its transaction rolled back and left
+    /// closed, and the stored key is the one that process made.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AChangeAnotherProcessMadeFirstIsRolledBackAsync()
+    {
+        _ = await _process.ReadAsync();
+
+        await using var work = new UnitOfWorkInMemory();
+        var losing = new SigningKeys(_keys, _configuration, work, _clock);
+
+        _keys.ReadsBeforeTheFirstKey = true;
+
+        Result changed = await losing.ChangeAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(changed.Match(() => true, _ => false));
+        Assert.False(work.Open);
+        Assert.Equal((0, 1), (work.Committed, work.RolledBack));
+        Assert.Equal(1, _keys.Count);
     }
 
     /// <summary>

@@ -19,9 +19,22 @@ internal sealed class ChallengeStoreInMemory : IChallengeStore
     public ValueTask<Challenge?> FindAsync(byte[] fingerprint, CancellationToken cancellationToken) =>
         ValueTask.FromResult(_challenges.GetValueOrDefault(Key(fingerprint)));
 
+    /// <summary>
+    /// Whether another transaction removed the challenge while this one waited for its
+    /// lock, applied as the lock is taken.
+    /// </summary>
+    public bool RemovedMeanwhile { get; set; }
+
     /// <inheritdoc/>
-    public ValueTask<Challenge?> FindForUpdateAsync(byte[] fingerprint, CancellationToken cancellationToken) =>
-        FindAsync(fingerprint, cancellationToken);
+    public ValueTask<Challenge?> FindForUpdateAsync(byte[] fingerprint, CancellationToken cancellationToken)
+    {
+        if (RemovedMeanwhile)
+        {
+            _challenges.Remove(Key(fingerprint));
+        }
+
+        return FindAsync(fingerprint, cancellationToken);
+    }
 
     /// <inheritdoc/>
     public ValueTask AddAsync(Challenge challenge, CancellationToken cancellationToken)

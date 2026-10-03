@@ -207,10 +207,30 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
 
         var refusal = Error.From(ErrorCodes.RestrictionExceeded);
         _notifications.Refusal = refusal;
+        _work.Reset();
 
         Result refused = await AnswerAsync(Address("elsewhere@example.test"), unheld: true);
 
         Assert.Same(refusal, refused.Match(() => (Error?)null, error => error));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a notice whose probe alert could not be raised is refused,
+    /// and its transaction is rolled back and left closed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ANoticeWhoseAlertIsNotRaisedIsRolledBackAsync()
+    {
+        _configuration.Set(Settings.AlertingNonexistentThreshold, 0);
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Result refused = await AnswerAsync(Address("nobody@example.test"), unheld: true);
+
+        Assert.Equal(ErrorCodes.SystemFault, refused.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
     }
 
     private static SendDestination Address(string address) =>

@@ -157,10 +157,12 @@ internal sealed class SigningKeys(
         }
 
         // X3: where another process made the key or the change first, nothing of this
-        // transaction is committed: the scope it runs in rolls it back as it ends, and
-        // the caller reads the stored keys that process left.
+        // transaction is committed: it is rolled back, and the caller reads the stored
+        // keys that process left.
         if (!made)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Success();
         }
 

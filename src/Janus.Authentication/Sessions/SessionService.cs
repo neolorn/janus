@@ -251,6 +251,8 @@ internal sealed class SessionService(
         if (await UnwatchedAsync(session, before, usedBefore, now, cancellationToken)
                 .ConfigureAwait(false) is Error unraised)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<Session>(unraised);
         }
 
@@ -420,6 +422,8 @@ internal sealed class SessionService(
         if (await UnwatchedAsync(session, before, usedBefore, now, cancellationToken)
                 .ConfigureAwait(false) is Error unraised)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<IssuedSession>(unraised);
         }
 
@@ -546,6 +550,8 @@ internal sealed class SessionService(
         if (await UnwatchedAsync(derived, before: null, usedBefore: null, now, cancellationToken)
                 .ConfigureAwait(false) is Error unraised)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<IssuedSession>(unraised);
         }
 
@@ -991,10 +997,9 @@ internal sealed class SessionService(
             if (await directory.StateAsync(subject, cancellationToken).ConfigureAwait(false)
                 is AccountState.Suspended or AccountState.Deleting or AccountState.Deleted)
             {
-                return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                    .Match(
-                        () => Result.Failure<IssuedSession>(Error.From(ErrorCodes.FactorRejected)),
-                        Result.Failure<IssuedSession>);
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure<IssuedSession>(Error.From(ErrorCodes.FactorRejected));
             }
         }
 
@@ -1008,6 +1013,8 @@ internal sealed class SessionService(
         if (await UnwatchedAsync(session, before: null, usedBefore: null, now, cancellationToken)
                 .ConfigureAwait(false) is Error unraised)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<IssuedSession>(unraised);
         }
 

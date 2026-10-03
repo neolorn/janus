@@ -134,8 +134,9 @@ internal sealed class RestrictionAdministration(
 
         if (failure is Error unread)
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Failure(unread), Result.Failure);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unread);
         }
 
         Restriction? before = replaced.Before;
@@ -157,6 +158,8 @@ internal sealed class RestrictionAdministration(
 
         if (changed.Match(() => (Error?)null, error => error) is Error unchanged)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unchanged);
         }
 
@@ -186,6 +189,8 @@ internal sealed class RestrictionAdministration(
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unpublished);
         }
 
@@ -199,6 +204,8 @@ internal sealed class RestrictionAdministration(
 
             if (alerted.Match(() => (Error?)null, error => error) is Error unalerted)
             {
+                await work.RollbackAsync().ConfigureAwait(false);
+
                 return Result.Failure(unalerted);
             }
         }
@@ -321,6 +328,8 @@ internal sealed class RestrictionAdministration(
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unpublished);
         }
 
@@ -332,6 +341,8 @@ internal sealed class RestrictionAdministration(
 
         if (alerted.Match(() => (Error?)null, error => error) is Error unalerted)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unalerted);
         }
 

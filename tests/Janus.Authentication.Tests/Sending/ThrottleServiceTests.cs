@@ -382,6 +382,46 @@ public sealed class ThrottleServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC5: a failure whose alert could not be raised is not counted,
+    /// and its transaction is rolled back and left closed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AFailureWhoseAlertIsNotRaisedIsRolledBackAsync()
+    {
+        _configuration.Set(Settings.AlertingAuthFailuresThreshold, 1);
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        var attempt = new ThrottleAttempt("198.51.100.7", null)
+        {
+            Account = SubjectId.New(_randomness),
+        };
+
+        Result refused = await Service.FailedAsync(attempt, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, refused.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5, AUTH-ABUSE-001: a failure is counted in a transaction of its
+    /// own, committed once and not rolled back.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ACountedFailureIsCommittedAsync()
+    {
+        var attempt = new ThrottleAttempt("198.51.100.7", null);
+
+        await FailedAsync(attempt, times: 1);
+
+        Assert.False(_work.Open);
+        Assert.Equal((1, 1, 0), (_work.Opened, _work.OutermostCommitted, _work.RolledBack));
+        Assert.Equal(
+            1,
+            (await _ledger.FindAsync(ThrottleScope.Source, attempt.Source, TestContext.Current.CancellationToken))?.Failures);
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-001: a sign-in that succeeds forgets what the account accumulated,
     /// which is all it proves; the source it came from and the identifier it named
     /// keep their counts and are held by them until time forgives them.
