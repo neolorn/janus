@@ -298,6 +298,8 @@ internal sealed class BreakGlassService(
 
         if (alerted.Match(() => (Error?)null, error => error) is Error unalerted)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<GeneratedBreakGlass>(unalerted);
         }
 
@@ -368,15 +370,26 @@ internal sealed class BreakGlassService(
 
         if (!await store.RecordAsync(standing, cancellationToken).ConfigureAwait(false))
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<IssuedSession>(Error.From(ErrorCodes.BreakGlassConsumed));
         }
 
-        return await (await sessions
+        Error? failure = null;
+
+        IssuedSession? issued = (await sessions
                 .BeginExemptAsync(account, Presented, reason, origin, cancellationToken)
                 .ConfigureAwait(false))
-            .Match(
-                issued => AnnouncedAsync(standing, account, reason, issued, attempt, now, cancellationToken),
-                unbegun => ValueTask.FromResult(Result.Failure<IssuedSession>(unbegun)))
+            .Match(value => (IssuedSession?)value, error => Held<IssuedSession?>(error, ref failure));
+
+        if (failure is not null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<IssuedSession>(failure);
+        }
+
+        return await AnnouncedAsync(standing, account, reason, issued!, attempt, now, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -401,6 +414,8 @@ internal sealed class BreakGlassService(
 
         if (alerted.Match(() => (Error?)null, error => error) is Error unalerted)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<IssuedSession>(unalerted);
         }
 
