@@ -541,6 +541,132 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC5: a sign-in whose challenge another completion removed while
+    /// this one waited for its lock is refused, begins no session, and its transaction
+    /// is rolled back and left closed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ASignInCompletedMeanwhileIsRolledBackAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _challenges.RemovedMeanwhile = true;
+        _work.Reset();
+
+        Result<SignInProgress> refused = await PresentAsync(began.Challenge, Factor.Password, Secret);
+
+        Assert.Equal(ErrorCodes.FactorRejected, Refused(refused));
+        Assert.Empty(await _live.LiveOfAsync(subject, _clock.GetUtcNow(), TestContext.Current.CancellationToken));
+        Assert.False(_work.Open);
+        Assert.Equal((_work.Opened - 1, 1), (_work.Committed, _work.RolledBack));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC8: a session refused inside a sign-in's completion, for an
+    /// account suspended while it waited, rolls its own level back and the completion
+    /// with it, so nothing of the completion is committed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC8_ASessionRefusedInsideACompletionRollsTheCompletionBackAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _accounts.Holding = held =>
+        {
+            _accounts.Holding = null;
+            _accounts.Stands(held, AccountState.Suspended);
+        };
+        _work.Reset();
+
+        Result<SignInProgress> refused = await PresentAsync(began.Challenge, Factor.Password, Secret);
+
+        Assert.Equal(ErrorCodes.FactorRejected, Refused(refused));
+        Assert.False(_work.Open);
+        Assert.Equal((_work.Opened - 2, 2), (_work.Committed, _work.RolledBack));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a step-up whose challenge another raise removed while this
+    /// one waited for its lock is refused, and its transaction is rolled back and left
+    /// closed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AStepUpWhoseChallengeIsGoneIsRolledBackAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Remembered(subject);
+
+        SignInProgress signedIn = await SignedInAsync(subject, Factor.Password, Secret);
+        SignInChallenge began = await BeganAsync(Address);
+
+        _challenges.RemovedMeanwhile = true;
+        _work.Reset();
+
+        Result<SignInProgress> refused = await Service.StepUpAsync(
+            AccessContext.Of(subject),
+            Assert.IsType<SessionId>(signedIn.Session),
+            began.Challenge,
+            new FactorPresentation(Factor.Password) { Value = Secret },
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.FactorRejected, Refused(refused));
+        Assert.False(_work.Open);
+        Assert.Equal((_work.Opened - 1, 1), (_work.Committed, _work.RolledBack));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5, AUTH-FACT-004: a wrong try at a sign-in code is refused with
+    /// its count kept, so its transaction is committed and not rolled back.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AWrongSignInCodeKeepsItsCountAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        PendingSignIn held = await CodeSentAsync(subject);
+
+        _work.Reset();
+
+        Result wrong = await Links.SpendCodeAsync(held, Other(Code()), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.CodeInvalid, wrong.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.False(_work.Open);
+        Assert.Equal((1, 0), (_work.Committed, _work.RolledBack));
+        Assert.Equal(
+            1,
+            (await _pending.FindAsync(subject, Factor.EmailCode, TestContext.Current.CancellationToken))?.WrongAttempts);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a sign-in code found gone under its lock is refused as
+    /// expired with no count to keep, so its transaction is rolled back and left closed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ASignInCodeGoneUnderItsLockIsRolledBackAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        PendingSignIn held = await CodeSentAsync(subject);
+
+        await _pending.RemoveAsync(held.Fingerprint, TestContext.Current.CancellationToken);
+        _work.Reset();
+
+        Result gone = await Links.SpendCodeAsync(held, Code(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.CodeExpired, gone.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-001 AC1, AUTH-ABUSE-003: failures against an identifier no account
     /// holds are counted against the identifier as failures against one an account
     /// holds are, so from a source that has failed nothing both are held alike and a
@@ -1421,9 +1547,14 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         await RaisedAsync(AssuranceLevel.Aal2);
 
         SignInChallenge began = await BeganAsync(Address);
+
+        _work.Reset();
+
         Result<SignInProgress> stopped = await PresentAsync(began.Challenge, Factor.Password, Secret);
 
         Assert.Equal(ErrorCodes.PolicyGraceExpired, Refused(stopped));
+        Assert.False(_work.Open);
+        Assert.Equal((_work.Opened - 1, 1), (_work.Committed, _work.RolledBack));
     }
 
     /// <summary>
@@ -1959,6 +2090,19 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Assert.NotNull(await _pending.FindAsync(subject, Factor.EmailLink, TestContext.Current.CancellationToken));
 
         return (began.Challenge, Token(), browser.Value);
+    }
+
+    // The account's outstanding email sign-in code, as the ask left it.
+    private async ValueTask<PendingSignIn> CodeSentAsync(SubjectId subject)
+    {
+        Enables(Factor.EmailCode);
+
+        Result asked = await Service.SendCodeAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+
+        Assert.True(asked.Match(() => true, _ => false));
+
+        return Assert.IsType<PendingSignIn>(
+            await _pending.FindAsync(subject, Factor.EmailCode, TestContext.Current.CancellationToken));
     }
 
     private async ValueTask<SignInLanding> PressedAsync(SubjectId subject)

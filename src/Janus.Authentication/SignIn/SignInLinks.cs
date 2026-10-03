@@ -196,22 +196,28 @@ internal sealed class SignInLinks(
             .FindForUpdateAsync(held.Fingerprint, cancellationToken)
             .ConfigureAwait(false);
 
-        DateTimeOffset now = time.GetUtcNow();
-        Result answer = Spent(locked, entered, now);
-
-        if (locked is not null && !locked.HasExpired(now))
+        // AUTH-FACT-004 AC3: whatever is presented once the code is gone or has lapsed is
+        // refused as expired, the right code included, and that refusal keeps no count.
+        if (locked is null || locked.HasExpired(time.GetUtcNow()))
         {
-            // The right code is spent by the try it answered, and enough wrong codes end
-            // the link, which is what stops a six-digit code being guessed at leisure
-            // (AUTH-FACT-004 AC3).
-            if (answer.Match(() => true, _ => false) || locked.WrongAttempts >= attempts)
-            {
-                await pending.RemoveAsync(locked.Fingerprint, cancellationToken).ConfigureAwait(false);
-            }
-            else
-            {
-                await pending.RecordAsync(locked, cancellationToken).ConfigureAwait(false);
-            }
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.CodeExpired));
+        }
+
+        Result answer = Spent(locked, entered);
+
+        // The right code is spent by the try it answered, and enough wrong codes end
+        // the link, which is what stops a six-digit code being guessed at leisure
+        // (AUTH-FACT-004 AC3). A wrong try's count stands whatever the outcome, so the
+        // refusal that keeps it commits (CONV-DESIGN-003).
+        if (answer.Match(() => true, _ => false) || locked.WrongAttempts >= attempts)
+        {
+            await pending.RemoveAsync(locked.Fingerprint, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            await pending.RecordAsync(locked, cancellationToken).ConfigureAwait(false);
         }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
@@ -653,15 +659,9 @@ internal sealed class SignInLinks(
     }
 
     // AUTH-FACT-004 AC3: each wrong try is refused as wrong, the one that reaches the
-    // cap included; whatever is presented once the code is gone or has lapsed is refused
-    // as expired, the right code included.
-    private static Result Spent(PendingSignIn? locked, [NeverLogged] string entered, DateTimeOffset now)
+    // cap included.
+    private static Result Spent(PendingSignIn locked, [NeverLogged] string entered)
     {
-        if (locked is null || locked.HasExpired(now))
-        {
-            return Result.Failure(Error.From(ErrorCodes.CodeExpired));
-        }
-
         if (locked.Matches(entered))
         {
             return Result.Success();
