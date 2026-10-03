@@ -20,7 +20,10 @@ internal sealed class SettingNaming(
     CancellationToken cancellationToken) : ISettingOperation<ValueTask<Result<bool>>>
 {
     /// <inheritdoc/>
-    public async ValueTask<Result<bool>> On<TValue>(Setting<TValue> setting) =>
+    public ValueTask<Result<bool>> On<TValue>(Setting<TValue> setting) =>
+        NamedAsync(setting, cancellationToken);
+
+    private async ValueTask<Result<bool>> NamedAsync<TValue>(Setting<TValue> setting, CancellationToken cancellationToken) =>
         (await configuration.ReadAsync(setting, cancellationToken).ConfigureAwait(false)).Match(
             _ => Result.Success(true),
             _ => Result.Success(false));

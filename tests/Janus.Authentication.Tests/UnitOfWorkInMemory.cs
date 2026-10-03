@@ -6,9 +6,9 @@ using Janus.Core;
 namespace Janus.Authentication.Tests;
 
 /// <summary>
-/// The transaction, counting what was opened and what was committed so a test can
-/// prove an operation writes once and commits once, and refusing to open or commit
-/// where a test asks it to (CONV-DESIGN-003 AC7).
+/// The transaction, counting what was opened, committed and rolled back so a test can
+/// prove an operation writes once and ends once, and refusing to open or commit where a
+/// test asks it to (CONV-DESIGN-003 AC5, AC7 and AC8).
 /// </summary>
 internal sealed class UnitOfWorkInMemory : IUnitOfWork
 {
@@ -30,7 +30,12 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
     public int OutermostCommitted { get; private set; }
 
     /// <summary>
-    /// Whether a transaction is open: begun and not yet committed.
+    /// How many levels were rolled back.
+    /// </summary>
+    public int RolledBack { get; private set; }
+
+    /// <summary>
+    /// Whether a transaction is open: begun and neither committed nor rolled back.
     /// </summary>
     public bool Open => _depth > 0;
 
@@ -45,6 +50,8 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
     public Error? RefusesCommit { get; set; }
 
     private int _depth;
+
+    private bool _marked;
 
     /// <inheritdoc/>
     public ValueTask<Result> BeginAsync(CancellationToken cancellationToken)
@@ -69,11 +76,25 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
         {
             RefusesCommit = null;
 
+            // A commit that fails leaves the unit of work rolled back.
+            _depth = 0;
+            _marked = false;
+
             return ValueTask.FromResult(Result.Failure(refused));
         }
 
-        Committed++;
         _depth = Math.Max(_depth - 1, 0);
+
+        if (_depth is 0 && _marked)
+        {
+            _marked = false;
+            RolledBack++;
+
+            throw new InvalidOperationException(
+                "An operation inside the unit of work rolled back, so nothing of it commits.");
+        }
+
+        Committed++;
 
         if (_depth is 0)
         {
@@ -81,6 +102,16 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
         }
 
         return ValueTask.FromResult(Result.Success());
+    }
+
+    /// <inheritdoc/>
+    public ValueTask RollbackAsync()
+    {
+        RolledBack++;
+        _depth = Math.Max(_depth - 1, 0);
+        _marked = _depth > 0;
+
+        return ValueTask.CompletedTask;
     }
 
     /// <summary>
@@ -91,7 +122,9 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
         Opened = 0;
         Committed = 0;
         OutermostCommitted = 0;
+        RolledBack = 0;
         _depth = 0;
+        _marked = false;
     }
 
     /// <inheritdoc/>

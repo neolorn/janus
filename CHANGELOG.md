@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `IUnitOfWork.RollbackAsync` ends an operation with nothing of it saved: the
+  transaction, every tracked change and every registration to run after the commit are
+  discarded. It takes no cancellation token and answers no result. An operation that
+  joined another's unit of work and rolls back marks the whole, and the outer commit
+  then commits nothing and throws. A commit that fails leaves the unit of work rolled
+  back. The analyser JAN0004 now reports an asynchronous member that implements one of
+  the library's own interfaces without a cancellation token.
 - `Janus.Conformance`, the suite a host runs against its own deployment, each call
   answering a report whose findings are codes with structured data.
   `ConformanceSuite.Policies` names each entity of the host's context that is not a

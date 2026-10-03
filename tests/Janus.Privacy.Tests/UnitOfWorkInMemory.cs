@@ -22,9 +22,15 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
     public int Committed { get; private set; }
 
     /// <summary>
-    /// Whether a transaction is open: begun and not yet committed.
+    /// How many were rolled back.
     /// </summary>
-    public bool Open => Opened > Committed;
+    public int RolledBack { get; private set; }
+
+    /// <summary>
+    /// Whether a transaction is open: begun and neither committed nor rolled back. A
+    /// commit that fails leaves it rolled back.
+    /// </summary>
+    public bool Open => Opened > Committed + RolledBack + _failed;
 
     /// <summary>
     /// The failure the next opening answers, where a test sets one.
@@ -35,6 +41,8 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
     /// The failure the next commit answers, where a test sets one.
     /// </summary>
     public Error? RefusesCommit { get; set; }
+
+    private int _failed;
 
     /// <inheritdoc/>
     public ValueTask<Result> BeginAsync(CancellationToken cancellationToken)
@@ -57,6 +65,7 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
         if (RefusesCommit is Error refused)
         {
             RefusesCommit = null;
+            _failed++;
 
             return ValueTask.FromResult(Result.Failure(refused));
         }
@@ -66,6 +75,14 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
         return ValueTask.FromResult(Result.Success());
     }
 
+    /// <inheritdoc/>
+    public ValueTask RollbackAsync()
+    {
+        RolledBack++;
+
+        return ValueTask.CompletedTask;
+    }
+
     /// <summary>
     /// Forgets what was counted, so a test counts only the operation under test.
     /// </summary>
@@ -73,6 +90,8 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
     {
         Opened = 0;
         Committed = 0;
+        RolledBack = 0;
+        _failed = 0;
     }
 
     /// <inheritdoc/>

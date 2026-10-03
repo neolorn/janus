@@ -22,6 +22,9 @@ internal sealed class UnitOfWork(StoreContext context) : IUnitOfWork
 
     private int _depth;
 
+    // An operation that joined the unit of work rolled back, so nothing of it commits.
+    private bool _marked;
+
     /// <inheritdoc/>
     public async ValueTask<Result> BeginAsync(CancellationToken cancellationToken)
     {
@@ -57,13 +60,53 @@ internal sealed class UnitOfWork(StoreContext context) : IUnitOfWork
             return Result.Success();
         }
 
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        await _transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if (_marked)
+        {
+            await EndAsync(CancellationToken.None).ConfigureAwait(false);
+
+            throw new InvalidOperationException(
+                "An operation inside the unit of work rolled back, so nothing of it commits.");
+        }
+
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await _transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            // A commit that fails leaves the unit of work rolled back, so the scope's
+            // next operation saves nothing of this one.
+            await EndAsync(CancellationToken.None).ConfigureAwait(false);
+
+            throw;
+        }
 
         await _transaction.DisposeAsync().ConfigureAwait(false);
         _transaction = null;
 
         return Result.Success();
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask RollbackAsync()
+    {
+        if (_transaction is null)
+        {
+            throw new InvalidOperationException("The operation has no transaction to roll back.");
+        }
+
+        // An inner level ends itself and marks the whole: the outermost level is the one
+        // that holds the transaction, and it is the one that rolls it back.
+        if (_depth > 0)
+        {
+            _depth--;
+            _marked = true;
+
+            return;
+        }
+
+        await EndAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -74,11 +117,23 @@ internal sealed class UnitOfWork(StoreContext context) : IUnitOfWork
             return;
         }
 
-        // Nothing committed, so nothing stays: an operation that failed part way
+        // Nothing committed, so nothing stays: an operation a fault ended part way
         // through leaves neither of its writes.
-        await _transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
-        await _transaction.DisposeAsync().ConfigureAwait(false);
+        await EndAsync(CancellationToken.None).ConfigureAwait(false);
+    }
+
+    // Leaves the unit of work as though no operation had begun it: the transaction
+    // rolled back, and nothing tracked for a later commit to save.
+    private async ValueTask EndAsync(CancellationToken cancellationToken)
+    {
+        IDbContextTransaction transaction = _transaction!;
+
         _transaction = null;
         _depth = 0;
+        _marked = false;
+        context.ChangeTracker.Clear();
+
+        await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.DisposeAsync().ConfigureAwait(false);
     }
 }

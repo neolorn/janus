@@ -25,12 +25,13 @@ public sealed class ResultContractTests
 
     /// <summary>
     /// CONV-DESIGN-005 AC1: every method on a public contract returns an outcome, so
-    /// no operation can report success by returning a bare value.
+    /// no operation can report success by returning a bare value. The rollback of the
+    /// unit of work has no expected failure and answers none.
     /// </summary>
     [Fact]
     public void CONV_DESIGN_005_AC1_EveryContractMethodReturnsAnOutcome()
     {
-        foreach (MethodInfo method in ContractMethods())
+        foreach (MethodInfo method in ContractMethods().Where(method => !IsTheRollback(method)))
         {
             Assert.True(
                 IsOutcome(method.ReturnType),
@@ -97,6 +98,10 @@ public sealed class ResultContractTests
             Assert.All(branching, method => Assert.Equal(2, method.GetParameters().Length));
         }
     }
+
+    private static bool IsTheRollback(MethodInfo method) =>
+        method.DeclaringType == typeof(IUnitOfWork)
+            && string.Equals(method.Name, nameof(IUnitOfWork.RollbackAsync), StringComparison.Ordinal);
 
     private static IEnumerable<MethodInfo> ContractMethods() =>
         PublicInterfaces()

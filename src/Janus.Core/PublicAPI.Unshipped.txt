@@ -1424,6 +1424,7 @@ Janus.Core.ITakedowns.ReverseAsync(Janus.Core.AccessContext! context, Janus.Core
 Janus.Core.IUnitOfWork
 Janus.Core.IUnitOfWork.BeginAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IUnitOfWork.CommitAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IUnitOfWork.RollbackAsync() -> System.Threading.Tasks.ValueTask
 Janus.Core.IdentifierAdded
 Janus.Core.IdentifierAdded.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.IdentifierId Identifier, out Janus.Core.IdentifierKind Kind) -> void
 Janus.Core.IdentifierAdded.Equals(Janus.Core.IdentifierAdded? other) -> bool

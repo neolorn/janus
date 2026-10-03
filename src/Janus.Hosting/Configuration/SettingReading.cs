@@ -17,7 +17,12 @@ internal sealed class SettingReading(
     CancellationToken cancellationToken) : ISettingOperation<ValueTask<Result<ConfiguredSetting>>>
 {
     /// <inheritdoc/>
-    public async ValueTask<Result<ConfiguredSetting>> On<TValue>(Setting<TValue> setting) =>
+    public ValueTask<Result<ConfiguredSetting>> On<TValue>(Setting<TValue> setting) =>
+        ReadAsync(setting, cancellationToken);
+
+    private async ValueTask<Result<ConfiguredSetting>> ReadAsync<TValue>(
+        Setting<TValue> setting,
+        CancellationToken cancellationToken) =>
         (await configuration.ReadAsync(setting, cancellationToken).ConfigureAwait(false)).Match(
             value => Result.Success(
                 new ConfiguredSetting(
