@@ -195,12 +195,14 @@ internal sealed class RecoveryCodeService(
         RecoveryCodeSet? held = await sets.FindForUpdateAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        bool spent = held is not null && held.Spend(code, time.GetUtcNow());
-
-        if (spent)
+        if (held is null || !held.Spend(code, time.GetUtcNow()))
         {
-            await sets.RecordAsync(held!, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.CodeInvalid));
         }
+
+        await sets.RecordAsync(held, cancellationToken).ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -208,7 +210,7 @@ internal sealed class RecoveryCodeService(
             return Result.Failure(notCommitted);
         }
 
-        return spent ? Result.Success() : Result.Failure(Error.From(ErrorCodes.CodeInvalid));
+        return Result.Success();
     }
 
     /// <summary>

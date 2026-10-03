@@ -378,23 +378,31 @@ internal sealed class WebAuthnService(
         // moves backwards.
         Authenticator? locked = await authenticators.FindForUpdateAsync(held.Id, cancellationToken)
             .ConfigureAwait(false);
-        ErrorCode? refused = locked is not { IsUsable: true, WebAuthn: not null }
-            ? ErrorCodes.FactorRejected
-            : Moved(assertion, locked.WebAuthn) ? ErrorCodes.WebAuthnCounterMismatch : null;
 
-        if (refused == ErrorCodes.WebAuthnCounterMismatch)
+        if (locked is not { IsUsable: true, WebAuthn: not null })
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<Authenticator>(Error.From(ErrorCodes.FactorRejected));
+        }
+
+        // AUTH-FACT-014 AC3: a counter that did not advance is refused and the refusal
+        // audited, the record being all it writes.
+        bool moved = Moved(assertion, locked.WebAuthn);
+
+        if (moved)
         {
             await audit.RecordedAsync(CounterMoved, held.Subject, held.Id, now, cancellationToken)
                 .ConfigureAwait(false);
         }
-        else if (refused is null)
+        else
         {
             if (Kept(assertion.Counter))
             {
-                locked!.Counted(assertion.Counter);
+                locked.Counted(assertion.Counter);
             }
 
-            locked!.Used(now);
+            locked.Used(now);
             await authenticators.RecordAsync(locked, cancellationToken).ConfigureAwait(false);
         }
 
@@ -404,9 +412,9 @@ internal sealed class WebAuthnService(
             return Result.Failure<Authenticator>(notCommitted);
         }
 
-        return refused is ErrorCode refusal
-            ? Result.Failure<Authenticator>(Error.From(refusal))
-            : Result.Success(locked!);
+        return moved
+            ? Result.Failure<Authenticator>(Error.From(ErrorCodes.WebAuthnCounterMismatch))
+            : Result.Success(locked);
     }
 
     // A counter that did not advance is a credential that exists twice. An authenticator

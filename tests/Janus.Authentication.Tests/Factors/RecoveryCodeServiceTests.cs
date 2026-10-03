@@ -82,12 +82,21 @@ public sealed class RecoveryCodeServiceTests : IAsyncDisposable
             subject,
             codes[0],
             TestContext.Current.CancellationToken)));
+
+        int committed = _work.Committed;
+
         Assert.Equal(
             ErrorCodes.CodeInvalid,
             Refusal(await Service.SpendAsync(
                 subject,
                 codes[0],
                 TestContext.Current.CancellationToken)));
+
+        // CONV-DESIGN-003 AC5: the refusal ends the unit of work it was decided in
+        // with nothing committed.
+        Assert.False(_work.Open);
+        Assert.Equal(committed, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>

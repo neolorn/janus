@@ -555,11 +555,20 @@ public sealed class CredentialServiceTests : IAsyncDisposable
 
         await PresentedAsync(subject, session);
 
+        _work.Reset();
+
         Error window = Failure(await Service.RemoveAsync(
             Authority(subject, session),
             confirmed.Credential,
             Source,
             TestContext.Current.CancellationToken));
+
+        // CONV-DESIGN-003 AC5: the refused removal ends the unit of work it was decided
+        // in with nothing committed, and the window's report then commits on its own.
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(2, _work.OutermostCommitted);
+        Assert.Equal(2, _work.Committed);
 
         Assert.Equal(ErrorCodes.CredentialLastSecondFactor, window.Code);
         Assert.Equal(
@@ -805,6 +814,8 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             key.Credential,
             TestContext.Current.CancellationToken));
 
+        _work.Reset();
+
         Assert.Equal(
             ErrorCodes.FactorRejected,
             Refused(await Service.CompleteKeyAsync(
@@ -814,9 +825,229 @@ public sealed class CredentialServiceTests : IAsyncDisposable
                 Source,
                 TestContext.Current.CancellationToken)));
 
+        // CONV-DESIGN-003 AC5: the refusal ends the unit of work the account's row was
+        // held in with nothing committed.
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+
         Assert.NotEqual(ceremony.Challenge, string.Empty);
         Assert.Equal(AuthenticatorState.Active, Held(key.Credential).State);
         Assert.Single(_authenticators.All);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a password the floor refuses is refused after the enrolment
+    /// session was held, and the refusal ends the unit of work with nothing committed
+    /// and the session still open.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ARefusedPasswordRollsBackAsync()
+    {
+        SubjectId subject = await AccountAsync(password: false);
+        EnrolmentSession opened = await OpenedAsync(subject);
+
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.PasswordTooShort,
+            Refused(await Service.SetPasswordAsync(
+                CredentialAuthority.Of(opened.Id),
+                "short",
+                Source,
+                TestContext.Current.CancellationToken)));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Null(await _passwords.FindAsync(subject, TestContext.Current.CancellationToken));
+        Assert.NotNull(await Enrolments.FindAsync(opened.Id, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a generator confirmed with a wrong code is refused after the
+    /// account's row was held, and the refusal ends the unit of work with nothing
+    /// committed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AGeneratorConfirmedWithAWrongCodeRollsBackAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+
+        GeneratorEnrolment begun = Value(await Service.BeginGeneratorAsync(
+            Authority(subject, session),
+            "Phone",
+            TestContext.Current.CancellationToken));
+
+        string right = Code(begun.Credential);
+
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.CodeInvalid,
+            Refused(await Service.ConfirmGeneratorAsync(
+                Authority(subject, session),
+                begun.Credential,
+                string.Equals(right, "000000", StringComparison.Ordinal) ? "111111" : "000000",
+                Source,
+                TestContext.Current.CancellationToken)));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.False(Held(begun.Credential).Confirmed);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: an enrolment that cannot be announced is refused after the
+    /// confirmation and the codes beside it were written, and the refusal ends the
+    /// unit of work with nothing of it committed and no notice sent.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AnEnrolmentThatCannotBeAnnouncedRollsBackAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+
+        GeneratorEnrolment begun = Value(await Service.BeginGeneratorAsync(
+            Authority(subject, session),
+            "Phone",
+            TestContext.Current.CancellationToken));
+
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+        _notifications.Sent.Clear();
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            Refused(await Service.ConfirmGeneratorAsync(
+                Authority(subject, session),
+                begun.Credential,
+                Code(begun.Credential),
+                Source,
+                TestContext.Current.CancellationToken)));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_notifications.Sent);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: the removal of a credential the account does not hold is
+    /// refused under the lock on its credentials, and the refusal ends the unit of work
+    /// with nothing committed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ARemovalOfAnUnknownCredentialRollsBackAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.CredentialNotFound,
+            Refused(await Service.RemoveAsync(
+                Authority(subject, session),
+                AuthenticatorId.New(_clock),
+                Source,
+                TestContext.Current.CancellationToken)));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a link that finds, under the lock on the account's row, an
+    /// identity of the provider linked meanwhile is refused, and the refusal ends the
+    /// unit of work with nothing committed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ALinkOfAProviderLinkedMeanwhileRollsBackAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+
+        _accounts.Holding = held => _authenticators.Hold(
+            Authenticator.Linked(AuthenticatorId.New(_clock), held, Factor.Google, Label("Google"), Noon));
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            Refused(await Service.LinkAsync(
+                Authority(subject, session),
+                Factor.Google,
+                "provider-subject",
+                Label("Google"),
+                Source,
+                TestContext.Current.CancellationToken)));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.DoesNotContain(_credentials.Records, record => record.Action == AuditActions.CredentialEnrolled);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a link that cannot be announced is refused after it was
+    /// written, and the refusal ends the unit of work with nothing committed and no
+    /// notice sent.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ALinkThatCannotBeAnnouncedRollsBackAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+        _notifications.Sent.Clear();
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            Refused(await Service.LinkAsync(
+                Authority(subject, session),
+                Factor.Google,
+                "provider-subject",
+                Label("Google"),
+                Source,
+                TestContext.Current.CancellationToken)));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_notifications.Sent);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: an unlink that finds, under the locks on the account's
+    /// credentials, the identity gone meanwhile is refused, and the refusal ends the
+    /// unit of work with nothing committed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AnUnlinkOfAnIdentityGoneMeanwhileRollsBackAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+
+        var linked = Authenticator.Linked(AuthenticatorId.New(_clock), subject, Factor.Google, Label("Google"), Noon);
+
+        await _authenticators.LinkAsync(linked, "provider-subject", TestContext.Current.CancellationToken);
+        await PresentedAsync(subject, session);
+
+        _authenticators.Locking = credential =>
+            _ = _authenticators.RemoveAsync(credential.Id, TestContext.Current.CancellationToken).AsTask();
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.CredentialNotFound,
+            Refused(await Service.UnlinkAsync(
+                Authority(subject, session),
+                Factor.Google,
+                Source,
+                TestContext.Current.CancellationToken)));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.DoesNotContain(_credentials.Records, record => record.Action == AuditActions.CredentialRemoved);
     }
 
     private CredentialService Service =>
