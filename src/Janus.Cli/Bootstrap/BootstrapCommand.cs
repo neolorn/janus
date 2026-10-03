@@ -106,7 +106,6 @@ internal static class BootstrapCommand
         services.AddCoreArea();
         services.AddSingleton(keys.Ring);
         services.AddStorageArea(keys.Connection);
-        services.AddScoped<SchemaValidation>();
         services.AddScoped<IEvents, EventOutbox>();
         services.AddScoped<IAlertChannels, AlertChannels>();
         services.AddScoped<DeploymentBootstrap>();

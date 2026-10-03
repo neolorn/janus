@@ -114,7 +114,6 @@ internal static class RegisterClientCommand
         services.AddCoreArea();
         services.AddSingleton(keys.Ring);
         services.AddStorageArea(keys.Connection);
-        services.AddScoped<SchemaValidation>();
         services.AddScoped<ClientRegistry>();
 
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });

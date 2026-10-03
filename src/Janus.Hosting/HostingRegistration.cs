@@ -597,7 +597,6 @@ public static class HostingRegistration
         services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();
         services.AddScoped<ModelValidation>();
         services.AddScoped<RedirectValidation>();
-        services.AddScoped<SchemaValidation>();
 
         // AUTHZ-MODEL-004 AC2 (D-160): what a hosted service starts before is what was
         // registered after it, and the web server is one, so the checks that read the

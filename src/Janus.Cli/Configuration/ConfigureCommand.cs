@@ -117,7 +117,6 @@ internal static class ConfigureCommand
         services.AddCoreArea();
         services.AddSingleton(keys.Ring);
         services.AddStorageArea(keys.Connection);
-        services.AddScoped<SchemaValidation>();
         services.AddScoped<RedirectValidation>();
         services.AddScoped<IEvents, EventOutbox>();
         services.AddScoped<IAlertChannels, AlertChannels>();

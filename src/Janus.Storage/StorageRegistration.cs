@@ -105,8 +105,8 @@ namespace Janus.Storage;
 internal static class StorageRegistration
 {
     /// <summary>
-    /// Registers the context, the unit of work, the connection accessor and the
-    /// persistence ports.
+    /// Registers the context, the schema check, the unit of work, the connection
+    /// accessor and the persistence ports.
     /// </summary>
     /// <param name="services">The host's collection.</param>
     /// <param name="connectionString">
@@ -131,6 +131,9 @@ internal static class StorageRegistration
                 StoreContext.MigrationsHistoryTable,
                 StoreContext.Schema)));
 
+        // OPS-MIG-002: what reads whether the database carries this build's schema, asked
+        // before anything is served or a command writes.
+        services.AddScoped<SchemaValidation>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddSingleton<IRegistrationSignals>(provider => new RegistrationSignals(
             connectionString,
