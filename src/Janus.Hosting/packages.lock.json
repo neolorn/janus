@@ -400,7 +400,7 @@
       "janus.storage": {
         "type": "Project",
         "dependencies": {
-          "Dapper": "[2.1.86, )",
+          "Dapper": "[2.1.89, )",
           "Janus.Authentication": "[1.0.0, )",
           "Janus.Authorization": "[1.0.0, )",
           "Janus.Core": "[1.0.0, )",
@@ -413,9 +413,9 @@
       },
       "Dapper": {
         "type": "CentralTransitive",
-        "requested": "[2.1.86, )",
-        "resolved": "2.1.86",
-        "contentHash": "v5wQfl9GfHhfTeFhorWTefa8c1Ev4HO8VF8i8wbSdZkq+P/az+1DTcqpkz8s9lMGyFf9kvoeJ+b2ABShW4cuIA=="
+        "requested": "[2.1.89, )",
+        "resolved": "2.1.89",
+        "contentHash": "1VjFE664wnxvuhlgP8kS4PeFFF4jqD3VkbIHW6Zlc52zuibgcz5ICnIHcQXlTp6pURpPNGLV0ZpNe5x9KePJnA=="
       },
       "Konscious.Security.Cryptography.Argon2": {
         "type": "CentralTransitive",
