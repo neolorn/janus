@@ -158,10 +158,9 @@ internal sealed class RegistrationService(
                 is not Invitation unopened
                 || !unopened.Opens(now))
             {
-                return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                    .Match(
-                        () => Result.Failure<RegistrationSessionId>(Error.From(ErrorCodes.InvitationExpired)),
-                        Result.Failure<RegistrationSessionId>);
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure<RegistrationSessionId>(Error.From(ErrorCodes.InvitationExpired));
             }
 
             unopened.AttachTo(session.Id, now);
@@ -283,26 +282,26 @@ internal sealed class RegistrationService(
         return HeldAsync(session, live => VerifiedAsync(live, identifier, code, cancellationToken), cancellationToken);
     }
 
-    private async ValueTask<Result<RegistrationState>> AgeAsync(
+    private async ValueTask<(Result<RegistrationState> Answer, bool Commits)> AgeAsync(
         RegistrationSession? live,
         DateOnly dateOfBirth,
         CancellationToken cancellationToken)
     {
         if (live is null)
         {
-            return Gone();
+            return (Gone(), false);
         }
 
         // The screen locks once it has refused a date, so that a person cannot walk
         // the date forward until it passes (REG-PROF-002).
         if (live.AgeRefused)
         {
-            return Result.Failure<RegistrationState>(Error.From(ErrorCodes.ProfileUnderage));
+            return (Result.Failure<RegistrationState>(Error.From(ErrorCodes.ProfileUnderage)), false);
         }
 
         if (live.Step is not RegistrationStep.Age)
         {
-            return OutOfStep();
+            return (OutOfStep(), false);
         }
 
         Error? failure = null;
@@ -317,7 +316,7 @@ internal sealed class RegistrationService(
 
         if (failure is not null)
         {
-            return Result.Failure<RegistrationState>(failure);
+            return (Result.Failure<RegistrationState>(failure), false);
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -326,7 +325,7 @@ internal sealed class RegistrationService(
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
-            return Result.Failure<RegistrationState>(notBegun);
+            return (Result.Failure<RegistrationState>(notBegun), false);
         }
 
         if (affirmation is not AttributeRequirement.Off && !adult)
@@ -338,10 +337,10 @@ internal sealed class RegistrationService(
             if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
                 .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
             {
-                return Result.Failure<RegistrationState>(notCommittedAgain);
+                return (Result.Failure<RegistrationState>(notCommittedAgain), true);
             }
 
-            return Result.Failure<RegistrationState>(Error.From(ErrorCodes.ProfileUnderage));
+            return (Result.Failure<RegistrationState>(Error.From(ErrorCodes.ProfileUnderage)), true);
         }
 
         live.AnswerAge(
@@ -355,10 +354,10 @@ internal sealed class RegistrationService(
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
-            return Result.Failure<RegistrationState>(notCommitted);
+            return (Result.Failure<RegistrationState>(notCommitted), true);
         }
 
-        return Result.Success(State(live));
+        return (Result.Success(State(live)), true);
     }
 
     /// <inheritdoc/>
@@ -567,6 +566,8 @@ internal sealed class RegistrationService(
 
         if (await DispatchAsync(live, staged, cancellationToken).ConfigureAwait(false) is Error refused)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<RegistrationState>(refused);
         }
 
@@ -626,7 +627,7 @@ internal sealed class RegistrationService(
         return Result.Success(State(live));
     }
 
-    private async ValueTask<Result<RegistrationState>> VerifiedAsync(
+    private async ValueTask<(Result<RegistrationState> Answer, bool Commits)> VerifiedAsync(
         RegistrationSession? live,
         IdentifierId identifier,
         [NeverLogged] string code,
@@ -634,12 +635,12 @@ internal sealed class RegistrationService(
     {
         if (live is null)
         {
-            return Gone();
+            return (Gone(), false);
         }
 
         if (live.Identity(identifier) is not StagedIdentity staged)
         {
-            return OutOfStep();
+            return (OutOfStep(), false);
         }
 
         // REG-SESS-003 AC6: a try is held to the delay the source and the identifier have
@@ -648,7 +649,7 @@ internal sealed class RegistrationService(
 
         if (await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false) is Error delayed)
         {
-            return Result.Failure<RegistrationState>(delayed);
+            return (Result.Failure<RegistrationState>(delayed), false);
         }
 
         Error? failure = null;
@@ -659,7 +660,7 @@ internal sealed class RegistrationService(
 
         if (failure is not null)
         {
-            return Result.Failure<RegistrationState>(failure);
+            return (Result.Failure<RegistrationState>(failure), false);
         }
 
         // A code invalidated by wrong tries refuses the right one too (REG-SESS-003
@@ -681,7 +682,7 @@ internal sealed class RegistrationService(
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
-            return Result.Failure<RegistrationState>(notBegun);
+            return (Result.Failure<RegistrationState>(notBegun), false);
         }
 
         if (!VerificationCode.Matches(held, code))
@@ -693,7 +694,7 @@ internal sealed class RegistrationService(
             if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
                 .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
             {
-                return Result.Failure<RegistrationState>(notCommittedAgain);
+                return (Result.Failure<RegistrationState>(notCommittedAgain), true);
             }
 
             return await CountedAsync(attempt, Error.From(ErrorCodes.CodeInvalid), cancellationToken)
@@ -707,10 +708,10 @@ internal sealed class RegistrationService(
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
-            return Result.Failure<RegistrationState>(notCommitted);
+            return (Result.Failure<RegistrationState>(notCommitted), true);
         }
 
-        return Result.Success(State(live));
+        return (Result.Success(State(live)), true);
     }
 
     /// <inheritdoc/>
@@ -1081,6 +1082,8 @@ internal sealed class RegistrationService(
 
         if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<RegistrationOutcome>(failure);
         }
 
@@ -1093,6 +1096,8 @@ internal sealed class RegistrationService(
 
         if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<RegistrationOutcome>(failure);
         }
 
@@ -1102,6 +1107,8 @@ internal sealed class RegistrationService(
         if (await RecordedAsync(live.Provisional, consents, cancellationToken)
                 .ConfigureAwait(false) is Error unrecorded)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<RegistrationOutcome>(unrecorded);
         }
 
@@ -1120,6 +1127,8 @@ internal sealed class RegistrationService(
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<RegistrationOutcome>(unpublished);
         }
 
@@ -1434,14 +1443,16 @@ internal sealed class RegistrationService(
     }
 
     // The refusal is counted against the delay after it is decided, and answers as it
-    // was decided unless the count itself failed.
-    private async ValueTask<Result<RegistrationState>> CountedAsync(
+    // was decided unless the count itself failed. AUTH-ABUSE-001, CONV-DESIGN-003: the
+    // count stands whatever the outcome, so the refusal that made it commits.
+    private async ValueTask<(Result<RegistrationState> Answer, bool Commits)> CountedAsync(
         ThrottleAttempt attempt,
         Error refusal,
         CancellationToken cancellationToken) =>
-        Result.Failure<RegistrationState>(
-            (await throttle.FailedAsync(attempt, cancellationToken).ConfigureAwait(false))
-                .Match(() => refusal, error => error));
+        (await throttle.FailedAsync(attempt, cancellationToken).ConfigureAwait(false))
+            .Match(
+                () => (Result.Failure<RegistrationState>(refusal), true),
+                error => (Result.Failure<RegistrationState>(error), false));
 
     private static StagedIdentity? Sent(RegistrationSession session, byte[] fingerprint)
     {
@@ -1601,10 +1612,12 @@ internal sealed class RegistrationService(
 
     // D-166 X3: an answer decided on the session's one document is decided on its row
     // under the lock, from the read to the write, so answers given at once are decided
-    // one after another and none is written over another.
+    // one after another and none is written over another. CONV-DESIGN-003: the answer
+    // says whether it commits, as a success and a refusal that keeps a count do; every
+    // other refusal rolls back.
     private async ValueTask<Result<RegistrationState>> HeldAsync(
         RegistrationSessionId id,
-        Func<RegistrationSession?, ValueTask<Result<RegistrationState>>> decide,
+        Func<RegistrationSession?, ValueTask<(Result<RegistrationState> Answer, bool Commits)>> decide,
         CancellationToken cancellationToken)
     {
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -1616,9 +1629,16 @@ internal sealed class RegistrationService(
         RegistrationSession? held = await sessions.FindForUpdateAsync(id, cancellationToken)
             .ConfigureAwait(false);
 
-        Result<RegistrationState> decided = await decide(
+        (Result<RegistrationState> decided, bool commits) = await decide(
                 held is null || held.HasExpired(time.GetUtcNow()) ? null : held)
             .ConfigureAwait(false);
+
+        if (!commits)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return decided;
+        }
 
         return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match(() => decided, Result.Failure<RegistrationState>);
@@ -1648,6 +1668,8 @@ internal sealed class RegistrationService(
 
         if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<RegistrationState>(failure);
         }
 
@@ -1661,6 +1683,8 @@ internal sealed class RegistrationService(
 
             if (failure is not null)
             {
+                await work.RollbackAsync().ConfigureAwait(false);
+
                 return Result.Failure<RegistrationState>(failure);
             }
 
@@ -1749,6 +1773,8 @@ internal sealed class RegistrationService(
 
         if (await DispatchAsync(session, bound, cancellationToken).ConfigureAwait(false) is Error refused)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<RegistrationState>(refused);
         }
 
@@ -1810,6 +1836,8 @@ internal sealed class RegistrationService(
         if (await DispatchAsync(session, staged, cancellationToken).ConfigureAwait(false)
             is Error refused)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<RegistrationState>(refused);
         }
 
@@ -1885,6 +1913,8 @@ internal sealed class RegistrationService(
         else if (await DispatchAsync(session, staged, cancellationToken).ConfigureAwait(false)
                  is Error refused)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<RegistrationState>(refused);
         }
 
