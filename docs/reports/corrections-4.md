@@ -602,6 +602,21 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 - Section G: every "Superseded by D-166" line section G names is present but for the 23 entries whose items are parked (section 2); the "Revised by entry" lines are present.
 - Observed, outside the sweeps: the analyser JAN0005 inspects expression statements only, so an expression-bodied member that discards a `Result` through `=> await X()` escapes it.
 
+### On `corrections-4`: the housekeeping before D-183's items, D-184, and question 58
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 43: the messages of two commits reworded (`86e23f9e` is now `863883c1`, type `test`; `82a3ae2b` is now `c25b633a`, its body line 70 characters). 104 commits took new hashes, 210 kept theirs; every tree, parent shape, author and date compared equal; the commit-message check passes from `b6d14fe` | `c1fa62e2` (the hashes in this report) | CONV-VCS-003 | `.github/gates/commit-message.sh b6d14fe HEAD` |
+| The SDK at 10.0.401; `Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.Design` and `dotnet-ef` at 10.0.12; `Dapper` 2.1.89; `StackExchange.Redis` 3.3.1; `Fido2` 4.2.0. No package has a later major version. `Microsoft.CodeAnalysis.CSharp` and `Microsoft.CodeAnalysis.Analyzers` stay at 5.6.0 (latest stable 5.9.0) | `a19591e4`, `3cb3fe5a`, `dff389e5`, `c91ec834`, `d2830b22` | CONV-SETUP-001, CONV-SETUP-002, CONV-DEP-004 | The locked restore, the build, the formatter and the unit tests under the new SDK flagged nothing |
+| D-184: `Janus.Storage` references `Microsoft.EntityFrameworkCore.Relational` at the version of `Microsoft.EntityFrameworkCore`; the SDK and the one version held by tests | `ff057e7b`, `d2b9ffac` | CONV-DESIGN-008, CONV-SETUP-001, CONV-DEP-003 | `LibraryStructureTests.CONV_DESIGN_008_AC3_TheRelationalAccessPackagesAndTheirToolCarryOneVersion`, `LibraryStructureTests.CONV_SETUP_001_AC3_TheSdkIsOfTheTargetedReleaseAndRollsForwardByPatch`, `LibraryStructureTests.CONV_DESIGN_008_AC1_ThePackageSetIsExactlyTheAllowList` |
+| D-183 question 58, the port: `IUnitOfWork.RollbackAsync`; an inner rollback marks the whole unit of work; a commit after a mark, and a commit that fails, leave it rolled back. JAN0004 exempts the rollback and a member implementing an interface that is not the library's own, and reports one implementing the library's own without a token; `SettingChange`, `SettingNaming` and `SettingReading` pass their token to the asynchronous method | `83819e32` | CONV-DESIGN-003, CONV-DESIGN-005, CONV-CODE-002, CONV-CODE-008 | `UnitOfWorkTests.CONV_DESIGN_003_AC5_ARefusedOperationLeavesNothingForTheNextCommitAsync`, `UnitOfWorkTests.CONV_DESIGN_003_AC8_AnOuterCommitAfterAnInnerRollbackCommitsNothingAndFaultsAsync`, `UnitOfWorkTests.CONV_DESIGN_003_AC8_AnOuterRollbackAfterAnInnerRollbackEndsTheUnitOfWorkAsync`, `BlockingAndCancellationAnalyzerTests.CONV_CODE_008_AC1_SilentOnAFrameworkInterfacesMemberAndOnTheRollbackAsync`, `BlockingAndCancellationAnalyzerTests.CONV_CODE_008_AC1_ReportedOnAnOwnInterfacesMemberWithoutACancellationTokenAsync`, `ResultContractTests.CONV_DESIGN_005_AC1_EveryContractMethodReturnsAnOutcome` |
+
+CONV-DESIGN-008 criterion 3, "no project's build reports MSB3277": no test decides it; the build of `ff057e7b` and of every commit since reports none, and the test above holds every lockfile to the one version, which is what the warning came from.
+
+What earlier runs left: nine worktrees held uncommitted work whose commits were all in the branch; each is kept as a patch outside the repository and removed with its branch. The reason rule of the configuration route that one of them carried is on the branch at the endpoint and in the service (`ConfigurationEndpointTests.OPS_CFG_005_EveryChangeCarriesAReasonAsync`, `ConfigurationAdministrationTests.OPS_CFG_008_AC2_ATighteningWithNoReasonIsRefusedAsync`). Four stashes are dropped: three held earlier states of the docs, and every file of the fourth is in the history (the changelog describes `MapAuthorizationTables`).
+
+**In progress when this section was written.** The X9 sweep of question 58 (every return after `BeginAsync`) runs in four parts, `part/rollback-accounts`, `part/rollback-factors`, `part/rollback-sessions` and `part/rollback-privacy`, and question 57 in `part/registration`, each in a worktree of its own cut from `83819e32`. None is merged. The parts of D-183 the owner's split names (sending, privacy, sessions, authorization, gates) and the work after their merges are not started.
+
 ### The section C sweeps, place by place
 
 For each sweep: each place changed, each place reviewed and left with the reason, and what is parked (D-166 section C).
@@ -2276,7 +2291,7 @@ part of 389 (3) and waits with 389 on question 48.
   2. The two packages stay at 10.0.4 until a provider declares a later floor.
 - **Parked.** The build and the fast checks of the version step, and so every item after
   it.
-- **Answer:** pending.
+- **Answer:** D-184: `Janus.Storage` references `Microsoft.EntityFrameworkCore.Relational` directly, at the version of `Microsoft.EntityFrameworkCore` (`ff057e7b`, `d2b9ffac`).
 
 **68. Tier 3. D-166 209 (2), REG-DOM-001 and IDN-ACCT-004: which checks of UTS #46 the library's own processing applies.**
 
