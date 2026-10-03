@@ -24,6 +24,11 @@ internal sealed class MembershipEndingInMemory(MembershipLookupInMemory lookup) 
     /// </summary>
     public List<EndedMembership> Ended { get; } = [];
 
+    /// <summary>
+    /// What happens while an end waits for the membership's row, where a test sets it.
+    /// </summary>
+    public Action? Ending { get; set; }
+
     /// <inheritdoc/>
     public async ValueTask<MembershipId?> FindAsync(
         SubjectId subject,
@@ -40,6 +45,8 @@ internal sealed class MembershipEndingInMemory(MembershipLookupInMemory lookup) 
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
+        Ending?.Invoke();
+
         if (!lookup.Leave(subject, organization))
         {
             return ValueTask.FromResult<MembershipId?>(null);

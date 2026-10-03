@@ -132,15 +132,11 @@ internal sealed class MembershipEnd(
         }
 
         // A second end that read the membership before this one committed finds none
-        // here, and is answered as the find would answer it, leaving the unit clean.
+        // here, and is answered as the find would answer it.
         if (await memberships.EndAsync(member, organization, now, cancellationToken).ConfigureAwait(false)
             is not MembershipId ended)
         {
-            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
-            {
-                return Result.Failure(notCommittedAgain);
-            }
+            await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Failure(Error.From(ErrorCodes.MembershipNotFound));
         }
@@ -178,6 +174,8 @@ internal sealed class MembershipEnd(
             if ((await events.PublishAsync(happened, cancellationToken).ConfigureAwait(false))
                 .Match(() => (Error?)null, error => error) is Error unpublished)
             {
+                await work.RollbackAsync().ConfigureAwait(false);
+
                 return Result.Failure(unpublished);
             }
         }

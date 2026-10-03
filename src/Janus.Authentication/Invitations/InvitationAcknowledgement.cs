@@ -207,8 +207,9 @@ internal sealed class InvitationAcknowledgement(
             && await directory.HoldAsync(standing.Organization, cancellationToken).ConfigureAwait(false)
                 is not { DeletionRequestedAt: null, ErasedAt: null })
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Failure(Error.From(ErrorCodes.InvitationExpired)), Result.Failure);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.InvitationExpired));
         }
 
         if (standing is null || standing.Invitee != invitee || !standing.Stands)
@@ -217,8 +218,9 @@ internal sealed class InvitationAcknowledgement(
                 ? ErrorCodes.InvitationNotFound
                 : ErrorCodes.InvitationExpired;
 
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Failure(Error.From(refused)), Result.Failure);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(refused));
         }
 
         invitation = standing;
@@ -239,6 +241,8 @@ internal sealed class InvitationAcknowledgement(
 
         if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(failure);
         }
 
@@ -289,6 +293,8 @@ internal sealed class InvitationAcknowledgement(
             if ((await events.PublishAsync(happened, cancellationToken).ConfigureAwait(false))
                 .Match(() => (Error?)null, error => error) is Error unpublished)
             {
+                await work.RollbackAsync().ConfigureAwait(false);
+
                 return Result.Failure(unpublished);
             }
         }
