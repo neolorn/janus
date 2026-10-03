@@ -165,6 +165,8 @@ internal sealed class ThrottleService(
 
                 if (published.Match(() => (Error?)null, error => error) is Error unpublished)
                 {
+                    await work.RollbackAsync().ConfigureAwait(false);
+
                     return Result.Failure(unpublished);
                 }
             }

@@ -60,6 +60,27 @@ public sealed class SmsBalanceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC5: a poll whose alert could not be raised is refused, and its
+    /// transaction is rolled back and left closed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_APollWhoseAlertIsNotRaisedIsRolledBackAsync()
+    {
+        _configuration.Set(Settings.AbuseSmsDrainFactor, 3.0m);
+
+        Steady(from: 168, to: 1, start: 100_000m, spendAnHour: 10m);
+
+        _sms.Balance = 98_320m - 400m;
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Result<decimal> refused = await Balance.PollAsync(Watcher, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, refused.Match(_ => (ErrorCode?)null, error => error.Code));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-006 AC1: an ordinary hour raises nothing, so the alert means
     /// something when it arrives.
     /// </summary>

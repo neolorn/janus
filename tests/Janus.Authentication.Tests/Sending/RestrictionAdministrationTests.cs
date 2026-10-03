@@ -59,7 +59,11 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
         _gate.GrantEveryone(administrative, Permissions.SystemAdminister);
     }
 
-    private RestrictionAdministration Administration =>
+    private RestrictionAdministration Administration => Announcing(_events);
+
+    // The administration with its own events and alerts going where a test says, the
+    // configuration change beneath it announcing as it always does.
+    private RestrictionAdministration Announcing(EventsInMemory announced) =>
         new(
             _configuration,
             new ConfigurationAdministration(
@@ -76,8 +80,8 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
             _audit,
             RestrictionKeySuppliers.None,
             _work,
-            _events,
-            _events,
+            announced,
+            announced,
             _clock);
 
     /// <inheritdoc/>
@@ -367,6 +371,52 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
         Assert.Equal(2, announced.Credit);
         Assert.DoesNotContain(Phone.Value, announced.Reason, StringComparison.Ordinal);
         Assert.DoesNotContain(Phone.Value, announced.IdempotencyKey, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5 and AC8: an edit whose event could not be written is refused
+    /// after the change beneath it joined its transaction, and the whole is rolled back
+    /// and left closed with nothing of it committed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AnEditWhoseEventIsNotWrittenIsRolledBackAsync()
+    {
+        var refusing = new EventsInMemory { Refusal = Error.From(ErrorCodes.SystemFault) };
+
+        Result refused = await Announcing(refusing).EditAsync(
+            "sms.destination",
+            Tightened(),
+            "an incident",
+            Satisfied,
+            AccessContext.Of(SubjectId.New(_randomness)),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, Refusal(refused));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.OutermostCommitted, _work.RolledBack));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a grant whose event could not be written is refused, and its
+    /// transaction is rolled back and left closed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AGrantWhoseEventIsNotWrittenIsRolledBackAsync()
+    {
+        var refusing = new EventsInMemory { Refusal = Error.From(ErrorCodes.SystemFault) };
+
+        Result refused = await Announcing(refusing).GrantAsync(
+            "sms.destination",
+            Phone.Value,
+            2,
+            "a reason",
+            Satisfied,
+            AccessContext.Of(SubjectId.New(_randomness)),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, Refusal(refused));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
     }
 
     /// <summary>
