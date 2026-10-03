@@ -12,7 +12,17 @@ through HTTP.
 The method, path, request and response members, statuses and error codes of every
 endpoint below are part of the public contract (LIB-API-001). They are held in a
 committed contract file generated from the endpoint data source, which a contract test
-checks and the release gate judges (REF-001 AC2, D-166).
+checks and the release gate judges (REF-001 AC2, D-166). Under each endpoint the file
+lists every status it answers and the codes each carries: the codes its row below gives,
+which the endpoint declares (`08` CONV-DESIGN-006), each under the status `10` gives it;
+and the answers its mounting gives it, which the file derives and nothing declares: 401
+`auth.session.expired` where it requires a session, 403 `auth.session.csrfinvalid` where
+the request-forgery layers of `17` section 4 apply to it, and 400
+`api.request.malformed` where it reads a body or binds a typed route or query value.
+What the pipeline answers whatever the endpoint (429 `auth.throttled` from the browser
+profile's source-based rate limiting, 404 `authz.resource.notfound` for a path or method
+no endpoint serves, 500 `system.fault`) is listed once, beside the stage order, and not
+under each endpoint (D-183).
 
 ---
 
@@ -45,16 +55,20 @@ never rendered prose.
 }
 ```
 
-*Source: LIB-API-003, CONV-NAME-003, D-166, D-179*
+*Source: LIB-API-003, CONV-NAME-003, D-166, D-179, D-183*
 
 The host renders the message in the user's language from the code. `details` carries
 structured context: never a sentence. Every free-text request field (`reason`, `detail`,
-`channelUsed`, `note`) is 1 to 1024 characters after trimming, one rule (D-153), at every
-endpoint. A free-text member that is blank or longer is refused **400**
-`api.request.malformed` naming the member; a reason the operation requires, absent or
-blank, is refused with that reason's own code where `10` names one
-(`config.change.reasonrequired`, `auth.recovery.reasonrequired`,
-`authz.grant.reasonrequired`) (D-166). Where
+`note`, and every other) is 1 to 1024 characters after trimming, one rule (D-153), at
+every endpoint. A free-text member is one whose value is prose a person writes and that
+no other rule shapes; a word of a closed vocabulary, an identifier, an address, a
+number, a date or instant, a name held to its own rule (INT-SMS-003, a role's form), a
+configuration value (shaped by its key's row in `10` section 4) and the text of a legal
+document or of its translation (PRIV-CONS-005) are not free text (D-183). A free-text
+member that is blank or longer is refused **400** `api.request.malformed` naming the
+member; a reason the operation requires, absent or blank, is refused with that reason's
+own code where `10` names one (`config.change.reasonrequired`,
+`auth.recovery.reasonrequired`, `authz.grant.reasonrequired`) (D-166). Where
 an endpoint below describes a response in prose and names no field, the field is the
 camelCase of the noun in the vocabulary this chapter already uses: `id`, `label`,
 `createdAt`, `lastUsedAt`, `expiresAt`, `signedInAt`, `device`, `location`, `current`
@@ -73,8 +87,8 @@ next attempt is looked at, built by one builder wherever it is answered (D-166).
 4. `details.member` names a member as the request writes it, with no `$` root and no list
    index: a member inside another by the member names from the body's top joined by
    dots; an element of a list, or a member inside one, by the list's name; a member
-   inside an element of a body that is itself a list by its own name. It carries nothing
-   of the member's value.
+   inside an element of a body that is itself a list by its own name; a route or query
+   value by its name in the route or query. It carries nothing of the member's value.
 
 ---
 
@@ -84,7 +98,7 @@ next attempt is looked at, built by one builder wherever it is answered (D-166).
 |---|---|
 | 200 | Success with a body |
 | 204 | Success, no body |
-| 400 | Malformed request: the body is not the shape the endpoint takes, a required member is absent or empty, a free-text member is outside the bound of API-CONV-002, or a word lies outside a closed vocabulary fixed in `10` or at startup (a configuration key the route does not serve, a takedown trigger, an undeclared permission, a role name's form). Carries `api.request.malformed` with `details.member` naming the member as the request writes it, in the form API-CONV-002 gives, and nothing of its value; where the body failed before any member, the code alone |
+| 400 | Malformed request: the body is not the shape the endpoint takes, a required member is absent or empty, a free-text member is outside the bound of API-CONV-002, or a word lies outside a closed vocabulary fixed in `10` or at startup (a configuration key the route does not serve, a takedown trigger, an undeclared permission, a role name's or a document name's form), or a route or query value does not read as its type (an identifier that is not a UUID, a restriction name outside its rule). Carries `api.request.malformed` with `details.member` naming the member as the request writes it, in the form API-CONV-002 gives, and nothing of its value; where the body failed before any member, the code alone |
 | 401 | No valid session: **session death only** |
 | 403 | Authenticated, not permitted, **and existence is not concealed**. `authz.denied` means only that a permission is absent (section 8 states when an identifier naming no row is answered so); the reserved account's refusals of OPS-BOOT-002 are answered with it too. Also carries `auth.stepup.required` (step-up is a 403, never a 401), `authz.restricted` and `auth.session.csrfinvalid` |
 | 404 | Not found: a path naming a runtime record the deployment does not hold, answered with a named code (under `/admin` nothing is concealed; section 8 states the one case answered as a missing permission instead); **or concealed denial** (`authz.resource.notfound`); also a path under the prefix that no endpoint serves, and a method a served path does not take. 405 is not used and no `Allow` header is sent |
@@ -92,7 +106,7 @@ next attempt is looked at, built by one builder wherever it is answered (D-166).
 | 422 | Well-formed but refused on meaning: a body referring to something that does not exist or cannot be acted on, a blocklisted password, a mixed-script identifier. Answered with a named code, and with `api.request.invalid` (`details.member`) where `10` names none more specific |
 | 429 | Throttled, or refused by a rate limit or a sending restriction (`auth.throttled`, `auth.restriction.exceeded`, and `integration.callback.rejected` for the callback rate limit only); carries `Retry-After` and `details.retryAt` |
 
-*Source: D-016, AUTHZ-CONCEAL-001, D-162, D-166, D-179*
+*Source: D-016, AUTHZ-CONCEAL-001, D-162, D-166, D-179, D-183*
 
 **Acceptance criteria**
 1. A concealed denial is byte-identical and timing-identical to a genuine 404.
@@ -119,15 +133,17 @@ identity SHALL be carried only by the session cookie.
 **API-CONV-005** — Endpoints that could reveal account existence SHALL return
 identical responses and identical timing regardless of existence.
 
-*Source: AUTH-ABUSE-003, D-166*
+*Source: AUTH-ABUSE-003, D-166, D-183*
 
 Applies to: every registration endpoint (`/register/*`, REG-SESS-005), sign-in
 initiation, recovery initiation, sign-in link request (`POST /auth/link`), email OTP
-request, and adding an identifier to an account (`POST /account/identifiers`). No
-registration endpoint discloses whether an identifier exists, except that two
-identifiers' existence is disclosed: a username at choice time (REG-IDENT-009), and the
-email an invitation binds, to the holder of the invitation's link alone, which was sent
-to that email (`POST /register` with `invitationToken`, REG-INV-001).
+request, adding or replacing an identifier on an account, and verifying it
+(`POST /account/identifiers`, `PUT /account/identifiers/{id}/replace`,
+`POST /account/identifiers/{id}/verify`). No registration endpoint discloses whether an
+identifier exists, except that two identifiers' existence is disclosed: a username at
+choice time (REG-IDENT-009), and the email an invitation binds, to the holder of the
+invitation's link alone, which was sent to that email (`POST /register` with
+`invitationToken`, REG-INV-001).
 
 **Acceptance criteria**
 1. Responses for existing and non-existent identifiers are byte-identical.
@@ -156,9 +172,9 @@ living `registration.session.lifetime`, that stages everything the steps collect
 **422**: `identity.invitation.expired`, a token that opens no invitation;
 `identity.invitation.identifiermismatch`, an account already holds the email the
 invitation binds
-**429**: throttled
+**429**: `auth.throttled` with `retryAt`
 
-*Source: D-146; REG-SESS-001, REG-SESS-002, API-REDIR-002, D-162, D-166*
+*Source: D-146; REG-SESS-001, REG-SESS-002, API-REDIR-002, D-162, D-166, D-183*
 
 A signed-in person is not offered registration; a request that nonetheless arrives
 with a live session creates no registration session and is refused **409**
@@ -173,10 +189,11 @@ The client identifier is
 validated at capture and stored on the session; no destination parameter is accepted
 here or at any later step (API-REDIR-002).
 
-Every `/register/*` endpoint below requires the registration session's cookie; a
-request from a browser without it is refused (REG-SESS-001 AC2). Every response is
-identical whether or not an identifier presented already belongs to an account
-(API-CONV-005, REG-SESS-005).
+Every `/register/*` endpoint below requires the registration session's cookie, except a
+request presenting a message's `linkToken` (`POST /register/verify/{id}`,
+`POST /register/abandon`); any other request from a browser without it is refused
+(REG-SESS-001 AC2). Every response is identical whether or not an identifier presented
+already belongs to an account (API-CONV-005, REG-SESS-005).
 
 ---
 
@@ -244,13 +261,15 @@ REG-SESS-003.
 hold the originating session's cookie: nothing changes; the body carries `sameBrowser`
 and, where it is false, the `code` to type where the flow is waiting
 **422**: `auth.code.invalid`, `auth.code.expired`; after `code.verification.attempts`
-wrong codes the code is invalidated and a correct one is refused too (AUTH-FACT-004)
+wrong codes the code is invalidated and a correct one is refused too (AUTH-FACT-004); a
+pressed `linkToken` that opens nothing is `auth.code.expired`
 **429**: `auth.throttled` with `retryAt` while the delay of AUTH-ABUSE-001 stands: a
-wrong code, or a pressed `linkToken` that opens nothing, is counted against the source
-and the identifier (REG-SESS-003 AC6); a replacement code draws on the sending
-restrictions (AUTH-ABUSE-004, `auth.restriction.exceeded` with `retryAt`)
+wrong code is counted against the source and the identifier, and a pressed `linkToken`
+that opens nothing against the source alone, the source being that of the request
+(REG-SESS-003 AC6); a replacement code draws on the sending restrictions
+(AUTH-ABUSE-004, `auth.restriction.exceeded` with `retryAt`)
 
-*Source: D-146; REG-SESS-003, AUTH-FACT-004, AUTH-ABUSE-001, AUTH-ABUSE-004, API-LAND-001, D-166*
+*Source: D-146; REG-SESS-003, AUTH-FACT-004, AUTH-ABUSE-001, AUTH-ABUSE-004, API-LAND-001, D-166, D-183*
 
 A `linkToken` with `press` verifies only when the request carries the cookie of the
 session that staged the identifier: the link completes in the browser that started the
@@ -372,11 +391,11 @@ lives `link.magic.lifetime`.
 { "identifier": "..." }
 ```
 
-**202** · **429**: throttled, or the send refused by a restriction
-(`auth.restriction.exceeded` with `retryAt`, identical for a registered and an
-unregistered identifier, AUTH-ABUSE-002)
+**202** · **429**: `auth.throttled` with `retryAt`, or, where a restriction refuses
+the send, `auth.restriction.exceeded` with `retryAt`, identical for a registered and an
+unregistered identifier (AUTH-ABUSE-002, AUTH-ABUSE-004)
 
-*Source: D-146; AUTH-FACT-002, AUTH-FACT-003, AUTH-ABUSE-003, AUTH-ABUSE-004, D-162, D-166*
+*Source: D-146; AUTH-FACT-002, AUTH-FACT-003, AUTH-ABUSE-003, AUTH-ABUSE-004, D-162, D-166, D-183*
 
 The link completes **only in the browser that requested it and only on a press**
 (REG-SESS-003): the landing route (API-LAND-001) calls `POST /auth/factor` with
@@ -431,9 +450,11 @@ attempt cap of its own, independent of the verification code (AUTH-FACT-004): it
 { "identifier": "..." }
 ```
 
-**202** · **429**: throttled
+**202** · **429**: `auth.throttled` with `retryAt`; `auth.restriction.exceeded` with
+`retryAt` where a restriction refuses the send (AUTH-ABUSE-004)
 
-*Source: AUTH-FACT-002, AUTH-FACT-003, AUTH-FACT-004, AUTH-ABUSE-003, D-135, D-166*
+*Source: AUTH-FACT-002, AUTH-FACT-003, AUTH-FACT-004, AUTH-ABUSE-003, D-135, D-166,
+D-183*
 
 ---
 
@@ -509,7 +530,8 @@ sign-in email is outside a domain lock the account is under, REG-DOM-001; a pend
 link or open challenge whose email the account no longer holds is `auth.factor.rejected`),
 `auth.code.invalid` and `auth.code.expired` (a sign-in code, below).
 Never 401: that code is session death only (API-CONV-003, D-125).
-**429** — throttled, with `Retry-After`
+**429**: `auth.throttled`, with `Retry-After`; `auth.restriction.exceeded` with
+`retryAt` where a restriction refuses the send of a `phoneCode` ask (AUTH-ABUSE-004)
 
 **Link tokens.** A call carrying a sign-in link's token names `factor` `emailLink` or
 `phoneLink`; any other factor with a `linkToken` is **400** `api.request.malformed`
@@ -525,6 +547,13 @@ code a sign-in link shows lives as long as its link (`link.magic.lifetime`). Eac
 capped by `code.signin.attempts`: a wrong code is `auth.code.invalid`, and a code past its
 lifetime or presented after the cap is `auth.code.expired`, a correct one included
 (D-166).
+
+**Second-step codes.** A `phoneCode` code is asked for by a call naming `factor`
+`phoneCode` with no `value`: **202** where the code is issued and sent (AUTH-FACT-002).
+Where the number's signal answers `risk`, nothing is sent and the call is answered with
+the challenge as it then stands: **200** `factorRequired` with `required` not naming
+`phoneCode`, or **422** `auth.factor.rejected` where no factor is left (AUTH-FACT-002b).
+An ask before a first factor is **202** and sends nothing.
 
 **Passkey assertions.** The assertion carries the user handle the authenticator
 returned. A handle naming an account other than the credential's owner, or none the
@@ -549,7 +578,7 @@ carries `policyRequirement` (`{ field, value, deadline }`, AUTH-FACT-017) beside
 requirement is met.
 
 *Source: AUTH-FACT-001, AUTH-FACT-003, AUTH-FACT-016, AUTH-FACT-017, AUTH-SESS-002,
-AUTH-ABUSE-001, D-146, D-166*
+AUTH-ABUSE-001, D-146, D-166, D-183*
 
 The response reports **properties reached**, never which factor produced them. On
 completion the session cookie is set and the identifier rotates (AUTH-SESS-006).
@@ -604,10 +633,15 @@ account's, another account's included, one answer for both
 
 Raises an existing session's assurance. Same request and response shape as
 `/auth/factor`; called once per factor until the session reaches the gate. A factor the
-policy in force for the account does not permit is refused `auth.factor.notpermitted`,
-as at sign-in (IDN-LIFE-009b).
+policy in force for the account does not permit is refused `auth.factor.notpermitted`
+before it is verified, and counted (AUTH-STEP-002, IDN-LIFE-009b). A `phoneCode` ask
+whose number answers `risk` is answered **403** `auth.stepup.required` with `details`
+computed without that entry (AUTH-FACT-002b).
 
-*Source: AUTH-STEP-001, AUTH-STEP-002, D-141, D-166*
+**429**: `auth.throttled`, with `Retry-After`; `auth.restriction.exceeded` with
+`retryAt` where a restriction refuses the send of a `phoneCode` ask (AUTH-ABUSE-004)
+
+*Source: AUTH-STEP-001, AUTH-STEP-002, D-141, D-166, D-183*
 
 Rotates the session identifier on success.
 
@@ -710,23 +744,23 @@ Registration ceremony. `begin` takes the **kind** being created, `{ "kind": "pas
 "securityKey", "label": "..." }` (the AUTH-FACT-002 identifiers): a passkey
 (`residentKey: required`, `userVerification: required`) or a second-factor security
 key (`residentKey: discouraged`), per AUTH-FACT-002b; a security key under two-step is
-refused on an account with no password. `complete` takes the credential and a
-**label** (1 to 64, unique per kind per account, defaulting to the client's device
-description, AUTH-FACT-001) and records the relying party identifier, `backupEligible`
-and `backupState`, `addedAt` and the label. During registration step 5 the ceremony
-runs against the registration session and its provisional user handle (REG-SESS-001).
-`begin` answers the creation options with `user`: `{ "id": "<the subject identifier as a
-WebAuthn user handle>", "name": "<the primary email>", "displayName": "<the display name,
-or empty>" }`; during registration `id` is the registration session's provisional
-subject identifier, which becomes the account's, and `name` the staged email; the
-credential is staged on the registration session and no account row is written before
-the terms step (REG-PM-001, REG-SESS-006).
+refused on an account with no password, with 409 `auth.factor.passwordrequired`.
+`complete` takes the credential and a **label** (1 to 64, unique per kind per account,
+defaulting to the client's device description, AUTH-FACT-001) and records the relying
+party identifier, `backupEligible` and `backupState`, `addedAt` and the label. During
+registration step 5 the ceremony runs against the registration session and its
+provisional user handle (REG-SESS-001). `begin` answers the creation options with
+`user`: `{ "id": "<the subject identifier as a WebAuthn user handle>", "name": "<the
+primary email>", "displayName": "<the display name, or empty>" }`; during registration
+`id` is the registration session's provisional subject identifier, which becomes the
+account's, and `name` the staged email; the credential is staged on the registration
+session and no account row is written before the terms step (REG-PM-001, REG-SESS-006).
 
 **422**: `auth.webauthn.algorithmnotallowed`,
 `auth.webauthn.userverificationrequired`
 
 *Source: AUTH-FACT-001, AUTH-FACT-002b, AUTH-FACT-011, AUTH-FACT-013, AUTH-FACT-014,
-D-146, D-162, D-166*
+D-146, D-162, D-166, D-183*
 
 Where the credential is device-bound, the response indicates a second enrolment is
 prompted — advisory for public users, required for administrative-organization
@@ -989,9 +1023,10 @@ Verifies an added identifier. Same request, responses and browser binding as
 browser that added it.
 
 **204** · **200** (link opened elsewhere: nothing changes, the code is shown) ·
-**422**: `auth.code.invalid`, `auth.code.expired` · **429**
+**422**: `auth.code.invalid`, `auth.code.expired` ·
+**429**: `auth.throttled` with `retryAt`
 
-*Source: D-146; REG-IDENT-004, REG-SESS-003*
+*Source: D-146; REG-IDENT-004, REG-SESS-003, D-183*
 
 Emits `IdentifierAdded` on success.
 
@@ -1275,11 +1310,11 @@ enrolled on the account (API-CONV-003)
 
 Enrolment requires one valid code before activation and a **label** (AUTH-FACT-001).
 `begin` returns the `otpauth` URI and the Base32 secret (`18` FE-PM-006). Refused on an
-account with no password (AUTH-FACT-002b). Gated at the lower of the account's
-reachable assurance and AAL2 (AUTH-STEP-007); confirmation is notified to every
-recorded channel other than the enrolling session.
+account with no password, with 409 `auth.factor.passwordrequired` (AUTH-FACT-002b).
+Gated at the lower of the account's reachable assurance and AAL2 (AUTH-STEP-007);
+confirmation is notified to every recorded channel other than the enrolling session.
 
-*Source: AUTH-FACT-001, AUTH-FACT-002b, AUTH-FACT-007, AUTH-STEP-007, D-146*
+*Source: AUTH-FACT-001, AUTH-FACT-002b, AUTH-FACT-007, AUTH-STEP-007, D-146, D-183*
 
 ---
 
@@ -1294,10 +1329,10 @@ download and print and confirms they were saved. The set records `viewedAt` when
 reports a copy, download or print at `POST /account/recoverycodes/exported`; both are
 visible in `GET /account`.
 **403**: `auth.stepup.required`
-**409**: the account has no password (a passkey-only account has no recovery codes,
-AUTH-FACT-002b)
+**409**: `auth.factor.passwordrequired`, the account has no password (a passkey-only
+account has no recovery codes, AUTH-FACT-002b)
 
-*Source: D-146; AUTH-FACT-008, AUTH-FACT-009, AUTH-RECOV-006, D-162, D-166*
+*Source: D-146; AUTH-FACT-008, AUTH-FACT-009, AUTH-RECOV-006, D-162, D-166, D-183*
 
 Regeneration invalidates the entire previous set. A reminder fires in the account and
 to the security-notice set when `recovery.codes.reminder` has elapsed since generation.
@@ -1311,9 +1346,9 @@ Records that the person copied, downloaded or printed the account's current
 recovery-code set (AUTH-FACT-008, AUTH-RECOV-006 AC2). No body. No gate.
 
 **204**
-**409**: the account holds no recovery-code set
+**409**: `auth.factor.notenrolled`, the account holds no recovery-code set
 
-*Source: AUTH-FACT-008, AUTH-RECOV-006, D-162, D-166*
+*Source: AUTH-FACT-008, AUTH-RECOV-006, D-162, D-166, D-183*
 
 ---
 
@@ -1367,7 +1402,8 @@ set), never a cached copy. `POST`: the generated **secret, returned once**, with
 `id`, under `Cache-Control: no-store`.
 **204**: `DELETE`: revoked at the server; a client using it fails on its next
 connection.
-**400**: `api.request.malformed` naming `label` where it is absent
+**400**: `api.request.malformed` naming `label` where it is absent, or `id` where `{id}`
+does not read as an app-password identifier
 **403**: `auth.stepup.required` (`mailcredential:create`, `mailcredential:revoke`);
 `authz.restricted` for a creation by a restricted account; `authz.denied` for a creation
 from the break-glass session or a session opened from it (OPS-BOOT-002)
@@ -1375,7 +1411,7 @@ from the break-glass session or a session opened from it (OPS-BOOT-002)
 no app password of the person under the identifier
 **422**: `auth.credential.labelinvalid`
 
-*Source: D-146; REG-MAIL-002, INT-MAIL-010, D-166, D-179*
+*Source: D-146; REG-MAIL-002, INT-MAIL-010, D-166, D-179, D-183*
 
 Creation and revocation are notified to the security-notice set and audited; no secret
 or hash appears in the library's database, logs or audit records. Ending a membership
@@ -1518,12 +1554,13 @@ no longer holds what issuing it required (REG-INV-001);
 `identity.invitation.identifiermismatch` (a bound email or phone is not verified on the
 account accepting, or the corporate address is already held by an account);
 `identity.identifier.domainnotallowed` where the organization's lock is on and the
-address the member will sign in with is outside it (REG-DOM-001)
+address the member will sign in with is outside it, or the account holds no verified
+email the lock could admit (REG-DOM-001)
 
 Emits `MembershipChanged` and, where a corporate address is taken on,
 `IdentifierAdded` and `IdentifierPrimaryChanged`.
 
-*Source: D-148; D-146, REG-INV-001, REG-INV-002, REG-MAIL-001, D-166*
+*Source: D-148; D-146, REG-INV-001, REG-INV-002, REG-MAIL-001, D-166, D-183*
 
 ---
 
@@ -1537,10 +1574,11 @@ mechanism, grantedAt, withdrawnAt, supersededAt }` (objections: `recordedAt` for
 `grantedAt`, and no `supersededAt`) (D-153). `document` is the legal document the
 consent was given against (the privacy notice where the purpose names none) and
 `noticeVersion` the version of `document`. `supersededAt` is the instant a material
-revision (PRIV-CONS-007) ended the consent, or null; a consent carrying it is asked for
-again (PRIV-CONS-007 AC4).
+revision, or a start whose declaration names another document for the purpose
+(PRIV-CONS-007), ended the consent, or null; a consent carrying it is asked for again
+(PRIV-CONS-007 AC4).
 
-*Source: PRIV-CONS-011, PRIV-CONS-001, D-166*
+*Source: PRIV-CONS-011, PRIV-CONS-001, D-166, D-183*
 
 ---
 
@@ -1548,13 +1586,15 @@ again (PRIV-CONS-007 AC4).
 
 **204** · **422** `privacy.purpose.noconsent` · **409** `privacy.notice.unpublished`
 (grant only). A withdrawal where the subject holds no consent for the purpose answers
-204 and records nothing.
+204 and records nothing; so does a grant where the subject holds a live consent the
+purpose admits (PRIV-CONS-001).
 
-*Source: PRIV-CONS-008, PRIV-CONS-011, D-135, D-162, D-166*
+*Source: PRIV-CONS-008, PRIV-CONS-011, D-135, D-162, D-166, D-183*
 
 Grant records the current version of the document the purpose's consent is governed
 by and the consent kind, and the mechanism `reconsent` where the subject holds a
-superseded, unwithdrawn consent for the purpose, `dashboard` otherwise; the operations
+superseded, unwithdrawn consent for the purpose, or a live one the purpose no longer
+admits, which the grant stamps superseded, `dashboard` otherwise; the operations
 contract applies the same rule to a grant named `dashboard` and records any other
 mechanism as named. It is how a subject opts in after registration or re-consents after
 a notice revision (PRIV-CONS-007). Withdrawal: no confirmation interstitial, no
@@ -1573,9 +1613,9 @@ withdrawal state). `POST` records an objection and raises `ObjectionChanged`;
 **204**
 **422**: `privacy.purpose.notobjectable`
 **409**: `privacy.notice.unpublished` (`POST` only). A `DELETE` where no objection is
-held answers 204 and records nothing.
+held, and a `POST` where one is, answers 204 and records nothing.
 
-*Source: PRIV-RIGHT-001a, D-145, D-162, D-166*
+*Source: PRIV-RIGHT-001a, D-145, D-162, D-166, D-183*
 
 ---
 
@@ -1597,10 +1637,12 @@ host publishes (terms of service, consent texts).
 }
 ```
 
+**400**: `api.request.malformed` naming `document` where `{document}` is not a document
+name (INT-SMS-003).
 **404**: `privacy.document.notfound`, the document, or the named version, was never
 published.
 
-*Source: PRIV-CONS-005, PRIV-CONS-006, D-146, D-162, D-166*
+*Source: PRIV-CONS-005, PRIV-CONS-006, D-146, D-162, D-166, D-183*
 
 Public, unauthenticated. The governing text is always returned with the translations,
 so a screen can show either without changing the interface language (PRIV-CONS-005
@@ -1984,11 +2026,15 @@ serves; naming `reason` where it is longer than 1024 characters after trimming
 any change of an `alerting.*.destinations` key (`alerting:destinations`); `authz.denied`
 for a loosening by a caller without `system:administer` in the administrative
 organization
+**409**: `config.change.superseded`, for a change of an `alerting.*.destinations` key
+whose value in force changed after its previous destinations were notified
+(OPS-ALERT-004a)
 **422**: `config.value.belowfloor`, `config.value.aboveceiling`,
-`config.value.notallowed`, `config.key.protected`; `config.change.reasonrequired`,
-`details.key` naming the key, where a change arrives without a reason or with a blank one
+`config.value.notallowed`, `config.key.protected`, `config.value.lastdestination`;
+`config.change.reasonrequired`, `details.key` naming the key, where a change arrives
+without a reason or with a blank one
 
-*Source: OPS-CFG-002, OPS-CFG-003, OPS-CFG-004, D-147, D-166*
+*Source: OPS-CFG-002, OPS-CFG-003, OPS-CFG-004, OPS-ALERT-004a, D-147, D-166, D-183*
 
 Every change carries a reason and produces an audit entry. Tightening requires no
 step-up; loosening requires step-up and `system:administer`. Protected keys (OPS-CFG-004)
@@ -2016,19 +2062,20 @@ the channel it carries (`sms.destination` and `sms.source` `sms`, `email.destina
 ```
 
 `purpose` and `channel` are optional, and an absent one reads as `any`. A restriction's
-name is 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_`; any
-other is refused `config.value.notallowed`. `reason` is required on every edit, a
-tightening included (OPS-CFG-008); `DELETE` takes `{ "reason": "..." }`. A **loosening**
-is any change `10` section 4.5 does not classify as a tightening (a higher max, a
-shorter interval, a removed bucket, a deleted or renamed restriction, a change of
-`channel` to anything but `any`, among others); it requires `system:administer` and
-raises a Normal alert (OPS-ALERT-001).
+name is 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_`; a
+`{name}` outside it is refused **400** `api.request.malformed` naming `name`, on every
+route that takes one. `reason` is required on every edit, a tightening included
+(OPS-CFG-008); `DELETE` takes `{ "reason": "..." }`. A **loosening** is any change `10`
+section 4.5 does not classify as a tightening (a higher max, a shorter interval, a
+removed bucket, a deleted or renamed restriction, a change of `channel` to anything but
+`any`, among others); it requires `system:administer` and raises a Normal alert
+(OPS-ALERT-001).
 
 **200** / **204**
-**400**: `api.request.malformed` naming `key`, `purpose`, `channel` or `buckets` where a
-key, purpose, channel or window is outside `10` section 5, a `max` is negative or an
-`interval` is not a positive ISO 8601 duration; naming `reason` where it is longer than
-1024 characters after trimming
+**400**: `api.request.malformed` naming `name` where `{name}` breaks the name rule;
+naming `key`, `purpose`, `channel` or `buckets` where a key, purpose, channel or window
+is outside `10` section 5, a `max` is negative or an `interval` is not a positive ISO
+8601 duration; naming `reason` where it is longer than 1024 characters after trimming
 **403**: `auth.stepup.required` (`restriction:edit`, every edit); `authz.denied` for a
 loosening by a caller without `system:administer` in the administrative organization
 **404**: `auth.restriction.notfound` where `{name}` is not in the set (`GET`, `DELETE`,
@@ -2038,7 +2085,7 @@ with no registered supplier (LIB-HOST-001, `details.supplier` naming it) or an e
 bucket list; `config.change.reasonrequired` where an edit arrives without a reason or
 with a blank one
 
-*Source: D-146; AUTH-ABUSE-004, OPS-CFG-002, OPS-CFG-008, D-162, D-166*
+*Source: D-146; AUTH-ABUSE-004, OPS-CFG-002, OPS-CFG-008, D-162, D-166, D-183*
 
 A change applies to the next send without a restart, is audited and emits
 `SendingRestrictionChanged`. Deleting a shipped default is a loosening, not an error.
@@ -2093,7 +2140,7 @@ gate. Not gated, each for its reason: revoking an invitation (it touches no acco
 creating an organization, publishing documents and translations, the compliance
 records, and refusing a privacy request.
 
-*Source: D-106, D-166*
+*Source: D-106, D-166, D-183*
 
 ### Organizations — `organization:manage`
 
@@ -2158,15 +2205,15 @@ organization (API-CONV-003). The reserved `emergency` account is refused as a me
 |---|---|
 | `POST /admin/accounts/{subject}/takedown` | Phase one, in one transaction: suspends the account and takes it into `deleting` by `takedown`, holding the state it was in, ends its sessions, records `reason` (required) and `trigger` (required: `staff-report` · `customer-report` · `automated-signal` · `authority-request`, `10` section 5.12d), and writes the `TakedownExecuted` outbox record for the host's own handling and `AccountSuspended` as an event row, at every trigger whatever state the account held, since it announces that access stopped (IDN-LIFE-003). Admits an account that is `active`, `restricted`, `suspended`, or `deleting` by `self` or `oob-request`. Starts `takedown.grace` (7 days), or for an account already `deleting` the earlier of its own window's end and the trigger plus `takedown.grace`; erasure (key destruction, fingerprint neutralisation) runs when the window closes and the account becomes `deleted` (IDN-LIFE-003, D-127). Body `{ "trigger": "...", "reason": "..." }`. Requires step-up (`account:takedown`), judged after every other refusal. **202** `{ takedownId, erasureDue }`: `takedownId` is the identifier of the `TakedownExecuted` outbox record the trigger writes (IDN-LIFE-003a); `erasureDue` is the instant the takedown's window closes. **400** `api.request.malformed` where `reason` is absent, blank or longer than 1024 characters after trimming, or `trigger` is not one of the four spellings. **404** `identity.account.notfound` where no account bears the subject. **409** `identity.takedown.active` for a takedown-originated `deleting`; `identity.account.stateconflict` (`details.state` `deleted`) for a `deleted` account |
 | `GET /admin/accounts/{subject}/takedown` | The account's latest takedown, read from its outbox record from the moment of trigger (IDN-LIFE-003 AC2): **200** `{ takedownId, subject, triggeredAt, erasureDue, reversed, status, attempts, subscribers: [ { name, required, confirmedAt } ] }`, one line per registered subject-event subscriber, `confirmedAt` absent until that subscriber confirms, `status` spelled as `10` section 5.12; `reversed` is `true` and `erasureDue` null once the takedown was reversed, and `status` reads `complete` after a manual completion (IDN-LIFE-003a). **404** `identity.takedown.notfound` where the account holds no takedown; **404** `identity.account.notfound` where the subject names no account |
-| `POST /admin/accounts/{subject}/takedown/reverse` | Reverses a takedown inside its window (an adult misjudged). Restores the state the account held at the trigger (IDN-LIFE-003): the deletion it was in, with its origin and start; else `suspended` with its origin; else `restricted` where a restriction is held; else `active`. Host-side actions taken on `TakedownExecuted` are not undone by the library; `TakedownReversed` is written in the reversal's transaction. Records the `reason`, required: body `{ "reason": "..." }`, **400** `api.request.malformed` where it is absent, blank or longer than 1024 characters after trimming. Requires step-up (`account:takedownreverse`), judged after every other refusal. **204** · **404** `identity.takedown.notfound` where the account holds no standing takedown; `identity.account.notfound` where the subject names no account · **422** `identity.takedown.windowelapsed`, from the window's end whether or not the account has been erased |
+| `POST /admin/accounts/{subject}/takedown/reverse` | Reverses a takedown inside its window (an adult misjudged). Restores the state the account held at the trigger (IDN-LIFE-003): the deletion it was in, with its origin and start; else `suspended` with its origin; else `restricted` where a restriction is held; else `active`. Returned to a deletion or a suspension, it keeps a held restriction, and returned to an `oob-request` deletion, that deletion's held suspension (D-183). Host-side actions taken on `TakedownExecuted` are not undone by the library; `TakedownReversed` is written in the reversal's transaction. Records the `reason`, required: body `{ "reason": "..." }`, **400** `api.request.malformed` where it is absent, blank or longer than 1024 characters after trimming. Requires step-up (`account:takedownreverse`), judged after every other refusal. **204** · **404** `identity.takedown.notfound` where the account holds no standing takedown; `identity.account.notfound` where the subject names no account · **422** `identity.takedown.windowelapsed`, from the window's end whether or not the account has been erased |
 
 ### Privacy requests and erasures — `privacyrequest:manage`
 
 | Endpoint | Does |
 |---|---|
 | `GET /admin/privacy/requests` | The queue, each request with its decision deadline and status — `open` · `fulfilled` · `refused` · `granted-by-lapse` · `deemed-refused-by-lapse` (PRIV-RIGHT-002) |
-| `POST /admin/privacy/requests` | Enters an out-of-band request on a subject's behalf, `type` one of `erasure` · `restriction` · `rectification` (`10` section 5.12c; rectification of editable data is account editing and is entered here only where the subject cannot edit it themselves); what an `erasure` fulfilled does follows the account's state (the fulfil row below, IDN-LIFE-003). Records the channel, the identity confirmation performed (D-113), and **`receivedAt`: required, the calendar date (`YYYY-MM-DD`, in `privacy.calendar.timezone`) the request reached the company, never later than today there; the decision clock runs from the end of it** (D-136, D-153). **422** `privacy.request.receivedfuture`. `detail` is optional; where present it is 1 to 1024 characters after trimming (API-CONV-002), as `channel` and the identity confirmation are |
-| `POST /admin/privacy/requests/{id}/fulfil` · `/refuse` | The decision. Fulfilment of restriction sets the state; refusal records the reason. Fulfilment of erasure follows the state it finds (IDN-LIFE-003): an account `active` or `restricted` enters `deleting` by `oob-request`, holding a restriction where one is in force; an account `suspended` begins its deletion all the same, holding the suspension with its origin, so that a cancellation returns it to `suspended`; an account already `deleting`, by any origin, has the request recorded fulfilled against the running window, and nothing restarts; an account `deleted` has the request recorded fulfilled, and nothing further happens. Where a window starts, the security-notice set is sent `oob-deletion-notice`, which carries no cancel link. Fulfilment of every request type, rectification included, requires step-up (`privacyrequest:fulfil`); refusing is not gated. Receipt is automatic at creation (D-126); no acknowledge endpoint. **403** `authz.denied` without `privacyrequest:manage`, before the request is read; **404** `privacy.request.notfound` where the identifier names no request; **409** `privacy.request.decided` where it is already decided. Nothing is concealed (section 8, AUTHZ-CONCEAL-005) |
+| `POST /admin/privacy/requests` | Enters an out-of-band request on a subject's behalf, `type` one of `erasure` · `restriction` · `rectification` (`10` section 5.12c; rectification of editable data is account editing and is entered here only where the subject cannot edit it themselves); what an `erasure` fulfilled does follows the account's state (the fulfil row below, IDN-LIFE-003). Records the channel, the identity confirmation performed (D-113), and **`receivedAt`: required, the calendar date (`YYYY-MM-DD`, in `privacy.calendar.timezone`) the request reached the company, never later than today there; the decision clock runs from the end of it** (D-136, D-153). **422** `privacy.request.receivedfuture`. `detail` is optional; where present it is 1 to 1024 characters after trimming (API-CONV-002), as `channel` and the identity confirmation are. An absent or `null` `detail` is recorded as none, never as empty text; a blank one is refused **400** `api.request.malformed` naming `detail`. A subject no account bears is refused **422** `api.request.invalid`, `details.member` the member naming it (D-183) |
+| `POST /admin/privacy/requests/{id}/fulfil` · `/refuse` | The decision. Fulfilment of restriction sets the state; refusal records the reason. Fulfilment of erasure follows the state it finds (IDN-LIFE-003): an account `active` or `restricted` enters `deleting` by `oob-request`, holding a restriction where one is in force; an account `suspended` begins its deletion all the same, holding the suspension with its origin, so that a cancellation returns it to `suspended`; an account already `deleting`, by any origin, has the request recorded fulfilled against the running window, and nothing restarts; an account `deleted` has the request recorded fulfilled, and nothing further happens. Where a window starts, the security-notice set is sent `oob-deletion-notice`, which carries no cancel link. Fulfilment of every request type, rectification included, requires step-up (`privacyrequest:fulfil`); refusing is not gated. Receipt is automatic at creation (D-126); no acknowledge endpoint. **403** `authz.denied` without `privacyrequest:manage`, before the request is read, and for an erasure whose subject is the reserved `emergency` account, once that account is read (OPS-BOOT-002), before the step-up; **404** `privacy.request.notfound` where the identifier names no request; **409** `privacy.request.decided` where it is already decided. Nothing is concealed (section 8, AUTHZ-CONCEAL-005). The fulfilment of an erasure refuses nothing on the account's state, each state having its outcome above, and nothing on its existence, which the entry checked; a deletion that will not begin after that is a fault (D-183) |
 | `GET /admin/erasures` · `GET /admin/erasures/{id}` | Every incomplete erasure in one query; per-subscriber state for one (IDN-LIFE-003b): `{ id, subject, reason, status, attempts, subscribers: [ { name, required, confirmedAt } ] }` (D-153). `id` is the identifier of the outbox record the erasure's host-side work travels on. **200** · **404** `privacy.erasure.notfound` where no erasure is held under it |
 | `POST /admin/erasures/{id}/complete` | The manual completion path after exhausted retries, itself recorded (IDN-LIFE-003a): closes a `failed` erasure, takedown (`takedownId`) or restriction delivery named by its identifier. Requires step-up (`erasure:complete`). **204** · **404** `privacy.erasure.notfound` where no such delivery is held under the identifier · **409** `privacy.erasure.notfailed` where it is `awaiting-subscribers` or `complete` |
 
@@ -2174,7 +2221,7 @@ organization (API-CONV-003). The reserved `emergency` account is refused as a me
 
 | Endpoint | Does |
 |---|---|
-| `GET /admin/audit?subject=...` | Every audit record naming one subject, as the acting identity or as the data subject the record concerns (`subject`), most recent first, without a full scan (PRIV-BREACH-002): each entry carries the record's identifier, category, action, occurrence, acting and effective subjects, data subject, organization and plain details, and never a value held under a subject's key (PRIV-RET-002), so it reads the same before and after erasure; a record of background work carries `principal` and `principalReason` (IDN-AUD-001); a record written in a break-glass session, or in a session another application opened from it, carries `breakGlassReason`, the reason given at its use (OPS-BOOT-002, D-170, D-171) |
+| `GET /admin/audit?subject=...` | Every audit record naming one subject, as the acting identity or as the data subject the record concerns (`subject`), most recent first, without a full scan (PRIV-BREACH-002): each entry carries the record's identifier, category, action, occurrence, acting and effective subjects, the data subject the record concerns as `subject` (null where it concerns none, a record written before that column existed among them), organization and plain details, and never a value held under a subject's key (PRIV-RET-002), so it reads the same before and after erasure; a record of background work carries `principal` and `principalReason` (IDN-AUD-001); a record written in a break-glass session, or in a session another application opened from it, carries `breakGlassReason`, the reason given at its use (OPS-BOOT-002, D-170, D-171) |
 | `GET /admin/explanations/{correlationId}` | Resolves a concealed denial's correlation identifier to the permission and principal (AUTHZ-GATE-004, AUTHZ-CONCEAL-004), with the outcome `allowed` or `denied` (the explanation outcomes of `10`); any recorded refusal resolves |
 
 Self-service explanation for **non-concealed** types is `GET /account/explanations/{correlationId}`, requiring only the subject's own session: it resolves a refusal whose acting and effective principal are both the caller, on a type that discloses or on no record (AUTHZ-CONCEAL-005); any other identifier answers `authz.denied` (D-166).
@@ -2183,8 +2230,8 @@ Self-service explanation for **non-concealed** types is `GET /account/explanatio
 
 | Endpoint | Does |
 |---|---|
-| `POST /admin/notices` · `POST /admin/documents/{document}/versions` | Publishes a new version: the governing-language text, its governing language (defaulting to `legal.governinglanguage`) and any translations (PRIV-CONS-005). A version without governing-language text is refused, **422** `privacy.notice.governingtextmissing`, and the condition is raised on OPS-ALERT-001 (PRIV-CONS-006). Takes a required boolean `material`; `true` supersedes every live consent recorded against an earlier version of that document and marks those subjects for re-consent, `false` publishes and touches no consent (PRIV-CONS-007, D-153, D-166). Not gated |
-| `PUT /admin/documents/{document}/versions/{version}/translations/{language}` | Attaches or corrects a translation on a published version without creating a new one (PRIV-CONS-006). **404** `privacy.document.notfound` where the version does not exist |
+| `POST /admin/notices` · `POST /admin/documents/{document}/versions` | Publishes a new version: the governing-language text, its governing language (defaulting to `legal.governinglanguage`) and any translations (PRIV-CONS-005). A version without governing-language text is refused, **422** `privacy.notice.governingtextmissing`, and the condition is raised on OPS-ALERT-001 (PRIV-CONS-006). Takes a required boolean `material`; `true` supersedes every live consent recorded against an earlier version of that document and marks those subjects for re-consent, `false` publishes and touches no consent (PRIV-CONS-007, D-153, D-166). **400** `api.request.malformed` naming `document` where `{document}` is not a document name (INT-SMS-003), answered before the body is read, so nothing is published and no condition is raised (D-183). Not gated |
+| `PUT /admin/documents/{document}/versions/{version}/translations/{language}` | Attaches or corrects a translation on a published version without creating a new one (PRIV-CONS-006). **400** `api.request.malformed` naming `document` where `{document}` is not a document name (INT-SMS-003, D-183) · **404** `privacy.document.notfound` where the version does not exist |
 
 ### Compliance records — `compliance:manage`
 
@@ -2193,7 +2240,7 @@ Self-service explanation for **non-concealed** types is `GET /account/explanatio
 | `GET /admin/compliance/licences` | The licence and permit records as stored (OPS-MAINT-001) |
 | `PUT /admin/compliance/licences` | Replaces the licence and permit records the system warns on (OPS-MAINT-001); the body is the list of records, each keyed by the caller's `id`; two records under one `id` are refused **422** `api.request.invalid` (`details.member` `id`) |
 | `GET` · `POST /admin/compliance/maintenance` | Reads and appends the maintenance log (OPS-MAINT-001); the entry's actor is the signed-in subject; an entry dated after now is refused **422** `api.request.invalid` (`details.member` `performedAt`); no route changes or removes an entry |
-| `PUT /admin/compliance/assessments` | The three human-input fields of the records of processing (PRIV-ROPA-001): the data owner, the implemented organizational security measures, and the links to LIA, DPIA and TIA. A statement replaces the three whole: a field it omits is cleared, and the links are the list it carries. The deployment holds one statement. **204** |
+| `PUT /admin/compliance/assessments` | The three human-input fields of the records of processing (PRIV-ROPA-001): the data owner, the implemented organizational security measures, and the links to LIA, DPIA and TIA. A statement replaces the three whole: a field it omits, or sends as `null`, is cleared, and the links are the list it carries. `dataOwner` and `organizationalSecurityMeasures` are free text (API-CONV-002): trimmed, and refused **400** `api.request.malformed` naming the member where blank or longer than 1024 characters (D-183). The deployment holds one statement. **204** |
 
 ---
 
@@ -2260,11 +2307,21 @@ included, is read as not failed and changes nothing.
 
 Google delivers the Security Event Token as the request body and follows RFC 8935: a
 carried or repeated event is answered **202** with no body; a token that fails
-validation (unreadable, carrying no `jti`, or not verified by the provider's keys) is
-answered **400** with a JSON body carrying `err`, an error code of RFC 8935 section 2.4,
-and `description` (RFC 8935 section 2.3); the rate limit is answered **429** with
-`Retry-After`. Apple posts `{ "payload": "<token>" }` and is answered **200** with no
-body.
+validation is answered **400** with `Content-Type: application/json`,
+`Content-Language: en` and a JSON body carrying `err`, the RFC 8935 section 2.4 code of
+the first failure in this order, and `description`, which carries the same code (RFC
+8935 section 2.3, LIB-API-003): a token that cannot be read as a Security Event Token,
+or carries no `jti` (RFC 8417 section 2.2), `invalid_request`; a provider not declared
+(LIB-HOST-001), `invalid_issuer`; a key identifier the provider's published key set does
+not hold, or a signature its key does not verify, `invalid_key`; an `iss` other than the
+issuer the provider's document names, `invalid_issuer`; an `aud` naming none of the
+declared `clientIds`, `invalid_audience`; an `exp` that has passed, `invalid_request`,
+while a token carrying no `exp` is not refused for it. The rate limit is answered
+**429** with `Retry-After`. Apple posts `{ "payload": "<token>" }` and is answered
+**200** with no body. On either route, a provider document the library cannot have or
+read (its metadata or its key set) refuses nothing: the delivery is answered **500**
+`system.fault`, nothing is claimed, recorded or changed, and the provider may deliver
+the event again (RFC 8935 section 2.3).
 
 Every other refusal on a callback, the host's included, is `integration.callback.rejected`:
 **429** with `Retry-After` and `details.retryAt` where `integration.callback.ratelimit`
@@ -2274,7 +2331,7 @@ whose earlier delivery is still being carried, its claim younger than
 is not counted as a rejection, and is carried when the provider delivers it again; one
 meeting an older unsettled claim takes it over and is carried (BFF-MACH-002).
 
-*Source: AUTH-ABUSE-007, INT-GEN-003, IDN-LIFE-012a, BFF-MACH-002, D-164, D-166*
+*Source: AUTH-ABUSE-007, INT-GEN-003, IDN-LIFE-012a, BFF-MACH-002, D-164, D-166, D-183*
 
 **Acceptance criteria**
 1. A forged callback with a guessed reference is rejected and logged.

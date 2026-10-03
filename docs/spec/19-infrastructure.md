@@ -355,12 +355,14 @@ raised alerts to their channels every `outbox.poll.interval` (OPS-ALERT-001); th
 watches of the host clock (INF-HOST-001), of certificate renewal (INF-TLS-003) and of
 the emergency credential (OPS-BOOT-001); the privacy-request deadline alerts and the
 holiday-list look (PRIV-RIGHT-002); and the read-volume baseline (OPS-ALERT-005)
-(D-148, D-166). Each runs as the system principal `10` names for it (INF-BG-002).
+(D-148, D-166). Each runs as the system principal `10` names for it (INF-BG-002). A job
+may run in several processes at once; what a delivery job carries is claimed row by row
+before it is carried (CONV-DESIGN-003), so each row is carried by one process at a time.
 The key-encryption-key re-wrap (OPS-SEC-003)
 is not background work of the worker: it runs inside the command-line process so that
 it does not depend on the application being up (D-147).
 
-*Source: D-148, D-166; D-147, the items named above*
+*Source: D-148, D-166, D-183; D-147, the items named above*
 
 **Acceptance criteria**
 1. Scheduled work runs without a person triggering it.
@@ -370,6 +372,7 @@ it does not depend on the application being up (D-147).
    router directly from the worker, so a stalled carrier still reports itself
    (OPS-ALERT-001).
 3. No job's run delays another job's turn in the same process.
+4. Two processes running one delivery job at once carry each row once.
 
 ---
 

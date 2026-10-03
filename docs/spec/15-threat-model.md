@@ -21,7 +21,7 @@ here as the worked example a threat model needs; a host substitutes its own.
 | **The host's commercial records** | For the first host, its customer list and pricing, judged its most commercially valuable asset (see §3.1) |
 | **Staff credentials** | Access to everything above |
 | **System availability** | Downtime blocks the host's business; confirmed, with the nuance in §7 |
-| **Registration session store** | Staged identifiers, verification state, a password hash and enrolled authenticators for accounts that do not yet exist; bound to one browser, swept at `registration.session.lifetime` (REG-SESS-001) |
+| **Registration session store** | Staged identifiers, verification state, a password hash, enrolled authenticators, an open WebAuthn ceremony, an unconfirmed TOTP secret and the whole source address, for accounts that do not yet exist; bound to one browser, swept at `registration.session.lifetime` (REG-SESS-001, D-183) |
 | **Restriction records** | An HMAC of a destination address, its key version and send timestamps, for addresses that may belong to no account; deleted once the longest destination interval has passed since the newest send, whether or not another send is made (AUTH-ABUSE-004, R-A21, D-166) |
 | **Session location** | A city-level location per live session, resolved from a local IP database and kept only with the session record (AUTH-SESS-013) |
 | **Preference store** | Host-declared typed values under the subject key; the library never reads their meaning (REG-PREF-001) |

@@ -62,9 +62,9 @@ breaking.
 |---|---|
 | **Model builder API** | Resource type declaration, containment, concealment, sensitivity, purposes with their data and subject categories, roles, the step-up gate and the purpose bound to an action, **derivations**; and the processing read back from them, `DeclaredProcessing` and `DeclaredPurpose` with its `ConsentKind` (`10` section 5.10) |
 | **Permission filter shape** | The expression form and the SQL fragment form |
-| **Operations contract** | The service contracts for every library-owned operation (LIB-API-005), the strongly typed identifiers they take and return (CONV-DESIGN-004), `PrivacyRequestId` among them, the gates one area asks of another, `IAccessGate` and `IStepUpGate`, the key ring's contract (CONV-CODE-007), which every area borrows a key through and no host implements, and the contract of the mail server in use (CONV-DESIGN-007), which several areas ask and no host implements |
-| **Extension contracts** | The interfaces a host implements or replaces for the library to call: the mail and SMS transports, `INotificationHandler` with `SendRequest`, `SendDestination` and `SendReference`, and `ISecretSource` (LIB-EXT-001); the declarations and environment seams of LIB-HOST-001; the assurance provider of LIB-HOST-004 |
-| **Emitted events** | Notification and lifecycle event contracts, including the identifier, restriction and device events of D-146 (`IdentifierAdded`, `IdentifierRemoved`, `IdentifierPrimaryChanged`, `SendingRestrictionChanged`, `SendingRestrictionGranted`, `DeviceVerified`; `10` section 5b), each delivered to every registered `IEventConsumer<TEvent>` from a row written in the emitting transaction, retried under `outbox.retry.*`, and on exhaustion failed with `degradation`; publication is not replaceable (CONV-DESIGN-002). And the host registrations that answer for them: `ISubjectEventSubscriber`, naming the resource types it covers (`Covers`), and `IPurposeHandler`, naming the purposes it handles (`Purposes`) |
+| **Operations contract** | The service contracts for every library-owned operation (LIB-API-005), the strongly typed identifiers they take and return (CONV-DESIGN-004), `PrivacyRequestId` among them, the gates one area asks of another, `IAccessGate` and `IStepUpGate`, the governed send every sending area asks of `Janus.Authentication` (`IGovernedSend`, taking an `OutboundMessage`; CONV-LAYOUT-002), the key ring's contract (CONV-CODE-007), which every area borrows a key through and no host implements, and the contract of the mail server in use (CONV-DESIGN-007), which several areas ask and no host implements |
+| **Extension contracts** | The interfaces a host implements or replaces for the library to call: the mail and SMS transports, `INotificationHandler` with `SendRequest` (the admitted message: its kind, destination, subject, language, values and the `SendReference` it is carried under, and none of the restrictions' inputs), `SendDestination` and `SendReference`, and `ISecretSource` (LIB-EXT-001); the declarations and environment seams of LIB-HOST-001; the assurance provider of LIB-HOST-004 |
+| **Emitted events** | Lifecycle event contracts, including the identifier, restriction and device events of D-146 (`IdentifierAdded`, `IdentifierRemoved`, `IdentifierPrimaryChanged`, `SendingRestrictionChanged`, `SendingRestrictionGranted`, `DeviceVerified`; `10` section 5b), each delivered to every registered `IEventConsumer<TEvent>` from a row written in the emitting transaction, retried under `outbox.retry.*`, and on exhaustion failed with `degradation`; publication is not replaceable (CONV-DESIGN-002). And the host registrations that answer for them: `ISubjectEventSubscriber`, naming the resource types it covers (`Covers`), and `IPurposeHandler`, naming the purposes it handles (`Purposes`) |
 | **Database schema** | All library-owned tables |
 | **Ancestry closure table** | Structure and semantics of `identity.ancestry`, `identity.effective_grants` and `identity.consented_resources` |
 | **Error codes** | Machine-readable codes, their meanings and the status each answers |
@@ -74,7 +74,7 @@ breaking.
 | **HTTP endpoints** | Method, path, body members, status codes and error codes of each endpoint, as `09-api-contract` gives them, held in a committed contract file generated from the endpoint data source |
 | **Configuration keys** | Names, types, scopes and value constraints, and the key families |
 
-*Source: D-026.4, D-017, D-041, D-106, D-146, D-166, D-171, D-172, D-176*
+*Source: D-026.4, D-017, D-041, D-106, D-146, D-166, D-171, D-172, D-176, D-183*
 
 The ancestry closure is public because hand-written SQL will query it. It cannot be
 restructured without a major version.
@@ -100,7 +100,7 @@ change in any release.
 **LIB-API-003** — Errors crossing the boundary SHALL be **machine-readable codes with
 structured data**, never rendered prose. **There is no exception.**
 
-*Source: D-021, D-054, D-166*
+*Source: D-021, D-054, D-166, D-183*
 
 An earlier draft carved out endpoints the library served directly to a browser. That
 carve-out is removed: **the library never returns user-facing text over HTTP.**
@@ -122,7 +122,8 @@ answered to the browser in the API-CONV-002 body: 400 `api.request.malformed` wi
 `details.error` the protocol's code, or 500 `system.fault` for `server_error`. The Google
 security-event route answers a token that fails validation in the shape RFC 8935 section
 2.3 fixes (`09` section 10); the `description` that shape requires, whose content the
-RFC leaves to the receiver, SHALL carry the `err` code again and never a sentence.
+RFC leaves to the receiver, SHALL carry the `err` code again and never a sentence, and
+the response SHALL carry `Content-Language: en`, which that section requires.
 
 **Acceptance criteria**
 1. No error returned across the boundary contains a user-facing sentence.
@@ -149,7 +150,7 @@ contract in `Janus.Core`, and SHALL be exposed **twice**: callable in-process by
 host, and as an HTTP endpoint in `Janus.Hosting` mapped over the same contract. The three
 operations named below as called in process only have no endpoint.
 
-*Source: D-106, D-166, D-172*
+*Source: D-106, D-166, D-172, D-183*
 
 
 The management application hosts the library in-process, so its natural call is the
@@ -183,8 +184,12 @@ session, and the registration signal.
 
 **Every operation takes an access context** (AUTHZ-IMP-001) — a system principal
 with a stated reason when called from background work (IDN-PRIN-001) — and is
-authorized by the gate exactly as the endpoint would be. Calling in-process is not a
-way round the permission.
+authorized by the gate exactly as the endpoint would be. Calling in-process is not a way
+round the permission. The read of the provider's published key set (`IOidc.KeysAsync`)
+is no operation, so it takes no access context and meets no gate: it answers the public
+keys `GET /oidc/jwks` publishes and nothing else, reads no record of a person, and is
+asked by the key set's endpoint and by the sign-on's reading of the identity token
+(BFF-SESS-006), where no person acts and no background work runs.
 
 **Seams that join the host's transaction.** `IResources` (AUTHZ-INHERIT-002) and
 `ICallbackReferences` (BFF-MACH-003) are seams, not operations of this contract: each
@@ -246,10 +251,10 @@ operation that changes a relationship; and the conformance suite's provider prob
 | **Reserved usernames** | Optional: names added to the library's reserved list (REG-IDENT-009) (D-153) |
 | **Dictionary words** | Optional: words added to either list the `dictionary` password source ships, the English list or the Arabic transliteration list (AUTH-PASS-004). A host extends the shipped lists by this declaration only, never by a deployment file. Absent, the shipped lists alone answer (D-166) |
 | **Sensitive-body endpoints** | Optional: `SensitiveBody` (`Janus.Core`), put on an endpoint as an attribute or as endpoint metadata, which turns body logging off for it (BFF-LOG-002) (D-153). Every endpoint the library maps carries it |
-| **Relationship sources** | Required for each relationship a declared derivation is over, materialised or not: a scoped source of the relationship's rows from the host's own context. The library evaluates over it the `GET /admin/access` view (AUTHZ-DERIVE-007) and the daily drift check of materialised derivations, `derivation.materialised.driftcheck` (AUTHZ-DERIVE-005); the rows stay the host's and the query runs in the host's context (LIB-HOST-002). Absent, startup fails with `model.startup.declarationmissing` naming the relationship |
+| **Relationship sources** | Required for each relationship a declared derivation is over, materialised or not: `RelationshipSource` (`Janus.Core`), one per relationship, made by `RelationshipSource.Of<TContext, TRow>(relationship, rows)`: `TContext` is the host's own context, which maps the contract tables (`MapAuthorizationTables`, LIB-HOST-002) and which the container gives in a scope; `TRow` is the row type the derivation's selectors are declared over; `rows` is a `Func<TContext, IQueryable<TRow>>` answering the relationship's rows from that context. In the scope of the request or job run that reads, the library takes one instance of `TContext`, the ancestry, effective grants and consented resources it maps, and the rows `rows` answers over that instance, so each evaluation is one query in the host's context. The library evaluates over it the `GET /admin/access` view (AUTHZ-DERIVE-007) and the daily drift check of materialised derivations, `derivation.materialised.driftcheck` (AUTHZ-DERIVE-005); the rows stay the host's and the query runs in the host's context (LIB-HOST-002). Absent, startup fails with `model.startup.declarationmissing` naming the relationship. A relationship source given twice or naming no declared relationship, a `TRow` other than the derivation's row type, or a `TContext` the container does not give in a scope or whose model does not map the contract tables fails startup with `model.startup.declarationinvalid`, `details.declaration` `relationshipSource.<relationship>` and `details.field` `relationship`, `rows` or `context`; the check builds the context's model and runs no query |
 | **Image codec** | Required while any policy's `photos` field is `true` (IDN-ATTR-002, `10` section 4.1a): `ImageCodec` (`Reencode`), `Func<ReadOnlyMemory<byte>, int, CancellationToken, ValueTask<ReadOnlyMemory<byte>?>>`, taking the upload and the longest side in pixels and answering the re-encoded JPEG with every metadata segment removed, or nothing for bytes the deployment does not accept (`identity.photo.invalid`, IDN-ATTR-004). The formats IDN-ATTR-004 accepts and the quality it stores are the contract the codec is declared to meet. Bootstrap writes the administrative organization's `photos` as `false`. A policy change setting `photos` to `true` without a codec is refused with `config.value.notallowed`, `details.field` `photos` and `details.requires` `imageCodec`; a stored policy showing photos without one fails startup with `model.startup.declarationmissing` naming `imageCodec` (D-162) |
 | **Social providers** | Optional, once per social provider: `SocialProvider` with `provider` (a factor the catalogue marks as a social provider), `metadata` (the provider's document naming the issuer and key set its security events are signed under), `configuration` (its OpenID Connect discovery document), `return` (the address registered at the provider that the browser comes back to, ending in `/callbacks/providers/{provider}/return`) and `clientIds` (the audiences an event names; the first is the client a sign-in runs under and the only audience its identity token may name). Its credential is read through the secret source by the provider's name: a static client secret the provider issued, or a signing credential (issuer, key identifier and a P-256 private key) from which the library mints the client secret at each exchange (IDN-LIFE-012, OPS-SEC-002). None declared: no round trip to that provider starts and its events are refused. Declared twice, naming a factor that is not a social provider, with an address that is not absolute `https`, a `return` whose path does not end as above, or no client or an empty one: startup fails with `model.startup.declarationinvalid` naming the member. A credential that is empty, or a signing credential whose issuer or key identifier is blank or whose key is not a P-256 private key: startup fails with `model.startup.secretunavailable`, `details.key` `socialProvider.<provider>` (IDN-LIFE-012a, D-164) |
-| **Mail server** | Optional: `IMailServer` (`ProvisionAsync`, `MailboxesAsync`, `AppPasswordsAsync`, `CreateAppPasswordAsync`, `RevokeAppPasswordAsync`; INT-MAIL-006, INT-MAIL-008, INT-MAIL-010), or the shipped JMAP adapter, which the library uses where `integration.mailserver.endpoint` is set when the application starts and the host registered none (LIB-EXT-001). A deployment has a mail server registered where the host registered an `IMailServer`, or where that key was set at the start; which one is in use is decided once, at the start (CONV-DESIGN-007), so a change of the key by `configure` takes effect at the next start (OPS-CFG-004). A push carries the mailbox's identifier, a key stable until the server confirms it, the canonical address and the mailbox state of `10` (`disabled` · `enabled` · `removed`); a push that meets, at the mailbox's name, an account not carrying that identifier is answered `integration.mailserver.conflict`, which marks it failed at that attempt with no further attempt in the run; any other failure is retried under `outbox.retry.*`, and a push marked failed is begun again each day (INT-MAIL-007); the listing answers, for each account, the mailbox identifier it carries (none where it carries none), its address and whether it is enabled; the app-password calls carry the person's token. Absent, nothing is pushed or compared (the rows are still written, and the first pass of a start with one registered pushes every state owed) and every app-password operation answers `identity.mailbox.notfound`, except a creation from the break-glass session or a session opened from it, which is refused with `authz.denied` first (OPS-BOOT-002); a deployment whose staff mail is hosted elsewhere needs none |
+| **Mail server** | Optional: `IMailServer` (`ProvisionAsync`, `MailboxesAsync`, `AppPasswordsAsync`, `CreateAppPasswordAsync`, `RevokeAppPasswordAsync`; INT-MAIL-006, INT-MAIL-008, INT-MAIL-010), or the shipped JMAP adapter, which the library uses where `integration.mailserver.endpoint` is set when the application starts and the host registered none (LIB-EXT-001). A deployment has a mail server registered where the host registered an `IMailServer`, or where that key was set at the start; which one is in use is decided once, at the start (CONV-DESIGN-007), so a change of the key by `configure` takes effect at the next start (OPS-CFG-004). A push carries the mailbox's identifier, a key stable until the server confirms it, the canonical address and the mailbox state of `10` (`disabled` · `enabled` · `removed`); a push that meets, at the mailbox's name, an account not carrying that identifier is answered `integration.mailserver.conflict`, which marks it failed at that attempt with no further attempt in the run; any other failure is retried under `outbox.retry.*`, and a push marked failed is begun again each day (INT-MAIL-007); the listing answers, for each account, the mailbox identifier it carries (none where it carries none), its address (none where the address the server lists does not read as an email address, IDN-ACCT-004) and whether it is enabled; the app-password calls carry the person's token. Absent, nothing is pushed or compared (the rows are still written, and the first pass of a start with one registered pushes every state owed) and every app-password operation answers `identity.mailbox.notfound`, except a creation from the break-glass session or a session opened from it, which is refused with `authz.denied` first (OPS-BOOT-002); a deployment whose staff mail is hosted elsewhere needs none |
 | **Mail server client** | Required where a mail server is registered, no default: `MailServerClient` (`clientId`), the registry's `protocol` client the mail server trusts, to which the library issues the person's token for the app-password calls (INT-MAIL-010, AUTH-OIDC-001 AC4). Absent, startup fails with `model.startup.declarationmissing` naming `mailServerClient.clientId` |
 | **DNS resolver** | Optional: `IDnsResolver` (`TextRecordsAsync`), the TXT lookup domain verification reads (REG-DOM-001). Absent, adding a domain to an organization's lock is refused with `config.value.notallowed`, `details.requires` `dnsResolver`, and a stored listed domain fails startup with `model.startup.declarationmissing` naming `dnsResolver`; a deployment that locks no domain needs none |
 | **Location file** | Optional: `ILocationSource`, which opens the IP-to-city file in the format INT-GEN-006 gives. Absent, no session carries a location and `degradation` is raised (INT-GEN-006, AUTH-SESS-013) |
@@ -276,7 +281,7 @@ other requirements already contradicted; the subject-event handlers added by D-0
 were still missing after that correction; and `10` then listed twenty keys with no
 default, of which fourteen could be defaulted and six belonged here (D-107).*
 
-*Source: D-148; D-005, D-015, D-068, D-107, D-146, D-153, D-162, D-166, D-176, D-177, D-179, D-180*
+*Source: D-148; D-005, D-015, D-068, D-107, D-146, D-153, D-162, D-166, D-176, D-177, D-179, D-180, D-183*
 
 **Acceptance criteria**
 1. A minimal working configuration requires only the declarations listed above; every
@@ -356,7 +361,7 @@ attained assurance level, whether it was phishing-resistant, the instant it was 
 and the account's reachable assurance. The gate is judged from that report (AUTH-STEP-002).
 Absent one, step-up checks SHALL fail closed.
 
-*Source: D-041, AUTH-STEP-003, D-166*
+*Source: D-041, AUTH-STEP-003, D-166, D-183*
 
 **Acceptance criteria**
 1. Authorization alone compiles and runs.
@@ -365,6 +370,10 @@ Absent one, step-up checks SHALL fail closed.
 3. With an assurance provider whose report meets a bound gate, the action is admitted;
    with one whose report does not, it is refused with `auth.stepup.required` carrying the
    gate.
+4. A report whose instant is after now, whose level is not one of `10` section 5.4, or
+   that the provider fails to give, meets no gate; a host-named gate is judged at the
+   strictest of the policy's gates, field by field; where the acting person's own
+   session of the library carries the request, the provider is not asked.
 
 ---
 

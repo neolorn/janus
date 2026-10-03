@@ -54,7 +54,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `identity.organization.protected` **(new)** | The administrative organization cannot be deleted; 409 | IDN-ORG-004, D-166 |
 | `identity.organization.notfound` | A path under `/admin` whose `{id}` names no organization the deployment holds (`/admin/organizations/{id}/...`); refused before anything is written; 404 | IDN-ORG-003, IDN-MEM-001, API-CONV-003, D-166 |
 | ~~`identity.account.restricted`~~ | *Retired by D-162. A restricted account's refused action answers `authz.restricted` (AUTHZ-GATE-006).* | |
-| `identity.account.notfound` | An administrative operation names a subject no account bears; 404 | IDN-LIFE-013, IDN-LIFE-003, PRIV-RIGHT-004, IDN-ATTR-003, D-166 |
+| `identity.account.notfound` | An administrative operation names in its path a subject no account bears (`/admin/accounts/{subject}/...`); an out-of-band privacy request whose body names such a subject is `api.request.invalid` (422) instead (PRIV-RIGHT-001, D-183); 404 | IDN-LIFE-013, IDN-LIFE-003, PRIV-RIGHT-004, IDN-ATTR-003, D-166, D-183 |
 | `identity.account.stateconflict` | The operation does not apply to the state the account is in: a takedown of a `deleted` account, a suspension of one `deleting` or `deleted`, a reactivation of one no administrator suspended, a restriction lifted from one not `restricted`, a cancellation where no grace window runs. `details.state` names the state (section 5.1) and, where it is `suspended`, `details.suspendedBy` the origin (section 5.12b); 409 | IDN-ACCT-007, IDN-LIFE-013, IDN-LIFE-003, PRIV-RIGHT-004, D-166 |
 | `identity.takedown.windowelapsed` **(new)** | Takedown reversal requested after its window, whether or not the account has been erased; 422 | IDN-LIFE-003, D-127, D-166 |
 | `identity.change.windowelapsed` **(new)** | Undo of an identifier removal or replace presented after `identifier.change.coolingoff`; 422 | REG-IDENT-006, REG-IDENT-007, D-140, D-146 (was IDN-LIFE-007, IDN-LIFE-010), D-166 |
@@ -85,7 +85,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 
 | Code | Meaning | Source |
 |---|---|---|
-| `auth.code.expired` | A verification code or an authentication code (the `emailCode` code, the `phoneCode` second-step code, the code a sign-in link shows in another browser) past its lifetime, or presented after its attempt cap, the correct code included (AUTH-FACT-004 AC3); 422 | AUTH-FACT-004, D-166 |
+| `auth.code.expired` | A verification code or an authentication code (the `emailCode` code, the `phoneCode` second-step code, the code a sign-in link shows in another browser) past its lifetime, or presented after its attempt cap, the correct code included (AUTH-FACT-004 AC3); also a registration link token that, pressed, opens nothing (REG-SESS-003 AC6); 422 | AUTH-FACT-004, REG-SESS-003, D-166, D-183 |
 | `auth.code.invalid` | A verification code or an authentication code rejected; 422 | AUTH-FACT-004, D-166 |
 | `auth.code.replayed` **(new)** | Code already consumed within its window; 422 | AUTH-FACT-005, D-166 |
 | `auth.factor.notpermitted` | A factor the account may not use here: a verification-only factor offered as authentication, or a factor the policy in force does not permit in `loginFactors`, presented at sign-in or at step-up; 422 | AUTH-FACT-002, AUTH-STEP-002, IDN-LIFE-009b, D-166 |
@@ -97,6 +97,8 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `auth.credential.notfound` | The account holds no active credential by that identifier of the kind the operation acts on, including an app password the mail server does not hold for the person; a credential of another account answers the same; 404 | AUTH-FACT-001, INT-MAIL-010, D-162, D-166 |
 | `auth.credential.labelinvalid` | A credential or app-password label that is empty, over 64 characters, or already held by another credential of the same kind on the account in any capitalisation (OPS-DB-001); 422 | AUTH-FACT-001, REG-MAIL-002, D-162, D-166 |
 | `auth.credential.notupgradable` | The credential named at `POST /account/credentials/{id}/upgrade` is the account's and is not a second-factor security key; 409 | AUTH-FACT-002b, D-162, D-166 |
+| `auth.factor.passwordrequired` **(new)** | A second step (a TOTP generator, a second-factor security key) or a recovery-code set asked for on an account that holds no password (AUTH-FACT-002b); 409 | AUTH-FACT-002b, AUTH-FACT-008, D-183 |
+| `auth.factor.notenrolled` **(new)** | The account holds no enrolment of the kind the operation acts on (no recovery-code set to record as exported); 409 | AUTH-FACT-008, D-183 |
 | `auth.password.blocklisted` | Password found in the compromised corpus; 422 | AUTH-PASS-004, D-166 |
 | `auth.password.tooshort` | Below the floor for this factor count; 422 | AUTH-PASS-001, D-166 |
 | `auth.password.toolong` | A password longer than `password.maximum` at registration, change or reset; nothing is truncated; no details; 422 | AUTH-PASS-001 AC3, D-162, D-166 |
@@ -108,7 +110,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `auth.screening.unavailable` **(new)** | Blocklist screening could not run; operation refused; 422 | AUTH-PASS-004, D-166 |
 | `auth.session.expired` | Session past idle or absolute limit; `details.reauthenticate` is `single-factor` when one factor (passkey or password) restores the session — idle expiry inside the absolute window, **AAL2-policy principals only** — or `full`; the break-glass session answers `full` on any expiry (OPS-BOOT-002); 401 | AUTH-SESS-005, D-123, D-139, D-166 |
 | `auth.session.csrfinvalid` **(new)** | A state-changing browser request refused by a layer of `17` section 4: fetch metadata, the custom request header, the origin or the synchronizer token; one code for every layer, which only the log entry names; also a sign-on or provider round trip whose `state` is absent, unbound or not the one the browser was sent out with (BFF-SESS-006, IDN-LIFE-012); 403 | AUTH-SESS-007, BFF-CSRF-001 to BFF-CSRF-004, D-162, D-166 |
-| `auth.stepup.required` **(new)** | The gate is not met; `details` carries `required` (`level`, `phishingResistant`, `maxAge` in whole seconds), `outcome` (`present` · `enrol` · `report-loss` · `pending`), `options` (the combinations of catalogue identifiers that would meet it) and `pendingUntil`, null unless the outcome is `pending`. At the invitation acknowledgement `details` carries `outcome` `enrol` and `policyRequirement` `{ field, value }` in place of the gate values. No `details` where no session of the library belonging to the acting account was judged (`09` `/auth/step-up`); 403 | AUTH-STEP-001, AUTH-STEP-002, D-141, D-166 |
+| `auth.stepup.required` **(new)** | The gate is not met; `details` carries `required` (`level`, `phishingResistant`, `maxAge` in whole seconds), `outcome` (`present` · `enrol` · `report-loss` · `pending`), `options` (the combinations of catalogue identifiers that would meet it) and `pendingUntil`, null unless the outcome is `pending`. At the invitation acknowledgement `details` carries `outcome` `enrol` and `policyRequirement` `{ field, value }` in place of the gate values. A gate judged from a host's assurance report (LIB-HOST-004), where no session of the library that is the acting person's own carries the request, that is not met (a provider failure included) carries `required`, `outcome` `present`, empty `options` and a null `pendingUntil`. Otherwise no `details` where no session of the library belonging to the acting account was judged (`09` `/auth/step-up`); 403 | AUTH-STEP-001, AUTH-STEP-002, LIB-HOST-004, D-141, D-166, D-183 |
 | `auth.stepup.unavailable` **(new)** | No assurance provider registered; 403 | AUTH-STEP-003, D-166 |
 | `auth.throttled` **(new)** | A progressive delay or a rate limit is in effect; `details.retryAt` is the instant the next attempt is looked at, and the answer carries `Retry-After`; a throttled navigation (a social provider's return) carries `error=auth.throttled` and `retryAt` in its query instead (BFF-ABUSE-001); 429 | AUTH-ABUSE-001, AUTH-ABUSE-002, AUTH-RECOV-002, OPS-ALERT-006, D-166 |
 | `auth.restriction.exceeded` **(new)** | A send refused by a named restriction; `details.retryAt` is the earliest time a bucket lifts, identical whether or not the address is registered (AUTH-ABUSE-002). Replaces `integration.sms.windowactive`; 429 | AUTH-ABUSE-004, D-146, D-166 |
@@ -144,7 +146,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `authz.restricted` | The subject's processing is restricted: a modifying action, or a change to the account's identifiers, credentials, profile or preferences, or an invitation acknowledgement, asked by a restricted account, the creation of a mail app password included. What IDN-ACCT-007 keeps available is admitted: ending sessions, reporting a credential lost, listing and revoking app passwords, the link-borne undo of an identifier change, and a credential set by recovery or enrolled where a policy hold stops its sign-in (AUTH-FACT-017); 403 | AUTHZ-GATE-006, IDN-ACCT-007, INT-MAIL-010, D-166 |
 | `authz.resource.notfound` | One not-found answer where nothing is to be told, meaning "nothing here" to the frontend whatever the case: a request in which the gate refused a record of a type that conceals its records, whether or not the record exists and whatever the endpoint wrote after the refusal, answered by the browser profile's stage 11 and never by an operation, `details.correlation` the audit record of the refusal and nothing else; a record named on an `/account` route that is not the caller's (a device or a session of another account, or none), with empty `details`; a request under the mount that no endpoint serves, a path no endpoint matches or a method a matched path does not take, with empty `details` on both profiles; 404 | AUTHZ-CONCEAL-001, AUTHZ-CONCEAL-004, BFF-ERR-003, BFF-ORDER-001 stage 11, LIB-API-003 AC4, API-CONV-003, CONV-DESIGN-002, D-166 |
 | `authz.derivation.sourcesmissing` | A check, capability query or explanation on a type that a non-materialised derivation is declared on or reaches through containment was made without the host-supplied sources, whatever the role the derivation confers allows; a fault, not a denial, answered as `system.fault` (500) | AUTHZ-DERIVE-001, D-161, D-162, D-166 |
-| `authz.truthtable.disagreement` | A conformance finding, raised by no request: a case of the host's truth table that the single check or the list filter decides otherwise than the table states. `details` carry `type`, `scenario` (section 5.30), `permission`, `expected`, `check` and `filter`, and for a derived case `derivation`, the relationship | LIB-TEST-001 AC2, AUTHZ-TEST-001, D-166 |
+| `authz.truthtable.disagreement` | A conformance finding, raised by no request: a case of the host's truth table that the single check or the list filter decides otherwise than the table states. `details` carry `type`, `scenario` (section 5.30), `permission`, `expected`, `check` and `filter`, for a derived case `derivation`, the relationship, and for a step-up case `gate`, the action's gate name | LIB-TEST-001 AC2, AUTHZ-TEST-001, D-166, D-183 |
 
 ### 1.4 Privacy
 
@@ -177,9 +179,10 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `config.change.reasonrequired` **(renamed)** | A configuration change submitted without a reason: a key at `/admin/config/{key}`, an organization's policy or its locked domains, any edit of the restriction set, a tightening included, or a restriction grant; and a protected key set by `configure` from the server without `--reason`; `details.key` names the setting where one is changed; 422 | OPS-CFG-002, OPS-CFG-004, OPS-CFG-005, OPS-CFG-008, AUTH-ABUSE-004, D-146, D-166 (renamed from `auth.restriction.reasonrequired`) |
 | ~~`config.change.stepuprequired`~~ | *Retired by D-166. A loosening without step-up is refused with `auth.stepup.required` (`09` `PUT /admin/config/{key}`).* | |
 | `config.value.lastdestination` | A change would leave an `alerting.*.destinations` list empty; 422 | OPS-ALERT-004a, D-153 |
+| `config.change.superseded` **(new)** | A change of an `alerting.*.destinations` key found, under its row's lock, a value in force other than the one whose destinations it notified: a concurrent change committed meanwhile; nothing is changed; 409 | OPS-ALERT-004a, D-183 |
 | `config.policy.belowsystem` **(new)** | An organization policy field the replacement states is looser than the system default; `details.field` names the first such field in the order of section 4.1a; a field the replacement leaves out is not judged; 422 | AUTH-STEP-002a, D-143, D-166 |
-| `api.request.malformed` | The request could not be read: its body is not the shape the endpoint takes; a member it requires is absent or empty; a free-text member is outside 1 to 1024 characters after trimming (API-CONV-002; a blank reason whose absence has a code of its own answers that code); or a member or path segment holds a word outside the closed vocabulary this chapter or the declared model fixes for it (a takedown trigger outside section 5.12d, a configuration key the route does not serve, an undeclared permission). `details.member` names the member the reader stopped at, or the one the endpoint required, by its name as the request writes it: a member inside another by the member names from the body's top joined by dots; an element of a list, or a member inside one, by the list's name; a member inside an element of a body that is itself a list by its own name; and never with a `$` root or a list index (API-CONV-002); it carries nothing of the member's value; where the body failed before any member, the refusal carries the code alone. Also: an authorization request the provider refused and cannot return to a client, `details.error` then carrying the protocol's code and nothing else (LIB-API-003); a registration through `IResources` whose member is absent or unreadable, a sensitive type naming no `subject` included (AUTHZ-INHERIT-002, IDN-LIFE-002a); and, for a `Janus.Cli` command, a command, argument or input it cannot read, answered as one JSON line (OPS-BOOT-001, OPS-SEC-001, DR-016); 400 | API-CONV-002, API-CONV-003, D-162, D-166, D-179 |
-| `api.request.invalid` | A well-formed request refused on its meaning where no more specific code of section 1 exists: a body naming something that does not exist or cannot be acted on (an invitation's `documents` naming a document not published, `details.member` `documents`; an invitation's `formerMailbox` where no held mailbox stands for its corporate address, `details.member` `formerMailbox`; a group member that does not exist or belongs to another organization; a preferred second step naming a method the account has not enrolled, `details.member` `method`); a compliance record dated after now, or two licences under one identifier; a registration or move through `IResources` that the declaration or the library's records refuse. `details.member` names the member in the form `api.request.malformed` gives; 422 | API-CONV-002, API-CONV-003, REG-INV-001, REG-MAIL-003, AUTHZ-GROUP-001, IDN-ATTR-008, AUTHZ-INHERIT-002, IDN-LIFE-002a, OPS-MAINT-001, D-166, D-178, D-179 |
+| `api.request.malformed` | The request could not be read: its body is not the shape the endpoint takes; a member it requires is absent or empty; a free-text member is outside 1 to 1024 characters after trimming (API-CONV-002; a blank reason whose absence has a code of its own answers that code); or a member or path segment holds a word outside the closed vocabulary this chapter or the declared model fixes for it (a takedown trigger outside section 5.12d, a configuration key the route does not serve, an undeclared permission), or a route or query value that does not read as its type (a document name, an identifier, a restriction name), `details.member` naming it. `details.member` names the member the reader stopped at, or the one the endpoint required, by its name as the request writes it: a member inside another by the member names from the body's top joined by dots; an element of a list, or a member inside one, by the list's name; a member inside an element of a body that is itself a list by its own name; and never with a `$` root or a list index (API-CONV-002); it carries nothing of the member's value; where the body failed before any member, the refusal carries the code alone. Also: an authorization request the provider refused and cannot return to a client, `details.error` then carrying the protocol's code and nothing else (LIB-API-003); a registration through `IResources` whose member is absent or unreadable, a sensitive type naming no `subject` included (AUTHZ-INHERIT-002, IDN-LIFE-002a); and, for a `Janus.Cli` command, a command, argument or input it cannot read, answered as one JSON line (OPS-BOOT-001, OPS-SEC-001, DR-016); 400 | API-CONV-002, API-CONV-003, INT-SMS-003, D-162, D-166, D-179, D-183 |
+| `api.request.invalid` | A well-formed request refused on its meaning where no more specific code of section 1 exists: a body naming something that does not exist or cannot be acted on (an invitation's `documents` naming a document not published, `details.member` `documents`; an invitation's `formerMailbox` where no held mailbox stands for its corporate address, `details.member` `formerMailbox`; a group member that does not exist or belongs to another organization; an out-of-band privacy request naming a subject no account bears; a preferred second step naming a method the account has not enrolled, `details.member` `method`); a compliance record dated after now, or two licences under one identifier; a registration or move through `IResources` that the declaration or the library's records refuse. `details.member` names the member in the form `api.request.malformed` gives; 422 | API-CONV-002, API-CONV-003, REG-INV-001, REG-MAIL-003, AUTHZ-GROUP-001, IDN-ATTR-008, AUTHZ-INHERIT-002, IDN-LIFE-002a, OPS-MAINT-001, PRIV-RIGHT-001, D-166, D-178, D-179, D-183 |
 | `model.containment.cycle` **(new)** | Containment declaration forms a cycle | AUTHZ-MODEL-004 |
 | `model.derivation.unindexed` **(new)** | Derivation names an unindexed column | AUTHZ-DERIVE-004 |
 | `model.purpose.missingassessment` **(new)** | Legitimate interest declared without an assessment | PRIV-BASIS-002 |
@@ -189,14 +192,14 @@ message — rewording the human-facing text is free, changing the code is breaki
 | `model.startup.rpid` **(new)** | Startup: the relying party identifier is not a registrable suffix of a configured origin | AUTH-FACT-011, D-147 |
 | `model.startup.labellimit` **(new)** | Startup: the configured origins exceed the five-label limit of related origins | AUTH-FACT-012, D-147 |
 | `model.startup.schemamismatch` **(new)** | Startup: the database's migration history lacks a migration the build declares; `details.pending` lists the migrations owed; non-zero exit. A history holding migrations the build does not declare is not a mismatch (OPS-MIG-005) | OPS-MIG-002, D-147, D-166 |
-| `model.startup.secretunavailable` **(renamed)** | Startup: a secret the library reads through the host's secret source (LIB-EXT-001) was not supplied, or was supplied empty or unusable: a key-encryption key or fingerprint key version (a fingerprint key version shorter than 32 bytes included), the maintenance credential, the mail server's secret where the library's mail-server adapter is used, or a social provider's credential, read by the provider's name; `details.key` names the secret: `keyEncryptionKeys`, `fingerprintKeys`, `maintenanceCredential`, `mailServerSecret` or `socialProvider.<provider>`. A `Janus.Cli` command gives it where its standard input is a terminal (`details.key` `input`) or the document it reads there holds no usable key (`details.key` naming the member). Also raised where a stored value is wrapped under a key version no longer held, `details.version` naming it | OPS-SEC-001, AUTH-KEY-002, OPS-MIG-003a, OPS-SEC-003, LIB-EXT-001, D-147, D-166 (renamed from `model.startup.kekunavailable`) |
+| `model.startup.secretunavailable` **(renamed)** | Startup: a secret the library reads through the host's secret source (LIB-EXT-001) was not supplied, or was supplied empty or unusable: a key-encryption key or fingerprint key version (a fingerprint key version shorter than 32 bytes included), the maintenance credential, the mail server's secret where the library's mail-server adapter is used, or a social provider's credential, read by the provider's name; `details.key` names the secret: `keyEncryptionKeys`, `fingerprintKeys`, `maintenanceCredential`, `mailServerSecret` or `socialProvider.<provider>`. A `Janus.Cli` command gives it where its standard input is a terminal (`details.key` `input`) or the document it reads there holds no usable key (`details.key` naming the member). Also raised at the start where a row of the subject-key table that is not erased stands under a key-encryption key version the source does not supply, and, as a fault a request answers `system.fault` (section 6), by an unwrap of a stored value under a version no longer held; `details.version` names the version | OPS-SEC-001, AUTH-KEY-002, OPS-MIG-003a, OPS-SEC-003, LIB-EXT-001, D-147, D-166 (renamed from `model.startup.kekunavailable`), D-183 |
 | `model.startup.governinglanguage` **(new)** | Startup: `legal.governinglanguage` is unset | PRIV-CONS-005, LIB-HOST-001, D-147 |
 | `model.startup.preferencedeclaration` **(new)** | Startup: a host preference declaration is malformed | REG-PREF-001, D-147 |
 | `model.startup.declarationmissing` | Startup: a required deployment value or host declaration is absent: a key of section 4 that names the deployment, or a conditional one whose condition holds; a declaration of LIB-HOST-001 (the secret source, the passkey pages, the authentication addresses, the sign-on client, the landing origins, the mail server client where a mail server is registered, and each mail and SMS transport the deployment does not take from the library); a subject-event handler (none covering a type declared sensitive), a purpose handler (none naming an objectable purpose) or a restriction key supplier; a declaration a stored value or the model needs (the image codec while a policy's `photos` is `true`, the DNS resolver while a domain is listed, the relationship source of every declared derivation, materialised or not). Or the model declares an item without what it requires: an encrypted field without its subject column, a type without its purposes, a purpose without its data categories, a category without its retention floor, a consent-based purpose on a type with no one subject column (`details.key` `<type>.<purpose>`). `details.key`, `details.handler` or `details.supplier` names it. The declarations' `details.key` spellings are `secretSource`, `passkeyAddresses` (or its field), `authenticationAddresses.signIn`, `authenticationAddresses.provider`, `signOnClient.clientId`, `landingOrigins.authentication`, `landingOrigins.account`, `mailServerClient.clientId`, `mailTransport`, `smsTransport`, `imageCodec` and `dnsResolver`; a relationship source is named by its relationship | LIB-HOST-001, AUTHZ-MODEL-003, PRIV-PRIN-001, PRIV-RIGHT-005a, PRIV-RIGHT-005b, PRIV-RIGHT-001a, PRIV-SENS-002, IDN-ATTR-002, REG-DOM-001, AUTHZ-DERIVE-005, AUTHZ-DERIVE-007, D-153, D-162, D-166, D-180 |
-| `model.startup.declarationinvalid` | Startup: a declaration is present but malformed: a name held to the rule of INT-SMS-003 that breaks it (a governing document's, a subject-event subscriber's: 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_`); a text-message template naming a place section 5.26 does not list (`details.declaration` the message kind, `details.field` the place); an encrypted field or its subject column that is not a member of the declared type, or a subject column that is not of the library's subject identifier type; an encrypted field whose data category no purpose declared on its type names (`details.declaration` the type, `details.field` the field); a social provider declared twice or with a member outside its rule (`details.declaration` `socialProvider.<provider>`, for example `socialProvider.apple`, the name `model.startup.secretunavailable` gives the provider's credential; `details.field` the member, `provider` where the provider is declared twice or names a factor that is not a social provider). `details.declaration` and `details.field` name it. A landing origin that is not the origin of a registered browser client's return address, or an authentication landing origin that is not the origin of the sign-in address, is refused with `details.key` `landingOrigins.authentication` or `landingOrigins.account` | LIB-HOST-001, INT-SMS-003, PRIV-PRIN-001, PRIV-RIGHT-005a, AUTHZ-MODEL-003, IDN-LIFE-012, D-166, D-175 |
+| `model.startup.declarationinvalid` | Startup: a declaration is present but malformed: a name held to the rule of INT-SMS-003 that breaks it (a governing document's, a subject-event subscriber's: 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_`); a text-message template naming a place section 5.26 does not list (`details.declaration` the message kind, `details.field` the place); an encrypted field or its subject column that is not a member of the declared type, or a subject column that is not of the library's subject identifier type; an encrypted field whose data category no purpose declared on its type names (`details.declaration` the type, `details.field` the field); a social provider declared twice or with a member outside its rule (`details.declaration` `socialProvider.<provider>`, for example `socialProvider.apple`, the name `model.startup.secretunavailable` gives the provider's credential; `details.field` the member, `provider` where the provider is declared twice or names a factor that is not a social provider); a relationship source given twice, naming no declared relationship, answering rows of another type than its derivation's, or naming a context the container does not give in a scope or whose model does not map the contract tables (`details.declaration` `relationshipSource.<relationship>`, `details.field` `relationship`, `rows` or `context`); a lawful basis list naming one key twice, or a basis with an empty key or label (`details.declaration` `lawfulBases`, `details.field` `key` or `label`). `details.declaration` and `details.field` name it. A landing origin that is not the origin of a registered browser client's return address, or an authentication landing origin that is not the origin of the sign-in address, is refused with `details.key` `landingOrigins.authentication` or `landingOrigins.account` | LIB-HOST-001, INT-SMS-003, PRIV-PRIN-001, PRIV-RIGHT-005a, AUTHZ-MODEL-003, IDN-LIFE-012, AUTHZ-DERIVE-005, PRIV-BASIS-001, D-166, D-175, D-183 |
 | `model.startup.redirectclient` | Startup: a registered client's return address is not an absolute `https` address with a host (or `http` on a loopback IP literal), `details.client` naming the client; or `redirect.defaultclient` names no registered client of kind `browser-application`, `details.key` naming the key | API-REDIR-001 AC3, D-162, D-166 |
 | `model.startup.subscribername` | Startup: two subject-event subscribers are registered under one name, or one under `erasure-ledger`, the name the library records the off-host ledger's confirmation under; `details.handler` names it | IDN-LIFE-003a, DR-016, D-166 |
-| `model.rotation.notready` | A key rotation's seal (`rotate-kek --sealed`, `rotate-fingerprint-key --sealed`) was confirmed where no rotation of that kind awaits one, where the latest has retired, or while values stand under a previous version, a held username, an unlapsed reservation or an abuse ledger line that still counts included; `details.pending` counts them. The command exits 1 | OPS-SEC-003 AC3, AC4, AC6, D-166 |
+| `model.rotation.notready` | A key rotation's seal (`rotate-kek --sealed`, `rotate-fingerprint-key --sealed`) was confirmed where no rotation of that kind awaits one, where the latest has retired, or while values stand under a previous version, a held username, an unlapsed reservation, an abuse ledger line that still counts or a sign-in in progress included; `details.pending` counts them. The command exits 1 | OPS-SEC-003 AC3, AC4, AC6, D-166, D-183 |
 | `model.type.undeclaredreference` | Startup: a resource type references a type that is not declared, or an action is bound to a purpose no resource type declares; `details.permission` names the action | AUTHZ-MODEL-004, AUTHZ-GATE-005, D-153, D-166 |
 | `model.role.undeclaredpermission` | Startup: a role grants a permission that is not declared | AUTHZ-MODEL-004, D-153 |
 | `model.derivation.undeclaredreference` | Startup: a derivation references a type or relationship that is not declared | AUTHZ-MODEL-004, D-153 |
@@ -206,7 +209,7 @@ message — rewording the human-facing text is free, changing the code is breaki
 
 | Code | Meaning | Source |
 |---|---|---|
-| `integration.callback.rejected` **(new)** | A callback refused. 429 with `Retry-After`, the error carrying `details.retryAt`, where `integration.callback.ratelimit` refused it; 422 with no `Retry-After` for every other cause: signature, window, event identifier, source range, reference, confirmation, an unreadable or unheld delivery report, a provider event its keys do not verify. The Google security-event route answers a Security Event Token that fails validation as RFC 8935 section 2.3 does (400 with `err` and `description`), not with this code | INT-GEN-003, BFF-MACH-002, BFF-MACH-003, IDN-LIFE-012a, D-166 |
+| `integration.callback.rejected` **(new)** | A callback refused. 429 with `Retry-After`, the error carrying `details.retryAt`, where `integration.callback.ratelimit` refused it; 422 with no `Retry-After` for every other cause: signature, window, event identifier, source range, reference, confirmation, an unreadable or unheld delivery report, a provider event its keys do not verify. The Google security-event route answers a Security Event Token that fails validation as RFC 8935 section 2.3 does (400 with `err` and `description`), not with this code. A provider's document the library cannot have or read is no cause of this code: the delivery is answered `system.fault` (500) on either provider route | INT-GEN-003, BFF-MACH-002, BFF-MACH-003, IDN-LIFE-012a, D-166, D-183 |
 | `integration.callback.inprogress` | A delivery of an event whose earlier delivery is still being carried: its claim is unsettled and younger than `integration.callback.claimtimeout`. Not recorded as a rejection and not counted toward `alerting.callback.threshold`; 409 | BFF-MACH-002 AC3, D-166 |
 | `integration.endpoint.insecure` **(new)** | Startup, or a change by `configure` (OPS-CFG-004): a key naming an endpoint the library calls (`integration.mail.endpoint`, `integration.sms.endpoint`, `integration.mailserver.endpoint`, `password.blocklist.selfhosted.address`) holds a value that is not an absolute `https` address; `details.key` names the key | INT-GEN-001, INF-TLS-004, D-162, D-166 |
 | `integration.mailserver.conflict` **(new)** | A mail server's answer to a mailbox push, never a route's: the server holds an account at the mailbox's name that does not carry the mailbox's identifier, so the push adopts nothing and changes nothing there. The push is marked failed at that attempt and raises `degradation` scoped `mailbox.conflict:<mailbox id>` | INT-MAIL-001, INT-MAIL-007, LIB-HOST-001, REG-MAIL-003, D-177 |
@@ -444,7 +447,7 @@ is the empty list.
 | `integration.mail.endpoint` | empty | **P**, string, an absolute `https` address; startup refuses another with `integration.endpoint.insecure` naming the key | INT-GEN-001, LIB-EXT-001, D-162, D-166: where the library's shipped mail transport calls; empty while the deployment registers a transport of its own |
 | `integration.sms.endpoint` | empty | **P**, string, an absolute `https` address; startup refuses another with `integration.endpoint.insecure` naming the key | INT-GEN-001, INT-SMS-001, LIB-EXT-001, D-162, D-166: where the library's shipped SMS transport calls; empty while the deployment registers a transport of its own |
 | `integration.mailserver.endpoint` | empty | **P**, string, an absolute `https` address, required only where the library's mail-server adapter is used; read at the start, so a change takes effect at the next start; startup refuses another with `integration.endpoint.insecure` naming the key | INT-MAIL-001, INT-GEN-001, LIB-EXT-001, D-166, D-176: where the library's mail-server adapter reaches the mail server (JMAP at `<endpoint>/jmap`, INT-MAIL-001); where it is set when the application starts and the host registers no `IMailServer`, the adapter is the deployment's mail server integration until the next start (LIB-HOST-001, CONV-DESIGN-007) |
-| `restrictions` | the four shipped restrictions below | R, edited through `GET/PUT/DELETE /admin/restrictions/{name}` (step-up `restriction:edit`, a reason on every edit, OPS-CFG-008); a restriction's name is 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_`, any other refused with `config.value.notallowed`; a loosening (the changes section 4's Direction paragraph names for this row: a higher max, a shorter interval, a removed bucket, a deleted restriction, a narrowed channel among them) falls under OPS-CFG-002, needs `system:administer` and raises a Normal alert | AUTH-ABUSE-004, OPS-CFG-008, D-146, D-166: the **named restriction set** governing every send except an alert, which answers to the deduplication of OPS-ALERT-002 alone. Each restriction is a key (§5.14), an optional purpose (§5.15), an optional channel (§5.15a) and one or more buckets of (max, interval, `sliding` · `fixed`, §5.16). Security notices to an existing holder answer only to restrictions whose purpose is `notification`. Replaces `abuse.sms.window`, INT-SMS-002 and IDN-LIFE-011 |
+| `restrictions` | the four shipped restrictions below | R, edited through `GET/PUT/DELETE /admin/restrictions/{name}` (step-up `restriction:edit`, a reason on every edit, OPS-CFG-008); a restriction's name is 1 to 64 lower-case letters and digits separated by single `.`, `-` or `_`; a `{name}` outside it is refused 400 `api.request.malformed` naming `name` on every route that takes one, and a name outside it inside the `restrictions` value with `config.value.notallowed`; a loosening (the changes section 4's Direction paragraph names for this row: a higher max, a shorter interval, a removed bucket, a deleted restriction, a narrowed channel among them) falls under OPS-CFG-002, needs `system:administer` and raises a Normal alert | AUTH-ABUSE-004, OPS-CFG-008, D-146, D-166, D-183: the **named restriction set** governing every send except an alert, which answers to the deduplication of OPS-ALERT-002 alone. Each restriction is a key (§5.14), an optional purpose (§5.15), an optional channel (§5.15a) and one or more buckets of (max, interval, `sliding` · `fixed`, §5.16). Security notices to an existing holder answer only to restrictions whose purpose is `notification`. Replaces `abuse.sms.window`, INT-SMS-002 and IDN-LIFE-011 |
 | `restrictions` · `sms.destination` | key `destination`, purpose `any`, channel `sms`, 3 per 24 h sliding | R, as above | AUTH-ABUSE-004, D-146, D-166 |
 | `restrictions` · `sms.source` | key `source`, purpose `any`, channel `sms`, 10 per 1 h sliding | R, as above | AUTH-ABUSE-004, D-146, D-166 |
 | `restrictions` · `email.destination` | key `destination`, purpose `any`, channel `email`, 5 per 1 h sliding and 1 per 60 s fixed | R, as above | AUTH-ABUSE-004, D-146, D-166: also bounds the new-device check code (AUTH-FACT-016) |
@@ -477,7 +480,7 @@ is the empty list.
 | `alerting.authfailures.threshold` | 20 | R, integer failures on one account inside `alerting.dedupe.window`; raising is loosening | OPS-ALERT-002, D-153: `auth-failures-sustained` |
 | `alerting.recovery.accountthreshold` | 3 per `P1D` | R, integer; raising is loosening | OPS-ALERT-001, D-153: `recovery-clustering` |
 | `alerting.recovery.approverthreshold` | 3 per `P1D` | R, integer; raising is loosening | OPS-ALERT-001, D-153: `approver-volume` |
-| `alerting.denials.threshold` | 50 per `PT10M` | R, integer denials per actor in a fixed ten-minute window counted from the Unix epoch in UTC; the actor is the acting subject the refusal records, and every refusal naming no acting subject is counted as one actor; raised once the window holds more than this; raising is loosening | AUTHZ-GATE-004, D-153, D-166: `denial-spike` |
+| `alerting.denials.threshold` | 50 per `PT10M` | R, integer denials per actor in a fixed ten-minute window counted from the Unix epoch in UTC; the actor is the system principal the refusal records, by its name, where one acted, and otherwise the acting subject it records; every refusal recording the nil subject and no principal is counted as one actor; raised once the window holds more than this; raising is loosening | AUTHZ-GATE-004, D-153, D-166, D-183: `denial-spike` |
 | `alerting.sessions.distance` | 500 | R, integer kilometres; raising is loosening | OPS-ALERT-007, D-153, D-166: `concurrent-sessions-implausible` fires when two sessions of one account are both used inside `alerting.sessions.window` and their cities are further apart than this, or their known countries differ, whatever their cities; distance is measured only where both places name a city, and a place with no country never fires |
 | `alerting.sessions.window` | `PT1H` | R, duration; lengthening is loosening | OPS-ALERT-007, D-153 |
 | `alerting.nonexistent.threshold` | 20 per `PT1H` | R, integer, system-wide; raising is loosening | AUTH-ABUSE-003, D-121, D-153: `nonexistent-notice-rate` |
@@ -517,6 +520,7 @@ is the empty list.
 | `outbox.retry.initial` | `PT30S` | R, duration | IDN-LIFE-003a, AUTH-ABUSE-004, D-153, D-162, D-166: first retry delay, full jitter |
 | `outbox.retry.factor` | 2.0 | R, decimal, floor 1.0 | IDN-LIFE-003a, AUTH-ABUSE-004, D-153, D-162, D-166: multiplier per further attempt |
 | `outbox.retry.maxattempts` | 10 | R, integer, floor 1 | IDN-LIFE-003a, AUTH-ABUSE-004, D-153, D-162, D-166: attempts before an erasure or takedown record is `failed` with `erasure-delivery-exhausted`, an event is `failed` with `degradation`, or a message is removed with `degradation` scoped `send:<channel>` (about eight hours end to end at the defaults) |
+| `outbox.claim.timeout` | `PT2M` | R, duration, floor `PT30S`, ceiling `PT10M` | CONV-DESIGN-003, INF-BG-001, AUTH-ABUSE-004, D-183: how long a claim on a row that a delivery job or a send's immediate attempt carries stands; an attempt still running then is abandoned as failed, and the next pass may take the row |
 | `sweep.interval` | `PT5M` | R, duration, ceiling `PT15M` | OPS-OBS-003, AUTH-KEY-003, PRIV-RIGHT-002, PRIV-RET-005, OPS-ALERT-006, D-153, D-166: one sweep for expired sessions, tokens and codes, identifier verifications whose codes have all expired unused, elapsed grace and cooling-off windows, privacy request deadlines (PRIV-RIGHT-002), sending-restriction records and every other abuse ledger line its own check no longer reads (PRIV-RET-005), export-limit records an hour old (OPS-ALERT-006) and domain re-verification; a deadline therefore fires within this interval of its instant |
 | `notification.languages` | none; **required** | R, **list** of BCP 47 tags, at least one | IDN-ATTR-001, AUTH-ABUSE-004, AUTH-ABUSE-005, D-031, D-153, D-166: the deployment's message languages. Step 3 of the recipient-language resolution sends in all of them: by email one message carrying every language in this order, subject lines joined, judged and counted once; by text message one message per language, admitted only where every applicable bucket has room for all of them, each counted. Every template is validated in each language at startup |
 | `notification.email.sendingdomain` | — **required** | R, string | INT-MAIL-011, D-153 |
@@ -671,9 +675,18 @@ public-task basis. Each carries the properties `IsConsent`,
 `legal-right-claim-or-defence` · `court-judgment-or-order`
 
 The library ships this list in this order, each entry carrying the four properties as
-PRIV-BASIS-001 tables them.
+PRIV-BASIS-001 tables them and the label its Basis column gives (D-032):
 
-*Source: PRIV-BASIS-001, D-108, D-162, D-166*
+| Key | Label |
+|---|---|
+| `consent` | Data Subject's Consent |
+| `contractual-obligation` | Fulfilment of a Contractual Obligation |
+| `legal-obligation` | Fulfilment of a Legal Obligation |
+| `legitimate-interest` | Legitimate Interest |
+| `legal-right-claim-or-defence` | Claim or Defence of a Legal Right |
+| `court-judgment-or-order` | Execution of Court Judgments or Orders from Competent Investigative Authorities |
+
+*Source: PRIV-BASIS-001, D-108, D-162, D-166, D-183*
 
 ### 5.8 Data subject rights
 
@@ -740,12 +753,16 @@ due at the earlier of that window's end and the trigger plus `takedown.grace`; a
 `restrictionHeld` (boolean), a restriction of processing held while the account is
 `suspended` or `deleting`, so that it returns `restricted`. A takedown's reversal
 restores, in this order, a held deletion, a held suspension with its origin,
-`restricted` where a restriction is held, and `active` otherwise. An out-of-band erasure
-fulfilled on an account already `deleting`, by any origin, is recorded fulfilled against
-the running window and holds nothing; on a `deleted` account it is recorded fulfilled
-and nothing further happens (IDN-LIFE-003).
+`restricted` where a restriction is held, and `active` otherwise. It clears what it
+restores and keeps what the state it returns to still holds: returned to a deletion or a
+suspension, the account keeps a held restriction, and returned to an `oob-request`
+deletion, the suspension that deletion holds; returned `restricted` or `active`, it
+holds nothing (D-183). An out-of-band erasure fulfilled on an account already
+`deleting`, by any origin, is recorded fulfilled against the running window and holds
+nothing; on a `deleted` account it is recorded fulfilled and nothing further happens
+(IDN-LIFE-003).
 
-*Source: IDN-LIFE-003, IDN-LIFE-013, PRIV-RIGHT-004, D-137, D-147, D-166*
+*Source: IDN-LIFE-003, IDN-LIFE-013, PRIV-RIGHT-004, D-137, D-147, D-166, D-183*
 
 ### 5.12c Privacy request status and type
 
@@ -804,11 +821,12 @@ every send except a security notice to an existing holder, which answers only to
 restrictions whose purpose is `notification` (AUTH-ABUSE-004). The `notification`
 purpose, and so `notification.destination`, counts security notices and other notices
 only: no link or code a person or an administrator asked for carries it. A recovery link
-(REG-IDENT-002) and an invitation link (IDN-LIFE-009a) carry `signin`, so neither counts
-against `notification.destination`. An alert is outside every restriction and answers to
-the deduplication of OPS-ALERT-002 alone.
+(REG-IDENT-002) and an invitation link (IDN-LIFE-009a) carry `signin`, and the
+confirmation a replace asks of the displaced address (REG-IDENT-007) carries
+`verification`, so none counts against `notification.destination`. An alert is outside
+every restriction and answers to the deduplication of OPS-ALERT-002 alone.
 
-*Source: D-148; AUTH-ABUSE-004, D-146, D-166*
+*Source: D-148; AUTH-ABUSE-004, D-146, D-166, D-183*
 
 ### 5.15a Restriction channels
 
@@ -870,19 +888,22 @@ completes on what is enrolled (REG-SESS-006).
 ### 5.20 Capability residuals
 
 The closed set a capability's `requires` may carry (API-CAP-001, AUTHZ-GATE-005):
-`stepup` · `reauthenticate` (a downgraded session, AUTH-SESS-009) · `restricted`
-(AUTHZ-GATE-006) · `consent` (PRIV-SENS-002, PRIV-CONS-007) · `accountstate`.
+`stepup` · `reauthenticate` (a downgraded session, AUTH-SESS-009: the gate would be met
+but for proof attained before the session's last downgrade; otherwise `stepup`) ·
+`restricted` (AUTHZ-GATE-006) · `consent` (PRIV-SENS-002, PRIV-CONS-007) ·
+`accountstate`.
 
-*Source: AUTHZ-GATE-005, D-153*
+*Source: AUTHZ-GATE-005, D-153, D-183*
 
 ### 5.21 Consent and objection mechanism
 
 The `mechanism` of a consent or objection record: `registration` (the terms step,
 REG-SESS-007) · `dashboard` (`/privacy/consents/*`, `/privacy/objections/*`) ·
-`reconsent` (the PRIV-CONS-007 prompt; recorded by the library for a dashboard grant over
-a superseded, unwithdrawn consent) · `administrator` (entered on the subject's behalf).
+`reconsent` (the PRIV-CONS-007 prompt; recorded by the library for a dashboard grant
+over a superseded, unwithdrawn consent, or over a live one the purpose no longer admits,
+which the grant stamps superseded) · `administrator` (entered on the subject's behalf).
 
-*Source: PRIV-CONS-001, PRIV-RIGHT-001a, D-153, D-162, D-166*
+*Source: PRIV-CONS-001, PRIV-RIGHT-001a, D-153, D-162, D-166, D-183*
 
 ### 5.22 Age group
 
@@ -1061,7 +1082,7 @@ kind lands under.
 | `identifier-removed` | An identifier was removed; sent to the remaining security-notice set with the undo link | `link` | REG-IDENT-006, REG-IDENT-007 |
 | `identifier-detached` | The removed identifier no longer reaches the account; no link, no powers | none | REG-IDENT-006 |
 | `identifier-settings-changed` | The primary of a kind, or the kind's backup setting, changed | none | REG-IDENT-005, REG-MAIL-003 |
-| `identifier-change-confirm` | The address a replace displaces is asked to confirm, only where the account has no other channel | `link` | REG-IDENT-007 |
+| `identifier-change-confirm` | The address a replace displaces is asked to confirm, only where the account has no other channel; under the `verification` purpose (section 5.15) | `link` | REG-IDENT-007, D-183 |
 | `credential-enrolled` | A credential was enrolled on the account | none | AUTH-STEP-007 |
 | `invitation-link` | The link of an invitation into an organization, sent to the email it binds and to nothing else, under the `signin` purpose (section 5.15) with no subject | `link` | IDN-LIFE-009a, REG-INV-001, REG-MAIL-001 |
 | `deactivation-notice` | The account deactivated itself; carries the link that stands it back up | `link` | IDN-LIFE-013 |
@@ -1196,10 +1217,13 @@ Scenarios, the values of `authz.truthtable.disagreement`'s `details.scenario`:
 `grant-to-nested-group` · `deny-over-grant` · `deny-on-container-over-grant` ·
 `expired-grant` · `revoked-grant` · `grant-in-another-organization` ·
 `role-without-permission` · `derived-grant` · `derived-grant-on-container` ·
-`deny-over-derived-grant`. A derived scenario runs once for each derivation its type
-declares.
+`deny-over-derived-grant` · `stepup-met` · `stepup-level-unmet` ·
+`stepup-phishingresistance-unmet` · `stepup-age-unmet` · `stepup-instant-future` ·
+`stepup-provider-failed` · `stepup-provider-absent`. A derived scenario runs once for
+each derivation its type declares; a step-up scenario agrees when the filter lists the
+record and the check answers the gate's outcome (AUTHZ-TEST-001 AC2).
 
-*Source: LIB-TEST-001, AUTHZ-TEST-001, D-166*
+*Source: LIB-TEST-001, AUTHZ-TEST-001, D-166, D-183*
 
 ### 5.31 Explanation outcome
 
@@ -1490,14 +1514,14 @@ IDN-LIFE-003a).
 | `ConsentChanged` | A consent granted, withdrawn or superseded; carries the purpose and `change` (`granted` · `withdrawn` · `superseded`, section 5.39); on `withdrawn`, handlers erase data held solely for the purpose (PRIV-CONS-008) | Every registered handler for the purpose — **required** |
 | `ObjectionChanged` | An objection recorded or withdrawn for a purpose on an objectable basis (PRIV-RIGHT-001a) | Every registered handler for the purpose — **required** |
 | `CredentialEnrolled` | An authenticator reached `active`, or a password was set on an existing account, by the person, by recovery or by an invitation, with the enrolment notification to every other recorded channel (AUTH-STEP-007); carries the credential identifier (absent for the password), the catalogue entry and the subject | Host (optional) |
-| `CredentialSuspended` · `CredentialRestored` · `CredentialInvalidated` | A loss report started, by a report or by a removal that would lower reachable assurance, was cancelled, or completed after the window (AUTH-RECOV-007); each carries the credential identifier, the catalogue entry and the subject, and `CredentialSuspended` the instant the window ends | Host (optional) |
-| `NotificationRequested` | The library needs a message delivered — verification, recovery, deletion, change notifications, alerts | The notification transport (INT-MAIL-008); retried by the outbox |
+| `CredentialSuspended` · `CredentialRestored` · `CredentialInvalidated` | A loss report started, by a report or by a removal that would lower reachable assurance, was cancelled, or completed after the window (AUTH-RECOV-007); each carries the credential identifier, the catalogue entry and the subject, and `CredentialSuspended` the instant the window ends. `CredentialSuspended`, and `CredentialRestored` raised from a session, carry the acting and the effective identity of the context that raised it, as the context gives them (AUTHZ-IMP-001); `CredentialRestored` raised from the cancel link carries neither | Host (optional) |
+| ~~`NotificationRequested`~~ | *Retired by D-183. A message is undertaken through the governed send (`IGovernedSend`, AUTH-ABUSE-004) and carried from the library's send outbox to `INotificationHandler` (LIB-EXT-001); an alert travels on its `AlertRaised` row (OPS-ALERT-001). No event is emitted for either.* | |
 | `AlertRaised` | An OPS-ALERT-001 condition fires; carries the condition identifier and, where the alert is raised under one, its scope (section 5.23), the severity and the structured details of the row. Written in the transaction that raised it, at every raise site; the alert channels carry it from that row after commit (OPS-ALERT-001) | Alert channels |
 
 Mail provisioning consumes no event: it reads the state these events announce
 (INT-MAIL-006).
 
-*Source: LIB-API-001, IDN-LIFE-003a, PRIV-RIGHT-005b, CONV-DESIGN-002, D-022, D-132, D-141, D-146, D-162, D-166, D-168, D-177*
+*Source: LIB-API-001, IDN-LIFE-003a, PRIV-RIGHT-005b, CONV-DESIGN-002, D-022, D-132, D-141, D-146, D-162, D-166, D-168, D-177, D-183*
 
 ## 6. Status code usage
 
@@ -1506,7 +1530,7 @@ Mail provisioning consumes no event: it reads the state these events announce
 | 200 | Success with a body |
 | 202 | Accepted, outcome deliberately not disclosed; also `auth.credential.lastsecondfactor`, a status and not a refusal |
 | 204 | Success, no body |
-| 400 | Malformed request: not the shape the endpoint takes, a required member absent or empty, a free-text member outside 1 to 1024 characters after trimming, or a word outside a closed vocabulary fixed in this chapter or at startup (`api.request.malformed`) |
+| 400 | Malformed request: not the shape the endpoint takes, a required member absent or empty, a free-text member outside 1 to 1024 characters after trimming, a word outside a closed vocabulary fixed in this chapter or at startup, or a route or query value that does not read as its type, `details.member` naming it (`api.request.malformed`) |
 | 401 | No valid session — **session death only** |
 | 403 | Authenticated, not permitted, existence not concealed; **also step-up required** (D-092). `authz.denied` means that a permission is absent, and carries only the other refusals `09` API-CONV-003 names |
 | 404 | Not found: a path naming a runtime record the deployment does not hold, answered with a named code (under `/admin` nothing is concealed), **or** concealed denial; also a path no endpoint serves, or a method a served path does not take (`authz.resource.notfound`). 405 is not used |
@@ -1521,11 +1545,12 @@ of its own. The one exception is `integration.callback.rejected`: 429 where the 
 rate limit refused the request and the refusal carries `details.retryAt`, 422 otherwise.
 A code whose row names a fault, and a code no row names, SHALL be answered as
 `system.fault` with 500 (BFF-ERR-002). A `model.*` code is a startup or command refusal,
-a conformance finding is a report of the suite (LIB-TEST-001), and
+or the code a fault carries into the log (an unwrap under a version no longer held,
+OPS-SEC-003); a conformance finding is a report of the suite (LIB-TEST-001);
 `integration.mailserver.conflict` is a mail server's answer to the provisioning job
-(INT-MAIL-007); none is answered by a request.
+(INT-MAIL-007). None is answered by a request.
 
-*Source: API-CONV-003, D-162, D-166, D-177*
+*Source: API-CONV-003, D-162, D-166, D-177, D-183*
 
 ---
 
@@ -1535,10 +1560,12 @@ a conformance finding is a report of the suite (LIB-TEST-001), and
 kind or any other value this document catalogues SHALL update this document in the same
 change.
 
-*Source: LIB-API-001, CONV-NAME-003, D-162, D-166, D-177*
+*Source: LIB-API-001, CONV-NAME-003, D-162, D-166, D-177, D-183*
 
 **Acceptance criteria**
-1. A contract test fails when a code or key exists in source but not here.
+1. A contract test fails when a code or key exists in source but is not a live row here
+   (a struck row, or one whose description opens "Retired" or "Withdrawn", is not live).
+   The test reads this document alone.
 2. At each release commit the release gate compares the contract lists of the previous
    release commit with its own, read from their committed contract files: configuration
    keys with type, scope and constraints, and key families; the library-owned schema;

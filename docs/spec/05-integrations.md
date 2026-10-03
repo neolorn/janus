@@ -94,12 +94,14 @@ requests per source (AUTH-ABUSE-001) per minute, fixed window, and answer 429
 refusal of a callback is 422 `integration.callback.rejected`, with no `Retry-After`;
 the route of a provider whose events follow RFC 8935 answers as `09` section 10 states.
 A correlation reference is 128 random bits, base64url, held only as its SHA-256 and
-looked up by it (BFF-MACH-003), and never logged (CONV-LOG-003). A signing secret
-rotates with a 24 hour overlap (BFF-MACH-002).
+looked up by it (BFF-MACH-003), and never logged (CONV-LOG-003); a send's reference,
+drawn at its admission, also travels inside its outbox row's encrypted content until the
+row is removed (PRIV-RIGHT-005a). A signing secret rotates with a 24 hour overlap
+(BFF-MACH-002).
 
 *Source: D-070*
 
-*Source: D-013, D-030, D-164, D-166*
+*Source: D-013, D-030, D-164, D-166, D-183*
 
 Callbacks arrive unauthenticated or weakly authenticated. A forged one must be
 unable to mark a phone verified, or to advance any state the host hangs on a callback.
@@ -200,7 +202,7 @@ others.
 | App passwords | **Stored by Stalwart**, never by this system; managed for the person through the library's first-party OIDC client (INT-MAIL-010) |
 | Storage | Stalwart's own database, not co-located with business data |
 
-*Source: D-006, D-146, D-166, D-176, D-177*
+*Source: D-006, D-146, D-166, D-176, D-177, D-183*
 
 **Restated** (D-146): every management operation happens through JMAP objects, so
 "management API" means JMAP and nothing else. The four concerns are unchanged. Should the edition change,
@@ -241,10 +243,11 @@ of `outbox.retry.*` cannot resolve a conflict that someone must resolve at the m
 server (INT-MAIL-007). The listing is `x:Account/query` with `x:Account/get` of
 `emailAddress`, `description` and `permissions`, and answers for each account the
 mailbox identifier its `description` carries (none where it carries none), its address
-and whether it is enabled; an account is listed enabled exactly where `authenticate` is
-not disabled and, under `Replace`, is enabled. App passwords are `AppPassword` objects
-(`x:AppPassword/get`, `x:AppPassword/set`) called with the person's token (INT-MAIL-010)
-and never with the management key.
+(none where `emailAddress` does not read as an email address) and whether it is enabled;
+an account is listed enabled exactly where `authenticate` is not disabled and, under
+`Replace`, is enabled. App passwords are `AppPassword` objects (`x:AppPassword/get`,
+`x:AppPassword/set`) called with the person's token (INT-MAIL-010) and never with the
+management key.
 
 **Acceptance criteria**
 1. No code reads Stalwart's database.
@@ -508,14 +511,16 @@ is counted with the accounts that carry no identifier of a mailbox the library h
 since that account is outside the library (D-101) and only the operator can erase it
 there. Addresses SHALL be compared in their canonical form (IDN-ACCT-004), the server's
 listed addresses canonicalised before the comparison, and a listed address that does not
-read matches no mailbox. Comparing by identifier, not by address, keeps apart the two
+read is listed as none and matches no mailbox: the account is counted where it carries
+no identifier of a mailbox the library holds, and is a difference where it carries one;
+it never fails the listing. Comparing by identifier, not by address, keeps apart the two
 mailboxes that a `replace`, or a release followed by a new invitation, leaves at one
 address (REG-MAIL-003, REG-MAIL-001). A difference SHALL raise `degradation`, scope
 `mailbox.reconciliation`, details `{ mailboxes, unknown }` (mailbox identifiers and a
 count, never an address); a listing that cannot be had SHALL raise it with
 `{ listed: false }`. Nothing SHALL be changed on either side.
 
-*Source: D-006, D-041, D-166, D-177, D-178*
+*Source: D-006, D-041, D-166, D-177, D-178, D-183*
 
 A failed suspension leaves a person reading mail after offboarding. Silent
 auto-correction conceals a broken pipeline.
@@ -544,6 +549,9 @@ auto-correction conceals a broken pipeline.
    unconfirmed, that push ends without a send; the push of the new mailbox is then sent
    and, while the old account stands at the server, is answered
    `integration.mailserver.conflict`.
+9. A listing that holds an account whose address does not read is read whole: every
+   other account is compared as before, and that account is counted where it carries no
+   identifier of a mailbox the library holds and is a difference where it carries one.
 
 ---
 
@@ -710,22 +718,25 @@ with Arabic binding.
 defined width (the message places of `10`), and a text message whose rendering exceeds
 its budget SHALL stop startup. A text message that carries a link is budgeted at two
 segments of its alphabet: 306 characters of the GSM 7-bit default alphabet, 134
-otherwise. Every other text message is budgeted at one: 160 and 70. `{link}` is
-measured at the width of the address it becomes, `<origin>/link#<kind>.<token>` with
-the origin the host declares for the link's application (`LandingOrigins`,
-`Authentication` or `Account`, LIB-HOST-001) and a drawn token; one token
-size serves every channel. Nothing is measured at a send. A text-message template that
-names a place `10` gives no width SHALL be refused at startup with
-`model.startup.declarationinvalid`. A value a deployment or host chooses for a place (a
-restriction's name, a governing document's name, a subject-event subscriber's name)
-SHALL be 1 to 64 characters of lower-case letters and digits separated by single `.`,
-`-` or `_`: a restriction's name outside the rule is refused where it is written with
-`config.value.notallowed`, and a document or subscriber declared under a name outside
-it is refused at startup with `model.startup.declarationinvalid`, `details.declaration`
-and `details.field` naming it. Bounding these values where they are written keeps every
-rendered template within the width it was measured at.
+otherwise. Every other text message is budgeted at one: 160 and 70. `{link}` is measured
+at the width of the address it becomes, `<origin>/link#<kind>.<token>` with the origin
+the host declares for the link's application (`LandingOrigins`, `Authentication` or
+`Account`, LIB-HOST-001) and a drawn token; one token size serves every channel. Nothing
+is measured at a send. A text-message template that names a place `10` gives no width
+SHALL be refused at startup with `model.startup.declarationinvalid`. A value a
+deployment or host chooses for a place (a restriction's name, a governing document's
+name, a subject-event subscriber's name) SHALL be 1 to 64 characters of lower-case
+letters and digits separated by single `.`, `-` or `_`: a restriction's name outside the
+rule is refused with `config.value.notallowed` where the `restrictions` value is
+written, and with 400 `api.request.malformed` naming `name` where a route names it; a
+document or subscriber declared under a name outside it is refused at startup with
+`model.startup.declarationinvalid`, `details.declaration` and `details.field` naming it;
+and a route naming a document outside it, the publish route included, is refused with
+400 `api.request.malformed` naming `document` before anything is read (`09` sections 7
+and 8a). Bounding these values where they are written keeps every rendered template
+within the width it was measured at.
 
-*Source: D-013, D-031, AUTH-ABUSE-005, D-162, D-166*
+*Source: D-013, D-031, AUTH-ABUSE-005, D-162, D-166, D-183*
 
 Unicode messages are 70 characters for a single message and 67 per part when
 concatenated; Latin gets 160 and 153. An Arabic message one character over 70 costs
@@ -735,9 +746,10 @@ double.
 1. A test fails if any rendered template exceeds its language's budget.
 2. Coverage spans every template in every supported language.
 3. A restriction, governing document or subscriber whose name breaks the rule is
-   refused where it is written or declared; the `key` place is measured at the widest
-   key including each family's widest parameter, and `outstanding` at the joined width
-   of the registered required subscribers' names.
+   refused where it is written or declared, a document's at the publish route before its
+   body is read, so no alert carries it; the `key` place is measured at the widest key
+   including each family's widest parameter, and `outstanding` at the joined width of
+   the registered required subscribers' names.
 4. A text message carrying `{link}` that fits two segments of its alphabet at the
    width of its link is accepted, one that does not stops startup, and a text-message
    template naming a place with no defined width stops startup with
@@ -766,28 +778,29 @@ succeeds without a balance read.
 
 **INT-SMS-005** — The delivery-report callback SHALL follow INT-GEN-003 and SHALL
 NOT by itself mark a phone verified. A report indicating **failed delivery** SHALL
-release the send from every restriction bucket it counted against (AUTH-ABUSE-004),
-and SHALL do nothing else.
+release the send's count from every restriction bucket it counted against, and any
+credit it spent (AUTH-ABUSE-004), and SHALL do nothing else.
 
-*Source: D-013, D-146, AUTH-ABUSE-007, D-166*
+*Source: D-013, D-146, AUTH-ABUSE-007, D-166, D-183*
 
 The gateway calls over plain HTTP with parameters in the query string,
 unauthenticated. The deployment's SMS transport (`ISmsTransport`, INT-SMS-006) reads
 the report from the gateway's own query parameters, each name taken once; a report it
 cannot read is rejected as one carrying a guessed reference is. A report of anything
 other than a final failure, an intermediate state included, is read as not failed and
-changes nothing. Releasing a bucket on a failure report is the one state change a
-report may cause: it can only make a person less restricted, never verified, and a
-forged failure report gains an attacker at most one extra send to a number the
-restriction already allows.
+changes nothing. Releasing a send's count and credit on a failure report is the one
+state change a report may cause: it can only make a person less restricted, never
+verified, and a forged failure report gains an attacker at most one extra send to a
+number the restriction or the credit already allowed.
 
 **Acceptance criteria**
 1. A forged report does not verify a phone.
 2. Correlation references are unguessable.
-3. A send whose report indicates failure does not count against any restriction
-   bucket. A report of delivery changes nothing. A report of either kind whose
-   reference no held send answers changes nothing and is rejected, recorded against its
-   source and counted toward `alerting.callback.threshold` (INT-GEN-003 AC1).
+3. A send whose report indicates failure does not count against any restriction bucket,
+   and a credit it spent is spent no longer. A report of delivery changes nothing. A
+   report of either kind whose reference no held send answers changes nothing and is
+   rejected, recorded against its source and counted toward
+   `alerting.callback.threshold` (INT-GEN-003 AC1).
 
 ---
 

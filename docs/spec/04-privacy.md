@@ -71,7 +71,7 @@ declare.
 | 5 | Claim or Defence of a Legal Right | no | — | no | no | Retaining evidence for a dispute |
 | 6 | Execution of Court Judgments or Orders from Competent Investigative Authorities | no | — | no | no | Responding to a court order |
 
-*Source: D-032, D-091, D-108, D-162, D-166*
+*Source: D-032, D-091, D-108, D-162, D-166, D-183*
 
 **The code reads the properties, never the name** — the same rule factors follow
 (AUTH-FACT-001). Whether a purpose is withdrawable, shows a dashboard control, runs the
@@ -79,11 +79,19 @@ capture path, needs a linked assessment, or can be objected to is answered by th
 flags on its basis. A project in another jurisdiction declares a different list with
 its own flags and the library changes not at all (D-091).
 
-**Storage is a library table seeded from the declaration.** At startup each declared
-basis is written as one row: its key, its label and its four flags. It carries the
-properties the code reads, which is what makes it a genuine table rather than a
-constrained column (CONV-ENUM-001). Purposes reference a basis by key; generated
-records emit its label.
+**Storage is a library table seeded from the declaration.** The table is
+`identity.lawful_bases`: `key` (the primary key), `label`, and the four flags
+`is_consent`, `requires_written_consent_for_sensitive`, `requires_assessment` and
+`is_objectable`. The startup hosted service SHALL write it before the server serves, in
+one transaction that first takes the table's `SHARE ROW EXCLUSIVE` lock: each declared
+basis is inserted or updated by its key, and every row whose key the declaration does
+not hold is deleted, so the table holds the declared list and nothing else, and of two
+starts the later one's list stands. Only the application's runtime credential writes it.
+It carries the properties the code reads, which is what makes it a genuine table rather
+than a constrained column (CONV-ENUM-001); the code reads them, and the label, from the
+declaration. Purposes reference a basis by key; generated records emit its label. A list
+that names one key twice, or a basis with an empty key or label, fails startup with
+`model.startup.declarationinvalid`.
 
 This is Egypt's list, not the European one. There is **no vital-interests basis and
 no public-task basis**; bases 5 and 6 are Egypt-specific. An implementer defaulting
@@ -97,6 +105,9 @@ to the European six would produce values the regulator does not recognise.
 4. No conditional in the library tests for a basis by name; a search of library
    source finds none.
 5. Declaring a different list with different flags requires no library change.
+6. After a start, `identity.lawful_bases` holds exactly the declared bases with their
+   labels and flags, whatever it held before; two starts with different lists leave one
+   whole list.
 
 ---
 
@@ -236,7 +247,7 @@ automated routine can be built later without first auditing the schema cold.
 
 **Building that routine is the user's decision**, not a threshold that fires on its own.
 
-*Source: D-078, D-098, D-162, D-166, D-168*
+*Source: D-078, D-098, D-162, D-166, D-168, D-183*
 
 **Acceptance criteria**
 1. Processing a sensitive type **for a consent-based purpose** without the data
@@ -247,8 +258,9 @@ automated routine can be built later without first auditing the schema cold.
    rest" alone.
 5. A list filter or SQL fragment for a permission bound to a consent-based purpose
    admits no record whose data subject holds no live consent of the required kind for
-   that purpose; a consent that is withdrawn, superseded, or recorded against a
-   document other than the one the purpose now names is not live.
+   that purpose recorded against the document the purpose now names; a consent that is
+   withdrawn or superseded is not live, and a live one recorded against another document
+   admits nothing.
 6. A check that names no record, or a record the library holds no subject for, is
    refused for a consent-based purpose.
 
@@ -299,16 +311,21 @@ mechanism, and withdrawal timestamp where applicable.
 · `reconsent` · `administrator`.
 
 **Values (D-166).** A grant named `dashboard` over a superseded, unwithdrawn consent for
-the purpose is recorded `reconsent`, by the operation and whoever calls it; any other
-mechanism is recorded as named.
+the purpose, or over a live one the purpose no longer admits, is recorded `reconsent`,
+by the operation and whoever calls it; any other mechanism is recorded as named.
 
-**Every grant is a record of its own.** A grant SHALL add a record. A withdrawal or a
+**A grant is a record of its own, unless an admitted one stands.** A grant SHALL add a record, except where the
+subject holds a live record for the purpose that the purpose admits (recorded against
+the document it now names, of the kind it requires): that grant SHALL change nothing,
+raise nothing and be answered as a grant. A live record the purpose no longer admits
+SHALL be stamped superseded by the grant that replaces it, in that grant's transaction,
+`ConsentChanged` carrying `superseded` and then `granted` (D-183). A withdrawal or a
 supersession SHALL stamp the live record and never overwrite or remove it. A subject
 holds at most one live record (neither withdrawn nor superseded) per purpose, and every
 earlier record stays, with its document, version and instants, for `retention.consent`
 (PRIV-RET-001).
 
-*Source: D-024, D-162, D-166*
+*Source: D-024, D-162, D-166, D-183*
 
 **Acceptance criteria**
 1. Consent for two purposes produces two records.
@@ -318,6 +335,10 @@ earlier record stays, with its document, version and instants, for `retention.co
    as it was; at most one live record per subject and purpose exists.
 5. A dashboard grant over a superseded, unwithdrawn consent is recorded `reconsent`; a
    grant an administrator makes over one is recorded `administrator`.
+6. A grant while a live record the purpose admits stands, or while one is written
+   meanwhile, adds no record and raises no event, and is answered as a grant; a grant
+   over a live record recorded against another document stamps it superseded and adds
+   one record, in one transaction.
 
 ---
 
@@ -480,9 +501,15 @@ materiality.
 **Values (D-166).** A purpose governs its consent by the document its declaration names,
 the privacy notice where it names none (D-162). A consent recorded against a document
 other than the one its purpose now names is superseded, and the subject is asked again
-(AC4).
+(AC4). The library learns of such a move when it starts: before the server serves, it
+stamps every live consent of a consent-based purpose recorded against another document
+as superseded, with one conditional update, and writes `ConsentChanged` `superseded` for
+each in the same transaction, so that two starts stamp each consent once. During a
+rollout (OPS-MIG-005) a consent the previous version records against the previous
+document is refused by the gate at once, since the view compares the document, and is
+stamped at the next start.
 
-*Source: D-024, D-066, D-162, D-166*
+*Source: D-024, D-066, D-162, D-166, D-183*
 
 Without this, publishing a revised notice (a text edit) would mark every live consent
 superseded and refuse processing of every record it covers until each subject
@@ -494,6 +521,9 @@ re-consented. A service-wide outage caused by editing a paragraph.
 3. Publishing a revised notice interrupts no processing under a contractual or
    legal-obligation purpose and no subject's access to their own records.
 4. Re-consent is requested at the subject's next interaction.
+5. A start whose declaration names, for a consent-based purpose, a document other than
+   the one a live consent was recorded against stamps that consent superseded and raises
+   `ConsentChanged` `superseded` for it once, however many processes start.
 
 ---
 
@@ -656,10 +686,11 @@ objection SHALL be recorded as a consent record is (PRIV-CONS-001: purpose, docu
 version, which for an objection is always the privacy notice, timestamp, mechanism,
 withdrawal timestamp) and SHALL raise `ObjectionChanged`, whose
 handlers are **required** for every objectable purpose: processing of that subject for
-that purpose stops when the event is handled. An objection is **always honoured**;
-the library offers no "compelling grounds" refusal.
+that purpose stops when the event is handled. An objection while the subject's objection
+to the purpose stands changes nothing and is answered as an objection (D-183). An
+objection is **always honoured**; the library offers no "compelling grounds" refusal.
 
-*Source: Law 151/2020 Art. 2, Decree 816/2025 Art. 3(5), D-145, D-166*
+*Source: Law 151/2020 Art. 2, Decree 816/2025 Art. 3(5), D-145, D-166, D-183*
 
 Consent means the person was asked and said yes, so they *withdraw*. An objectable
 basis means the controller proceeded on its own recorded justification, so the person
@@ -679,7 +710,8 @@ is a fact about its declaration, never assumed either way.
 5. A purpose whose basis is not objectable returns `privacy.purpose.notobjectable`.
 6. An objection before any version of the privacy notice is published is refused with
    `privacy.notice.unpublished`; withdrawing an objection the subject has not made
-   changes nothing and is answered as a withdrawal.
+   changes nothing and is answered as a withdrawal; objecting again while an objection
+   stands records nothing and raises no `ObjectionChanged`.
 
 ---
 
@@ -897,10 +929,14 @@ Erasure SHALL overwrite the wrapped key with an irreversible value.
 **Values (D-153).** Fields are encrypted with AES-256-GCM (32 byte data key, 12 byte
 nonce, 16 byte tag), one data key per subject, wrapped under the key-encryption key
 with AES key wrap with padding (RFC 5649). The format marker is one byte, `0x01` for
-this scheme. An erased wrapped key is 32 zero bytes under marker `0x00`; every decrypt
-refuses it, and the DR-016 ledger and a restore recognise it as erased.
+this scheme. An erased wrapped key is 32 zero bytes wherever a wrapped key is held. The
+subject-key table keeps the format marker in a column of its own and sets it to `0x00`
+with them; a wrapped key held with no marker (an outbox row's, an invitation's, a
+mailbox's) is the 32 zero bytes alone, and no marker byte is written into it. Every
+unwrap refuses a wrapped key of 32 zero bytes before it is tried, and the DR-016 ledger
+and a restore recognise it as erased.
 
-*Source: D-097, D-099, D-100, D-147, D-166, D-171, D-172, D-173, D-174, D-178*
+*Source: D-097, D-099, D-100, D-147, D-166, D-171, D-172, D-173, D-174, D-178, D-183*
 
 **Per column, not per row.** Name and phone on a host record are encrypted; its
 non-personal columns (dates, amounts, quantities, references) are not. Aggregates and
@@ -1044,12 +1080,12 @@ address neutralised, in the transaction that records the confirmation, and the r
 remains, so nothing about a person outlives an invitation that led nowhere.
 
 **The send outbox.** A send may name no subject, or a subject that holds no key yet, so
-an outbox row holds the whole message (destination, source address and values) in one
-column under a data key of the row's own, wrapped under the deployment's data key, beside
-the subject it names. Erasure SHALL overwrite the wrapped key of every outstanding row
-naming the subject with the erased value (marker `0x00`, **Values** above), in the
-erasure transaction, and a row whose key is erased SHALL be removed without being
-carried.
+an outbox row holds the whole message (destination, source address, values and the
+reference each message is carried under) in one column under a data key of the row's
+own, wrapped under the deployment's data key, beside the subject it names. Erasure SHALL
+overwrite the wrapped key of every outstanding row naming the subject with the erased
+value (32 zero bytes, **Values** above; the outbox keeps no marker), in the erasure
+transaction, and a row whose key is erased SHALL be removed without being carried.
 
 **Acceptance criteria**
 1. Every encrypted field declares the column identifying its subject; startup fails
@@ -1133,14 +1169,14 @@ sign in to.
 recoverable by decrypting the subject's own encrypted column — so rotation is a batch
 operation across every live subject. Erased subjects need none; their fingerprints are
 already neutralised. What no value stands behind (a held username, an erased subject's
-reservation, the lines of the abuse ledgers) is read under its version until it lapses,
-and the previous version is retired only then (OPS-SEC-003).
+reservation, the lines of the abuse ledgers, a sign-in in progress) is read under its
+version until it lapses, and the previous version is retired only then (OPS-SEC-003).
 
 **Values (D-153).** The keyed function is HMAC-SHA-256 over the canonical UTF-8 bytes
 (IDN-ACCT-004), 32 byte output. The neutralised value is 32 zero bytes, and no lookup
 path may match it.
 
-*Source: D-082, D-093, D-166*
+*Source: D-082, D-093, D-166, D-183*
 
 Email and phone must be matchable for sign-in lookup and duplicate detection, and
 anything searchable cannot be encrypted. This is inherent, not a gap.

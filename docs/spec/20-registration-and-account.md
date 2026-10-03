@@ -246,11 +246,13 @@ one operation: step-up, the new identifier verifies, the swap applies at once, a
 undo goes to the remaining channels of the account. **Only where no other channel
 exists at all** SHALL the old address confirm before the swap, except within an
 admin-assisted enrolment session (AUTH-RECOV-002), where the approver's recorded
-confirmation stands in for the old address and the new address confirms alone. A
-replace whose codes have all expired unused SHALL be swept (OPS-OBS-003), leaving the
-identifier as it stood.
+confirmation stands in for the old address and the new address confirms alone. The
+confirmation is the message `identifier-change-confirm` under the sending purpose
+`verification`, as the new address's code is: the person making the change asked for it,
+and it is not a notice (AUTH-ABUSE-004). A replace whose codes have all expired unused
+SHALL be swept (OPS-OBS-003), leaving the identifier as it stood.
 
-*Source: D-148; D-146, D-166, amends D-035 and restates IDN-LIFE-004, IDN-LIFE-007, IDN-LIFE-010*
+*Source: D-148; D-146, D-166, D-183, amends D-035 and restates IDN-LIFE-004, IDN-LIFE-007, IDN-LIFE-010*
 
 The degenerate case is one email, phone optional and never added: nothing else could
 undo a hostile change. If that address is lost or compromised, administrative recovery
@@ -265,6 +267,8 @@ undo a hostile change. If that address is lost or compromised, administrative re
    applies when the new address verifies; the old address is not asked.
 4. A replace left past the expiry of its codes is swept, after which a new replace of
    the same identifier is accepted.
+5. The confirmation sent to the displaced address is counted under the purpose
+   `verification` and is neither counted nor refused by `notification.destination`.
 
 ---
 
@@ -471,24 +475,34 @@ The account SHALL be created in **one transaction** at the terms step (REG-SESS-
 not at all. An expired or abandoned session SHALL be swept and SHALL leave nothing
 behind.
 
-*Source: D-146, D-166; amends D-114 (the `pending` state is removed)*
+*Source: D-146, D-166, D-183; amends D-114 (the `pending` state is removed)*
 
 Staged: identifiers and their verification state, the password hash and floor flag,
 enrolled authenticators (WebAuthn ceremonies use the session's provisional user handle,
-which becomes the subject identifier), provider `sub`, the age answer, consents, the
-notice presentation record, the invitation its token opened (the token itself is never
-staged), the originating client identifier (API-REDIR-002) and the locale.
+which becomes the subject identifier), the WebAuthn ceremony it has open (its kind,
+challenge and expiry), the TOTP generator it has begun and not confirmed (its label and
+secret), provider `sub`, the age answer, consents, the notice presentation record, the
+invitation its token opened (the token itself is never staged), the originating client
+identifier (API-REDIR-002), the whole address its begin arrived on (AUTH-SESS-013) and
+the locale. The open ceremony and the unconfirmed generator are each spent or replaced
+under the lock on the session, and the address is held whole, never in the form
+AUTH-ABUSE-001 counts a source by.
 
 **Acceptance criteria**
 1. Abandoning after verifying both identifiers leaves no account and no reservation; a
    later registration with the same identifiers is a fresh one.
-2. A request against a registration session from a browser without its pre-authentication
-   cookie is refused.
+2. A request against a registration session from a browser without its
+   pre-authentication cookie is refused, except a request presenting a message's
+   `linkToken`.
 3. The session store contains no registration session older than
    `registration.session.lifetime`.
 4. Exactly one `AccountRegistered` event fires per created account, and no account exists
    in a state that is not `active` immediately after creation, save where an invitation's
    policy holds it at enrolment (AUTH-RECOV-001 enforced).
+5. Beginning a passkey ceremony or a TOTP generator at the security step writes no row
+   outside the session store; the generator's secret is unreadable from a dump; the
+   terms step writes only a confirmed generator, under the new account's subject key; an
+   abandoned or expired session leaves neither behind.
 
 ---
 
@@ -553,29 +567,32 @@ show the code to type and a control that **ends the registration session at once
 Nothing SHALL change on a plain open. Five wrong codes SHALL invalidate the code
 (`code.verification.attempts`); a new code draws on the sending restrictions
 (AUTH-ABUSE-004). The message SHALL be `verification-link` (`10`, message kinds),
-carrying both the code and the link. A wrong code, and a link token that opens nothing,
-SHALL be counted as a failure against the source and the identifier by the throttle of
-AUTH-ABUSE-001, and every ask for a code or a link SHALL first be held to that
+carrying both the code and the link. A wrong code SHALL be counted as a failure against
+the source and the identifier by the throttle of AUTH-ABUSE-001, and a pressed link
+token that opens nothing against the source alone; the source is that of the request in
+hand. Every ask for a code or a link, and every press, SHALL first be held to that
 throttle's delay.
 
 **Values (D-162, D-166).** `GET /register/events` is woken by a PostgreSQL notification
 on the channel `identity_registration`, raised inside the transaction that changes the
 session (an identifier verified, a step completed) and so released only on commit, and
 reads the state back every `registration.events.pollinterval`, whichever comes first.
-Channels are database-wide, so a host SHALL NOT use that name. A lost channel SHALL
-raise the `degradation` condition with `details.component` `registration-channel`
-(OPS-OBS-002). Every link the library sends has the form of API-LAND-001,
-`<origin>/link#<kind>.<token>`, the origin being the landing origin the host declares
-for the application (`LandingOrigins`, LIB-HOST-001) and the kind one of `10`'s link
-kinds. The links of this chapter are `registration` (a registration's identifiers),
-`invitation` (an invitation) and `sign-in` (a sign-in link), which land on the
-authentication application, and `identifier` (an identifier's add or replace),
-`identifier-confirm` (the old address's confirmation of REG-IDENT-007) and `undo` (the
-undo of REG-IDENT-006), which land on the account application. Every kind acts only on
-a press, never on load (FE-VER-001). The token travels in the fragment, so no request,
-log or referrer carries it.
+Channels are database-wide, so a host SHALL NOT use that name. A lost channel SHALL be
+raised as the `degradation` condition with `details.component` `registration-channel` by
+the registration signal (the listener that wakes `GET /register/events`) itself, in a
+scope and unit of work of its own, when a wait begins while its channel is not
+listening; the event stream takes only the signal (OPS-OBS-002, LIB-API-005). Every link
+the library sends has the form of API-LAND-001, `<origin>/link#<kind>.<token>`, the
+origin being the landing origin the host declares for the application (`LandingOrigins`,
+LIB-HOST-001) and the kind one of `10`'s link kinds. The links of this chapter are
+`registration` (a registration's identifiers), `invitation` (an invitation) and
+`sign-in` (a sign-in link), which land on the authentication application, and
+`identifier` (an identifier's add or replace), `identifier-confirm` (the old address's
+confirmation of REG-IDENT-007) and `undo` (the undo of REG-IDENT-006), which land on the
+account application. Every kind acts only on a press, never on load (FE-VER-001). The
+token travels in the fragment, so no request, log or referrer carries it.
 
-*Source: D-148; D-146, D-162, D-166, supersedes the code-only design of IDN-LIFE-004; API-LAND-001*
+*Source: D-148; D-146, D-162, D-166, D-183, supersedes the code-only design of IDN-LIFE-004; API-LAND-001*
 
 Without the browser binding, an attacker who starts a registration with a victim's
 address gets it verified the moment the victim clicks the verification link. Mail scanners
@@ -605,7 +622,10 @@ keys.
 5. A registration message carries both the code and the link.
 6. Wrong registration codes are counted by the throttle of AUTH-ABUSE-001 against the
    source and the identifier; while its delay stands, a further code or ask is refused
-   with `auth.throttled` and `retryAt`.
+   with `auth.throttled` and `retryAt`. A pressed link token that opens nothing is
+   counted against the source of the request that presents it and answered
+   `auth.code.expired`; while that source's delay stands, the press is refused with
+   `auth.throttled` and `retryAt`. An unpressed one counts nothing.
 7. With the database channel lost, a verification still advances the waiting screen
    within `registration.events.pollinterval`, and `degradation` is raised.
 
@@ -640,13 +660,16 @@ the same, and nobody SHALL be notified. Whether a staged identifier is held or r
 SHALL be judged again inside the terms step's transaction, before the account is
 written: one taken or reserved since it was staged ends the session, and no account is
 created. The email an invitation binds is the one exception: where an account holds it,
-the press that begins the registration is refused (REG-INV-001).
+the press that begins the registration is refused (REG-INV-001). A code presented for a
+held or reserved value SHALL be answered from a verification-code record that no code
+matches (AUTH-FACT-004), exactly as a wrong code for a value no account holds; the same
+holds at an identifier's add and replace (REG-IDENT-004, REG-IDENT-007).
 
 **Values (D-153).** The sign-in exit is a static link on every registration screen, drawn
 by the frontend; `GET /register` carries no field for it, because a field present only
 for a duplicate would be an oracle.
 
-*Source: D-146, D-162, D-166; D-076, D-112*
+*Source: D-146, D-162, D-166, D-183; D-076, D-112*
 
 **Acceptance criteria**
 1. The response to a duplicate, the email an invitation binds excepted, is byte- and
@@ -657,6 +680,11 @@ for a duplicate would be an oracle.
 3. The session expires without creating an account.
 4. An identifier another account takes, or that becomes reserved, after it was staged
    ends the session at the terms step, and no account is created.
+5. A code presented for a duplicate, or for a value reserved for an undo, is answered as
+   a wrong code for a value no account holds: `auth.code.invalid` for each of the first
+   `code.verification.attempts` tries, then `auth.code.expired`, in the same bytes and
+   counted by the throttle alike; no code verifies it, and an add or replace of such a
+   value is swept when one of a fresh value would be.
 
 ---
 
@@ -702,14 +730,15 @@ consent-based purpose the host declares (PRIV-CONS-002 to 004), none of which bl
 registration. Every document SHALL be readable in its governing language and any
 available translation without changing the interface language (PRIV-CONS-005). On
 submit the one transaction of REG-SESS-001 SHALL run and the person SHALL be signed in
-at the assurance the security step proved (AUTH-SESS-005a). Completing the step SHALL
-remember the registering browser as seen for `device.verification.lifetime`, so that the
-new-device check (AUTH-FACT-016) does not hold the account's next sign-in from it. The
-account SHALL NOT be created without the terms version accepted and the notice version
-presented; a session that reaches the transaction without either is refused with
-`identity.registration.incomplete`.
+at the assurance the security step proved (AUTH-SESS-005a), in a session that records
+the whole address of the request completing the step (AUTH-SESS-013). Completing the
+step SHALL remember the registering browser as seen for `device.verification.lifetime`,
+so that the new-device check (AUTH-FACT-016) does not hold the account's next sign-in
+from it. The account SHALL NOT be created without the terms version accepted and the
+notice version presented; a session that reaches the transaction without either is
+refused with `identity.registration.incomplete`.
 
-*Source: D-148; D-146, D-166, PRIV-CONS-005, PRIV-CONS-008a*
+*Source: D-148; D-146, D-166, D-183, PRIV-CONS-005, PRIV-CONS-008a*
 
 **Acceptance criteria**
 1. Registration completes with every consent control left unticked.
@@ -722,6 +751,8 @@ presented; a session that reaches the transaction without either is refused with
    browser it is.
 5. A session that reaches the terms step's transaction without a terms or notice version
    creates no account and is refused with `identity.registration.incomplete`.
+6. A registration completed from an IPv6 address opens a session that records the whole
+   address, not its /64.
 
 ---
 
@@ -842,8 +873,9 @@ domain SHALL be **verified by a DNS TXT record** before it counts and SHALL be
 sign-in email and any open email chosen at invitation acceptance SHALL be in the list
 (`identity.identifier.domainnotallowed`). At acknowledgement the lock SHALL be judged as
 it then stands on the address the member will sign in with: the corporate address where
-one is taken on, else the bound email, else at least one verified email of the
-accepting account. An invitation SHALL be refused at issue with
+one is taken on, else the bound email, else at least one verified email of the accepting
+account; an account holding no verified email has no address the lock admits and is
+refused. An invitation SHALL be refused at issue with
 `identity.identifier.domainnotallowed` where the address its member will sign in with
 (the corporate address where the mail is integrated, REG-MAIL-001; the bound email
 otherwise) is outside the lock of the organization it invites into; the personal email
@@ -891,7 +923,7 @@ domain is read the same way and admits only where it equals a listed domain; a
 subdomain is a different domain. An address whose domain does not read is admitted only
 where no lock applies.
 
-*Source: D-146, D-166*
+*Source: D-146, D-166, D-183*
 
 In a single-organization deployment the administrator is trusted anyway; the library is
 generic, and DNS verification is what every comparable product requires.
@@ -914,7 +946,8 @@ generic, and DNS verification is what every comparable product requires.
 9. A sign-in link requested for a locked address answers 202 and sends nothing; a link
    sent before its domain was removed does not sign in.
 10. An existing account holding no verified email inside a locked organization's list
-    cannot acknowledge an open invitation into it.
+    cannot acknowledge an open invitation into it, an account holding no verified email
+    at all included, and nothing is written.
 11. An invitation whose member's sign-in address is outside the lock is refused at issue
     with `identity.identifier.domainnotallowed`.
 12. Listing a domain while no DNS resolver is declared is refused with

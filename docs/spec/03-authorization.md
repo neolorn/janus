@@ -397,7 +397,7 @@ writes records the nil subject as its granter and the reason `AUTHZ-DERIVE-005`,
 its audit record names the principal (AUTHZ-GRANT-003). The refresh meets no gate of
 its own: the host calls it from its own gated operation (CONV-DESIGN-002 AC3).
 
-*Source: D-043, D-162, D-166*
+*Source: D-043, D-162, D-166, D-183*
 
 Materialisation reintroduces, deliberately and in one controlled place, the
 synchronisation problem the design otherwise avoids. It is the last rung of the
@@ -416,7 +416,13 @@ and for the same reason.
    naming the derivation; a grant it writes names the nil granter with the reason
    `AUTHZ-DERIVE-005`.
 5. A model declaring a derivation, materialised or not, whose relationship has no
-   declared source fails startup with `model.startup.declarationmissing`.
+   declared source fails startup with `model.startup.declarationmissing`; a source given
+   twice, naming no declared relationship, answering rows of another type than the
+   derivation's, or naming a context the container does not give in a scope or whose
+   model does not map the contract tables fails startup with
+   `model.startup.declarationinvalid`.
+6. The view and the drift check evaluate a derivation in one statement in the host's
+   context, over the rows and the contract tables of one context instance.
 
 ---
 
@@ -628,10 +634,13 @@ identifier validation in `02-authentication`.
 **AUTHZ-MODEL-005** — The built model SHALL be serialized to a file at startup, for
 committing and reviewing.
 
-The output SHALL also list every right the maintenance credential of OPS-MIG-003a holds,
-each as the object it is held on, its kind first, and the right (D-162).
+The output SHALL also list every right the maintenance credential of OPS-MIG-003a holds
+in the library's schema, those it holds through `PUBLIC` included, each as the object it
+is held on, its kind first, and the right (D-162); what it holds in any other schema is
+what a role granted nothing holds, `USAGE` on `public` among it, and is not listed
+(OPS-MIG-003a, D-183).
 
-*Source: D-015, D-162, D-166*
+*Source: D-015, D-162, D-166, D-183*
 
 Recovers the one real advantage of an external model file — diffability in review —
 without giving up compiler-checked property references.
@@ -704,14 +713,18 @@ parameters. Neither rendering ever enumerates permitted resources (AUTHZ-PRIN-00
 both renderings add one condition from the same rule definition: an `EXISTS` over the
 library's view `identity.consented_resources` (each registered record whose data
 subject, AUTHZ-MODEL-003, holds a consent for a purpose that is neither withdrawn nor
-superseded, with the consent's kind) for the row's type and identifier and that purpose,
-of kind `written` where the purpose requires written consent. The LINQ rendering reads
-the view through a third `IQueryable` the host supplies from its own `DbContext`, mapped
-by `MapAuthorizationTables(ModelBuilder)` beside the other two; the SQL rendering names
-the view. A list therefore admits no record whose data subject has not consented, or has
-withdrawn (PRIV-SENS-002, PRIV-SENS-002a).
+superseded, with the consent's document and kind) for the row's type and identifier and
+that purpose, recorded against the document the purpose now names, of kind `written`
+where the purpose requires written consent. The rule definition passes that document
+from the model as a parameter, as it passes the permission and the resource type, so a
+consent against another document is refused by the lists as by a check in every process
+(PRIV-CONS-007). The LINQ rendering reads the view through a third `IQueryable` the host
+supplies from its own `DbContext`, mapped by `MapAuthorizationTables(ModelBuilder)`
+beside the other two; the SQL rendering names the view. A list therefore admits no
+record whose data subject has not consented, or has withdrawn (PRIV-SENS-002,
+PRIV-SENS-002a).
 
-*Source: D-017, D-166*
+*Source: D-017, D-166, D-183*
 
 **Acceptance criteria**
 1. Both renderings derive from one rule definition — neither is written separately.
@@ -719,8 +732,8 @@ withdrawn (PRIV-SENS-002, PRIV-SENS-002a).
 3. The SQL fragment is parameterised; no value is interpolated into SQL text.
 4. For a permission bound to a consent-based purpose, both renderings admit only the
    records whose data subject holds a live consent of the required kind for that
-   purpose, and a truth-table case bound to such a purpose is asserted equal across
-   them.
+   purpose, recorded against the document the purpose now names, and a truth-table case
+   bound to such a purpose is asserted equal across them.
 
 ---
 
@@ -800,8 +813,10 @@ explanation.
 **Values (D-160).** The `stepup` residual comes from the **gate bound to the action**, not
 from the permission string: the model builder binds a host-declared action to a step-up
 gate name (`10` section 5a or a host-declared gate), and the library-owned actions carry
-their bindings in section 5a. `requires` lists `stepup` for an action whose bound gate
-the session does not currently satisfy.
+their bindings in section 5a. `requires` lists `reauthenticate` for an action whose
+bound gate the session would satisfy but for proof attained before its last downgrade
+(AUTH-SESS-009), and `stepup` for one whose bound gate it otherwise does not currently
+satisfy (`10` section 5.20).
 
 **Values (D-162, D-166).** The `consent` residual comes from the **purpose bound to the
 action**, as `stepup` comes from its gate: the model builder binds a host-declared action
@@ -822,7 +837,7 @@ each derivation confers allows is read from the model and mapped in memory; no r
 and no permission costs a further query, and no grant is read through the library's own
 connection.
 
-*Source: D-015, D-078, D-162, D-166*
+*Source: D-015, D-078, D-162, D-166, D-183*
 
 The frontend must never infer permissions from role names; that is how a button
 appears while the endpoint refuses. Computing them per row in separate calls
@@ -856,11 +871,27 @@ acknowledgement, are modifying and are refused through the gate with `authz.rest
 as every other modifying action is; what IDN-ACCT-007 keeps available to a restricted
 account is admitted.
 
-*Source: D-037, D-166*
+**Values (D-183).** The restriction decides a write, so the gate SHALL judge it with the
+acting account's row held (CONV-DESIGN-003) in the transaction the action writes in, to
+that transaction's end: `SELECT ... FOR SHARE`, or `FOR UPDATE` where the operation goes
+on to lock that row itself, taken before any other row lock of the operation. A
+restriction, which takes the row `FOR UPDATE`, therefore commits either before the
+action, which the gate then refuses, or after it. A library operation refuses before its
+unit of work begins where the state it reads then already refuses, and asks the gate
+again inside its unit of work before its first write, on the state read under that hold;
+a refusal there is recorded as every gate refusal is, and the unit of work rolls back.
+Where a host asks the gate for a modifying action inside an open transaction, the gate
+holds the row in that transaction the same way.
+
+*Source: D-037, D-166, D-183*
 
 **Acceptance criteria**
 1. A restricted account's records are readable by that account and not modifiable.
 2. Restriction is enforced through the gate, not by scattered checks.
+3. A restriction committed after a modifying action of the account passed the gate step
+   and before its first write refuses the action with `authz.restricted`, and the action
+   leaves nothing; a restriction begun while an admitted action holds the row waits for
+   that action to commit.
 
 ---
 
@@ -924,10 +955,13 @@ Every gate refusal SHALL carry the identifier, whoever asked. A refusal of backg
 work SHALL be recorded as its other actions are: the nil subject under both identities,
 and the system principal's name and stated reason (IDN-PRIN-001 AC4, D-162). The record
 of a refusal SHALL be written outside any transaction the caller holds open and
-committed at once, so a rollback of the caller's work leaves it standing; an action's
-own records stay in its transaction (D-166).
+committed at once, so a rollback of the caller's work leaves it standing. Where it takes
+its actor's refusals past `alerting.denials.threshold`, the `denial-spike` alert and its
+`AlertRaised` row SHALL be written in that same transaction, the count read with the
+actor's refusals held (CONV-DESIGN-003), and a failure to write them fails the record
+(OPS-ALERT-001). An action's own records stay in its transaction (D-166, D-183).
 
-*Source: D-016, D-162, D-166*
+*Source: D-016, D-162, D-166, D-183*
 
 Support can diagnose a legitimate permission problem without the response revealing
 anything.
@@ -939,7 +973,9 @@ anything.
 3. The identifier of a refusal of a system principal resolves to the principal's name
    and reason.
 4. A refusal inside a transaction the caller rolls back is still recorded, resolves by
-   its identifier, and counts toward `alerting.denials.threshold`.
+   its identifier, and counts toward `alerting.denials.threshold`; one that takes the
+   count past it raises `denial-spike`, with its `AlertRaised` row, whatever the
+   caller's outcome.
 
 ---
 
@@ -1015,7 +1051,8 @@ cookie.
 
 **AUTHZ-IMP-001** — The access context SHALL carry **acting identity** and
 **effective identity** as separate values, identical in every current path. Audit
-SHALL record both.
+SHALL record both, and an event that names who acted SHALL carry both as the context
+gives them; neither is ever compared with the other.
 
 An audit record SHALL also name, where there is one, the data subject it concerns, apart
 from both identities: the account an action is taken on is the record's `subject`, never
@@ -1024,7 +1061,7 @@ acting identity, the nil subject for both beside a system principal. The trail r
 subject (PRIV-BREACH-002) reads the records naming the subject as acting identity or as
 `subject`.
 
-*Source: D-014, D-166*
+*Source: D-014, D-166, D-183*
 
 Impersonation is out of scope. Two identity fields where one would do is defensible
 on its own terms — it makes "who did this" unambiguous — and retrofitting a second
@@ -1046,7 +1083,7 @@ identity into every audit record and permission check later would not be.
 relationship, permission, and condition for each resource type. Changing a policy
 SHALL require changing the table first.
 
-*Source: D-015*
+*Source: D-015, D-183*
 
 The diff in that table is the change under review. It is the difference between an
 authorization system that is trusted and one that is feared.
@@ -1055,9 +1092,12 @@ authorization system that is trusted and one that is feared.
 1. The table covers direct grants, container inheritance, multi-level inheritance,
    group membership, nested group membership, deny overriding allow, expiry,
    cross-organization isolation, **derived grants**, **deny defeating a derived
-   grant**, and **a derived grant on a container reaching its contents**.
+   grant**, **a derived grant on a container reaching its contents**, and **a bound
+   action judged from a host's assurance report** (met; unmet on its level, its phishing
+   resistance, its age or an instant after now; a provider that fails; no provider).
 2. Every case runs through both the single check and the list filter
-   (AUTHZ-PRIN-001).
+   (AUTHZ-PRIN-001). A step-up case agrees when the filter lists the record and the
+   check answers the gate's outcome (AUTHZ-GATE-005).
 3. Where a derivation is materialised, the same cases pass identically before and
    after materialisation.
 

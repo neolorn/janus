@@ -143,7 +143,7 @@ The identifier is the value used in `loginFactors` (`10` section 4.1a), in `/aut
 requests and in credential records; eleven identifiers may appear in `loginFactors`
 (D-151).
 
-*Source: D-151; D-148, D-012, D-009, D-013, D-141, D-146, D-147, D-166*
+*Source: D-151; D-148, D-012, D-009, D-013, D-141, D-146, D-147, D-166, D-183*
 
 Conditional UI (autofill) is a presentation mode of passkey sign-in, not a separate
 factor. A hardware security key is one way to hold a WebAuthn credential, appearing
@@ -162,6 +162,16 @@ out-of-band confirmation, not by possession of the phone (D-111). Where SMS *is*
 authentication factor (`phoneLink`, `phoneCode`) it is a **restricted** factor under
 NIST SP 800-63B-4 section 3.1.3.3 (AUTH-FACT-002b).
 
+**Values (D-166, D-183).** A `phoneCode` code is asked for by `POST /auth/factor` (at a
+step-up, `POST /auth/step-up`) naming `phoneCode` with no `value`, once a challenge
+offers it after a first factor or under a session. The library then asks the phone
+signal of the number (AUTH-FACT-002b). Where it does not answer `risk`, a code bound to
+that challenge is issued on its record and sent as criterion 6 states, and the ask is
+answered 202. Where it answers `risk`, nothing is issued, sent or counted, the
+consideration is recorded, `phoneCode` is withheld from the challenge, and the ask is
+answered with what the challenge then offers (AUTH-FACT-002b criterion 6). An ask before
+a first factor sends nothing and is answered 202, whatever the account holds.
+
 **Acceptance criteria**
 1. `emailLink`, `emailCode`, `phoneLink` and `phoneCode` are absent from every
    enrolment and sign-in screen until the applicable policy's `loginFactors` enables
@@ -175,10 +185,16 @@ NIST SP 800-63B-4 section 3.1.3.3 (AUTH-FACT-002b).
    as a second step is one issued for `phoneCode` on that sign-in.
 5. A sign-in by `phoneLink` alone records AAL1; password plus `phoneCode` records
    AAL2 and not phishing-resistant (AUTH-SESS-005a).
-6. A second-step challenge that offers `phoneCode` sends its code to the number as the
-   message kind `secondstep-code` under the purpose `secondfactor` (AUTH-ABUSE-004),
-   an authentication code under AUTH-FACT-004, and that code, presented, completes the
+6. A `phoneCode` ask at a second-step challenge that offers it, where the number's
+   signal does not answer `risk`, sends its code to the number as the message kind
+   `secondstep-code` under the purpose `secondfactor` (AUTH-ABUSE-004), an
+   authentication code under AUTH-FACT-004, and that code, presented, completes the
    sign-in.
+7. A `phoneCode` ask whose number answers `risk` sends nothing and records the
+   consideration; at a sign-in it is answered with the factors the challenge still
+   offers, or `auth.factor.rejected` where none is left; at a step-up with no
+   combination left it is answered `auth.stepup.required` with `outcome` `report-loss`
+   or `enrol`.
 
 ---
 
@@ -205,7 +221,8 @@ optional host callback declared on the model builder (LIB-HOST-001), returning `
 person sees is the frontend's, keyed on the catalogue identifier (`18` FE-SEC-001); no
 response of `09` carries a marker field.
 
-*Source: D-146; NIST SP 800-63B-4 section 3.1.3.3; IDN-ATTR-008; `18` FE-SEC-001; D-166*
+*Source: D-146; NIST SP 800-63B-4 section 3.1.3.3; IDN-ATTR-008; `18` FE-SEC-001; D-166,
+D-183*
 
 Two-step is a second factor *beside a password*; without a password there is nothing
 for it to be second to, and a passkey is already two factors (AUTH-SESS-005a). The
@@ -233,10 +250,11 @@ person who bought one for two-step should not have to buy another to go password
    account's other factors, and a sign-in with none left is refused with
    `auth.factor.rejected`; a sign-in link asked for by text is not sent, and
    `POST /auth/link` answers 202 as it always does; at a step-up the restricted entries
-   are withheld from the combinations offered (AUTH-STEP-002); a recovery link is not
-   sent to the number, and `/recovery/begin` answers 202 as it always does. The signal
-   is asked of the number, so every answer is the same whether or not an account holds
-   it (AUTH-ABUSE-003 AC1).
+   are withheld from the combinations offered (AUTH-STEP-002); at the ask of a
+   `phoneCode` code the entry is withheld the same way and the ask is answered with what
+   remains (AUTH-FACT-002); a recovery link is not sent to the number, and
+   `/recovery/begin` answers 202 as it always does. The signal is asked of the number,
+   so every answer is the same whether or not an account holds it (AUTH-ABUSE-003 AC1).
 
 ---
 
@@ -332,8 +350,17 @@ correct code, once accepted, is refused if presented again. Every channel verifi
 code (a registration's, an identifier's, the new-device check's) SHALL be issued and
 answered through one verification-code record, in a table of its own that no
 credential is reachable through. A wrong try and the spending of the right code SHALL
-be decided under a lock on that record, so that concurrent tries count as the same
-number of sequential ones and the right code answers once.
+be decided under a lock on that record, a wrong try's count kept as AUTH-ABUSE-001
+states, so that concurrent tries count as the same number of sequential ones and the
+right code answers once. A value REG-SESS-005 answers as held or reserved, at
+registration or at an identifier's add or replace, SHALL be given a record as any other
+value is, with the same lifetime and attempt cap, holding no code that any presentation
+matches: no code is sent (a held value's holder is notified as REG-SESS-005 states, and
+nobody for a reserved value), and every presentation SHALL be read, compared in fixed
+time, counted and answered on the path a presentation against a sent code takes. It
+therefore answers `auth.code.invalid` for each of the first `code.verification.attempts`
+tries and `auth.code.expired` after them and after its lifetime, and is swept when such
+a record would be.
 
 **Authentication codes.** The `emailCode` sign-in code, the code of a `phoneCode`
 second step (AUTH-FACT-002), and the code a sign-in link shows where it is opened in
@@ -346,7 +373,7 @@ SHALL be decided under a lock as a verification code is. The `emailCode` code SH
 sent as the message kind `sign-in-code` and the `phoneCode` code as `secondstep-code`,
 never as a verification code.
 
-*Source: D-034, D-146, D-166*
+*Source: D-034, D-146, D-166, D-183*
 
 Collapsing them is a common source of bugs in which a verification code becomes a
 login credential. The attempt cap makes a six-digit code unguessable within its
@@ -393,9 +420,12 @@ has up to 30 seconds to reuse an observed code.
 
 **AUTH-FACT-006** — A TOTP secret is the account's credential secret: it SHALL be
 encrypted at rest under the account's subject key (PRIV-RIGHT-005a) and SHALL be
-destroyed with that key.
+destroyed with that key. Before the account exists, a secret begun at registration is a
+staged value of the registration session (PRIV-RIGHT-005a, REG-SESS-001) until the terms
+step's transaction encrypts it under the new account's subject key, and is swept with
+the session.
 
-*Source: D-034, D-026.3, D-166*
+*Source: D-034, D-026.3, D-166, D-183*
 
 **Acceptance criteria**
 1. Secrets are not readable from a database dump alone.
@@ -924,12 +954,12 @@ the rehash.
 credential derives. Revoking it SHALL invalidate everything derived from it.
 
 The record holds: subject, created, last seen, **assurance level attained**,
-**phishing-resistance attained**, timestamp of each, origin address, device, idle
-expiry, absolute expiry.
+**phishing-resistance attained**, timestamp of each, the instant it was last downgraded
+(AUTH-SESS-009), origin address, device, idle expiry, absolute expiry.
 
 Redis for speed, PostgreSQL as the durable copy.
 
-*Source: D-007, D-020.2, D-147*
+*Source: D-007, D-020.2, D-147, D-183*
 
 **Acceptance criteria**
 1. Revoking the session invalidates the app session, the auth session, and any
@@ -1364,7 +1394,14 @@ step-up during the grace SHALL be told the requirement and the deadline and SHAL
 offered enrolment; the expiry of the grace SHALL end no live session, and the hold
 applies at the account's next sign-in.
 
-*Source: D-026.5, D-146, D-166*
+**Values (D-183).** A downgrade SHALL be recorded on the session record as the instant
+it was made, written in the transaction that makes it; the attained level and phishing
+resistance stay as they were reached. A gate SHALL count what the session proved only
+where it was attained after that instant (AUTH-STEP-002 step 1), so a downgraded session
+passes no gate until a combination the policy in force permits is presented, and that
+presentation lifts the downgrade.
+
+*Source: D-026.5, D-146, D-166, D-183*
 
 Terminating outright logs everyone out mid-work for a non-emergency, training users
 to expect random logouts.
@@ -1378,6 +1415,9 @@ to expect random logouts.
    account is held at enrolment (AUTH-FACT-017).
 5. A session the account held before a membership attaches keeps read access and passes
    no step-up gate until a factor the organization's policy permits is presented.
+6. A session that proved the gate one minute before a membership attaches is asked a
+   presentation at its next gated action; a permitted factor presented then passes the
+   gate, and the session's attained values from before the downgrade are unchanged.
 
 ---
 
@@ -1407,12 +1447,12 @@ split across two apps or folded into another.
 (AUTH-SESS-001) and the account's reachable assurance (AUTH-STEP-006) only; it SHALL
 NOT read the account's list of enrolled factors, and no rule text SHALL name a factor.
 
-*Source: D-148; D-020.2, D-067, D-086, D-125, D-141, D-146, D-166*
+*Source: D-148; D-020.2, D-067, D-086, D-125, D-141, D-146, D-166, D-183*
 
 **Evaluation order:**
 1. **Check what the session already proved.** If the attained level and
-   phishing-resistance meet the gate and were earned within the maximum age,
-   **require nothing**.
+   phishing-resistance meet the gate and were earned within the maximum age and after
+   the session's last downgrade (AUTH-SESS-009), **require nothing**.
 2. **Otherwise offer every combination of the account's usable factors** (state
    `active`, AUTH-RECOV-007, of a factor the policy in force permits in
    `loginFactors`, and not a restricted entry withheld because its number's signal
@@ -1439,16 +1479,29 @@ NOT read the account's list of enrolled factors, and no rule text SHALL name a f
      the cancel option; the gate stays closed until invalidation completes.
 
 A factor the policy in force does not permit in `loginFactors` is never offered, and
-presenting it at step-up is refused with `auth.factor.notpermitted`, as at sign-in
-(IDN-LIFE-009b).
+presenting it at step-up is refused with `auth.factor.notpermitted` before the factor is
+verified, and counted as a refused step-up factor (AUTH-ABUSE-001). At sign-in the same
+refusal is made only after the factor has succeeded, so that a caller not yet
+authenticated learns nothing of the account's memberships (IDN-LIFE-009b,
+AUTH-ABUSE-003).
 
-A gate bound to a host's action (AUTHZ-GATE-005) is judged against the library's
-session the request carries, where that session is the acting person's own; a
-host-named gate that no policy states values for costs the strictest of the policy's
-gates, field by field. Where no session of the library carries the request, the host's
-assurance provider (LIB-HOST-004) reports the attained level, whether it was
-phishing-resistant, when it was attained and the account's reachable assurance, and the
-gate is judged from those.
+A gate bound to a host's action (AUTHZ-GATE-005) is judged against the library's session
+the request carries, where that session is the acting person's own; a host-named gate
+that no policy states values for costs the strictest of the policy's gates, field by
+field. Where no session of the library carries the request, the host's assurance
+provider (LIB-HOST-004) reports the attained level, whether it was phishing-resistant,
+when it was attained and the account's reachable assurance, and the gate, its values
+resolved as for a session, is judged from those. The gate SHALL be met only where the
+provider answers, its report reads (a level of `10` section 5.4, an instant not after
+now), the level reaches the gate's level (the reachable assurance read from the report,
+floor `aal1`), phishing resistance is reported where the gate requires it, and the
+instant lies within the maximum age before now; anything else, a provider failure
+included, is refused with `auth.stepup.required` carrying `required`, `outcome`
+`present`, empty `options` and a null `pendingUntil`: the proof is the host's to obtain
+through its own sign-in, so the answer offers no factor of the library's (LIB-HOST-004).
+Where no assurance provider is registered, no report is asked and the action is refused
+with `auth.stepup.unavailable` (AUTH-STEP-003). A session of the library that is the
+acting person's own is judged in place of the provider.
 
 **Why "reaches the level", not "strongest held".** A person who enrolled a second
 factor did so to protect exactly these actions. That protection is expressed by the
@@ -1471,7 +1524,8 @@ this design's own extension, recorded as a choice (D-125).
    maximum age, and nothing else; no rule text names a factor.
 2. Evaluating a gate reads the session record and the account's reachable
    assurance; it never enumerates enrolled factors.
-3. A subject whose session meets the gate within the maximum age is not challenged.
+3. A subject whose session meets the gate within the maximum age, and after its last
+   downgrade (AUTH-SESS-009), is not challenged.
 4. On an account whose reachable assurance is AAL2, a bare password passes no gate;
    password + TOTP, password + recovery code, password + security key, or a passkey
    does, and the subject chooses among those they can present.
@@ -1486,7 +1540,8 @@ this design's own extension, recorded as a choice (D-125).
    pending loss report is shown with its completion time; nothing is a bare refusal.
 8. Registering a new factor type changes no gate.
 9. A factor the policy's `loginFactors` does not permit is not offered at a gate, and
-   presenting it is refused with `auth.factor.notpermitted`.
+   presenting it at a gate is refused with `auth.factor.notpermitted`, whether the
+   factor is right or wrong, and counted.
 
 ---
 
@@ -1956,9 +2011,13 @@ registration, recovery and step-up alike. A factor refused at step-up, including
 presented against a challenge that is unknown or not the asker's, SHALL be counted
 against the source and against the session's account in the one account count sign-in
 failures are counted in, and the delay SHALL be asked before the challenge is opened. A
-verification refused in a registration session (a wrong email or phone code, or a link
-token that opens nothing) SHALL be counted against the source and the identifier, and
-each ask of a code or a link in a registration session SHALL ask the delay first.
+verification refused in a registration session SHALL be counted against the source of
+the request that presents it: a wrong email or phone code against that source and the
+identifier, and a pressed link token that opens nothing against that source alone, since
+it names no identifier, once that source's delay has been asked. Each ask of a code or a
+link in a registration session SHALL ask the delay first. Every count and every delay of
+a registration session uses the source of the request in hand, never one stored at its
+begin.
 
 The identifier component SHALL be keyed by the keyed hash, under the fingerprint key
 (OPS-SEC-001), of the identifier's canonical form (an address, a number or a username
@@ -1984,7 +2043,15 @@ failure earns is the one the count it wrote earns under `abuse.throttle.threshol
 and it SHALL run from that failure: an attempt is looked at once the failure's instant
 plus that delay has passed, and a refusal carries that instant as `retryAt`.
 
-*Source: D-013, D-166*
+**Where a refusal's count is kept (D-183).** A count or record a refusal makes that
+SHALL stand whatever the operation's outcome (a failure under this item, a wrong try of
+a code under AUTH-FACT-004, a refused step-up factor, a pressed registration token that
+opens nothing, a trusted device's failure under AUTH-FACT-015, the record of a refused
+factor, signal or provider event) is committed with the refusal, the operation having
+written nothing else (CONV-DESIGN-003). A refusal the gate records is written outside
+the operation instead (AUTHZ-CONCEAL-004).
+
+*Source: D-013, D-166, D-183*
 
 Lockout is a denial-of-service weapon usable by anyone who knows a user's email, at
 no cost to the attacker.
@@ -2139,25 +2206,40 @@ an existing holder** SHALL be governed only by restrictions whose purpose is
 purpose is `any` counts or refuses one, whatever its key. No link or code a person or an
 administrator asked for carries the purpose `notification`: a recovery link and an
 invitation link carry `signin`, as a sign-in link does (REG-IDENT-002, `10` section
-5.15). `notification` and `notification.destination` therefore count security notices
-and other notices only. The per-destination record
-SHALL hold the HMAC, the fingerprint key version it was computed under (OPS-SEC-003)
-and the send timestamps only, kept apart from the records of the other key kinds.
-Before a send's counters are read, and on every run of the expiry sweep, every
-destination record whose newest timestamp is older than the longest interval the
-current destination restrictions declare SHALL be deleted.
+5.15), and the link asking the address a replace displaces to confirm it carries
+`verification`, as the new address's code does (REG-IDENT-007). `notification` and
+`notification.destination` therefore count security notices and other notices only. The
+per-destination record SHALL hold the HMAC, the fingerprint key version it was computed
+under (OPS-SEC-003) and the send timestamps only, kept apart from the records of the
+other key kinds. Before a send's counters are read, and on every run of the expiry
+sweep, every destination record whose newest timestamp is older than the longest
+interval the current destination restrictions declare SHALL be deleted.
 
-**Sending order.** The restrictions and the gateway floor (AUTH-ABUSE-006) SHALL be
-judged inside the transaction of the operation that undertakes the send, and a refusal
-SHALL return before anything is written. An admitted send SHALL write its row to the
-library's own outbox in that transaction. One immediate attempt SHALL run after the
+**Sending order.** Every area undertakes a send through the governed send
+(`IGovernedSend`, CONV-LAYOUT-002), never through `INotificationHandler` or a transport
+itself. The restrictions and the gateway floor (AUTH-ABUSE-006) SHALL be judged inside
+the transaction of the operation that undertakes the send, and a refusal SHALL return
+before its count or its outbox row is written. The judgement SHALL be made with the
+counter of every key the send's restrictions apply to held (`SELECT ... FOR UPDATE`, the
+counter created first where none stands), the counters taken in one fixed order, after
+the operation's own row locks, and held to the end of that transaction, so that two
+sends judged at once are judged one after the other (CONV-DESIGN-003). An admitted send
+SHALL count from its admission: its count, any credit it spends and its row in the
+library's own outbox, carrying the `SendReference` drawn for it, SHALL be written in
+that transaction, and the governed send answers its caller with that reference or with
+the refusal, never with the delivery. One immediate attempt SHALL run after the
 outermost transaction commits, and SHALL be discarded if it rolls back; whatever that
 attempt does not carry is the outbox publisher's, under `outbox.retry.*` (D-022,
 INF-BG-001). No transport SHALL be called inside an open transaction, and an operation
 that rolls back SHALL send nothing. A retried send SHALL be judged by the restrictions
-as they stand when it is retried. A row SHALL be removed once every language it owes is
-taken (IDN-PRIN-003); a send whose attempts are exhausted raises the `degradation`
-condition. This holds on every send path: invitations, recovery, sign-in and notices.
+as they stand when it is retried, with its own count set aside: admitted, it counts at
+the retry's instant in place of its earlier count; refused, it holds none. A send's
+count and any credit it spent SHALL be released where it fails for good: its attempts
+are spent, its row is removed uncarried after erasure (PRIV-RIGHT-005a), a delivery
+report says it failed (INT-SMS-005), or the restrictions refuse its retry. A row SHALL
+be removed once every language it owes is taken (IDN-PRIN-003); a send whose attempts
+are exhausted raises the `degradation` condition in the transaction that removes its
+row. This holds on every send path: invitations, recovery, sign-in and notices.
 
 **Every declared language.** A send resolved to every declared language (IDN-ATTR-001
 step 3) SHALL be judged exactly, with no bucket overrun. By email it SHALL be one
@@ -2169,14 +2251,15 @@ all of them (judged once, with the weight of their number), and each SHALL count
 multilingual rule enters the catalogue: it holds one text per language.
 
 **An ask that sends nothing.** An ask of a sign-in link, an email code or a recovery
-that sends nothing, for any reason, SHALL be judged and counted against the
-restrictions as its message would be, in the message's destination, kind, purpose and
-language, and SHALL be refused by them alike. For an address no account holds, the
-`account` key does not apply. The ask is answered before any transport is called
-(AUTH-ABUSE-003).
+that sends nothing, for any reason, and an ask or resend of a verification code for a
+value REG-SESS-005 answers as held or reserved, at registration or at an identifier's
+add or replace (AUTH-FACT-004), SHALL be judged and counted against the restrictions as
+its message would be, in the message's destination, kind, purpose and language, and
+SHALL be refused by them alike. For an address no account holds, the `account` key does
+not apply. The ask is answered before any transport is called (AUTH-ABUSE-003).
 
 *Source: D-146; replaces the fixed window of D-013, INT-SMS-002 and IDN-LIFE-011;
-OPS-CFG-002; D-142 for the editing model; D-166*
+OPS-CFG-002; D-142 for the editing model; D-166, D-183*
 
 Shipped defaults:
 
@@ -2237,10 +2320,16 @@ or the alert that tells someone something is wrong.
 12. A send no request asked for is counted under no `source` key.
 13. An alert is sent whatever the buckets of every restriction hold; only the
     deduplication of OPS-ALERT-002 limits it.
-14. An ask of a sign-in link, an email code or a recovery that sends nothing is counted
-    against the restrictions as its message would be, and is refused by them alike.
+14. An ask of a sign-in link, an email code or a recovery that sends nothing, and an ask
+    of a verification code for a held or reserved value, is counted against the
+    restrictions as its message would be, and is refused by them alike.
 15. A recovery link and an invitation link are counted under the purpose `signin`, and
-    neither is counted or refused by `notification.destination`.
+    the confirmation a replace asks of the displaced address under `verification`; none
+    of the three is counted or refused by `notification.destination`.
+16. Of several sends judged at once while a bucket has room for one, one is admitted and
+    the others are refused with `retryAt`, and one credit is spent once; a send counts
+    from its admission, a retried send is judged with its own count set aside, and a
+    send that fails for good releases its count and its credit.
 
 ---
 
@@ -2642,16 +2731,18 @@ string `identity:oidc:token-protection:v1`, the current version encrypting; no k
 its own SHALL be created or stored. A code or refresh token encrypted under a version
 that has been retired (OPS-SEC-003) is refused.
 
-*Source: D-026.3, D-105, D-166, D-176, D-180*
+*Source: D-026.3, D-105, D-166, D-176, D-180, D-183*
 
 **Acceptance criteria**
 1. No secret value appears in any configuration file in the repository.
 2. Startup fails with `model.startup.secretunavailable`, `details.key` naming the
    secret, where a secret the deployment needs cannot be read from the declared secret
-   source, or where any version of the fingerprint key is shorter than 32 bytes; startup
-   with no secret source declared fails with `model.startup.declarationmissing`,
-   `details.key` `secretSource` (LIB-HOST-001); the server serves no request before every
-   secret is read.
+   source, where any version of the fingerprint key is shorter than 32 bytes, or where a
+   row of the subject-key table that is not erased stands under a key-encryption key
+   version the source does not supply (`details.key` `keyEncryptionKeys`,
+   `details.version` naming the lowest such version); startup with no secret source
+   declared fails with `model.startup.declarationmissing`, `details.key` `secretSource`
+   (LIB-HOST-001); the server serves no request before every secret is read.
 3. A refresh token issued before a rotation of the key-encryption key is honoured
    across restarts until the version it was encrypted under is retired.
 4. No secret is taken as an argument of `AddJanus`, and no value that belongs to no

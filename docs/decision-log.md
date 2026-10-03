@@ -5992,6 +5992,8 @@ list is deliberately left to D-108.
 
 ## D-108 — Lawful bases are declared with properties; the code branches on the properties, never the name
 
+> **Amended.** The sensitive-data categories carry no property the code branches on and stay a declaration; only the lawful bases are a table seeded from it (D-183).
+
 **Date:** 2026-09-03 · **Status:** accepted · **Amends:** D-032, D-091, D-094 §94.3 · **Applies:** the D-012 property pattern · **Resolves:** final review, finding 7
 
 **TL;DR.** `04` promised another jurisdiction could supply its own basis list with the
@@ -8978,6 +8980,8 @@ section 7 · `19` · `20` · `docs/guide/janus-explained.md`,
 
 > **Amended.** Section B, and the Tier 2 stop of section C rule X5: a Tier 2 or Tier 3 question parks the item it touches and every item that depends on it, is reported at once, and the run goes on with the rest; the run ends when the work is done or every item left waits on an answer; independent parts may run in parallel (D-182).
 
+> **Amended.** Corrections-4 questions 21 to 65: items 115 (2), 118, 119 (1) to (7), 120 (2), 129 (1), 133 and 147, 135, 136, 143, 146 (4), 152 (3), 156, 160, 169 (3), 242 (3) and (4), 265, 276, 282, 303 (1), 317 (2), 318, 321, 328, 342 (3), 359 and 382 (3), 389 (2) and (6), 414, 419, the out-of-band erasure of section D.5, rules X3, X4, X7 and X9, the Tier 1 correction (1), and section E items 4 and 5 are answered or corrected as D-183 states; 118's count once the handler answers is reversed, a send counting from its admission (D-183).
+
 **Date:** 2026-09-25 · **Status:** accepted · **Amends:** D-161 (item 4, the working mode; item 2, where the drift check's rows come from), D-162 (item 22, where the governed send path lives; item 23, when the first attempt is made; item 26, the budget of a text message carrying a link; item 31, where destination records are kept and when they are swept; item 66, where a client secret comes from; C.55, where photo availability is held and what bootstrap writes; C.68 at `POST /auth/link`; C.103, the condition of the mail server row; E, the status of `identity.identifier.invalid`), D-153 (owner decision 2, the source a flood limit counts; owner decision 7, the word lists; the `backup.restoretest.interval` default; the address the bootstrap command prints), D-147 (the retirement of a key-encryption-key version; the name of the startup code for an unavailable secret), D-146 (item 17: a restriction's channel, the notices to a holder, a reason on every edit), D-143 (the policy object gains `photos`), D-129 (the break-glass page takes a reason), D-127 (a takedown reversal restores the state the takedown found), D-079a (a recognised device is exempt from the hold, not from the count), D-071 (three protected switches retired), D-060 (photos are off for the administrative organization until a codec is declared), D-057 (an authorization request's `redirect_uri` is refused at the push, not replaced), D-164 (item 3: the mail server verifies `aud` itself), D-165 (the developer recipient row is a declared example; the provider callback row and INT-GEN-003's sentence restored) · **Extends:** D-162, D-164, D-165
 
 **TL;DR.** The ledger entries 110 to 423 were audited entry by entry against the
@@ -11782,6 +11786,8 @@ section 5.24.
 
 > **Amended.** Item 1: the signing credentials are held in the library's credential source and read through the provider's event model; the options are never rebuilt and hold only what the provider needs to start; a replaced signing credential signs nothing after the rotation and its private key object is disposed at the first read after its overlap ends (D-181).
 
+> **Amended.** Item 1: the key ring is registered by `Janus.Core`'s own registration method, which `AddJanus` and the command line's composition call, not by `Janus.Hosting` and `Janus.Cli` (D-183).
+
 **Date:** 2026-09-29 · **Status:** accepted · **Amends:** D-170 (item 1, which sessions keep the reason), D-166 (215, the mail server's secret is borrowed from the ring, not read and cleared at each use) · **Extends:** D-166 (121 and 336, X9)
 
 **TL;DR.** D-166 has every secret read once through the host's secret source at startup,
@@ -12089,6 +12095,8 @@ proves each of the five refusals with its two details.
 ---
 
 ## D-176 — Corrections-4 question 13: when the mail server in use is decided; what an `enabled` push does under `Replace`
+
+> **Amended.** The key ring and the mail server in use are registered by `Janus.Core`'s own registration method, which `AddJanus` and the command line's composition call (D-183).
 
 **Date:** 2026-09-30 · **Status:** accepted · **Amends:** D-166 (215 points 2 and 4; 263 and 270, what "`IMailServer` registered" means), D-171 (item 1, the ring is filled in steps)
 
@@ -12806,6 +12814,392 @@ rules and the stop conditions, the report); `08` the preamble, CONV-VCS-001, CON
 
 ---
 
+## D-183 — Corrections-4 questions 21 to 65, and three Tier 1 records
+
+**Date:** 2026-10-01 · **Status:** accepted · **Amends:** D-108 (the sensitive-data categories are no seeded table), D-166 (the items, rules and sections its D-183 note lists), D-171 (item 1, where the key ring is registered), D-176 (where the key ring and the mail server in use are registered)
+
+**TL;DR.** The answers to the 45 questions the corrections-4 run parked under D-182, and
+the audit of three records it marked. The largest: a send counts from its admission,
+judged with its keys' counters held in the caller's transaction and carried after the
+commit, every carried row claimed before its carrier is called; a unit of work rolls back
+on every return but success, with a new `RollbackAsync`, save a refusal that keeps a count
+a chapter requires, which commits that count alone; a restriction is judged with the
+account's row held; a retired version's unwrap is a fault, and the start refuses where a
+live row needs a version the source lacks; a held identifier gets a verification record no
+code matches; a downgrade is an instant on the session record; a provider event's refusal
+follows RFC 8935 code by code; the endpoint contract file reads declared codes and derives
+what an endpoint's mounting answers; a typed route value that does not parse is named. The
+other answers settle shapes and wording. Two Tier 1 records were not Tier 1 and are
+corrected; the third stands.
+
+**The questions.** Questions 21 to 65 of the corrections-4 report
+(`docs/reports/corrections-4.md`). Each answer below names the question; the chapters
+carry the full rule. Questions 43 (two commit messages, reworded with the owner's leave)
+and 54 (the repository variable `DESTRUCTIVE_DDL_GATE`, created with the value `disabled`
+as D-166 378 says) were the owner's and need no rule. Where the processes of one
+deployment are concerned, they declare one model, apart from the brief overlap of a
+rollout (OPS-MIG-005).
+
+**Privacy, consent and records.**
+
+- **21. The detail of an entered request.** `detail` is nullable from the endpoint to the
+  column: absent or `null` records none, and a given value is trimmed and refused blank or
+  past 1024 characters, at the endpoint and in the service (X4, CONV-CODE-006 criterion
+  3). An empty string is never stored for none. *Rejected:* the empty string read as
+  absent (an in-process blank passes); the empty string stored for absent (a sentinel at
+  rest).
+- **28. The lawful basis table.** `identity.lawful_bases` (`key`, `label`, the four
+  flags), written by the startup hosted service before the server serves, in one
+  transaction that takes the table's `SHARE ROW EXCLUSIVE` lock, inserts or updates each
+  declared basis and deletes every row the declaration does not hold; only the runtime
+  credential writes it. The code and the records of processing read the declaration; the
+  labels are PRIV-BASIS-001's Basis column, now in `10` section 5.7. A list naming a key
+  twice, or an empty key or label, fails startup. The sensitive-data categories carry no
+  property and stay a declaration, which corrects `08` CONV-ENUM-001 and D-108.
+  *Rejected:* keeping undeclared rows; a categories table; a migration or command as the
+  writer (neither sees the declaration).
+- **29. The consented resources against the document a purpose now names.** The view
+  carries the consent's document, and both renderings compare it with the document the
+  purpose names, passed from the model as a parameter, so the lists and the check refuse
+  the same consents in every process. A start stamps superseded every live consent of a
+  consent-based purpose recorded against another document, writing `ConsentChanged`
+  `superseded` for each in the same transaction, conditionally, so that two starts stamp
+  each once. During a rollout a consent the previous version records against the previous
+  document is refused at once and stamped at the next start. *Rejected:* the view without
+  the document; a seeded table of purposes; supersession without a stamp.
+- **30. A grant while a live record stands.** A grant over a live record the purpose
+  admits (its document, its kind) changes nothing, raises nothing and is answered as a
+  grant; one over a live record the purpose no longer admits stamps it superseded and adds
+  the new record in one transaction (`reconsent` from the dashboard); none adds one. The
+  insert is conditional on the partial unique index, and a grant meeting a row written
+  meanwhile reads it and answers as above. An objection while one stands changes nothing.
+  *Rejected:* a second record over an admitted one; a 409.
+- **33. What a fingerprint key's retirement forgets.** 318 is the rule, and `06` is
+  corrected to it: retirement waits for every keyed hash that lapses on its own, a sign-in
+  in progress among them (`--sealed` is refused with `pending` while one carries a
+  fingerprint under a previous version), and deletes only unspent restriction credit and
+  released username holds under a previous version. Where a sign-in in progress keeps its
+  fingerprint's version nowhere the command can read, it is written on the sign-in's row.
+  *Rejected:* forgetting lines or sign-ins that still count.
+- **39. The erased value in `send_outbox.wrapped_key`.** 32 zero bytes, with no marker
+  byte, wherever a wrapped key is held without a marker (an outbox row's, an invitation's,
+  a mailbox's); the subject-key table keeps its marker column at `0x00` beside the 32 zero
+  bytes. Every unwrap refuses 32 zero bytes before it is tried. The mailbox release of
+  `e64141d`, and a subject key's erasure if it writes another length, are brought to this
+  value with the DR-016 recognition. *Rejected:* `0x00` and 32 zeros (a marker in a column
+  that keeps none); zeros of the wrap's length (a second erased value).
+- **44. What a takedown's reversal keeps.** The reversal clears the held values it
+  restores, not every one: returned to a deletion or a suspension the account keeps a held
+  restriction, and returned to an `oob-request` deletion, the suspension that deletion
+  holds (PRIV-RIGHT-004, PRIV-RIGHT-001 criterion 4). `b1960a2e` stands.
+- **24. A document name on the publish route.** The publish, translation and read routes
+  refuse a `{document}` outside the name rule of INT-SMS-003 with 400
+  `api.request.malformed` naming `document`, before anything is read, so nothing is
+  published and no alert carries the name. *Rejected:* refusing undeclared names (the
+  terms of service and other notices are published there and declared nowhere); leaving
+  it.
+- **45. The fulfilment's codes for an out-of-band erasure.** The entry refuses a subject
+  no account bears with 422 `api.request.invalid`. The fulfilment refuses nothing on the
+  account's state (each state has its outcome) nor on its existence; a deletion that will
+  not begin after the dispatch is a fault. An erasure of the reserved `emergency` account
+  is refused 403 `authz.denied` once that account is read (OPS-BOOT-002). *Rejected:*
+  adding `identity.account.notfound` and `identity.account.stateconflict` to the row;
+  recording fulfilled what erased nothing.
+- **65. The free text of `PUT /admin/compliance/assessments`.** `dataOwner` and
+  `organizationalSecurityMeasures` (the API's spelling) are free text: trimmed, refused
+  blank or past 1024 characters naming the member, and cleared when omitted. API-CONV-002
+  now defines free text: prose a person writes that no other rule shapes; a closed word,
+  an identifier, an address, a number, an instant, a ruled name, a configuration value and
+  a legal document's text are not, nor is `channelUsed`, which names one of the account's
+  recorded channels (AUTH-RECOV-003). *Rejected:* a blank read as omitted; the statement
+  outside X4.
+
+**Keys, faults and the start.**
+
+- **26. A retired version's unwrap.** A value under a key-encryption key version the
+  application does not hold is a broken invariant, so a fault (CONV-ERR-001), not a
+  refusal. The start reads the versions the subject-key table's rows that are not erased
+  stand under and refuses with `model.startup.secretunavailable`, `details.key`
+  `keyEncryptionKeys`, `details.version`, where the source lacks one (OPS-SEC-001
+  criterion 2). After the start, `Unwrap` checks the erased value first, then throws an
+  internal fault carrying the same code and details, logged with them and answered
+  `system.fault`. *Rejected:* a result through the store's callers; `StartupException` at
+  a request.
+
+**Sending, delivery and alerts.**
+
+- **27, 38 and 63. The governed send, its carrying and its admission.** The contract is
+  `IGovernedSend` in `Janus.Core`, one method, `UndertakeAsync(OutboundMessage, ...)`
+  answering `Result<SendReference>`: the admission or the refusal, never the delivery.
+  `SendRequest` stays the handler's request and becomes the admitted message (kind,
+  destination, subject, language, values and its reference; no input of the judgement).
+  The draw of an ask stays internal to `Janus.Authentication`. A send is judged and
+  counted at its admission, in the caller's transaction, with the counter of every key its
+  restrictions apply to held (`FOR UPDATE`, created first where none stands, taken in one
+  fixed order after the operation's own row locks), and its outbox row, carrying the
+  reference drawn for it, is written there. A refused send returns before its count and
+  its outbox row are written; a counter created for the judgement is the only write before
+  it (X7). A send is released, its count and any credit it spent, where it fails for good
+  (attempts spent, removed uncarried after erasure, a failure report, a retry the
+  restrictions refuse). A retried send is judged with its own count set aside and,
+  admitted, counts at the retry's instant. One immediate attempt runs after the outermost
+  commit and is discarded on rollback; 119 (1) to (4), 227 and 322 are built with 118 as
+  one change. The reference travels inside the row's encrypted content until the row is
+  removed. This reverses 118's sentence that counts a message once the handler answers
+  that it was taken: counting after a transport call is what made the race of X3 at S1
+  unfixable. A `global` restriction serialises sends on one counter for the length of each
+  undertaking transaction, which is what a global bucket means. *Rejected:* a new name for
+  the admitted message; building the after-commit registration alone, or a send path that
+  faults until callers move.
+- **61. Passes that overlap across processes.** Every row background work carries out of
+  the database (a message, an outbox or event row, a mailbox push, a raised alert; each
+  delivery apart) is claimed before its carrier is called, by one conditional update
+  committed on its own that marks it claimed until `outbox.claim.timeout` (new, `PT2M`)
+  and succeeds only where it is unclaimed or its claim has timed out. The outcome is
+  written by one update conditional on that claim, and an attempt still running at the
+  timeout is abandoned as a failed attempt. A send's immediate attempt claims its row the
+  same way. `job_runs` keeps pacing runs. *Rejected:* a lease for the pass (it leaves the
+  immediate attempt unguarded and lets one stalled holder stop every row); accepting
+  duplicates.
+- **64. Whom a destination change notifies.** The previous destinations are notified
+  before the transaction, as OPS-ALERT-004a and D-083 require, and the change is written
+  by one update conditional on the value whose holders were told; where a concurrent
+  change committed meanwhile, nothing is written and the change is refused 409
+  `config.change.superseded` (new). `09` also gains `config.value.lastdestination`, which
+  the route already answers. *Rejected:* the notice after the commit (it breaks "before
+  the change takes effect"); an advisory lock across a network call.
+- **59. The transaction of a denial-spike alert.** The `denial-spike` alert and its
+  `AlertRaised` row are written in the refusal record's own transaction, outside the
+  caller's, with the actor's refusals held while they are counted; a failure to write them
+  fails the record. *Rejected:* a separate transaction after the record commits (a window
+  in which the spike is true and unraised).
+- **34. The actor of a principal's refusal.** D-166 136 stands: a principal's refusals are
+  counted by the principal's name, others by the acting subject, and refusals recording
+  the nil subject and no principal count as one actor. The `10` row follows. *Rejected:*
+  every principal as one actor (one runaway job masks another, and the alert cannot name
+  the job).
+- **60. The purpose of the identifier-change-confirm link.** `verification`: the person
+  making the change asked for it and the swap waits on it, so it is not a notice, and
+  under `notification` a hostile session could exhaust the displaced address's bucket and
+  silence its real notices. It is counted by neither `notification` restriction.
+- **23. Who raises the loss of the registration channel.** The registration signal raises
+  it itself, in a scope and unit of work of its own, when a wait begins while its channel
+  is not listening; the event stream takes only the signal, as LIB-API-005 allows.
+  *Rejected:* widening the endpoint's list.
+- **62. A restriction committed after the gate reads.** X3 applies: the gate judges the
+  restriction with the acting account's row held (`FOR SHARE`, or `FOR UPDATE` where the
+  operation locks that row itself, before any other row lock) in the transaction the
+  action writes in. A library operation refuses before its unit of work where the state
+  already refuses, and asks the gate again inside it before its first write, on the state
+  read under the hold; a host asking the gate inside an open transaction is held the same
+  way. A restriction therefore commits either before the action, which is refused, or
+  after it.
+
+**Sessions, registration and step-up.**
+
+- **31. Verifying a code for a held identifier.** A value REG-SESS-005 answers as held or
+  reserved, at registration or at an identifier's add or replace, is given a
+  verification-code record like any other, with the same lifetime and attempt cap, holding
+  no code any presentation matches; each presentation is read, compared in fixed time,
+  counted and answered on the path of a presentation against a sent code, so the answers
+  and counts are a fresh value's and the add or replace is swept on the same expiry. An
+  ask or resend of a code for such a value is judged and counted against the restrictions
+  as its message would be, and answered as for a fresh value (REG-SESS-005 criterion 1,
+  AUTH-ABUSE-004), and sends what D-166 141 says. *Rejected:* a drawn code never sent (a
+  guess could verify a held value).
+- **32. A registration link token that opens nothing.** `IRegistration.LandAsync` takes
+  the request's source. A pressed token that opens nothing asks that source's delay, is
+  counted against the source alone (it names no identifier) and answered
+  `auth.code.expired`; an unpressed one counts nothing. Every count and delay of a
+  registration session uses the source of the request in hand, never one stored at its
+  begin, and a request presenting a message's `linkToken` is taken without the
+  registration session's cookie so that it can be counted. *Rejected:* counting only where
+  a session exists (a fresh browser's press would count nothing).
+- **36. A downgraded session, and where `auth.factor.notpermitted` is judged.** The
+  session record gains the instant it was last downgraded, written in the transaction that
+  downgrades; the attained values stay as reached, and a gate counts what the session
+  proved only where it was attained after that instant, so a permitted presentation lifts
+  the downgrade. A gated action that would be met but for proof attained before the last
+  downgrade carries `requires` `reauthenticate`, otherwise `stepup`. At a step-up, a
+  factor the policy in force does not permit is refused `auth.factor.notpermitted` before
+  it is verified, and counted; a sign-in goes on refusing it only after the factor
+  succeeds, so an unauthenticated caller learns nothing of the account's memberships, and
+  `AcceptsAsync` is unchanged. *Rejected:* clearing or back-dating the attained values;
+  judging after verification at a step-up.
+- **40. `Effective` on `CredentialSuspended`.** It carries the reporting context's
+  effective identity as given, as `CredentialRestored` from a session does; an event that
+  names who acted carries both identities as the context gives them, and they are never
+  compared (AUTHZ-IMP-001). *Rejected:* never setting it; relaxing the gate.
+- **41. An accepting account that holds no verified email.** Refused: REG-DOM-001
+  criterion 10 already decides it, and its second paragraph governs sign-in, not
+  acknowledgement. `2e8174c1` is brought to it.
+- **42. Where a registration's open ceremony and unconfirmed generator are held.** Staged
+  on the registration session (REG-SESS-001, REG-SESS-002 criterion 2), the ceremony's
+  kind, challenge and expiry and the generator's label and secret, each spent or replaced
+  under the lock on the session and encrypted as its staged values are; the terms step
+  writes only a confirmed generator, under the new account's subject key.
+- **46. Truth-table rows for the step-up gate.** Owed: `Janus.Authorization` is permission
+  logic by CONV-VCS-004's definition. The rows cover every outcome of 328 (met; unmet on
+  level, phishing resistance, age or an instant after now; a provider that fails; no
+  provider), in a fixture that registers a provider; a step-up case agrees when the filter
+  lists the record and the check answers the gate's outcome. `10` section 5.30 names their
+  scenarios (`stepup-met` and the six unmet ones).
+- **47. The section of a changelog line.** `Added`: no version is released (CONV-VCS-005).
+- **48. The address a registration's first session records.** The registration session
+  holds the whole address its begin arrived on, never the counting form; the first session
+  records the whole address of the request that completes the terms step; every count uses
+  the request's own source (question 32). *Rejected:* storing both forms; accepting the
+  /64.
+
+**Authorization, structure and conventions.**
+
+- **22. The shape of a relationship source.**
+  `RelationshipSource.Of<TContext, TRow>(relationship, rows)` in `Janus.Core`, `rows` a
+  `Func<TContext, IQueryable<TRow>>`. The view and the drift check need the ancestry, the
+  grants and the consented resources beside the rows, and one statement needs one context
+  instance, so the library resolves the host's context in the reading scope and takes all
+  four from it. No resource type is declared. Start checks refuse a source given twice,
+  naming no declared relationship, answering another row type, or naming a context the
+  container does not give in a scope or whose model does not map the contract tables.
+  *Rejected:* a factory over the service provider or an interface (the rows alone); a
+  model builder member (no scope).
+- **25. The rows REF-001 counts.** Chapter 10 holds every row the ledger owed (D-166
+  section F), so the contract tests of REF-001 criterion 1 read chapter 10 alone, in each
+  direction they read now. This reverses the first part of ledger entry 403, which takes
+  the line "Superseded by D-183"; its reading of the boundary's codes stands.
+- **35. The subject of an audit entry.** `AuditEntry` also carries `SubjectId? Subject`,
+  read back as `subject`, which `09` already requires; 303 (1) named only the members it
+  added.
+- **37. The maintenance role outside the library's schema.** In every schema the role
+  holds exactly what the library grants it: in `identity` the serialized listing,
+  privileges held through `PUBLIC` counted; elsewhere exactly what a role granted nothing
+  holds. `USAGE` on `public`, which PostgreSQL gives every role, is neither listed nor
+  revoked (the schema and the database are the host's too). The test compares with a
+  control role it creates.
+- **49. What CONV-DESIGN-004 criterion 2 exempts.** Inside the declaration of a typed
+  identifier or value, a parameter of the type it wraps is exempt.
+  `Microsoft.IdentityModel.Protocols`, which `OpenIddict.Validation` brings, is named in
+  CONV-DESIGN-008 beside `Microsoft.IdentityModel.JsonWebTokens` and never referenced
+  directly; `ForeignMembers` gains the two retrievers, and the reflection test admits an
+  interface declared in an assembly of a package the table lists or names as brought. A
+  log method takes the typed identifier it logs.
+- **50 and 51. The endpoint contract file.** Each endpoint declares, as metadata of
+  `Janus.Hosting`, the codes its `09` row gives; their statuses are those `ApiStatus` maps
+  them to, never declared beside them. The file adds what an endpoint's mounting answers
+  (401 `auth.session.expired` where it requires a session, 403 `auth.session.csrfinvalid`
+  where the request-forgery layers apply, 400 `api.request.malformed` where it reads a
+  body or binds a typed value) and lists the pipeline's own answers once. The Hosting test
+  host fails a response carrying a code its endpoint neither declares nor answers by its
+  mounting or the pipeline, so the file states what the endpoints answer. Rows that
+  refused without a code gain one: `auth.factor.passwordrequired` (409, a second step or a
+  recovery-code set asked for on an account with no password) and
+  `auth.factor.notenrolled` (409, no recovery-code set to record as exported), and every
+  bare throttle answer names `auth.throttled`, with `auth.restriction.exceeded` where a
+  send is refused. `NotificationRequested`, an event no path emits since the governed send
+  carries every message, is retired.
+- **52. `HostedMailbox.Address`.** `EmailAddress?`, none where the listed address does not
+  read, as INT-MAIL-007 and D-166 220 (4) require; such an account is counted where it
+  carries no held mailbox's identifier and is a difference where it carries one, and never
+  fails the listing. `MailboxPush.Address` stays `EmailAddress`.
+- **53. A typed route value that does not parse.** Every typed route or query value binds
+  through `IParsable<T>` and is named when it does not parse: the endpoint declares its
+  typed values, generic over each type, in the metadata that declares its codes, and the
+  error translation stage names the first that refuses the request's text. A restriction
+  name outside its rule in the path is therefore 400 `api.request.malformed` naming
+  `name`, as a role name's form is; `config.value.notallowed` stays for a name inside the
+  `restrictions` value.
+- **55. The access context of `IOidc.KeysAsync`.** None: the read of the published key set
+  is no operation (LIB-API-005), answers public keys alone and meets no gate. The library
+  has no anonymous access context, and none is made. The `ClaimsAsync` half of 160 stands.
+  160 takes no ledger line (section G does not list it).
+- **56. A provider event's refusal.** On the Google route each failure is 400 with
+  `Content-Language: en` and the RFC 8935 section 2.4 `err` of the first failure in a
+  fixed order (unreadable or no `jti`, `invalid_request`; provider not declared,
+  `invalid_issuer`; key not in the published set or signature not verified, `invalid_key`;
+  `iss` not the document's issuer, `invalid_issuer`; `aud` naming no declared client,
+  `invalid_audience`; a passed `exp`, `invalid_request`; no `exp` is no refusal), and
+  `description` carries the `err` code again (LIB-API-003, `10`), correcting 282 and E.5.
+  A provider document the library cannot have or read refuses nothing on either route: the
+  delivery is answered 500 `system.fault`, nothing is claimed or recorded, and the
+  provider may deliver again; 276's Apple test keeps 422 for an undeclared provider only.
+  Checked against RFC 8935 and Google's Cross-Account Protection guide, 2026-10-01.
+- **57. The area registration methods.** A project of the package that defines a type the
+  container registers holds those registrations in its one method; one that defines none
+  (`Janus.Identity` today) exposes none. `Janus.Core`'s method registers the key ring and
+  the mail server in use, called by `AddJanus` and the command line's composition (D-171
+  and D-176 said `Janus.Hosting` and `Janus.Cli` register them); `AddJanus` is
+  `Janus.Hosting`'s own method. The container's abstractions come from the ASP.NET Core
+  shared framework by a framework reference, never as a package, and no project but
+  `Janus.Hosting` uses a type of a `Microsoft.AspNetCore` namespace. *Rejected:* adding
+  the abstractions package (a package copy of a framework assembly is what failed the
+  conformance run); leaving area types registered in Hosting.
+- **58. A unit of work left clean.** `IUnitOfWork` gains `RollbackAsync`, which answers no
+  result and takes no cancellation token. After a successful `BeginAsync`, every return
+  but success rolls back, whether or not the operation wrote, since a commit also saves
+  what the context tracks. A rollback clears the change tracker and the after-commit
+  registrations and resets the unit of work. An inner rollback marks the whole unit of
+  work: the outermost level rolls it back, and an outer commit after it rolls back and is
+  a fault. A call an operation must survive being refused begins no unit of work of its
+  own; a sweep site that cannot meet this is a question. A refusal that must keep a count
+  or record a chapter requires to stand whatever the outcome (a wrong try on a code's
+  record, a failure AUTH-ABUSE-001 counts, a refused step-up factor, a break-glass attempt
+  and its alert, a failed authentication's record) commits that write, having written
+  nothing else, and such an operation begins the outermost unit of work; a refusal the
+  gate records stays outside the operation. `RollbackAsync` is the one method of the
+  library's own contracts without a cancellation token (CONV-CODE-002, JAN0004); a member
+  implementing a framework or listed package's interface that declares none passes on the
+  token its arguments carry. *Rejected:* rolling back through `DisposeAsync`; savepoints
+  (an operation would commit in part); a separate transaction for a count on a row the
+  refusal holds locked (it would wait on its own lock).
+
+**The Tier 1 records the run marked for audit.**
+
+- **`211b1d42` (`Janus.Authentication` references `OpenIddict.Server`): stands.**
+  CONV-DESIGN-008 governs which packages the solution uses and confines one to a project
+  only where its row says so; the credential source of D-181 holds the provider's
+  credential objects in `Janus.Authentication`. `08` now says a project references a
+  listed package where its items need it, and names this reference. The two other records
+  of D-181's commit stand: the backfill of `signing_keys.longest_lifetime` with the
+  ceiling of `oidc.accesstoken.lifetime`, the one value that covers every token such a key
+  signed, and the replacement of the discovery's algorithm list and token hashes, which
+  read the credential from the options.
+- **`52482ed5` (146 (4), an ask with a risk signal): not Tier 1, and corrected.** It
+  decided a step-up's outcome from rules for anonymous asks. At an ask made after a first
+  factor or under a session, a number whose signal answers `risk` sends, issues and counts
+  nothing, records the consideration, withholds `phoneCode` from the challenge, and
+  answers with what the challenge then offers: at a sign-in 200 `factorRequired` without
+  it, or 422 `auth.factor.rejected` where nothing is left; at a step-up 403
+  `auth.stepup.required` computed without it, `report-loss` or `enrol` where no
+  combination remains. An ask before a first factor is 202 and sends nothing.
+- **`669bac7b` (the values of 328): the main line stands; its failure rules were not Tier
+  1 and are now stated.** A host's assurance report meets a gate only where the provider
+  answers, the report reads (a level of `10` section 5.4, an instant not after now), the
+  level reaches the gate (floor `aal1`), phishing resistance is met where required and the
+  instant lies within the maximum age; anything else is `auth.stepup.required` with
+  `outcome` `present`, empty `options` and a null `pendingUntil`, the proof being the
+  host's to obtain. With no provider registered the answer stays `auth.stepup.unavailable`
+  (AUTH-STEP-003). A host-named gate costs the strictest of the policy's gates field by
+  field, and the acting person's own session of the library is judged in place of the
+  provider.
+
+**Propagated to:** `01` IDN-ACCT-007, IDN-LIFE-003, IDN-LIFE-012a; `02` AUTH-FACT-002,
+AUTH-FACT-002b, AUTH-FACT-004, AUTH-FACT-006, AUTH-SESS-001, AUTH-SESS-009, AUTH-STEP-002,
+AUTH-ABUSE-001, AUTH-ABUSE-004, AUTH-KEY-002; `03` AUTHZ-MODEL-005, AUTHZ-DERIVE-005,
+AUTHZ-GATE-002, AUTHZ-GATE-005, AUTHZ-GATE-006, AUTHZ-CONCEAL-004, AUTHZ-IMP-001,
+AUTHZ-TEST-001; `04` PRIV-BASIS-001, PRIV-SENS-002, PRIV-CONS-001, PRIV-CONS-007,
+PRIV-RIGHT-001a, PRIV-RIGHT-005a, PRIV-RIGHT-005c; `05` INT-GEN-003, INT-MAIL-001,
+INT-MAIL-007, INT-SMS-003, INT-SMS-005; `06` OPS-MIG-003a, OPS-BOOT-002, OPS-BOOT-004,
+OPS-SEC-001, OPS-SEC-003, OPS-ALERT-004a, OPS-OBS-002; `07` LIB-API-001, LIB-API-003,
+LIB-API-005, LIB-HOST-001, LIB-HOST-004; `08` CONV-LAYOUT-001, CONV-LAYOUT-002,
+CONV-DESIGN-002 to 008, CONV-ENUM-001, CONV-CODE-002, CONV-CODE-007, CONV-CODE-008
+(JAN0004), CONV-TEST-001; `09` the preamble, API-CONV-002, API-CONV-003, API-CONV-005, and
+the routes the answers name; `10` the rows and sections the answers name, sections 5.21
+and 5.30 and the retired `NotificationRequested`; `15` section 1 (the registration session
+store); `17` BFF-CSRF-005b, BFF-ERR-002, BFF-ABUSE-002; `19` INF-BG-001; `20`
+REG-SESS-001, REG-SESS-003, REG-SESS-005, REG-SESS-007, REG-IDENT-007, REG-DOM-001.
+
+---
+
 # Index — all items closed
 
 | Item | Decision |
@@ -12998,6 +13392,7 @@ rules and the stop conditions, the report); `08` the preamble, CONV-VCS-001, CON
 | Corrections-4 questions 18 and 19: how an absent secret source is named, and one way to reach an optional declaration | D-180 |
 | Corrections-4 question 20: how a replaced signing credential leaves the provider | D-181 |
 | Questions park their item, not the run; independent parts run in parallel | D-182 |
+| Corrections-4 questions 21 to 65, and three Tier 1 records | D-183 |
 
 **Queue clear.** Next step: rewrite the spec notes from this log.
 

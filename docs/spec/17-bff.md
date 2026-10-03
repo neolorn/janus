@@ -378,18 +378,20 @@ to the session), and for the registration session (BFF-CSRF-005b).
 
 **BFF-CSRF-005b** — The **registration session** (REG-SESS-001) SHALL be bound to the
 pre-authentication cookie of BFF-CSRF-005a, and every `/register/*` request SHALL be
-refused from a browser that does not carry it. `GET /register/events` SHALL stream
-server-sent events authenticated by that cookie alone, with **no token in any URL or
-query parameter**; where the stream is unavailable the frontend polls `GET /register`.
-Every link, whatever its kind, SHALL land on a frontend route (API-LAND-001) and SHALL
-reach the BFF **only on a press**, never on load. For a sign-in link or an
-identifier-verification link, the BFF SHALL complete the verification only when the
-request carries the cookie of the session that sent the link, and SHALL otherwise
-answer with the code to type and change nothing. Every link lands on `/link` with its
-token in the fragment (FE-VER-001); a fragment is no part of a request's target
+refused from a browser that does not carry it, except a request presenting a message's
+`linkToken` (`POST /register/verify/{id}`, `POST /register/abandon`), which is taken so
+that a press can be counted against its source (REG-SESS-003). `GET /register/events`
+SHALL stream server-sent events authenticated by that cookie alone, with **no token in
+any URL or query parameter**; where the stream is unavailable the frontend polls
+`GET /register`. Every link, whatever its kind, SHALL land on a frontend route
+(API-LAND-001) and SHALL reach the BFF **only on a press**, never on load. For a sign-in
+link or an identifier-verification link, the BFF SHALL complete the verification only
+when the request carries the cookie of the session that sent the link, and SHALL
+otherwise answer with the code to type and change nothing. Every link lands on `/link`
+with its token in the fragment (FE-VER-001); a fragment is no part of a request's target
 (RFC 9110), so the token reaches the BFF only in the body of the call the landing makes.
 
-*Source: D-146; REG-SESS-001, REG-SESS-003, AUTH-FACT-003, API-LAND-001, D-166*
+*Source: D-146; REG-SESS-001, REG-SESS-003, AUTH-FACT-003, API-LAND-001, D-166, D-183*
 
 The cookie is what makes "the browser that started the flow" a checkable fact rather
 than a hope. A token in the URL of an event stream would appear in proxy logs, browser
@@ -400,8 +402,9 @@ what turns the press into the right person's intent.
 
 **Acceptance criteria**
 1. A `/register/*` request without the pre-authentication cookie of the session that
-   created it is refused; `GET /register/events` without it answers as API-CONV-003
-   requires and streams nothing.
+   created it is refused, except a request presenting a message's `linkToken`;
+   `GET /register/events` without it answers as API-CONV-003 requires and streams
+   nothing.
 2. No request or response of the registration flow carries a token in a URL; the event
    stream's only credential is the cookie.
 3. Disconnecting the stream and polling `GET /register` yields the same state.
@@ -645,12 +648,13 @@ A fault SHALL be caught inside concealment and outside every other stage of each
 profile. An answer already begun SHALL NOT be replaced, and a request whose caller has
 gone SHALL NOT be answered.
 
-*Source: CONV-ERR-001, P-003, D-166*
+*Source: CONV-ERR-001, P-003, D-166, D-183*
 
 **Acceptance criteria**
 1. No stack trace, connection string, or internal type name reaches a response.
 2. The detail is retrievable from logs by correlation identifier: the fault's type and
-   stack frames, and those of each inner fault, and never a message (CONV-LOG-003).
+   stack frames, and those of each inner fault, the `10` code and details a fault
+   carries where it carries one, and never a message (CONV-LOG-003).
 
 ---
 
@@ -733,11 +737,12 @@ navigation (a social provider's return) SHALL carry `retryAt` as a query member 
 **BFF-ABUSE-002** — The BFF SHALL NOT expose enumeration through differential
 responses, timing, or error granularity.
 
-*Source: AUTH-ABUSE-003, API-CONV-005*
+*Source: AUTH-ABUSE-003, API-CONV-005, D-183*
 
 **Acceptance criteria**
-1. Registration, sign-in initiation, recovery initiation, sign-in link and email code
-   request all return uniform responses.
+1. Every endpoint API-CONV-005 names returns uniform responses: registration, sign-in
+   initiation, recovery initiation, sign-in link and email code request, and adding,
+   replacing and verifying an identifier.
 
 ---
 

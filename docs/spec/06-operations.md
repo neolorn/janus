@@ -199,13 +199,16 @@ them, PRIV-RIGHT-005a), read and write on the rotation progress table of OPS-SEC
 and the append to the audit trail its records need, because the unwrap and wrap happen
 in the command's own process with keys that are never in the database. For the
 fingerprint key's rotation it SHALL hold the rights AC4 lists. It SHALL hold nothing
-else. The library reads it through the host's secret source at startup (OPS-SEC-001)
-for the partition job, and a `Janus.Cli` command reads it from the key document on its
-standard input for a rotation (INF-HOST-003); it is never in application
-configuration, and a process whose secret source cannot supply it does not start
-(`model.startup.secretunavailable`, `details.key` `maintenanceCredential`).
+else: outside the library's schema it holds exactly what a role granted nothing holds,
+since what PostgreSQL gives every role through `PUBLIC` there (`USAGE` on the schema
+`public` among it) is the database's and the host's, and the library's migrations
+neither list nor revoke it. The library reads it through the host's secret source at
+startup (OPS-SEC-001) for the partition job, and a `Janus.Cli` command reads it from the
+key document on its standard input for a rotation (INF-HOST-003); it is never in
+application configuration, and a process whose secret source cannot supply it does not
+start (`model.startup.secretunavailable`, `details.key` `maintenanceCredential`).
 
-*Source: D-148; D-118, D-147, D-166*
+*Source: D-148; D-118, D-147, D-166, D-183*
 
 **Acceptance criteria**
 1. The maintenance credential cannot issue `DROP`, `ALTER` or `CREATE` directly.
@@ -217,10 +220,14 @@ configuration, and a process whose secret source cannot supply it does not start
    For the fingerprint key's rotation it can read the key, subject, fingerprint,
    version and encrypted value of the identifiers, the identifier removals, the
    authenticators and the mailboxes and write their fingerprint and version, can read
-   the version of each abuse ledger line and of each held username, and can delete
-   unspent restriction credit and released username holds under a retired version; it
-   never reads a hash. It can read or write no other table. The grants are listed in
-   the serialized model output for review.
+   the version of each abuse ledger line, of each sign-in in progress and of each held
+   username, and can delete unspent restriction credit and released username holds under
+   a retired version; it never reads a hash. It can read or write no other table. The
+   grants are listed in the serialized model output for review.
+5. Read in every schema of the database, the maintenance credential holds in the
+   library's schema exactly the privileges the serialized model lists, those held
+   through `PUBLIC` counted, and in every other schema exactly what a role granted
+   nothing holds.
 
 ---
 
@@ -810,7 +817,14 @@ The change SHALL be made through the configuration operation of OPS-CFG-008, as 
 change with no direction (OPS-CFG-002), and audited with its before and after values
 (D-162).
 
-*Source: D-083, D-166*
+**Concurrent changes (D-183).** The previous destinations are those in force when the
+change is read, and they are notified before its transaction begins, since no transport
+is called while one is open (CONV-DESIGN-002). The change SHALL then be written by one
+update conditional on that value still being in force (CONV-DESIGN-003); where a
+concurrent change committed meanwhile, nothing is written and the change is refused with
+409 `config.change.superseded`, so no destination is replaced without having been told.
+
+*Source: D-083, D-166, D-183*
 
 **This closes a bypass of the entire alerting system.** An attacker holding one
 stepped-up administrative session could replace the destinations with their own — a
@@ -834,6 +848,10 @@ REG-IDENT-006): the existing security-notice set is always told, whatever the ne
 5. A change that would leave a channel's destination list empty is refused with `config.value.lastdestination` (D-153).
 6. A destination change produces an audit record with before and after values, as
    every runtime change does.
+7. Of two changes of one destination list made at once from the same value, one applies;
+   the other is refused with `config.change.superseded`, writes nothing and raises no
+   `alert-destination-changed`, and the destinations the applied change replaced were
+   notified before it.
 
 ---
 
@@ -1093,7 +1111,7 @@ credential, one field for the reason, one button. The endpoint
 free-text member under API-CONV-002, and kept with the session. The owner is not technical
 (`12` §1); an API endpoint is not a procedure they can follow.
 
-*Source: D-065, D-129, D-166, D-170, D-171, D-179*
+*Source: D-065, D-129, D-166, D-170, D-171, D-179, D-183*
 
 **Acceptance criteria**
 1. Use consumes it; a second attempt fails.
@@ -1114,8 +1132,9 @@ free-text member under API-CONV-002, and kept with the session. The owner is not
    (BFF-SESS-006), each step-up action listed above is refused with `authz.denied`
    before anything is loaded, `POST /account/mail/apppasswords` included, which answers
    `authz.denied` and not `identity.mailbox.notfound`; an administrator's suspension,
-   takedown, grant or group addition naming the reserved account is also refused with
-   `authz.denied`, once the reserved account has been read.
+   takedown, grant, group addition or fulfilment of an out-of-band erasure naming the
+   reserved account is also refused with `authz.denied`, once the reserved account has
+   been read.
 10. Every audit record written in a break-glass session, or in a session another
     application opened from it (BFF-SESS-006), carries the reason given at the
     credential's use, `auth.breakglass.used` included, and the trail read returns it as
@@ -1135,26 +1154,29 @@ removed) under the `password.argon2.*` parameters in force at generation, which 
 carries; the code is held **on paper only**, never in the secrets manager, never
 emailed, never written to a file.
 
-*Source: D-148; D-065, D-133, D-147, D-166, D-170*
+*Source: D-148; D-065, D-133, D-147, D-166, D-170, D-183*
 
-**Strength and throttle (D-147, D-153).** The credential SHALL carry at least 128 bits of
-entropy, drawn from a typeable alphabet (no characters that are confused in print or
-absent from a common keyboard) and rendered in the check-charactered groups above, so
-a transcription error is caught before submission. The alphabet is Crockford base32
-(digits and upper-case letters without I, L, O and U; input folds case and maps i and
-l to 1 and o to 0). The code is 27 data symbols (135 bits) in 9 groups; each group is
-3 data symbols and 1 check symbol equal to the weighted sum of the group's symbol
-values (weights 1, 2, 3) modulo 32; printed as 36 symbols in groups of four separated
-by hyphens. Attempts at `/auth/break-glass`
-SHALL be source-throttled per AUTH-ABUSE-001 and, in addition, limited to at most 5
-attempts per hour globally across all sources. Every attempt SHALL count toward the
-global limit when it arrives, before the per-source delay, the check symbols or any
-hash is looked at, an attempt the limit refuses included; a refusal by the limit is 429
-`auth.throttled` with `details.retryAt` one hour after the refused attempt. The first
-attempt the limit refuses SHALL raise `auth-failures-sustained` for the reserved
-account, and with no scope where no reserved account exists yet, so an attack on a
-deployment not yet bootstrapped is loud too (D-170). With 128 bits behind it, the
-global limit exists to make the attack loud, not to make it infeasible.
+**Strength and throttle (D-147, D-153).** The credential SHALL carry at least 128 bits
+of entropy, drawn from a typeable alphabet (no characters that are confused in print or
+absent from a common keyboard) and rendered in the check-charactered groups above, so a
+transcription error is caught before submission. The alphabet is Crockford base32
+(digits and upper-case letters without I, L, O and U; input folds case and maps i and l
+to 1 and o to 0). The code is 27 data symbols (135 bits) in 9 groups; each group is 3
+data symbols and 1 check symbol equal to the weighted sum of the group's symbol values
+(weights 1, 2, 3) modulo 32; printed as 36 symbols in groups of four separated by
+hyphens. Attempts at `/auth/break-glass` SHALL be source-throttled per AUTH-ABUSE-001
+and, in addition, limited to at most 5 attempts per hour globally across all sources.
+Every attempt SHALL count toward the global limit when it arrives, before the per-source
+delay, the check symbols or any hash is looked at, an attempt the limit refuses
+included. The count, and the `auth-failures-sustained` raise below, SHALL be committed
+with the refusal, together with the attempt's other kept writes (its source's failure
+under AUTH-ABUSE-001 and its failed authentication under CONV-LOG-005) and nothing else
+(CONV-DESIGN-003), so both stand. A refusal by the limit is 429 `auth.throttled` with
+`details.retryAt` one hour after the refused attempt. The first attempt the limit
+refuses SHALL raise `auth-failures-sustained` for the reserved account, and with no
+scope where no reserved account exists yet, so an attack on a deployment not yet
+bootstrapped is loud too (D-170). With 128 bits behind it, the global limit exists to
+make the attack loud, not to make it infeasible.
 
 The four other envelope items (DR-009) live in both the envelope and the secrets
 manager because the system needs them daily. The break-glass code is needed by
@@ -1183,7 +1205,8 @@ new. Alerting and audit are the controls.
 7. A sixth attempt within one hour at `/auth/break-glass`, from any source, is
    refused and counted, and the per-source throttle of AUTH-ABUSE-001 applies as well;
    the first such refusal raises `auth-failures-sustained` for the reserved account,
-   and with no scope on a deployment where no reserved account exists yet.
+   and with no scope on a deployment where no reserved account exists yet. The count and
+   the alert stand after the refused attempt.
 
 ---
 
@@ -1237,16 +1260,18 @@ argument, a file or an environment variable, and SHALL clear every key when it e
 command the executable does not carry is refused with one JSON line
 `api.request.malformed` naming it on standard error, and exit code 1.
 
-*Source: D-026.3, D-069, D-103, D-105, D-166, D-180*
+*Source: D-026.3, D-069, D-103, D-105, D-166, D-180, D-183*
 
 **Acceptance criteria**
 1. No secret value appears in any repository file or image layer.
 2. Startup fails with `model.startup.secretunavailable`, `details.key` naming the
    secret, where a secret the deployment needs cannot be read from the declared secret
-   source, or where any version of the fingerprint key is shorter than 32 bytes; startup
-   with no secret source declared fails with `model.startup.declarationmissing`,
-   `details.key` `secretSource` (LIB-HOST-001); the server serves no request before every
-   secret is read.
+   source, where any version of the fingerprint key is shorter than 32 bytes, or where a
+   row of the subject-key table that is not erased stands under a key-encryption key
+   version the source does not supply (`details.key` `keyEncryptionKeys`,
+   `details.version` naming the lowest such version); startup with no secret source
+   declared fails with `model.startup.declarationmissing`, `details.key` `secretSource`
+   (LIB-HOST-001); the server serves no request before every secret is read.
 3. No secret other than the two bootstrap values is present on the host outside the
    secrets manager.
 4. A command whose standard input is a terminal, or whose document holds no usable
@@ -1307,7 +1332,7 @@ by subject identifier; the progress row holds the key version, the key of the la
 table processed (a row's key, not a subject identifier, PRIV-RIGHT-005a, D-174), the processed count, and the started, completed and retired
 instants.
 
-*Source: D-148; D-147; DR-009a, PRIV-RIGHT-005a, OPS-SEC-001, D-166, D-174*
+*Source: D-148; D-147; DR-009a, PRIV-RIGHT-005a, OPS-SEC-001, D-166, D-174, D-183*
 
 **The shape.** The operator adds the new key version to the secrets manager as
 current, keeping the previous one, and restarts the application on it; `rotate-kek`,
@@ -1344,22 +1369,22 @@ and must not depend on the application being healthy: the case that most needs a
 rotation (suspicion of exposure, DR-009a) is also the case in which the application
 may be compromised or down.
 
-**Fingerprint key.** Rotation of the fingerprint key (OPS-SEC-001) uses the same
-shape (new version, resumable batch job, previous version usable until complete,
-escrow copy) but re-computes every stored fingerprint rather than re-wrapping a key.
-Every stored fingerprint whose value is held (identifiers, live reservations,
-mailboxes, provider links) is computed again. What no value stands behind (a held
-username, an erased subject's reservation, the lines of the abuse ledgers) is read
+**Fingerprint key.** Rotation of the fingerprint key (OPS-SEC-001) uses the same shape
+(new version, resumable batch job, previous version usable until complete, escrow copy)
+but re-computes every stored fingerprint rather than re-wrapping a key. Every stored
+fingerprint whose value is held (identifiers, live reservations, mailboxes, provider
+links) is computed again. What no value stands behind (a held username, an erased
+subject's reservation, the lines of the abuse ledgers, a sign-in in progress) is read
 under its version until it lapses; retirement waits for it, and is refused with
 `model.rotation.notready` and `pending` while a username is held, an erased subject's
-reservation has not lapsed, or an abuse ledger line under a previous version still
-counts. The expiry sweep removes each abuse ledger line once its own check no longer
-reads it (OPS-OBS-003). At retirement, unspent restriction credit under a previous
-version is dropped. A keyed hash kept with no plaintext to recompute it from (a sign-in
-in progress, a throttle ledger line) is forgotten when the version it was computed
-under is retired.
-It is documented as heavy and is expected never to run; it exists so that a suspected
-exposure has a procedure rather than an improvisation.
+reservation has not lapsed, an abuse ledger line under a previous version still counts,
+or a sign-in in progress carries a fingerprint computed under a previous version
+(AUTH-ABUSE-001). The expiry sweep removes each abuse ledger line once its own check no
+longer reads it (OPS-OBS-003), and a sign-in lapses with its record. At retirement the
+command deletes unspent restriction credit and released username holds under a previous
+version, which lapse on no clock of their own, and nothing else (OPS-MIG-003a criterion
+4). It is documented as heavy and is expected never to run; it exists so that a
+suspected exposure has a procedure rather than an improvisation.
 
 **Acceptance criteria**
 1. The operation is a `Janus.Cli` command that requires the maintenance credential
@@ -1371,8 +1396,11 @@ exposure has a procedure rather than an improvisation.
 3. Until the previous version is retired, values wrapped under it remain readable;
    after retirement, a value still wrapped under it (there is none by construction:
    every value under the key-encryption key is a row of the subject-key table,
-   PRIV-RIGHT-005a) fails to unwrap with `model.startup.secretunavailable`,
-   `details.key` `keyEncryptionKeys`, naming the version.
+   PRIV-RIGHT-005a) fails to unwrap as a fault (CONV-ERR-001) carrying
+   `model.startup.secretunavailable`, `details.key` `keyEncryptionKeys` and
+   `details.version` naming the version: a request is answered `system.fault`, a job
+   fails its run and a command exits 1 with the code. A start is refused with the same
+   code where such a row stands (OPS-SEC-001 criterion 2).
 4. The escrow copy of the new version is produced by the same command, and the
    previous version is not retired until the operator confirms with `--sealed` that
    the copy is sealed (DR-009); `--sealed` before the rotation completes is refused
@@ -1414,13 +1442,15 @@ degradation too.
 naming it; the scopes include `password.blocklist.fallback`, `clock.reference.absent`,
 `clock.reference.unread`, `certificate.renewal.absent` and
 `certificate.renewal.unread`. A lost registration channel is raised with
-`details.component` `registration-channel` by the event stream that finds it lost,
-deduplicated by the window of OPS-ALERT-002. A fall back to the offline blocklist is raised as
-`password.blocklist.fallback` with `details.configured` (the corpus configured) and
-`details.used` (`offline`) before the offline corpus is asked; a fall back that cannot
-be raised refuses the operation with what refused the raise.
+`details.component` `registration-channel` by the registration signal itself
+(REG-SESS-003), when a wait begins while its channel is not listening, in a scope and
+unit of work of its own, deduplicated by the window of OPS-ALERT-002; the event stream
+takes only the registration signal (LIB-API-005). A fall back to the offline blocklist
+is raised as `password.blocklist.fallback` with `details.configured` (the corpus
+configured) and `details.used` (`offline`) before the offline corpus is asked; a fall
+back that cannot be raised refuses the operation with what refused the raise.
 
-*Source: D-011, D-006, D-022, P-003, D-166*
+*Source: D-011, D-006, D-022, P-003, D-166, D-183*
 
 **Acceptance criteria**
 1. Each listed condition produces a monitored signal.

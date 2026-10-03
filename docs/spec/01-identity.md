@@ -190,7 +190,7 @@ typed a capital.
 | `deleting` | Deletion requested, grace window (`account.deletion.grace`, default 30 days) running — **cancellable until it elapses** | No |
 | `deleted` | Personal data removed or key-destroyed, anonymised record retained | No |
 
-*Source: D-006, D-037, D-026.1, D-113, D-146, D-166*
+*Source: D-006, D-037, D-026.1, D-113, D-146, D-166, D-183*
 
 Entering `deleting` is the customer's exercise of the erasure right (PRIV-RIGHT-001);
 no separate privacy request is created for it. There is no `pending` state: an account
@@ -217,8 +217,10 @@ the state an account is in SHALL be refused with `identity.account.stateconflict
 `details.state` naming the state and, where it is `suspended`, `details.suspendedBy` its
 origin, wherever `10` section 1.1 holds no code of its own for the case (as
 `identity.takedown.active` and `identity.account.adminsuspended` are). An administrative
-operation naming a subject no account bears SHALL be refused with
-`identity.account.notfound` (404).
+operation whose path names a subject no account bears SHALL be refused with
+`identity.account.notfound` (404); one whose body names it, the entry of an out-of-band
+privacy request among them, with 422 `api.request.invalid` naming the member (`09`
+API-CONV-003).
 
 **Acceptance criteria**
 1. Every account row has a state; none is null.
@@ -523,7 +525,7 @@ the single point at which the adult affirmation is collected.
 any credible indication that a customer is under 18: account suspended, host-side
 processing for the subject stopped, personal data removed, event recorded.
 
-*Source: D-148; D-039, D-127, D-147, D-166*
+*Source: D-148; D-039, D-127, D-147, D-166, D-183*
 
 **Two phases, one operation.** Triggering the takedown does, in one transaction:
 suspend the account, terminate its sessions (AUTH-SESS-010), record the event with
@@ -554,12 +556,15 @@ a reversal SHALL restore it: `active`; `restricted` where a restriction is held
 (PRIV-RIGHT-004); `suspended` with its `suspendedBy`, so that an administrator's
 suspension is still lifted only under `account:manage` and an owner's deactivation only
 by its owner (IDN-LIFE-013); or the deletion it was in, with its `deletingBy` and its
-start. Where the account was
-already `deleting`, the takedown's erasure falls due at the earlier of that window's end
-and the trigger plus `takedown.grace`, so the takedown never erases later than the
-subject's own request would have. The reversal and the erasure each read the account
-under a lock in their transaction, so of a reversal and an erasure at the window's end
-only one commits. A second trigger on a takedown-originated `deleting` is refused with
+start. A reversal to a deletion or a suspension keeps a restriction the account holds,
+and a reversal to an `oob-request` deletion keeps the suspension that deletion holds, so
+that the deletion's cancellation or the suspension's end restores them in turn
+(PRIV-RIGHT-004, `10` section 5.12b). Where the account was already `deleting`, the
+takedown's erasure falls due at the earlier of that window's end and the trigger plus
+`takedown.grace`, so the takedown never erases later than the subject's own request
+would have. The reversal and the erasure each read the account under a lock in their
+transaction, so of a reversal and an erasure at the window's end only one commits. A
+second trigger on a takedown-originated `deleting` is refused with
 `identity.takedown.active`; a trigger on a `deleted` account with
 `identity.account.stateconflict`; a trigger, a read of its progress or a reversal naming
 a subject no account bears with `identity.account.notfound`; and a read or a reversal of
@@ -642,6 +647,11 @@ on the spot.
 10. An out-of-band erasure fulfilled on an account already `deleting` leaves its window's
     end unchanged, and one fulfilled on a `deleted` account changes nothing but the
     request, which reads `fulfilled`.
+11. A restricted account an administrator suspended, whose out-of-band erasure was then
+    fulfilled and which was then taken down, returns at the reversal to its
+    `oob-request` deletion with its start, holding the suspension and the restriction;
+    cancelling the deletion returns it `suspended` by `administrator`, and reactivating
+    it returns it `restricted`.
 
 **Atomicity was claimed and is unachievable.** Two steps are library work; two belong
 to the host application, in tables the library never touches (LIB-HOST-002). An
@@ -942,7 +952,7 @@ to the security-notice set); on an email disable, the provider-verified identifi
 SHALL drop to unverified. Every event is verified against the provider's
 published keys, is idempotent by its `jti`, and is audited.
 
-*Source: D-164, D-166*
+*Source: D-164, D-166, D-183*
 
 A person's Google account is taken over and Google tells every relying party within
 seconds. A system that ignores that is choosing to keep the attacker signed in.
@@ -972,11 +982,14 @@ way.
 
 **How an event is taken (D-166).** An event is claimed by its `jti` under its
 provider's callback name, in the transaction its work runs in; an event that carries no
-`jti` is refused as unreadable (RFC 8417 section 2.2). A carried event is recorded as
-`auth.providerevent.taken`; a replayed one as `auth.providerevent.rejected` and answered
-as a carried one is; one the provider's keys do not verify as
-`auth.providerevent.rejected` against the account its unverified claims name, where they
-name one, and refused. The provider's subject identifier is never recorded or logged.
+`jti` is refused as unreadable (RFC 8417 section 2.2). A provider document the library
+cannot have or read refuses nothing: the delivery is answered as a fault, nothing is
+claimed or recorded, and the provider may deliver it again (`09` section 10). A carried
+event is recorded as `auth.providerevent.taken`; a replayed one as
+`auth.providerevent.rejected` and answered as a carried one is; one the provider's keys
+do not verify as `auth.providerevent.rejected` against the account its unverified claims
+name, where they name one, and refused. The provider's subject identifier is never
+recorded or logged.
 
 **Acceptance criteria**
 1. A signed `sessions-revoked` or `account-disabled` event ends every session of the
@@ -994,6 +1007,10 @@ name one, and refused. The provider's subject identifier is never recorded or lo
 6. A credential held by a provider's event stands again at the first session begun on
    other factors, recorded as `auth.credential.restored`.
 7. An event carrying no `jti` changes nothing and is refused.
+8. On the Google route each failure is answered 400 with the `err` `09` section 10 gives
+   it, the same code as `description`, and `Content-Language: en`; on either route a
+   provider document that cannot be read is answered 500 `system.fault`, and nothing is
+   claimed, recorded or changed.
 
 ---
 
