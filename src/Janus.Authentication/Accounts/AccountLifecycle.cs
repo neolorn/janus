@@ -131,7 +131,9 @@ internal sealed class AccountLifecycle(
         if (await UnadmittedAsync(subject, deletion: false, cancellationToken).ConfigureAwait(false)
             is Error moved)
         {
-            return await SettledAsync(moved, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(moved);
         }
 
         await directory.DeactivateAsync(subject, cancellationToken).ConfigureAwait(false);
@@ -166,6 +168,8 @@ internal sealed class AccountLifecycle(
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unpublished);
         }
 
@@ -219,7 +223,9 @@ internal sealed class AccountLifecycle(
 
         if (await ReactivationRefusedAsync(link.Subject, cancellationToken).ConfigureAwait(false) is Error moved)
         {
-            return await SettledAsync(moved, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(moved);
         }
 
         await directory.ReinstateAsync(link.Subject, cancellationToken).ConfigureAwait(false);
@@ -237,6 +243,8 @@ internal sealed class AccountLifecycle(
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unpublished);
         }
 
@@ -323,10 +331,9 @@ internal sealed class AccountLifecycle(
         if (await UnadmittedAsync(subject, deletion: true, cancellationToken).ConfigureAwait(false)
             is Error moved)
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(
-                    () => Result.Failure<DateTimeOffset>(moved),
-                    Result.Failure<DateTimeOffset>);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<DateTimeOffset>(moved);
         }
 
         await directory.BeginDeletionAsync(subject, now, cancellationToken).ConfigureAwait(false);
@@ -356,6 +363,8 @@ internal sealed class AccountLifecycle(
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<DateTimeOffset>(unpublished);
         }
 
@@ -408,7 +417,9 @@ internal sealed class AccountLifecycle(
 
         if (await CancellationRefusedAsync(link, cancellationToken).ConfigureAwait(false) is Error moved)
         {
-            return await SettledAsync(moved, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(moved);
         }
 
         await directory.CancelDeletionAsync(link.Subject, cancellationToken).ConfigureAwait(false);
@@ -426,6 +437,8 @@ internal sealed class AccountLifecycle(
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unpublished);
         }
 
@@ -519,13 +532,6 @@ internal sealed class AccountLifecycle(
             ? Error.From(ErrorCodes.DeletionWindowElapsed)
             : null;
     }
-
-    // CONV-DESIGN-003: a decision taken again under the lock that refuses the operation
-    // before its write commits the transaction with nothing in it, so the unit of work
-    // is left clean.
-    private async ValueTask<Result> SettledAsync(Error refusal, CancellationToken cancellationToken) =>
-        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match(() => Result.Failure(refusal), Result.Failure);
 
     private async ValueTask<LifecycleLink?> PresentedAsync(
         [NeverLogged] string linkToken,

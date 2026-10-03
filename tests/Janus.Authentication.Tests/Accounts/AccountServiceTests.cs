@@ -335,6 +335,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
         await ChosenAsync(Chosen);
 
         _clock.Advance(TimeSpan.FromDays(1));
+        _work.Reset();
 
         Error refused = Failure(await Service.EditProfileAsync(
             Acting,
@@ -343,11 +344,36 @@ public sealed class AccountServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken));
 
         Assert.Equal(ErrorCodes.UsernameCoolingOff, refused.Code);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
         Assert.Equal(
             Noon + Settings.IdentifiersUsernameChangeCoolOff.Default,
             refused.Details["retryAt"].Deserialize<DateTimeOffset>());
 
         Assert.Equal(Chosen, await UsernameAsync());
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a preference the directory refuses after the unit of work
+    /// began rolls it back, so nothing of the edit is committed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_APreferenceRefusedAfterTheWorkBeganIsRolledBackAsync()
+    {
+        var declared = new Dictionary<string, string>(StringComparer.Ordinal) { ["undeclared"] = "1" };
+
+        Result refused = await Service.SetPreferencesAsync(
+            Acting,
+            language: null,
+            timeZone: null,
+            declared,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.PreferenceUndeclared, Failure(refused).Code);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>

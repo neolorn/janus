@@ -100,9 +100,18 @@ internal sealed class AccountAdministration(
 
         (refusal, state) = await SuspendableAsync(subject, cancellationToken).ConfigureAwait(false);
 
-        if (refusal is not null || state is null)
+        if (refusal is not null)
         {
-            return await SettledAsync(refusal, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(refusal);
+        }
+
+        // An account an administrator suspended meanwhile stands as asked: the
+        // operation is done with nothing to write.
+        if (state is null)
+        {
+            return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
 
         await directory.SuspendAsync(subject, cancellationToken).ConfigureAwait(false);
@@ -127,6 +136,8 @@ internal sealed class AccountAdministration(
 
             if (published.Match(() => (Error?)null, error => error) is Error unpublished)
             {
+                await work.RollbackAsync().ConfigureAwait(false);
+
                 return Result.Failure(unpublished);
             }
         }
@@ -190,7 +201,9 @@ internal sealed class AccountAdministration(
 
         if (await ReactivationRefusedAsync(subject, cancellationToken).ConfigureAwait(false) is Error moved)
         {
-            return await SettledAsync(moved, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(moved);
         }
 
         await directory.ReinstateAsync(subject, cancellationToken).ConfigureAwait(false);
@@ -207,6 +220,8 @@ internal sealed class AccountAdministration(
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unpublished);
         }
 
@@ -269,7 +284,9 @@ internal sealed class AccountAdministration(
 
         if (await LiftRefusedAsync(subject, cancellationToken).ConfigureAwait(false) is Error moved)
         {
-            return await SettledAsync(moved, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(moved);
         }
 
         await directory.LiftRestrictionAsync(subject, now, cancellationToken).ConfigureAwait(false);
@@ -335,9 +352,16 @@ internal sealed class AccountAdministration(
 
         (refusal, deleting) = await CancellableAsync(subject, now, cancellationToken).ConfigureAwait(false);
 
-        if (refusal is not null || deleting is null)
+        if (refusal is not null)
         {
-            return await SettledAsync(refusal, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(refusal);
+        }
+
+        if (deleting is null)
+        {
+            return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
 
         // IDN-LIFE-003: the cancellation of a window an out-of-band request began is
@@ -361,6 +385,8 @@ internal sealed class AccountAdministration(
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unpublished);
         }
 
@@ -495,13 +521,6 @@ internal sealed class AccountAdministration(
             ? (Error.From(ErrorCodes.DeletionWindowElapsed), null)
             : (null, deleting);
     }
-
-    // CONV-DESIGN-003: a decision taken again under the lock that settles the operation
-    // before its write commits the transaction with nothing in it, so the unit of work
-    // is left clean; a refusal of nothing is the success of an operation already done.
-    private async ValueTask<Result> SettledAsync(Error? refusal, CancellationToken cancellationToken) =>
-        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match(() => refusal is null ? Result.Success() : Result.Failure(refusal), Result.Failure);
 
     private static string Key(SubjectId subject, DateTimeOffset at) =>
         string.Create(CultureInfo.InvariantCulture, $"{subject.Value}@{at.UtcTicks}");

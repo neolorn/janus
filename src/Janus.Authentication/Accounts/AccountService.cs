@@ -189,6 +189,18 @@ internal sealed class AccountService(
             return Result.Failure(badLegalName);
         }
 
+        Username? username = null;
+
+        if (edit.Username is string entered)
+        {
+            if (Unusable(entered, out Username read) is Error unusable)
+            {
+                return Result.Failure(unusable);
+            }
+
+            username = read;
+        }
+
         DateTimeOffset now = time.GetUtcNow();
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -197,10 +209,12 @@ internal sealed class AccountService(
             return Result.Failure(notBegun);
         }
 
-        if (edit.Username is string entered
-            && await ChooseAsync(context, subject, session, entered, now, cancellationToken)
+        if (username is Username chosen
+            && await ChooseAsync(context, subject, session, chosen, now, cancellationToken)
                 .ConfigureAwait(false) is Error refused)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(refused);
         }
 
@@ -317,6 +331,8 @@ internal sealed class AccountService(
 
         if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(failure);
         }
 
@@ -705,17 +721,12 @@ internal sealed class AccountService(
                 username));
     }
 
-    // REG-IDENT-009: a username is chosen through the profile, is never verified, is
-    // public by nature and so discloses its own refusals, and is held against a second
-    // change for as long as the cooling off lasts.
-    private async ValueTask<Error?> ChooseAsync(
-        AccessContext context,
-        SubjectId subject,
-        SessionId session,
-        string entered,
-        DateTimeOffset now,
-        CancellationToken cancellationToken)
+    // What a username is refused for on its own text, which needs no transaction and is
+    // answered before one begins (CONV-DESIGN-003).
+    private Error? Unusable(string entered, out Username username)
     {
+        username = default;
+
         // IDN-ACCT-005 AC3: a word that mixes scripts is refused by the code that names
         // the mixing, before anything else about the username is judged.
         if (!ScriptMixing.IsSingleScriptPerWord(entered))
@@ -723,16 +734,25 @@ internal sealed class AccountService(
             return Error.From(ErrorCodes.IdentifierMixedScript);
         }
 
-        if (!Username.TryParse(entered, out Username username))
+        if (!Username.TryParse(entered, out username))
         {
             return Error.From(ErrorCodes.UsernameInvalid);
         }
 
-        if (reserved.Holds(username))
-        {
-            return Error.From(ErrorCodes.UsernameReserved);
-        }
+        return reserved.Holds(username) ? Error.From(ErrorCodes.UsernameReserved) : null;
+    }
 
+    // REG-IDENT-009: a username is chosen through the profile, is never verified, is
+    // public by nature and so discloses its own refusals, and is held against a second
+    // change for as long as the cooling off lasts.
+    private async ValueTask<Error?> ChooseAsync(
+        AccessContext context,
+        SubjectId subject,
+        SessionId session,
+        Username username,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
         // D-166 X3: the set is read under its lock, so two usernames chosen at once are
         // chosen one after the other and the second is judged against the first.
         await identifiers.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
