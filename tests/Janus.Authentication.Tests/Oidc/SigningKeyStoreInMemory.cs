@@ -57,10 +57,23 @@ internal sealed class SigningKeyStoreInMemory : ISigningKeyStore
     public bool HoldsPrivateKey(string keyId) =>
         _keys.TryGetValue(keyId, out (SigningKey Key, byte[]? PrivateKey) held) && held.PrivateKey is not null;
 
+    /// <summary>
+    /// Whether the next whole read answers as it would have before any key was stored,
+    /// which is what a process reads that another is about to make the first key under.
+    /// </summary>
+    public bool ReadsBeforeTheFirstKey { get; set; }
+
     /// <inheritdoc/>
     public ValueTask<IReadOnlyList<SigningKey>> HeldAsync(CancellationToken cancellationToken)
     {
         Reads++;
+
+        if (ReadsBeforeTheFirstKey)
+        {
+            ReadsBeforeTheFirstKey = false;
+
+            return ValueTask.FromResult<IReadOnlyList<SigningKey>>([]);
+        }
 
         return ValueTask.FromResult<IReadOnlyList<SigningKey>>(
             [.. _keys.Values.Select(held => held.Key).OrderBy(key => key.PublishedAt)]);
