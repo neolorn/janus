@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Xunit;
@@ -164,6 +165,14 @@ public sealed class LibraryStructureTests
         "Testcontainers.PostgreSql",
         "Testcontainers.Redis",
         "xunit.v3",
+    ];
+
+    // CONV-DESIGN-008 AC3: the packages that carry one version and move together.
+    private static readonly string[] MovingTogether =
+    [
+        "Microsoft.EntityFrameworkCore",
+        "Microsoft.EntityFrameworkCore.Design",
+        "Microsoft.EntityFrameworkCore.Relational",
     ];
 
     private static readonly string[] InheritedProperties =
@@ -956,6 +965,27 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
+    /// CONV-SETUP-001 AC3: global.json names an SDK of the .NET release the solution
+    /// targets, and rolls forward to a later patch of its feature band and no further.
+    /// </summary>
+    [Fact]
+    public void CONV_SETUP_001_AC3_TheSdkIsOfTheTargetedReleaseAndRollsForwardByPatch()
+    {
+        string framework = XDocument
+            .Parse(Repository.ReadText("Directory.Build.props"))
+            .Descendants("TargetFramework")
+            .Single()
+            .Value;
+
+        using var settings = JsonDocument.Parse(Repository.ReadText("global.json"));
+        JsonElement sdk = settings.RootElement.GetProperty("sdk");
+        var version = Version.Parse(sdk.GetProperty("version").GetString()!);
+
+        Assert.Equal(framework, "net" + version.ToString(2));
+        Assert.Equal("latestPatch", sdk.GetProperty("rollForward").GetString());
+    }
+
+    /// <summary>
     /// CONV-SETUP-002 AC1: no project file carries a package version.
     /// </summary>
     [Fact]
@@ -1084,6 +1114,63 @@ public sealed class LibraryStructureTests
             .ToArray();
 
         Assert.Equal(AllowedPackages, declared);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-008 AC3: the core, relational and design packages carry one version,
+    /// the tool manifest gives dotnet-ef that version, and every lockfile resolves each
+    /// of the three at it, so no build has two versions of one of their assemblies to
+    /// choose between. Storage alone references the relational package.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_008_AC3_TheRelationalAccessPackagesAndTheirToolCarryOneVersion()
+    {
+        var versions = XDocument
+            .Parse(Repository.ReadText("Directory.Packages.props"))
+            .Descendants("PackageVersion")
+            .ToDictionary(
+                package => package.Attribute("Include")!.Value,
+                package => package.Attribute("Version")!.Value,
+                StringComparer.Ordinal);
+
+        string version = versions["Microsoft.EntityFrameworkCore"];
+
+        using var manifest = JsonDocument.Parse(Repository.ReadText(".config/dotnet-tools.json"));
+
+        Assert.All(MovingTogether, package => Assert.Equal(version, versions[package]));
+        Assert.Equal(
+            version,
+            manifest.RootElement.GetProperty("tools").GetProperty("dotnet-ef").GetProperty("version").GetString());
+
+        string[] roots = [.. Roots, "tests"];
+
+        foreach (string lockfile in roots.SelectMany(root => Directory.EnumerateFiles(
+            Path.Combine(Repository.Root, root),
+            "packages.lock.json",
+            SearchOption.AllDirectories)))
+        {
+            using var locked = JsonDocument.Parse(File.ReadAllText(lockfile));
+
+            foreach (JsonProperty framework in locked.RootElement.GetProperty("dependencies").EnumerateObject())
+            {
+                foreach (string package in MovingTogether)
+                {
+                    if (framework.Value.TryGetProperty(package, out JsonElement resolved))
+                    {
+                        Assert.Equal(version, resolved.GetProperty("resolved").GetString());
+                    }
+                }
+            }
+        }
+
+        string referencing = Assert.Single(
+            Projects(),
+            project => XDocument
+                .Parse(File.ReadAllText(project))
+                .Descendants("PackageReference")
+                .Any(reference => reference.Attribute("Include")!.Value == "Microsoft.EntityFrameworkCore.Relational"));
+
+        Assert.Equal("Janus.Storage.csproj", Path.GetFileName(referencing));
     }
 
     /// <summary>
