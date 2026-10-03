@@ -906,6 +906,25 @@ and none carries a `$` root, a list index or a nested path written otherwise.
   (question 46), 382 (question 50, question 51), 389 (question 48), 419 (question 32).
 - The lines already present stand: 139, 151, 262, 186, 328 (399), 367 (402), 400, 402.
 
+#### X9, `part/rollback-sessions`, merged as `738ef362` (`1b9a5e9b`, `e3f97ab2`, `141a473f`, `fb1e3ee0`)
+
+- `SessionService.ResolveAsync`, `RestoreAsync`, `DeriveAsync` and the private `BeginAsync`: the return where the concurrent-sessions condition is not raised left the unit of work open; rolled back. Tests `SessionServiceTests.CONV_DESIGN_003_AC5_AUseWhoseConditionIsNotRaisedIsRolledBackAsync`, `..._ARestorationWhoseConditionIsNotRaisedIsRolledBackAsync`, `..._ADerivationWhoseConditionIsNotRaisedIsRolledBackAsync`, `..._ABeginningWhoseConditionIsNotRaisedIsRolledBackAsync`.
+- `SessionService`, the private `BeginAsync`: `auth.factor.rejected` for an account found suspended, deleting or deleted under its lock ended with a commit; rolled back. Test `IDN_LIFE_013_AnAccountSuspendedMeanwhileBeginsNoSessionAsync`.
+- Reviewed, left: `SessionService.PresentAsync`, `RotateAsync`, `EndAsync`, `RevokeEveryAsync`, `EndAccountAsync` and the seven sites of `PreAuthenticationService` (no return between the beginning and the commit); `ConcurrentSessions` begins none.
+- `AuthenticationService.RaiseAsync`: the challenge gone under its lock and a failure of the presentation ended with a commit; rolled back. Test `CONV_DESIGN_003_AC5_AStepUpWhoseChallengeIsGoneIsRolledBackAsync`.
+- `AuthenticationService`, the private `CompleteAsync`: the challenge gone under its lock and every failure of the issue ended with a commit; rolled back, so a session begun before device trust failed is no longer saved. The refusals inside the issue stay after the challenge's lock. Tests `CONV_DESIGN_003_AC5_ASignInCompletedMeanwhileIsRolledBackAsync`, `AUTH_FACT_017_AC1_WithNoGraceARaiseHoldsTheSignInAtEnrolmentAsync`, `CONV_DESIGN_003_AC8_ASessionRefusedInsideACompletionRollsTheCompletionBackAsync`.
+- Reviewed, left: `AuthenticationService.BeginAsync` and the units of `PresentAsync` and `LandAsync` (no return between); `CountedAsync` and `StepUpRefusedAsync` keep the record of a failed authentication (CONV-LOG-005), begin the outermost unit of work and are called before any other begins.
+- `SignInLinks.SpendCodeAsync`: `auth.code.expired` for a code gone or lapsed under its lock ended with a commit; rolled back. A wrong try keeps its count and commits. Tests `CONV_DESIGN_003_AC5_ASignInCodeGoneUnderItsLockIsRolledBackAsync`, `CONV_DESIGN_003_AC5_AWrongSignInCodeKeepsItsCountAsync`. The try that reaches the limit is question 71.
+- Reviewed, left: `SignInLinks.SendSecondStepAsync`, `AbandonAsync` and the private `IssueAsync` (no return between).
+- `NonExistenceNotice`: a refused send of the notice and a probe alert not raised returned with the unit open; rolled back. Tests `AUTH_ABUSE_002_AC3_TheNoticeAnswersToTheRestrictionsOfTheAskAsync`, `CONV_DESIGN_003_AC5_ANoticeWhoseAlertIsNotRaisedIsRolledBackAsync`.
+- `RestrictionAdministration.EditAsync`: the set unreadable under its lock ended with a commit; the refused configuration change, the event not written and the alert not raised returned with the unit open; all rolled back. `GrantAsync`: the event not written and the alert not raised; rolled back. Tests `CONV_DESIGN_003_AC5_AnEditWhoseEventIsNotWrittenIsRolledBackAsync`, `CONV_DESIGN_003_AC5_AGrantWhoseEventIsNotWrittenIsRolledBackAsync`.
+- `SmsBalance.PollAsync`: the alert not raised; rolled back. Test `CONV_DESIGN_003_AC5_APollWhoseAlertIsNotRaisedIsRolledBackAsync`.
+- `ThrottleService.FailedAsync`: the alert not raised returned with the unit open; rolled back. The counted failure commits (AUTH-ABUSE-001). Tests `CONV_DESIGN_003_AC5_AFailureWhoseAlertIsNotRaisedIsRolledBackAsync`, `CONV_DESIGN_003_AC5_ACountedFailureIsCommittedAsync`.
+- Reviewed, left: `ThrottleService.SucceededAsync`, `PhoneSignals.AllowsAsync` and `ConsiderAsync` (no return between).
+- `SigningKeys.ChangeAsync`: where another process made the change first it answered success with the unit left open; rolled back, then success. Test `CONV_DESIGN_003_AC5_AChangeAnotherProcessMadeFirstIsRolledBackAsync`.
+- Reviewed, left: `SigningKeys.LengthenAsync`, `ClientRegistry.RegisterAsync`, `OidcService.ReuseAsync` (no return between).
+- Parked: `DeliveryReports.ReportAsync` (question 69), `BotDefence` (question 70), the limit of `SignInLinks.SpendCodeAsync` (question 71), `RegisteredSecrets.RotatedAsync` (question 72).
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -2314,6 +2333,44 @@ part of 389 (3) and waits with 389 on question 48.
   Unicode 17.0.0 is downloaded (SHA-256
   `87f05505dc026fdb2bff16132bdc68a8014675836882a9a2b1844540ad3be382`) and kept outside
   the repository until the item is built.
+- **Answer:** pending.
+
+**69. Tier 3. CONV-DESIGN-003 and INT-GEN-003: whether the counts of a rejected callback stand.**
+
+- **Item.** X9 at `DeliveryReports.ReportAsync` (question 58).
+- **What the code does.** It begins, then `CallbackAdmission` counts the callback and, on a rejection, counts the rejection and past the threshold writes the alert's event row, all in that unit of work. On `integration.callback.rejected` it commits; on any other failure it returns with the unit open.
+- **What the specification says.** CONV-DESIGN-003 lists the refusals whose count or record stands (AUTH-FACT-004, AUTH-ABUSE-001, AUTH-STEP-002, OPS-BOOT-004, CONV-LOG-005). The callback counts of INT-GEN-003 are not among them, and a rejection past the threshold writes more than a count.
+- **Parked.** The whole of `DeliveryReports.ReportAsync`, its other-failure return included.
+- **Answer:** pending.
+
+**70. Tier 2. CONV-DESIGN-003: a refusal returned after the commit of a record the list does not name (`BotDefence`).**
+
+- **Item.** X9 at `BotDefence` (question 58).
+- **What the code does.** It begins, writes the signal's audit record, commits, then asks the verifier outside the unit of work and may answer `bff.challenge.required`. No unit is left open.
+- **What the specification says.** A refusal that needs no write is returned before the unit of work begins; a refusal that keeps a record is one of the five the item lists, and the signal's record is not among them.
+- **Readings.**
+  1. The record is the operation's own success and the challenge is a later answer: nothing changes.
+  2. The record is written only where the verifier's answer is known, in one unit of work after it.
+- **Parked.** `BotDefence`.
+- **Answer:** pending.
+
+**71. Tier 3. AUTH-FACT-004 and CONV-DESIGN-003: the wrong try that reaches `code.signin.attempts`.**
+
+- **Item.** X9 at `SignInLinks.SpendCodeAsync` (question 58).
+- **What the code does.** A wrong try below the limit writes its count and commits. The wrong try that reaches the limit writes no count: it removes the pending sign-in, and commits.
+- **What the specification says.** CONV-DESIGN-003: such a refusal commits "that count or record and nothing else". AUTH-FACT-004: the code is invalidated after that many wrong tries.
+- **Parked.** The limit path of `SpendCodeAsync`, left committing as it was. The expired path of the same method is rolled back (`e3f97ab2`).
+- **Answer:** pending.
+
+**72. Tier 2. CONV-DESIGN-003: a lost race that commits nothing (`RegisteredSecrets.RotatedAsync`).**
+
+- **Item.** X9 at `RegisteredSecrets.RotatedAsync` (question 58).
+- **What the code does.** The conditional replace is followed by a commit whether or not it replaced anything. Where another process won, the method reads the standing secret outside the unit of work and may answer `system.fault`.
+- **What the specification says.** Every return but success rolls back. The lost race normally answers success, as `SigningKeys.ChangeAsync` does, which now rolls back before it.
+- **Readings.**
+  1. Where nothing was replaced the unit of work is rolled back, then the standing secret is read: as `SigningKeys.ChangeAsync`.
+  2. The commit of nothing stays, since the operation succeeds.
+- **Parked.** `RegisteredSecrets.RotatedAsync`.
 - **Answer:** pending.
 
 ## 5. Gate result
