@@ -327,10 +327,113 @@ public sealed class LossReportsTests : IAsyncDisposable
 
         _clock.Advance(TimeSpan.FromDays(8));
         _events.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
 
         Assert.Equal(
             ErrorCodes.SystemFault,
             Refused(await Service.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken)));
+
+        // CONV-DESIGN-003 AC5: the refusal ends the unit of work the invalidation was
+        // written in with nothing committed.
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a suspension whose announcement is refused is refused after
+    /// it was written, and the refusal ends the unit of work with nothing committed and
+    /// no notice sent.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ASuspensionThatCannotBeAnnouncedRollsBackAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        AuthenticatorId generator = await EnrolledAsync(subject);
+        int sent = _notifications.Sent.Count;
+
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            Refused(await Service.ReportAsync(
+                AccessContext.Of(subject),
+                generator,
+                Source,
+                TestContext.Current.CancellationToken)));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(sent, _notifications.Sent.Count);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a cancellation that finds, under the credential's lock, a
+    /// report no longer running is refused as an unknown credential is, and the refusal
+    /// ends the unit of work with nothing committed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ACancellationOfAReportEndedMeanwhileRollsBackAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        AuthenticatorId generator = await EnrolledAsync(subject);
+
+        _ = await Service.ReportAsync(
+            AccessContext.Of(subject),
+            generator,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        _authenticators.Locking = credential => credential.Restore();
+        _work.Reset();
+
+        Result cancelled = await Service.CancelAsync(
+            AccessContext.Of(subject),
+            generator,
+            cancelToken: null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.CredentialNotFound, cancelled.Match<ErrorCode?>(() => null, error => error.Code));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.DoesNotContain(_credentials.Records, record => record.Action == AuditActions.CredentialReportCancelled);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a cancellation whose announcement is refused is refused
+    /// after it was written, and the refusal ends the unit of work with nothing
+    /// committed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ACancellationThatCannotBeAnnouncedRollsBackAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        AuthenticatorId generator = await EnrolledAsync(subject);
+
+        _ = await Service.ReportAsync(
+            AccessContext.Of(subject),
+            generator,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Result cancelled = await Service.CancelAsync(
+            AccessContext.Of(subject),
+            generator,
+            cancelToken: null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, cancelled.Match<ErrorCode?>(() => null, error => error.Code));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>

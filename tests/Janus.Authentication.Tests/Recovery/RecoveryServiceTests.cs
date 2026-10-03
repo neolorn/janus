@@ -378,6 +378,8 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
             Source,
             TestContext.Current.CancellationToken)));
 
+        _work.Reset();
+
         Assert.Equal(
             ErrorCodes.RecoveryTokenInvalid,
             Refused(await Service.CompleteAsync(
@@ -385,6 +387,12 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
                 Secret,
                 Source,
                 TestContext.Current.CancellationToken)));
+
+        // CONV-DESIGN-003 AC5: the refusal ends the unit of work the link was read in
+        // with nothing committed.
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
 
         _notifications.Sent.Clear();
         _clock.Advance(TimeSpan.FromMinutes(5));
@@ -569,11 +577,18 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         _ = await Approving(second, another, subject, Reason);
 
         _clock.Advance(TimeSpan.FromMinutes(1));
+        _work.Reset();
 
         Result<ApprovedRecovery> capped = await Approving(second, another, subject, Reason);
 
         Assert.Equal(ErrorCodes.Throttled, Refused(capped));
         Assert.Equal(latest.AddDays(1), Lifts(capped));
+
+        // CONV-DESIGN-003 AC5: the refusal ends the unit of work the approvals were
+        // counted in with nothing committed.
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>
@@ -628,6 +643,12 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.SystemFault, Refused(await Approving(approver, session, subject, Reason)));
         Assert.Equal(0, _work.OutermostCommitted);
         Assert.Empty(_notifications.Mail);
+
+        // CONV-DESIGN-003 AC5: the refusal ends the unit of work the approval was
+        // written in with nothing committed.
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>
@@ -714,11 +735,19 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
 
         string recovery = Sent();
 
+        _work.Reset();
+
         Assert.Equal(
             ErrorCodes.EnrolmentTokenInvalid,
             Refused(await Service.BeginEnrolmentAsync(
                 recovery,
                 TestContext.Current.CancellationToken)));
+
+        // CONV-DESIGN-003 AC5: the refusal ends the unit of work the link was read in
+        // with nothing committed.
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
 
         _notifications.Sent.Clear();
         _clock.Advance(TimeSpan.FromMinutes(5));

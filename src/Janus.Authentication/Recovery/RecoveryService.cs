@@ -191,23 +191,27 @@ internal sealed class RecoveryService(
                 .Match(() => true, error => Withheld<bool>(error, ref failure));
         }
 
-        if (failure is null)
+        if (failure is not null)
         {
-            link!.Spend(session: null, now);
+            await work.RollbackAsync().ConfigureAwait(false);
 
-            await links.RecordAsync(link, cancellationToken).ConfigureAwait(false);
+            return Result.Failure(failure);
+        }
 
-            // D-140: recovery is the way back for an account its own holder deactivated,
-            // and finishing it is what stands it up again; who suspended it is read on
-            // the account's row under its lock (D-166 X3), so an administrator's
-            // suspension committed meanwhile is not stood up.
-            await accounts.HoldAsync(link.Subject, cancellationToken).ConfigureAwait(false);
+        link!.Spend(session: null, now);
 
-            if (await accounts.SuspendedByAsync(link.Subject, cancellationToken).ConfigureAwait(false)
-                is SuspensionOrigin.Self)
-            {
-                await accounts.ReinstateAsync(link.Subject, cancellationToken).ConfigureAwait(false);
-            }
+        await links.RecordAsync(link, cancellationToken).ConfigureAwait(false);
+
+        // D-140: recovery is the way back for an account its own holder deactivated,
+        // and finishing it is what stands it up again; who suspended it is read on
+        // the account's row under its lock (D-166 X3), so an administrator's
+        // suspension committed meanwhile is not stood up.
+        await accounts.HoldAsync(link.Subject, cancellationToken).ConfigureAwait(false);
+
+        if (await accounts.SuspendedByAsync(link.Subject, cancellationToken).ConfigureAwait(false)
+            is SuspensionOrigin.Self)
+        {
+            await accounts.ReinstateAsync(link.Subject, cancellationToken).ConfigureAwait(false);
         }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
@@ -216,14 +220,9 @@ internal sealed class RecoveryService(
             return Result.Failure(notCommitted);
         }
 
-        if (failure is not null)
-        {
-            return Result.Failure(failure);
-        }
-
         // IDN-LIFE-008: a changed password ends every session that was held under the
         // old one, wherever it is held.
-        _ = (await sessions.EndAccountAsync(link!.Subject, cancellationToken).ConfigureAwait(false))
+        _ = (await sessions.EndAccountAsync(link.Subject, cancellationToken).ConfigureAwait(false))
             .Match(() => true, error => Withheld<bool>(error, ref failure));
 
         if (failure is not null)
@@ -351,12 +350,16 @@ internal sealed class RecoveryService(
         RecoveryLink? link = await LockedAsync(token, cancellationToken).ConfigureAwait(false);
         Error? failure = Unopened(link, RecoveryPurpose.Enrolment, ErrorCodes.EnrolmentTokenInvalid, now);
 
-        if (failure is null)
+        if (failure is not null)
         {
-            link!.Spend(opened, now);
+            await work.RollbackAsync().ConfigureAwait(false);
 
-            await links.RecordAsync(link, cancellationToken).ConfigureAwait(false);
+            return Result.Failure<EnrolmentSession>(failure);
         }
+
+        link!.Spend(opened, now);
+
+        await links.RecordAsync(link, cancellationToken).ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -366,10 +369,8 @@ internal sealed class RecoveryService(
 
         // D-147: the session the link opens is capped by the link's own lifetime and
         // never given one of its own.
-        return failure is not null
-            ? Result.Failure<EnrolmentSession>(failure)
-            : Result.Success(
-                new EnrolmentSession(opened, link!.Subject, link.ExpiresAt, link.MailboxLost));
+        return Result.Success(
+            new EnrolmentSession(opened, link.Subject, link.ExpiresAt, link.MailboxLost));
     }
 
     /// <inheritdoc/>
@@ -788,10 +789,9 @@ internal sealed class RecoveryService(
 
         if (Later(Lifts(drawn, perAccount, now), Lifts(given, perApprover, now)) is DateTimeOffset lifts)
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(
-                    () => Result.Failure<ApprovedRecovery>(Error.Throttled(lifts)),
-                    Result.Failure<ApprovedRecovery>);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<ApprovedRecovery>(Error.Throttled(lifts));
         }
 
         await approvals
@@ -814,6 +814,8 @@ internal sealed class RecoveryService(
 
         if (raised.Match(() => (Error?)null, error => error) is Error unraised)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<ApprovedRecovery>(unraised);
         }
 

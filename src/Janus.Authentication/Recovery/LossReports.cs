@@ -203,6 +203,8 @@ internal sealed class LossReports(
                 cancellationToken)
             .ConfigureAwait(false) is Error unannounced)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<LossReported>(unannounced);
         }
 
@@ -281,8 +283,9 @@ internal sealed class LossReports(
 
         if (held is not null && !Running(held, report))
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Failure(Error.From(ErrorCodes.CredentialNotFound)), Result.Failure);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.CredentialNotFound));
         }
 
         if (held is not null)
@@ -318,6 +321,8 @@ internal sealed class LossReports(
                 cancellationToken)
             .ConfigureAwait(false) is Error unannounced)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unannounced);
         }
 
@@ -539,6 +544,8 @@ internal sealed class LossReports(
                 cancellationToken)
             .ConfigureAwait(false) is Error unannounced)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<int>(unannounced);
         }
 
