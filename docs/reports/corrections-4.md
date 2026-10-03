@@ -1964,6 +1964,30 @@ The rows that state the D-166 outcomes (an undeclared permission is Raised; a lo
 **66. Withdrawn.** It asked after the row `abuse.source.sitelimit` of section F, which is
 part of 389 (3) and waits with 389 on question 48.
 
+**67. Tier 2. CONV-DESIGN-008 and CONV-SETUP-002: `Microsoft.EntityFrameworkCore` at 10.0.12 beside `Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.3.**
+
+- **Item.** The move of `Microsoft.EntityFrameworkCore` and
+  `Microsoft.EntityFrameworkCore.Design` to 10.0.12 (`3cb3fe5a`).
+- **What the code needs.** One version of `Microsoft.EntityFrameworkCore.Relational` in
+  every project. `Janus.Storage` resolves 10.0.12, through `Design`, whose assets are
+  private. Every project that references `Janus.Storage` resolves 10.0.4, the floor the
+  provider 10.0.3 declares, beside `Microsoft.EntityFrameworkCore` 10.0.12. The build
+  reports MSB3277 in seven projects and the output of `Janus.Storage.Tests` holds
+  `Relational` 10.0.4.0 beside `EntityFrameworkCore` 10.0.12.0. The locked restore passes.
+  At 10.0.4 all three were one version.
+- **What the specification says.** CONV-DESIGN-008 lists the three relational packages
+  and not `Microsoft.EntityFrameworkCore.Relational`; CONV-SETUP-002 holds every version
+  in `Directory.Packages.props`, whose entries are exactly that list. No stable provider
+  newer than 10.0.3 exists.
+- **Readings.**
+  1. `Relational` is pinned at the version of `Microsoft.EntityFrameworkCore`: an entry
+     in `Directory.Packages.props` with central transitive pinning, or a reference in
+     `Janus.Storage`. Either adds a package the table does not name.
+  2. The two packages stay at 10.0.4 until a provider declares a later floor.
+- **Parked.** The build and the fast checks of the version step, and so every item after
+  it.
+- **Answer:** pending.
+
 ## 5. Gate result
 
 **`corrections-4`, at the stop at question 20.** Not run. The run stopped at question 20, before step 4 of the work
