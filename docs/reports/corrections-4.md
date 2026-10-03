@@ -1045,6 +1045,7 @@ and none carries a `$` root, a list index or a nested path written otherwise.
 | `error-statuses.txt` at the merge of `part/gates` (`d5a7fc0e`) | The file `4d1552d8` made lacked 14 codes the working branch had declared since | LIB-API-001 criterion 2; `09` and `10` | The 14 codes are added with the statuses `09` and `10` give, `identity.registration.incomplete` 409 (`3ff77d5d`) |
 | `configuration-keys.txt` at the merge of `part/gates` (`d5a7fc0e`) | `part/gates` changed the file's form, and the working branch had added `code.signin.attempts` and `code.signin.lifetime` | LIB-API-001 criterion 2; `10` section 4 | The new form, with both keys written in it |
 | `FingerprintKeyTests` at the merge of `part/gates` (`d5a7fc0e`) | `RestrictionKey` takes a kind since 122 | INF-HOST-003 criterion 4 | The test passes `RestrictionKeyKind.Destination`; test only |
+| `.gitleaks.toml` (`1a5a2af6`) | The scan of the full history flagged `PRIV-BREACH-002` under `generic-api-key` in `docs/reports/corrections-4.md` line 313 (from `a22c76f7`), where the row of D-166 D.8 cites the item beside its tests | OPS-DEP-004; the working guide's section 3, an allow-list entry for specification text | One entry: that file and the exact value `^PRIV-BREACH-002$`, `condition = "AND"`, reason "an item identifier a report cites beside the tests that carry it" |
 
 ## 4. Open questions
 
