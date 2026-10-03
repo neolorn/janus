@@ -191,6 +191,8 @@ internal sealed class PasswordService(
                 .ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error unannounced)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<PasswordFeedback>(unannounced);
         }
 

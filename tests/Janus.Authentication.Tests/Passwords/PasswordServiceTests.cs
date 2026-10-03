@@ -121,6 +121,31 @@ public sealed class PasswordServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC5: a password whose enrolment cannot be announced is refused
+    /// after it was written, and the refusal ends the unit of work with nothing
+    /// committed.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_APasswordThatCannotBeAnnouncedRollsBackAsync()
+    {
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            Refusal(await Service.SetAsync(
+                Subject(),
+                Encoding.UTF8.GetBytes(Chosen),
+                [],
+                AssuranceLevel.Aal1,
+                actor: null,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
     /// AUTH-PASS-007 AC1, AC2: the password set at one strength still verifies after
     /// the parameters are raised, and the sign-in that proved it carries the hash
     /// onto the new ones without the person being told.
