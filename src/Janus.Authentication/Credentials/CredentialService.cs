@@ -133,20 +133,19 @@ internal sealed class CredentialService(
                 .Match(() => true, error => Withheld<bool>(error, ref failure));
         }
 
-        if (failure is null)
+        if (failure is not null)
         {
-            await CompletedAsync(acting, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(failure);
         }
+
+        await CompletedAsync(acting, cancellationToken).ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
             return Result.Failure(notCommitted);
-        }
-
-        if (failure is not null)
-        {
-            return Result.Failure(failure);
         }
 
         // IDN-LIFE-008: a changed password ends what was held under the old one.
@@ -304,8 +303,9 @@ internal sealed class CredentialService(
 
         if (!await HeldOpenAsync(acting, cancellationToken).ConfigureAwait(false))
         {
-            return await RefusedAsync<EnrolledCredential>(Error.From(ErrorCodes.EnrolmentTokenInvalid), cancellationToken)
-                .ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<EnrolledCredential>(Error.From(ErrorCodes.EnrolmentTokenInvalid));
         }
 
         // D-166 X3: a second step is enrolled under the lock on the account's row, which
@@ -326,7 +326,9 @@ internal sealed class CredentialService(
 
         if (failure is not null)
         {
-            return await RefusedAsync<EnrolledCredential>(failure, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<EnrolledCredential>(failure);
         }
 
         await ceremonies.RemoveAsync(acting.Subject, cancellationToken).ConfigureAwait(false);
@@ -450,8 +452,9 @@ internal sealed class CredentialService(
 
         if (!await HeldOpenAsync(acting, cancellationToken).ConfigureAwait(false))
         {
-            return await RefusedAsync<EnrolledCredential>(Error.From(ErrorCodes.EnrolmentTokenInvalid), cancellationToken)
-                .ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<EnrolledCredential>(Error.From(ErrorCodes.EnrolmentTokenInvalid));
         }
 
         // D-166 X3: a second step is enrolled under the lock on the account's row, which
@@ -465,7 +468,9 @@ internal sealed class CredentialService(
 
         if (failure is not null)
         {
-            return await RefusedAsync<EnrolledCredential>(failure, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<EnrolledCredential>(failure);
         }
 
         return await SettledAsync(
@@ -577,11 +582,7 @@ internal sealed class CredentialService(
 
         if (refusal is not null || lowers)
         {
-            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notSettled)
-            {
-                return Result.Failure(notSettled);
-            }
+            await work.RollbackAsync().ConfigureAwait(false);
 
             return refusal is not null
                 ? Result.Failure(refusal)
@@ -692,8 +693,9 @@ internal sealed class CredentialService(
         if ((await authenticators.OfAsync(acting.Subject, cancellationToken).ConfigureAwait(false))
             .Any(credential => credential.Factor == provider))
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Failure(Error.From(ErrorCodes.FactorRejected)), Result.Failure);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.FactorRejected));
         }
 
         await authenticators.LinkAsync(linked, providerSubject, cancellationToken).ConfigureAwait(false);
@@ -713,6 +715,8 @@ internal sealed class CredentialService(
                 .ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error unannounced)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unannounced);
         }
 
@@ -804,8 +808,9 @@ internal sealed class CredentialService(
 
         if (moved is not null)
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Failure(moved), Result.Failure);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(moved);
         }
 
         await authenticators.RemoveAsync(linked.Id, cancellationToken).ConfigureAwait(false);
@@ -1129,6 +1134,8 @@ internal sealed class CredentialService(
 
             if (failure is not null)
             {
+                await work.RollbackAsync().ConfigureAwait(false);
+
                 return Result.Failure<EnrolledCredential>(failure);
             }
         }
@@ -1157,6 +1164,8 @@ internal sealed class CredentialService(
                 .ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error unannounced)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<EnrolledCredential>(unannounced);
         }
 
@@ -1178,15 +1187,6 @@ internal sealed class CredentialService(
             Redundancy.Satisfied(enrolled) ? null : policy.CredentialRedundancy,
             generated));
     }
-
-    // CONV-DESIGN-003: a refusal from the write a transaction was opened for comes
-    // before that write, so the transaction commits with nothing in it and the unit of
-    // work is left clean for whatever the scope does next.
-    private async ValueTask<Result<TValue>> RefusedAsync<TValue>(
-        Error refusal,
-        CancellationToken cancellationToken) =>
-        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match(() => Result.Failure<TValue>(refusal), Result.Failure<TValue>);
 
     // D-148, D-166 X3: the enrolment session a completion acts under is held under its
     // link's lock from the start of the transaction that completes it, so a second
