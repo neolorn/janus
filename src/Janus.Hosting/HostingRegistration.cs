@@ -625,7 +625,7 @@ public static class HostingRegistration
         // builds the provider's options.
         services.Insert(9, ServiceDescriptor.Singleton<IHostedService, ProviderStartService>());
         services.Insert(10, ServiceDescriptor.Singleton<IHostedService, RelayValidationService>());
-        services.AddKeyRing();
+        services.AddCoreArea();
 
         // INF-BG-001: the scheduled work starts once the checks above have passed.
         services.AddHostedService(provider => new BackgroundWorker(

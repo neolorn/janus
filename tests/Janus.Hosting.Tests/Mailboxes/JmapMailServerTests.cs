@@ -601,7 +601,7 @@ public sealed class JmapMailServerTests : IDisposable
 
         services.AddSingleton<IConfigurationStore>(_configuration);
         services.AddSingleton<ISecretSource>(secrets);
-        services.AddKeyRing();
+        services.AddCoreArea();
         services.AddSingleton<JmapMailServer>();
         _ = services.AddHttpClient(JmapMailServer.Channel).ConfigurePrimaryHttpMessageHandler(() => _server);
         services.AddSingleton(KeyRingRegistration.Service);

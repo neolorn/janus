@@ -862,7 +862,7 @@ internal sealed class Deployment : IAsyncDisposable
         // CONV-CODE-007, CONV-DESIGN-007: the one key ring, filled from the host's
         // secret source, and the mail server in use, the host's own.
         _ = services.AddSingleton<ISecretSource>(Secrets);
-        _ = services.AddKeyRing();
+        _ = services.AddCoreArea();
         _ = services.AddSingleton<JmapMailServer>();
         _ = services.AddHttpClient(JmapMailServer.Channel);
         services.Add(KeyRingRegistration.HostedService());
