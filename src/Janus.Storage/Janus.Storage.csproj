@@ -10,9 +10,12 @@
 
   <!-- OPS-DATA-001: LINQ for everything normal, Dapper for hand-written SQL.
        CONV-DESIGN-003: the design package is this project's alone and builds the
-       migration bundle, so it ships with nothing. -->
+       migration bundle, so it ships with nothing.
+       CONV-DESIGN-008: the relational package is referenced directly, so every project
+       that reaches this one resolves it at the version of the core package. -->
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
     <PackageReference Include="Dapper" />

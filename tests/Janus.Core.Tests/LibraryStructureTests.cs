@@ -152,6 +152,7 @@ public sealed class LibraryStructureTests
         "Microsoft.CodeAnalysis.PublicApiAnalyzers",
         "Microsoft.EntityFrameworkCore",
         "Microsoft.EntityFrameworkCore.Design",
+        "Microsoft.EntityFrameworkCore.Relational",
         "Microsoft.Testing.Platform",
         "MinVer",
         "Npgsql.EntityFrameworkCore.PostgreSQL",
