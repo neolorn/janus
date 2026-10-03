@@ -92,6 +92,8 @@ public sealed class ProtectedConfigurationTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.Denied, changed.Match(() => (Error?)null, error => error)?.Code);
         Assert.Empty(_events.Published);
+        Assert.False(_work.Open);
         Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 }
