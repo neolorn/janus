@@ -18,6 +18,12 @@ paths = ['''^\Qdocs/decision-log.md\E$''']
 regexes = ['''^PRIV-BREACH-002$''']
 
 [[allowlists]]
+description = "an item identifier a report cites beside the tests that carry it"
+condition = "AND"
+paths = ['''^\Qdocs/reports/corrections-4.md\E$''']
+regexes = ['''^PRIV-BREACH-002$''']
+
+[[allowlists]]
 description = "an item identifier in a migration's comment"
 condition = "AND"
 paths = ['''^\Qsrc/Janus.Storage/Migrations/20260930224333_NameTheSubjectOfEachAuditRecord.cs\E$''']
