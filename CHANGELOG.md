@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The shipped mail-server adapter lists an account whose `emailAddress` does not read as
+  an email address, or that holds none, with no address, where it failed the listing
+  for an account holding none. Reconciliation reads such a listing whole: the account
+  is counted where it carries no held mailbox's identifier and is a difference where it
+  carries one.
 - The two log entries of a concealed refusal carry the audit record they name as an
   `AuditRecordId`, in the text it was always written in.
 - `IUnitOfWork.RollbackAsync` ends an operation with nothing of it saved: the
