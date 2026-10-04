@@ -144,7 +144,7 @@ internal sealed class CredentialService(
         }
         else
         {
-            _ = (await SetAsync(acting.Subject, password, cancellationToken).ConfigureAwait(false))
+            _ = (await SetAsync(acting.Subject, acting.Context, password, cancellationToken).ConfigureAwait(false))
                 .Match(() => true, error => Withheld<bool>(error, ref failure));
         }
 
@@ -852,7 +852,8 @@ internal sealed class CredentialService(
                     new CredentialEnrolled(now, Announced + ":" + linked.Id, linked.Id, provider)
                     {
                         Subject = acting.Subject,
-                        Actor = acting.Subject,
+                        Actor = acting.Context.Acting,
+                        Effective = acting.Context.Effective,
                     },
                     cancellationToken)
                 .ConfigureAwait(false))
@@ -1330,7 +1331,8 @@ internal sealed class CredentialService(
                     new CredentialEnrolled(now, Announced + ":" + credential, credential, kind)
                     {
                         Subject = acting.Subject,
-                        Actor = acting.Subject,
+                        Actor = acting.Context.Acting,
+                        Effective = acting.Context.Effective,
                     },
                     cancellationToken)
                 .ConfigureAwait(false))
@@ -1379,6 +1381,7 @@ internal sealed class CredentialService(
 
     private async ValueTask<Result> SetAsync(
         SubjectId subject,
+        AccessContext context,
         [NeverLogged] string password,
         CancellationToken cancellationToken)
     {
@@ -1408,7 +1411,7 @@ internal sealed class CredentialService(
                         presented,
                         words,
                         StepUp.Reachable(HeldFactors.Of(enrolled, password: true).Standing).Level,
-                        subject,
+                        context,
                         cancellationToken)
                     .ConfigureAwait(false))
                 .Match(_ => Result.Success(), Result.Failure);

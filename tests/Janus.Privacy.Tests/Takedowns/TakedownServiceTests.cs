@@ -752,6 +752,53 @@ public sealed class TakedownServiceTests : IAsyncDisposable
         Assert.Single(_events.PublishedInTransaction);
     }
 
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: a takedown's suspension is announced with the acting and the
+    /// effective identity of the context that executed it, each as the context gives it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_ATakedownsSuspensionCarriesBothIdentitiesOfItsContextAsync()
+    {
+        AccessContext context = OnBehalf();
+
+        _ = Held(await Takedowns.ExecuteAsync(
+            context,
+            Browser,
+            Ahmed,
+            TakedownTrigger.CustomerReport,
+            "a parent wrote in",
+            TestContext.Current.CancellationToken));
+
+        AccountSuspended suspended = Assert.Single(_events.Of<AccountSuspended>());
+
+        Assert.Equal((context.Acting, context.Effective), (suspended.Actor, suspended.Effective));
+    }
+
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: a takedown's reversal is announced with the acting and the
+    /// effective identity of the context that reversed it, each as the context gives it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_AReversalCarriesBothIdentitiesOfItsContextAsync()
+    {
+        AccessContext context = OnBehalf();
+
+        _ = Held(await ExecutedAsync());
+        Held(await Takedowns.ReverseAsync(
+            context,
+            Browser,
+            Ahmed,
+            "an adult, misjudged",
+            TestContext.Current.CancellationToken));
+
+        TakedownReversed reversed = Assert.Single(_events.Of<TakedownReversed>());
+
+        Assert.Equal((context.Acting, context.Effective), (reversed.Actor, reversed.Effective));
+    }
+
+
     private static TValue Held<TValue>(Result<TValue> outcome) =>
         outcome.Match(
             value => value,
@@ -771,6 +818,19 @@ public sealed class TakedownServiceTests : IAsyncDisposable
         outcome.Match(
             () => throw new InvalidOperationException("The operation succeeded."),
             error => error);
+
+    // A context whose acting identity is not its effective one, which is the seam
+    // AUTHZ-IMP-001 keeps and no current path produces: the session and its proof are
+    // the acting identity's, and the grant is the effective one's.
+    private AccessContext OnBehalf()
+    {
+        var onBehalf = new SubjectId(Guid.Parse("55555555-5555-4555-8555-555555555555"));
+
+        _accounts.Hold(onBehalf, AccountState.Active);
+        _gate.Grant(onBehalf, Company, Permissions.TakedownExecute);
+
+        return AccessContext.Of(Mona, onBehalf);
+    }
 
     private ValueTask<Result<ExecutedTakedown>> ExecutedAsync(
         SubjectId? by = null,

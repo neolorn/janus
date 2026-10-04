@@ -61,6 +61,24 @@ against the public contract of LIB-API-001.
   nothing.
 - A lookup of an identifier, a reservation or a username hold by its value reads every
   fingerprint key version held in one statement.
+- A `phoneCode` code asked for at `POST /auth/step-up`, where the number's signal answers
+  `risk`, is no longer answered 202: nothing is issued, sent or counted, and the ask is
+  answered 403 `auth.stepup.required` with `details` computed without the entry against
+  the strictest of the gates of the policy in force, field by field, the step-up naming
+  no action; `outcome` is `report-loss` or `enrol` where no combination is left.
+- Every event raised with the access context of a person who acted now carries
+  `Effective` beside `Actor`, each as the context gives it: `AccountSuspended`,
+  `AccountReactivated`, `AccountDeletionRequested` and `AccountDeletionCancelled` raised
+  from a session or by an administrator, `CredentialEnrolled`,
+  `SendingRestrictionChanged`, `SendingRestrictionGranted`, `TakedownReversed` and the
+  `AlertRaised` of a destination change. `AccountReactivated` and
+  `AccountDeletionCancelled` raised from the link a notice carried, with no context,
+  carry neither, where they carried the subject as `Actor`.
+- The drift check of materialised derivations records each grant it writes as
+  `authz.grant.materialised` and each grant it takes back as `authz.grant.retracted`
+  (`AuditActions.GrantMaterialised`, `AuditActions.GrantRetracted`), in the transaction
+  that corrects the drift: a security record naming the principal
+  `derivation-driftcheck`, the reason `AUTHZ-DERIVE-005`, the grant and its role.
 - A domain of an organization's lock, and the domain of an address judged against it,
   takes its ASCII form from the library's own UTS #46 processing and no longer from the
   machine's ICU, so one domain is listed and compared in one form on every machine. A

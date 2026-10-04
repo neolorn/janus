@@ -317,6 +317,19 @@ public static class AuditActions
     public static AuditAction ExportAssembled { get; } = AuditAction.Parse("privacy.export.assembled");
 
     /// <summary>
+    /// The drift check wrote a materialised derivation's grant it found missing.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-DERIVE-005, AUTHZ-GRANT-003, chapter 10 section 5.</remarks>
+    public static AuditAction GrantMaterialised { get; } = AuditAction.Parse("authz.grant.materialised");
+
+    /// <summary>
+    /// The drift check took back a materialised derivation's grant no relationship
+    /// supports.
+    /// </summary>
+    /// <remarks>Implements AUTHZ-DERIVE-005, AUTHZ-GRANT-003, chapter 10 section 5.</remarks>
+    public static AuditAction GrantRetracted { get; } = AuditAction.Parse("authz.grant.retracted");
+
+    /// <summary>
     /// A group was created.
     /// </summary>
     /// <remarks>Implements AUTHZ-GROUP-001.</remarks>

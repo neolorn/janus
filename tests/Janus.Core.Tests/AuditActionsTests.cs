@@ -45,6 +45,8 @@ public sealed class AuditActionsTests
         "auth.stepup.failed",
         "authz.access.denied",
         "authz.access.exported",
+        "authz.grant.materialised",
+        "authz.grant.retracted",
         "authz.group.created",
         "authz.group.memberadded",
         "authz.group.memberremoved",

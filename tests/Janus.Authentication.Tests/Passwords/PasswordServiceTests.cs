@@ -233,6 +233,36 @@ public sealed class PasswordServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken)));
     }
 
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: a password's event carries the acting and the effective
+    /// identity of the context that set it, each as the context gives it, and one set
+    /// with no context carries neither.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_ASetPasswordCarriesBothIdentitiesOfItsContextAsync()
+    {
+        SubjectId subject = Subject();
+        var context = AccessContext.Of(Subject(), subject);
+
+        await SetAsync(subject, Chosen, AssuranceLevel.Aal1);
+
+        (await Service.SetAsync(
+            subject,
+            Encoding.UTF8.GetBytes(Chosen),
+            [],
+            AssuranceLevel.Aal1,
+            context,
+            TestContext.Current.CancellationToken)).Switch(
+            _ => { },
+            error => throw new Xunit.Sdk.XunitException($"The password was refused: {error.Code}."));
+
+        IReadOnlyList<CredentialEnrolled> announced = _events.Of<CredentialEnrolled>();
+
+        Assert.Equal(2, announced.Count);
+        Assert.Equal(((SubjectId?)null, (SubjectId?)null), (announced[0].Actor, announced[0].Effective));
+        Assert.Equal((context.Acting, context.Effective), (announced[1].Actor, announced[1].Effective));
+    }
+
     private SubjectId Subject() => SubjectId.New(_randomness);
 
     private static ErrorCode Refusal<TValue>(Result<TValue> result) =>

@@ -156,6 +156,7 @@ internal static class AuthenticationEndpoints
                         challenge,
                         request.Factor,
                         stepping: null,
+                        session: null,
                         origin.Source,
                         RequestOrigin.Language(context.Request),
                         cancellationToken)
@@ -250,6 +251,7 @@ internal static class AuthenticationEndpoints
                         challenge,
                         request.Factor,
                         holder.Effective,
+                        browser.Required.Id,
                         RequestOrigin.Source(context.Request),
                         RequestOrigin.Language(context.Request),
                         cancellationToken)

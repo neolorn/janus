@@ -524,6 +524,57 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
             { "sms.destination", null },
         };
 
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: an edit's event carries the acting and the effective identity
+    /// of the context that edited, each as the context gives it.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_AnEditCarriesBothIdentitiesOfItsContextAsync()
+    {
+        var context = AccessContext.Of(SubjectId.New(_randomness), SubjectId.New(_randomness));
+
+        (await Administration.EditAsync(
+            "sms.destination",
+            Tightened(),
+            "an incident",
+            Satisfied,
+            context,
+            TestContext.Current.CancellationToken)).Switch(
+            () => { },
+            error => throw new Xunit.Sdk.XunitException($"The edit was refused: {error.Code}."));
+
+        SendingRestrictionChanged announced = Assert.Single(_events.Of<SendingRestrictionChanged>());
+
+        Assert.Equal((context.Acting, context.Effective), (announced.Actor, announced.Effective));
+    }
+
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: a grant's event carries the acting and the effective identity
+    /// of the context that granted, each as the context gives it.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_AGrantCarriesBothIdentitiesOfItsContextAsync()
+    {
+        var context = AccessContext.Of(SubjectId.New(_randomness), SubjectId.New(_randomness));
+
+        _ledger.Given(new RestrictionKey("sms.destination", RestrictionKeyKind.Destination, Phone.Value), Noon, Noon, Noon);
+
+        (await Administration.GrantAsync(
+            "sms.destination",
+            Phone.Value,
+            2,
+            "support: their carrier dropped both",
+            Satisfied,
+            context,
+            TestContext.Current.CancellationToken)).Switch(
+            () => { },
+            error => throw new Xunit.Sdk.XunitException($"The grant was refused: {error.Code}."));
+
+        SendingRestrictionGranted announced = Assert.Single(_events.Of<SendingRestrictionGranted>());
+
+        Assert.Equal((context.Acting, context.Effective), (announced.Actor, announced.Effective));
+    }
+
     private static Restriction Loosened() =>
         new(
             "sms.destination",

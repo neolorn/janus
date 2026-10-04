@@ -18,12 +18,19 @@ internal sealed class AccessAuditInMemory : IAccessAudit
 
     private readonly List<ExportedAccess> _exports = [];
 
+    private readonly List<CorrectedGrant> _corrected = [];
+
     private readonly List<string> _asked = [];
 
     /// <summary>
     /// Every export recorded, in the order it was.
     /// </summary>
     public IReadOnlyList<ExportedAccess> Exports => _exports;
+
+    /// <summary>
+    /// Every grant the drift check corrected, in the order it was recorded.
+    /// </summary>
+    public IReadOnlyList<CorrectedGrant> Corrected => _corrected;
 
     /// <summary>
     /// What was asked of the refusals, in the order it was asked (held, recorded,
@@ -57,6 +64,14 @@ internal sealed class AccessAuditInMemory : IAccessAudit
     public ValueTask RecordAsync(ExportedAccess export, CancellationToken cancellationToken)
     {
         _exports.Add(export);
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public ValueTask RecordAsync(CorrectedGrant corrected, CancellationToken cancellationToken)
+    {
+        _corrected.Add(corrected);
 
         return ValueTask.CompletedTask;
     }

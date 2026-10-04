@@ -136,7 +136,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // reports of the caller where no session of the library carries the request: every
     // outcome of the report against the gate (AUTHZ-TEST-001 AC1, LIB-HOST-004,
     // AUTH-STEP-002, AUTH-STEP-003). The gate is one the host names, costing the
-    // strictest of the gates of the policy the caller is under.
+    // strictest of the gates of the policy the caller is under. The caller's grant admits
+    // the record in every case, so what decides is the gate, and a list asked under the
+    // action is refused with the code the check answers (AUTHZ-TEST-001 AC2,
+    // AUTHZ-GATE-005).
     private static readonly (string Scenario, Decided Decided)[] StepUps =
     [
         ("a report that meets the gate", Decided.Allowed),
@@ -151,7 +154,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // An action bound to a consent-based purpose, on a sensitive type, which asks the
     // written consent of the record's data subject against the document the purpose
     // names. The caller holds the grant in every case, so what decides is the consent,
-    // and the lists admit the record where the check does and nowhere else
+    // and the lists admit the record where the check does and nowhere else. A subject
+    // holds a record a grant, so the cases include a live record beside an ended one and
+    // a subject whose every record is ended, where the latest says which refusal it is
     // (AUTHZ-TEST-001 AC1, AUTHZ-GATE-002 AC4, PRIV-SENS-002 AC1, PRIV-CONS-007 AC5).
     private static readonly (string Scenario, Decided Decided)[] Consents =
     [
@@ -160,6 +165,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a consent that was withdrawn", Decided.ConsentRequired),
         ("a consent that was superseded", Decided.ConsentSuperseded),
         ("a consent given again after one was withdrawn", Decided.Allowed),
+        ("a live consent standing beside one that was superseded", Decided.Allowed),
+        ("every consent to the purpose withdrawn or superseded", Decided.ConsentRequired),
         ("a written consent against another document", Decided.ConsentSuperseded),
         ("an ordinary consent where the purpose asks a written one", Decided.ConsentWrittenRequired),
         ("a consent to another purpose", Decided.ConsentRequired),
@@ -223,16 +230,18 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Assert.Equal(decided, await OperationAsync(scenario));
 
     /// <summary>
-    /// AUTHZ-TEST-001 AC1, LIB-HOST-004 AC3, AC4, AUTH-STEP-003 AC1: every case of the
-    /// step-up table decides the way the table says through the single check, and where
-    /// the report meets the gate both renderings of the filter list the record.
+    /// AUTHZ-TEST-001 AC1, AC2, AUTHZ-GATE-005, LIB-HOST-004 AC3, AC4, AUTH-STEP-003 AC1:
+    /// every case of the step-up table decides the way the table says through the single
+    /// check, and both renderings of the filter answer the same: the record listed where
+    /// the report meets the gate, and the filter refused with the code the check answers
+    /// where it does not.
     /// </summary>
     /// <param name="scenario">The case.</param>
     /// <param name="decided">What it decides.</param>
     /// <returns>The work of running it.</returns>
     [Theory]
     [MemberData(nameof(StepUpCases))]
-    public async Task AUTHZ_TEST_001_AC1_EveryStepUpCaseDecidesTheWayTheTableSaysAsync(
+    public async Task AUTHZ_TEST_001_AC2_EveryStepUpCaseDecidesTheSameWayThroughBothPathsAsync(
         string scenario,
         Decided decided)
     {
@@ -241,12 +250,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         await using ServiceProvider? reporting = Reporting(scenario);
 
         Assert.Equal(decided, await ChecksAsync(written, reporting));
-
-        if (decided is Decided.Allowed)
-        {
-            Assert.Equal(Decided.Allowed, await ExpressionAdmitsAsync(written, reporting));
-            Assert.Equal(Decided.Allowed, await FragmentAdmitsAsync(written, reporting));
-        }
+        Assert.Equal(decided, await ExpressionAdmitsAsync(written, reporting));
+        Assert.Equal(decided, await FragmentAdmitsAsync(written, reporting));
     }
 
     /// <summary>
@@ -478,19 +483,26 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
     private static async Task<Expression<Func<HostDocument, bool>>> ExpressionAsync(
         Case written,
+        HostContext reading) =>
+        Rendered(await FilteredAsync(written, reading, deployment: null));
+
+    // The expression the gate renders for the case, or the refusal it answers before
+    // rendering one (AUTHZ-GATE-005).
+    private static async Task<Result<Expression<Func<HostDocument, bool>>>> FilteredAsync(
+        Case written,
         HostContext reading,
-        IServiceProvider? deployment = null)
+        IServiceProvider? deployment)
     {
         await using AsyncServiceScope scope = (deployment ?? written.Host.Services).CreateAsyncScope();
 
-        return Rendered(await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+        return await scope.ServiceProvider.GetRequiredService<IAccessGate>()
             .FilterAsync(
                 AccessContext.Of(written.Account),
                 written.Asked,
                 written.Record.Type,
                 written.Deployment.Organization,
                 Sources(reading),
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken);
     }
 
     private static TheoryData<string, Decided> Read((string Scenario, Decided Decided)[] table)
@@ -563,23 +575,25 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         {
             await using HostContext reading = host.Context();
 
-            return await reading.Documents
-                .Where(await ExpressionAsync(written, reading, deployment))
-                .AnyAsync(
-                    document => document.Id == written.Record.Id.ToString(),
-                    TestContext.Current.CancellationToken)
-                ? Decided.Allowed
-                : Decided.Denied;
+            return await (await FilteredAsync(written, reading, deployment)).Match(
+                async expression => await reading.Documents
+                    .Where(expression)
+                    .AnyAsync(
+                        document => document.Id == written.Record.Id.ToString(),
+                        TestContext.Current.CancellationToken)
+                    ? Decided.Allowed
+                    : Decided.Denied,
+                refused => Task.FromResult(Refused(refused)));
         });
 
     private async Task<Decided> FragmentAdmitsAsync(Case written, IServiceProvider? deployment = null) =>
         await RaisedOrAsync(async () =>
         {
-            SqlFilter fragment;
+            Result<SqlFilter> rendered;
 
             await using (AsyncServiceScope scope = (deployment ?? host.Services).CreateAsyncScope())
             {
-                fragment = Rendered(await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                rendered = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
                     .FragmentAsync(
                         AccessContext.Of(written.Account),
                         written.Asked,
@@ -587,8 +601,17 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                         written.Deployment.Organization,
                         "identity_authz_row",
                         "id",
-                        TestContext.Current.CancellationToken));
+                        TestContext.Current.CancellationToken);
             }
+
+            // AUTHZ-GATE-005: a fragment the gate refuses before rendering decides the
+            // case by the code it answers.
+            if (rendered.Match<Error?>(_ => null, refused => refused) is Error refusal)
+            {
+                return Refused(refusal);
+            }
+
+            SqlFilter fragment = Rendered(rendered);
 
             var arguments = new DynamicParameters();
 
@@ -1335,6 +1358,17 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 await EndedAsync(subject, withdrawn: true);
                 await ConsentedAsync(subject);
                 break;
+            case "a live consent standing beside one that was superseded":
+                await ConsentedAsync(subject);
+                await EndedAsync(subject, withdrawn: false);
+                await ConsentedAsync(subject, after: TimeSpan.FromHours(2));
+                break;
+            case "every consent to the purpose withdrawn or superseded":
+                await ConsentedAsync(subject);
+                await EndedAsync(subject, withdrawn: false);
+                await ConsentedAsync(subject, after: TimeSpan.FromHours(2));
+                await EndedAsync(subject, withdrawn: true, after: TimeSpan.FromHours(3));
+                break;
             case "a written consent against another document":
                 await ConsentedAsync(subject, document: "newsletter-terms");
                 break;
@@ -1366,12 +1400,15 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             : capability.Can.Contains(HostPermissions.Recommend) ? Decided.Allowed : Decided.Denied;
 
     // PRIV-SENS-002 AC1: the written consent the consent-based purpose asks of a
-    // sensitive type, recorded for its data subject.
+    // sensitive type, recorded for its data subject. A case that gives a second consent
+    // gives it later than the first, so which of the two is the latest is not left to
+    // their identifiers.
     private async Task ConsentedAsync(
         SubjectId subject,
         string purpose = "recommendations",
         string document = "privacy-notice",
-        ConsentKind kind = ConsentKind.Written)
+        ConsentKind kind = ConsentKind.Written,
+        TimeSpan after = default)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -1388,7 +1425,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 "1",
                 ConsentMechanism.Dashboard,
                 kind,
-                Deployment.Noon,
+                Deployment.Noon + after,
                 WithdrawnAt: null,
                 SupersededAt: null),
             cancellationToken);
@@ -1396,8 +1433,9 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     }
 
     // PRIV-CONS-004, PRIV-CONS-007: the subject's live consent to the purpose, stamped
-    // withdrawn or superseded.
-    private async Task EndedAsync(SubjectId subject, bool withdrawn)
+    // withdrawn or superseded, an hour after the first consent where the case names no
+    // other instant.
+    private async Task EndedAsync(SubjectId subject, bool withdrawn, TimeSpan? after = null)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -1405,7 +1443,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
         IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
         IConsentStore store = scope.ServiceProvider.GetRequiredService<IConsentStore>();
-        DateTimeOffset at = Deployment.Noon.AddHours(1);
+        DateTimeOffset at = Deployment.Noon + (after ?? TimeSpan.FromHours(1));
 
         await work.BeginAsync(cancellationToken);
 

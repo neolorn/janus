@@ -414,6 +414,31 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
         Assert.Equal(_work.Opened, _work.Committed + _work.RolledBack);
     }
 
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: the alert a destination change raises carries the acting and
+    /// the effective identity of the context that changed it, each as the context gives
+    /// it.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_ADestinationChangeCarriesBothIdentitiesOfItsContextAsync()
+    {
+        var context = AccessContext.Of(SubjectId.New(_randomness), SubjectId.New(_randomness));
+
+        (await Change.ChangeAsync(
+            SendKind.Email,
+            Elsewhere,
+            "an incident",
+            Satisfied,
+            context,
+            TestContext.Current.CancellationToken)).Switch(
+            () => { },
+            error => throw new Xunit.Sdk.XunitException($"The change was refused: {error.Code}."));
+
+        AlertRaised raised = Assert.Single(_events.Of<AlertRaised>());
+
+        Assert.Equal((context.Acting, context.Effective), (raised.Actor, raised.Effective));
+    }
+
     private async Task<IReadOnlyList<string>> DestinationsAsync(TextListSetting setting) =>
         (await _configuration.ReadAsync(setting, TestContext.Current.CancellationToken)).Match(
             destinations => destinations,

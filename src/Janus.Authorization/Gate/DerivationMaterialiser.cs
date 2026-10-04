@@ -18,6 +18,7 @@ namespace Janus.Authorization.Gate;
 /// <param name="records">Where the records a container reaches are read.</param>
 /// <param name="grants">Where the rows the derivation was precomputed into are read and written.</param>
 /// <param name="declared">Where a relationship's rows are read through the source the host declared.</param>
+/// <param name="audit">Where each grant the drift check writes or takes back is recorded.</param>
 /// <param name="work">The caller's transaction, which the refresh joins.</param>
 /// <param name="time">The clock liveness is read against.</param>
 /// <remarks>
@@ -29,13 +30,15 @@ namespace Janus.Authorization.Gate;
 /// supplied where the host calls the refresh, and through the source the host declared
 /// where the drift check does. A grant the host's refresh writes records the context's
 /// subject as its granter; one the drift check's writes records the nil subject and the
-/// reason <c>AUTHZ-DERIVE-005</c>.
+/// reason <c>AUTHZ-DERIVE-005</c>, and each grant the drift check writes or takes back is
+/// recorded in the trail in the transaction that corrects it (D-187).
 /// </remarks>
 internal sealed class DerivationMaterialiser(
     AuthorizationModel model,
     IResourceStore records,
     IGrantStore grants,
     IRelationshipSources declared,
+    IAccessAudit audit,
     IUnitOfWork work,
     TimeProvider time) : IDerivationMaterialiser
 {
@@ -146,16 +149,18 @@ internal sealed class DerivationMaterialiser(
     // code crosses the boundary in (CONV-CONTENT-001); the drift check acts as its
     // principal, which is no account, so its grants name the nil subject and the item
     // that requires the check (D-166).
-    private static (SubjectId Granter, string Reason) Recorded(AccessContext context, string relationship)
+    private static (SubjectId Granter, string Reason, SystemPrincipal? Correcting) Recorded(
+        AccessContext context,
+        string relationship)
     {
         if (context.Effective is SubjectId subject)
         {
-            return (subject, "derivation:" + relationship);
+            return (subject, "derivation:" + relationship, null);
         }
 
         return context.Principal is { Name: DerivationDriftCheck.Job } principal
             && principal.MayRun(SystemOperation.Reconciliation)
-                ? (default, DriftReason)
+                ? (default, DriftReason, principal)
                 : throw new ArgumentException(
                     "The grants a refresh writes are recorded against a subject or by the drift check, and this context is neither.",
                     nameof(context));
@@ -180,9 +185,9 @@ internal sealed class DerivationMaterialiser(
                 nameof(derivation));
         }
 
-        (SubjectId granter, string reason) = Recorded(context, derivation);
+        (SubjectId granter, string reason, SystemPrincipal? correcting) = Recorded(context, derivation);
 
-        return new Refreshing(relationship, following, granter, reason);
+        return new Refreshing(relationship, following, granter, reason, correcting);
     }
 
     private async ValueTask<Result<DerivationRefresh>> RefreshedAsync(
@@ -274,6 +279,7 @@ internal sealed class DerivationMaterialiser(
             Revoked(grant, refreshing.Granter, at, refreshing.Reason);
 
             await grants.RecordAsync(grant, cancellationToken).ConfigureAwait(false);
+            await CorrectedAsync(refreshing, grant, retracted: true, at, cancellationToken).ConfigureAwait(false);
             revoked++;
         }
 
@@ -288,17 +294,45 @@ internal sealed class DerivationMaterialiser(
                     continue;
                 }
 
-                await grants
-                    .CreateAsync(
-                        Written(following, organization, holder, record, refreshing, at),
-                        cancellationToken)
-                    .ConfigureAwait(false);
+                Grant grant = Written(following, organization, holder, record, refreshing, at);
+
+                await grants.CreateAsync(grant, cancellationToken).ConfigureAwait(false);
+                await CorrectedAsync(refreshing, grant, retracted: false, at, cancellationToken).ConfigureAwait(false);
 
                 written++;
             }
         }
 
         return new DerivationRefresh(written, revoked);
+    }
+
+    // AUTHZ-GRANT-003 AC5, AUTHZ-DERIVE-005: a grant the drift check writes or takes back
+    // is recorded in the transaction that corrects it, naming the check's principal. A
+    // host's own refresh is the host's write and records nothing here.
+    private async ValueTask CorrectedAsync(
+        Refreshing refreshing,
+        Grant grant,
+        bool retracted,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        if (refreshing.Correcting is not SystemPrincipal principal)
+        {
+            return;
+        }
+
+        await audit
+            .RecordAsync(
+                new CorrectedGrant(
+                    AuditRecordId.New(time),
+                    principal,
+                    grant.Organization,
+                    grant.Id,
+                    grant.Role,
+                    retracted,
+                    at),
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private Grant Written(
@@ -349,10 +383,12 @@ internal sealed class DerivationMaterialiser(
     private sealed record Materialised(ResourceType Type, RoleName Role);
 
     // One refresh as it was asked: the relationship, the materialised derivations that
-    // follow from it, and who and why its grants record.
+    // follow from it, who and why its grants record, and the drift check's principal
+    // where the drift check asked.
     private sealed record Refreshing(
         RelationshipDeclaration Relationship,
         IReadOnlyList<Materialised> Following,
         SubjectId Granter,
-        string Reason);
+        string Reason,
+        SystemPrincipal? Correcting);
 }

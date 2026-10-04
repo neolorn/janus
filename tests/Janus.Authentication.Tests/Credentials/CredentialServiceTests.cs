@@ -1185,6 +1185,64 @@ public sealed class CredentialServiceTests : IAsyncDisposable
         Assert.Equal([key.Credential, linked.Id], _authenticators.All.Select(held => held.Id));
     }
 
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: an enrolment that reached active is announced with the acting
+    /// and the effective identity of the context that confirmed it, each as the context
+    /// gives it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_AConfirmedEnrolmentCarriesBothIdentitiesOfItsContextAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        var context = AccessContext.Of(SubjectId.New(_randomness), subject);
+        var authority = CredentialAuthority.Of(context, session);
+
+        _events.Published.Clear();
+
+        GeneratorEnrolment begun = Value(await Service.BeginGeneratorAsync(
+            authority,
+            "Phone",
+            TestContext.Current.CancellationToken));
+
+        _ = Value(await Service.ConfirmGeneratorAsync(
+            authority,
+            begun.Credential,
+            Code(begun.Credential),
+            Source,
+            TestContext.Current.CancellationToken));
+
+        CredentialEnrolled announced = Assert.Single(_events.Of<CredentialEnrolled>());
+
+        Assert.Equal((context.Acting, context.Effective), (announced.Actor, announced.Effective));
+    }
+
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: a linked provider is announced with the acting and the
+    /// effective identity of the context that linked it, each as the context gives it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_ALinkedProviderCarriesBothIdentitiesOfItsContextAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        var context = AccessContext.Of(SubjectId.New(_randomness), subject);
+
+        _events.Published.Clear();
+
+        Assert.True(Succeeded(await Service.LinkAsync(
+            CredentialAuthority.Of(context, session),
+            Factor.Google,
+            "provider-subject",
+            Label("Google"),
+            Source,
+            TestContext.Current.CancellationToken)));
+
+        CredentialEnrolled announced = Assert.Single(_events.Of<CredentialEnrolled>());
+
+        Assert.Equal((context.Acting, context.Effective), (announced.Actor, announced.Effective));
+    }
+
     // AUTHZ-GATE-006 AC3: the change made with the account restricted in the moment
     // before the next unit of work begins, which is after the change's gate step. It is
     // refused as the gate refuses, the unit of work it began is rolled back and none is

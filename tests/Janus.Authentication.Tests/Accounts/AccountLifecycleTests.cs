@@ -626,6 +626,56 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
         Assert.Equal(AccountState.Deleting, await StateAsync());
     }
 
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: a deactivation's event carries the acting and the effective
+    /// identity of the context that deactivated, each as the context gives it, and the
+    /// reactivation raised from the link its notice carried, with no context, carries
+    /// neither.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_ADeactivationCarriesBothIdentitiesAndItsLinkNeitherAsync()
+    {
+        var context = AccessContext.Of(SubjectId.New(_randomness), _person);
+
+        Accepted(await Lifecycle.DeactivateAsync(
+            context,
+            Stepped(),
+            Source,
+            TestContext.Current.CancellationToken));
+        Accepted(await Lifecycle.ReactivateAsync(Link(), TestContext.Current.CancellationToken));
+
+        AccountSuspended suspended = Assert.Single(_events.Of<AccountSuspended>());
+        AccountReactivated reactivated = Assert.Single(_events.Of<AccountReactivated>());
+
+        Assert.Equal((context.Acting, context.Effective), (suspended.Actor, suspended.Effective));
+        Assert.Equal((_person, null, null), (reactivated.Subject, reactivated.Actor, reactivated.Effective));
+    }
+
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: a requested deletion's event carries the acting and the
+    /// effective identity of the context that asked, each as the context gives it, and
+    /// the cancellation raised from the link its notice carried, with no context, carries
+    /// neither.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_ARequestedDeletionCarriesBothIdentitiesAndItsLinkNeitherAsync()
+    {
+        var context = AccessContext.Of(SubjectId.New(_randomness), _person);
+
+        _ = Value(await Lifecycle.DeleteAsync(
+            context,
+            Stepped(),
+            Source,
+            TestContext.Current.CancellationToken));
+        Accepted(await Lifecycle.CancelDeletionAsync(Link(), TestContext.Current.CancellationToken));
+
+        AccountDeletionRequested requested = Assert.Single(_events.Of<AccountDeletionRequested>());
+        AccountDeletionCancelled cancelled = Assert.Single(_events.Of<AccountDeletionCancelled>());
+
+        Assert.Equal((context.Acting, context.Effective), (requested.Actor, requested.Effective));
+        Assert.Equal((_person, null, null), (cancelled.Subject, cancelled.Actor, cancelled.Effective));
+    }
+
     private static void Accepted(Result outcome) =>
         outcome.Switch(() => { }, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
 

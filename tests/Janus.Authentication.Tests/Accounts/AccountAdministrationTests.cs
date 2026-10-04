@@ -617,6 +617,58 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
         Assert.Equal((0, 1, false), (_work.Committed, _work.RolledBack, _work.Open));
     }
 
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: a suspension's event carries the acting and the effective
+    /// identity of the context that suspended, each as the context gives it.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_ASuspensionCarriesBothIdentitiesOfItsContextAsync()
+    {
+        (AccessContext context, SessionId session) = OnBehalf();
+
+        Accepted(await Administration.SuspendAsync(context, session, _member, TestContext.Current.CancellationToken));
+
+        AccountSuspended suspended = Assert.Single(_events.Of<AccountSuspended>());
+
+        Assert.Equal((context.Acting, context.Effective), (suspended.Actor, suspended.Effective));
+    }
+
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: a reactivation's event carries the acting and the effective
+    /// identity of the context that reactivated, each as the context gives it.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_AReactivationCarriesBothIdentitiesOfItsContextAsync()
+    {
+        (AccessContext context, SessionId session) = OnBehalf();
+
+        Accepted(await SuspendAsync(_member));
+        Accepted(await Administration.ReactivateAsync(context, session, _member, TestContext.Current.CancellationToken));
+
+        AccountReactivated reactivated = Assert.Single(_events.Of<AccountReactivated>());
+
+        Assert.Equal((context.Acting, context.Effective), (reactivated.Actor, reactivated.Effective));
+    }
+
+    /// <summary>
+    /// AUTHZ-IMP-001 AC5: a cancelled deletion's event carries the acting and the
+    /// effective identity of the context that cancelled it, each as the context gives it.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_IMP_001_AC5_ACancelledDeletionCarriesBothIdentitiesOfItsContextAsync()
+    {
+        (AccessContext context, SessionId session) = OnBehalf();
+
+        _directory.Deleting(_member, DeletionOrigin.OutOfBandRequest, Noon.AddDays(-1));
+        _directory.ErasedFor(_member, PrivacyRequestId.Of(Noon.AddDays(-1)));
+
+        Accepted(await Administration.CancelDeletionAsync(context, session, _member, TestContext.Current.CancellationToken));
+
+        AccountDeletionCancelled cancelled = Assert.Single(_events.Of<AccountDeletionCancelled>());
+
+        Assert.Equal((context.Acting, context.Effective), (cancelled.Actor, cancelled.Effective));
+    }
+
     private static DateTimeOffset Stale =>
         Noon - Settings.SessionStepUpRecency.Default - TimeSpan.FromMinutes(1);
 
@@ -640,6 +692,19 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
 
     private async Task<Result<ReadOnlyMemory<byte>>> PhotoAsync(AccessContext context, SubjectId subject) =>
         await Administration.ReadPhotoAsync(context, subject, TestContext.Current.CancellationToken);
+
+    // A context whose acting identity is not its effective one, which is the seam
+    // AUTHZ-IMP-001 keeps and no current path produces: the administrator's grant is
+    // the effective identity's, and the session and its proof are the acting one's.
+    private (AccessContext Context, SessionId Session) OnBehalf()
+    {
+        var acting = SubjectId.New(_randomness);
+
+        _directory.Stands(acting, AccountState.Active);
+        _passwords.Hold(acting, Noon);
+
+        return (AccessContext.Of(acting, _administrator), Opened(acting, Noon));
+    }
 
     private async Task<Result> SuspendAsync(SubjectId subject) =>
         await Administration.SuspendAsync(

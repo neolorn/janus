@@ -184,6 +184,40 @@ internal sealed class AccessAudit(StoreContext context, DataConnections connecti
     }
 
     /// <inheritdoc/>
+    public async ValueTask RecordAsync(CorrectedGrant corrected, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(corrected);
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        AuditAction action = corrected.Retracted ? AuditActions.GrantRetracted : AuditActions.GrantMaterialised;
+
+        await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                Append,
+                new
+                {
+                    id = corrected.Id.Value,
+                    category = VocabularyConverter<AuditCategory>.Write(AuditCategory.Security),
+                    at = corrected.At.ToUniversalTime(),
+                    action = action.ToString(),
+
+                    // IDN-AUD-001: the drift check is no account, so the row names the
+                    // nil subject under both identities beside its principal.
+                    acting = default(SubjectId).Value,
+                    effective = default(SubjectId).Value,
+                    organization = (Guid?)corrected.Organization.Value,
+                    details = Written(corrected),
+                    principal = corrected.Principal.Name,
+                    reason = corrected.Principal.Reason,
+                    breakGlassReason = (string?)null,
+                },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<DeniedAccess?> FindAsync(
         AuditRecordId correlation,
         CancellationToken cancellationToken)
@@ -284,6 +318,17 @@ internal sealed class AccessAudit(StoreContext context, DataConnections connecti
 
         return JsonSerializer.Serialize(details, AuditDocument.Default.DictionaryStringJsonElement);
     }
+
+    // AUTHZ-GRANT-003, chapter 10 section 5.24: the grant the drift check wrote or took
+    // back, and the role it confers.
+    private static string Written(CorrectedGrant corrected) =>
+        JsonSerializer.Serialize(
+            new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+            {
+                [Grant] = JsonSerializer.SerializeToElement(corrected.Grant.Value),
+                [Role] = JsonSerializer.SerializeToElement(corrected.Role.ToString()),
+            },
+            AuditDocument.Default.DictionaryStringJsonElement);
 
     private static DeniedAccess Read(AuditRecordId correlation, RecordedDenial row)
     {
