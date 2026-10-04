@@ -231,8 +231,10 @@ internal sealed class OrganizationService(
         if ((await directory.HoldAsync(organization, cancellationToken).ConfigureAwait(false))?.DeletionRequestedAt
             is not null)
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(Result.Success, Result.Failure);
+            // CONV-DESIGN-003: nothing was written, so the unit of work is rolled back.
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success();
         }
 
         if ((await directory.RequestDeletionAsync(organization, now, cancellationToken).ConfigureAwait(false))
@@ -356,7 +358,10 @@ internal sealed class OrganizationService(
         // nothing to write.
         if (held.DeletionRequestedAt is null)
         {
-            return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            // CONV-DESIGN-003: nothing was written, so the unit of work is rolled back.
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success();
         }
 
         await directory.CancelDeletionAsync(organization, cancellationToken).ConfigureAwait(false);

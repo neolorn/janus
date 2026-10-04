@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A suspension, a revocation of an invitation, and a request or a cancellation of an
+  organization's deletion that another caller made first answer as before and roll
+  their transaction back.
 - A turn of the background worker that finds no lapse to claim rolls its transaction
   back.
 - Adding a member a group already holds and taking out one it does not hold answer as

@@ -602,6 +602,21 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
         Assert.Equal(1, _work.RolledBack);
     }
 
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: a suspension that finds the account suspended by another
+    /// administrator under its lock is done having written nothing, so it rolls its unit
+    /// of work back.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ASuspensionMadeMeanwhileIsRolledBackAsync()
+    {
+        _directory.Holding = held => _directory.Suspended(held, SuspensionOrigin.Administrator);
+
+        Accepted(await SuspendAsync(_member));
+
+        Assert.Equal((0, 1, false), (_work.Committed, _work.RolledBack, _work.Open));
+    }
+
     private static DateTimeOffset Stale =>
         Noon - Settings.SessionStepUpRecency.Default - TimeSpan.FromMinutes(1);
 

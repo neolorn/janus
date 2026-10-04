@@ -379,7 +379,10 @@ internal sealed class InvitationService(
         // nothing to write.
         if (!held.Stands)
         {
-            return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            // CONV-DESIGN-003: nothing was written, so the unit of work is rolled back.
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success();
         }
 
         await WithdrawnAsync(held, acting, context.BreakGlassReason, now, cancellationToken).ConfigureAwait(false);
