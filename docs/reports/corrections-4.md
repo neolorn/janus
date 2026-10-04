@@ -615,7 +615,7 @@ CONV-DESIGN-008 criterion 3, "no project's build reports MSB3277": no test decid
 
 What earlier runs left: nine worktrees held uncommitted work whose commits were all in the branch; each is kept as a patch outside the repository and removed with its branch. The reason rule of the configuration route that one of them carried is on the branch at the endpoint and in the service (`ConfigurationEndpointTests.OPS_CFG_005_EveryChangeCarriesAReasonAsync`, `ConfigurationAdministrationTests.OPS_CFG_008_AC2_ATighteningWithNoReasonIsRefusedAsync`). Four stashes are dropped: three held earlier states of the docs, and every file of the fourth is in the history (the changelog describes `MapAuthorizationTables`).
 
-**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The five parts of D-183 the owner's split names are merged (below), and four further parts for what they left: question 30, question 29, the mailbox pushes of question 61, and questions 42 and 31. Questions 68 to 121 park the sites they name. Of the work after the merges, the new codes, the retirement of `NotificationRequested` and question 53 are merged; questions 50 and 51 wait on question 119; question 62 runs in a part not yet merged.
+**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The five parts of D-183 the owner's split names are merged (below), and four further parts for what they left: question 30, question 29, the mailbox pushes of question 61, and questions 42 and 31. Questions 68 to 125 park the sites they name. Of the work after the merges, the new codes, the retirement of `NotificationRequested`, question 53 and question 62 are merged; questions 50 and 51 wait on question 119; the sites of question 62 in the identifiers and the registration run in a part not yet merged.
 
 ### The section C sweeps, place by place
 
@@ -1182,6 +1182,27 @@ After the merge: build 0 warnings 0 errors, format clean, 3085 unit tests, 139 c
   - Changed tests: `SessionRequirementTests.BFF_STEP_001_TheEndpointsThatNeedASessionAreTheOnesListed` (route patterns without the constraint); `BrowserProfileTests.AUTH_SESS_007_AC2_NoEndpointCanOptOut` and `BrowserProfileTests.BFF_CSRF_001_AC2_NoEndpointCanBeExcludedByConfigurationOrAttribute` (question 121).
 - **Not built: questions 50 and 51, the whole of them** (CONV-DESIGN-006 criteria 3 and 4; D-166 359 and 382 (3)), parked on question 119. Left: the codes declared on the 154 endpoints (99 hold no declaration); the produced and accepted types as metadata; `endpoints.txt` with its `pipeline` heading and `EndpointContractTests.LIB_API_001_AC2_TheEndpointsAreTheContract`; the test host's check; the lines of `release.sh` and the two scenarios of D-166 382; ledger line 382.
 
+#### D-183, `part/held-gate`, merged as `42fe0861` (`c269fb1a`, `ca559838`, `be484f95`, `804b666e`, `94e4ad4e`)
+
+After the merge: build 0 warnings 0 errors, format clean, 3112 unit tests, 139 contract tests; `TruthTableTests`, `GateBehaviourTests`, `CredentialFlowTests`, `RegistrationFlowTests`, `ConfigurationLockTests` and `SubjectRestrictionsTests` passed on the merged tree. Two conflicts: the changelog (both sides kept) and `CredentialService.BeginGeneratorAsync` (the unit of work of question 62 around the generator's write, then the answer as question 42 left it). No migration.
+
+- **Question 62** (AUTHZ-GATE-006 criterion 3, IDN-ACCT-007, CONV-DESIGN-002, CONV-DESIGN-003).
+  - The gate (`c269fb1a`): for a modifying permission asked inside an open transaction, the restriction is read under a shared hold on the acting account's row. Outside a transaction, for a reading permission and for a principal with no account, nothing is held. Where an operation locks the acting account's row itself, that lock is taken first; no second way to hold the row was added.
+  - The sites (`ca559838`, `be484f95`, `804b666e`, `94e4ad4e`): after a successful beginning, the gate's ask again, a refusal rolling back.
+  - Truth table: five cases (a modifying check asked again inside the caller's unit of work; the same by a caller restricted since the gate step; a settings change asked again by a caller restricted since; a group created by a caller managing groups; the same by a caller restricted since), in `c269fb1a` and `ca559838`, the two commits that change counted files.
+  - Tests of the gate: `SubjectSetsTests.AUTHZ_GATE_006_AC3_InsideATransactionTheRestrictionIsReadUnderTheHoldAsync`, `SubjectSetsTests.AUTHZ_GATE_006_APrincipalWithNoAccountHoldsNoRowAsync`; `SubjectRestrictionsTests` over PostgreSQL with two connections: `AUTHZ_GATE_006_AC3_ARestrictionWaitsForTheActionThatHoldsTheRowAsync`, `AUTHZ_GATE_006_AC3_AnActionWaitsForARestrictionUnderWayAndReadsItAsync`, `AUTHZ_GATE_006_TwoActionsOfOneAccountHoldTheRowTogetherAsync`, `AUTHZ_GATE_006_ARowTheOperationLockedItselfIsJudgedWithoutWaitingAsync`, `AUTHZ_GATE_006_OutsideATransactionNothingIsHeldAsync`, `AUTHZ_GATE_006_ASubjectWithNoAccountIsNotRestrictedAsync`; `GateBehaviourTests.AUTHZ_GATE_006_AC3_ARestrictionCommittedAfterTheGateStepRefusesInsideTheUnitOfWorkAsync`, `GateBehaviourTests.AUTHZ_GATE_006_AC3_ARestrictionBegunWhileAnAdmittedActionHoldsTheRowWaitsForItAsync`, `GateBehaviourTests.AUTHZ_GATE_006_AReadingActionInsideAUnitOfWorkHoldsNoRowAsync`.
+  - Tests of the sites, each named `AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStep...`: `GroupEndpointTests...RefusesEachGroupChangeAsync`, `GrantEndpointTests...RefusesAGrantAndARevocationAsync`, `RoleEndpointTests...RefusesARoleChangeAsync`, `AccountAdministrationEndpointTests...RefusesEachTransitionAsync`, `MaintenanceEndpointTests...RefusesBothRecordsAsync`, `OrganizationEndpointTests...RefusesEachLifecycleChangeAsync`, `OrganizationPolicyEndpointTests...RefusesAPolicyChangeAsync`, `OrganizationDomainEndpointTests...RefusesEachDomainChangeAsync`, `InvitationEndpointTests...RefusesEachMembershipChangeAsync`, `RestrictionEndpointTests...RefusesAnEditADeletionAndAGrantAsync`, `SessionRevocationEndpointTests...RefusesBothRevocationsAsync`, `BreakGlassEndpointTests...RefusesAGenerationAsync`, `InvitationAcknowledgementFlowTests...RefusesAnAcknowledgementAsync`, `AccountLifecycleFlowTests...RefusesADeactivationAsync`, `PhotoFlowTests...RefusesAPhotoChangeAsync`, `AccountApplicationTests...RefusesEachSettingAsync`, `CredentialFlowTests...RefusesEachCredentialChangeAsync`, `CredentialServiceTests...RefusesEachCredentialChangeAsync`, `AccountServiceTests...RefusesAUsernameAndAPreferredStepAsync`, `RecoveryServiceTests...RefusesAnApprovalAsync`, `PublicationEndpointTests...RefusesAPublicationAndATranslationAsync`, `ProcessingRecordsEndpointTests...RefusesTheStatementsAsync`, `PrivacyRequestEndpointTests...RefusesEachDecisionAsync`, `TakedownEndpointTests...RefusesATakedownAndItsReversalAsync`, `ConfigurationEndpointTests...RefusesAKeyAndARetentionAsync`.
+  - Not decided by a test: the order of the locks at each site (the acting account's row before any other) is held by a test at the gate alone; at each site it was read: the ask is the first statement after the beginning, or follows only the lock of the acting account's own row. The tests of the sites run over fakes and hold the refusal, the rollback and that nothing is written, not the waiting.
+- **Place by place.**
+  - Changed: `GrantService` (the grant, the revocation); `GroupService` (create, remove, add and remove a member); `RoleService` (define, remove); `AccountAdministration` (suspend, reactivate, lift a restriction, cancel a deletion; the acting account's own row first where it is the target); `BreakGlassService.GenerateAsync`; `MaintenanceRecords` (the licences, the record); `OrganizationService` (create, request and cancel a deletion, replace the policy); `OrganizationDomainService` (add, remove, verify); `InvitationService` (issue, revoke); `MembershipEnd.EndAsync`; `SessionService.RevokeAccountAsync`, which now begins a unit of work of its own, and `RevokeEveryAsync`; `RecoveryService`, the approval's first unit of work; `RestrictionAdministration` (edit, grant); `AccountLifecycle.DeactivateAsync`; `AccountService` (the profile, the preferences, a credential's label, the preferred second step); `ProfilePhotos` (set, remove); `InvitationAcknowledgement.AcknowledgeAsync`; `CredentialService` (set a password, remove, unlink, begin and upgrade a key, complete a key, confirm a generator, link; begin a generator and generate recovery codes inside a unit of work begun for the ask); `LegalDocumentService` (publish, translate); `ProcessingRecordsService.DeclareAsync`; `PrivacyRequestService` (fulfil, refuse, the entry on a subject's behalf); `TakedownService` (execute, reverse; `IAccountStates.HoldAsync` is new); `ConfigurationService.ChangeAsync` (the retention of a category; a plain key, which now begins an outer unit of work that the change joins).
+  - Parked: `AppPasswords.CreateAsync` (question 122), `RecoveryService.SendAsync` (question 123), `ErasureService.CompleteAsync` (question 124), the destination keys through `AlertDestinationChange.ChangeAsync` (question 125).
+  - Not yet done: `IdentifierService` (add, verify, make primary, set the backup, remove, replace), `RegistrationService` and `VerificationCodes`, which another part held while this one ran; any endpoint that asks the gate itself and then writes was not reviewed. A further part takes them.
+  - Reviewed, left: `ConfigurationAdministration.ChangeAsync` and `ChangeMemberAsync` (an internal seam; its own ask for a loosening is already inside the unit of work); `AccountLifecycle` reactivate, delete and cancel a deletion (borne by a link, or kept available under restriction by IDN-ACCT-007); `SessionService`'s ends of one's own sessions, `LossReports`, `DeviceService` (no ask of the gate); `ConsentService`, `PrivacyRequestService.SubmitAsync`, `ExportService` (no permission asked); reads; the background sweeps, callbacks, intakes, publishers, the alert router and dispatch (a system principal, no account row); `ExportOperations`, `DerivationMaterialiser`, `ResourceService`.
+  - Parked sites of questions 69 to 88: none settled. `GroupService.AddMemberAsync` and `RemoveMemberAsync` (77), `AccountLifecycle.DeactivateAsync`, `InvitationAcknowledgement` and `MembershipEnd` (80) gained the ask before what they do.
+- For audit:
+  - `InvitationAcknowledgement` asks the gate for the inviter inside the unit of work, so the inviter's row is held shared after other locks, not before; the same holds for the asks for a loosening inside `ConfigurationAdministration` on a path the outer ask has not held.
+  - Two administrators who restrict or suspend each other at once each hold their own row shared and want the other's exclusively; PostgreSQL ends one as a deadlock. No chapter speaks to it.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1363,6 +1384,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3085 unit tests, 139 c
 | `RoleName`, `ResourceType`, `ResourceId`, `ConfigurationKey` (`28c53a12`) | A public `Parse(string, IFormatProvider)` beside `Parse(string)` makes every existing call an analyser error | CONV-DESIGN-006, "binds through `IParsable<T>`" | The four implement the interface explicitly, which the framework binds and which adds no line to the public surface |
 | `BrowserProfileLog.BodyUnreadable`, its message (`28c53a12`) | It said "request body" where the stage now also answers a route or query value | CONV-DESIGN-006 | The message reads "A request could not be bound at {Member}"; the event's identifier and level are unchanged |
 | `EndpointDeclarationTests` (the merge of `part/endpoints`) | One line wrote the product name as text, which CONV-NAME-001 criterion 2 refuses | CONV-NAME-001 | The name is read from a namespace, as `KeyMaterialTests` reads it; test only |
+| Fakes and fixtures for question 62 (`c269fb1a`, `ca559838`, `be484f95`, `804b666e`, `94e4ad4e`) | No fixture could commit a restriction between the gate step and the first write; two fixtures called a service with no grant, which the ask inside the unit of work now refuses; one hook of `InvitationServiceTests` ran twice now that the row is held twice | AUTHZ-GATE-006 criterion 3; CONV-TEST-007; the working guide's section 3, test infrastructure | The fakes of the unit of work and of the gate let a restriction be committed meanwhile; the fixtures grant what the route's gate step already requires; the hook fires once. No assertion weakened, no runtime code |
 
 ## 4. Open questions
 
@@ -2522,7 +2544,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3085 unit tests, 139 c
   window. `AccessGate` resolves `SubjectSets` once per operation, and `GatedSettings`
   enforces the restriction in no second place.
 - **Parked.** C9.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `c269fb1a`, `ca559838`, `be484f95`, `804b666e` and `94e4ad4e` (`part/held-gate`), but for the four sites questions 122 to 125 park and the sites of the identifiers and the registration, not yet done.
 
 **63. Tier 3. D-166 X3 at S1, AUTH-ABUSE-004 criterion 1 against CONV-DESIGN-003 criterion 6: the admission of a send.**
 
@@ -3150,6 +3172,34 @@ part of 389 (3) and waits with 389 on question 48.
   1. The three files join the list. Built.
   2. The declared values reach the stage another way, and the list stands.
 - **Parked.** Nothing.
+- **Answer:** pending.
+
+**122. Tier 3. AUTHZ-GATE-006: `AppPasswords.CreateAsync`, whose first write is outside any unit of work.**
+
+- **Item.** Question 62.
+- **The matter.** The gate is asked again "inside its unit of work before its first write". The operation's first write is the mail server's creation of the password, outside any unit of work; the unit of work that follows records the audit entry and the notice of what the server already did. The chapters do not state how such a site is built.
+- **Parked.** The site, unchanged.
+- **Answer:** pending.
+
+**123. Tier 3. AUTHZ-GATE-006: `RecoveryService.SendAsync`, the approval's second unit of work.**
+
+- **Item.** Question 62.
+- **The matter.** The approval is two units of work: the first commits the approval and asks the gate again; the second writes the send. The chapters do not state whether the second asks again, nor what a restriction committed between the two leaves (an approval standing with nothing sent).
+- **Parked.** `SendAsync`, unchanged.
+- **Answer:** pending.
+
+**124. Tier 3. AUTHZ-GATE-006: `ErasureService.CompleteAsync`, whose ledger line precedes its unit of work.**
+
+- **Item.** Question 62.
+- **The matter.** The ledger line is appended before the unit of work begins, so the first write precedes it.
+- **Parked.** The site, unchanged.
+- **Answer:** pending.
+
+**125. Tier 3. AUTHZ-GATE-006 against OPS-ALERT-004a: the destination keys.**
+
+- **Item.** Question 62.
+- **The matter.** OPS-ALERT-004a sends the notice to the destinations being replaced before the change's unit of work begins; that delivery is the first effect and a rollback does not undo it. A refusal found by asking again inside the unit of work would follow the notice of a change that then did not happen.
+- **Parked.** `ConfigurationService.DestinationsAsync` and `AlertDestinationChange.ChangeAsync`, unchanged; the gate step and the ask for a loosening inside the unit of work are as they were.
 - **Answer:** pending.
 
 ## 5. Gate result
