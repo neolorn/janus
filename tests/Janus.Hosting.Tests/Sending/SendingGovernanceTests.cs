@@ -1549,6 +1549,51 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-004 AC19: a send whose caller acts on whether it was carried counts as
+    /// carried where its immediate attempt took it, and as not carried where that attempt
+    /// left it waiting.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC19_AFollowedSendIsCarriedOnlyWhereItsImmediateAttemptTookItAsync()
+    {
+        GovernedSend send = Path.Send;
+
+        IReadOnlyList<SendDeliveryId> taken = await FollowedAsync(send, Mailed());
+        _sms.Accepts = false;
+        IReadOnlyList<SendDeliveryId> left = await FollowedAsync(send, Texted());
+
+        Assert.True(await send.CarriedAsync(taken, TestContext.Current.CancellationToken));
+        Assert.False(await send.CarriedAsync(left, TestContext.Current.CancellationToken));
+        Assert.Equal(left, _outbox.Waiting.Select(waiting => waiting.Id));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC19: a send whose immediate attempt is not taken counts as not
+    /// carried whatever later becomes of its row. A row gone is not a send taken: one
+    /// removed at exhaustion by that attempt, and one a later pass carried, both count as
+    /// not carried for the caller that followed them.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC19_ASendNotTakenCountsAsNotCarriedWhateverBecomesOfItsRowAsync()
+    {
+        GovernedSend send = Path.Send;
+        _mail.Accepts = false;
+
+        IReadOnlyList<SendDeliveryId> later = await FollowedAsync(send, Mailed());
+        _mail.Accepts = true;
+        _clock.Advance(TimeSpan.FromMinutes(3));
+        int passed = await RetriedAsync();
+        _configuration.Set(Settings.OutboxRetryMaxAttempts, 1);
+        _sms.Accepts = false;
+        IReadOnlyList<SendDeliveryId> exhausted = await FollowedAsync(send, Texted());
+
+        Assert.Equal(1, passed);
+        Assert.Empty(_outbox.Waiting);
+        Assert.False(await send.CarriedAsync(later, TestContext.Current.CancellationToken));
+        Assert.False(await send.CarriedAsync(exhausted, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC12, CONV-ERR-003 AC2: a fault of the library's own in the
     /// immediate attempt after the commit, here the outbox failing at the claim, is
     /// logged and goes no further. The send answers as it committed, its row and its
@@ -1738,6 +1783,22 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         (await Path.Publisher.RetryAsync(Carrier, TestContext.Current.CancellationToken)).Match(
             carried => carried,
             error => throw new Xunit.Sdk.XunitException($"The pass failed: {error.Code}."));
+
+    // One send as a caller that follows it makes it: admitted in a unit of work the
+    // caller began as the outermost and committed, so that its one attempt has run.
+    private async Task<IReadOnlyList<SendDeliveryId>> FollowedAsync(GovernedSend send, OutboundMessage message)
+    {
+        Begun(await _work.BeginAsync(TestContext.Current.CancellationToken));
+
+        IReadOnlyList<SendDeliveryId> admitted =
+            (await send.AdmitAsync(message, TestContext.Current.CancellationToken)).Match(
+                written => written,
+                error => throw new Xunit.Sdk.XunitException($"The send was refused: {error.Code}."));
+
+        Begun(await _work.CommitAsync(TestContext.Current.CancellationToken));
+
+        return admitted;
+    }
 
     // One send as an operation makes it: undertaken in a unit of work of its own, which
     // commits where the send was admitted, so that its one attempt follows, and rolls

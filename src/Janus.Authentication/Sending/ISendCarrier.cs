@@ -19,6 +19,9 @@ internal interface ISendCarrier
     /// </summary>
     /// <param name="delivery">What its outbox row is held under.</param>
     /// <param name="cancellationToken">Abandons the attempt.</param>
-    /// <returns>The work of attempting it.</returns>
-    ValueTask AttemptAsync(SendDeliveryId delivery, CancellationToken cancellationToken);
+    /// <returns>
+    /// Whether this attempt carried it: the answer a caller that follows the message
+    /// acts on, whatever later becomes of its row (AUTH-ABUSE-004).
+    /// </returns>
+    ValueTask<bool> AttemptAsync(SendDeliveryId delivery, CancellationToken cancellationToken);
 }

@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- An alert and a loss report's notification count as carried only where the one
+  attempt that follows their commit took them. One that attempt did not take counts
+  as not carried whatever later becomes of its row: the alert falls to its second
+  channel and the invalidation waits, also where the row was removed uncarried or a
+  later pass carried it.
 - A notice that a restriction refuses no longer spends its address's
   `abuse.nonexistent.window`: the window is marked only where the notice's send is
   admitted, for the notice to the holder of an address or number someone tried to

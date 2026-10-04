@@ -17,10 +17,10 @@ internal sealed class SendCarrierInMemory : ISendCarrier
     public List<SendDeliveryId> Attempted { get; } = [];
 
     /// <inheritdoc/>
-    public ValueTask AttemptAsync(SendDeliveryId delivery, CancellationToken cancellationToken)
+    public ValueTask<bool> AttemptAsync(SendDeliveryId delivery, CancellationToken cancellationToken)
     {
         Attempted.Add(delivery);
 
-        return ValueTask.CompletedTask;
+        return ValueTask.FromResult(false);
     }
 }

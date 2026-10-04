@@ -60,22 +60,28 @@ internal sealed class SendPublisher(
     /// or throws leaves the message to the publisher, and so does a fault of the
     /// library's own (a setting that does not read, a database that does not answer),
     /// which is logged here and goes no further: the commit stands, and the operation
-    /// answers what it committed (CONV-DESIGN-003, CONV-ERR-003).
+    /// answers what it committed (CONV-DESIGN-003, CONV-ERR-003). It answers whether the
+    /// handler took the message in this attempt, which is what a caller that follows
+    /// the message reads (AUTH-ABUSE-004).
     /// </remarks>
-    public async ValueTask AttemptAsync(SendDeliveryId delivery, CancellationToken cancellationToken)
+    public async ValueTask<bool> AttemptAsync(SendDeliveryId delivery, CancellationToken cancellationToken)
     {
+        bool taken = false;
+
         try
         {
             Schedule schedule = (await ScheduleAsync(cancellationToken).ConfigureAwait(false))
                 .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
-            (await CarriedAsync(delivery, schedule, immediate: true, cancellationToken).ConfigureAwait(false))
-                .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            taken = (await CarriedAsync(delivery, schedule, immediate: true, cancellationToken).ConfigureAwait(false))
+                .Match(carried => carried, error => throw new InvalidOperationException(error.Code.ToString()));
         }
         catch (Exception fault) when (fault is not OperationCanceledException)
         {
             SendLog.AttemptLeft(log, FaultLog.Of(fault));
         }
+
+        return taken;
     }
 
     /// <summary>

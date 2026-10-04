@@ -74,14 +74,6 @@ internal interface ISendOutbox
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Whether one admitted message still waits to be carried.
-    /// </summary>
-    /// <param name="delivery">What it is held under.</param>
-    /// <param name="cancellationToken">Abandons the read.</param>
-    /// <returns>Whether its row stands.</returns>
-    ValueTask<bool> WaitsAsync(SendDeliveryId delivery, CancellationToken cancellationToken);
-
-    /// <summary>
     /// Whether erasure has overwritten the key of one admitted message, which is then
     /// unreadable and is removed without being carried (PRIV-RIGHT-005a).
     /// </summary>

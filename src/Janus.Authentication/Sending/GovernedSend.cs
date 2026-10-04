@@ -39,6 +39,11 @@ internal sealed class GovernedSend(
     TimeProvider time,
     RandomNumberGenerator randomness) : IGovernedSend, IFollowedSend, ISendingRestrictions
 {
+    // AUTH-ABUSE-004: what the one attempt after the commit took, of the messages this
+    // operation undertook. A caller that follows a message reads it here: a row gone is
+    // not by itself a send taken.
+    private readonly HashSet<SendDeliveryId> _taken = [];
+
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">The message is absent.</exception>
     public async ValueTask<Result<SendReference>> UndertakeAsync(
@@ -59,21 +64,13 @@ internal sealed class GovernedSend(
 
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">The messages are absent.</exception>
-    public async ValueTask<bool> CarriedAsync(
+    public ValueTask<bool> CarriedAsync(
         IReadOnlyList<SendDeliveryId> admitted,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(admitted);
 
-        foreach (SendDeliveryId delivery in admitted)
-        {
-            if (await outbox.WaitsAsync(delivery, cancellationToken).ConfigureAwait(false))
-            {
-                return false;
-            }
-        }
-
-        return true;
+        return ValueTask.FromResult(admitted.All(_taken.Contains));
     }
 
     /// <inheritdoc/>
@@ -184,7 +181,7 @@ internal sealed class GovernedSend(
             {
                 SendDeliveryId written = delivery.Id;
 
-                work.AfterCommit(token => carrier.AttemptAsync(written, token))
+                work.AfterCommit(token => AttemptedAsync(written, token))
                     .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
             }
 
@@ -192,6 +189,14 @@ internal sealed class GovernedSend(
         }
 
         return Result.Success<IReadOnlyList<SendDelivery>>(admitted);
+    }
+
+    private async ValueTask AttemptedAsync(SendDeliveryId delivery, CancellationToken cancellationToken)
+    {
+        if (await carrier.AttemptAsync(delivery, cancellationToken).ConfigureAwait(false))
+        {
+            _ = _taken.Add(delivery);
+        }
     }
 
     private static TValue Held<TValue>(Error error, ref Error? failure)

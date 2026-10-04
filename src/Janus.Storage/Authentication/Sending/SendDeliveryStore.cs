@@ -132,13 +132,6 @@ internal sealed class SendDeliveryStore(
     }
 
     /// <inheritdoc/>
-    public async ValueTask<bool> WaitsAsync(SendDeliveryId delivery, CancellationToken cancellationToken) =>
-        await context.SendOutbox
-            .AsNoTracking()
-            .AnyAsync(row => row.Id == delivery, cancellationToken)
-            .ConfigureAwait(false);
-
-    /// <inheritdoc/>
     public async ValueTask<byte[]?> ErasedAsync(SendDeliveryId delivery, CancellationToken cancellationToken)
     {
         var held = await context.SendOutbox

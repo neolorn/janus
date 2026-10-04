@@ -134,10 +134,6 @@ internal sealed class SendOutboxInMemory : ISendOutbox
             : ValueTask.FromResult(_held.TryGetValue(delivery, out SendDelivery? held) ? held : null);
 
     /// <inheritdoc/>
-    public ValueTask<bool> WaitsAsync(SendDeliveryId delivery, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_held.ContainsKey(delivery));
-
-    /// <inheritdoc/>
     public ValueTask<byte[]?> ErasedAsync(SendDeliveryId delivery, CancellationToken cancellationToken) =>
         ValueTask.FromResult(
             _erased.Contains(delivery) && _held.TryGetValue(delivery, out SendDelivery? held)
