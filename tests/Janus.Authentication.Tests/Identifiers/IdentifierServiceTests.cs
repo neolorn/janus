@@ -696,6 +696,35 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-007 AC5, AUTH-ABUSE-004 AC15: the confirmation asked of the displaced
+    /// address goes under the purpose of the new address's code, since the person
+    /// making the change asked for it and it is no notice.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC5_TheConfirmationIsAskedUnderTheVerificationPurposeAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        await VerifiedAsync(email);
+
+        SendRequest asked = _notifications.Mail.Last(
+            sent => sent.Message is MessageKind.IdentifierChangeConfirm);
+
+        Assert.Equal(RestrictionPurpose.Verification, asked.Purpose);
+        Assert.Equal(Primary, asked.Destination.Canonical);
+    }
+
+    /// <summary>
     /// IDN-ACCT-007 AC2: a restricted account changes none of its identifiers. Adding,
     /// removing, replacing, promoting and naming a backup are each refused with the
     /// code the gate refuses a modifying action with, and nothing is staged or given up.

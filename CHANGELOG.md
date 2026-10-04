@@ -2429,3 +2429,6 @@ against the public contract of LIB-API-001.
   already holds is what stands in its place; the verification staged for it records no
   browser. Everywhere else an address is displaced only by a session that has stepped
   up, and the old address is asked where the account has no other channel at all.
+- The link that asks the address a replace displaces to confirm it is sent under the
+  `verification` purpose, as the new address's code is, so no `notification`
+  restriction counts or refuses it.

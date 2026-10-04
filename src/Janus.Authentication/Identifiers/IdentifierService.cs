@@ -1402,7 +1402,7 @@ internal sealed class IdentifierService(
                 new SendRequest(
                     Destination(displaced.Kind, displaced.Canonical),
                     MessageKind.IdentifierChangeConfirm,
-                    RestrictionPurpose.Notification,
+                    RestrictionPurpose.Verification,
                     source,
                     await LanguageAsync(waiting.Subject, cancellationToken).ConfigureAwait(false))
                 {
