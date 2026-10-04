@@ -626,6 +626,36 @@ public sealed class PublicSurfaceTests
     }
 
     /// <summary>
+    /// CONV-DESIGN-007 AC7: of the types of another project, the entry point registers
+    /// itself only the host's declaration it is given and the two built by a factory that
+    /// reads a type of a project the type's own cannot reference: the sending validation,
+    /// whose placeholders come from the privacy project, and the declared processing,
+    /// read from the authorization model. Every other type of such a project is
+    /// registered by that project's own method, what evaluates a permission among them
+    /// (LIB-SEAM-001 AC1). What the entry point registers itself is read as what its
+    /// collection holds beyond what the other projects' methods register on their own.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_007_AC7_TheEntryPointRegistersOfAnotherProjectTheDeclarationAndWhatNoOtherCan()
+    {
+        IEnumerable<Type> others = Beyond()
+            .Select(Built)
+            .OfType<Type>()
+            .Where(Ships)
+            .Where(type => type.Assembly.GetName().Name != Mounting)
+            .Distinct()
+            .OrderBy(type => type.FullName, StringComparer.Ordinal);
+
+        Assert.Equal(
+            [
+                typeof(Janus.Authentication.Sending.SendingValidation),
+                typeof(AuthorizationDeclaration),
+                typeof(DeclaredProcessing),
+            ],
+            others);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-007, CONV-CODE-007: a composition a job builds inside the application
     /// over another credential registers the key ring the start filled, as it stands,
     /// and calls the storage's method and never the core's, whose ring would be a

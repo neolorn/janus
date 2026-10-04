@@ -284,18 +284,10 @@ public static class HostingRegistration
         // request, so the two share one holder.
         services.AddScoped<ConcealedRefusals>();
         services.AddScoped<IConcealedRefusals>(provider => provider.GetRequiredService<ConcealedRefusals>());
-        services.AddScoped<AccessGate>();
-        services.AddScoped<IAccessGate>(provider => provider.GetRequiredService<AccessGate>());
 
         // IDN-ACCT-007 AC2, AUTHZ-GATE-006: an account's own settings are held under
         // restriction by the gate, which the account's operations ask through a port.
-        services.AddScoped<ISettingsRestriction>(provider =>
-            new GatedSettings(provider.GetRequiredService<AccessGate>().RequireSettingsChangeAsync));
-
-        // CONV-DESIGN-002 AC3, AUTHZ-SCOPE-001: a group or a grant the deployment holds no
-        // row for is refused by the gate, which its operations ask through a port.
-        services.AddScoped<IUnscopedRefusal>(provider =>
-            new GatedUnscopedRefusal(provider.GetRequiredService<AccessGate>().RefuseUnscopedAsync));
+        services.AddScoped<ISettingsRestriction, GatedSettings>();
 
         // INT-MAIL-001, CONV-DESIGN-007: the shipped adapter is registered as its own
         // type, never as IMailServer; the start chooses it where the host registered no
