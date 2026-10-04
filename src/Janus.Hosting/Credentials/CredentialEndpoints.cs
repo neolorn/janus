@@ -47,7 +47,7 @@ internal static class CredentialEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.CredentialLastSecondFactor,
-                    ErrorCodes.StepUpRequired, ErrorCodes.Restricted)
+                    ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied)
                 .Binding<AuthenticatorId>("id"))
             .Produces(StatusCodes.Status204NoContent);
         _ = account.MapPost("/credentials/{id}/upgrade", UpgradeAsync)
@@ -77,7 +77,8 @@ internal static class CredentialEndpoints
                     ErrorCodes.FactorPasswordRequired))
             .Produces<RecoveryCodesView>();
         _ = account.MapPost("/recoverycodes/exported", MarkRecoveryCodesExportedAsync)
-            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionExpired, ErrorCodes.FactorNotEnrolled))
+            .Declares(EndpointDeclaration
+                .Answering(ErrorCodes.SessionExpired, ErrorCodes.Restricted, ErrorCodes.FactorNotEnrolled))
             .Produces(StatusCodes.Status204NoContent);
 
         RouteGroupBuilder ceremonies = endpoints.MapGroup("/auth/webauthn/register");
@@ -309,7 +310,8 @@ internal static class CredentialEndpoints
     }
 
     // AUTH-FACT-008: the report is about the set of the account whose session the
-    // browser holds, and an enrolment session reports none.
+    // browser holds, or of the account an enrolment session was opened for, whose
+    // second step showed the codes (chapter 09 POST /enrol/begin).
     private static async Task<IResult> MarkRecoveryCodesExportedAsync(
         ICredentials credentials,
         RequestSession browser,
@@ -318,10 +320,18 @@ internal static class CredentialEndpoints
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentNullException.ThrowIfNull(browser);
 
-        return browser.Context is not AccessContext holder
+        if (browser.Context is AccessContext holder)
+        {
+            return Answers.Of(
+                await credentials.MarkRecoveryCodesExportedAsync(holder, cancellationToken)
+                    .ConfigureAwait(false),
+                Nothing);
+        }
+
+        return browser.FirstContact?.Enrolment is not EnrolmentSessionId opened
             ? Nobody()
             : Answers.Of(
-                await credentials.MarkRecoveryCodesExportedAsync(holder, cancellationToken)
+                await credentials.MarkRecoveryCodesExportedAsync(opened, cancellationToken)
                     .ConfigureAwait(false),
                 Nothing);
     }

@@ -69,7 +69,7 @@ DELETE /account/credentials/{id}
   204
   400 api.request.malformed
   401 auth.session.expired
-  403 auth.session.csrfinvalid auth.stepup.required authz.restricted
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
 PATCH /account/credentials/{id}
   request application/json
     label: string
@@ -389,7 +389,7 @@ POST /account/recoverycodes
 POST /account/recoverycodes/exported
   204
   401 auth.session.expired
-  403 auth.session.csrfinvalid
+  403 auth.session.csrfinvalid authz.restricted
   409 auth.factor.notenrolled
 PUT /account/secondstep/preferred
   request application/json

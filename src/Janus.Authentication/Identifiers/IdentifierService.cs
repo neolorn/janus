@@ -243,7 +243,7 @@ internal sealed class IdentifierService(
 
         return await enrolments.FindAsync(enrolment, cancellationToken).ConfigureAwait(false)
             is not EnrolmentSession opened
-            ? Result.Failure(Error.From(ErrorCodes.EnrolmentTokenInvalid))
+            ? Result.Failure(Error.From(ErrorCodes.SessionExpired))
             : await ProvedAsync(
                     asking: null,
                     opened.Subject,
@@ -1026,7 +1026,7 @@ internal sealed class IdentifierService(
         if (await enrolments.FindAsync(enrolment, cancellationToken).ConfigureAwait(false)
             is not EnrolmentSession opened)
         {
-            return Result.Failure(Error.From(ErrorCodes.EnrolmentTokenInvalid));
+            return Result.Failure(Error.From(ErrorCodes.SessionExpired));
         }
 
         // REG-IDENT-007: the one exception to the displaced address confirming is the

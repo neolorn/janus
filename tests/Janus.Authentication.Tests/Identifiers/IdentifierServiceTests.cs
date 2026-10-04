@@ -2632,8 +2632,8 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// D-148: an enrolment session that has lapsed reaches nothing, and what it is
-    /// told says only that the token opens nothing.
+    /// D-148, D-188: an enrolment session that has ended reaches nothing, and what it
+    /// is told is what a session that has ended is told.
     /// </summary>
     [Fact]
     public async Task REG_IDENT_007_ALapsedEnrolmentSessionReachesNoReplacementAsync()
@@ -2643,7 +2643,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
 
         Assert.Equal(
-            ErrorCodes.EnrolmentTokenInvalid,
+            ErrorCodes.SessionExpired,
             Refused(await Service.ReplaceAsync(
                 EnrolmentSessionId.New(_clock),
                 email,
