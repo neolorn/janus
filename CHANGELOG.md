@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A host's assurance report meets a step-up gate only where it reads: a report whose
+  instant is after now, or whose level or reachable assurance is not an assurance
+  level, meets no gate and is refused with `auth.stepup.required` as a report the
+  provider fails to give is.
 - An account that holds no verified email cannot acknowledge an invitation into an
   organization whose domain lock is on: it is refused with
   `identity.identifier.domainnotallowed` and nothing is written, as an account whose

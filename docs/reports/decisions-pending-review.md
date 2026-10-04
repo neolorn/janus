@@ -13212,6 +13212,8 @@ compared with, or return the three values a gate needs.
 
 **Revised by entry 399.**
 
+**Superseded by D-166.**
+
 ---
 
 ## 329. What an export operation is, and what it asks

@@ -203,6 +203,66 @@ public sealed class StepUpGatesTests
             Bound));
     }
 
+    /// <summary>
+    /// LIB-HOST-004 AC4: a report whose instant is after now, whose level or reachable
+    /// assurance is not a level of chapter 10 section 5.4, or that the provider fails to
+    /// give, meets no gate and is refused with the gate, the outcome <c>present</c> and
+    /// no options.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_HOST_004_AC4_AReportThatDoesNotReadMeetsNoGateAsync()
+    {
+        var sessions = new SessionGatesInMemory(Identifiers.Subject());
+
+        sessions.Costs(Gate, new Core.Gate(GateLevel.Reachable, PhishingResistant: false, TimeSpan.FromMinutes(5)));
+
+        AttainedAssurance read = Reported(AssuranceLevel.Aal2);
+        AttainedAssurance?[] unread =
+        [
+            read with { AttainedAt = TimeProvider.System.GetUtcNow() + TimeSpan.FromMinutes(1) },
+            read with { Level = (AssuranceLevel)4 },
+            read with { Reachable = (AssuranceLevel)(-1) },
+            null,
+        ];
+
+        Assert.Null(await RefusalAsync(Reporting(sessions, read)));
+
+        foreach (AttainedAssurance? report in unread)
+        {
+            Error refused = Assert.IsType<Error>(await RefusalAsync(Reporting(sessions, report)));
+
+            Assert.Equal(ErrorCodes.StepUpRequired, refused.Code);
+            Assert.Equal(
+                "{\"level\":\"aal1\",\"phishingResistant\":false,\"maxAge\":300}",
+                refused.Details["required"].GetRawText());
+            Assert.Equal("present", refused.Details["outcome"].GetString());
+            Assert.Equal(0, refused.Details["options"].GetArrayLength());
+            Assert.Equal(JsonValueKind.Null, refused.Details["pendingUntil"].ValueKind);
+        }
+    }
+
+    /// <summary>
+    /// LIB-HOST-004 AC4: where the acting person's own session of the library carries
+    /// the request, that session is judged and the provider is not asked.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_HOST_004_AC4_TheActingPersonsOwnSessionIsJudgedInPlaceOfTheProviderAsync()
+    {
+        var sessions = new SessionGatesInMemory(_holder);
+        var provider = new AssuranceProviderInMemory(Reported(AssuranceLevel.Aal2));
+        var gates = new StepUpGates(sessions, provider, TimeProvider.System);
+
+        Assert.Equal(ErrorCodes.StepUpRequired, await OutstandingAsync(gates, Bound));
+
+        sessions.Meets(Gate);
+
+        Assert.Null(await OutstandingAsync(gates, Bound));
+        Assert.Equal([Gate, Gate], sessions.Asked);
+        Assert.Equal(0, provider.Asked);
+    }
+
     // What a host reports of a proof made a minute ago, reaching no further than it.
     private static AttainedAssurance Reported(AssuranceLevel level) =>
         new(level, PhishingResistant: false, TimeProvider.System.GetUtcNow() - TimeSpan.FromMinutes(1), level);

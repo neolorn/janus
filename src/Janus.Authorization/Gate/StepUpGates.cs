@@ -87,13 +87,16 @@ internal sealed class StepUpGates(
             return failure;
         }
 
-        // A report that cannot be read is a gate unmet, never one assumed met.
+        DateTimeOffset now = time.GetUtcNow();
+
+        // LIB-HOST-004 AC4: a report the provider fails to give, or one that does not
+        // read, is a gate unmet, never one assumed met.
         AttainedAssurance? attained = (await assurance.AttainedAsync(context, cancellationToken).ConfigureAwait(false))
-            .Match<AttainedAssurance?>(value => value, _ => null);
+            .Match<AttainedAssurance?>(value => Reads(value, now) ? value : null, _ => null);
 
         AssuranceLevel required = Required(cost, attained);
 
-        return attained is not null && Meets(attained, cost, required, time.GetUtcNow())
+        return attained is not null && Meets(attained, cost, required, now)
             ? null
             : Refusal(cost, required);
     }
@@ -107,6 +110,13 @@ internal sealed class StepUpGates(
             GateLevel.Aal2 => AssuranceLevel.Aal2,
             _ => attained is { Reachable: > AssuranceLevel.Aal1 } report ? report.Reachable : AssuranceLevel.Aal1,
         };
+
+    // AUTH-STEP-002: a report reads where its levels are levels of chapter 10 section 5.4
+    // and its proof was made no later than now.
+    private static bool Reads(AttainedAssurance attained, DateTimeOffset now) =>
+        Enum.IsDefined(attained.Level)
+        && Enum.IsDefined(attained.Reachable)
+        && attained.AttainedAt <= now;
 
     private static bool Meets(AttainedAssurance attained, Core.Gate cost, AssuranceLevel required, DateTimeOffset now) =>
         attained.Level >= required
