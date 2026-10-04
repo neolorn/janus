@@ -58,6 +58,8 @@ public sealed class AlertChannelsTests : IAsyncDisposable
             TestContext.Current.CancellationToken);
 
         Assert.Equal(ErrorCodes.SystemFault, outcome.Match(() => (Error?)null, error => error)?.Code);
+        Assert.False(_work.Open);
         Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 }

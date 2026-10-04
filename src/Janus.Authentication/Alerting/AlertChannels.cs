@@ -37,6 +37,8 @@ internal sealed class AlertChannels(IRaisedAlerts alerts, IEvents events, IUnitO
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unpublished);
         }
 
