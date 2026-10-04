@@ -445,6 +445,61 @@ public sealed class GroupEndpointTests : IAsyncLifetime
         Assert.Equal(StatusCodes.Status204NoContent, absent.Status);
         Assert.Equal(2, _deployment.GroupChanges.Changes.Count);
         Assert.Equal([User], await _deployment.Groups.MembersAsync(tellers, CancellationToken.None));
+        Assert.False(_deployment.Work.Open);
+        Assert.Equal(0, _deployment.Work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a removal and a change of members refused after the unit of
+    /// work began, with the organization's groups held or for want of the step-up, each
+    /// roll it back, so no unit of work is left open.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AChangeRefusedAfterItBeganRollsBackAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
+        GroupId department = Id(await CreatedAsync(administrator, "Department"));
+        GroupId team = Id(await CreatedAsync(administrator, "Team"));
+        GroupId empty = Id(await CreatedAsync(administrator, "Empty"));
+
+        _ = await AddedAsync(administrator, department, GrantSubject.Of(team));
+
+        int rolledBack = _deployment.Work.RolledBack;
+
+        Answer holding = await RemovedAsync(administrator, department);
+
+        Assert.Equal(ErrorCodes.GroupInUse.ToString(), holding.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 1), Ended());
+
+        Answer around = await AddedAsync(administrator, team, GrantSubject.Of(department));
+
+        Assert.Equal(ErrorCodes.GroupCycle.ToString(), around.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 2), Ended());
+
+        _deployment.Groups.Holding = held =>
+        {
+            _deployment.Groups.Holding = null;
+            _ = _deployment.Groups.RemoveAsync(empty, CancellationToken.None).AsTask();
+        };
+
+        Denied(await RemovedAsync(administrator, empty));
+        Assert.Equal((false, 0, rolledBack + 3), Ended());
+
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(16));
+
+        Answer removed = await MemberRemovedAsync(administrator, department, GrantSubject.Of(team));
+
+        Assert.Equal(ErrorCodes.StepUpRequired.ToString(), removed.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 4), Ended());
+
+        // Whether a unit of work is open, how many were left neither committed nor rolled
+        // back, and how many were rolled back.
+        (bool Open, int Unended, int RolledBack) Ended() =>
+            (
+                _deployment.Work.Open,
+                _deployment.Work.Opened - _deployment.Work.Committed - _deployment.Work.RolledBack,
+                _deployment.Work.RolledBack);
     }
 
     /// <summary>

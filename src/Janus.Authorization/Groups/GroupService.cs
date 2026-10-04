@@ -167,7 +167,11 @@ internal sealed class GroupService(
 
         if (await groups.FindAsync(group, cancellationToken).ConfigureAwait(false) is not Group held)
         {
-            return await RefusedAsync(await GoneAsync(context, cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
+            Error gone = await GoneAsync(context, cancellationToken).ConfigureAwait(false);
+
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(gone);
         }
 
         // AUTHZ-GRANT-003 AC3: a grant's history names the group it was given to,
@@ -175,6 +179,8 @@ internal sealed class GroupService(
         // without a change of members recording it.
         if (await NamedAsync(held, cancellationToken).ConfigureAwait(false))
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(Error.From(ErrorCodes.GroupInUse));
         }
 
@@ -261,7 +267,9 @@ internal sealed class GroupService(
 
         if (refused is not null)
         {
-            return await RefusedAsync(refused, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(refused);
         }
 
         // X9: a member already held changes nothing and records nothing, and the unit
@@ -331,12 +339,16 @@ internal sealed class GroupService(
                 : await ChangeRefusedAsync(context, acting, session, held, cancellationToken).ConfigureAwait(false))
             is Error refused)
         {
-            return await RefusedAsync(refused, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(refused);
         }
 
+        // X9: a member not held changes nothing and records nothing, and the unit of
+        // work still ends before the operation returns.
         if (!(await groups.MembersAsync(group, cancellationToken).ConfigureAwait(false)).Contains(member))
         {
-            return Result.Success();
+            return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
 
         await groups.RemoveMemberAsync(group, member, cancellationToken).ConfigureAwait(false);
@@ -362,11 +374,6 @@ internal sealed class GroupService(
 
     private static Error Unjoinable() =>
         Error.From(ErrorCodes.RequestInvalid, "member", JsonSerializer.SerializeToElement("subjectId"));
-
-    // A refusal decided inside the transaction ends it before the operation returns.
-    private async ValueTask<Result> RefusedAsync(Error refused, CancellationToken cancellationToken) =>
-        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match(() => Result.Failure(refused), Result.Failure);
 
     // AUTHZ-SCOPE-001, CONV-DESIGN-002 AC3: a change to a group is judged in the
     // organization its row belongs to, and that alone is read of it before the gate. A
