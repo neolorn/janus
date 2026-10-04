@@ -161,6 +161,31 @@ public sealed class EventPublisherTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC5, IDN-LIFE-003a: an event whose budget is spent and whose alert
+    /// cannot be raised is refused after the unit of work began, and rolls it back, so
+    /// the failure is not recorded without its alert.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ASpentBudgetWhoseAlertCannotBeRaisedRollsBackAsync()
+    {
+        _configuration.Set(Settings.OutboxRetryMaxAttempts, 1);
+        _refusing.Throws = true;
+
+        await PublishedAsync(new AccountRegistered(Noon, "registered"));
+
+        _alerts.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Result<int> passed = await PassedAsync();
+
+        Assert.Equal(ErrorCodes.SystemFault, passed.Match(_ => default(ErrorCode?), error => error.Code));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-002 and LIB-EXT-001: event publication is not a default a host
     /// replaces, so an <c>IEvents</c> the host registered before <c>AddJanus</c> is not
     /// what the library publishes through: the publication writes its row, and the
@@ -221,7 +246,11 @@ public sealed class EventPublisherTests : IAsyncDisposable
             .Match(() => true, _ => false));
 
     private async Task<int> PassAsync() =>
-        (await new EventPublisher(
+        (await PassedAsync())
+        .Match(published => published, error => throw new InvalidOperationException(error.Code.ToString()));
+
+    private ValueTask<Result<int>> PassedAsync() =>
+        new EventPublisher(
                 _events,
                 new EventConsumers(_services),
                 _configuration,
@@ -229,6 +258,5 @@ public sealed class EventPublisherTests : IAsyncDisposable
                 _work,
                 _clock,
                 _randomness)
-            .PublishAsync(Carrier, TestContext.Current.CancellationToken))
-        .Match(published => published, error => throw new InvalidOperationException(error.Code.ToString()));
+            .PublishAsync(Carrier, TestContext.Current.CancellationToken);
 }
