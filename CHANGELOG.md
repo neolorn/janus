@@ -2612,3 +2612,6 @@ against the public contract of LIB-API-001.
   consent; the fragment carries the purpose, the document and the kind as parameters. A
   check and a capability page refuse a live consent recorded against another document
   with `privacy.consent.superseded`, as the lists leave its record out.
+- Startup refuses a relationship source whose context maps the ancestry and the
+  effective grants and not the consented resources, with
+  `model.startup.declarationinvalid` naming the source and `context`.

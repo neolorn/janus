@@ -1297,7 +1297,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     /// AUTHZ-DERIVE-005 AC5, LIB-HOST-001 AC2: a relationship source given twice, naming
     /// no declared relationship, answering rows of another type than the derivation's,
     /// or naming a context the container does not give in a scope or whose model does
-    /// not map the contract tables stops the deployment as it starts, naming the source
+    /// not map every contract table stops the deployment as it starts, naming the source
     /// and the member at fault; one declared whole starts.
     /// </summary>
     /// <param name="fault">What is wrong with the declaration.</param>
@@ -1310,6 +1310,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     [InlineData("rows", "relationshipSource.reviewer", "rows")]
     [InlineData("ungiven", "relationshipSource.reviewer", "context")]
     [InlineData("unmapped", "relationshipSource.reviewer", "context")]
+    [InlineData("partly mapped", "relationshipSource.reviewer", "context")]
     public async Task AUTHZ_DERIVE_005_AC5_AMalformedRelationshipSourceIsRefusedNamingItAsync(
         string fault,
         string declaration,
@@ -1549,6 +1550,12 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
                     .AddScoped(_ => new UnmappedHostContext(
                         new DbContextOptionsBuilder<UnmappedHostContext>().UseNpgsql(connection).Options))
                     .AddSingleton(RelationshipSource.Of<UnmappedHostContext, HostReviewer>("reviewer", context => context.Reviewers));
+                break;
+            case "partly mapped":
+                services
+                    .AddScoped(_ => new PartlyMappedHostContext(
+                        new DbContextOptionsBuilder<PartlyMappedHostContext>().UseNpgsql(connection).Options))
+                    .AddSingleton(RelationshipSource.Of<PartlyMappedHostContext, HostReviewer>("reviewer", context => context.Reviewers));
                 break;
             default:
                 HostFixture.Sourced(services, connection);
