@@ -45,12 +45,15 @@ public sealed class EventPublisherTests : IAsyncDisposable
     /// A host that registered one consumer of registrations and suspensions and another
     /// of registrations alone.
     /// </summary>
-    public EventPublisherTests() =>
+    public EventPublisherTests()
+    {
+        _events.Work = _work;
         _services = new ServiceCollection()
             .AddSingleton<IEventConsumer<AccountRegistered>>(_recording)
             .AddSingleton<IEventConsumer<AccountSuspended>>(_recording)
             .AddSingleton<IEventConsumer<AccountRegistered>>(_refusing)
             .BuildServiceProvider();
+    }
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -112,7 +115,7 @@ public sealed class EventPublisherTests : IAsyncDisposable
 
         Assert.Single(_recording.Received);
         Assert.Equal(2, _refusing.Offered);
-        Assert.Equal(_clock.GetUtcNow(), pending.PublishedAt);
+        Assert.Equal(_clock.GetUtcNow(), Assert.Single(_events.Held).PublishedAt);
     }
 
     /// <summary>
@@ -181,8 +184,194 @@ public sealed class EventPublisherTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.SystemFault, passed.Match(_ => default(ErrorCode?), error => error.Code));
         Assert.False(_work.Open);
-        Assert.Equal(0, _work.Committed);
         Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(_work.Opened, _work.Committed + _work.RolledBack);
+
+        PendingEvent pending = Assert.Single(_events.Held);
+
+        Assert.Null(pending.FailedAt);
+        Assert.Equal(0, pending.Attempts);
+        Assert.Equal(0, _events.Outcomes);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC9, INF-BG-001: an event row is claimed whole by one claim
+    /// committed on its own, the claim is renewed before each consumer is called, each
+    /// take is written as it happens and the row's outcome once, every write in a unit
+    /// of work, and no consumer is called while one is open.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_AnEventIsClaimedWholeAndItsClaimRenewedBeforeEachConsumerAsync()
+    {
+        var open = new List<bool>();
+        var renewals = new List<int>();
+
+        _recording.Meanwhile = () =>
+        {
+            open.Add(_work.Open);
+            renewals.Add(_events.Renewed.Count);
+            _clock.Advance(TimeSpan.FromSeconds(90));
+        };
+        _refusing.Meanwhile = () =>
+        {
+            open.Add(_work.Open);
+            renewals.Add(_events.Renewed.Count);
+        };
+
+        await PublishedAsync(new AccountRegistered(Noon, "registered"));
+
+        _work.Reset();
+
+        Assert.Equal(1, await PassAsync());
+
+        EventClaim claim = Assert.Single(_events.Claimed);
+
+        Assert.Equal(Noon + TimeSpan.FromMinutes(2), claim.Until);
+        Assert.Equal([false, false], open);
+        Assert.Equal([1, 2], renewals);
+        Assert.Equal(
+            [Noon + TimeSpan.FromMinutes(2), Noon + TimeSpan.FromSeconds(210)],
+            _events.Renewed.Select(renewed => renewed.Until));
+        Assert.Equal(
+            [
+                [typeof(RecordingConsumer).FullName!],
+                [typeof(RecordingConsumer).FullName!, typeof(RefusingConsumer).FullName!],
+            ],
+            _events.Takes);
+        Assert.Equal(1, _events.Outcomes);
+        Assert.False(_events.WroteOutsideAUnitOfWork);
+        Assert.Equal((6, 6, 0), (_work.Opened, _work.OutermostCommitted, _work.RolledBack));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC9, IDN-LIFE-003a: an attempt is one pass over the consumers
+    /// still to take the event. A consumer that faults leaves its take unwritten, the
+    /// consumers after it are still offered the event, and the pass counts one attempt
+    /// for the row.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_AnAttemptIsOnePassOverTheConsumersStillToTakeTheEventAsync()
+    {
+        await using ServiceProvider host = new ServiceCollection()
+            .AddSingleton<IEventConsumer<AccountRegistered>>(_refusing)
+            .AddSingleton<IEventConsumer<AccountRegistered>>(_recording)
+            .BuildServiceProvider();
+
+        _refusing.Throws = true;
+
+        await PublishedAsync(new AccountRegistered(Noon, "registered"));
+
+        Assert.Equal(0, (await PassedAsync(host)).Match(published => published, _ => -1));
+
+        PendingEvent pending = Assert.Single(_events.Held);
+
+        Assert.Equal(1, _refusing.Offered);
+        Assert.Single(_recording.Received);
+        Assert.Equal(1, pending.Attempts);
+        Assert.Equal([typeof(RecordingConsumer).FullName], pending.Taken);
+        Assert.Equal(1, _events.Outcomes);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC9: a pass stops where the renewal of its claim changes nothing.
+    /// A row another pass took over while a consumer ran is that pass's: no further
+    /// consumer is offered the event and no outcome is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_APassStopsWhereTheRenewalOfItsClaimChangesNothingAsync()
+    {
+        await using ServiceProvider host = new ServiceCollection()
+            .AddSingleton<IEventConsumer<AccountRegistered>>(_refusing)
+            .AddSingleton<IEventConsumer<AccountRegistered>>(_recording)
+            .BuildServiceProvider();
+
+        _refusing.Refusals = 1;
+        _refusing.Meanwhile = () =>
+            _events.TakeOver(_events.Held[0].Id, Noon + TimeSpan.FromMinutes(10));
+
+        await PublishedAsync(new AccountRegistered(Noon, "registered"));
+
+        Assert.Equal(0, (await PassedAsync(host)).Match(published => published, _ => -1));
+
+        PendingEvent pending = Assert.Single(_events.Held);
+
+        Assert.Equal(1, _refusing.Offered);
+        Assert.Empty(_recording.Received);
+        Assert.Single(_events.Renewed);
+        Assert.Equal(0, _events.Outcomes);
+        Assert.Equal(0, pending.Attempts);
+        Assert.Empty(pending.Taken);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC9: a take and an outcome are written only under the claim. A
+    /// consumer that took the event while another pass took the row over has its take
+    /// left unwritten by this pass, which stops and writes no outcome.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_ATakeWhoseClaimWasTakenOverIsNotWrittenAsync()
+    {
+        _recording.Meanwhile = () =>
+            _events.TakeOver(_events.Held[0].Id, Noon + TimeSpan.FromMinutes(10));
+
+        await PublishedAsync(new AccountRegistered(Noon, "registered"));
+
+        Assert.Equal(0, await PassAsync());
+
+        PendingEvent pending = Assert.Single(_events.Held);
+
+        Assert.Single(_recording.Received);
+        Assert.Equal(0, _refusing.Offered);
+        Assert.Empty(_events.Takes);
+        Assert.Empty(pending.Taken);
+        Assert.Equal(0, _events.Outcomes);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC9, INF-BG-001: a row another pass holds is not carried, and
+    /// one whose claim has timed out is carried by the next pass.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_AnEventAnotherPassHoldsIsCarriedOnlyOnceItsClaimTimesOutAsync()
+    {
+        await PublishedAsync(new AccountSuspended(Noon, "suspended", SuspensionOrigin.Self));
+
+        _events.TakeOver(_events.Held[0].Id, Noon + TimeSpan.FromMinutes(2));
+
+        Assert.Equal(0, await PassAsync());
+        Assert.Empty(_recording.Received);
+        Assert.Empty(_events.Claimed);
+
+        _clock.Advance(TimeSpan.FromMinutes(2));
+
+        Assert.Equal(1, await PassAsync());
+        Assert.Single(_recording.Received);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003: a consumer still running when the claim times out is abandoned
+    /// as one that did not take the event, and the pass counts the attempt.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AConsumerStillRunningWhenTheClaimTimesOutIsAbandonedAsync()
+    {
+        _recording.Stalls = true;
+
+        await PublishedAsync(new AccountSuspended(Noon, "suspended", SuspensionOrigin.Self));
+
+        Assert.Equal(0, (await PassedAsync(clock: new LapsedClock(Noon))).Match(published => published, _ => -1));
+
+        PendingEvent pending = Assert.Single(_events.Held);
+
+        Assert.Equal(1, pending.Attempts);
+        Assert.Empty(pending.Taken);
+        Assert.Null(pending.PublishedAt);
     }
 
     /// <summary>
@@ -249,14 +438,14 @@ public sealed class EventPublisherTests : IAsyncDisposable
         (await PassedAsync())
         .Match(published => published, error => throw new InvalidOperationException(error.Code.ToString()));
 
-    private ValueTask<Result<int>> PassedAsync() =>
+    private ValueTask<Result<int>> PassedAsync(IServiceProvider? host = null, TimeProvider? clock = null) =>
         new EventPublisher(
                 _events,
-                new EventConsumers(_services),
+                new EventConsumers(host ?? _services),
                 _configuration,
                 _alerts,
                 _work,
-                _clock,
+                clock ?? _clock,
                 _randomness)
             .PublishAsync(Carrier, TestContext.Current.CancellationToken);
 }

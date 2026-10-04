@@ -270,6 +270,7 @@ public sealed class ModelTests
             // Not an account field: an emitted event waiting for the consumers the host
             // registered, and marked once they have it (LIB-API-001, CONV-DESIGN-002).
             "events.attempts",
+            "events.claimed_until",
             "events.failed_at",
             "events.id",
             "events.kind",

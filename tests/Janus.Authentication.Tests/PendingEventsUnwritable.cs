@@ -18,15 +18,39 @@ internal sealed class PendingEventsUnwritable : IPendingEvents
         throw new InvalidOperationException("The pending events table at db.internal:5432 could not be written.");
 
     /// <inheritdoc/>
-    public ValueTask<IReadOnlyList<PendingEvent>> DueAsync(
+    public ValueTask<IReadOnlyList<PendingEventId>> DueAsync(
         DateTimeOffset now,
         int count,
         CancellationToken cancellationToken) =>
-        ValueTask.FromResult<IReadOnlyList<PendingEvent>>([]);
+        ValueTask.FromResult<IReadOnlyList<PendingEventId>>([]);
 
     /// <inheritdoc/>
-    public ValueTask RecordAsync(PendingEvent pending, CancellationToken cancellationToken) =>
-        ValueTask.CompletedTask;
+    public ValueTask<EventClaim?> ClaimAsync(
+        PendingEventId pending,
+        DateTimeOffset now,
+        TimeSpan timeout,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<EventClaim?>(null);
+
+    /// <inheritdoc/>
+    public ValueTask<EventClaim?> RenewAsync(
+        EventClaim claim,
+        DateTimeOffset now,
+        TimeSpan timeout,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<EventClaim?>(null);
+
+    /// <inheritdoc/>
+    public ValueTask<PendingEvent?> FindAsync(PendingEventId pending, CancellationToken cancellationToken) =>
+        ValueTask.FromResult<PendingEvent?>(null);
+
+    /// <inheritdoc/>
+    public ValueTask<bool> TakeAsync(PendingEvent pending, EventClaim claim, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(false);
+
+    /// <inheritdoc/>
+    public ValueTask<bool> RecordAsync(PendingEvent pending, EventClaim claim, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(false);
 
     /// <inheritdoc/>
     public ValueTask<int> SweepAsync(CancellationToken cancellationToken) =>

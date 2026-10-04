@@ -25,6 +25,8 @@ public sealed class PendingEventsTests(DatabaseFixture database) : IClassFixture
 {
     private static readonly DateTimeOffset Noon = new(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);
 
+    private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(2);
+
     private static readonly SubjectId Subject = new(Guid.Parse("0b6f2a53-6d4e-4a8c-9d0e-2f1a7c3b5e91"));
     private static readonly SubjectId Actor = new(Guid.Parse("5c1e9f47-2a3b-4d6e-8f0a-1b2c3d4e5f60"));
 
@@ -63,8 +65,7 @@ public sealed class PendingEventsTests(DatabaseFixture database) : IClassFixture
 
         await using StoreContext reading = database.Context();
 
-        IReadOnlyList<PendingEvent> due = await new PendingEvents(reading)
-            .DueAsync(Noon, emitted.Count, TestContext.Current.CancellationToken);
+        IReadOnlyList<PendingEvent> due = await DueAsync(reading, Noon, emitted.Count);
 
         Assert.Equal(emitted.Count, due.Count);
 
@@ -125,8 +126,7 @@ public sealed class PendingEventsTests(DatabaseFixture database) : IClassFixture
 
         Assert.Equal(
             "committed",
-            Assert.Single(await new PendingEvents(reading).DueAsync(Noon, 10, TestContext.Current.CancellationToken))
-                .Raised.IdempotencyKey);
+            Assert.Single(await DueAsync(reading, Noon, 10)).Raised.IdempotencyKey);
     }
 
     /// <summary>
@@ -164,22 +164,147 @@ public sealed class PendingEventsTests(DatabaseFixture database) : IClassFixture
         {
             var events = new PendingEvents(recording);
 
-            await events.RecordAsync(marked, TestContext.Current.CancellationToken);
-            await events.RecordAsync(failed, TestContext.Current.CancellationToken);
-            await events.RecordAsync(waiting, TestContext.Current.CancellationToken);
-            await recording.SaveChangesAsync(TestContext.Current.CancellationToken);
+            foreach (PendingEvent pending in new[] { marked, failed, waiting })
+            {
+                EventClaim claim = await events.ClaimAsync(pending.Id, Noon, Timeout, TestContext.Current.CancellationToken)
+                    ?? throw new Xunit.Sdk.XunitException("The event was not claimed.");
+
+                Assert.True(await events.RecordAsync(pending, claim, TestContext.Current.CancellationToken));
+            }
         }
 
         await using StoreContext reading = database.Context();
-        var read = new PendingEvents(reading);
 
-        Assert.Empty(await read.DueAsync(Noon.AddSeconds(29), 10, TestContext.Current.CancellationToken));
+        Assert.Empty(await DueAsync(reading, Noon.AddSeconds(29), 10));
 
-        PendingEvent due = Assert.Single(await read.DueAsync(Noon.AddSeconds(30), 10, TestContext.Current.CancellationToken));
+        PendingEvent due = Assert.Single(await DueAsync(reading, Noon.AddSeconds(30), 10));
 
         Assert.Equal(waiting.Id, due.Id);
         Assert.Equal(1, due.Attempts);
         Assert.Equal(["Host.Welcome"], due.Taken);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC9, INF-BG-001 AC4: an event row is claimed whole by one
+    /// conditional update, so of several passes that reach it at once one takes it; while
+    /// the claim stands no pass reads the row as due and none claims it; a renewal moves
+    /// the claim's end and is the pass's own alone; and once the claim has timed out the
+    /// next pass takes the row over, after which the first pass renews, takes and records
+    /// nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_AnEventIsClaimedByOnePassAndWrittenOnlyUnderItsClaimAsync()
+    {
+        await EmptiedAsync();
+
+        var raised = PendingEvent.Of(new AccountReactivated(Noon, "claimed"));
+
+        await AddedAsync(raised);
+
+        EventClaim?[] claims = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => ClaimedAsync(raised.Id, Noon)));
+
+        EventClaim claim = Assert.Single(claims, one => one is not null)!.Value;
+
+        Assert.Equal(Noon + Timeout, claim.Until);
+        Assert.Null(await ClaimedAsync(raised.Id, Noon + Timeout - TimeSpan.FromSeconds(1)));
+
+        await using (StoreContext reading = database.Context())
+        {
+            Assert.Empty(await DueAsync(reading, Noon + Timeout - TimeSpan.FromSeconds(1), 10));
+        }
+
+        EventClaim renewed;
+
+        await using (StoreContext renewing = database.Context())
+        {
+            renewed = await new PendingEvents(renewing)
+                .RenewAsync(claim, Noon.AddMinutes(1), Timeout, TestContext.Current.CancellationToken)
+                ?? throw new Xunit.Sdk.XunitException("The claim was not renewed.");
+
+            Assert.Equal(Noon.AddMinutes(1) + Timeout, renewed.Until);
+            Assert.Null(await new PendingEvents(renewing)
+                .RenewAsync(claim, Noon.AddMinutes(1), Timeout, TestContext.Current.CancellationToken));
+        }
+
+        Assert.Null(await ClaimedAsync(raised.Id, Noon + Timeout));
+
+        raised.Take("Host.Welcome");
+
+        await using (StoreContext taking = database.Context())
+        {
+            Assert.False(await new PendingEvents(taking).TakeAsync(raised, claim, TestContext.Current.CancellationToken));
+            Assert.True(await new PendingEvents(taking).TakeAsync(raised, renewed, TestContext.Current.CancellationToken));
+        }
+
+        EventClaim taken = await ClaimedAsync(raised.Id, renewed.Until)
+            ?? throw new Xunit.Sdk.XunitException("The timed-out claim was not taken over.");
+
+        raised.Take("Host.Ledger");
+        raised.Published(renewed.Until);
+
+        await using (StoreContext recording = database.Context())
+        {
+            var events = new PendingEvents(recording);
+
+            Assert.Null(await events.RenewAsync(renewed, renewed.Until, Timeout, TestContext.Current.CancellationToken));
+            Assert.False(await events.TakeAsync(raised, renewed, TestContext.Current.CancellationToken));
+            Assert.False(await events.RecordAsync(raised, renewed, TestContext.Current.CancellationToken));
+
+            PendingEvent held = await events.FindAsync(raised.Id, TestContext.Current.CancellationToken)
+                ?? throw new Xunit.Sdk.XunitException("The event was not written.");
+
+            Assert.Equal(["Host.Welcome"], held.Taken);
+            Assert.Null(held.PublishedAt);
+            Assert.True(await events.RecordAsync(raised, taken, TestContext.Current.CancellationToken));
+            Assert.False(await events.RecordAsync(raised, taken, TestContext.Current.CancellationToken));
+        }
+
+        await using StoreContext after = database.Context();
+
+        PendingEvent marked = await new PendingEvents(after).FindAsync(raised.Id, TestContext.Current.CancellationToken)
+            ?? throw new Xunit.Sdk.XunitException("The event was not written.");
+
+        Assert.Equal(renewed.Until, marked.PublishedAt);
+        Assert.Equal(["Host.Ledger", "Host.Welcome"], marked.Taken.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC9: a claim succeeds only where the row's next attempt is due, so
+    /// an event a pass released and rescheduled is not claimed before that instant, and a
+    /// marked or failed event is never claimed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_AnEventReleasedAndRescheduledIsNotClaimedBeforeItIsDueAsync()
+    {
+        await EmptiedAsync();
+
+        var rescheduled = PendingEvent.Of(new AccountReactivated(Noon, "rescheduled"));
+        var failed = PendingEvent.Of(new AccountReactivated(Noon, "spent"));
+
+        await AddedAsync(rescheduled);
+        await AddedAsync(failed);
+
+        Assert.False(rescheduled.Refused(Noon, TimeSpan.FromMinutes(10), 2.0m, maximum: 3, jitter: 1));
+        Assert.True(failed.Refused(Noon, TimeSpan.FromMinutes(10), 2.0m, maximum: 1, jitter: 1));
+
+        await using (StoreContext recording = database.Context())
+        {
+            var events = new PendingEvents(recording);
+
+            foreach (PendingEvent pending in new[] { rescheduled, failed })
+            {
+                EventClaim claim = await events.ClaimAsync(pending.Id, Noon, Timeout, TestContext.Current.CancellationToken)
+                    ?? throw new Xunit.Sdk.XunitException("The event was not claimed.");
+
+                Assert.True(await events.RecordAsync(pending, claim, TestContext.Current.CancellationToken));
+            }
+        }
+
+        Assert.Null(await ClaimedAsync(rescheduled.Id, Noon.AddMinutes(10) - TimeSpan.FromSeconds(1)));
+        Assert.Null(await ClaimedAsync(failed.Id, Noon.AddDays(1)));
+        Assert.NotNull(await ClaimedAsync(rescheduled.Id, Noon.AddMinutes(10)));
     }
 
     // One of each event the library emits, each carrying a value in every field.
@@ -238,6 +363,36 @@ public sealed class PendingEventsTests(DatabaseFixture database) : IClassFixture
         new TakedownExecuted(Noon, "takedown") { Subject = Subject },
         new TakedownReversed(Noon, "takedown-reversed") { Subject = Subject },
     ];
+
+    private static async Task<IReadOnlyList<PendingEvent>> DueAsync(StoreContext reading, DateTimeOffset now, int count)
+    {
+        var events = new PendingEvents(reading);
+        var due = new List<PendingEvent>();
+
+        foreach (PendingEventId waiting in await events.DueAsync(now, count, TestContext.Current.CancellationToken))
+        {
+            due.Add(await events.FindAsync(waiting, TestContext.Current.CancellationToken)
+                ?? throw new Xunit.Sdk.XunitException("The event was not written."));
+        }
+
+        return due;
+    }
+
+    private async Task AddedAsync(PendingEvent pending)
+    {
+        await using StoreContext writing = database.Context();
+
+        await new PendingEvents(writing).AddAsync(pending, TestContext.Current.CancellationToken);
+        await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    // A claim as a pass takes it: one conditional update, committed on its own.
+    private async Task<EventClaim?> ClaimedAsync(PendingEventId pending, DateTimeOffset now)
+    {
+        await using StoreContext claiming = database.Context();
+
+        return await new PendingEvents(claiming).ClaimAsync(pending, now, Timeout, TestContext.Current.CancellationToken);
+    }
 
     private async Task EmptiedAsync()
     {

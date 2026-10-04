@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- An emitted event's row is claimed whole before any consumer is called, by one
+  conditional update that succeeds only where the row is due and unclaimed or its claim
+  has timed out, so one pass of the `events` job carries a row at a time whatever the
+  number of processes. The pass renews its claim before each consumer and stops where
+  another pass has taken the row over; each consumer's take is written as it happens
+  and the row's outcome once, each only under the claim. A consumer still running when
+  `outbox.claim.timeout` has passed is abandoned as one that did not take the event.
+  The `events` table gains `claimed_until` (migration `ClaimAnEventBeforeItIsOffered`).
 - A message's row is claimed only where its next attempt is due, by the attempt that
   follows the commit as by the `sends` job, so a row one attempt released and
   rescheduled is not carried early by another. A message is due from its admission: it

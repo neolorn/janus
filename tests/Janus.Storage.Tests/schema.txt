@@ -306,6 +306,7 @@ table events
   column taken_by jsonb not null
   column published_at timestamp with time zone
   column failed_at timestamp with time zone
+  column claimed_until timestamp with time zone
   constraint pk_events PRIMARY KEY (id)
   index ix_events_due using btree (next_attempt_at) WHERE ((published_at IS NULL) AND (failed_at IS NULL))
 table grant_versions
