@@ -40,7 +40,8 @@ internal sealed class RelyingParty
     }
 
     /// <summary>
-    /// The identifier every credential is bound to and recorded against.
+    /// The identifier every credential is bound to and recorded against, in its ASCII
+    /// form.
     /// </summary>
     public string Id { get; }
 
@@ -93,8 +94,10 @@ internal sealed class RelyingParty
                 "no origin is configured for it to sit over");
         }
 
+        // The identifier and the hosts are compared in the ASCII form the conversion
+        // gives both, so one written in either form sits over one written in the other.
         string[] hosts = [.. origins.Select(Host)];
-        string resolved = identifier.Length == 0 ? Common(hosts) : identifier;
+        string resolved = identifier.Length == 0 ? Common(hosts) : Identifier(identifier);
 
         // Origins that share no label have no domain in common to derive an identifier
         // from, so no identifier sits over all of them.
@@ -105,15 +108,6 @@ internal sealed class RelyingParty
                 "origins",
                 string.Join(", ", hosts),
                 "they share no domain for an identifier to sit over");
-        }
-
-        if (!PublicSuffixList.Reads(resolved))
-        {
-            throw Refused(
-                ErrorCodes.StartupRelyingPartyId,
-                "rpid",
-                resolved,
-                "it has no ASCII form and so no registrable domain");
         }
 
         if (PublicSuffixList.Shipped.IsSuffix(resolved))
@@ -201,7 +195,7 @@ internal sealed class RelyingParty
         string.Equals(Id, recorded, StringComparison.OrdinalIgnoreCase);
 
     // A host the suffix list cannot read has no registrable domain, so no identifier
-    // sits over it and no label of it can be counted.
+    // sits over it and no label of it can be counted. What is read is its ASCII form.
     private static string Host(string origin)
     {
         if (!Uri.TryCreate(origin, UriKind.Absolute, out Uri? parsed) || parsed.Host.Length == 0)
@@ -213,14 +207,23 @@ internal sealed class RelyingParty
                 "it is not an absolute origin with a host");
         }
 
-        return PublicSuffixList.Reads(parsed.Host)
-            ? parsed.Host
+        return PublicSuffixList.TryAscii(parsed.Host, out string ascii)
+            ? ascii
             : throw Refused(
                 ErrorCodes.StartupRelyingPartyId,
                 "origin",
                 origin,
                 "its host has no ASCII form and so no registrable domain");
     }
+
+    private static string Identifier(string identifier) =>
+        PublicSuffixList.TryAscii(identifier, out string ascii)
+            ? ascii
+            : throw Refused(
+                ErrorCodes.StartupRelyingPartyId,
+                "rpid",
+                identifier,
+                "it has no ASCII form and so no registrable domain");
 
     private static string[] Labels(string host) => host.Split('.');
 
@@ -233,7 +236,7 @@ internal sealed class RelyingParty
 
         while (reversed.All(labels =>
             labels.Length > shared
-            && string.Equals(labels[shared], reversed[0][shared], StringComparison.OrdinalIgnoreCase)))
+            && string.Equals(labels[shared], reversed[0][shared], StringComparison.Ordinal)))
         {
             shared++;
         }
@@ -242,8 +245,8 @@ internal sealed class RelyingParty
     }
 
     private static bool Over(string identifier, string host) =>
-        string.Equals(host, identifier, StringComparison.OrdinalIgnoreCase)
-        || host.EndsWith("." + identifier, StringComparison.OrdinalIgnoreCase);
+        string.Equals(host, identifier, StringComparison.Ordinal)
+        || host.EndsWith("." + identifier, StringComparison.Ordinal);
 
     private static async ValueTask<TValue> ValueAsync<TValue>(
         IConfigurationStore configuration,

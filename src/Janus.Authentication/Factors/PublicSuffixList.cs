@@ -36,7 +36,7 @@ internal sealed class PublicSuffixList
         FrozenSet<string> rules,
         FrozenSet<string> wildcards,
         FrozenSet<string> exceptions,
-        int setAside)
+        IReadOnlyList<string> setAside)
     {
         _rules = rules;
         _wildcards = wildcards;
@@ -52,10 +52,12 @@ internal sealed class PublicSuffixList
         ?? throw new InvalidOperationException("The package carries no Public Suffix List."));
 
     /// <summary>
-    /// How many rules were set aside when the list was read, the conversion having
-    /// refused a label of each.
+    /// The rules set aside when the list was read, the conversion having refused a
+    /// label of each: every one as the list writes it, in the order the list holds
+    /// them. They are fixed when the list is committed, so the test of the release pins
+    /// them by name and nothing reports them at run time.
     /// </summary>
-    public int SetAside { get; }
+    public IReadOnlyList<string> SetAside { get; }
 
     /// <summary>
     /// Reads a list in the form the Public Suffix List is published in.
@@ -69,7 +71,7 @@ internal sealed class PublicSuffixList
         HashSet<string> rules = new(StringComparer.Ordinal);
         HashSet<string> wildcards = new(StringComparer.Ordinal);
         HashSet<string> exceptions = new(StringComparer.Ordinal);
-        int setAside = 0;
+        List<string> setAside = [];
 
         using StreamReader reading = new(list);
 
@@ -95,7 +97,7 @@ internal sealed class PublicSuffixList
             }
             else
             {
-                setAside++;
+                setAside.Add(rule);
             }
         }
 
@@ -103,20 +105,27 @@ internal sealed class PublicSuffixList
             rules.ToFrozenSet(StringComparer.Ordinal),
             wildcards.ToFrozenSet(StringComparer.Ordinal),
             exceptions.ToFrozenSet(StringComparer.Ordinal),
-            setAside);
+            [.. setAside]);
     }
 
     /// <summary>
-    /// Whether a host has an ASCII form the list can judge it by. One with none has no
-    /// registrable domain, and the list answers nothing about it.
+    /// The ASCII form the list judges a name by, which is the form every name it
+    /// compares is in. A name with none has no registrable domain, and the list answers
+    /// nothing about it.
     /// </summary>
-    /// <param name="host">The host.</param>
+    /// <param name="name">The name, a host or an identifier, as it is written.</param>
+    /// <param name="ascii">Its ASCII form, or empty.</param>
     /// <returns>Whether the conversion gives it an ASCII form.</returns>
-    public static bool Reads(string host)
+    /// <exception cref="ArgumentNullException">The name is absent.</exception>
+    public static bool TryAscii(string name, out string ascii)
     {
-        ArgumentNullException.ThrowIfNull(host);
+        ArgumentNullException.ThrowIfNull(name);
 
-        return TryAscii(host, out _);
+        // The conversion lowers what it reads, so the forms compare as they stand. A
+        // name is taken as it is written, without the canonical form a domain lock
+        // compares under, so that a deviation character keeps the label a browser
+        // resolves it to.
+        return CanonicalForm.TryDomainToAscii(name.TrimEnd('.'), out ascii);
     }
 
     /// <summary>
@@ -180,10 +189,4 @@ internal sealed class PublicSuffixList
         TryAscii(host, out string ascii)
             ? ascii.Split('.')
             : throw new ArgumentException("The host has no ASCII form to judge it by.", nameof(host));
-
-    // The conversion lowers what it reads, so the forms compare as they stand. A name
-    // is taken as it is written, without the canonical form a domain lock compares
-    // under, so that a deviation character keeps the label a browser resolves it to.
-    private static bool TryAscii(string name, out string ascii) =>
-        CanonicalForm.TryDomainToAscii(name.TrimEnd('.'), out ascii);
 }

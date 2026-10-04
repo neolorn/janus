@@ -339,6 +339,56 @@ public sealed class RelyingPartyTests
     }
 
     /// <summary>
+    /// AUTH-FACT-010 AC5: an identifier written in ASCII form sits over an origin whose
+    /// host is written in Unicode, and settles as it would with both in ASCII form.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_010_AC5_AnAsciiIdentifierSitsOverAnOriginWrittenInUnicode() =>
+        Assert.Equal(
+            "xn--bcher-kva.de",
+            Settled("xn--bcher-kva.de", ["https://app.bücher.de", "https://BÜCHER.de"]).Id);
+
+    /// <summary>
+    /// AUTH-FACT-010 AC5: an identifier written in Unicode sits over an origin whose
+    /// host is written in ASCII form, and settles as it would with both in ASCII form.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_010_AC5_AUnicodeIdentifierSitsOverAnOriginWrittenInAscii() =>
+        Assert.Equal(
+            "xn--bcher-kva.de",
+            Settled("Bücher.de", ["https://app.xn--bcher-kva.de", "https://id.bücher.de"]).Id);
+
+    /// <summary>
+    /// AUTH-FACT-010 AC5: with no identifier set, origins written in the two forms share
+    /// the parent they would share in ASCII form, and that form is what is derived.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_010_AC5_AnUnsetIdentifierDerivesInAsciiForm()
+    {
+        Assert.Equal(
+            "xn--bcher-kva.de",
+            Settled(string.Empty, ["https://app.bücher.de", "https://id.xn--bcher-kva.de"]).Id);
+        Assert.Equal(
+            "xn--bcher-kva.de",
+            Settled(string.Empty, ["https://app.bücher.de", "https://id.bücher.de"]).Id);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-010 AC5: the form is no way round the comparison, so an identifier in
+    /// either form over an origin of another domain is refused as in ASCII form.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_010_AC5_AnIdentifierOverNoOriginIsRefusedInEitherForm()
+    {
+        Assert.Equal(
+            ErrorCodes.StartupRelyingPartyId,
+            Refusal("bücher.de", ["https://app.xn--bcher-kva.com"]));
+        Assert.Equal(
+            ErrorCodes.StartupRelyingPartyId,
+            Refusal("xn--bcher-kva.de", ["https://app.bucher.de"]));
+    }
+
+    /// <summary>
     /// AUTH-FACT-012 AC2: the labels counted are compared in their ASCII form, so one
     /// name written in Unicode and in its ASCII form counts once.
     /// </summary>
