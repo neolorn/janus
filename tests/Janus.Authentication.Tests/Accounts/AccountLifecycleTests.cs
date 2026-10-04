@@ -526,6 +526,65 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-004 AC18: the notice of a deactivation that a restriction refuses fails
+    /// nothing. The account is deactivated, its sessions ended, the change audited and
+    /// announced, and all of it committed, with the answer it would have had.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC18_ADeactivationWhoseNoticeIsRefusedIsCommittedAsync()
+    {
+        SessionId session = Stepped();
+
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _work.Reset();
+
+        Accepted(await Lifecycle.DeactivateAsync(
+            Acting,
+            session,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Empty(_notifications.Carried);
+        Assert.Equal(AccountState.Suspended, await StateAsync());
+        Assert.Empty(await LiveAsync());
+        Assert.Equal("identity.account.deactivated", Assert.Single(_audit.Recorded).Action.ToString());
+        _ = Assert.Single(_events.Of<AccountSuspended>());
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC18: the notice of a deletion that a restriction refuses fails
+    /// nothing. The grace window begins, the sessions end, the request is audited and
+    /// announced, and all of it is committed, with the answer it would have had.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC18_ADeletionWhoseNoticeIsRefusedIsCommittedAsync()
+    {
+        SessionId session = Stepped();
+
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _work.Reset();
+
+        DateTimeOffset erasesAt = Value(await Lifecycle.DeleteAsync(
+            Acting,
+            session,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(Noon + Settings.AccountDeletionGrace.Default, erasesAt);
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Empty(_notifications.Carried);
+        Assert.Equal(AccountState.Deleting, await StateAsync());
+        Assert.Empty(await LiveAsync());
+        Assert.Equal("identity.deletion.requested", Assert.Single(_audit.Recorded).Action.ToString());
+        _ = Assert.Single(_events.Of<AccountDeletionRequested>());
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC5: a deletion refused under the account's lock, for a suspension
     /// committed since it was first judged, rolls its unit of work back and commits
     /// nothing.

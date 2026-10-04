@@ -159,6 +159,36 @@ public sealed class AppPasswordsTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-004 AC18, REG-MAIL-002: the notice of a creation or a revocation that a
+    /// restriction refuses fails nothing. Each is answered as it would have been and its
+    /// audit record is committed.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC18_AnAppPasswordWhoseNoticeIsRefusedIsAuditedAndCommittedAsync()
+    {
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+
+        IssuedAppPassword issued = Issued(await CreateAsync("Phone", _session));
+
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(
+            (AuditActions.MailCredentialCreated, _person, issued.Id),
+            Assert.Single(_audit.MailCredentials));
+
+        Accepted(await RevokeAsync(issued.Id, _session));
+
+        Assert.False(_work.Open);
+        Assert.Equal(2, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(
+            (AuditActions.MailCredentialRevoked, _person, issued.Id),
+            _audit.MailCredentials[^1]);
+        Assert.Empty(_notifications.Carried);
+    }
+
+    /// <summary>
     /// INT-MAIL-010 AC2: the listing is read from the server every time, so what the
     /// server holds is what is answered, including what the library never saw created.
     /// </summary>

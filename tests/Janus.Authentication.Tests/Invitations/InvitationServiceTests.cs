@@ -1152,6 +1152,73 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-004 AC18: the notice of the corporate address that a restriction
+    /// refuses fails nothing. The acknowledgement attaches the membership, takes the
+    /// address on as the primary and commits, with the answer it would have had.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC18_AnAcknowledgementWhoseNoticeIsRefusedIsCommittedAsync()
+    {
+        _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+
+        string token = _notifications.Mail[^1].Token();
+        SubjectId holder = Holder();
+        _ = _identifiers.Verified(holder, IdentifierKind.Email, Personal);
+        Invitation invitation = _invitations.Held[0];
+
+        _authenticators.Hold(Passkey(holder));
+        Accepted(await OpenAsync(holder, token));
+        _notifications.Sent.Clear();
+        _notifications.Carried.Clear();
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _work.Reset();
+
+        Accepted(await AcknowledgeAsync(holder, invitation.Id));
+
+        HeldIdentifiers held = await _identifiers.HeldAsync(holder, TestContext.Current.CancellationToken);
+        HeldIdentifier corporate = held.OfKind(IdentifierKind.Email).Single(email => email.Canonical == Corporate);
+
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Empty(_notifications.Carried);
+        Assert.True(corporate is { IsVerified: true, IsPrimary: true });
+        Assert.Equal(Staff, Assert.Single(_attachments.Attached).Organization);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC18: the notice of a retired corporate address that a restriction
+    /// refuses fails nothing. The membership ends, the address leaves the account, the
+    /// mailbox is retired and the end is audited and committed, with the answer it would
+    /// have had.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC18_AMembershipEndWhoseNoticeIsRefusedIsCommittedAsync()
+    {
+        (SubjectId holder, IdentifierId personal) = await StaffMemberAsync();
+        Mailbox mailbox = Assert.Single(_mailboxes.Held);
+
+        _clock.Advance(TimeSpan.FromDays(30));
+        _notifications.Sent.Clear();
+        _notifications.Carried.Clear();
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _work.Reset();
+
+        Accepted(await EndAsync(Staff, holder));
+
+        HeldIdentifiers held = await _identifiers.HeldAsync(holder, TestContext.Current.CancellationToken);
+
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Empty(_notifications.Carried);
+        Assert.Equal(personal, Assert.Single(held.OfKind(IdentifierKind.Email)).Id);
+        Assert.False(mailbox.IsHeld);
+        Assert.Equal(AuditActions.MembershipEnded, _audit.Changes[^1].Action);
+        _ = Assert.Single(_ending.Ended);
+    }
+
+    /// <summary>
     /// REG-MAIL-001, REG-IDENT-004, CONV-DESIGN-003 AC6: the corporate address is taken
     /// on under the lock on the account's identifiers, so an address the account
     /// proved while the acknowledgement waited for it is in the set that hears of it.
