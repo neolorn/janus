@@ -433,6 +433,33 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-008 AC4: a set is viewed in the unit of work whose response returns
+    /// it, the second-step enrolment's and the generation's alike, so a set returned
+    /// has the instant, and neither leaves it exported.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AC4_ASetReturnedIsViewedInTheUnitOfWorkThatReturnsItAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+
+        _ = await ConfirmedAsync(subject, session);
+        RecoveryCodeSet brought = (await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!;
+        await PresentedAsync(subject, session);
+        _clock.Advance(TimeSpan.FromMinutes(3));
+        int committed = _work.OutermostCommitted;
+        GeneratedRecoveryCodes generated = Value(await Service.GenerateRecoveryCodesAsync(
+            Authority(subject, session),
+            TestContext.Current.CancellationToken));
+        RecoveryCodeSet regenerated = (await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!;
+
+        Assert.Equal((Noon, null), (brought.ViewedAt, brought.ExportedAt));
+        Assert.Equal((generated.GeneratedAt, null), (regenerated.ViewedAt, regenerated.ExportedAt));
+        Assert.Equal(Noon + TimeSpan.FromMinutes(3), regenerated.ViewedAt);
+        Assert.Equal(committed + 1, _work.OutermostCommitted);
+    }
+
+    /// <summary>
     /// AUTH-FACT-008 AC4 and AUTH-RECOV-006 AC2: the report of a copy, download or
     /// print is recorded on the set the account holds, at the instant it is made.
     /// </summary>
@@ -473,6 +500,77 @@ public sealed class CredentialServiceTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)));
 
         Assert.Null(await _sets.FindAsync(subject, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 AC2: recording an export changes the set's record, so a restricted
+    /// account is refused it with the code the gate refuses a modifying action with,
+    /// before any unit of work begins, and the set stays unexported.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedAccountRecordsNoExportAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        _ = await ConfirmedAsync(subject, session);
+        _restriction.Restrict(subject);
+        int opened = _work.Opened;
+
+        ErrorCode refused = Refused(await Service.MarkRecoveryCodesExportedAsync(
+            AccessContext.Of(subject),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.Restricted, refused);
+        Assert.Equal(opened, _work.Opened);
+        Assert.Null((await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.ExportedAt);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the account committed after the gate step
+    /// and before the first write refuses the report of an export inside its unit of
+    /// work, which rolls back and leaves the set unexported.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesTheExportAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        _ = await ConfirmedAsync(subject, session);
+
+        await RestrictedSinceTheGateStepAsync(
+            subject,
+            async () => Refused(await Service.MarkRecoveryCodesExportedAsync(
+                AccessContext.Of(subject),
+                TestContext.Current.CancellationToken)));
+
+        Assert.Null((await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.ExportedAt);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: the first report of an export commits its write, and a
+    /// report made again, which changes nothing, is a success that wrote nothing and
+    /// leaves its unit of work rolled back with the first instant standing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AnExportReportedAgainWritesNothingAndRollsBackAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        _ = await ConfirmedAsync(subject, session);
+        int committed = _work.OutermostCommitted;
+        int rolledBack = _work.RolledBack;
+
+        Accepted(await Service.MarkRecoveryCodesExportedAsync(
+            AccessContext.Of(subject),
+            TestContext.Current.CancellationToken));
+        _clock.Advance(TimeSpan.FromMinutes(2));
+        Accepted(await Service.MarkRecoveryCodesExportedAsync(
+            AccessContext.Of(subject),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal((committed + 1, rolledBack + 1), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.False(_work.Open);
+        Assert.Equal(Noon, (await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.ExportedAt);
     }
 
     /// <summary>
@@ -746,7 +844,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
         Assert.NotNull(await _passwords.FindAsync(subject, TestContext.Current.CancellationToken));
 
         Assert.Equal(
-            ErrorCodes.EnrolmentTokenInvalid,
+            ErrorCodes.SessionExpired,
             Refused(await Service.BeginGeneratorAsync(
                 CredentialAuthority.Of(opened.Id),
                 "Phone",
@@ -797,7 +895,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
         _clock.Advance(TimeSpan.FromHours(2));
 
         Assert.Equal(
-            ErrorCodes.EnrolmentTokenInvalid,
+            ErrorCodes.SessionExpired,
             Refused(await Service.SetPasswordAsync(
                 CredentialAuthority.Of(opened.Id),
                 Another,
@@ -805,6 +903,120 @@ public sealed class CredentialServiceTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)));
 
         Assert.Null(await _passwords.FindAsync(subject, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-002, D-188: an enrolment session that stands reaches none of the
+    /// operations chapter 09 does not name for it, and each refuses it as a missing
+    /// permission is refused, with nothing of the account changed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_002_TheEnrolmentSessionIsDeniedWhatItDoesNotReachAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        EnrolledCredential generator = await ConfirmedAsync(subject, session);
+        var authority = CredentialAuthority.Of((await OpenedAsync(subject)).Id);
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        ErrorCode[] refused =
+        [
+            Refused(await Service.RemoveAsync(authority, generator.Credential, Source, cancellationToken)),
+            Refused(await Service.UpgradeKeyAsync(authority, generator.Credential, cancellationToken)),
+            Refused(await Service.GenerateRecoveryCodesAsync(authority, cancellationToken)),
+            Refused(await Service.LinkableAsync(authority, Factor.Google, cancellationToken)),
+            Refused(await Service.LinkAsync(
+                authority,
+                Factor.Google,
+                "provider-subject",
+                Label("Google"),
+                Source,
+                cancellationToken)),
+            Refused(await Service.UnlinkAsync(authority, Factor.Google, Source, cancellationToken)),
+        ];
+
+        Assert.All(refused, code => Assert.Equal(ErrorCodes.Denied, code));
+        Assert.NotNull(await _authenticators.FindAsync(generator.Credential, cancellationToken));
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-002, D-188: an enrolment session that has ended is a session that
+    /// has ended wherever it is presented, at the operations it reached and at those
+    /// it never did.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_002_AnEndedEnrolmentSessionIsExpiredWhereverPresentedAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        EnrolledCredential generator = await ConfirmedAsync(subject, session);
+        EnrolmentSession opened = await OpenedAsync(subject);
+        var authority = CredentialAuthority.Of(opened.Id);
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        _clock.Advance(TimeSpan.FromHours(2));
+
+        ErrorCode[] refused =
+        [
+            Refused(await Service.SetPasswordAsync(authority, Another, Source, cancellationToken)),
+            Refused(await Service.BeginKeyAsync(authority, Factor.Passkey, cancellationToken)),
+            Refused(await Service.BeginGeneratorAsync(authority, "Phone", cancellationToken)),
+            Refused(await Service.MarkRecoveryCodesExportedAsync(opened.Id, cancellationToken)),
+            Refused(await Service.RemoveAsync(authority, generator.Credential, Source, cancellationToken)),
+            Refused(await Service.UpgradeKeyAsync(authority, generator.Credential, cancellationToken)),
+            Refused(await Service.GenerateRecoveryCodesAsync(authority, cancellationToken)),
+            Refused(await Service.LinkableAsync(authority, Factor.Google, cancellationToken)),
+            Refused(await Service.UnlinkAsync(authority, Factor.Google, Source, cancellationToken)),
+        ];
+
+        Assert.All(refused, code => Assert.Equal(ErrorCodes.SessionExpired, code));
+        Assert.Null((await _sets.FindAsync(subject, cancellationToken))!.ExportedAt);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-008 AC4, D-188: the report of an export is one of the operations an
+    /// enrolment session reaches, and it sets the export against the set of the
+    /// account the session was opened for.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AC4_TheEnrolmentSessionReportsAnExportAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        _ = await ConfirmedAsync(subject, session);
+        EnrolmentSession opened = await OpenedAsync(subject);
+
+        Accepted(await Service.MarkRecoveryCodesExportedAsync(
+            opened.Id,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            _clock.GetUtcNow(),
+            (await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.ExportedAt);
+        Assert.NotNull(await Enrolments.FindAsync(opened.Id, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 AC2, D-188: the gate is asked for the restriction when an
+    /// enrolment session reports an export too, so a restricted account's set stays
+    /// unexported.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedAccountsEnrolmentSessionRecordsNoExportAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        _ = await ConfirmedAsync(subject, session);
+        EnrolmentSession opened = await OpenedAsync(subject);
+        _restriction.Restrict(subject);
+
+        ErrorCode refused = Refused(await Service.MarkRecoveryCodesExportedAsync(
+            opened.Id,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.Restricted, refused);
+        Assert.Null((await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.ExportedAt);
     }
 
     /// <summary>

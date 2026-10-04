@@ -315,6 +315,51 @@ public sealed class RelyingPartyTests
             ErrorCodes.StartupRelyingPartyId,
             Refusal("example.com", ["https://app.example.com", "/signin/callback"]));
 
+    /// <summary>
+    /// AUTH-FACT-010 AC1: an origin whose host the library's conversion gives no ASCII
+    /// form has no registrable domain for an identifier to sit over, and an identifier
+    /// with none sits over nothing; each is refused with the same code and never a fault.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_010_AC1_ANameWithNoAsciiFormIsRefused()
+    {
+        Assert.Equal(
+            ErrorCodes.StartupRelyingPartyId,
+            Refusal("example.com", ["https://app.example.com", "https://my_shop.example.com"]));
+        Assert.Equal(
+            ErrorCodes.StartupRelyingPartyId,
+            Refusal("ab--c.com", ["https://app.ab--c.com"]));
+        Assert.Equal(
+            ErrorCodes.StartupRelyingPartyId,
+            Refused(() => RelyingParty.Of(
+                "example.com",
+                ["https://app.example.com"],
+                ["https://my_shop.example.net"],
+                Algorithms)));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-012 AC2: the labels counted are compared in their ASCII form, so one
+    /// name written in Unicode and in its ASCII form counts once.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_012_AC2_ALabelWrittenInTwoFormsCountsOnce()
+    {
+        var party = RelyingParty.Of(
+            "example.com",
+            ["https://app.example.com"],
+            [
+                "https://bücher.de",
+                "https://xn--bcher-kva.com",
+                "https://one.net",
+                "https://two.net",
+                "https://three.net",
+            ],
+            Algorithms);
+
+        Assert.Equal(5, party.RelatedOrigins.Count);
+    }
+
     private static RelyingParty Settled(string identifier, IReadOnlyList<string> origins) =>
         RelyingParty.Of(identifier, origins, [], Algorithms);
 

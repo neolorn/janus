@@ -24,7 +24,7 @@ internal sealed class UnitOfWorkInterleaved(IUnitOfWork inner, Func<Cancellation
     public bool Open { get; private set; }
 
     /// <inheritdoc/>
-    public async ValueTask<Result> BeginAsync(CancellationToken cancellationToken)
+    public async ValueTask<Result<bool>> BeginAsync(CancellationToken cancellationToken)
     {
         if (!_interleaved)
         {
@@ -33,9 +33,9 @@ internal sealed class UnitOfWorkInterleaved(IUnitOfWork inner, Func<Cancellation
             await meanwhile(cancellationToken).ConfigureAwait(false);
         }
 
-        Result begun = await inner.BeginAsync(cancellationToken).ConfigureAwait(false);
+        Result<bool> begun = await inner.BeginAsync(cancellationToken).ConfigureAwait(false);
 
-        Open = begun.Match(() => true, _ => Open);
+        Open = begun.Match(_ => true, _ => Open);
 
         return begun;
     }

@@ -10,6 +10,41 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- An enrolment session reaches the routes `POST /enrol/begin` lists and no other
+  credential route: `DELETE /account/credentials/{id}` and
+  `POST /account/credentials/{id}/upgrade` refuse it 403 `authz.denied`, as do
+  `ICredentials.RemoveAsync`, `UpgradeKeyAsync`, `GenerateRecoveryCodesAsync`,
+  `LinkableAsync` and `UnlinkAsync`. `POST /account/recoverycodes/exported` now
+  admits it, through the new overload
+  `ICredentials.MarkRecoveryCodesExportedAsync(EnrolmentSessionId, CancellationToken)`,
+  and asks the gate for the restriction there too. An enrolment session that has
+  ended is answered 401 `auth.session.expired` with no details wherever it is
+  presented, where the credential and identifier routes answered 422
+  `auth.enrolment.tokeninvalid`; that code is now the link token's at
+  `POST /enrol/begin` alone.
+- `POST /account/recoverycodes/exported` and
+  `ICredentials.MarkRecoveryCodesExportedAsync` refuse a restricted account 403
+  `authz.restricted`, as every other change to its credentials is refused; no step-up
+  is asked. A report made again leaves the first `exportedAt` standing.
+- A recovery-code set carries `viewedAt` from the moment its codes are returned:
+  `POST /account/recoverycodes` and the enrolment of a second step beside a password
+  write it with the set, where it stayed unset until an export was reported.
+- An alert and a loss report's notification count as carried only where the one
+  attempt that follows their commit took them. One that attempt did not take counts
+  as not carried whatever later becomes of its row: the alert falls to its second
+  channel and the invalidation waits, also where the row was removed uncarried or a
+  later pass carried it.
+- A notice that a restriction refuses no longer spends its address's
+  `abuse.nonexistent.window`: the window is marked only where the notice's send is
+  admitted, for the notice to the holder of an address or number someone tried to
+  register or add as for the answer to an address no account holds, so the next ask
+  inside the window whose send is admitted tells the address.
+- `IConsents.GrantAsync` that finds the consent recorded meanwhile, and so writes
+  nothing, rolls its transaction back where it opened it and commits its level where it
+  joined a unit of work the caller opened, so a caller's own unit of work is never
+  marked by it.
+- `IUnitOfWork.BeginAsync` answers `Result<bool>`: whether the level it opened is the
+  outermost, or one that joined a unit of work another operation opened.
 - The `expiry-sweep` job removes an identifier's add, and a replace whose swap has not
   applied, once every verification-code record it holds is spent or past
   `code.verification.lifetime`: the new address's code and, where the old address must
@@ -37,6 +72,30 @@ against the public contract of LIB-API-001.
   where it applied the change for as long as the replace was pending. A code or a
   confirmation outstanding on an add or a replace when this version is deployed no
   longer answers: the add is asked again, and the replace is abandoned and made again.
+- A removal of an identifier, and the swap of a replace, replaces a removal record of
+  the same kind and value whose undo window has run out and that the `expiry-sweep` job
+  has not yet taken, where the second removal of such a value was a fault until the
+  sweep ran.
+- `POST /account/identifiers/{id}/undo` counts the account's verified identifiers of
+  the kind alone: it answers 409 `identity.identifier.maximum` only where they fill
+  `identifiers.<kind>.max`, and a pending add or an unverified identifier never refuses
+  it, where an undo into a full kind was a fault. The right code or a press of the
+  link of a pending add, at `POST /account/identifiers/{id}/verify`, answers 409
+  `identity.identifier.maximum` and writes nothing where the account's verified
+  identifiers already fill the kind; the add stays listed until it is swept or
+  abandoned.
+- `POST /account/identifiers/{id}/verify` counts and throttles its codes and presses
+  as `POST /register/verify/{id}` does. A refused code is counted against the request's
+  source and the identifier, an expired or capped one included, and a further code is
+  answered 429 `auth.throttled` with `retryAt` while that delay stands. Every press is
+  first held to the delay of its source. A pressed token that opens nothing (swept,
+  abandoned, settled or never issued) answers 422 `auth.code.expired`, where it
+  answered `auth.code.invalid`, and is counted against the source alone; one merely
+  opened counts nothing.
+- The expiry sweep ends pending identifier verifications in a transaction: it locks
+  its candidates, passing over any row another transaction holds, and judges each
+  again before it deletes, so a resend of an add's code, which holds the pending
+  verification's row while it writes, keeps its record.
 - `ICredentials.MarkRecoveryCodesExportedAsync` records that the person copied,
   downloaded or printed the recovery-code set the account holds, and
   `POST /account/recoverycodes/exported` maps it. An account holding no set is refused
@@ -93,6 +152,21 @@ against the public contract of LIB-API-001.
   answered 403 `auth.stepup.required` with `details` computed without the entry against
   the strictest of the gates of the policy in force, field by field, the step-up naming
   no action; `outcome` is `report-loss` or `enrol` where no combination is left.
+- A sign-in code presented right whose sign-in a domain lock then refuses is spent in the
+  one transaction that refuses it: the refusal `identity.identifier.domainnotallowed`
+  counts no failure and records no failed authentication, where it used to be counted
+  and recorded in a second transaction. A right code sent to an address the account has
+  given up since commits its spend with the refusal's record and counts.
+- A fault of the library's own while a factor, a sign-in code or a new-device code is
+  being judged (a setting that does not read, the database failing) is no longer counted
+  against the delay or recorded as a failed authentication, at a sign-in and at a
+  step-up alike: the request answers `system.fault` and the person is not held for it.
+- A `phoneCode` code asked for at `POST /auth/step-up`, where the number's signal answers
+  `risk`, is answered as `POST /auth/factor` answers it: 200 `factorRequired` with
+  `required` naming the factors of the combinations left without the entry, judged
+  against the strictest of the policy's gates; 200 with `required` empty where the
+  session already meets that gate, which used to be 202; and 403 `auth.stepup.required`
+  only where no combination is left, with `outcome` `report-loss`, `enrol` or `pending`.
 - Every event raised with the access context of a person who acted now carries
   `Effective` beside `Actor`, each as the context gives it: `AccountSuspended`,
   `AccountReactivated`, `AccountDeletionRequested` and `AccountDeletionCancelled` raised
@@ -147,12 +221,13 @@ against the public contract of LIB-API-001.
   and the row's outcome once, each only under the claim. A consumer still running when
   `outbox.claim.timeout` has passed is abandoned as one that did not take the event.
   The `events` table gains `claimed_until` (migration `ClaimAnEventBeforeItIsOffered`).
-- A message's row is claimed only where its next attempt is due, by the attempt that
-  follows the commit as by the `sends` job, so a row one attempt released and
-  rescheduled is not carried early by another. A message is due from its admission: it
-  is no longer held back from the job for `outbox.retry.initial`, and where the job
-  reaches a row before the attempt that follows the commit, the claim decides which of
-  them carries it.
+- A message's row is claimed only where its next attempt is due, so a row one attempt
+  released and rescheduled is not carried early by another. A new row whose immediate
+  attempt follows the commit is written due `outbox.retry.initial` after its admission,
+  with no jitter, and that attempt claims it whatever its due instant, so the `sends`
+  job takes a new row only once its immediate attempt has had its chance. A message
+  answered before any transport is called (a sign-in link, an email code, a recovery
+  ask) has no such attempt and is due to the job at once.
 - A message carried again that the restrictions or the gateway floor refuse fails for
   good: its row is removed without being carried, its count and the credit it spent are
   given back, and no alert is raised. It no longer waits as a failed attempt does.
@@ -178,6 +253,16 @@ against the public contract of LIB-API-001.
   UseSTD3ASCIIRules, CheckHyphens, CheckBidi, CheckJoiners and VerifyDnsLength set and
   invalid Punycode refused, in lower case. The form does not depend on the ICU of the
   machine.
+- The Public Suffix List's rules, and the hosts of `webauthn.origins` and
+  `webauthn.relatedorigins` and the identifier of `webauthn.rpid` judged against them,
+  are compared in that ASCII form and no longer in the machine's, so a deployment's
+  registrable domain is the same on every machine. A rule of the list the conversion
+  refuses is set aside when the list is read. An origin whose host, or an identifier,
+  the conversion refuses (an underscore, a hyphen first or last or in the third and
+  fourth places, an empty label) stops the start with `model.startup.rpid`, where the
+  machine's mapping admitted some of them. The labels a related-origins allowlist is
+  counted by are compared in their ASCII form, so one name written in Unicode and in
+  its ASCII form counts once.
 - A refused factor's record, the delay's counts and a trusted device's failure are
   committed in one transaction, and none stands where one cannot be written. A wrong
   sign-in code or new-device code commits its count on the code, or the code's removal
@@ -368,6 +453,22 @@ against the public contract of LIB-API-001.
   and nothing else: no client is registered for it and it holds no secret.
   `IProviderProbes` in `Janus.Core` is the operation it asks through, called in process
   only.
+- `ConformanceSuite.TruthTableAsync` takes a `DeploymentFactory`, a delegate the host
+  supplies that builds and starts its composition with the `IAssuranceProvider` it is
+  given registered, or with none where it is given none, and runs seven step-up
+  scenarios through it: `stepup-met`, `stepup-level-unmet`,
+  `stepup-phishingresistance-unmet`, `stepup-age-unmet`, `stepup-instant-future`,
+  `stepup-provider-failed` and `stepup-provider-absent`. The factory is called once for
+  each step-up case, with a provider of the suite's own that gives the scenario's report
+  or fails to give one, and with none for `stepup-provider-absent`; the composition it
+  answers is disposed once the case is judged, and every other case runs on the
+  container passed. A step-up case agrees where the check answers the gate's outcome
+  and the filter answers the same, and its finding names the action's gate under
+  `details.gate`. A `TruthTableCase` of a step-up scenario states `Allowed` true for
+  `stepup-met` and false for the rest; one stating otherwise throws where it is
+  constructed, and a table whose step-up case names a permission bound to no gate is
+  refused before anything is written. The members of a `TruthTableCase` are set at
+  construction alone.
 - `IResources` in `Janus.Core`: a host registers each record it creates, many at once
   for an import, and moves one, inside its own unit of work, and the ancestry the
   permission filter reads is written in the same transaction. A record is placed only in
@@ -788,6 +889,15 @@ against the public contract of LIB-API-001.
   its source and counted toward `alerting.callback.threshold`. Claimed events and issued
   references are kept, as hashes, in the `callback_events` and `callback_references`
   tables, a claim with when it was taken and when it settled.
+- A machine route that refuses a request for carrying the session cookie answers as its
+  protocol refuses a bad request, where it answered 403 `authz.denied`. A callback, the
+  delivery report, the two provider-event routes and the host's own included, is held
+  to `integration.callback.ratelimit` first and then refused 422
+  `integration.callback.rejected` with no `Retry-After`, recorded against its source and
+  counted toward `alerting.callback.threshold`; the Google route answers it so too, not
+  in the RFC 8935 shape. `POST /oidc/par`, `POST /oidc/token` and `GET /oidc/userinfo`
+  answer 400 with `error` `invalid_request` alone, before anything the request presents
+  is read.
 - `ICallbackReferences.IssueAsync` issues the correlation reference an unsigned callback
   carries: 128 random bits in base64url, of which only the hash is kept.
 - `GET /callbacks/sms/dlr` takes the SMS gateway's delivery report on the machine

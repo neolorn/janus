@@ -31,12 +31,16 @@ internal interface IFollowedSend
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Whether every one of the messages an undertaking wrote has been carried, asked
-    /// once the unit of work that undertook them has committed.
+    /// Whether every one of the messages an undertaking wrote was carried by its
+    /// immediate attempt, asked of the send that undertook them once their unit of work
+    /// has committed.
     /// </summary>
     /// <param name="admitted">What the undertaking wrote.</param>
     /// <param name="cancellationToken">Abandons the read.</param>
-    /// <returns>Whether none of them still waits in the outbox.</returns>
+    /// <returns>
+    /// Whether the immediate attempt took every one of them. One it did not take counts
+    /// as not carried, whatever later becomes of its row.
+    /// </returns>
     ValueTask<bool> CarriedAsync(
         IReadOnlyList<SendDeliveryId> admitted,
         CancellationToken cancellationToken);

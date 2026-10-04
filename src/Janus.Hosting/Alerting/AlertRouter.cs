@@ -62,7 +62,7 @@ internal sealed class AlertRouter(
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<AlertDelivery>(notBegun);
         }
@@ -299,7 +299,7 @@ internal sealed class AlertRouter(
         CancellationToken cancellationToken)
     {
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         Result<IReadOnlyList<SendDeliveryId>> undertaken = await sending
             .AdmitAsync(

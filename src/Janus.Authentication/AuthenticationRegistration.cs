@@ -193,6 +193,7 @@ internal static class AuthenticationRegistration
         services.AddScoped<RedirectValidation>();
         services.AddScoped<OidcService>();
         services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
+        services.AddScoped<ITokenMinting>(provider => provider.GetRequiredService<OidcService>());
 
         // IDN-ATTR-002, OPS-CFG-003: a policy that shows photos is refused where the
         // deployment declared no codec, so what changes a policy takes the codec as it

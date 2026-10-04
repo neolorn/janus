@@ -456,7 +456,7 @@ public sealed class OutboxStoreTests(DatabaseFixture database)
         await using StoreContext confirming = database.Context();
         await using var work = new UnitOfWork(confirming);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         bool confirmed = await Store(confirming, Noon).ConfirmAsync(claim, subscriber, at, TestContext.Current.CancellationToken);
 
@@ -475,7 +475,7 @@ public sealed class OutboxStoreTests(DatabaseFixture database)
 
         _ = await store.FindAsync(delivery, TestContext.Current.CancellationToken);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         Delivery held = Assert.IsType<Delivery>(
             await store.FindForUpdateAsync(delivery, TestContext.Current.CancellationToken));

@@ -104,10 +104,11 @@ internal sealed class SendOutboxInMemory : ISendOutbox
         SendDeliveryId delivery,
         DateTimeOffset now,
         TimeSpan timeout,
+        bool immediate,
         CancellationToken cancellationToken)
     {
         if (!_held.TryGetValue(delivery, out SendDelivery? held)
-            || held.NextAttemptAt > now
+            || (held.NextAttemptAt > now && !(immediate && held.Attempts is 0))
             || (_claims.TryGetValue(delivery, out DateTimeOffset until) && until > now))
         {
             return ValueTask.FromResult<SendClaim?>(null);
@@ -131,10 +132,6 @@ internal sealed class SendOutboxInMemory : ISendOutbox
         _erased.Contains(delivery)
             ? throw new CryptographicException("The key has been erased.")
             : ValueTask.FromResult(_held.TryGetValue(delivery, out SendDelivery? held) ? held : null);
-
-    /// <inheritdoc/>
-    public ValueTask<bool> WaitsAsync(SendDeliveryId delivery, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_held.ContainsKey(delivery));
 
     /// <inheritdoc/>
     public ValueTask<byte[]?> ErasedAsync(SendDeliveryId delivery, CancellationToken cancellationToken) =>

@@ -195,7 +195,7 @@ typed a capital.
 | `deleting` | Deletion requested, grace window (`account.deletion.grace`, default 30 days) running — **cancellable until it elapses** | No |
 | `deleted` | Personal data removed or key-destroyed, anonymised record retained | No |
 
-*Source: D-006, D-037, D-026.1, D-113, D-146, D-166, D-183, D-188*
+*Source: D-006, D-037, D-026.1, D-113, D-146, D-166, D-183, D-188, D-189*
 
 Entering `deleting` is the customer's exercise of the erasure right (PRIV-RIGHT-001);
 no separate privacy request is created for it. There is no `pending` state: an account
@@ -216,7 +216,9 @@ the sign-in the table grants (D-166). A restriction the person asked for does no
 them off from their mail: a mailbox is owed `enabled` while its holder is `active` or
 `restricted` (INT-MAIL-006), and a `restricted` account keeps its app passwords but
 cannot create one (D-166); recording that its recovery codes were exported changes their
-record, so it is refused like any other change (D-188).
+record, so it is refused like any other change (D-188), save the report that completes
+an enrolment session, which is admitted as the credential it completes is
+(AUTH-RECOV-006, D-189).
 
 **An operation the state does not admit (D-166).** An operation that does not apply to
 the state an account is in SHALL be refused with `identity.account.stateconflict` (409),
@@ -233,9 +235,10 @@ API-CONV-003).
 2. A `restricted` account signs in by any factor its policy allows, reads its own data
    and exercises data subject rights; every modifying action it asks of the gate, every
    change to its identifiers, credentials, profile and preferences (REG-ACCT-001) and
-   every invitation acknowledgement is refused with `authz.restricted`
-   (AUTHZ-GATE-006). A credential set by recovery, or enrolled where a policy hold
-   (AUTH-FACT-017) stops its sign-in, is admitted.
+   every invitation acknowledgement is refused with `authz.restricted` (AUTHZ-GATE-006).
+   A credential set by recovery, or enrolled where a policy hold (AUTH-FACT-017) stops
+   its sign-in, is admitted, and so is the report of a recovery-code export that
+   completes an enrolment session.
 3. Transitioning to `deleted` leaves the subject identifier resolvable and removes
    personal attributes.
 4. `deleting` begun by `self` or `oob-request` is cancellable throughout its window,

@@ -17,8 +17,8 @@ namespace Janus.Authorization;
 internal static class AuthorizationRegistration
 {
     /// <summary>
-    /// Registers the model built from the host's declaration, what the gate reads, and
-    /// the services of the grant, role, group and resource operations.
+    /// Registers the model built from the host's declaration, the gate and what it
+    /// reads, and the services of the grant, role, group and resource operations.
     /// </summary>
     /// <param name="services">The host's collection.</param>
     /// <param name="declaration">What the host declared about its own domain.</param>
@@ -72,6 +72,14 @@ internal static class AuthorizationRegistration
         services.AddScoped<ReadVolume>();
         services.AddScoped<IReadVolume>(provider => provider.GetRequiredService<ReadVolume>());
         services.AddScoped<AdministrativeScope>();
+
+        // LIB-SEAM-001 AC1: what evaluates a permission is named here and nowhere else
+        // outside its own file, so each contract it answers resolves the one instance
+        // of the scope.
+        services.AddScoped<AccessGate>();
+        services.AddScoped<IAccessGate>(provider => provider.GetRequiredService<AccessGate>());
+        services.AddScoped<ISettingsChangeGate>(provider => provider.GetRequiredService<AccessGate>());
+        services.AddScoped<IUnscopedRefusal>(provider => provider.GetRequiredService<AccessGate>());
         services.AddScoped<IGrants, GrantService>();
         services.AddScoped<IRoles, RoleService>();
         services.AddScoped<IGroups, GroupService>();

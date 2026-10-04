@@ -454,7 +454,7 @@ subtle failure.
 **BFF-MACH-001** — A second pipeline profile SHALL exist for **non-browser traffic**,
 carrying no session and no CSRF protection.
 
-*Source: D-070, D-166, D-188*
+*Source: D-070, D-166, D-188, D-189*
 
 A protocol client calling the token endpoint, the BFFs pushing their sign-on requests
 and exchanging the codes (BFF-SESS-006), the SMS gateway calling its delivery-report
@@ -468,8 +468,9 @@ day one.
 it is mounted**, not from a flag or attribute. A developer cannot accidentally place a
 browser endpoint on this profile; it is a deliberate act. A machine route that refuses a
 request for carrying the session cookie answers as its protocol refuses a bad request: a
-callback 422 `integration.callback.rejected`, counted as a rejection (`09` section 10);
-an OIDC route its protocol error `invalid_request` (D-188).
+callback, once the rate limit admits it, 422 `integration.callback.rejected`, counted as
+a rejection (`09` section 10); an OIDC route its protocol error `invalid_request`
+(D-188, D-189).
 
 **No source rate limit of its own.** The profile has no stage 4 (BFF-ORDER-001); each
 machine endpoint carries its own limit. A callback is admitted
@@ -482,11 +483,11 @@ volumetric flood is the reverse proxy's to absorb, not the library's.
 **Acceptance criteria**
 1. A browser endpoint cannot be moved to this profile by configuration or attribute.
 2. Machine endpoints reject browser-originated requests carrying a session cookie (a
-   callback 422 `integration.callback.rejected`, an OIDC route `invalid_request`,
-   D-188), **except the break-glass endpoint**, which is reached from a browser and
-   SHALL ignore any cookie present rather than refusing. Otherwise a stale cookie for
-   the domain would produce an inexplicable refusal, during an emergency, for the
-   system's one non-technical user. The provider return
+   callback, once the rate limit admits it, 422 `integration.callback.rejected`, an OIDC
+   route `invalid_request`, D-188, D-189), **except the break-glass endpoint**, which is
+   reached from a browser and SHALL ignore any cookie present rather than refusing.
+   Otherwise a stale cookie for the domain would produce an inexplicable refusal, during
+   an emergency, for the system's one non-technical user. The provider return
    `/callbacks/providers/{provider}/return` likewise ignores any cookie, and only
    re-addresses the browser by `303` to its browser-profile continuation.
 3. The token endpoint and every callback authenticate successfully.
@@ -505,17 +506,18 @@ SHALL be applied.
 | Idempotency | Keyed on the provider's event identifier |
 | Secret | From the secrets manager, rotatable with an overlap window |
 
-**The mount.** A host mounts each of its own callbacks with `UseCallback(path, callback)`
-before `UseBrowserProfile`, at a path it chooses; the callback is an `ISignedCallback` or
-an `IUnsignedCallback`, and nothing a host passes turns a check off. The machine profile
-runs, in order: the rate limit per source, the published ranges where declared, then for
-a signed callback the signature, the window where the scheme carries an instant,
-verification under the current secret and, for 24 hours after a rotation, the previous
-one, and the event claim; the host's route runs last. A signed callback a host mounts is
-a keyed-hash (HMAC) scheme under the hash the provider publishes; a provider that signs
-with a public key is mounted as unsigned and confirmed through its API (BFF-MACH-003).
-The social providers' security events, the library's own, are verified under the
-provider's published keys (IDN-LIFE-012a).
+**The mount.** A host mounts each of its own callbacks with
+`UseCallback(path, callback)` before `UseBrowserProfile`, at a path it chooses; the
+callback is an `ISignedCallback` or an `IUnsignedCallback`, and nothing a host passes
+turns a check off. The machine profile runs, in order: the rate limit per source, then
+the refusal of a request carrying the session cookie (BFF-MACH-001, D-189), the
+published ranges where declared, then for a signed callback the signature, the window
+where the scheme carries an instant, verification under the current secret and, for 24
+hours after a rotation, the previous one, and the event claim; the host's route runs
+last. A signed callback a host mounts is a keyed-hash (HMAC) scheme under the hash the
+provider publishes; a provider that signs with a public key is mounted as unsigned and
+confirmed through its API (BFF-MACH-003). The social providers' security events, the
+library's own, are verified under the provider's published keys (IDN-LIFE-012a).
 
 **Values (D-153).** A callback signing secret rotates with a 24 hour overlap during which
 both secrets verify. A delivery whose event was carried is answered 200 without reaching
@@ -529,7 +531,7 @@ refusal is `integration.callback.rejected`: 429 with `Retry-After` and `details.
 where `integration.callback.ratelimit` refused the request, 422 for every other cause
 (`09` section 10 states the social providers' own answers).
 
-*Source: D-070, D-166*
+*Source: D-070, D-166, D-189*
 
 Signature verification is the accepted baseline for webhook security and is not
 optional where available. Parsing before verification breaks it — re-serialised JSON
@@ -804,7 +806,7 @@ reads or changes the account's state.
 | 2 | Fetch Metadata resource isolation | Cheapest rejection; no session lookup needed |
 | 3 | Origin validation | Same — cheap, no state |
 | 4 | Source-based rate limiting | Before any expensive work, including session lookup |
-| 5 | Session resolution | Identity established. A cookie that no longer resolves is cleared, and the request continues as one that carried none (D-162) |
+| 5 | Session resolution | Identity established. A cookie that no longer resolves is cleared, and the request continues as one that carried none (D-162). An enrolment session is resolved only on the routes `POST /enrol/begin` lists; elsewhere the request continues as one that carried none, its cookie kept (`09`, D-189) |
 | 6 | CSRF synchronizer token validation | Requires the session; must precede any state change |
 | 7 | Account-based throttling (AUTH-ABUSE-001, AUTH-RECOV-002) | Requires the account the request names, which only the operation reads |
 | 8 | Assurance and step-up gating | Requires the session's assurance properties. An endpoint that requires a session refuses a request stage 5 left without one: 401 `auth.session.expired`, with `details.reauthenticate` where a sign-in session ended (BFF-STEP-001 AC3), the code alone where none was held or a registration or enrolment session ended (D-186, D-188) |
@@ -820,7 +822,7 @@ in its own memory, so a deployment of several instances sets both keys to its sh
 the limit it wants. A source or /48 already over its limit is refused without reading
 configuration or any store, and without a log line for each refused request.
 
-*Source: D-052, D-053, D-162, D-166, D-188*
+*Source: D-052, D-053, D-162, D-166, D-188, D-189*
 
 **Throttling is two stages, not one.** Source-based limiting must precede session
 lookup to protect against resource exhaustion; account-based limiting cannot, because

@@ -86,7 +86,7 @@ internal sealed class ExportService(
             await SectionsAsync(subject, cancellationToken).ConfigureAwait(false));
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<SubjectExport>(notBegun);
         }

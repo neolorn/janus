@@ -110,11 +110,11 @@ as the query member `error` (BFF-ERR-001) and is rendered from its code the same
 the original request**, without requiring the person to re-enter what they had already
 provided. An expired session SHALL NOT redirect the person to a sign-in page. A 401 with
 no `details` means no session was held, and is FE-API-006's, save on a registration
-request, where it means the registration session ended (FE-REG-005), and on a request of
-an enrolment session (`09` `POST /enrol/begin`), where it means that session ended and
-the person needs a new link (D-188).
+request, where it means the registration session ended (FE-REG-005), and on a request an
+enrolment session makes on its routes (`09` `POST /enrol/begin`), where it means that
+session ended and the person needs a new link (D-188, D-189).
 
-*Source: BFF-STEP-001, AUTH-STEP-001, AUTH-SESS-005, D-123, D-166, D-186, D-188*
+*Source: BFF-STEP-001, AUTH-STEP-001, AUTH-SESS-005, D-123, D-166, D-186, D-188, D-189*
 
 The BFF rejects rather than redirecting mid-request. Recovering is the frontend's
 job. For an expiry, `details.reauthenticate` is `single-factor` or `full`, and the
@@ -191,12 +191,12 @@ exceptions to the content rule).
 **FE-API-006** — A frontend that finds no per-app session SHALL navigate the browser to
 `GET /auth/signon?returnTo=<route>`, `<route>` being the path of its own route the
 person was on. It finds none where `GET /auth/session` answers that no session is held,
-or where any request other than a registration request (FE-REG-005) or an enrolment
-session's (FE-API-004, D-188) is refused 401 with no `details` (BFF-ORDER-001 stage 8).
-A route the browser was returned to with `error` (FE-API-003) SHALL render the refusal
-and SHALL NOT navigate to the sign-on by itself.
+or where any request other than a registration request (FE-REG-005) or one an enrolment
+session makes on its routes (FE-API-004, D-188, D-189) is refused 401 with no `details`
+(BFF-ORDER-001 stage 8). A route the browser was returned to with `error` (FE-API-003)
+SHALL render the refusal and SHALL NOT navigate to the sign-on by itself.
 
-*Source: BFF-SESS-006, BFF-ORDER-001, BFF-ERR-001, D-166, D-186, D-188*
+*Source: BFF-SESS-006, BFF-ORDER-001, BFF-ERR-001, D-166, D-186, D-188, D-189*
 
 The sign-on is the library's (BFF-SESS-006); the frontend only starts it, because only
 the frontend knows the route the person meant to reach.
@@ -789,10 +789,12 @@ until a password exists** on the account. `phoneCode` SHALL be shown with its
 **less-secure flag** wherever it is listed. **Recovery codes** SHALL be shown **once**
 with copy, download and print, and a **confirm-saved** control SHALL gate continuation
 (AUTH-RECOV-006); a copy, download or print SHALL be reported at
-`POST /account/recoverycodes/exported`, which sets `exportedAt` (AUTH-FACT-008).
+`POST /account/recoverycodes/exported`, which sets `exportedAt` (AUTH-FACT-008), save in
+an enrolment session, where the confirm-saved control alone reports the export, once,
+since that report ends the session (AUTH-RECOV-006, D-189).
 
 *Source: D-146; AUTH-FACT-002b, AUTH-FACT-001, AUTH-RECOV-006, AUTH-FACT-008, D-162,
-D-166*
+D-166, D-189*
 
 The two dialogs are the one place the frontend chooses between a credential that signs
 in and one that is a second factor; the server cannot make that choice for it. Where
@@ -814,7 +816,8 @@ the passkey dialog and the frontend does not pre-empt it.
 6. Recovery codes are shown once with copy, download and print; the flow does not
    continue until the confirm-saved control is used; the codes are not shown again
    except by regeneration; a copy, download or print calls
-   `POST /account/recoverycodes/exported`.
+   `POST /account/recoverycodes/exported`, save in an enrolment session, where the
+   confirm-saved control alone calls it, once.
 
 ---
 

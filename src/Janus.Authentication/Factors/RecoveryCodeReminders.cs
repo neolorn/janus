@@ -133,7 +133,7 @@ internal sealed class RecoveryCodeReminders(
         }
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         (int reached, int told) = await TellAsync(subject, cancellationToken).ConfigureAwait(false);
 

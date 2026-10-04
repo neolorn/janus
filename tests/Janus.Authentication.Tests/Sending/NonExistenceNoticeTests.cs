@@ -85,6 +85,25 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-003 AC4: a notice whose send a restriction refused spends no window,
+    /// and the next ask inside it whose send is admitted tells the address.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_003_AC4_ANoticeARestrictionRefusedSpendsNoWindowAsync()
+    {
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+
+        Result refused = await AnswerAsync(Address("nobody@example.test"), unheld: true);
+        _notifications.Refusal = null;
+        _clock.Advance(TimeSpan.FromMinutes(30));
+        bool told = await ToldAsync("nobody@example.test");
+
+        Assert.Equal(ErrorCodes.RestrictionExceeded, refused.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.True(told);
+        Assert.Equal(Noon.AddMinutes(30), Assert.Single(_notices.Told).At);
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-003 AC5: more of these than the deployment admits in an hour
     /// raises the enumeration-probe alert.
     /// </summary>

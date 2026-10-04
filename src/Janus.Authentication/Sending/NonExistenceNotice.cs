@@ -129,7 +129,7 @@ internal sealed class NonExistenceNotice(
             RecipientLanguage.Found(language, languages));
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -142,11 +142,11 @@ internal sealed class NonExistenceNotice(
             // two asks at once tell it once.
             await ledger.HoldAsync(destination.Canonical, cancellationToken).ConfigureAwait(false);
 
-            if (await ledger
-                .FirstAsync(destination.Canonical, now, window, cancellationToken)
+            if (!await ledger
+                .WasToldAsync(destination.Canonical, now, window, cancellationToken)
                 .ConfigureAwait(false))
             {
-                return await ToldAsync(asked, now, threshold, cancellationToken).ConfigureAwait(false);
+                return await ToldAsync(asked, now, window, threshold, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -188,6 +188,7 @@ internal sealed class NonExistenceNotice(
     private async ValueTask<Result> ToldAsync(
         OutboundMessage asked,
         DateTimeOffset now,
+        TimeSpan window,
         int threshold,
         CancellationToken cancellationToken)
     {
@@ -201,6 +202,12 @@ internal sealed class NonExistenceNotice(
 
             return Result.Failure(refused);
         }
+
+        // AUTH-ABUSE-003, D-188: the mark that spends the window is written only here,
+        // where the send is admitted.
+        await ledger
+            .MarkAsync(asked.Destination.Canonical, now, window, cancellationToken)
+            .ConfigureAwait(false);
 
         int recent = await ledger.SinceAsync(now - Hour, cancellationToken).ConfigureAwait(false);
 

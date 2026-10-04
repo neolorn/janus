@@ -157,7 +157,7 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
             PendingVerificationStore store = Store(verifying);
             IdentifierDirectory directory = Directory(verifying);
 
-            Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+            Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
             await directory.HoldAsync(subject, TestContext.Current.CancellationToken);
 
@@ -243,10 +243,7 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using (StoreContext sweeping = database.Context())
-        {
-            Assert.True(await Store(sweeping).SweepAsync(now, TestContext.Current.CancellationToken) >= 4);
-        }
+        Assert.True(await SweptAsync(now) >= 4);
 
         await using StoreContext reading = database.Context();
         PendingVerificationStore store = Store(reading);
@@ -260,6 +257,66 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
         Assert.Equal(
             standing,
             Assert.Single(await store.AddsOfAsync(subject, TestContext.Current.CancellationToken)).Identifier);
+    }
+
+    /// <summary>
+    /// REG-IDENT-004 (D-188), OPS-OBS-003: a resend holds the pending verification's row
+    /// while it writes, and the sweep passes over a candidate another transaction holds
+    /// without waiting for it, so the resend in flight keeps its record: the
+    /// verification whose every record had lapsed stands once the resend has written its
+    /// new code, and the sweep that ran meanwhile ended the lapsed one nobody held.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_004_TheSweepPassesOverAVerificationAResendHoldsAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        var lifetime = TimeSpan.FromMinutes(10);
+        DateTimeOffset now = Noon.AddMinutes(30);
+
+        IdentifierId resent = await StagedAsync(subject, replacing: false);
+        IdentifierId lapsed = await StagedAsync(subject, replacing: false);
+
+        await using (StoreContext resending = database.Context())
+        await using (var resend = new UnitOfWork(resending))
+        {
+            Assert.True((await resend.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
+            Assert.NotNull(await Store(resending).FindForUpdateAsync(resent, TestContext.Current.CancellationToken));
+
+            _ = await SweptAsync(now);
+
+            await new VerificationCodeStore(resending, new DataConnections(resending)).AddAsync(
+                VerificationCode.Issue(PendingVerification.CodeHolder(resent), "123456", now, lifetime),
+                TestContext.Current.CancellationToken);
+
+            Assert.True((await resend.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        }
+
+        _ = await SweptAsync(now);
+
+        await using StoreContext reading = database.Context();
+
+        Assert.NotNull(await Store(reading).FindAsync(resent, TestContext.Current.CancellationToken));
+        Assert.Null(await Store(reading).FindAsync(lapsed, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-IDENT-004 (D-188): the sweep locks its candidates, which it can do only inside
+    /// a transaction, so one asked for outside any is a fault and deletes nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_004_TheSweepRunsOnlyInsideATransactionAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        IdentifierId lapsed = await StagedAsync(subject, replacing: false);
+
+        await using StoreContext sweeping = database.Context();
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => Store(sweeping).SweepAsync(Noon, TestContext.Current.CancellationToken).AsTask());
+
+        Assert.NotNull(await Store(sweeping).FindAsync(lapsed, TestContext.Current.CancellationToken));
     }
 
     /// <inheritdoc/>
@@ -288,6 +345,21 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
         return staged;
     }
 
+    // One pass of the sweep in a transaction of its own, as the expiry sweep runs it.
+    private async Task<int> SweptAsync(DateTimeOffset now)
+    {
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
+
+        int ended = await Store(context).SweepAsync(now, TestContext.Current.CancellationToken);
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return ended;
+    }
+
     // Each proof is its own request, read before its transaction and again under the
     // lock, as the identifier service does, and says whether it was the one that
     // proved the value.
@@ -299,7 +371,7 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
 
         _ = await store.FindAsync(staged, TestContext.Current.CancellationToken);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         PendingVerification held = Assert.IsType<PendingVerification>(
             await store.FindForUpdateAsync(staged, TestContext.Current.CancellationToken));

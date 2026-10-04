@@ -22,6 +22,7 @@ Janus.Conformance.ConformanceReport.Equals(Janus.Conformance.ConformanceReport? 
 Janus.Conformance.ConformanceReport.Findings.get -> System.Collections.Generic.IReadOnlyList<Janus.Conformance.ConformanceFinding!>!
 Janus.Conformance.ConformanceReport.Findings.init -> void
 Janus.Conformance.ConformanceSuite
+Janus.Conformance.DeploymentFactory
 Janus.Conformance.IConformanceRows<TResource>
 Janus.Conformance.IConformanceRows<TResource>.RelateAsync(string! relationship, Janus.Core.ResourceReference record, Janus.Core.SubjectId subject, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 Janus.Conformance.IConformanceRows<TResource>.Rows.get -> System.Linq.IQueryable<TResource!>!
@@ -31,13 +32,10 @@ Janus.Conformance.IConformanceRows<TResource>.WriteAsync(Janus.Core.ResourceRefe
 Janus.Conformance.TruthTableCase
 Janus.Conformance.TruthTableCase.<Clone>$() -> Janus.Conformance.TruthTableCase!
 Janus.Conformance.TruthTableCase.Allowed.get -> bool
-Janus.Conformance.TruthTableCase.Allowed.init -> void
 Janus.Conformance.TruthTableCase.Deconstruct(out Janus.Conformance.TruthTableScenario Scenario, out Janus.Core.Permission Permission, out bool Allowed) -> void
 Janus.Conformance.TruthTableCase.Equals(Janus.Conformance.TruthTableCase? other) -> bool
 Janus.Conformance.TruthTableCase.Permission.get -> Janus.Core.Permission
-Janus.Conformance.TruthTableCase.Permission.init -> void
 Janus.Conformance.TruthTableCase.Scenario.get -> Janus.Conformance.TruthTableScenario
-Janus.Conformance.TruthTableCase.Scenario.init -> void
 Janus.Conformance.TruthTableCase.TruthTableCase(Janus.Conformance.TruthTableScenario Scenario, Janus.Core.Permission Permission, bool Allowed) -> void
 Janus.Conformance.TruthTableScenario
 Janus.Conformance.TruthTableScenario.DenyOnContainerOverGrant = 9 -> Janus.Conformance.TruthTableScenario
@@ -57,6 +55,13 @@ Janus.Conformance.TruthTableScenario.GrantToNestedGroup = 7 -> Janus.Conformance
 Janus.Conformance.TruthTableScenario.NoGrant = 5 -> Janus.Conformance.TruthTableScenario
 Janus.Conformance.TruthTableScenario.RevokedGrant = 11 -> Janus.Conformance.TruthTableScenario
 Janus.Conformance.TruthTableScenario.RoleWithoutPermission = 13 -> Janus.Conformance.TruthTableScenario
+Janus.Conformance.TruthTableScenario.StepUpAgeUnmet = 20 -> Janus.Conformance.TruthTableScenario
+Janus.Conformance.TruthTableScenario.StepUpInstantFuture = 21 -> Janus.Conformance.TruthTableScenario
+Janus.Conformance.TruthTableScenario.StepUpLevelUnmet = 18 -> Janus.Conformance.TruthTableScenario
+Janus.Conformance.TruthTableScenario.StepUpMet = 17 -> Janus.Conformance.TruthTableScenario
+Janus.Conformance.TruthTableScenario.StepUpPhishingResistanceUnmet = 19 -> Janus.Conformance.TruthTableScenario
+Janus.Conformance.TruthTableScenario.StepUpProviderAbsent = 23 -> Janus.Conformance.TruthTableScenario
+Janus.Conformance.TruthTableScenario.StepUpProviderFailed = 22 -> Janus.Conformance.TruthTableScenario
 override Janus.Conformance.ConformanceFinding.Equals(object? obj) -> bool
 override Janus.Conformance.ConformanceFinding.GetHashCode() -> int
 override Janus.Conformance.ConformanceFinding.ToString() -> string!
@@ -73,6 +78,7 @@ static Janus.Conformance.ConformanceReport.operator ==(Janus.Conformance.Conform
 static Janus.Conformance.ConformanceSuite.Declaration(Janus.Core.AuthorizationDeclaration! declaration) -> Janus.Conformance.ConformanceReport!
 static Janus.Conformance.ConformanceSuite.Policies(System.IServiceProvider! services, Microsoft.EntityFrameworkCore.Metadata.IModel! model) -> Janus.Conformance.ConformanceReport!
 static Janus.Conformance.ConformanceSuite.ProviderAsync(System.IServiceProvider! services, Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Conformance.ConformanceReport!>
-static Janus.Conformance.ConformanceSuite.TruthTableAsync<TResource>(System.IServiceProvider! services, System.Func<System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<System.Data.Common.DbConnection!>>! connect, Janus.Conformance.IConformanceRows<TResource!>! rows, System.Collections.Generic.IReadOnlyList<Janus.Conformance.TruthTableCase!>! cases, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Conformance.ConformanceReport!>
+static Janus.Conformance.ConformanceSuite.TruthTableAsync<TResource>(System.IServiceProvider! services, Janus.Conformance.DeploymentFactory! deployment, System.Func<System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<System.Data.Common.DbConnection!>>! connect, Janus.Conformance.IConformanceRows<TResource!>! rows, System.Collections.Generic.IReadOnlyList<Janus.Conformance.TruthTableCase!>! cases, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Conformance.ConformanceReport!>
 static Janus.Conformance.TruthTableCase.operator !=(Janus.Conformance.TruthTableCase? left, Janus.Conformance.TruthTableCase? right) -> bool
 static Janus.Conformance.TruthTableCase.operator ==(Janus.Conformance.TruthTableCase? left, Janus.Conformance.TruthTableCase? right) -> bool
+virtual Janus.Conformance.DeploymentFactory.Invoke(Janus.Core.IAssuranceProvider? assurance, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<System.IServiceProvider!>

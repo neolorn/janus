@@ -35,8 +35,11 @@ internal static class EndpointAnswers
     /// What an endpoint's mounting answers, derived as the chapter's preamble says: the
     /// malformed request where the endpoint reads a body or binds a typed value, the
     /// forgery layers' refusal where they apply, and the absent session where the
-    /// endpoint requires one. A route of the machine profile that refuses a session
-    /// cookie is answered that refusal by the profile.
+    /// endpoint requires one. The machine profile derives none: a callback it refuses
+    /// for carrying a session cookie is answered the code chapter 09 section 10 gives
+    /// every callback's refusal, which the callback's endpoint declares, and a protocol
+    /// endpoint of the provider answers in its protocol's shape, which carries no code
+    /// (BFF-MACH-001).
     /// </summary>
     /// <param name="endpoint">The endpoint, as it is mounted.</param>
     /// <returns>The codes, each once.</returns>
@@ -46,7 +49,6 @@ internal static class EndpointAnswers
         ArgumentNullException.ThrowIfNull(endpoint);
 
         var codes = new List<ErrorCode>();
-        PathString? machine = Machine(endpoint);
 
         if (endpoint.Metadata.GetMetadata<IAcceptsMetadata>() is not null
             || EndpointDeclaration.Of(endpoint) is { Values.Count: > 0 })
@@ -59,12 +61,7 @@ internal static class EndpointAnswers
             codes.Add(ErrorCodes.SessionExpired);
         }
 
-        if (machine is PathString governed && !MachineRoutes.IgnoresCookie(governed))
-        {
-            codes.Add(ErrorCodes.Denied);
-        }
-
-        if (machine is null && !endpoint.RoutePattern.RawText!.StartsWith(SiteRoot, StringComparison.Ordinal))
+        if (Machine(endpoint) is null && !endpoint.RoutePattern.RawText!.StartsWith(SiteRoot, StringComparison.Ordinal))
         {
             codes.Add(ErrorCodes.SessionCsrfInvalid);
         }

@@ -109,7 +109,7 @@ public sealed class ExportLedgerTests(DatabaseFixture database)
         await using var work = new UnitOfWork(writing);
         var ledger = new ExportLedger(writing, new DataConnections(writing));
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         await ledger.HoldAsync(subject, TestContext.Current.CancellationToken);
 

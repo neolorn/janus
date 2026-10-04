@@ -28,7 +28,7 @@ internal sealed class EventOutbox(IPendingEvents events, IUnitOfWork work) : IEv
         ArgumentNullException.ThrowIfNull(raised);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }

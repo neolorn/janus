@@ -32,7 +32,7 @@ internal sealed class LawfulBasisSeed(
     public async ValueTask SeededAsync(CancellationToken cancellationToken)
     {
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         await bases.ReplaceAsync(declaration.LawfulBases, cancellationToken).ConfigureAwait(false);
 

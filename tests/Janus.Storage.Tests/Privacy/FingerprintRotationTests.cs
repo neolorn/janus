@@ -345,8 +345,8 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
                 cancellationToken);
             await new RegistrationSourceLedger(counting, Deployment.Fingerprints)
                 .RecordAsync("198.51.100.9", Noon, cancellationToken);
-            _ = await new NoticeLedger(counting, new DataConnections(counting), Deployment.Fingerprints)
-                .FirstAsync("nobody@example.test", Noon, TimeSpan.FromHours(1), cancellationToken);
+            await new NoticeLedger(counting, new DataConnections(counting), Deployment.Fingerprints)
+                .MarkAsync("nobody@example.test", Noon, TimeSpan.FromHours(1), cancellationToken);
             _ = await new CallbackLedger(counting, new DataConnections(counting), Deployment.Fingerprints)
                 .ReceivedAsync("203.0.113.9", Noon, TimeSpan.FromMinutes(1), cancellationToken);
             await counting.SaveChangesAsync(cancellationToken);

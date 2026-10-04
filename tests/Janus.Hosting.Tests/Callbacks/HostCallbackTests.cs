@@ -530,26 +530,67 @@ public sealed class HostCallbackTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// BFF-MACH-001 AC2 and AC3: a host's callback authenticates by what its provider
-    /// sends, and one carrying a browser's session cookie is refused before its checks.
+    /// BFF-MACH-001 AC2 and AC3, chapter 09 section 10: a host's callback authenticates
+    /// by what its provider sends, and one carrying a browser's session cookie is
+    /// refused before its own checks as every rejected callback is: 422 with no
+    /// interval, its admission and its rejection counted and committed together, and
+    /// the rejection counted towards <c>alerting.callback.threshold</c>.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task BFF_MACH_001_AC2_AHostCallbackCarryingASessionCookieIsRefusedAsync()
+    public async Task BFF_MACH_001_AC2_AHostCallbackCarryingASessionCookieIsRejectedAndCountedAsync()
     {
+        _configuration.Set(Settings.AlertingCallbackThreshold, 0);
+
         HttpContext carried = await SentAsync(
             Events,
             Body,
             [.. SignedHostCallback.Signing(Body, Noon, Secret), ("Cookie", BrowserCookies.Session + "=stale")]);
 
-        Assert.Equal(StatusCodes.Status403Forbidden, carried.Response.StatusCode);
-        Assert.Empty(_callbacks.Counted);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, carried.Response.StatusCode);
+        Assert.Equal(ErrorCodes.CallbackRejected.ToString(), Code(carried));
+        Assert.Equal(0, carried.Response.Headers.RetryAfter.Count);
         Assert.Equal(0, _reached);
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(2, _callbacks.Counted.Count);
+        Assert.Single(_callbacks.Counted, callback => callback.Rejected);
+        Assert.Equal(
+            AlertCondition.CallbackVerificationFailed,
+            Assert.Single(_events.Of<AlertRaised>()).Condition);
 
         HttpContext genuine = await SentAsync(Events, Body, SignedHostCallback.Signing(Body, Noon, Secret));
 
         Assert.Equal(StatusCodes.Status200OK, genuine.Response.StatusCode);
         Assert.NotNull(genuine.Features.Get<MachineGoverned>());
+    }
+
+    /// <summary>
+    /// INT-GEN-003 AC4 and BFF-MACH-001 AC2: the rate limit is answered first, so a
+    /// callback carrying a session cookie from a source past
+    /// <c>integration.callback.ratelimit</c> is answered 429 with the interval and is
+    /// not counted as a rejection.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task INT_GEN_003_AC4_ACallbackCarryingASessionCookiePastTheRateLimitIsAnswered429Async()
+    {
+        _configuration.Set(Settings.IntegrationCallbackRateLimit, 1);
+
+        (string Name, string Value)[] carrying =
+            [.. SignedHostCallback.Signing(Body, Noon, Secret), ("Cookie", BrowserCookies.Session + "=stale")];
+
+        HttpContext rejected = await SentAsync(Events, Body, carrying);
+        HttpContext flooded = await SentAsync(Events, Body, carrying);
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, rejected.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, flooded.Response.StatusCode);
+        Assert.Equal(ErrorCodes.CallbackRejected.ToString(), Code(flooded));
+        Assert.Equal("60", flooded.Response.Headers.RetryAfter.ToString());
+        Assert.Single(_callbacks.Counted, callback => callback.Rejected);
+        Assert.Equal(0, _reached);
+        Assert.False(_work.Open);
     }
 
     /// <summary>
@@ -614,6 +655,14 @@ public sealed class HostCallbackTests : IAsyncDisposable
         await _pipeline(context);
 
         return context;
+    }
+
+    // The code a refusal carries.
+    private static string? Code(HttpContext answered)
+    {
+        using var document = JsonDocument.Parse(((MemoryStream)answered.Response.Body).ToArray());
+
+        return document.RootElement.GetProperty("code").GetString();
     }
 
     // The host's own route: it reads the body again, as it would to act on it.

@@ -71,7 +71,7 @@ internal sealed class MaintenanceRecords(
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -163,7 +163,7 @@ internal sealed class MaintenanceRecords(
         var entry = new MaintenanceEntry(MaintenanceEntryId.Of(now), task, performedAt, actor, stated);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<MaintenanceEntry>(notBegun);
         }

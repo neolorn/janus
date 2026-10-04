@@ -82,7 +82,7 @@ public sealed class VerificationCodesTests(DatabaseFixture database) : IClassFix
         await using var work = new UnitOfWork(context);
 
         (await work.BeginAsync(TestContext.Current.CancellationToken))
-            .Switch(() => { }, error => throw new Xunit.Sdk.XunitException("No unit of work began: " + error.Code));
+            .Switch(_ => { }, error => throw new Xunit.Sdk.XunitException("No unit of work began: " + error.Code));
 
         Result presented = await Codes(context, work)
             .PresentAsync(holder, entered, TestContext.Current.CancellationToken);

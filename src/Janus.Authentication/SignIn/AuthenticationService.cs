@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
@@ -86,6 +87,21 @@ internal sealed class AuthenticationService(
     TimeProvider time,
     RandomNumberGenerator randomness) : IAuthentication
 {
+    // AUTH-ABUSE-001: every code a factor refuses what was presented to it with. A
+    // failure under any other code is no judgement of what was presented.
+    private static readonly FrozenSet<ErrorCode> Refusals = new[]
+    {
+        ErrorCodes.FactorRejected,
+        ErrorCodes.FactorNotPermitted,
+        ErrorCodes.CodeInvalid,
+        ErrorCodes.CodeExpired,
+        ErrorCodes.CodeReplayed,
+        ErrorCodes.WebAuthnAlgorithmNotAllowed,
+        ErrorCodes.WebAuthnCounterMismatch,
+        ErrorCodes.WebAuthnRelyingPartyChanged,
+        ErrorCodes.WebAuthnUserVerificationRequired,
+    }.ToFrozenSet();
+
     /// <summary>
     /// Opens a sign-in for an identifier, with the tokens only the browser boundary
     /// can read.
@@ -154,7 +170,7 @@ internal sealed class AuthenticationService(
         var ceremony = OpaqueToken.Draw(randomness);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<SignInChallenge>(notBegun);
         }
@@ -249,8 +265,10 @@ internal sealed class AuthenticationService(
     /// Nothing where the ask is answered as every ask is; at a sign-in whose number's
     /// signal answers <c>risk</c>, what the challenge then offers, or
     /// <c>auth.factor.rejected</c> where it offers nothing; at a step-up whose number's
-    /// signal answers <c>risk</c>, <c>auth.stepup.required</c> computed without the
-    /// entry; or the refusal of the send.
+    /// signal answers <c>risk</c>, the factors of the combinations left without the
+    /// entry, none where the session already meets the gate, or
+    /// <c>auth.stepup.required</c> where no combination is left; or the refusal of the
+    /// send.
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     /// <remarks>
@@ -261,7 +279,8 @@ internal sealed class AuthenticationService(
     /// <c>risk</c> after a first factor is sent nothing either, and the sign-in is told
     /// what is left to present, which an anonymous caller is never told. At a step-up,
     /// whose challenge names no action, what is left is judged against the strictest of
-    /// the policy's gates, field by field (AUTH-STEP-002, D-187).
+    /// the policy's gates, field by field, and answered as a sign-in's ask is
+    /// (AUTH-STEP-002, D-187, D-188).
     /// </remarks>
     public async ValueTask<Result<SignInProgress?>> AskAsync(
         string challenge,
@@ -605,7 +624,7 @@ internal sealed class AuthenticationService(
         await throttle.SucceededAsync(attempt, cancellationToken).ConfigureAwait(false);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<SignInOutcome>(notBegun);
         }
@@ -674,7 +693,7 @@ internal sealed class AuthenticationService(
         // this unit of work, so a refused one commits its count on the code's record
         // with the refusal's record and the delay's counts (CONV-DESIGN-003).
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<SignInOutcome>(notBegun);
         }
@@ -829,7 +848,7 @@ internal sealed class AuthenticationService(
         await throttle.SucceededAsync(attempt, cancellationToken).ConfigureAwait(false);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<SignInOutcome>(notBegun);
         }
@@ -977,7 +996,7 @@ internal sealed class AuthenticationService(
         await throttle.SucceededAsync(attempt, cancellationToken).ConfigureAwait(false);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<LandedSignIn>(notBegun);
         }
@@ -1019,24 +1038,53 @@ internal sealed class AuthenticationService(
     // AUTH-FACT-002 AC7, AUTH-STEP-002 (D-187): a step-up whose text code the signal
     // withheld is answered with what it then offers. Its challenge names no action, so
     // that is judged against the strictest of the policy's gates, field by field, on the
-    // session the step-up raises; a session that is not the account's judges no gate, and
-    // one that already meets that gate is refused nothing.
+    // session the step-up raises; a session that is not the account's judges no gate.
+    // The ask is answered as a sign-in's is (D-188): with the factors of the
+    // combinations left, or with none where the session already meets that gate, and
+    // it is refused only where no combination is left, with the gate and what the
+    // account does next.
     private async ValueTask<Result<SignInProgress?>> WithoutTextsAsync(
         SubjectId subject,
         SessionId? session,
         CancellationToken cancellationToken)
     {
-        if (session is not SessionId raising)
+        if (session is not SessionId raising
+            || await sessionStore.FindAsync(raising, cancellationToken).ConfigureAwait(false) is not Session live
+            || live.Subject != subject)
         {
             return Result.Failure<SignInProgress?>(Error.From(ErrorCodes.StepUpRequired));
         }
 
-        return (await guard.ChallengeWithoutTextsAsync(subject, raising, cancellationToken).ConfigureAwait(false))
-            .Match(
-                left => StepUpRefusal.Met(left)
-                    ? Result.Success<SignInProgress?>(null)
-                    : Result.Failure<SignInProgress?>(StepUpRefusal.Of(left)),
-                Result.Failure<SignInProgress?>);
+        Error? failure = null;
+
+        StepUpChallenge left = (await guard
+                .ChallengeWithoutTextsAsync(subject, raising, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Withheld<StepUpChallenge>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<SignInProgress?>(failure);
+        }
+
+        List<Factor> required = left.Outcome is StepUpOutcome.Present
+            ? [.. left.Combinations.SelectMany(combination => combination).Distinct()]
+            : [];
+
+        if (!StepUpRefusal.Met(left) && required.Count is 0)
+        {
+            return Result.Failure<SignInProgress?>(StepUpRefusal.Of(left));
+        }
+
+        return Result.Success<SignInProgress?>(new SignInProgress(
+            required.Count is 0 ? SignInStatus.Complete : SignInStatus.FactorRequired,
+            live.Attained,
+            live.PhishingResistant,
+            required,
+            TrustDeviceOffered: false,
+            Session: null,
+            Requirement: null,
+            PasswordChangeRequired: false));
     }
 
     // The account an identifier opens a sign-in for, the identifier itself where it is
@@ -1131,7 +1179,8 @@ internal sealed class AuthenticationService(
     // A refusal comes back counted and recorded already, by the count its caller hands
     // in: a factor whose refusal keeps a write of its own (a code's wrong try, a
     // counter that did not advance) commits that write with the count, in one unit of
-    // work (CONV-DESIGN-003).
+    // work (CONV-DESIGN-003). A fault of the library's own comes back as it is, neither
+    // counted nor recorded (AUTH-ABUSE-001).
     private async ValueTask<Result<bool>> AcceptsAsync(
         Challenge open,
         SubjectId subject,
@@ -1160,9 +1209,15 @@ internal sealed class AuthenticationService(
         bool changeRequired = (await JudgedAsync(open, subject, presented, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<bool>(error, ref refusal));
 
-        return refusal is null
-            ? Result.Success(changeRequired)
-            : Result.Failure<bool>(await counted(cancellationToken).ConfigureAwait(false) ?? refusal);
+        if (refusal is null)
+        {
+            return Result.Success(changeRequired);
+        }
+
+        return Result.Failure<bool>(
+            Refuses(refusal)
+                ? await counted(cancellationToken).ConfigureAwait(false) ?? refusal
+                : refusal);
     }
 
     // The factors whose services end their own unit of work, a refusal of theirs
@@ -1298,7 +1353,7 @@ internal sealed class AuthenticationService(
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<bool>(notBegun);
         }
@@ -1342,7 +1397,8 @@ internal sealed class AuthenticationService(
     // AUTH-FACT-004: the try is decided in this unit of work, so a wrong try's count and
     // the invalidation at the cap commit with the refusal's record and the failure's
     // counts; a code gone or out of life changes nothing on its record and commits
-    // those alone (CONV-DESIGN-003).
+    // those alone; and a right code's spend commits in it whether the sign-in then
+    // goes on or a domain lock refuses it (CONV-DESIGN-003).
     private async ValueTask<Result<bool>> CodeAsync(
         Challenge open,
         SubjectId subject,
@@ -1363,7 +1419,7 @@ internal sealed class AuthenticationService(
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<bool>(notBegun);
         }
@@ -1378,15 +1434,17 @@ internal sealed class AuthenticationService(
                 await RefusedAsync(refusal, Answered(refusal), counted, cancellationToken).ConfigureAwait(false));
         }
 
+        // A right code is spent whatever follows, and the lock is judged only after it,
+        // so that a wrong code learns nothing of the lock (REG-DOM-001).
+        if (await links.LockedAsync(held, cancellationToken).ConfigureAwait(false) is Error locked)
+        {
+            return Result.Failure<bool>(await SpentAsync(locked, counted, cancellationToken).ConfigureAwait(false));
+        }
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
             return Result.Failure<bool>(notCommitted);
-        }
-
-        if (await links.LockedAsync(held, cancellationToken).ConfigureAwait(false) is Error locked)
-        {
-            return Result.Failure<bool>(await counted(cancellationToken).ConfigureAwait(false) ?? locked);
         }
 
         open.Accepted(presented.Factor);
@@ -1394,15 +1452,49 @@ internal sealed class AuthenticationService(
         return Result.Success(false);
     }
 
+    // AUTH-FACT-004, CONV-DESIGN-003: ends the unit of work a right code was spent in
+    // where the sign-in it would complete is then refused. A domain lock's refusal
+    // commits the spend alone, the factor having succeeded, so no failure is counted
+    // and no failed authentication recorded; an address given up since is a refused
+    // factor, whose record and counts commit with the spend (REG-IDENT-006); and a
+    // lock that could not be judged is rolled back.
+    private async ValueTask<Error> SpentAsync(
+        Error locked,
+        Func<CancellationToken, ValueTask<Error?>> counted,
+        CancellationToken cancellationToken)
+    {
+        if (locked.Code == ErrorCodes.FactorRejected)
+        {
+            return await RefusedAsync(locked, kept: true, counted, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (locked.Code != ErrorCodes.IdentifierDomainNotAllowed)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return locked;
+        }
+
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match(() => locked, error => error);
+    }
+
     // What a code answers a try with, as against a failure to judge it.
     private static bool Answered(Error refusal) =>
         refusal.Code == ErrorCodes.CodeInvalid || refusal.Code == ErrorCodes.CodeExpired;
 
+    // AUTH-ABUSE-001, CONV-LOG-005: whether a failure is a factor's refusal of what was
+    // presented, which is a failed attempt, as against a fault of the library's own (a
+    // setting that does not read, the database failing), which is none: nothing is
+    // counted or recorded for it and the request answers system.fault.
+    private static bool Refuses(Error failure) => Refusals.Contains(failure.Code);
+
     // CONV-DESIGN-003: ends the unit of work a refusal was decided in. A refusal that
     // keeps a write is counted inside it, the count joining it, and the whole is
     // committed together; any other is rolled back and then counted, as a refusal
-    // that never began one is. A count that fails is what the caller is told, with
-    // nothing committed.
+    // that never began one is, save a fault of the library's own, which is rolled back
+    // and counted nowhere. A count that fails is what the caller is told, with nothing
+    // committed.
     private async ValueTask<Error> RefusedAsync(
         Error refusal,
         bool kept,
@@ -1413,7 +1505,9 @@ internal sealed class AuthenticationService(
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
-            return await counted(cancellationToken).ConfigureAwait(false) ?? refusal;
+            return Refuses(refusal)
+                ? await counted(cancellationToken).ConfigureAwait(false) ?? refusal
+                : refusal;
         }
 
         if (await counted(cancellationToken).ConfigureAwait(false) is Error uncounted)
@@ -1680,7 +1774,7 @@ internal sealed class AuthenticationService(
         // AUTH-ABUSE-004: the code is issued and its message undertaken in one unit of
         // work, so a send the restrictions refuse leaves no code behind it.
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<SignInOutcome>(notBegun);
         }
@@ -1754,7 +1848,7 @@ internal sealed class AuthenticationService(
         CancellationToken cancellationToken)
     {
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<SignInOutcome>(notBegun);
         }
@@ -1966,7 +2060,7 @@ internal sealed class AuthenticationService(
         CancellationToken cancellationToken)
     {
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return notBegun;
         }
@@ -2024,7 +2118,7 @@ internal sealed class AuthenticationService(
         CancellationToken cancellationToken)
     {
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return notBegun;
         }

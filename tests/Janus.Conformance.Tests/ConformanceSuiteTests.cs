@@ -79,9 +79,22 @@ public sealed class ConformanceSuiteTests(SampleHost host) : IClassFixture<Sampl
         new(TruthTableScenario.DenyOverDerivedGrant, SampleHost.ReadSheet, Allowed: false),
     ];
 
+    // Amending a sheet is bound to a step-up gate, so beside its grant it is decided by
+    // what an assurance provider reports: a report that meets the gate, each way one
+    // does not, a provider that fails, and no provider.
+    private static readonly TruthTableCase[] Amendments =
+    [
+        new(TruthTableScenario.StepUpMet, SampleHost.AmendSheet, Allowed: true),
+        new(TruthTableScenario.StepUpLevelUnmet, SampleHost.AmendSheet, Allowed: false),
+        new(TruthTableScenario.StepUpPhishingResistanceUnmet, SampleHost.AmendSheet, Allowed: false),
+        new(TruthTableScenario.StepUpAgeUnmet, SampleHost.AmendSheet, Allowed: false),
+        new(TruthTableScenario.StepUpInstantFuture, SampleHost.AmendSheet, Allowed: false),
+        new(TruthTableScenario.StepUpProviderFailed, SampleHost.AmendSheet, Allowed: false),
+        new(TruthTableScenario.StepUpProviderAbsent, SampleHost.AmendSheet, Allowed: false),
+    ];
+
     // The purpose every declaration below rests its types on, which holds together.
     private const string Keeping = "keeping records";
-
 
     /// <summary>
     /// LIB-TEST-001 AC1: every entity the sample host maps is a declared type, the rows
@@ -212,6 +225,105 @@ public sealed class ConformanceSuiteTests(SampleHost host) : IClassFixture<Sampl
                 (found.Failure.Details["scenario"].GetString(),
                     found.Failure.Details["check"].GetBoolean(),
                     found.Failure.Details["filter"].GetBoolean())));
+    }
+
+    /// <summary>
+    /// LIB-TEST-001 AC2: each step-up case is asked of a composition the host's factory
+    /// builds for it, with a provider of the suite's own or, for the case of no
+    /// provider, with none; the factory is asked for no other case, and every case is
+    /// decided as the table states by the single check and by the list filter alike.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_TEST_001_AC2_EveryStepUpCaseAgreesOnACompositionBuiltForItAsync()
+    {
+        List<bool> provided = [];
+        await using SampleContext context = host.Context();
+
+        ConformanceReport report = await ConformanceSuite.TruthTableAsync(
+            host.Services,
+            (assurance, cancellationToken) =>
+            {
+                provided.Add(assurance is not null);
+
+                return host.DeployAsync(assurance, cancellationToken);
+            },
+            host.ConnectAsync,
+            new SampleRows<Sheet>(context, SampleHost.SheetType, row => row.Id),
+            [new(TruthTableScenario.GrantOnRecord, SampleHost.ReadSheet, Allowed: true), .. Amendments],
+            TestContext.Current.CancellationToken);
+
+        Assert.Empty(report.Findings);
+        Assert.Equal([true, true, true, true, true, true, false], provided);
+    }
+
+    /// <summary>
+    /// LIB-TEST-001 AC2: a step-up case the deployment decides otherwise than its
+    /// scenario is reported with the gate its action is bound to, here by a factory
+    /// that registers no provider whatever it is given: the met case is refused, and the
+    /// case of a failing provider is refused with another code than a failing provider's.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_TEST_001_AC2_AStepUpCaseDecidedOtherwiseIsReportedNamingTheGateAsync()
+    {
+        await using SampleContext context = host.Context();
+
+        ConformanceReport report = await ConformanceSuite.TruthTableAsync(
+            host.Services,
+            (_, cancellationToken) => host.DeployAsync(assurance: null, cancellationToken),
+            host.ConnectAsync,
+            new SampleRows<Sheet>(context, SampleHost.SheetType, row => row.Id),
+            [
+                new(TruthTableScenario.StepUpMet, SampleHost.AmendSheet, Allowed: true),
+                new(TruthTableScenario.StepUpProviderFailed, SampleHost.AmendSheet, Allowed: false),
+            ],
+            TestContext.Current.CancellationToken);
+
+        Assert.All(report.Findings, found => Assert.Equal(ErrorCodes.TruthTableDisagreement, found.Failure.Code));
+        Assert.Equal(
+            [
+                ("sheet", "stepup-met", "sheet:amend", SampleHost.Amending, true, false, false),
+                ("sheet", "stepup-provider-failed", "sheet:amend", SampleHost.Amending, false, false, false),
+            ],
+            report.Findings.Select(found => (
+                found.Failure.Details["type"].GetString(),
+                found.Failure.Details["scenario"].GetString(),
+                found.Failure.Details["permission"].GetString(),
+                found.Failure.Details["gate"].GetString(),
+                found.Failure.Details["expected"].GetBoolean(),
+                found.Failure.Details["check"].GetBoolean(),
+                found.Failure.Details["filter"].GetBoolean())));
+    }
+
+    /// <summary>
+    /// LIB-TEST-001 AC2: a step-up case naming a permission the declaration binds to no
+    /// gate reaches no run: the table is refused, naming the scenario, before any
+    /// composition is built for it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_TEST_001_AC2_AStepUpCaseOnAPermissionBoundToNoGateReachesNoRunAsync()
+    {
+        List<bool> provided = [];
+        await using SampleContext context = host.Context();
+
+        ArgumentException refused = await Assert.ThrowsAsync<ArgumentException>(
+            async () => await ConformanceSuite.TruthTableAsync(
+                host.Services,
+                (assurance, cancellationToken) =>
+                {
+                    provided.Add(assurance is not null);
+
+                    return host.DeployAsync(assurance, cancellationToken);
+                },
+                host.ConnectAsync,
+                new SampleRows<Sheet>(context, SampleHost.SheetType, row => row.Id),
+                [.. Amendments, new(TruthTableScenario.StepUpMet, SampleHost.ReadSheet, Allowed: true)],
+                TestContext.Current.CancellationToken));
+
+        Assert.Contains(nameof(TruthTableScenario.StepUpMet), refused.Message, StringComparison.Ordinal);
+        Assert.Empty(provided);
     }
 
     /// <summary>
@@ -381,6 +493,7 @@ public sealed class ConformanceSuiteTests(SampleHost host) : IClassFixture<Sampl
 
         return await ConformanceSuite.TruthTableAsync(
             host.Services,
+            host.DeployAsync,
             host.ConnectAsync,
             rows(context),
             cases,

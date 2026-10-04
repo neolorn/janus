@@ -471,7 +471,7 @@ public sealed class InvitationStoreTests(DatabaseFixture database) : IClassFixtu
 
         _ = await store.FindAsync(id, TestContext.Current.CancellationToken);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         Invitation held = (await store.FindForUpdateAsync(id, TestContext.Current.CancellationToken))!;
         bool opens = held.Opens(Noon.AddHours(1));

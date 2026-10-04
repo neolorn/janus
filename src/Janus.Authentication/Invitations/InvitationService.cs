@@ -218,7 +218,7 @@ internal sealed class InvitationService(
             lifetime);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<IssuedInvitation>(notBegun);
         }
@@ -345,7 +345,7 @@ internal sealed class InvitationService(
         DateTimeOffset now = time.GetUtcNow();
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -775,7 +775,7 @@ internal sealed class InvitationService(
         _ = Sweeping(context);
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         int swept = await invitations
             .SweepAsync(time.GetUtcNow(), cancellationToken)

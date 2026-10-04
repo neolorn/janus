@@ -40,7 +40,7 @@ internal sealed class DenialRecording(IUnitOfWork work, IAccessAudit audit, Deni
         ArgumentNullException.ThrowIfNull(denial);
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw Fault(error));
+            .Switch(_ => { }, error => throw Fault(error));
 
         await audit.HoldAsync(denial.Acting ?? default, denial.Principal, cancellationToken)
             .ConfigureAwait(false);

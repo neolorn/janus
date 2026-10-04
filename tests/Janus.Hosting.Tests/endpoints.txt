@@ -69,7 +69,7 @@ DELETE /account/credentials/{id}
   204
   400 api.request.malformed
   401 auth.session.expired
-  403 auth.session.csrfinvalid auth.stepup.required authz.restricted
+  403 auth.session.csrfinvalid auth.stepup.required authz.denied authz.restricted
 PATCH /account/credentials/{id}
   request application/json
     label: string
@@ -227,6 +227,7 @@ POST /account/identifiers/{id}/undo
   204
   400 api.request.malformed
   403 auth.session.csrfinvalid
+  409 identity.identifier.maximum
   422 identity.change.windowelapsed
 POST /account/identifiers/{id}/verify
   request application/json
@@ -241,6 +242,7 @@ POST /account/identifiers/{id}/verify
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.restricted
+  409 identity.identifier.maximum
   422 auth.code.expired auth.code.invalid
   429 auth.throttled
 GET /account/invitation
@@ -389,7 +391,7 @@ POST /account/recoverycodes
 POST /account/recoverycodes/exported
   204
   401 auth.session.expired
-  403 auth.session.csrfinvalid
+  403 auth.session.csrfinvalid authz.restricted
   409 auth.factor.notenrolled
 PUT /account/secondstep/preferred
   request application/json
@@ -1360,7 +1362,6 @@ POST /auth/webauthn/register/complete
   422 auth.credential.labelinvalid auth.webauthn.algorithmnotallowed auth.webauthn.userverificationrequired
 POST /callbacks/providers/apple
   200
-  403 authz.denied
   409 integration.callback.inprogress
   422 integration.callback.rejected
   429 integration.callback.rejected
@@ -1375,7 +1376,6 @@ POST /callbacks/providers/google
     application/json
       err: string
       description: string
-  403 authz.denied
   409 integration.callback.inprogress
   422 integration.callback.rejected
   429 integration.callback.rejected
@@ -1386,7 +1386,6 @@ POST /callbacks/providers/google/return
   303
 GET /callbacks/sms/dlr
   200
-  403 authz.denied
   409 integration.callback.inprogress
   422 integration.callback.rejected
   429 integration.callback.rejected

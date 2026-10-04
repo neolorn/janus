@@ -394,6 +394,132 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-006 AC9: with the email maximum at two, an account holding two emails
+    /// that removes one and stages a pending add is admitted its undo, and the pending
+    /// add's right code is then refused 409 <c>identity.identifier.maximum</c>, the add
+    /// left listed unverified.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AC9_TheUndoIsAdmittedAndThePendingAddIsThenRefusedTheMaximumAsync()
+    {
+        const string third = "third@example.test";
+
+        _deployment.Configuration.Set(Settings.IdentifiersEmailMax, 2);
+        _deployment.Templates.Set(
+            MessageKind.IdentifierRemoved,
+            SendKind.Email,
+            "en",
+            new MessageTemplate("removed", "{link}"));
+
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        Guid going = _deployment.Identifiers.Verified(Registered(), IdentifierKind.Email, Second).Value;
+
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync("DELETE", "/account/identifiers/" + going)).Status);
+        Assert.Equal(
+            StatusCodes.Status202Accepted,
+            (await browser.SendAsync("POST", "/account/identifiers", ("kind", "email"), ("value", third))).Status);
+
+        string staged = Assert.Single(_deployment.Pending.All).Identifier.Value.ToString();
+        string code = Flow.Code(_deployment, IdentifierKind.Email);
+
+        Answer restored = await browser.SendAsync(
+            "POST",
+            "/account/identifiers/" + going + "/undo",
+            ("linkToken", Undo()));
+        Answer presented = await browser.SendAsync(
+            "POST",
+            "/account/identifiers/" + staged + "/verify",
+            ("code", code));
+
+        Assert.Equal(StatusCodes.Status204NoContent, restored.Status);
+        Assert.Equal(StatusCodes.Status409Conflict, presented.Status);
+        Assert.Equal(ErrorCodes.IdentifierMaximum.ToString(), presented.Text("code"));
+        Assert.False(Listed(Emails(await browser.SendAsync("GET", "/account")), staged)
+            .GetProperty("verified")
+            .GetBoolean());
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 AC9: an account whose verified emails fill the kind is refused the
+    /// undo with 409 <c>identity.identifier.maximum</c>, and the removed value stays
+    /// off the account.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AC9_TheUndoIsRefusedTheMaximumWhereVerifiedEmailsFillTheKindAsync()
+    {
+        const string third = "third@example.test";
+
+        _deployment.Configuration.Set(Settings.IdentifiersEmailMax, 2);
+        _deployment.Templates.Set(
+            MessageKind.IdentifierRemoved,
+            SendKind.Email,
+            "en",
+            new MessageTemplate("removed", "{link}"));
+
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = Registered();
+        Guid going = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, Second).Value;
+
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync("DELETE", "/account/identifiers/" + going)).Status);
+
+        _ = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, third);
+
+        Answer refused = await browser.SendAsync(
+            "POST",
+            "/account/identifiers/" + going + "/undo",
+            ("linkToken", Undo()));
+
+        Assert.Equal(StatusCodes.Status409Conflict, refused.Status);
+        Assert.Equal(ErrorCodes.IdentifierMaximum.ToString(), refused.Text("code"));
+        Assert.Null(await _deployment.Identifiers.OwnerAsync(
+            IdentifierKind.Email,
+            Second,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC6, REG-SESS-003 AC6: a pressed token that opens nothing answers
+    /// 422 <c>auth.code.expired</c> and is counted against the request's source; while
+    /// that source's delay stands the press answers 429 <c>auth.throttled</c> with
+    /// <c>retryAt</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_007_AC6_APressedTokenThatOpensNothingAnswersExpiredThenThrottledAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        string path = "/account/identifiers/" + Guid.CreateVersion7() + "/verify";
+
+        for (int press = 0; press < Settings.AbuseThrottleThreshold.Default; press++)
+        {
+            Answer gone = await browser.SendAsync(
+                "POST",
+                path,
+                ("linkToken", "a-token-no-verification-sent"),
+                ("press", true));
+
+            Assert.Equal(StatusCodes.Status422UnprocessableEntity, gone.Status);
+            Assert.Equal(ErrorCodes.CodeExpired.ToString(), gone.Text("code"));
+        }
+
+        Answer held = await browser.SendAsync(
+            "POST",
+            path,
+            ("linkToken", "a-token-no-verification-sent"),
+            ("press", true));
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, held.Status);
+        Assert.Equal(ErrorCodes.Throttled.ToString(), held.Text("code"));
+        Assert.True(held.Json().GetProperty("details").TryGetProperty("retryAt", out _));
+    }
+
+    /// <summary>
     /// REG-IDENT-006 (D-187): a removal naming a pending add answers 204 and ends its
     /// pending verification, so the account lists it no longer; nothing is reserved and
     /// no undo is sent.

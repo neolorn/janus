@@ -54,7 +54,7 @@ internal sealed class AccessGate(
     ReverseLookup lookup,
     IRecordedConsents consents,
     IAdministrativeOrganization administrative,
-    TimeProvider time) : IAccessGate
+    TimeProvider time) : IAccessGate, ISettingsChangeGate, IUnscopedRefusal
 {
     // PRIV-CONS-001, PRIV-CONS-007: the document that governs a consent whose purpose
     // names none.
@@ -1055,7 +1055,7 @@ internal sealed class AccessGate(
         if (scoped is not OrganizationId organization)
         {
             return Result.Failure<ResourceAccess>(
-                await RefuseUnscopedAsync(context, Permissions.GrantRead, cancellationToken)
+                await RefusedAsync(context, Permissions.GrantRead, cancellationToken)
                     .ConfigureAwait(false));
         }
 
@@ -1293,7 +1293,7 @@ internal sealed class AccessGate(
     /// caller holding nothing where a row is would have, as a host record the library
     /// holds no registration for is refused.
     /// </remarks>
-    internal async ValueTask<Error> RefuseUnscopedAsync(
+    public async ValueTask<Error> RefusedAsync(
         AccessContext context,
         Permission permission,
         CancellationToken cancellationToken) =>
@@ -1322,7 +1322,7 @@ internal sealed class AccessGate(
     /// refusal of it is. Asked inside the operation's unit of work, it is judged with
     /// the account's row held, as every modifying action is (D-183).
     /// </remarks>
-    internal async ValueTask<Result> RequireSettingsChangeAsync(
+    public async ValueTask<Result> RequireSettingsChangeAsync(
         AccessContext context,
         CancellationToken cancellationToken) =>
         await subjects.RestrictedAsync(context, cancellationToken).ConfigureAwait(false)

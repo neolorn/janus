@@ -144,7 +144,7 @@ requests and in credential records; eleven identifiers may appear in `loginFacto
 (D-151).
 
 *Source: D-151; D-148, D-012, D-009, D-013, D-141, D-146, D-147, D-166, D-183, D-187,
-D-188*
+D-188, D-189*
 
 Conditional UI (autofill) is a presentation mode of passkey sign-in, not a separate
 factor. A hardware security key is one way to hold a WebAuthn credential, appearing
@@ -173,10 +173,12 @@ consideration is recorded, `phoneCode` is withheld from the challenge, and the a
 answered with what the challenge then offers (AUTH-FACT-002b criterion 6); at a step-up,
 whose challenge names no action, what it offers is judged against the strictest of the
 policy's gates, field by field, as a host-named gate that no policy states values for is
-(AUTH-STEP-002, D-187), and where the session already meets that gate as AUTH-STEP-002
-step 1 judges it the ask is answered 200 with `required` empty, nothing further being
-needed (D-188). An ask before a first factor sends nothing and is answered 202, whatever
-the account holds.
+(AUTH-STEP-002, D-187); with no combination left the ask is answered
+`auth.stepup.required` with the outcome AUTH-STEP-002 gives, `pending` with
+`pendingUntil` among them (D-189), and where the session already meets that gate as
+AUTH-STEP-002 step 1 judges it the ask is answered 200 with `required` empty, nothing
+further being needed (D-188). An ask before a first factor sends nothing and is answered
+202, whatever the account holds.
 
 **Acceptance criteria**
 1. `emailLink`, `emailCode`, `phoneLink` and `phoneCode` are absent from every
@@ -200,7 +202,8 @@ the account holds.
    consideration; at a sign-in it is answered with the factors the challenge still
    offers, or `auth.factor.rejected` where none is left; at a step-up, judged against
    the strictest of the policy's gates field by field, with no combination left it is
-   answered `auth.stepup.required` with `outcome` `report-loss` or `enrol`, and with
+   answered `auth.stepup.required` with the outcome AUTH-STEP-002 gives (`report-loss`,
+   `enrol`, or `pending` with `pendingUntil` where a loss report is in flight), and with
    that gate already met, as AUTH-STEP-002 step 1 judges it, it is answered 200 with
    `required` empty.
 
@@ -394,16 +397,22 @@ link, `link.magic.lifetime`. Every authentication code SHALL be invalidated afte
 `code.signin.attempts` (default **5**, ceiling 10) wrong tries, SHALL validate once, and
 SHALL be decided under a lock as a verification code is, its wrong try's count and its
 invalidation at the cap (the pending sign-in removed) kept writes as a verification
-code's are (CONV-DESIGN-003, D-186). A code presented right is spent whatever follows:
-where the sign-in it would complete is then refused (a domain lock, REG-DOM-001), its
-spend is a kept write committed in the one unit of work with the refusal, which counts
-no failure and records no failed authentication since the factor succeeded, and the lock
-is judged after the code, never before it, so that a wrong code learns nothing of the
-lock (D-188). The `emailCode` code SHALL be sent as the message kind
+code's are (CONV-DESIGN-003, D-186). A code presented right is spent whatever refusal
+follows, and a fault leaves it as it was, since nothing of the operation commits
+(AUTH-ABUSE-001, D-189): where the sign-in it would complete is then refused (a domain
+lock, REG-DOM-001), its spend is a kept write committed in the one unit of work with the
+refusal, which counts no failure and records no failed authentication since the factor
+succeeded, and the lock is judged after the code, never before it, so that a wrong code
+learns nothing of the lock (D-188). A right code sent to an address given up since is
+refused `auth.factor.rejected`, a refused factor counted and recorded with its spend in
+the same unit of work. For every factor, the lock on the address the sign-in was opened
+with is judged after the factor's verification and counts no failure, and what the
+verification wrote (a code's spend, a credential's counter) is kept with that refusal
+(CONV-DESIGN-003, D-189). The `emailCode` code SHALL be sent as the message kind
 `sign-in-code` and the `phoneCode` code as `secondstep-code`, never as a verification
 code.
 
-*Source: D-034, D-146, D-166, D-183, D-186, D-187, D-188*
+*Source: D-034, D-146, D-166, D-183, D-186, D-187, D-188, D-189*
 
 Collapsing them is a common source of bugs in which a verification code becomes a
 login credential. The attempt cap makes a six-digit code unguessable within its
@@ -480,11 +489,15 @@ Prevents lockout from a mis-scanned QR code.
 **AUTH-FACT-008** — Recovery codes SHALL be issued in sets of 10, single-use, displayed
 once at generation, and stored hashed. The set SHALL record `viewedAt`, set inside the
 unit of work of the generation or of the second-step enrolment (AUTH-RECOV-006) whose
-response returns it (D-188), and `exportedAt`, set when the frontend reports a copy,
-download or print (`POST /account/recoverycodes/exported`, the mapping of the operation
-`ICredentials.MarkRecoveryCodesExportedAsync`, D-187), and a **reminder** SHALL be sent
-through the account and as a notice when `recovery.codes.reminder` (default **365
-days**) has elapsed since the set was generated.
+response returns it (D-188), and for a set a registration's security step returned, the
+instant that step's response returned it, staged on the registration session and carried
+into the set at the terms step (REG-SESS-006, D-189); and `exportedAt`, set when the
+frontend reports a copy, download or print, or in an enrolment session when the
+confirm-saved control makes its one report (`POST /account/recoverycodes/exported`, the
+mapping of the operation `ICredentials.MarkRecoveryCodesExportedAsync`, AUTH-RECOV-006,
+D-187, D-189), and a **reminder** SHALL be sent through the account and as a notice when
+`recovery.codes.reminder` (default **365 days**) has elapsed since the set was
+generated.
 
 **Values (D-153).** A recovery code is 10 symbols from the Crockford base32 alphabet
 (about 50 bits), shown as two groups of five and hashed as a password is.
@@ -498,7 +511,7 @@ set stays owed and is reminded at a later pass (CONV-DESIGN-003, D-186). A set o
 account that is not active stays owed and is reminded if the account becomes active
 again. `remindedAt` is shown in the account and carried in the export.
 
-*Source: D-034, D-146, D-166, D-186, D-187, D-188*
+*Source: D-034, D-146, D-166, D-186, D-187, D-188, D-189*
 
 Hashed as passwords are: verifiable, never recoverable. The timestamps let the
 account say whether the person ever saved the codes; the reminder exists because a set
@@ -508,9 +521,11 @@ saved a year ago is often on a device or a sheet of paper the person no longer h
 1. A used code is rejected on second presentation.
 2. Codes are not retrievable after the generation screen.
 3. A database dump does not yield usable codes.
-4. `viewedAt` is set in the unit of work whose response returns the set, so a set
-   returned has it; `exportedAt` is set by `POST /account/recoverycodes/exported` and
-   stays unset otherwise; both are visible in the account.
+4. `viewedAt` is set in the unit of work whose response returns the set, or for a
+   registration's set the instant the security step's response returned it, carried in
+   at the terms step, so a set returned has it; `exportedAt` is set by
+   `POST /account/recoverycodes/exported` and stays unset otherwise; both are visible in
+   the account.
 5. A set older than `recovery.codes.reminder` produces one reminder in the account
    and one notice to the security-notice set, and no further reminder until the set
    is regenerated.
@@ -542,14 +557,21 @@ publicsuffix.org when each release is prepared and committed with its date, as t
 offline leaked-password list is (CONV-VCS-005, D-169); NOTICE names the list, its
 licence (Mozilla Public License 2.0) and its source address. The library uses it only to
 validate the deployment's own configured origins (this item and AUTH-FACT-012 AC2).
-Every name the comparison reads, a rule's labels as the embedded list is read and a
-configured origin's host at startup, takes its ASCII form from the library's own UTS #46
-conversion with REG-DOM-001's settings (IDN-ACCT-004), never from the machine's
-`IdnMapping`, so that the registrable domain is the same on every machine (D-154); a
-rule whose label the conversion refuses is set aside when the embedded list is read, and
-the number set aside is logged at startup (D-188).
+Every name the comparison reads, a rule's labels as the embedded list is read, and at
+startup a configured or related origin's host and the configured identifier, takes its
+ASCII form from the library's own UTS #46 conversion with REG-DOM-001's settings
+(IDN-ACCT-004), never from the machine's `IdnMapping`, so that the registrable domain is
+the same on every machine (D-154); a rule whose label the conversion refuses is set
+aside when the embedded list is read (D-188). The rules set aside are known when the
+list is committed: a test of the release pins them by name, so a list that sets one
+aside more, or one fewer, fails until the pin is reviewed with the list, and nothing is
+logged at run time. A configured origin's host, a related origin's host or the
+configured identifier that the conversion refuses stops the start with
+`model.startup.rpid`, and the identifier is judged against the hosts in the form the
+conversion gives both, so an identifier written in one form sits over an origin written
+in the other, as a browser judges it (D-189).
 
-*Source: D-004, D-166, D-188*
+*Source: D-004, D-166, D-188, D-189*
 
 A passkey created for `example.com` works across its subdomains; the reverse does
 not. The parent domain is the widest door and keeps a future mobile app usable with
@@ -561,11 +583,17 @@ deployment's own domains, and it surfaces at startup. That is why a refresh at e
 release is the proportionate update.
 
 **Acceptance criteria**
-1. A relying party identifier that is not a registrable suffix of a configured
-   origin fails startup with a named error.
+1. A relying party identifier that is not a registrable suffix of a configured origin,
+   or a configured host or identifier the conversion refuses, fails startup with
+   `model.startup.rpid`.
 2. With origins across subdomains and no explicit setting, the derived value is the
    common parent.
 3. Startup failure occurs before any credential can be enrolled.
+4. A release whose embedded list sets aside one rule more, or one fewer, than the
+   release test pins fails that test.
+5. An identifier written in ASCII form over an origin whose host is written in Unicode,
+   and the reverse, starts, and an unset identifier derives, as in ASCII form
+   throughout.
 
 ---
 
@@ -1946,13 +1974,16 @@ gone after a notified window — never remove one outright.
 
 ---
 
-**AUTH-RECOV-006** — Recovery codes SHALL **always** be generated when a second
-step is enrolled beside a password, and shown **once** with copy, download and print
+**AUTH-RECOV-006** — Recovery codes SHALL **always** be generated when a second step is
+enrolled beside a password, and shown **once** with copy, download and print
 (AUTH-FACT-008). The person SHALL confirm they have saved them before the enrolment
-completes. The set MAY be regenerated later (`POST /account/recoverycodes`,
-AUTH-FACT-009). A passkey-only account SHALL receive none.
+completes: in an enrolment session (AUTH-RECOV-002) the report of their export
+(`POST /account/recoverycodes/exported`) completes the enrolment and ends that session,
+which stays open on its routes until that report or the end of its lifetime (D-189). The
+set MAY be regenerated later (`POST /account/recoverycodes`, AUTH-FACT-009). A
+passkey-only account SHALL receive none.
 
-*Source: D-009, D-146; amends the earlier "encouraged, never blocking" position*
+*Source: D-009, D-146, D-189; amends the earlier "encouraged, never blocking" position*
 
 The earlier position held that a hard block reduces adoption. What changed is the
 shape of the flow: the codes appear on the same screen as the enrolment, saving them is
@@ -1965,9 +1996,12 @@ codes to stand in for (AUTH-FACT-002b).
    generates a set and displays it before the enrolment can complete; the flow does
    not complete until the person confirms they have saved it.
 2. Copy, download and print are each offered and each sets `exportedAt`
-   (AUTH-FACT-008).
+   (AUTH-FACT-008), save in an enrolment session, where the confirm-saved control's one
+   report sets it and ends the session (`18` FE-SEC-001).
 3. `POST /account/recoverycodes` regenerates the set under AUTH-FACT-009.
 4. A passkey-only account holds no recovery code set and is offered none.
+5. An enrolment session whose second step showed recovery codes stays open on its routes
+   until `POST /account/recoverycodes/exported` reports them saved, which ends it.
 
 ---
 
@@ -2061,15 +2095,19 @@ Independent limits on source address, account, and identifier. Applied to sign-i
 registration, recovery and step-up alike. A factor refused at step-up, including one
 presented against a challenge that is unknown or not the asker's, SHALL be counted
 against the source and against the session's account in the one account count sign-in
-failures are counted in, and the delay SHALL be asked before the challenge is opened. A
-verification refused in a registration session SHALL be counted against the source of
-the request that presents it: a wrong email or phone code against that source and the
-identifier, and a pressed link token that opens nothing, in a registration session or at
-`POST /account/identifiers/{id}/verify` (REG-IDENT-007, D-188), against that source
-alone, since it names no identifier, once that source's delay has been asked. Each ask
-of a code or a link in a registration session SHALL ask the delay first. Every count and
-every delay of a registration session uses the source of the request in hand, never one
-stored at its begin.
+failures are counted in, and the delay SHALL be asked before the challenge is opened. At
+both verify routes, `POST /register/verify/{id}` and
+`POST /account/identifiers/{id}/verify`, every code and every press SHALL first be held
+to the source's delay, and every one the route refuses as wrong, past its lifetime or
+its attempt cap, naming nothing held or opening nothing SHALL be counted against the
+source of the request that presents it: a wrong email or phone code against that source
+and the identifier, and a code or press past its lifetime or its attempt cap, a code
+naming nothing the session or the account holds, and a pressed link token that opens
+nothing against that source alone; a right code refused for another cause counts nothing
+(REG-SESS-003, REG-IDENT-004, REG-IDENT-007, D-188, D-189). Each ask of a code or a link
+in a registration session SHALL ask the delay first. Every count and every delay of a
+registration session uses the source of the request in hand, never one stored at its
+begin.
 
 The identifier component SHALL be keyed by the keyed hash, under the fingerprint key
 (OPS-SEC-001), of the identifier's canonical form (an address, a number or a username
@@ -2098,22 +2136,32 @@ plus that delay has passed, and a refusal carries that instant as `retryAt`.
 **Where a refusal's count is kept (D-183, D-186).** A count or record a refusal makes
 that SHALL stand, whatever the operation's outcome, is one of the kept writes
 CONV-DESIGN-003 lists, and is committed with the refusal, together with the refusal's
-other kept writes and nothing else. This chapter's are a failure under this item, a
-pressed registration link token that opens nothing among them, and the
+other kept writes and nothing else. This chapter's are a failure under this item, every
+code or press refused at either verify route as wrong, past its lifetime or its attempt
+cap, naming nothing held or opening nothing among them, and the
 `auth-failures-sustained` raise such failures bring for their account (OPS-ALERT-002); a
 consumed refresh token's session family revoked at its reuse, with its audit record
-(AUTH-OIDC-003); a wrong try of a code, its invalidation at the cap and the spend of a
-right code whose sign-in a domain lock then refuses (AUTH-FACT-004); a trusted device's
+(AUTH-OIDC-003); a wrong try of a code, its invalidation at the cap, the spend of a
+right authentication code whatever refusal follows, and what a factor's verification
+wrote where a domain lock then refuses the sign-in (AUTH-FACT-004); a trusted device's
 failure and its trust revoked at the limit (AUTH-FACT-015); the record of a refused
 step-up factor and of a failed authentication (AUTH-STEP-002, CONV-LOG-005); the audit
 record of a signature counter that did not advance (AUTH-FACT-014); and the record of a
 bot-defence signal and of a phone signal's consideration (AUTH-ABUSE-008,
 AUTH-FACT-002b). A refusal the gate records is written outside the operation instead
-(AUTHZ-CONCEAL-004). A fault of the library's own inside a sign-in, a sign-in code's or
-a device check's path is no failed attempt: nothing is counted under this item or
-recorded under CONV-LOG-005, and the request answers `system.fault` (D-188).
+(AUTHZ-CONCEAL-004). A fault of the library's own inside a sign-in, a step-up, a sign-in
+code's or a device check's path is no failed attempt: nothing is counted under this item
+or recorded under CONV-LOG-005, no `auth.stepup.failed` is written, and the request
+answers `system.fault` (D-188, D-189). A failed attempt of a presented factor is one
+refused with `auth.factor.rejected`, `auth.factor.notpermitted`, `auth.code.invalid`,
+`auth.code.expired`, `auth.code.replayed`, `auth.credential.suspended`,
+`auth.webauthn.algorithmnotallowed`, `auth.webauthn.countermismatch`,
+`auth.webauthn.rpidchanged` or `auth.webauthn.userverificationrequired`, and a
+break-glass code refused for any cause (`auth.breakglass.invalid`,
+`auth.breakglass.consumed`) is one too (OPS-BOOT-004); a new refusal of a factor joins
+this list with its `10` row (D-189).
 
-*Source: D-013, D-166, D-183, D-186, D-188*
+*Source: D-013, D-166, D-183, D-186, D-188, D-189*
 
 Lockout is a denial-of-service weapon usable by anyone who knows a user's email, at
 no cost to the attacker.
@@ -2161,8 +2209,12 @@ the control without handing over the lever.
 10. Failures from a recognised browser count towards the account's
     `auth-failures-sustained` condition (OPS-ALERT-002) and hold other sources, and do
     not hold that browser.
-11. Wrong codes presented in a registration session are counted and held by the delay
-    as refused factors at sign-in are.
+11. At both verify routes every code and press, one that opens a verification included,
+    waits out the source's delay first, and each one refused as this item lists counts
+    (a wrong code against the source and the identifier; a code or press past its
+    lifetime or its attempt cap, a code naming nothing the session or account holds and
+    a press that opens nothing against the source alone), as refused factors at sign-in
+    are; a right code refused for another cause counts nothing.
 12. A provider's return from a source under a delay calls no provider and returns the
     browser with `error=auth.throttled` and `retryAt`.
 13. Two addresses within one IPv6 /64 share one source delay, and an IPv4-mapped
@@ -2297,10 +2349,12 @@ governed send answers its caller with that reference or with the refusal, never 
 delivery. A refused send fails the operation that undertook it only where a chapter or
 the operation's `09` row answers that refusal; elsewhere the operation goes on without
 the send and commits what else it wrote, or rolls back where it wrote nothing else
-(CONV-DESIGN-003). One immediate attempt SHALL run after the outermost transaction
-commits, and SHALL be discarded if it rolls back; the row is written due
-`outbox.retry.initial` after its admission and the immediate attempt claims it whatever
-its due instant, so that no pass takes it first (CONV-DESIGN-003, D-188); whatever that
+(CONV-DESIGN-003). For a message that has one, one immediate attempt SHALL run after the
+outermost transaction commits, and SHALL be discarded if it rolls back; a row that has
+an immediate attempt is written due `outbox.retry.initial` after its admission and the
+immediate attempt claims it whatever its due instant, so that no pass takes it first,
+and a row that has none (a message whose ask is answered before any transport is called,
+AUTH-ABUSE-003) is due at its admission (CONV-DESIGN-003, D-188, D-189); whatever that
 attempt does not carry is the outbox publisher's, under `outbox.retry.*` (D-022,
 INF-BG-001). A caller that acts on whether its sends were carried (the loss report's
 notifications, AUTH-RECOV-007; an alert's channels, OPS-ALERT-003) undertakes them in
@@ -2345,7 +2399,7 @@ and refused by it alike (AUTH-ABUSE-006, D-186). For an address no account holds
 (AUTH-ABUSE-003).
 
 *Source: D-146; replaces the fixed window of D-013, INT-SMS-002 and IDN-LIFE-011;
-OPS-CFG-002; D-142 for the editing model; D-166, D-183, D-186, D-187, D-188*
+OPS-CFG-002; D-142 for the editing model; D-166, D-183, D-186, D-187, D-188, D-189*
 
 Shipped defaults:
 
@@ -2428,7 +2482,8 @@ or the alert that tells someone something is wrong.
     refusal commits nothing it wrote but the kept writes it made (CONV-DESIGN-003).
 19. A loss report's notification or an alert whose immediate attempt is not taken counts
     as not carried for its caller, whatever later becomes of its row; no pass claims a
-    new row before `outbox.retry.initial` has passed since its admission.
+    new row that has an immediate attempt before `outbox.retry.initial` has passed since
+    its admission, and a row that has none is claimed by the next pass.
 
 ---
 
@@ -2526,14 +2581,28 @@ universal. An additional challenge SHALL appear only on adverse signals.
 whether or not a verifier is declared. The record is a kept write, committed alone
 before the host's verifier is asked, since the verifier is called outside any open
 transaction, and a challenge the verifier then requires leaves it standing
-(CONV-DESIGN-003). The defence is asked at `POST /register`, before the session is
-created, since both signals are the source's: where a signal fires and a verifier is
-declared the request is answered 403 `auth.challenge.required` and creates nothing, and
-the frontend repeats it with the host's challenge token as `challengeToken`, which the
-verifier judges, a passing one creating the session; where none is declared the signal
-is recorded and the session created (`09`, `18` FE-REG-001, D-188).
+(CONV-DESIGN-003). The defence is asked at `POST /register`, after the signed-in refusal
+and before the invitation is judged, so that a challenged request spends no invitation,
+and before the session is created, since neither signal needs it: where a signal fires
+and a verifier is declared the request is answered 403 `auth.challenge.required` and
+creates nothing, and the frontend repeats it with the host's challenge token as
+`challengeToken`, which the verifier judges, a passing one creating the session; where
+none is declared the signal is recorded and the session created (`09`, `18` FE-REG-001,
+D-188). `repeatedAttempts` counts the session the request would create with those
+already created from the source in the hour. `datacenterRange` matches the whole address
+the request arrived on, never the counting source of AUTH-ABUSE-001, against the ranges
+of a file the host supplies through the optional range source (LIB-HOST-001), refreshed
+and judged for age exactly as the IP location file is (INT-GEN-006): UTF-8, a first line
+`# YYYY-MM-DD`, then one tab-separated range per line, first address and last address,
+refused whole for no date, an unreadable line, or ranges of mixed family, reversed or
+overlapping. The `datacenter-ranges` job refreshes it every
+`abuse.botdefence.ranges.refresh`; a file older than `abuse.botdefence.ranges.maxage`,
+judged from its own date, or none at all, is stale, and then `datacenterRange` does not
+fire and `degradation` is raised (OPS-OBS-002), so the signal is never silent. A host
+that supplies no ranges takes `datacenterRange` out of `abuse.botdefence.signals`. The
+library ships no ranges (D-189).
 
-*Source: D-013, D-186, D-188*
+*Source: D-013, D-186, D-188, D-189*
 
 Phone verification already imposes attacker cost; showing every customer a puzzle is
 friction without proportionate benefit.
@@ -2542,8 +2611,10 @@ friction without proportionate benefit.
 1. An ordinary registration presents no challenge.
 2. A registration from a datacenter range, or repeated attempts, presents one.
 3. `repeatedAttempts` means more than `abuse.botdefence.repeatedattempts` registration
-   sessions from one source in an hour; `datacenterRange` matches a bundled range file
-   refreshed like the IP location database (INT-GEN-006) (D-153).
+   sessions from one source in an hour, the one the request would create counted (with
+   the default 3, the fourth is challenged); `datacenterRange` matches the host's range
+   file, refreshed like the IP location file (INT-GEN-006), and with no fresh file it
+   does not fire and `degradation` is raised (D-153, D-189).
 4. The challenge is the host's: a challenge verifier callback declared on the model
    builder (LIB-HOST-001) takes a token and answers pass or fail. When a signal fires at
    `POST /register` and a verifier is declared, the request answers

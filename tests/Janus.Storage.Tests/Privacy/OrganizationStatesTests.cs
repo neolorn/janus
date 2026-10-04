@@ -225,7 +225,7 @@ public sealed class OrganizationStatesTests(DatabaseFixture database)
         await using var work = new UnitOfWork(writing);
         var store = new OrganizationStore(writing);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         Organization held = Assert.IsType<Organization>(
             await store.FindForUpdateAsync(organization, TestContext.Current.CancellationToken));

@@ -154,7 +154,7 @@ internal sealed class AppPasswords(
         DateTimeOffset now = time.GetUtcNow();
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         // AUTHZ-GATE-006, D-186: the server's creation is no write of the library's
         // database, so the gate is asked again inside the unit of work that records it,
@@ -286,7 +286,7 @@ internal sealed class AppPasswords(
         DateTimeOffset now = time.GetUtcNow();
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         _ = await TellAsync(subject, source, cancellationToken).ConfigureAwait(false);
         await audit.MailCredentialAsync(action, subject, credential, now, cancellationToken).ConfigureAwait(false);
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))

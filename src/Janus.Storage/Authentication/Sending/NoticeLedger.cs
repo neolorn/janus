@@ -60,7 +60,7 @@ internal sealed class NoticeLedger(StoreContext context, DataConnections connect
     }
 
     /// <inheritdoc/>
-    public async ValueTask<bool> FirstAsync(
+    public async ValueTask<bool> WasToldAsync(
         string destination,
         DateTimeOffset at,
         TimeSpan window,
@@ -78,9 +78,21 @@ internal sealed class NoticeLedger(StoreContext context, DataConnections connect
                         cancellationToken)
                     .ConfigureAwait(false))
             {
-                return false;
+                return true;
             }
         }
+
+        return false;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask MarkAsync(
+        string destination,
+        DateTimeOffset at,
+        TimeSpan window,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
 
         await SweepAsync(at, window, cancellationToken).ConfigureAwait(false);
 
@@ -91,8 +103,6 @@ internal sealed class NoticeLedger(StoreContext context, DataConnections connect
             FingerprintVersion = Fingerprint.CurrentVersion(ring),
             At = at,
         });
-
-        return true;
     }
 
     /// <inheritdoc/>

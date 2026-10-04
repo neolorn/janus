@@ -379,7 +379,7 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
         await using var work = new UnitOfWork(writing);
         var store = new PrivacyRequestStore(writing, new DataConnections(writing));
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         await store.HoldAsync(request.Subject, request.Type, TestContext.Current.CancellationToken);
 
@@ -404,7 +404,7 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
         var store = new PrivacyRequestStore(writing, new DataConnections(writing));
 
         _ = await store.FindAsync(request, TestContext.Current.CancellationToken);
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         QueuedRequest held = Assert.IsType<QueuedRequest>(
             await store.FindForUpdateAsync(request, TestContext.Current.CancellationToken));

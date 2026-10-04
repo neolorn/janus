@@ -473,7 +473,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
         await using StoreContext writing = database.Context();
         await using var work = new UnitOfWork(writing);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         await Ledger(writing).RecordAsync(reference, counted, spent, at, TestContext.Current.CancellationToken);
 
@@ -487,7 +487,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
         await using StoreContext writing = database.Context();
         await using var work = new UnitOfWork(writing);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         SendLedger ledger = Ledger(writing);
 
@@ -516,7 +516,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
         await using StoreContext writing = database.Context();
         await using var work = new UnitOfWork(writing);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         await Ledger(writing).GrantAsync(key, credit, TestContext.Current.CancellationToken);
 
@@ -529,7 +529,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
         await using StoreContext writing = database.Context();
         await using var work = new UnitOfWork(writing);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         bool released = await Ledger(writing).ReleaseAsync(reference, TestContext.Current.CancellationToken);
 
@@ -556,7 +556,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
         await using StoreContext writing = database.Context();
         await using var work = new UnitOfWork(writing);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         IReadOnlyDictionary<RestrictionKey, SendCounter> held = await Ledger(writing)
             .HoldAsync(keys, stale, setAside, TestContext.Current.CancellationToken);

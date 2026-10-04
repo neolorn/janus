@@ -134,7 +134,7 @@ internal sealed class ThrottleService(
         DateTimeOffset now = time.GetUtcNow();
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -205,7 +205,7 @@ internal sealed class ThrottleService(
         }
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await ledger.HoldAsync(ThrottleScope.Account, account.ToString(), cancellationToken).ConfigureAwait(false);
         await ledger.ClearAsync(ThrottleScope.Account, account.ToString(), cancellationToken).ConfigureAwait(false);
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
