@@ -440,6 +440,33 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-008 AC4, REG-SESS-006: the set a registration's security step returned
+    /// records, as when it was viewed, the instant that step's response returned it,
+    /// staged on the session and carried into the set at the terms step.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_008_AC4_ARegistrationsSetIsViewedWhenTheSecurityStepReturnedItAsync()
+    {
+        RegistrationSessionId session = await ConfirmedAsync();
+        _ = Ok(await Service.SetPasswordAsync(session, Short, TestContext.Current.CancellationToken));
+        DateTimeOffset returned = _clock.GetUtcNow();
+        RegistrationState settled = Ok(await Service.EnrolAsync(
+            session,
+            SecondStepCredential(),
+            TestContext.Current.CancellationToken));
+        Later();
+
+        RegistrationCompleted completed = Ok(await AcceptedAsync(session));
+
+        RecoveryCodeSet? held = await _sets.FindAsync(completed.Subject, TestContext.Current.CancellationToken);
+        Assert.NotNull(settled.Security.RecoveryCodes);
+        Assert.NotNull(held);
+        Assert.Equal(returned, held.ViewedAt);
+        Assert.Equal(returned + TimeSpan.FromMinutes(2), held.GeneratedAt);
+        Assert.Null(held.ExportedAt);
+    }
+
+    /// <summary>
     /// REG-SESS-006 AC1, REG-PM-001: a passkey created against the registration
     /// session, under its provisional handle and the staged email, completes the step
     /// with no password, and the account the terms step creates holds it.

@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The recovery-code set of an account that enrolled a second step beside a password
+  while registering carries `viewedAt`: the instant the security step returned the
+  codes, kept on the registration session and written with the set at the terms
+  step, where the set was written with it unset.
 - An enrolment session reaches the routes `POST /enrol/begin` lists and no other
   credential route: `DELETE /account/credentials/{id}` and
   `POST /account/credentials/{id}/upgrade` refuse it 403 `authz.denied`, as do

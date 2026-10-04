@@ -2142,7 +2142,10 @@ internal sealed class RegistrationService(
                 return (failure, null);
             }
 
-            session.StageRecoveryCodes(set.Hashes);
+            // AUTH-FACT-008, REG-SESS-006: the response of the unit of work this staging
+            // joins returns the codes, the one time they are shown, so the instant is
+            // staged with them and the terms step carries it into the set.
+            session.StageRecoveryCodes(set.Hashes, time.GetUtcNow());
             drawn = set.Codes;
         }
 
@@ -2647,11 +2650,16 @@ internal sealed class RegistrationService(
 
         if (session.RecoveryCodes is IReadOnlyList<PasswordHash> codes)
         {
-            await recoveryCodeStore
-                .ReplaceAsync(
-                    RecoveryCodeSet.Of(session.Provisional, codes, now),
-                    cancellationToken)
-                .ConfigureAwait(false);
+            var set = RecoveryCodeSet.Of(session.Provisional, codes, now);
+
+            // AUTH-FACT-008 AC4: the set was viewed when the security step returned it,
+            // which is the instant the session staged with it.
+            if (session.RecoveryCodesViewedAt is DateTimeOffset viewedAt)
+            {
+                set.Viewed(viewedAt);
+            }
+
+            await recoveryCodeStore.ReplaceAsync(set, cancellationToken).ConfigureAwait(false);
         }
     }
 }

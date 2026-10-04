@@ -129,6 +129,12 @@ internal sealed class RegistrationSession
     public IReadOnlyList<PasswordHash>? RecoveryCodes { get; private set; }
 
     /// <summary>
+    /// The instant the security step's response returned those codes, which the set
+    /// records as when it was viewed once the terms step writes it (AUTH-FACT-008).
+    /// </summary>
+    public DateTimeOffset? RecoveryCodesViewedAt { get; private set; }
+
+    /// <summary>
     /// The WebAuthn creation ceremony the session has open, where it has one. It is
     /// spent or replaced under the lock on the session (REG-SESS-001).
     /// </summary>
@@ -250,6 +256,7 @@ internal sealed class RegistrationSession
     /// <param name="passwordStandsAlone">Whether it reaches the single-factor floor.</param>
     /// <param name="phoneSkipped">Whether the phone step was passed over.</param>
     /// <param name="recoveryCodes">The set drawn at the security step.</param>
+    /// <param name="recoveryCodesViewedAt">When the security step returned that set.</param>
     /// <param name="termsVersion">The terms version accepted.</param>
     /// <param name="noticeVersion">The notice version presented.</param>
     /// <param name="invitation">The invitation that opened it, where one did.</param>
@@ -266,6 +273,7 @@ internal sealed class RegistrationSession
         bool passwordStandsAlone,
         bool phoneSkipped,
         IReadOnlyList<PasswordHash>? recoveryCodes,
+        DateTimeOffset? recoveryCodesViewedAt,
         string? termsVersion,
         string? noticeVersion,
         InvitationId? invitation,
@@ -282,6 +290,7 @@ internal sealed class RegistrationSession
         PasswordStandsAlone = passwordStandsAlone;
         PhoneSkipped = phoneSkipped;
         RecoveryCodes = recoveryCodes;
+        RecoveryCodesViewedAt = recoveryCodesViewedAt;
         TermsVersion = termsVersion;
         NoticeVersion = noticeVersion;
         Invitation = invitation;
@@ -549,15 +558,17 @@ internal sealed class RegistrationSession
 
     /// <summary>
     /// Stages the set of recovery codes the security step drew, replacing whatever
-    /// was staged.
+    /// was staged, with the instant the step's response returns them.
     /// </summary>
     /// <param name="codes">The hashes, in the order the codes were drawn.</param>
+    /// <param name="viewedAt">When the response that returns the codes is produced.</param>
     /// <exception cref="ArgumentNullException">The set is absent.</exception>
-    public void StageRecoveryCodes(IReadOnlyList<PasswordHash> codes)
+    public void StageRecoveryCodes(IReadOnlyList<PasswordHash> codes, DateTimeOffset viewedAt)
     {
         ArgumentNullException.ThrowIfNull(codes);
 
         RecoveryCodes = codes;
+        RecoveryCodesViewedAt = viewedAt;
     }
 
     /// <summary>
