@@ -117,6 +117,12 @@ against the public contract of LIB-API-001.
   audits it. Where the server does not take the revocation the refusal is answered all
   the same, the failure is logged, and the password stays listed for its holder to
   revoke.
+- An approved recovery writes the approval, its audit record and the enrolment link's
+  send in one unit of work. A link a sending restriction refuses is answered 429
+  `auth.restriction.exceeded` with `retryAt`, and one the gateway floor refuses 422
+  `integration.sms.balancefloor`; either leaves no approval, no record of it and no
+  send, and so does a restriction of the approver's account committed after the first
+  ask of the gate, answered `authz.restricted`.
 - The shipped mail-server adapter lists an account whose `emailAddress` does not read as
   an email address, or that holds none, with no address, where it failed the listing
   for an account holding none. Reconciliation reads such a listing whole: the account

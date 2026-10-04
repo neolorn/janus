@@ -21,12 +21,19 @@ internal sealed class RecoveryApprovalStoreInMemory : IRecoveryApprovalStore
     /// </summary>
     public IReadOnlyList<RecoveryApproval> All => _given;
 
+    /// <summary>
+    /// The unit of work the operations under test run in. Where a test names it, an
+    /// approval written or spent inside one that rolls back is put back as it stood.
+    /// </summary>
+    public UnitOfWorkInMemory? Work { get; set; }
+
     /// <inheritdoc/>
     public ValueTask HoldAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
 
     /// <inheritdoc/>
     public ValueTask AddAsync(RecoveryApproval approval, CancellationToken cancellationToken)
     {
+        Undoing();
         _given.Add(approval);
 
         return ValueTask.CompletedTask;
@@ -69,6 +76,8 @@ internal sealed class RecoveryApprovalStoreInMemory : IRecoveryApprovalStore
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
+        Undoing();
+
         for (int index = 0; index < _given.Count; index++)
         {
             if (_given[index].Subject == subject && _given[index].SpentAt is null)
@@ -78,5 +87,23 @@ internal sealed class RecoveryApprovalStoreInMemory : IRecoveryApprovalStore
         }
 
         return ValueTask.CompletedTask;
+    }
+
+    // What the table holds now is what a rollback of the unit of work in progress puts
+    // back.
+    private void Undoing()
+    {
+        if (Work is not { Open: true })
+        {
+            return;
+        }
+
+        RecoveryApproval[] given = [.. _given];
+
+        Work.Undoing(() =>
+        {
+            _given.Clear();
+            _given.AddRange(given);
+        });
     }
 }

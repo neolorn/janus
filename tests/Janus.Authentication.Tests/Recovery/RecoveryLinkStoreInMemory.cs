@@ -16,6 +16,17 @@ internal sealed class RecoveryLinkStoreInMemory : IRecoveryLinkStore
 {
     private readonly Dictionary<string, RecoveryLink> _links = [];
 
+    /// <summary>
+    /// The unit of work the operations under test run in. Where a test names it, a link
+    /// replaced inside one that rolls back is put back as it stood.
+    /// </summary>
+    public UnitOfWorkInMemory? Work { get; set; }
+
+    /// <summary>
+    /// How many links the store holds.
+    /// </summary>
+    public int Count => _links.Count;
+
     /// <inheritdoc/>
     public ValueTask<RecoveryLink?> FindAsync(
         byte[] fingerprint,
@@ -44,6 +55,21 @@ internal sealed class RecoveryLinkStoreInMemory : IRecoveryLinkStore
     public ValueTask ReplaceAsync(RecoveryLink link, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(link);
+
+        if (Work is { Open: true })
+        {
+            var held = new Dictionary<string, RecoveryLink>(_links);
+
+            Work.Undoing(() =>
+            {
+                _links.Clear();
+
+                foreach (KeyValuePair<string, RecoveryLink> one in held)
+                {
+                    _links[one.Key] = one.Value;
+                }
+            });
+        }
 
         foreach (string key in _links
             .Where(entry =>

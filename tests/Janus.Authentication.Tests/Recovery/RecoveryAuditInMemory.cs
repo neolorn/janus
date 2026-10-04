@@ -41,6 +41,12 @@ internal sealed class RecoveryAuditInMemory : IRecoveryAudit
     /// </summary>
     public IReadOnlyList<Entry> Written => _written;
 
+    /// <summary>
+    /// The unit of work the operations under test run in. Where a test names it, a
+    /// record written inside one that rolls back is forgotten, as the trail forgets it.
+    /// </summary>
+    public UnitOfWorkInMemory? Work { get; set; }
+
     /// <inheritdoc/>
     public ValueTask ApprovedAsync(
         SubjectId approver,
@@ -51,6 +57,9 @@ internal sealed class RecoveryAuditInMemory : IRecoveryAudit
         DateTimeOffset at,
         CancellationToken cancellationToken)
     {
+        int stood = _written.Count;
+
+        Work?.Undoing(() => _written.RemoveRange(stood, _written.Count - stood));
         _written.Add(new Entry(approver, subject, reason, channel, at) { BreakGlassReason = breakGlassReason });
 
         return ValueTask.CompletedTask;
