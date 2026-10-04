@@ -37,6 +37,10 @@ against the public contract of LIB-API-001.
   where it applied the change for as long as the replace was pending. A code or a
   confirmation outstanding on an add or a replace when this version is deployed no
   longer answers: the add is asked again, and the replace is abandoned and made again.
+- A removal of an identifier, and the swap of a replace, replaces a removal record of
+  the same kind and value whose undo window has run out and that the `expiry-sweep` job
+  has not yet taken, where the second removal of such a value was a fault until the
+  sweep ran.
 - `ICredentials.MarkRecoveryCodesExportedAsync` records that the person copied,
   downloaded or printed the recovery-code set the account holds, and
   `POST /account/recoverycodes/exported` maps it. An account holding no set is refused

@@ -151,7 +151,9 @@ internal interface IIdentifierStore
 
     /// <summary>
     /// Records that an account gave an identifier up, which holds the value out of
-    /// reach for as long as the undo is good for.
+    /// reach for as long as the undo is good for. A removal row of the same kind and
+    /// value whose window ran out before this removal, not yet swept, is replaced; the
+    /// caller holds the value's lock (REG-IDENT-006).
     /// </summary>
     /// <param name="removal">What was given up.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
