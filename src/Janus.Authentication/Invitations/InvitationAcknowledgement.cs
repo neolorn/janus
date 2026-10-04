@@ -447,8 +447,9 @@ internal sealed class InvitationAcknowledgement(
 
     // REG-DOM-001: the lock is judged as it now stands on the address the member will
     // sign in with: the corporate address where one is taken on, else the bound email,
-    // else any verified email the account holds. An account holding no email signs in
-    // with none, so nothing of it is judged.
+    // else any verified email the account holds. An account holding no verified email
+    // has no address a lock admits, so it is refused wherever the lock is on
+    // (criterion 10).
     private async ValueTask<Error?> OutsideLockAsync(
         Invitation invitation,
         InvitedIdentifiers bound,
@@ -466,7 +467,9 @@ internal sealed class InvitationAcknowledgement(
                 .ConfigureAwait(false);
         }
 
-        Error? refused = null;
+        Error? refused = await locks
+            .RefusedWithoutAddressInAsync(invitation.Organization, cancellationToken)
+            .ConfigureAwait(false);
 
         foreach (HeldIdentifier email in held.OfKind(IdentifierKind.Email).Where(identifier => identifier.IsVerified))
         {

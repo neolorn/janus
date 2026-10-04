@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- An account that holds no verified email cannot acknowledge an invitation into an
+  organization whose domain lock is on: it is refused with
+  `identity.identifier.domainnotallowed` and nothing is written, as an account whose
+  verified emails are all outside the list is.
 - `CredentialSuspended` carries the effective identity of the context that reported the
   loss or asked for the removal as `Effective`, beside its `Actor`, as
   `CredentialRestored` from a session does. Both are carried as the context gives them.

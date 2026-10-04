@@ -521,6 +521,37 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-DOM-001 criterion 10: an account holding no verified email at all has no
+    /// address a lock admits, so it cannot acknowledge an open invitation into an
+    /// organization whose lock is on, and nothing is written; into one that locks
+    /// nothing it is acknowledged.
+    /// </summary>
+    [Fact]
+    public async Task REG_DOM_001_AC10_AnAccountHoldingNoVerifiedEmailCannotAcknowledgeIntoALockedOrganizationAsync()
+    {
+        string token = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+        SubjectId holder = Holder();
+        InvitationId invitation = _invitations.Held[0].Id;
+
+        _ = _identifiers.Verified(holder, IdentifierKind.Phone, Number);
+        _authenticators.Hold(Passkey(holder));
+        Accepted(await OpenAsync(holder, token));
+        await LockedAsync(Customer, "staff.test");
+        _work.Reset();
+
+        Error refused = Failure(await AcknowledgeAsync(holder, invitation));
+
+        Assert.Equal(ErrorCodes.IdentifierDomainNotAllowed, refused.Code);
+        Assert.Empty(_attachments.Attached);
+        Assert.Equal(0, _work.Opened);
+
+        _configuration.Set(Settings.OrganizationPolicy, Customer.ToString(), PolicyOverride.None);
+
+        Accepted(await AcknowledgeAsync(holder, invitation));
+        Assert.Equal(Customer, Assert.Single(_attachments.Attached).Organization);
+    }
+
+    /// <summary>
     /// REG-INV-001: an identifier that does not read, or whose words mix scripts, is
     /// refused naming the member it was entered in.
     /// </summary>
