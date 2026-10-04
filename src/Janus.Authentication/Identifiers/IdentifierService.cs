@@ -147,6 +147,16 @@ internal sealed class IdentifierService(
         // the second counts what the first took on.
         await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
 
+        // AUTHZ-GATE-006, D-183: the restriction is asked again under that lock, which the
+        // operation takes itself before any other, so one committed since the gate step
+        // refuses the addition before anything is written.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
         held = await directory.HeldAsync(subject, cancellationToken).ConfigureAwait(false);
 
         if (Standing(held, canonical) is null && held.OfKind(kind).Count >= maximum)
@@ -201,7 +211,7 @@ internal sealed class IdentifierService(
             return Result.Failure(restricted);
         }
 
-        return await ProvedAsync(subject, session, identifier, code, source, cancellationToken)
+        return await ProvedAsync(context, subject, session, identifier, code, source, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -219,7 +229,14 @@ internal sealed class IdentifierService(
         return await enrolments.FindAsync(enrolment, cancellationToken).ConfigureAwait(false)
             is not EnrolmentSession opened
             ? Result.Failure(Error.From(ErrorCodes.EnrolmentTokenInvalid))
-            : await ProvedAsync(opened.Subject, completing: null, identifier, code, source, cancellationToken)
+            : await ProvedAsync(
+                    asking: null,
+                    opened.Subject,
+                    completing: null,
+                    identifier,
+                    code,
+                    source,
+                    cancellationToken)
                 .ConfigureAwait(false);
     }
 
@@ -227,6 +244,7 @@ internal sealed class IdentifierService(
     // the account it belongs to was established, and the session, where there is one,
     // that a replacement it completes keeps (IDN-LIFE-008).
     private async ValueTask<Result> ProvedAsync(
+        AccessContext? asking,
         SubjectId subject,
         SessionId? completing,
         IdentifierId identifier,
@@ -240,6 +258,16 @@ internal sealed class IdentifierService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the verification before anything is written.
+        if (await RestrictedSinceAsync(asking, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
         }
 
         // D-166 X3: the verification is read under its lock, so every wrong code of many
@@ -521,6 +549,16 @@ internal sealed class IdentifierService(
         // once, or a promotion and a removal, the second decides on what the first left.
         await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
 
+        // AUTHZ-GATE-006, D-183: the restriction is asked again under that lock, which the
+        // operation takes itself before any other, so one committed since the gate step
+        // refuses the promotion before anything is written.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
         held = await directory.HeldAsync(subject, cancellationToken).ConfigureAwait(false);
 
         if (Unpromotable(held.Find(identifier)) is Error moved)
@@ -610,6 +648,16 @@ internal sealed class IdentifierService(
 
         // D-166 X3: as for a promotion.
         await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        // AUTHZ-GATE-006, D-183: the restriction is asked again under that lock, which the
+        // operation takes itself before any other, so one committed since the gate step
+        // refuses the setting before anything is written.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
 
         held = await directory.HeldAsync(subject, cancellationToken).ConfigureAwait(false);
 
@@ -704,6 +752,16 @@ internal sealed class IdentifierService(
 
         // D-166 X3: as for a promotion.
         await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+        // AUTHZ-GATE-006, D-183: the restriction is asked again under that lock, which the
+        // operation takes itself before any other, so one committed since the gate step
+        // refuses the removal before anything is written.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
 
         held = await directory.HeldAsync(subject, cancellationToken).ConfigureAwait(false);
 
@@ -889,7 +947,7 @@ internal sealed class IdentifierService(
             return Result.Failure(closed);
         }
 
-        return await StagedAsync(subject, session, identifier, value, source, cancellationToken)
+        return await StagedAsync(context, subject, session, identifier, value, source, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -915,6 +973,7 @@ internal sealed class IdentifierService(
         // anything else reaches this no more than a session does.
         return opened.MailboxLost
             ? await StagedAsync(
+                    asking: null,
                     opened.Subject,
                     session: null,
                     identifier,
@@ -929,6 +988,7 @@ internal sealed class IdentifierService(
     // asks nothing of the address it displaces, because the approver already
     // confirmed on a channel the account holds.
     private async ValueTask<Result> StagedAsync(
+        AccessContext? asking,
         SubjectId subject,
         SessionId? session,
         IdentifierId identifier,
@@ -990,6 +1050,16 @@ internal sealed class IdentifierService(
             return Result.Failure(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the replacement before anything is written.
+        if (await RestrictedSinceAsync(asking, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
         if (await TakenAsync(subject, changing.Kind, canonical, source, cancellationToken)
             .ConfigureAwait(false))
         {
@@ -1040,6 +1110,14 @@ internal sealed class IdentifierService(
 
         return Result.Success();
     }
+
+    // AUTHZ-GATE-006, D-183: the restriction asked again inside the unit of work, where
+    // the gate judges it with the account's row held. An enrolment session is not asked
+    // about the restriction, there as at the gate step (IDN-ACCT-007).
+    private async ValueTask<Error?> RestrictedSinceAsync(AccessContext? asking, CancellationToken cancellationToken) =>
+        asking is null
+            ? null
+            : await restriction.RefusedAsync(asking, cancellationToken).ConfigureAwait(false);
 
     // REG-IDENT-005: only an identifier the account holds and has proved is promoted,
     // and the personal email stays non-primary for the whole membership (REG-MAIL-001).

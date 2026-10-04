@@ -48,6 +48,11 @@ against the public contract of LIB-API-001.
   write, and the setting's one writer joins that transaction. A restriction of the
   acting account committed after the first ask refuses the change `authz.restricted`
   and leaves nothing written.
+- An account's own changes of its identifiers (adding one, verifying one by its code,
+  making one primary, setting the backup, removing one and replacing one) ask the gate
+  again inside their unit of work before the first write, with the acting account's row
+  locked first. A restriction committed after the first ask refuses the change
+  `authz.restricted` and leaves nothing written.
 - The shipped mail-server adapter lists an account whose `emailAddress` does not read as
   an email address, or that holds none, with no address, where it failed the listing
   for an account holding none. Reconciliation reads such a listing whole: the account
