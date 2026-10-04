@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `RestrictionName` names a sending restriction under the same rule as a document's
+  name, read by `Parse`, `TryParse` and `IParsable<T>`. `IRestrictionSet.ReadAsync`,
+  `DeleteAsync` and `GrantAsync` take it, where each took text, and the
+  `/admin/restrictions/{name}` routes bind it from the path, so a name outside the rule
+  is refused 400 `api.request.malformed` naming `name` before the body is read, where a
+  body that did not read was named first.
 - `DocumentName` names a legal document: 1 to 64 lower-case letters and digits
   separated by single `.`, `-` or `_`, read by `Parse`, `TryParse` and `IParsable<T>`.
   `ILegalDocuments.ReadAsync` and `TranslateAsync` take it and `DocumentPublication`

@@ -47,13 +47,11 @@ internal sealed class RestrictionSetService(
     /// <inheritdoc/>
     public async ValueTask<Result<Restriction>> ReadAsync(
         AccessContext context,
-        string name,
+        RestrictionName name,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(name);
-
         return (await AllAsync(context, cancellationToken).ConfigureAwait(false)).Match(
-            declared => Named(declared, name) is Restriction restriction
+            declared => Named(declared, name.ToString()) is Restriction restriction
                 ? Result.Success(restriction)
                 : Result.Failure<Restriction>(Unnamed()),
             Result.Failure<Restriction>);
@@ -103,12 +101,10 @@ internal sealed class RestrictionSetService(
     public async ValueTask<Result> DeleteAsync(
         AccessContext context,
         SessionId session,
-        string name,
+        RestrictionName name,
         string? reason,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(name);
-
         Error? failure = null;
 
         IReadOnlyList<Restriction> declared = (await AllAsync(context, cancellationToken).ConfigureAwait(false))
@@ -121,7 +117,7 @@ internal sealed class RestrictionSetService(
 
         // Deleting what is not there changes nothing, and a change of nothing is not
         // one to announce or to write down.
-        if (Named(declared, name) is null)
+        if (Named(declared, name.ToString()) is null)
         {
             return Result.Failure(Unnamed());
         }
@@ -131,7 +127,7 @@ internal sealed class RestrictionSetService(
                 session,
                 StepUpAction.RestrictionEdit,
                 challenge => administration.EditAsync(
-                    name,
+                    name.ToString(),
                     replacement: null,
                     reason,
                     challenge,
@@ -145,14 +141,13 @@ internal sealed class RestrictionSetService(
     public async ValueTask<Result> GrantAsync(
         AccessContext context,
         SessionId session,
-        string name,
+        RestrictionName name,
         string keyValue,
         int credit,
         string? reason,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(keyValue);
 
         if (await scope.RefusedAsync(context, Permissions.RestrictionGrant, cancellationToken)
@@ -166,7 +161,7 @@ internal sealed class RestrictionSetService(
                 session,
                 StepUpAction.RestrictionGrant,
                 challenge => administration.GrantAsync(
-                    name,
+                    name.ToString(),
                     keyValue,
                     credit,
                     reason,

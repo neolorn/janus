@@ -405,6 +405,40 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// INT-SMS-003 AC3, chapter 09 section 8 (D-187): the name is bound from the route as
+    /// a restriction's name, so a name outside the rule is answered naming <c>name</c>
+    /// before any body is read: a body that is no JSON, and one whose member does not
+    /// read, are never named.
+    /// </summary>
+    /// <param name="body">A body the endpoint cannot read.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("{")]
+    [InlineData("""{ "key": 7, "buckets": "none", "credit": "three" }""")]
+    public async Task INT_SMS_003_AC3_ANameOutsideItsRuleIsAnsweredBeforeTheBodyIsReadAsync(string body)
+    {
+        Browser administrator = await AuthorisedAsync(
+            Permissions.RestrictionEdit,
+            Permissions.RestrictionGrant,
+            Permissions.SystemAdminister);
+
+        Answer edited = await administrator.SendAsync("PUT", "/admin/restrictions/No..Such", body);
+        Answer deleted = await administrator.SendAsync("DELETE", "/admin/restrictions/No..Such", body);
+        Answer granted = await administrator.SendAsync("POST", "/admin/restrictions/No..Such/grant", body);
+
+        Assert.All(
+            new[] { edited, deleted, granted },
+            answer =>
+            {
+                Assert.Equal(StatusCodes.Status400BadRequest, answer.Status);
+                Assert.Equal(ErrorCodes.RequestMalformed.ToString(), answer.Text("code"));
+                Assert.Equal("name", answer.Json().GetProperty("details").GetProperty("member").GetString());
+            });
+        Assert.Empty(_deployment.Events.Of<SendingRestrictionChanged>());
+        Assert.Empty(_deployment.Events.Of<SendingRestrictionGranted>());
+    }
+
+    /// <summary>
     /// API-CONV-002, CONV-CODE-006 AC2, D-166: a reason past 1024 characters after
     /// trimming is a request the boundary does not read, refused naming it at the edit,
     /// the deletion and the grant, and nothing changes.

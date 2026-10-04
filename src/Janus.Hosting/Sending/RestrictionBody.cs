@@ -27,7 +27,7 @@ internal sealed record RestrictionBody(
     /// </summary>
     /// <param name="name">The restriction's name.</param>
     /// <returns>The restriction, or nothing and the member that stopped it.</returns>
-    public (Restriction? Restriction, string Member) Read(string name)
+    public (Restriction? Restriction, string Member) Read(RestrictionName name)
     {
         if (!Keyed(Key, out RestrictionKeyKind kind, out string? host))
         {
@@ -65,7 +65,7 @@ internal sealed record RestrictionBody(
             buckets.Add(read);
         }
 
-        return (new Restriction(name, kind, host, purpose, buckets) { Channel = channel }, string.Empty);
+        return (new Restriction(name.ToString(), kind, host, purpose, buckets) { Channel = channel }, string.Empty);
     }
 
     private static bool Keyed(string? written, out RestrictionKeyKind kind, out string? host)

@@ -38,7 +38,7 @@ public interface IRestrictionSet
     /// </returns>
     ValueTask<Result<Restriction>> ReadAsync(
         AccessContext context,
-        string name,
+        RestrictionName name,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -76,7 +76,7 @@ public interface IRestrictionSet
     ValueTask<Result> DeleteAsync(
         AccessContext context,
         SessionId session,
-        string name,
+        RestrictionName name,
         string? reason,
         CancellationToken cancellationToken);
 
@@ -100,7 +100,7 @@ public interface IRestrictionSet
     ValueTask<Result> GrantAsync(
         AccessContext context,
         SessionId session,
-        string name,
+        RestrictionName name,
         string keyValue,
         int credit,
         string? reason,

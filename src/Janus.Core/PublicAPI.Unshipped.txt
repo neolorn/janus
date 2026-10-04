@@ -1413,10 +1413,10 @@ Janus.Core.IRestoreTestInstance.RestoreAsync(System.Threading.CancellationToken 
 Janus.Core.IRestoreTestInstance.TearDownAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IRestrictionSet
 Janus.Core.IRestrictionSet.AllAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.Restriction!>!>>
-Janus.Core.IRestrictionSet.DeleteAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, string! name, string? reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IRestrictionSet.DeleteAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.RestrictionName name, string? reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IRestrictionSet.EditAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.Restriction! replacement, string? reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
-Janus.Core.IRestrictionSet.GrantAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, string! name, string! keyValue, int credit, string? reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
-Janus.Core.IRestrictionSet.ReadAsync(Janus.Core.AccessContext! context, string! name, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.Restriction!>>
+Janus.Core.IRestrictionSet.GrantAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.RestrictionName name, string! keyValue, int credit, string? reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IRestrictionSet.ReadAsync(Janus.Core.AccessContext! context, Janus.Core.RestrictionName name, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.Restriction!>>
 Janus.Core.IRoles
 Janus.Core.IRoles.AllAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.DefinedRole!>!>>
 Janus.Core.IRoles.DefineAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.DefinedRole! role, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<bool>>
@@ -2502,6 +2502,9 @@ Janus.Core.RestrictionChannel
 Janus.Core.RestrictionChannel.Any = 0 -> Janus.Core.RestrictionChannel
 Janus.Core.RestrictionChannel.Email = 2 -> Janus.Core.RestrictionChannel
 Janus.Core.RestrictionChannel.Sms = 1 -> Janus.Core.RestrictionChannel
+Janus.Core.RestrictionName
+Janus.Core.RestrictionName.RestrictionName() -> void
+Janus.Core.RestrictionName.Equals(Janus.Core.RestrictionName other) -> bool
 Janus.Core.RestrictionPurpose
 Janus.Core.RestrictionPurpose.Any = 0 -> Janus.Core.RestrictionPurpose
 Janus.Core.RestrictionPurpose.Notification = 4 -> Janus.Core.RestrictionPurpose
@@ -3407,6 +3410,8 @@ override Janus.Core.RestrictionKeySupplier.GetHashCode() -> int
 override Janus.Core.RestrictionKeySupplier.ToString() -> string!
 override Janus.Core.Result.GetHashCode() -> int
 override Janus.Core.Result<TValue>.GetHashCode() -> int
+override Janus.Core.RestrictionName.GetHashCode() -> int
+override Janus.Core.RestrictionName.ToString() -> string!
 override Janus.Core.RoleName.GetHashCode() -> int
 override Janus.Core.RoleName.ToString() -> string!
 override Janus.Core.SendContext.Equals(object? obj) -> bool
@@ -4343,6 +4348,10 @@ static Janus.Core.Result.operator !=(Janus.Core.Result left, Janus.Core.Result r
 static Janus.Core.Result.operator ==(Janus.Core.Result left, Janus.Core.Result right) -> bool
 static Janus.Core.Result<TValue>.operator !=(Janus.Core.Result<TValue> left, Janus.Core.Result<TValue> right) -> bool
 static Janus.Core.Result<TValue>.operator ==(Janus.Core.Result<TValue> left, Janus.Core.Result<TValue> right) -> bool
+static Janus.Core.RestrictionName.Parse(string! value) -> Janus.Core.RestrictionName
+static Janus.Core.RestrictionName.TryParse(string? value, out Janus.Core.RestrictionName name) -> bool
+static Janus.Core.RestrictionName.operator !=(Janus.Core.RestrictionName left, Janus.Core.RestrictionName right) -> bool
+static Janus.Core.RestrictionName.operator ==(Janus.Core.RestrictionName left, Janus.Core.RestrictionName right) -> bool
 static Janus.Core.RoleName.Parse(string! value) -> Janus.Core.RoleName
 static Janus.Core.RoleName.TryParse(string? value, out Janus.Core.RoleName name) -> bool
 static Janus.Core.RoleName.operator !=(Janus.Core.RoleName left, Janus.Core.RoleName right) -> bool
@@ -4462,6 +4471,7 @@ virtual Janus.Core.SubjectEvent.Equals(Janus.Core.SubjectEvent? other) -> bool
 ~override Janus.Core.Result<TValue>.Equals(object obj) -> bool
 ~override Janus.Core.Result<TValue>.ToString() -> string
 ~override Janus.Core.DocumentName.Equals(object obj) -> bool
+~override Janus.Core.RestrictionName.Equals(object obj) -> bool
 ~override Janus.Core.RoleName.Equals(object obj) -> bool
 ~override Janus.Core.SendReference.Equals(object obj) -> bool
 ~override Janus.Core.SessionId.Equals(object obj) -> bool
