@@ -1153,6 +1153,7 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetRequiredService<TimeProvider>()));
         _ = services.AddOidc();
         _ = services.AddScoped<Janus.Authentication.Mailboxes.IMailServerTokens, Janus.Hosting.Oidc.MailServerTokens>();
+        _ = services.AddScoped<Janus.Authentication.Mailboxes.IAppPasswordLog, Janus.Hosting.Mailboxes.AppPasswordLog>();
         _ = services.AddScoped<IAppPasswords, Janus.Authentication.Mailboxes.AppPasswords>();
 
         _ = services.AddSingleton(new BrowserSessionCookies(application));

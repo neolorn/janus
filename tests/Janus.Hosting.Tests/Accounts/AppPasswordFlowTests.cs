@@ -148,6 +148,64 @@ public sealed class AppPasswordFlowTests : IAsyncDisposable
         Assert.Empty(_deployment.MailServer.Tokens);
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC4 and chapter 09 section 6: a creation by an account restricted
+    /// after the gate step is refused 403 <c>authz.restricted</c> at the second ask,
+    /// after the server's call; the password the server created is revoked there and
+    /// the answer carries no secret.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC4_ACreationRefusedAtTheSecondAskLeavesNoPasswordAtTheServerAsync()
+    {
+        Browser browser = await HolderAsync();
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        Answer? refused = null;
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            async () => refused = await browser.SendAsync("POST", Path, ("label", "Phone")));
+
+        string secret = Assert.Single(_deployment.MailServer.Secrets);
+
+        Assert.Empty(_deployment.MailServer.AppPasswordsOf(subject));
+        Assert.DoesNotContain(secret, Assert.IsType<Answer>(refused).Body, StringComparison.Ordinal);
+        Assert.DoesNotContain(_deployment.Logs.Lines, line => line.Contains(secret, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC4 and INT-MAIL-010: where the server does not take the
+    /// revocation, the creation is still refused 403 <c>authz.restricted</c> with no
+    /// secret, the failure is logged by the holder and the code alone, and the password
+    /// stays listed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC4_ARevocationTheServerDoesNotTakeIsLoggedAndStillRefusedAsync()
+    {
+        Browser browser = await HolderAsync();
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        Answer? refused = null;
+
+        _deployment.MailServer.Created = () => _deployment.MailServer.Unreachable = true;
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            async () => refused = await browser.SendAsync("POST", Path, ("label", "Phone")));
+
+        _deployment.MailServer.Unreachable = false;
+
+        string secret = Assert.Single(_deployment.MailServer.Secrets);
+
+        Assert.Equal("Phone", Assert.Single(_deployment.MailServer.AppPasswordsOf(subject)).Label);
+        Assert.DoesNotContain(secret, Assert.IsType<Answer>(refused).Body, StringComparison.Ordinal);
+        Assert.Contains(
+            _deployment.Logs.Lines,
+            line => line.Contains(subject.ToString(), StringComparison.Ordinal)
+                && line.Contains(ErrorCodes.SystemFault.ToString(), StringComparison.Ordinal));
+        Assert.DoesNotContain(_deployment.Logs.Lines, line => line.Contains(secret, StringComparison.Ordinal));
+    }
+
     private static string Claim(string token, string name) =>
         JsonDocument
             .Parse(System.Buffers.Text.Base64Url.DecodeFromChars(token.Split('.')[1]))

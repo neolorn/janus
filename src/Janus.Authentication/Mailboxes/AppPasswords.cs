@@ -25,11 +25,12 @@ namespace Janus.Authentication.Mailboxes;
 /// <param name="sending">What tells the security-notice set.</param>
 /// <param name="configuration">Where the languages are read.</param>
 /// <param name="audit">Where creation and revocation are written down.</param>
+/// <param name="log">Where a password the server would not revoke is written down.</param>
 /// <param name="work">The one transaction the record of a change runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements LIB-API-005, REG-MAIL-002, INT-MAIL-010, IDN-ACCT-007 and AUTH-OIDC-001 AC4. The library
-/// stores nothing about an app password: the server generates the secret and holds the
+/// Implements LIB-API-005, REG-MAIL-002, INT-MAIL-010, IDN-ACCT-007, AUTHZ-GATE-006 and
+/// AUTH-OIDC-001 AC4. The library stores nothing about an app password: the server generates the secret and holds the
 /// credential, and what is written here is the notice and the audit row, which name the
 /// server's identifier and never the secret or the label.
 /// </remarks>
@@ -44,6 +45,7 @@ internal sealed class AppPasswords(
     IGovernedSend sending,
     IConfigurationStore configuration,
     ICredentialAudit audit,
+    IAppPasswordLog log,
     IUnitOfWork work,
     TimeProvider time) : IAppPasswords
 {
@@ -149,8 +151,33 @@ internal sealed class AppPasswords(
             return Result.Failure<IssuedAppPassword>(failure);
         }
 
-        await RecordAsync(AuditActions.MailCredentialCreated, subject, created.Id, source, cancellationToken)
+        DateTimeOffset now = time.GetUtcNow();
+
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        // AUTHZ-GATE-006, D-186: the server's creation is no write of the library's
+        // database, so the gate is asked again inside the unit of work that records it,
+        // with the acting account's row held, before that unit of work's first write.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            // INT-MAIL-010: what the server created is revoked there before the refusal
+            // is answered, and its secret goes nowhere. A revocation the server does not
+            // take leaves the password listed for its holder to revoke, and is logged.
+            (await hosting.RevokeAppPasswordAsync(token, created.Id, cancellationToken).ConfigureAwait(false))
+                .Switch(() => { }, unrevoked => log.RevocationFailed(subject, unrevoked.Code));
+
+            return Result.Failure<IssuedAppPassword>(since);
+        }
+
+        _ = await TellAsync(subject, source, cancellationToken).ConfigureAwait(false);
+        await audit
+            .MailCredentialAsync(AuditActions.MailCredentialCreated, subject, created.Id, now, cancellationToken)
             .ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         return Result.Success(created);
     }

@@ -110,6 +110,13 @@ against the public contract of LIB-API-001.
   again inside their unit of work before the first write, with the acting account's row
   locked first. A restriction committed after the first ask refuses the change
   `authz.restricted` and leaves nothing written.
+- Creating a mail app password asks the gate again after the mail server's call, inside
+  the unit of work that records the creation. A restriction of the account committed
+  meanwhile refuses the creation `authz.restricted`: the password the server created is
+  revoked there before the answer, its secret is never returned, and nothing notifies or
+  audits it. Where the server does not take the revocation the refusal is answered all
+  the same, the failure is logged, and the password stays listed for its holder to
+  revoke.
 - The shipped mail-server adapter lists an account whose `emailAddress` does not read as
   an email address, or that holds none, with no address, where it failed the listing
   for an account holding none. Reconciliation reads such a listing whole: the account

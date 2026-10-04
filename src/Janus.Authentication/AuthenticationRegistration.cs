@@ -265,6 +265,7 @@ internal static class AuthenticationRegistration
             provider.GetRequiredService<IGovernedSend>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<ICredentialAudit>(),
+            provider.GetRequiredService<IAppPasswordLog>(),
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>()));
 

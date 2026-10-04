@@ -71,6 +71,12 @@ internal sealed class MailServerInMemory : IMailServer
     public Action<MailboxPush>? Receiving { get; set; }
 
     /// <summary>
+    /// What happens at the server once it has next created an app password, where a
+    /// test sets it: a server that stops answering after the creation. It happens once.
+    /// </summary>
+    public Action? Created { get; set; }
+
+    /// <summary>
     /// Whether the server hosts a mailbox, and whether it is enabled.
     /// </summary>
     /// <param name="address">The address.</param>
@@ -214,6 +220,12 @@ internal sealed class MailServerInMemory : IMailServer
 
         held.Add(new AppPassword(id, label, DateTimeOffset.UnixEpoch, expiresAt));
         Secrets.Add(secret);
+
+        if (Created is Action created)
+        {
+            Created = null;
+            created();
+        }
 
         return ValueTask.FromResult(Result.Success(new IssuedAppPassword(id, secret)));
     }
