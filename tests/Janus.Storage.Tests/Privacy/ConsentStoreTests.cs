@@ -28,9 +28,9 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
 
     private const string Notice = "privacy-notice";
 
-    private const string BeforeTheKey = "20261004015227_AddLawfulBases";
+    private const string AddLawfulBases = "20261004015227_AddLawfulBases";
 
-    private const string TheKey = "20261004022141_KeepARecordForEachGrant";
+    private const string KeepARecordForEachGrant = "20261004022141_KeepARecordForEachGrant";
 
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 
@@ -491,7 +491,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
         string moved = await database.CreateDatabaseAsync("consent_key");
         SubjectId subject = Subjects.New();
 
-        await MigrateAsync(moved, BeforeTheKey);
+        await MigrateAsync(moved, AddLawfulBases);
 
         await using (StoreContext writing = DatabaseFixture.Context(moved))
         {
@@ -518,7 +518,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
                 new { subject = subject.Value, at = Noon, withdrawn = Noon.AddDays(1) });
         }
 
-        await MigrateAsync(moved, TheKey);
+        await MigrateAsync(moved, KeepARecordForEachGrant);
 
         await using var reading = new NpgsqlConnection(moved);
         await reading.OpenAsync(TestContext.Current.CancellationToken);
