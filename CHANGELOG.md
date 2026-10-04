@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A break-glass presentation runs in one transaction. A refused code, the code of the
+  issue last used presented again included, commits the attempt's count, the source's
+  failure and the failed authentication together, and a refusal by the global limit
+  commits the count with its `auth-failures-sustained` raise. A consumed code is now
+  recorded as a failed authentication and counted against its source.
 - The phone signal callback is asked before an operation's transaction begins and never
   inside one. What it answered is recorded in the transaction that undertakes the
   restricted factor, and a restricted factor undertaken for a number nothing was asked
