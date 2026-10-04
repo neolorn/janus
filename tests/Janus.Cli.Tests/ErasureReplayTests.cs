@@ -168,6 +168,43 @@ public sealed class ErasureReplayTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
+    /// DR-016 and AUTHZ-GATE-006: a line may be appended twice, as a manual completion
+    /// refused after its line was appended and made again appends it. A replay reads the
+    /// repeat as one erasure: the account is erased once, its host is told once and one
+    /// record is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task DR_016_ALineAppendedTwiceIsOneErasureToAReplayAsync()
+    {
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        Guid subject = await AccountAsync(connection, "active");
+        string line = $"2026-09-21T10:30:00Z {subject:D} minor-takedown";
+
+        await WrittenAsync(line, line);
+
+        Invocation replayed = await Invocation.PipedAsync([Command, _ledger], Invocation.Keys(Application()));
+
+        Assert.Equal((0, string.Empty), (replayed.ExitCode, replayed.Error));
+        Assert.Equal("""{"reapplied":1,"standing":1,"absent":0}""", replayed.Output.Trim());
+        Assert.Equal(
+            ("deleted", "takedown", new DateTime(2026, 9, 21, 10, 30, 0, DateTimeKind.Utc), (short)0),
+            await ErasedAsync(connection, subject));
+        Assert.Equal(
+            (1, 1, 1),
+            await connection.QuerySingleAsync<(int, int, int)>(
+                """
+                SELECT
+                    (SELECT count(*)::int FROM identity.erasures WHERE subject = @subject),
+                    (SELECT count(*)::int FROM identity.outbox WHERE subject = @subject),
+                    (SELECT count(*)::int FROM identity.audit_records
+                     WHERE action = 'privacy.erasure.executed' AND subject = @subject)
+                """,
+                new { subject }));
+    }
+
+    /// <summary>
     /// DR-016 AC3: a ledger holding one line in another form is refused whole, by the
     /// line's number, before anything is written, so no replay runs over half a ledger.
     /// </summary>

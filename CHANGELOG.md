@@ -139,6 +139,30 @@ against the public contract of LIB-API-001.
   again inside their unit of work before the first write, with the acting account's row
   locked first. A restriction committed after the first ask refuses the change
   `authz.restricted` and leaves nothing written.
+- Creating a mail app password asks the gate again after the mail server's call, inside
+  the unit of work that records the creation. A restriction of the account committed
+  meanwhile refuses the creation `authz.restricted`: the password the server created is
+  revoked there before the answer, its secret is never returned, and nothing notifies or
+  audits it. Where the server does not take the revocation the refusal is answered all
+  the same, the failure is logged, and the password stays listed for its holder to
+  revoke.
+- An approved recovery writes the approval, its audit record and the enrolment link's
+  send in one unit of work. A link a sending restriction refuses is answered 429
+  `auth.restriction.exceeded` with `retryAt`, and one the gateway floor refuses 422
+  `integration.sms.balancefloor`; either leaves no approval, no record of it and no
+  send, and so does a restriction of the approver's account committed after the first
+  ask of the gate, answered `authz.restricted`.
+- The manual completion of an erasure asks the gate again inside its unit of work
+  before the first write. A restriction of the operator's account committed after the
+  first ask refuses the completion `authz.restricted` and closes nothing. A ledger line
+  the completion appended before its unit of work stands, and a replay reads a line
+  appended twice as one erasure.
+- A change of an alert destination list asks the gate again inside its unit of work
+  before the first write. A restriction of the acting account committed after the first
+  ask refuses the change `authz.restricted`: nothing is written and no
+  `alert-destination-changed` is raised, and the notice already given to the
+  destinations it would have replaced stands as the notice of a change requested and
+  not made.
 - The shipped mail-server adapter lists an account whose `emailAddress` does not read as
   an email address, or that holds none, with no address, where it failed the listing
   for an account holding none. Reconciliation reads such a listing whole: the account

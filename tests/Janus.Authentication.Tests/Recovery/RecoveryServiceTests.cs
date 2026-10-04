@@ -89,6 +89,9 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     {
         _notifications.Work = _work;
         _restrictions.Work = _work;
+        _approvals.Work = _work;
+        _recorded.Work = _work;
+        _links.Work = _work;
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, [Language, "ar"]);
     }
@@ -1084,6 +1087,107 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         Assert.Equal(1, _work.RolledBack);
         Assert.Empty(_approvals.All);
         Assert.Empty(_notifications.Sent);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC4: the approval, its record and the link's send are one unit of
+    /// work, so the second ask stands before all three: an approval refused there leaves
+    /// neither the approval nor its link's send, and no second unit of work is begun.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC4_AnApprovalRefusedAtTheSecondAskLeavesNeitherItNorItsLinksSendAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId approver, SessionId session) = await ApproverAsync();
+
+        _notifications.Sent.Clear();
+        _work.Reset();
+        _gate.Admitted = admitted => _work.Meanwhile = () => _gate.Restrict(admitted);
+
+        Assert.Equal(ErrorCodes.Restricted, Refused(await Approving(approver, session, subject, Reason)));
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(0, _work.Committed);
+        Assert.Empty(_approvals.All);
+        Assert.Empty(_recorded.Written);
+        Assert.Equal(0, _links.Count);
+        Assert.Empty(_notifications.Sent);
+
+        _gate.Lift(approver);
+        _work.Reset();
+
+        Assert.NotNull(Value(await Approving(approver, session, subject, Reason))!.EnrolmentLinkExpiresAt);
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(_clock.GetUtcNow(), Assert.Single(_approvals.All).SpentAt);
+        Assert.Single(_recorded.Written);
+        Assert.Equal(1, _links.Count);
+        Assert.Single(_notifications.Carried, sent => sent.Message is MessageKind.EnrolmentLink);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-002 AC7: an approval whose link's send a sending restriction refuses
+    /// is refused with <c>auth.restriction.exceeded</c>, and one whose text message the
+    /// gateway floor refuses with <c>integration.sms.balancefloor</c>; each leaves no
+    /// approval, no record of it, no link and no send, its unit of work rolled back.
+    /// </summary>
+    /// <param name="refusal">The code the send is refused with.</param>
+    /// <param name="texted">Whether the link goes to the account's number.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("auth.restriction.exceeded", false)]
+    [InlineData("auth.restriction.exceeded", true)]
+    [InlineData("integration.sms.balancefloor", true)]
+    public async Task AUTH_RECOV_002_AC7_AnApprovalWhoseLinkIsRefusedLeavesNoApprovalAsync(string refusal, bool texted)
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId approver, SessionId session) = await ApproverAsync();
+        var code = ErrorCode.Parse(refusal);
+
+        _notifications.Sent.Clear();
+        _notifications.Refusal = Error.From(code);
+        _notifications.RefusedChannel = texted ? SendKind.Sms : SendKind.Email;
+        _work.Reset();
+
+        Assert.Equal(code, Refused(await Approving(approver, session, subject, Reason, texted ? Number : Address)));
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_approvals.All);
+        Assert.Empty(_recorded.Written);
+        Assert.Equal(0, _links.Count);
+        Assert.Empty(_notifications.Carried);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-002: where two approvers are required, the first approval stands and
+    /// sends nothing; the second spends both in the unit of work that sends the link,
+    /// and a link the restrictions refuse leaves the first standing and the second
+    /// unwritten.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_002_TheApprovalThatCompletesTheCountSpendsEveryOneWithItsLinkAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId first, SessionId opened) = await ApproverAsync();
+        (SubjectId second, SessionId another) = await ApproverAsync();
+
+        _configuration.Set(Settings.RecoveryApproversRequired, 2);
+
+        _ = await Approving(first, opened, subject, Reason);
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+
+        Assert.Equal(ErrorCodes.RestrictionExceeded, Refused(await Approving(second, another, subject, Reason)));
+        Assert.Null(Assert.Single(_approvals.All).SpentAt);
+
+        _notifications.Refusal = null;
+
+        Assert.NotNull(Value(await Approving(second, another, subject, Reason))!.EnrolmentLinkExpiresAt);
+        Assert.Equal(2, _approvals.All.Count);
+        Assert.All(_approvals.All, approval => Assert.Equal(_clock.GetUtcNow(), approval.SpentAt));
     }
 
     private ValueTask<Result<ApprovedRecovery>> Approving(

@@ -52,6 +52,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
     private readonly ConfigurationInMemory _configuration = new();
     private readonly CredentialAuditInMemory _audit = new();
     private readonly SettingsRestrictionInMemory _restriction = new();
+    private readonly AppPasswordLogInMemory _log = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
@@ -185,6 +186,57 @@ public sealed class AppPasswordsTests : IAsyncDisposable
             (AuditActions.MailCredentialRevoked, _person, issued.Id),
             _audit.MailCredentials[^1]);
         Assert.Empty(_notifications.Carried);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC4, INT-MAIL-010 and REG-MAIL-002: a restriction of the account
+    /// committed after the gate step and after the server created the password refuses
+    /// the creation at the second ask, inside the unit of work that would have recorded
+    /// it. The unit of work rolls back, the password is revoked at the server, its
+    /// secret is not answered, and nothing notifies or audits it.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC4_ACreationRefusedAtTheSecondAskIsRevokedAtTheServerAsync()
+    {
+        _restriction.Admitted = admitted => _work.Meanwhile = () => _restriction.Restrict(admitted);
+
+        Result<IssuedAppPassword> refused = await CreateAsync("Phone", _session);
+
+        Assert.Equal(ErrorCodes.Restricted, Refused(refused));
+        Assert.Single(_server.Secrets);
+        Assert.Empty(_server.AppPasswordsOf(_person));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_notifications.Sent);
+        Assert.Empty(_audit.MailCredentials);
+        Assert.Empty(_log.Unrevoked);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC4 and INT-MAIL-010: where the server does not take the
+    /// revocation, the refusal is answered all the same and returns no secret, the
+    /// failure is logged, and the password stays listed for its holder to revoke,
+    /// neither notified nor audited.
+    /// </summary>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC4_ARevocationTheServerDoesNotTakeLeavesThePasswordListedAsync()
+    {
+        _restriction.Admitted = admitted => _work.Meanwhile = () => _restriction.Restrict(admitted);
+        _server.Created = () => _server.Unreachable = true;
+
+        Result<IssuedAppPassword> refused = await CreateAsync("Phone", _session);
+
+        _server.Unreachable = false;
+
+        Assert.Equal(ErrorCodes.Restricted, Refused(refused));
+        Assert.Equal("Phone", Assert.Single(Listed(await ListAsync(_session))).Label);
+        Assert.Equal((_person, ErrorCodes.SystemFault), Assert.Single(_log.Unrevoked));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_notifications.Sent);
+        Assert.Empty(_audit.MailCredentials);
     }
 
     /// <summary>
@@ -349,6 +401,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
             _notifications,
             _configuration,
             _audit,
+            _log,
             _work,
             _clock);
 

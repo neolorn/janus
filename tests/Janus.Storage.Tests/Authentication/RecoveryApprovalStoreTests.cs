@@ -85,6 +85,58 @@ public sealed class RecoveryApprovalStoreTests(DatabaseFixture database)
         Assert.Single(await Store(reading).ForAsync(subject, Noon, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// AUTH-RECOV-002: the approval that completes the count is written in the unit of
+    /// work that sends the link. An approval added there is no row yet, so the standing
+    /// approvals read before it are those given earlier; the link spends them, the
+    /// completing approval is written spent, and after the commit none stands while both
+    /// still count against the day.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_RECOV_002_TheCompletingApprovalIsSpentInTheUnitOfWorkThatWritesItAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        SubjectId first = await _deployment.AccountAsync(Noon);
+        SubjectId second = await _deployment.AccountAsync(Noon);
+
+        await using (StoreContext earlier = database.Context())
+        {
+            await Store(earlier).AddAsync(
+                new RecoveryApproval(subject, first, Channel, Noon.AddHours(1)),
+                TestContext.Current.CancellationToken);
+            await earlier.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (StoreContext context = database.Context())
+        {
+            await using var work = new UnitOfWork(context);
+            RecoveryApprovalStore store = Store(context);
+
+            Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+            await store.HoldAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(
+                first,
+                Assert.Single(await store.StandingForAsync(subject, Noon, TestContext.Current.CancellationToken)).Approver);
+
+            await store.SpendAsync(subject, Noon.AddHours(2), TestContext.Current.CancellationToken);
+            await store.AddAsync(
+                new RecoveryApproval(subject, second, Channel, Noon.AddHours(2), Noon.AddHours(2)),
+                TestContext.Current.CancellationToken);
+
+            Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        }
+
+        await using StoreContext reading = database.Context();
+        RecoveryApprovalStore read = Store(reading);
+
+        Assert.Empty(await read.StandingForAsync(subject, Noon, TestContext.Current.CancellationToken));
+        Assert.Equal(
+            [Noon.AddHours(1), Noon.AddHours(2)],
+            await read.ForAsync(subject, Noon, TestContext.Current.CancellationToken));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 

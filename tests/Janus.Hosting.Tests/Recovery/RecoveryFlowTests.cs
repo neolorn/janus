@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Sending;
@@ -20,8 +22,13 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
     private const string Language = "en";
     private const string Elsewhere = "nobody@example.test";
     private const string NewPassword = "lemoncurdandbutter";
+    private const string Recorded = "recovered@example.test";
+
+    private static readonly OrganizationId Administration =
+        new(Guid.Parse("33333333-3333-4333-8333-333333333333"));
 
     private readonly Deployment _deployment = new();
+    private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
 
     /// <summary>
     /// A deployment that can send, whose recovery message and suspension notice carry
@@ -30,6 +37,8 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
     public RecoveryFlowTests()
     {
         Flow.Prepare(_deployment);
+        _deployment.RecoveryApprovals.Work = _deployment.Work;
+        _deployment.RecoveryAudit.Work = _deployment.Work;
 
         foreach (MessageKind message in new[] { MessageKind.RecoveryLink, MessageKind.SecurityNotice, MessageKind.CredentialSuspended })
         {
@@ -45,7 +54,11 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
     }
 
     /// <inheritdoc/>
-    public async ValueTask DisposeAsync() => await _deployment.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        _randomness.Dispose();
+        await _deployment.DisposeAsync();
+    }
 
     /// <summary>
     /// AUTH-ABUSE-004: a recovery link is asked for by a person, so it is counted under
@@ -286,6 +299,98 @@ public sealed class RecoveryFlowTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status400BadRequest, unreached.Status);
         Assert.Equal("channelUsed", unreached.Json().GetProperty("details").GetProperty("member").GetString());
         Assert.Equal(sent, _deployment.Mail.Taken.Count);
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-002 AC7 and chapter 09 section 5: an approval whose link's send a
+    /// sending restriction refuses is answered 429 <c>auth.restriction.exceeded</c> with
+    /// <c>retryAt</c>, and leaves no approval, no record of it and no send.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_002_AC7_AnApprovalWhoseLinkARestrictionRefusesIsAnsweredAndLeavesNothingAsync()
+    {
+        Browser approver = await ApproverAsync();
+        SubjectId subject = Recovered();
+
+        _deployment.Configuration.Set<IReadOnlyList<Restriction>>(
+            Settings.Restrictions,
+            [
+                new Restriction(
+                    "email.destination",
+                    RestrictionKeyKind.Destination,
+                    HostKeyName: null,
+                    RestrictionPurpose.SignIn,
+                    [new Bucket(1, TimeSpan.FromHours(1), BucketWindow.Sliding)])
+                {
+                    Channel = RestrictionChannel.Email,
+                },
+            ]);
+
+        Answer approved = await ApprovedAsync(approver, subject);
+        int sent = _deployment.Mail.Taken.Count;
+        Answer refused = await ApprovedAsync(approver, subject);
+
+        Assert.Equal(StatusCodes.Status200OK, approved.Status);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, refused.Status);
+        Assert.Equal(ErrorCodes.RestrictionExceeded.ToString(), refused.Text("code"));
+        Assert.Equal(
+            _deployment.Clock.GetUtcNow() + TimeSpan.FromHours(1),
+            refused.Json().GetProperty("details").GetProperty("retryAt").GetDateTimeOffset());
+        Assert.Single(_deployment.RecoveryApprovals.All);
+        Assert.Single(_deployment.RecoveryAudit.Written);
+        Assert.Equal(sent, _deployment.Mail.Taken.Count);
+        Assert.False(_deployment.Work.Open);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC4 and chapter 09 section 5: an approval by an approver restricted
+    /// after the gate step is refused 403 <c>authz.restricted</c> at the second ask
+    /// inside its unit of work, nothing approved and nothing sent.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC4_AnApprovalRefusedAtTheSecondAskApprovesAndSendsNothingAsync()
+    {
+        Browser approver = await ApproverAsync();
+        SubjectId subject = Recovered();
+        int sent = _deployment.Mail.Taken.Count;
+
+        await RestrictedSinceTheGateStep.RefusesAsync(_deployment, () => ApprovedAsync(approver, subject));
+
+        Assert.Empty(_deployment.RecoveryApprovals.All);
+        Assert.Empty(_deployment.RecoveryAudit.Written);
+        Assert.Equal(sent, _deployment.Mail.Taken.Count);
+    }
+
+    private static Task<Answer> ApprovedAsync(Browser approver, SubjectId subject) =>
+        approver.SendAsync(
+            "POST",
+            "/admin/recovery/approve",
+            ("subject", subject.ToString()),
+            ("reason", "Confirmed on the recorded address."),
+            ("channelUsed", Recorded));
+
+    // A signed-in member of the administrative organization who may approve a recovery.
+    private async Task<Browser> ApproverAsync()
+    {
+        Browser browser = await RegisteredAsync();
+
+        _deployment.Administers(Administration);
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Administration, Permissions.RecoveryApprove);
+
+        return browser;
+    }
+
+    // Another account, holding the address its recovery is confirmed on.
+    private SubjectId Recovered()
+    {
+        var subject = SubjectId.New(_randomness);
+
+        _deployment.Accounts.Stands(subject, AccountState.Active);
+        _ = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, Recorded);
+
+        return subject;
     }
 
     // The account the tests recover, signed in, with the clock past the minute the

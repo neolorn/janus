@@ -300,6 +300,7 @@ public static class HostingRegistration
         // INT-MAIL-001, CONV-DESIGN-007: the shipped adapter is registered as its own
         // type, never as IMailServer; the start chooses it where the host registered no
         // mail server and the endpoint is set.
+        services.AddScoped<IAppPasswordLog, AppPasswordLog>();
         services.AddSingleton<JmapMailServer>();
         _ = services.AddHttpClient(JmapMailServer.Channel);
 

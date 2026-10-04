@@ -809,8 +809,23 @@ internal sealed class RecoveryService(
             return Result.Failure<ApprovedRecovery>(Error.Throttled(lifts));
         }
 
+        // AUTH-RECOV-002: the link goes out once as many approvers as the deployment
+        // requires stand behind it, this one among them, counted under the same hold.
+        bool linked = await StandingAsync(subject, approver, now - lifetime, cancellationToken)
+            .ConfigureAwait(false) >= required;
+
+        // The link spends every approval that stood behind it, and the approval that
+        // completes them is written spent, since it is spent in the unit of work that
+        // writes it.
+        if (linked)
+        {
+            await approvals.SpendAsync(subject, now, cancellationToken).ConfigureAwait(false);
+        }
+
         await approvals
-            .AddAsync(new RecoveryApproval(subject, approver, channel.Canonical, now), cancellationToken)
+            .AddAsync(
+                new RecoveryApproval(subject, approver, channel.Canonical, now, linked ? now : null),
+                cancellationToken)
             .ConfigureAwait(false);
         await audit
             .ApprovedAsync(approver, context.BreakGlassReason, subject, reason, channel.Kind, now, cancellationToken)
@@ -834,30 +849,31 @@ internal sealed class RecoveryService(
             return Result.Failure<ApprovedRecovery>(unraised);
         }
 
+        // AUTH-RECOV-002, AUTHZ-GATE-006, D-186: the link's send is undertaken in the
+        // unit of work that writes the approval and its record, so the gate's second ask
+        // covers both, and a send a restriction or the gateway floor refuses leaves no
+        // approval, no record of it and no send.
+        if (linked
+            && await LinkedAsync(approver, subject, channel, source, now, lifetime, cancellationToken)
+                .ConfigureAwait(false) is Error unsent)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<ApprovedRecovery>(unsent);
+        }
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
             return Result.Failure<ApprovedRecovery>(notCommitted);
         }
 
-        if (await StandingAsync(subject, now - lifetime, cancellationToken).ConfigureAwait(false)
-            < required)
-        {
-            return Result.Success(new ApprovedRecovery(EnrolmentLinkExpiresAt: null));
-        }
-
-        return await SendAsync(
-                approver,
-                subject,
-                channel,
-                source,
-                now,
-                lifetime,
-                cancellationToken)
-            .ConfigureAwait(false);
+        return Result.Success(new ApprovedRecovery(linked ? now + lifetime : null));
     }
 
-    private async ValueTask<Result<ApprovedRecovery>> SendAsync(
+    // D-166 119 (3): the link's record is written first and its send undertaken after,
+    // in the caller's unit of work; a refusal of that send is the caller's to roll back.
+    private async ValueTask<Error?> LinkedAsync(
         SubjectId approver,
         SubjectId subject,
         Channel channel,
@@ -866,45 +882,12 @@ internal sealed class RecoveryService(
         TimeSpan lifetime,
         CancellationToken cancellationToken)
     {
-        Error? failure = null;
         var token = OpaqueToken.Draw(randomness);
 
         // IDN-ATTR-001: the request is the approver's and says nothing of the language
         // the person being recovered reads.
         string? language = await LanguageAsync(subject, requested: null, cancellationToken)
             .ConfigureAwait(false);
-
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
-        {
-            return Result.Failure<ApprovedRecovery>(notBegun);
-        }
-
-        _ = (await sending
-                .UndertakeAsync(
-                    new OutboundMessage(
-                        channel.Destination,
-                        MessageKind.EnrolmentLink,
-                        RestrictionPurpose.SignIn,
-                        source,
-                        language)
-                    {
-                        Subject = subject,
-                        Values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
-                        {
-                            ["link"] = landing.Of(LinkKind.Enrolment, token.Value),
-                        },
-                    },
-                    cancellationToken)
-                .ConfigureAwait(false))
-            .Match(_ => true, error => Withheld<bool>(error, ref failure));
-
-        if (failure is not null)
-        {
-            await work.RollbackAsync().ConfigureAwait(false);
-
-            return Result.Failure<ApprovedRecovery>(failure);
-        }
 
         await links
             .ReplaceAsync(
@@ -922,7 +905,28 @@ internal sealed class RecoveryService(
                     channel.Kind is not IdentifierKind.Email),
                 cancellationToken)
             .ConfigureAwait(false);
-        await approvals.SpendAsync(subject, now, cancellationToken).ConfigureAwait(false);
+
+        if ((await sending
+                .UndertakeAsync(
+                    new OutboundMessage(
+                        channel.Destination,
+                        MessageKind.EnrolmentLink,
+                        RestrictionPurpose.SignIn,
+                        source,
+                        language)
+                    {
+                        Subject = subject,
+                        Values = new Dictionary<string, string>(capacity: 1, StringComparer.Ordinal)
+                        {
+                            ["link"] = landing.Of(LinkKind.Enrolment, token.Value),
+                        },
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match(_ => (Error?)null, error => error) is Error refused)
+        {
+            return refused;
+        }
 
         _ = await NotifyAsync(
                 subject,
@@ -933,17 +937,14 @@ internal sealed class RecoveryService(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure<ApprovedRecovery>(notCommitted);
-        }
-
-        return Result.Success(new ApprovedRecovery(now + lifetime));
+        return null;
     }
 
+    // The approvers standing behind the account's re-enrolment once this one has joined
+    // them. The approval being given is not yet a row, so it is counted here.
     private async ValueTask<int> StandingAsync(
         SubjectId subject,
+        SubjectId approver,
         DateTimeOffset from,
         CancellationToken cancellationToken)
     {
@@ -951,7 +952,7 @@ internal sealed class RecoveryService(
             .StandingForAsync(subject, from, cancellationToken)
             .ConfigureAwait(false);
 
-        var approvers = new HashSet<SubjectId>();
+        var approvers = new HashSet<SubjectId> { approver };
 
         foreach (RecoveryApproval approval in standing)
         {
