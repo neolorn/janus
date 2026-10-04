@@ -585,6 +585,74 @@ public sealed class PublicSurfaceTests
     }
 
     /// <summary>
+    /// CONV-DESIGN-007 AC7: the shipped defaults that stand in for an absent host
+    /// declaration are registered by the core's method, each only where none is
+    /// registered, so a host's own declaration is the one the container answers, and
+    /// the entry point registers none of them itself. What the entry point registers
+    /// itself is read as what its collection holds beyond what the other projects'
+    /// methods register on their own.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_007_AC7_TheShippedDefaultsAreTheCoreMethodsEachWhereNoneIsRegistered()
+    {
+        object[] shipped =
+        [
+            RestrictionKeySuppliers.None,
+            PreferenceDeclarations.None,
+            ReservedUsernames.Default,
+            DictionaryWords.Default,
+        ];
+        object[] hosts =
+        [
+            RestrictionKeySuppliers.Of([]),
+            PreferenceDeclarations.Of([]),
+            ReservedUsernames.Of(["steward"]),
+            DictionaryWords.Of(["qx7"]),
+        ];
+        var declared = new ServiceCollection();
+
+        foreach (object host in hosts)
+        {
+            _ = declared.AddSingleton(host.GetType(), host);
+        }
+
+        using ServiceProvider absent = new ServiceCollection().AddCoreArea().BuildServiceProvider();
+        using ServiceProvider present = declared.AddCoreArea().BuildServiceProvider();
+
+        Assert.All(shipped, standing => Assert.Same(standing, absent.GetRequiredService(standing.GetType())));
+        Assert.All(hosts, host => Assert.Same(host, Assert.Single(present.GetServices(host.GetType()))));
+        Assert.DoesNotContain(Beyond().Select(Made), made => shipped.Any(standing => standing.GetType() == made));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-007, CONV-CODE-007: a composition a job builds inside the application
+    /// over another credential registers the key ring the start filled, as it stands,
+    /// and calls the storage's method and never the core's, whose ring would be a
+    /// second, empty one. The audit retention and the restore test build the only two.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_007_AJobsOwnCompositionRegistersTheFilledRingAndNeverCallsTheCoreMethod()
+    {
+        (string Name, string Text)[] compositions =
+        [
+            .. Repository
+                .Project(Mounting)
+                .Select(file => (Name: Path.GetFileName(file), Text: File.ReadAllText(file)))
+                .Where(file => file.Text.Contains("new " + nameof(ServiceCollection) + "()", StringComparison.Ordinal))
+                .OrderBy(file => file.Name, StringComparer.Ordinal),
+        ];
+
+        Assert.Equal(["AuditRetention.cs", "RestoreTest.cs"], compositions.Select(file => file.Name));
+        Assert.All(compositions, file =>
+        {
+            Assert.Contains("IKeyRing ring", file.Text, StringComparison.Ordinal);
+            Assert.Contains("services.AddSingleton(ring);", file.Text, StringComparison.Ordinal);
+            Assert.Contains("services.AddStorageArea(", file.Text, StringComparison.Ordinal);
+            Assert.DoesNotContain("AddCoreArea", file.Text, StringComparison.Ordinal);
+        });
+    }
+
+    /// <summary>
     /// CONV-DESIGN-007 AC8: no project but the hosting project names a namespace of the
     /// shared framework's own, and of the framework's extensions each names the
     /// container's abstractions alone. A project that names them takes them by the
@@ -630,6 +698,26 @@ public sealed class PublicSurfaceTests
     // what the host fixture declares.
     private static IServiceCollection Registered() =>
         new ServiceCollection().AddJanus(Connection, HostFixture.Declaration(), ApplicationKind.Public);
+
+    // CONV-DESIGN-007 AC7: what the entry point registers itself: what its collection
+    // holds once each registration the other projects' methods make on their own has
+    // been taken from it, one for one.
+    private static List<ServiceDescriptor> Beyond()
+    {
+        List<ServiceDescriptor> beyond = [.. Registered()];
+
+        foreach (string line in RegistrationMethods.SelectMany(method => Alone(method.Key, method.Value)).Select(Line))
+        {
+            int at = beyond.FindIndex(service => Line(service) == line);
+
+            if (at >= 0)
+            {
+                beyond.RemoveAt(at);
+            }
+        }
+
+        return beyond;
+    }
 
     // CONV-DESIGN-007 AC7: a registration method takes the collection it adds to first.
     private static bool Registers(MethodInfo method) =>

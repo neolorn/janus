@@ -144,11 +144,6 @@ public static class HostingRegistration
         // probes, as the same client and on the same connection.
         services.AddScoped<IProviderProbes, ProviderProbes>();
 
-        // LIB-HOST-001: what the host declares about its own messaging is the host's.
-        // A deployment that declares none of it starts, and the checks that would have
-        // read a declaration find nothing to read.
-        services.TryAddSingleton(RestrictionKeySuppliers.None);
-
         // INT-MAIL-009: outbound delivery is registered apart from mailbox hosting.
         services.AddOutboundDelivery();
 
@@ -239,10 +234,6 @@ public static class HostingRegistration
             provider.GetRequiredService<IAlertChannels>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<ILocationResolver>(provider => provider.GetRequiredService<LocationDatabase>());
-
-        services.TryAddSingleton(PreferenceDeclarations.None);
-        services.TryAddSingleton(ReservedUsernames.Default);
-        services.TryAddSingleton(DictionaryWords.Default);
 
         // REG-PM-001, LIB-HOST-001: the frontend's pages are the host's to declare and
         // the library has no address to fall back on, so a deployment that registered

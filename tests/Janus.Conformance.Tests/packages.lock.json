@@ -823,6 +823,7 @@
           "Janus.Authentication": "[1.0.0, )",
           "Janus.Core": "[1.0.0, )",
           "Janus.Identity": "[1.0.0, )",
+          "Janus.Privacy": "[1.0.0, )",
           "Janus.Storage": "[1.0.0, )"
         }
       },
