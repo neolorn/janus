@@ -1068,6 +1068,9 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<RegisteredSecrets>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
+        _ = services.AddSingleton(provider => new SigningCredentialSource(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            provider.GetRequiredService<TimeProvider>()));
         _ = services.AddOidc();
         _ = services.AddScoped<Janus.Authentication.Mailboxes.IMailServerTokens, Janus.Hosting.Oidc.MailServerTokens>();
         _ = services.AddScoped<IAppPasswords, Janus.Authentication.Mailboxes.AppPasswords>();

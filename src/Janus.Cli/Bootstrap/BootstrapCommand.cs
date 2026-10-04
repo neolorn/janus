@@ -2,9 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Janus.Authentication.Alerting;
+using Janus.Authentication;
 using Janus.Authentication.Bootstrap;
-using Janus.Authentication.Events;
 using Janus.Core;
 using Janus.Storage;
 using Microsoft.Extensions.DependencyInjection;
@@ -93,7 +92,8 @@ internal static class BootstrapCommand
     }
 
     // What the command runs over: the storage area under the connection and the keys
-    // the document carried, and the service that seeds the deployment.
+    // the document carried, the authentication area, whose event outbox and alert
+    // channels the seeding writes through, and the service that seeds the deployment.
     private static ServiceProvider Composed(KeyDocument keys)
     {
         var services = new ServiceCollection();
@@ -106,8 +106,7 @@ internal static class BootstrapCommand
         services.AddCoreArea();
         services.AddSingleton(keys.Ring);
         services.AddStorageArea(keys.Connection);
-        services.AddScoped<IEvents, EventOutbox>();
-        services.AddScoped<IAlertChannels, AlertChannels>();
+        services.AddAuthenticationArea();
         services.AddScoped<DeploymentBootstrap>();
 
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });

@@ -2,37 +2,18 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Janus.Authentication;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
-using Janus.Authentication.BreakGlass;
-using Janus.Authentication.Callbacks;
-using Janus.Authentication.Configuration;
-using Janus.Authentication.Credentials;
-using Janus.Authentication.Events;
-using Janus.Authentication.Factors;
-using Janus.Authentication.Identifiers;
-using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
-using Janus.Authentication.Maintenance;
 using Janus.Authentication.Oidc;
-using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
-using Janus.Authentication.Policies;
-using Janus.Authentication.Recovery;
-using Janus.Authentication.Registration;
-using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
-using Janus.Authentication.SignIn;
 using Janus.Authorization;
 using Janus.Authorization.Gate;
-using Janus.Authorization.Grants;
-using Janus.Authorization.Groups;
 using Janus.Authorization.Model;
-using Janus.Authorization.Resources;
-using Janus.Authorization.Roles;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Accounts;
@@ -56,16 +37,7 @@ using Janus.Hosting.Registration;
 using Janus.Hosting.Sending;
 using Janus.Hosting.Sessions;
 using Janus.Privacy;
-using Janus.Privacy.Breaches;
-using Janus.Privacy.Consents;
-using Janus.Privacy.Documents;
-using Janus.Privacy.Erasures;
-using Janus.Privacy.Exports;
-using Janus.Privacy.Outbox;
-using Janus.Privacy.Policies;
-using Janus.Privacy.Records;
 using Janus.Privacy.Requests;
-using Janus.Privacy.Takedowns;
 using Janus.Storage;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Json;
@@ -120,7 +92,11 @@ public static class HostingRegistration
         // CONV-DESIGN-007: time is injected, and a host that has its own clock keeps it.
         services.TryAddSingleton(TimeProvider.System);
 
+        // CONV-DESIGN-007: each project registers the types it defines, and what follows
+        // is this project's own.
+        services.AddCoreArea();
         services.AddStorageArea(connectionString);
+        services.AddAuthenticationArea();
         services.AddAuthorizationArea(declaration);
         services.AddPrivacyArea();
 
@@ -136,7 +112,6 @@ public static class HostingRegistration
         // BFF-OWN-001: the browser boundary is the library's, so what issues a cookie
         // and what validates a token are registered here and not left to the host.
         services.AddSingleton(new BrowserSessionCookies(application));
-        services.AddScoped<SynchronizerTokens>();
         services.AddScoped<Concealment>();
         services.AddScoped<ErrorTranslation>();
         services.AddScoped<MalformedRequest>();
@@ -174,86 +149,24 @@ public static class HostingRegistration
 
         // INT-MAIL-009: outbound delivery is registered apart from mailbox hosting.
         services.AddOutboundDelivery();
-        services.AddScoped(services => new PhoneSignals(
-            services.GetService<PhoneSignalProvider>(),
-            services.GetRequiredService<IPhoneSignalAudit>(),
-            services.GetRequiredService<IUnitOfWork>(),
-            services.GetRequiredService<TimeProvider>()));
-        services.AddScoped<ConfigurationAdministration>();
-        services.AddScoped<RestrictionAdministration>();
-        services.AddScoped<SendCounterSweep>();
-
-        // API-LAND-001: every link lands on an origin the host declared, and one it did
-        // not declare stops the start, so nothing is registered in its place.
-        services.AddScoped(provider => new LandingLinks(provider.GetRequiredService<LandingOrigins>()));
-        services.AddScoped<IRestrictionSet, RestrictionSetService>();
-        services.AddScoped<ThrottleService>();
-        services.AddScoped<NonExistenceNotice>();
-        services.AddScoped<CallbackAdmission>();
-        services.AddScoped<CallbackReferences>();
-        services.AddScoped<ICallbackReferences>(
-            provider => provider.GetRequiredService<CallbackReferences>());
-        services.AddScoped<DeliveryReports>();
 
         // IDN-LIFE-012a: a provider's events are verified against the keys it publishes,
         // read on a client of the framework's factory and held between events; a
         // deployment that declares no provider takes none.
         services.AddSingleton<ProviderKeys>();
         _ = services.AddHttpClient(ProviderKeys.Channel);
-        services.AddScoped<ProviderEvents>();
         services.AddScoped<ProviderEventIntake>();
 
         // IDN-LIFE-012, REG-IDENT-008: this application is the providers' client, on
         // the same connection their documents are read on.
-        services.AddScoped<ProviderAttempts>();
         services.AddScoped<ProviderSignIn>();
-        services.AddScoped(services => new BotDefence(
-            services.GetRequiredService<IConfigurationStore>(),
-            services.GetRequiredService<IDatacenterRanges>(),
-            services.GetRequiredService<IRegistrationSources>(),
-            services.GetRequiredService<IBotDefenceAudit>(),
-            services.GetRequiredService<IUnitOfWork>(),
-            services.GetService<ChallengeVerifier>(),
-            services.GetRequiredService<TimeProvider>()));
         services.AddScoped<AlertRouter>();
-        services.AddScoped<IAlertChannels, AlertChannels>();
         services.AddScoped<AlertDispatch>();
 
-        // LIB-API-001, CONV-DESIGN-002: an emitted event is a row on the transaction
-        // that made it true, offered to the host's consumers once that has committed.
-        // Publication is not a default a host replaces (LIB-EXT-001, D-166, 320), so an
-        // IEvents registered before this one does not pre-empt it; a host consumes an
-        // event through IEventConsumer<TEvent>.
-        services.RemoveAll<IEvents>();
-        services.AddScoped<IEvents, EventOutbox>();
+        // LIB-API-001, CONV-DESIGN-002: a committed event is offered to the consumers
+        // the host registered.
         services.AddScoped<EventConsumers>();
         services.AddScoped<EventPublisher>();
-
-        // OPS-BOOT-002, OPS-BOOT-004: the sealed emergency credential, and OPS-BOOT-001
-        // AC3: its absence raised until one is generated.
-        services.AddScoped<BreakGlassService>();
-        services.AddScoped<IBreakGlass>(provider => provider.GetRequiredService<BreakGlassService>());
-        services.AddScoped<EmergencyCredentialWatch>();
-
-        // OPS-MAINT-001: the licences and permits warned of, and the maintenance log.
-        // DR-009a: the annual operation the key-encryption key is rotated in, warned of
-        // from the log.
-        services.AddScoped<IMaintenanceRecords, MaintenanceRecords>();
-        services.AddScoped<LicenceExpiry>();
-        services.AddScoped<EnvelopeRotationWatch>();
-
-        // INF-HOST-001, INF-TLS-003: the clock and the renewer are the environment's, so
-        // what measures them is the deployment's to register, and one it does not
-        // register is raised as unwatched.
-        services.AddScoped(provider => new ClockDriftWatch(
-            provider.GetService<IClockReference>(),
-            provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IAlertChannels>(),
-            provider.GetRequiredService<TimeProvider>()));
-        services.AddScoped(provider => new CertificateRenewalWatch(
-            provider.GetService<ICertificateRenewal>(),
-            provider.GetRequiredService<IAlertChannels>(),
-            provider.GetRequiredService<TimeProvider>()));
 
         // DR-007, DR-008: the backups and the throwaway instance are the environment's,
         // so what restores into one is the deployment's to register, and one it does not
@@ -281,11 +194,8 @@ public static class HostingRegistration
         services.AddScoped<IAlertLog, AlertLog>();
         services.AddScoped<IConfigurationAdministration, ConfigurationService>();
 
-        // AUTH-SESS-001, AUTH-PASS-004, AUTH-FACT-005: the authentication services,
-        // each of which reads the settings table for what it enforces.
-        services.AddScoped<PolicyResolution>();
-        services.AddScoped<Janus.Authentication.Policies.AdministrativeScope>();
-        services.AddSingleton<Argon2idHasher>();
+        // AUTH-PASS-004: what a password is screened against, and the record of each
+        // screening.
         services.AddScoped<IScreeningLog, ScreeningLog>();
         services.AddSingleton<IWordList>(provider => new WordList(provider.GetRequiredService<DictionaryWords>()));
 
@@ -304,10 +214,6 @@ public static class HostingRegistration
                 new OfflineCorpus());
         });
 
-        services.AddScoped<PasswordScreening>();
-        services.AddScoped<PasswordService>();
-        services.AddScoped<PreAuthenticationService>();
-
         // INT-GEN-006: one copy of the location file for the process, read from the
         // file the deployment supplies, where it supplies one.
         services.AddSingleton<LocationCopy>();
@@ -318,16 +224,6 @@ public static class HostingRegistration
             provider.GetRequiredService<IAlertChannels>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<ILocationResolver>(provider => provider.GetRequiredService<LocationDatabase>());
-        services.AddScoped<ConcurrentSessions>();
-        services.AddScoped<SessionService>();
-        services.AddScoped<ISessions>(provider => provider.GetRequiredService<SessionService>());
-        services.AddScoped<TotpService>();
-        services.AddScoped<WebAuthnService>();
-        services.AddScoped<RecoveryCodeService>();
-        services.AddScoped<RecoveryCodeReminders>();
-        services.AddScoped<DeviceService>();
-        services.AddScoped<StepUpGuard>();
-        services.AddScoped<IStepUpGate, StepUpGate>();
 
         services.TryAddSingleton(PreferenceDeclarations.None);
         services.TryAddSingleton(ReservedUsernames.Default);
@@ -352,42 +248,7 @@ public static class HostingRegistration
             provider.GetRequiredService<IConfigurationStore>()));
 
         services.ConfigureHttpJsonOptions(ReadThroughContexts);
-        services.AddScoped<RegistrationService>();
-        services.AddScoped<IRegistration>(provider => provider.GetRequiredService<RegistrationService>());
-        services.AddScoped<IdentifierService>();
-        services.AddScoped<IIdentifiers>(provider => provider.GetRequiredService<IdentifierService>());
-        services.AddScoped<AccountLifecycle>();
-
-        // IDN-ATTR-002, LIB-HOST-001: the codec is the deployment's and may be absent,
-        // so what needs it takes it as it was registered and refuses without it.
-        services.AddScoped(provider => new ProfilePhotos(
-            provider.GetRequiredService<IAccountDirectory>(),
-            provider.GetRequiredService<ISettingsRestriction>(),
-            provider.GetRequiredService<Janus.Authentication.Policies.IMembershipLookup>(),
-            provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IAccountAudit>(),
-            provider.GetRequiredService<IUnitOfWork>(),
-            provider.GetService<ImageCodec>(),
-            provider.GetRequiredService<TimeProvider>()));
-        services.AddScoped<AccountService>();
-        services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
-        services.AddScoped<IAccounts, AccountAdministration>();
-        services.AddScoped<SignInLinks>();
-        services.AddScoped<VerificationCodes>();
-        services.AddScoped<AuthenticationService>();
-        services.AddScoped<IAuthentication>(provider =>
-            provider.GetRequiredService<AuthenticationService>());
-        services.AddScoped<LossReports>();
-        services.AddScoped<EnrolmentSessions>();
-        services.AddScoped<RecoveryService>();
-        services.AddScoped<IRecovery>(provider => provider.GetRequiredService<RecoveryService>());
-        services.AddScoped<CredentialService>();
-        services.AddScoped<ICredentials>(provider => provider.GetRequiredService<CredentialService>());
-        services.AddScoped<SigningKeys>();
-        services.AddScoped<RegisteredSecrets>();
         services.AddOidc();
-        services.AddScoped<OidcService>();
-        services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
 
         // LIB-HOST-001, PRIV-RIGHT-005b: what the host declared is read back at
         // startup against the handlers it registered, so the declaration is here as
@@ -420,32 +281,6 @@ public static class HostingRegistration
         // row for is refused by the gate, which its operations ask through a port.
         services.AddScoped<IUnscopedRefusal>(provider =>
             new GatedUnscopedRefusal(provider.GetRequiredService<AccessGate>().RefuseUnscopedAsync));
-        services.AddScoped<IOrganizations, OrganizationService>();
-
-        // REG-DOM-001, LIB-EXT-001: the resolver is the deployment's and may be absent,
-        // so what reads a record takes it as it was registered and proves nothing
-        // without it.
-        services.AddScoped<DomainLock>();
-        services.AddScoped<IOrganizationDomains>(provider => new OrganizationDomainService(
-            provider.GetRequiredService<Janus.Authentication.Policies.AdministrativeScope>(),
-            provider.GetRequiredService<StepUpGuard>(),
-            provider.GetRequiredService<IOrganizationDirectory>(),
-            provider.GetRequiredService<IDomainStore>(),
-            provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<ConfigurationAdministration>(),
-            provider.GetService<IDnsResolver>(),
-            provider.GetRequiredService<IOrganizationAudit>(),
-            provider.GetRequiredService<IAlertChannels>(),
-            provider.GetRequiredService<IUnitOfWork>(),
-            provider.GetRequiredService<TimeProvider>(),
-            provider.GetRequiredService<RandomNumberGenerator>()));
-        services.AddScoped(provider => new DomainReverification(
-            provider.GetRequiredService<IDomainStore>(),
-            provider.GetService<IDnsResolver>(),
-            provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IAlertChannels>(),
-            provider.GetRequiredService<IUnitOfWork>(),
-            provider.GetRequiredService<TimeProvider>()));
 
         // INT-MAIL-001, CONV-DESIGN-007: the shipped adapter is registered as its own
         // type, never as IMailServer; the start chooses it where the host registered no
@@ -453,24 +288,8 @@ public static class HostingRegistration
         services.AddSingleton<JmapMailServer>();
         _ = services.AddHttpClient(JmapMailServer.Channel);
 
-        // INT-MAIL-006, INT-MAIL-008: the mail server is optional, and a deployment
-        // that registers none provisions nothing and reconciles nothing.
-        services.AddScoped(provider => new MailboxPublisher(
-            provider.GetRequiredService<IMailboxStore>(),
-            provider.GetRequiredService<IMailServerInUse>(),
-            provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IAlertChannels>(),
-            provider.GetRequiredService<IUnitOfWork>(),
-            provider.GetRequiredService<TimeProvider>(),
-            provider.GetRequiredService<RandomNumberGenerator>()));
-        services.AddScoped(provider => new MailboxReconciliation(
-            provider.GetRequiredService<IMailboxStore>(),
-            provider.GetRequiredService<IMailServerInUse>(),
-            provider.GetRequiredService<IAlertChannels>(),
-            provider.GetRequiredService<TimeProvider>()));
-
-        // INT-MAIL-010: the app passwords are the mail server's, reached with a token
-        // the provider issues to the server's client; without a server there are none.
+        // INT-MAIL-010: the token the provider issues to the mail server's client, with
+        // which the app passwords are reached; without a server there are none.
         services.AddScoped<IMailServerTokens>(provider => new MailServerTokens(
             provider.GetRequiredService<OpenIddict.Server.IOpenIddictServerFactory>(),
             provider.GetRequiredService<OpenIddict.Server.IOpenIddictServerDispatcher>(),
@@ -479,50 +298,6 @@ public static class HostingRegistration
             provider.GetService<MailServerClient>(),
             provider.GetRequiredService<AuthenticationAddresses>(),
             provider.GetRequiredService<TimeProvider>()));
-        services.AddScoped<IAppPasswords>(provider => new AppPasswords(
-            provider.GetRequiredService<IMailServerInUse>(),
-            provider.GetRequiredService<IMailServerTokens>(),
-            provider.GetRequiredService<IMailboxStore>(),
-            provider.GetRequiredService<IAccountDirectory>(),
-            provider.GetRequiredService<ISettingsRestriction>(),
-            provider.GetRequiredService<StepUpGuard>(),
-            provider.GetRequiredService<IIdentifierDirectory>(),
-            provider.GetRequiredService<INotificationHandler>(),
-            provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<ICredentialAudit>(),
-            provider.GetRequiredService<IUnitOfWork>(),
-            provider.GetRequiredService<TimeProvider>()));
-
-        services.AddScoped<InvitationAcknowledgement>();
-        services.AddScoped<MembershipEnd>();
-        services.AddScoped<InvitationOpening>();
-
-        // REG-MAIL-001: an invitation reserves a mailbox only where there is a mail
-        // server to create it on.
-        services.AddScoped(provider => new InvitationService(
-            provider.GetRequiredService<IAccessGate>(),
-            provider.GetRequiredService<Janus.Authentication.Policies.AdministrativeScope>(),
-            provider.GetRequiredService<StepUpGuard>(),
-            provider.GetRequiredService<IOrganizationDirectory>(),
-            provider.GetRequiredService<IRoleCatalogue>(),
-            provider.GetRequiredService<ILegalDocuments>(),
-            provider.GetRequiredService<DomainLock>(),
-            provider.GetRequiredService<IInvitationStore>(),
-            provider.GetRequiredService<IAccountDirectory>(),
-            provider.GetRequiredService<IIdentifierDirectory>(),
-            provider.GetRequiredService<InvitationAcknowledgement>(),
-            provider.GetRequiredService<MembershipEnd>(),
-            provider.GetRequiredService<IMailboxStore>(),
-            provider.GetRequiredService<IMailServerInUse>(),
-            provider.GetRequiredService<INotificationHandler>(),
-            provider.GetRequiredService<LandingLinks>(),
-            provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IOrganizationAudit>(),
-            provider.GetRequiredService<IUnitOfWork>(),
-            provider.GetRequiredService<TimeProvider>(),
-            provider.GetRequiredService<RandomNumberGenerator>()));
-        services.AddScoped<IInvitations>(provider => provider.GetRequiredService<InvitationService>());
-        services.AddScoped<RedirectValidation>();
 
         // AUTHZ-MODEL-004 AC2 (D-160): what a hosted service starts before is what was
         // registered after it, and the web server is one, so the checks that read the
@@ -550,7 +325,6 @@ public static class HostingRegistration
         // builds the provider's options.
         services.Insert(9, ServiceDescriptor.Singleton<IHostedService, ProviderStartService>());
         services.Insert(10, ServiceDescriptor.Singleton<IHostedService, RelayValidationService>());
-        services.AddCoreArea();
 
         // INF-BG-001: the scheduled work starts once the checks above have passed.
         services.AddHostedService(provider => new BackgroundWorker(
