@@ -2,6 +2,7 @@ using System;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
 using Xunit;
 
@@ -32,7 +33,7 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
         _deployment.Documents.Hold(
             new DocumentVersion("privacy-notice", "1", "ar", "النص", [], Noon));
         _deployment.Configuration.Set(
-            Janus.Core.Configuration.Settings.PrivacyCalendarTimeZone,
+            Settings.PrivacyCalendarTimeZone,
             "Africa/Cairo");
     }
 
@@ -63,6 +64,41 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
         Assert.True(
             receipt.GetProperty("decisionDue").GetDateTimeOffset()
             > receipt.GetProperty("receiptSentAt").GetDateTimeOffset());
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-002 AC1, 09 section 7: a receipt a sending restriction refuses leaves
+    /// the request standing. It is answered 202 with <c>receiptSentAt</c> null and its
+    /// deadline, the request is queued and committed, and no receipt is sent.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_002_AC1_AReceiptARestrictionRefusesIsAnsweredNullAndTheRequestStandsAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.Notices.Refuses = true;
+
+        int rolledBack = _deployment.Work.RolledBack;
+
+        Answer submitted = await browser.SendAsync(
+            "POST",
+            "/privacy/requests",
+            ("type", "restriction"),
+            ("detail", "the recorded date of birth is disputed"));
+
+        JsonElement receipt = submitted.Json();
+
+        Assert.Equal(StatusCodes.Status202Accepted, submitted.Status);
+        Assert.Equal(JsonValueKind.Null, receipt.GetProperty("receiptSentAt").ValueKind);
+        Assert.NotEqual(default, receipt.GetProperty("decisionDue").GetDateTimeOffset());
+        Assert.Equal(
+            receipt.GetProperty("requestId").GetGuid(),
+            Assert.Single(_deployment.Requests.Queue).Id.Value);
+        Assert.Null(Assert.Single(_deployment.Requests.Queue).ReceiptSentAt);
+        Assert.False(_deployment.Work.Open);
+        Assert.Equal(rolledBack, _deployment.Work.RolledBack);
+        Assert.Empty(_deployment.Notices.Told);
     }
 
     /// <summary>

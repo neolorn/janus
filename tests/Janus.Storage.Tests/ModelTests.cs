@@ -652,6 +652,7 @@ public sealed class ModelTests
             "privacy_requests.escalated_at",
             "privacy_requests.id",
             "privacy_requests.identity_confirmation",
+            "privacy_requests.receipt_sent_at",
             "privacy_requests.received_at",
             "privacy_requests.status",
             "privacy_requests.subject",

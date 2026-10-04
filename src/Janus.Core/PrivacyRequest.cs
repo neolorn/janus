@@ -14,7 +14,10 @@ namespace Janus.Core;
 /// <c>privacy.calendar.timezone</c>. The decision clock runs from the end of it.
 /// </param>
 /// <param name="CreatedAt">When the request entered the queue.</param>
-/// <param name="ReceiptSentAt">When the automatic receipt went out, which is creation.</param>
+/// <param name="ReceiptSentAt">
+/// When the automatic receipt was admitted, which is creation, or nothing where a
+/// sending restriction refused it.
+/// </param>
 /// <param name="DecisionDue">The end of the sixth working day after submission.</param>
 /// <param name="Status">Where it stands.</param>
 /// <param name="DecidedAt">When it was decided, where it was.</param>
@@ -37,7 +40,7 @@ public sealed record PrivacyRequest(
     string? Detail,
     DateOnly ReceivedAt,
     DateTimeOffset CreatedAt,
-    DateTimeOffset ReceiptSentAt,
+    DateTimeOffset? ReceiptSentAt,
     DateTimeOffset DecisionDue,
     PrivacyRequestStatus Status,
     DateTimeOffset? DecidedAt,

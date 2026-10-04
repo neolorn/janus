@@ -2,12 +2,17 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Core;
 using Janus.Identity.Accounts;
 using Janus.Privacy.Requests;
 using Janus.Storage.Identity.Accounts;
+using Janus.Storage.Migrations;
 using Janus.Storage.Privacy.Requests;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Storage.Tests.Privacy;
@@ -38,6 +43,8 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
         SubjectId subject = await RegisteredAsync();
         QueuedRequest written = Entered(subject, PrivacyRequestType.Erasure);
 
+        written.ReceiptAdmitted();
+
         await WritingAsync(async store => await store.AddAsync(
             written,
             TestContext.Current.CancellationToken));
@@ -60,6 +67,101 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
         Assert.Equal("letter", held.Channel);
         Assert.Equal("national identity card seen", held.IdentityConfirmation);
         Assert.True(held.Open);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-002 AC1: a request whose receipt a sending restriction refused holds
+    /// no receipt-sent timestamp in its row, and reads back with none.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_002_AC1_ARequestWhoseReceiptWasRefusedReadsBackWithNoneAsync()
+    {
+        SubjectId subject = await RegisteredAsync();
+        QueuedRequest written = Entered(subject, PrivacyRequestType.Restriction);
+
+        await WritingAsync(async store => await store.AddAsync(
+            written,
+            TestContext.Current.CancellationToken));
+
+        await using StoreContext reading = database.Context();
+
+        QueuedRequest held = Assert.IsType<QueuedRequest>(
+            await new PrivacyRequestStore(reading, new DataConnections(reading))
+                .FindAsync(written.Id, TestContext.Current.CancellationToken));
+
+        Assert.Null(held.ReceiptSentAt);
+        Assert.Equal(Noon, held.CreatedAt);
+        Assert.True(held.Open);
+        Assert.Null(await reading.PrivacyRequests
+            .Where(row => row.Id == written.Id)
+            .Select(row => row.ReceiptSentAt)
+            .SingleAsync(TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-002 AC1 (D-186): a request queued before the receipt's instant was
+    /// kept reads back, once the migration has run, the receipt at creation it was
+    /// queued with.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_002_AC1_ARequestQueuedBeforeTheReceiptWasKeptReadsBackItsReceiptAsync()
+    {
+        string moved = await database.CreateDatabaseAsync("request_receipt");
+        string keeping;
+
+        await using (StoreContext migrating = DatabaseFixture.Context(moved))
+        {
+            string[] declared = [.. migrating.GetService<IMigrationsAssembly>().Migrations.Keys.Order(StringComparer.Ordinal)];
+
+            keeping = declared.Single(migration =>
+                migration.EndsWith("_" + nameof(KeepWhetherARequestsReceiptWasSent), StringComparison.Ordinal));
+
+            await migrating.GetService<IMigrator>().MigrateAsync(
+                declared[Array.IndexOf(declared, keeping) - 1],
+                TestContext.Current.CancellationToken);
+        }
+
+        var values = new
+        {
+            id = Guid.CreateVersion7(),
+            subject = Subjects.New().Value,
+            received = new DateOnly(2026, 9, 18),
+            at = Noon,
+            due = Clock.Due,
+            warn = Clock.WarnAt,
+            escalate = Clock.EscalateAt,
+        };
+
+        await using (var connection = new NpgsqlConnection(moved))
+        {
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO identity.accounts (subject, state, created_at)
+                VALUES (@subject, 'active', @at);
+                INSERT INTO identity.privacy_requests
+                    (id, subject, type, received_at, created_at, decision_due, warn_at, escalate_at, status)
+                VALUES
+                    (@id, @subject, 'restriction', @received, @at, @due, @warn, @escalate, 'open');
+                """,
+                values);
+        }
+
+        await using (StoreContext migrating = DatabaseFixture.Context(moved))
+        {
+            await migrating.GetService<IMigrator>().MigrateAsync(keeping, TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = DatabaseFixture.Context(moved);
+
+        QueuedRequest held = Assert.IsType<QueuedRequest>(
+            await new PrivacyRequestStore(reading, new DataConnections(reading))
+                .FindAsync(new PrivacyRequestId(values.id), TestContext.Current.CancellationToken));
+
+        Assert.Equal(Noon, held.CreatedAt);
+        Assert.Equal(Noon, held.ReceiptSentAt);
     }
 
     /// <summary>

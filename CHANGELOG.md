@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A privacy request whose receipt a sending restriction refuses is queued all the same:
+  the request stands, its clock runs, and `receiptSentAt` is answered null by
+  `POST /me/privacy-requests`, `POST /admin/privacy-requests` and the queue, where it
+  was answered with the creation instant whether the receipt was admitted or not.
+  `PrivacyRequest.ReceiptSentAt` and `PrivacyRequestReceipt.ReceiptSentAt` are now
+  nullable, and a migration adds `privacy_requests.receipt_sent_at`, set to the
+  creation instant for every request already queued.
 - An invitation that is revoked, acknowledged, found expired by the sweep or attached to
   a subject who is erased holds, in place of its wrapped key, the 32 zero bytes of an
   erased key and no longer an absent one, so one erased value stands wherever a wrapped

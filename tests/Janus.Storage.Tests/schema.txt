@@ -832,6 +832,7 @@ table privacy_requests
   column identity_confirmation text
   column warned_at timestamp with time zone
   column escalated_at timestamp with time zone
+  column receipt_sent_at timestamp with time zone
   constraint ck_privacy_requests_status CHECK ((status = ANY (ARRAY['deemed-refused-by-lapse'::text, 'fulfilled'::text, 'granted-by-lapse'::text, 'open'::text, 'refused'::text])))
   constraint ck_privacy_requests_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_privacy_requests_type CHECK ((type = ANY (ARRAY['erasure'::text, 'rectification'::text, 'restriction'::text])))
