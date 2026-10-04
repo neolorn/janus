@@ -588,6 +588,7 @@ table mailboxes
   column failed_at timestamp with time zone
   column fingerprint_version integer not null
   column attempted boolean not null
+  column claimed_until timestamp with time zone
   constraint ck_mailboxes_holder_not_max_uuid CHECK ((holder <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_mailboxes_key CHECK (((holder IS NULL) = (wrapped_key IS NOT NULL)))
   constraint ck_mailboxes_pending CHECK (((pending IS NULL) OR (pending = ANY (ARRAY['disabled'::text, 'enabled'::text, 'removed'::text]))))

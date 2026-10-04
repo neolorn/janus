@@ -60,6 +60,12 @@ internal sealed class MailServerInMemory : IMailServer
     public bool LosesAnswers { get; set; }
 
     /// <summary>
+    /// Whether a push ends as a call its caller gave up on does: cancelled, though
+    /// nobody cancelled the pass that made it.
+    /// </summary>
+    public bool Abandoned { get; set; }
+
+    /// <summary>
     /// What the test observes the moment a push arrives, before the server acts on it.
     /// </summary>
     public Action<MailboxPush>? Receiving { get; set; }
@@ -112,6 +118,11 @@ internal sealed class MailServerInMemory : IMailServer
 
         Received.Add(push);
         Receiving?.Invoke(push);
+
+        if (Abandoned)
+        {
+            throw new OperationCanceledException("The push was given up.");
+        }
 
         if (Unreachable)
         {

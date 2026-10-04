@@ -303,6 +303,37 @@ internal sealed class Mailbox
     public bool IsSettled(bool stands) => Pending is null && Pushed == Owed(stands);
 
     /// <summary>
+    /// Whether a pass has anything to do for the mailbox: a push to begin under a key
+    /// of its own, or an attempt that is due. It changes nothing, so a pass asks it of
+    /// a row it read without a claim.
+    /// </summary>
+    /// <param name="stands">Whether its holder stands.</param>
+    /// <param name="now">The instant of the pass.</param>
+    /// <param name="waits">
+    /// Whether an attempt, though due, waits for a removal at the mailbox's address.
+    /// </param>
+    /// <returns>Whether there is something to claim the row for.</returns>
+    public bool Awaits(bool stands, DateTimeOffset now, bool waits)
+    {
+        MailboxState owed = Owed(stands);
+
+        if (Pending is null && Pushed == owed)
+        {
+            return false;
+        }
+
+        if (Pending != owed || PendingKey is null)
+        {
+            return true;
+        }
+
+        return !waits
+            && (FailedAt is DateTimeOffset failed
+                ? failed + Resumed <= now
+                : NextAttemptAt is null || NextAttemptAt <= now);
+    }
+
+    /// <summary>
     /// The push the mailbox is owed now. A change of the state owed begins a push of
     /// its own under a new key and a fresh budget; the same state keeps its key. An
     /// outstanding push may have reached the server though its answer did not, so a

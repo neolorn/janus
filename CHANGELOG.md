@@ -2666,3 +2666,10 @@ against the public contract of LIB-API-001.
   channels in several processes carry each raised condition once. The claim stands for
   `outbox.claim.timeout`; a condition the router refused gives its claim up and is
   taken by the next pass.
+- A mailbox push is claimed before the mail server is called, by one conditional update
+  committed on its own, and its attempt and its outcome are each written under that
+  claim, so passes of the mailbox publisher in several processes make each push once
+  at a time and count each attempt once. The claim stands for `outbox.claim.timeout`,
+  and a push still with the server then is abandoned as a failed attempt. A pass
+  decides on the mailbox as its row stands once claimed and writes the push alone, so
+  it never writes back a holder or a state owed it read earlier.
