@@ -615,7 +615,7 @@ CONV-DESIGN-008 criterion 3, "no project's build reports MSB3277": no test decid
 
 What earlier runs left: nine worktrees held uncommitted work whose commits were all in the branch; each is kept as a patch outside the repository and removed with its branch. The reason rule of the configuration route that one of them carried is on the branch at the endpoint and in the service (`ConfigurationEndpointTests.OPS_CFG_005_EveryChangeCarriesAReasonAsync`, `ConfigurationAdministrationTests.OPS_CFG_008_AC2_ATighteningWithNoReasonIsRefusedAsync`). Four stashes are dropped: three held earlier states of the docs, and every file of the fourth is in the history (the changelog describes `MapAuthorizationTables`).
 
-**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The five parts of D-183 the owner's split names are merged (below), with a sixth for question 30. Left unbuilt by them and taken up in further parts: questions 31 and 42 (sessions), question 29 (privacy), and three of the five carriers of question 61 (sending). Questions 68 to 113 park the sites they name. The work after the merges (50, 51, 53, the new codes, the retirement of `NotificationRequested`, 62) is not started.
+**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The five parts of D-183 the owner's split names are merged (below), with a sixth for question 30. Left unbuilt by them and taken up in further parts: questions 31 and 42 (sessions), question 29 (privacy), and the carriers of question 61 that sending left (the mailbox pushes are merged; two wait on question 114). Questions 68 to 114 park the sites they name. The work after the merges (50, 51, 53, the new codes, the retirement of `NotificationRequested`, 62) is not started.
 
 ### The section C sweeps, place by place
 
@@ -1117,6 +1117,19 @@ After the merge: build 0 warnings 0 errors, format clean, 3035 unit tests, 139 c
   - **Not built in the part:** the claim of the event rows (`EventPublisher`), of the erasure outbox's deliveries (`OutboxPublisher`) and of the mailbox pushes (`MailboxPublisher`). CONV-DESIGN-003 criterion 9 and INF-BG-001 criterion 4 hold for messages and raised alerts alone until a further part builds them.
 - Parked sites touched: question 75 (`RecoveryCodeReminders`), question 80 (`AccountLifecycle`, `IdentifierService`, `InvitationAcknowledgement`, `MembershipEnd`, `AppPasswords`) and question 88 (`ProviderEvents`): the send's type alone. The send begins no unit of work now, so it marks no caller's; what each caller does with a refused send is as it was. `RecoveryCodeReminders.RemindedAsync`, where every channel refuses, commits having written counters alone (question 77's matter). `PhoneSignals.ConsiderAsync` still begins a level of its own inside the caller's unit and throws on failure.
 - For audit: `Deployment`, the fixture of `Janus.Hosting.Tests`, runs the publisher's pass after each request by default, as the worker does, so that the flow tests find the mail of an ask; a test of what the request itself did turns it off. A caller of the governed send outside a unit of work on a path no test reaches would fault at run time; the full gate has not run yet.
+
+#### D-183, `part/carriers`, merged as `17583e8f` (`0be8db67`)
+
+After the merge: build 0 warnings 0 errors, format clean, 3039 unit tests, 139 contract tests. One migration, `ClaimAMailboxPushBeforeItIsCarried` (one nullable column, no hand-written SQL); nothing was regenerated.
+
+- **Question 61, the mailbox pushes** (`0be8db67`; CONV-DESIGN-003, INF-BG-001, INT-MAIL-007). The publisher claims only a mailbox it has something to do for, in a unit of work of its own; reads the row again as it stands under the claim and decides on that; writes the counted attempt under the claim; calls the server outside any transaction, bounded by `outbox.claim.timeout`; writes the outcome and its alert under the claim and gives the claim up. An outcome whose claim was taken over writes and raises nothing. The claimed writes set the push's columns alone, where the pass wrote the whole aggregate from its earlier read.
+  - `MailboxStoreTests`: `CONV_DESIGN_003_AC9_AMailboxPushIsClaimedByOnePassAsync`, `CONV_DESIGN_003_AC9_AnOutcomeWritesThePushAndNothingElseAsync`, `PRIV_RIGHT_005a_AC19_ARemovalConfirmedUnderAClaimForgetsTheAddressAsync`.
+  - `MailboxPublisherTests`: `CONV_DESIGN_003_AC9_AMailboxAnotherPassHoldsIsNotPushedAsync`, `CONV_DESIGN_003_AC9_AnOutcomeWhoseClaimWasTakenOverIsNotRecordedAsync`, `CONV_DESIGN_003_APushAbandonedAtItsClaimsTimeoutIsAFailedAttemptAsync`, `CONV_DESIGN_003_AMailboxWithNothingDueIsNotClaimedAsync`.
+  - Four existing tests of `MailboxPublisherTests` expect one commit more, the claim's own: `INT_MAIL_007_AC1_APushIsWrittenDownBeforeItLeavesAsync`, `INT_MAIL_007_AC1_EachAttemptIsCountedBeforeItIsMadeAsync`, `INT_MAIL_001_AC4_AConflictIsMarkedFailedAndRaisedOnItsFirstAttemptAsync`, `CONV_DESIGN_003_AC5_AFailedPushWhoseAlertIsNotRaisedIsRolledBackAsync`.
+  - Not decided by a test: the timer that abandons a push at the claim's timeout (read; the test holds what the publisher does with a call that ends cancelled). INF-BG-001 criterion 4 with two processes is held by the storage test over separate connections.
+- **Not built:** the claim of the event rows and of the erasure outbox, parked on question 114. Both still read due rows and carry them unclaimed.
+- Question 77's matter: where a claim was taken over, or a claimed row has nothing to write, the publisher commits a unit of work that wrote nothing, as `AlertDispatch` and `SendPublisher` do.
+- Observed in `af618c88`, not changed: `SendDeliveryStore.ClaimAsync` is conditional on the claim alone, not on the row still being due, and `SendPublisher` does not read the schedule again after it claims. A pass that read a row as due and claims it after another pass failed an attempt and released it carries it again at once: each attempt is counted once, and one interval of the backoff is skipped. It is stated under question 114.
 
 ## 2. Items not implemented
 
@@ -2439,7 +2452,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3035 unit tests, 139 c
   3. The overlap accepted under at-least-once delivery: the lost update fixed (an increment
      in SQL), `ON CONFLICT DO NOTHING`, an idempotent ledger append.
 - **Parked.** V7 (`OutboxPublisher`) and S6 (the retry and settle of `SendingService`).
-- **Answer:** D-183. Built for the send outbox and the raised alerts in `af618c88` and `e8f32416` (`part/sending`); the three other carriers are not yet built.
+- **Answer:** D-183. Built for the send outbox and the raised alerts in `af618c88` and `e8f32416` (`part/sending`) and for the mailbox pushes in `0be8db67` (`part/carriers`); the event rows and the erasure outbox wait on question 114.
 
 **62. Tier 3. D-166 X3 at C9, IDN-ACCT-007 criterion 2 and AUTHZ-GATE-006 criterion 2 against CONV-DESIGN-003 criterion 6: a restriction committed after the gate reads.**
 
@@ -2986,6 +2999,19 @@ part of 389 (3) and waits with 389 on question 48.
 - **Item.** Question 39.
 - **The contradiction.** PRIV-RIGHT-005a: "a wrapped key held with no marker (an outbox row's, an invitation's, a mailbox's) is the 32 zero bytes alone". `SubjectEraser` sets an attached invitation's wrapped key and its encrypted document to null, and `InvitationStore` nulls both at use and at expiry. D-183 question 39 names the mailbox's release and the subject key as what is brought to the value, and not the invitation.
 - **Parked.** The invitation's erased key, as it is.
+- **Answer:** pending.
+
+**114. Tier 2. CONV-DESIGN-003 (the rule and criterion 9) and INF-BG-001 criterion 4: how a row that tracks several deliveries is claimed "each delivery apart".**
+
+- **Item.** Question 61, for the event rows (`EventPublisher`) and the erasure outbox (`OutboxPublisher`, its ledger pass included).
+- **What the code needs.** Both rows track several deliveries: `outbox` has a row of `outbox_confirmations` for each subscriber, written only once that subscriber confirms; `events` keeps the consumers that took the event in `taken_by`. In both, the attempts, the schedule, the status or failure, the alert at exhaustion and, for an erasure, the `erasures` row are kept for the row. To claim each delivery apart the code needs somewhere to hold a claim for a row and one subscriber or consumer, which no table has before confirmation, and a rule for who writes the row's attempt count, schedule, completion, failure and alert where two passes hold different deliveries of one row, and what an attempt then is.
+- **What the specification says.** CONV-DESIGN-003: a row that background work carries out of the database, "each delivery apart where a row tracks several", is claimed by one conditional update, and the attempt's outcome is written by one update conditional on that claim. IDN-LIFE-003a counts attempts and fails for the record. LIB-API-001 retries an event for the row under `outbox.retry.*`. No chapter names where a delivery's claim is held or how the row's outcome is guarded.
+- **Readings.**
+  1. One claim for the row; its subscribers or consumers are called in turn under it, bounded by the claim's timeout as a whole; the outcome is one write conditional on the row's claim. `claimed_until` on `events` and `outbox`, the shape of the three carriers built. It does not match "each delivery apart".
+  2. One claim for each delivery: a row for a delivery and its subscriber written at the claim (in `outbox_confirmations` with a nullable `confirmed_at`, or a new table), and for events a table of event and consumer; the row's own outcome then needs a rule of its own (a lock at settling, or a claim of the row as well).
+  3. Both: a claim of the row for its outcome and a claim of each delivery for each call.
+- **Also open.** Whether a claim is conditional on the row still being due. The mailbox publisher decides on the row as read under the claim; the send publisher does not, and can skip one interval of the backoff after another pass released the row.
+- **Parked.** The event rows and the erasure outbox, unclaimed.
 - **Answer:** pending.
 
 ## 5. Gate result
