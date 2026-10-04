@@ -1508,6 +1508,14 @@ against the public contract of LIB-API-001.
   `null` `detail` records none: `PrivacyRequestEntry.Detail` and
   `PrivacyRequest.Detail` are nullable, the `detail` column of `privacy_requests`
   takes null, and an empty text is never stored for none.
+- `rotate-fingerprint-key --sealed` waits for everything that lapses on a clock of
+  its own: it is refused with `model.rotation.notready` and `pending` while a sign-in
+  in progress carries a fingerprint computed under a previous version, as it is for a
+  held username, an unlapsed reservation and an abuse count that still counts. At
+  retirement it deletes unspent restriction credit and released username holds under a
+  previous version, and nothing else: a migration revokes the maintenance role's
+  `DELETE` on the abuse ledgers and on the sign-ins in progress, whose versions it
+  still reads.
 - A value wrapped under a key-encryption key version the application does not hold
   fails to unwrap as a fault carrying `model.startup.secretunavailable`,
   `details.key` `keyEncryptionKeys` and `details.version`: a request is answered

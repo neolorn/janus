@@ -248,8 +248,9 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     /// <summary>
     /// OPS-MIG-003a AC4, OPS-SEC-003 AC6: of a table holding a keyed fingerprint the
     /// maintenance role reaches what computing it again needs and no other column, and
-    /// of a ledger the version a line is hashed under and the line to forget, never the
-    /// hash (entry 318 of the decisions pending review).
+    /// of a ledger the version a line is hashed under, never the hash and never the line
+    /// to delete; it deletes unspent restriction credit and released username holds and
+    /// no other line (D-183).
     /// </summary>
     [Fact]
     public async Task OPS_MIG_003a_AC4_TheMaintenanceRoleReachesTheFingerprintsAndNoOtherColumnAsync()
@@ -261,8 +262,14 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
             UPDATE identity.identifiers SET fingerprint = fingerprint, fingerprint_version = fingerprint_version
             WHERE identifier_id = identifier_id AND subject = subject AND enc_canonical = enc_canonical
             """));
+        Assert.Equal(0, await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*)::int FROM identity.throttle_counters WHERE fingerprint_version <> 1"));
+        Assert.Equal(0, await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*)::int FROM identity.signin_challenges WHERE fingerprint_version <> 1"));
         Assert.Equal(0, await connection.ExecuteAsync(
-            "DELETE FROM identity.throttle_counters WHERE fingerprint_version <> 1"));
+            "DELETE FROM identity.send_grants WHERE fingerprint_version <> 1"));
+        Assert.Equal(0, await connection.ExecuteAsync(
+            "DELETE FROM identity.username_holds WHERE fingerprint_version <> 1 AND releases_at <= now()"));
 
         PostgresException withheld = await Assert.ThrowsAsync<PostgresException>(async () =>
             await connection.ExecuteScalarAsync<int>("SELECT count(enc_entered)::int FROM identity.identifiers"));
@@ -271,6 +278,19 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
 
         Assert.Equal(InsufficientPrivilege, withheld.SqlState);
         Assert.Equal(InsufficientPrivilege, hashed.SqlState);
+
+        foreach (string ledger in new[]
+        {
+            "callbacks", "nonexistence_notices", "registration_sources", "send_counters",
+            "send_key_counters", "sends", "signin_challenges", "throttle_counters",
+        })
+        {
+            PostgresException kept = await Assert.ThrowsAsync<PostgresException>(async () =>
+                await connection.ExecuteAsync(
+                    $"DELETE FROM identity.{ledger} WHERE fingerprint_version <> 1"));
+
+            Assert.Equal(InsufficientPrivilege, kept.SqlState);
+        }
     }
 
     /// <summary>

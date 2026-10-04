@@ -76,7 +76,7 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
                 identity.identifier_removals, identity.authenticators, identity.mailboxes, identity.username_holds,
                 identity.throttle_counters, identity.callbacks, identity.nonexistence_notices,
                 identity.registration_sources, identity.send_counters, identity.send_key_counters,
-                identity.sends CASCADE;
+                identity.sends, identity.send_grants, identity.signin_challenges CASCADE;
             DELETE FROM identity.audit_records WHERE action LIKE 'ops.keyrotation.%';
             """);
     }
@@ -429,14 +429,14 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
     }
 
     /// <summary>
-    /// OPS-SEC-003 AC6, AUTH-ABUSE-001: a sign-in in progress carries the hash of the
-    /// identifier it was opened with, so the retirement forgets one opened under the
-    /// previous version as it forgets a ledger line and keeps one opened under the new
-    /// one.
+    /// OPS-SEC-003 AC6, AUTH-ABUSE-001 (D-183): a sign-in in progress carries the hash of
+    /// the identifier it was opened with and the version it was computed under, so the
+    /// retirement waits while one opened under the previous version stands, forgets none,
+    /// and goes ahead once that sign-in has lapsed with its record.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task OPS_SEC_003_AC6_RetirementForgetsTheSignInsOpenedUnderThePreviousVersionAsync()
+    public async Task OPS_SEC_003_AC6_RetirementWaitsWhileASignInInProgressCarriesThePreviousVersionAsync()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         Challenge previous = Opened();
@@ -451,14 +451,58 @@ public sealed class FingerprintRotationTests(DatabaseFixture database)
 
         Completed(await RecomputedAsync(new FixedTime(Noon), cancellationToken));
 
-        Assert.Equal([1], Retirement(await RetiredAsync(new FixedTime(Noon), cancellationToken)).Retired);
+        Error refused = Refusal(await RetiredAsync(new FixedTime(Noon), cancellationToken));
 
         await using NpgsqlConnection connection = await database.OpenAsync();
 
+        Assert.Equal(ErrorCodes.RotationNotReady, refused.Code);
+        Assert.Equal(1, refused.Details["pending"].GetInt32());
+        Assert.Equal(
+            2,
+            await connection.ExecuteScalarAsync<int>("SELECT count(*)::int FROM identity.signin_challenges"));
+
+        await using (StoreContext lapsing = database.Context())
+        {
+            await new ChallengeStore(lapsing, Ring(Rotating)).RemoveAsync(previous.Fingerprint, cancellationToken);
+            _ = await lapsing.SaveChangesAsync(cancellationToken);
+        }
+
+        Assert.Equal([1], Retirement(await RetiredAsync(new FixedTime(Noon), cancellationToken)).Retired);
         Assert.Equal(
             Convert.ToHexString(current.Fingerprint),
             Convert.ToHexString(
                 Assert.Single(await connection.QueryAsync<byte[]>("SELECT handle FROM identity.signin_challenges"))));
+    }
+
+    /// <summary>
+    /// OPS-SEC-003 (D-183), OPS-MIG-003a AC4: at retirement the command deletes unspent
+    /// restriction credit and released username holds under a previous version, which
+    /// lapse on no clock of their own, and nothing else: credit under the current version
+    /// and a hold not yet released under it stay.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_SEC_003_AC6_RetirementDeletesOnlyUnspentCreditAndReleasedHoldsAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        await connection.ExecuteAsync(
+            "INSERT INTO identity.send_grants (key, credit, fingerprint_version) VALUES (@previous, 2, 1), (@current, 3, 2)",
+            new { previous = RandomNumberGenerator.GetBytes(32), current = RandomNumberGenerator.GetBytes(32) });
+        await HeldAsync("released.under.the.previous", 1, Noon.AddDays(-1));
+        await HeldAsync("held.under.the.current", 2, Noon.AddDays(30));
+
+        Completed(await RecomputedAsync(new FixedTime(Noon), cancellationToken));
+
+        Assert.Equal([1], Retirement(await RetiredAsync(new FixedTime(Noon), cancellationToken)).Retired);
+        Assert.Equal(
+            [2],
+            await connection.QueryAsync<int>("SELECT fingerprint_version FROM identity.send_grants"));
+        Assert.Equal(
+            [2],
+            await connection.QueryAsync<int>("SELECT fingerprint_version FROM identity.username_holds"));
     }
 
     /// <summary>

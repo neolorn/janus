@@ -12533,6 +12533,8 @@ IDN-LIFE-012a could say the provider's subject is held encrypted beside its
 fingerprint; AUTH-ABUSE-004 AC6 could admit the version; OPS-MIG-003a AC4 could list
 the rights above; the runbook's "printed but not rotated" could point at the command.
 
+**Superseded by D-166.**
+
 ---
 
 ## 319. How a protected key is changed from the server, and what the change records and raises

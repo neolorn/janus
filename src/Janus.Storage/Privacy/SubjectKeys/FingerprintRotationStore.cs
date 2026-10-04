@@ -84,8 +84,7 @@ internal sealed class FingerprintRotationStore(
 
     // The ledgers, whose keys are hashed from values the library never holds, and the
     // sign-ins in progress, which carry the hash of the identifier they were opened with
-    // and are forgotten with the version it was computed under. A sign-in the previous
-    // release opened carries no hash and no version, and is left to lapse.
+    // and the version it was computed under on their own row.
     private static readonly string[] Ledgers =
     [
         "callbacks",
@@ -99,9 +98,10 @@ internal sealed class FingerprintRotationStore(
         "throttle_counters",
     ];
 
-    // D-166, 318: the abuse counts, each of which still counts until the expiry sweep
-    // finds that its own check no longer reads it, so a retirement waits on every line
-    // under a previous version rather than forgetting one that counts.
+    // OPS-SEC-003 (D-166 318, D-183): what lapses on a clock of its own. An abuse count
+    // still counts until the expiry sweep finds that its own check no longer reads it,
+    // and a sign-in in progress is read under its version until its record lapses, so a
+    // retirement waits on every line under a previous version and forgets none of them.
     private static readonly string[] Counts =
     [
         "callbacks",
@@ -110,7 +110,15 @@ internal sealed class FingerprintRotationStore(
         "send_counters",
         "send_key_counters",
         "sends",
+        "signin_challenges",
         "throttle_counters",
+    ];
+
+    // OPS-SEC-003 (D-183): unspent restriction credit lapses on no clock of its own, so
+    // a retirement deletes it, with the released username holds, and nothing else.
+    private static readonly string[] Forgotten =
+    [
+        "send_grants",
     ];
 
     private static readonly byte[] Neutral = Fingerprint.Neutralised();
@@ -248,7 +256,7 @@ internal sealed class FingerprintRotationStore(
         AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
         var parameters = new { current = Fingerprint.CurrentVersion(ring), now };
 
-        foreach (string ledger in Ledgers)
+        foreach (string ledger in Forgotten)
         {
             await ambient.Connection
                 .ExecuteAsync(new CommandDefinition(
