@@ -942,6 +942,26 @@ The rollback is written inline at each return. `CredentialService.RefusedAsync`,
 - Parked: `VerificationCodes.PresentAsync` (question 73), the counter mismatch of `WebAuthnService.PresentAsync` (question 74), `RecoveryCodeReminders.RemindedAsync` (question 75), the refusals of `BreakGlassService.PresentAsync` (question 76), `DeviceService`'s standing check and the cancelled report of `LossReports.InvalidateAsync` (question 77).
 - Observed, outside the sweep: `CredentialService.SetPasswordAsync` ends the account's other sessions after its commit, in no unit of work; `DeviceService.VerifiedAsync` publishes `DeviceVerified` after the commit that remembered the browser (X1).
 
+#### X9, `part/rollback-accounts`, merged as `699ab691` (`4582a7ce`, `1a58339a`, `fe7a5cdc`, `a64c93e2`, `7e096fc4`, `9c84477a`, `b78a6241`, `10c5e7c9`, `ccfec930`)
+
+The rollback is written inline at each return. The helpers that committed a refusal (`SettledAsync` in `AccountAdministration`, `AccountLifecycle` and `IdentifierService`; `EndedAsync` in `OrganizationService` and `ConfigurationAdministration`) are removed. Where the decision under the lock finds the operation already done, the return is a success with nothing to write and still commits.
+
+- `AccountAdministration.SuspendAsync`, `ReactivateAsync`, `LiftRestrictionAsync`, `CancelDeletionAsync`: a refusal under the account's lock ended with a commit, and the event not written returned with the unit open; rolled back. Tests `AccountAdministrationTests.CONV_DESIGN_003_AC5_ASuspensionRefusedUnderTheLockIsRolledBackAsync`, `..._AReactivationRefusedUnderTheLockIsRolledBackAsync`, `..._ALiftRefusedUnderTheLockIsRolledBackAsync`, `..._ACancellationRefusedUnderTheLockIsRolledBackAsync`.
+- `AccountLifecycle.DeactivateAsync`, `ReactivateAsync`, `DeleteAsync`, `CancelDeletionAsync`: the same two returns; rolled back. Tests `IDN_ACCT_007_ASuspensionCommittedMeanwhileIsNamedToADeactivationAsync`, `CONV_DESIGN_005_AC1_AnEventThatIsNotTakenFailsTheOperationAsync`, `IDN_LIFE_013_ASuspensionCommittedMeanwhileIsNotReversedByALinkAsync`, `CONV_DESIGN_003_AC5_ADeletionRefusedUnderTheLockIsRolledBackAsync`, `CONV_DESIGN_003_AC5_ACancellationRefusedUnderTheLockIsRolledBackAsync`.
+- `AccountService.EditProfileAsync`: the three refusals of a username on its own text (mixed script, invalid, reserved), the first after the beginning, are judged before it; every refusal inside the choice rolls back. `SetPreferencesAsync`: a refused preference returned with the unit open; rolled back. Tests `REG_IDENT_009_AC2_ASecondChangeInsideTheWindowIsRefusedAsync`, `CONV_DESIGN_003_AC5_APreferenceRefusedAfterTheWorkBeganIsRolledBackAsync`. Reviewed, left: `LabelCredentialAsync`, `PreferSecondStepAsync`, `ProfilePhotos.SetAsync` and `RemoveAsync` (no return between).
+- `IdentifierService.AddAsync` (the maximum under the lock, a refused stage), `LandAsync`, `MakePrimaryAsync`, `SetBackupAsync`, `RemoveAsync`, `UndoAsync` and the two replacements: refusals under the lock ended with a commit, and a refused send or an event not written returned with the unit open; rolled back. The verification: no pending record, an expired code and a failed settle roll back; a wrong code writes its count and commits, read as the wrong try of AUTH-FACT-004, the operation beginning the outermost unit of work. Tests `CONV_DESIGN_003_AC5_AnAdditionWhoseSendIsRefusedIsRolledBackAsync`, `CONV_DESIGN_003_AC5_AWrongCodeCommitsItsCountAloneAsync`, `CONV_DESIGN_003_AC5_AnExpiredCodeIsRolledBackAsync`, `REG_IDENT_007_AC2_AChangeAbandonedMeanwhileIsNotAppliedAsync`, `CONV_DESIGN_003_AC5_APressOnAVerificationGoneMeanwhileIsRolledBackAsync`, `..._APromotionRefusedUnderTheLockIsRolledBackAsync`, `..._ABackupRefusedUnderTheLockIsRolledBackAsync`, `REG_IDENT_006_AC1_AnAddressMadePrimaryMeanwhileIsSparedAsync`, `..._AnUndoSpentMeanwhileIsRolledBackAsync`, `..._AReplacementWhoseSendIsRefusedIsRolledBackAsync`. Reviewed, left: `AbandonAsync`.
+- `RegistrationService.BeginAsync`: an invitation no longer opening under its lock ended with a commit; rolled back. The unit `RecordAgeAsync` and `VerifyAsync` share committed whatever was decided; it now rolls back but where the refusal counts (a code spent, never outstanding, expired or wrong, with the throttle's failure counted). The stage, the addition, the resend, the change and the supplied address: a refused send rolls back. The completion: a session not issued, a browser not remembered, a refused consent and an event not written roll back. Tests `RegistrationServiceTests.CONV_DESIGN_003_AC5_ALinkRefusedUnderTheInvitationsLockIsRolledBackAsync`, `..._AWrongCodeCommitsItsCountsAsync`, `..._ACodeForNoStagedIdentifierIsRolledBackAsync`, `..._AnAgeAnsweredOutOfStepIsRolledBackAsync`, `..._AStagedIdentifierWhoseSendIsRefusedIsRolledBackAsync`, `..._ABoundIdentifierWhoseSendIsRefusedIsRolledBackAsync`, `..._AChangedIdentifierWhoseSendIsRefusedIsRolledBackAsync`, `..._ASuppliedAddressWhoseSendIsRefusedIsRolledBackAsync`, `PRIV_CONS_001_AC1_AControlForAPurposeTakingNoConsentIsRefusedAsync`. Reviewed, left: `SkipPhoneAsync`, `DiscardAsync`, `LandAsync`, `AbandonAsync`, `SweepAsync`.
+- `InvitationService.IssueAsync` and `RevokeAsync`, `InvitationAcknowledgement.AcknowledgeAsync`, `InvitationOpening.OpenAsync`, `MembershipEnd.EndAsync`: refusals under the lock ended with a commit, and a failed attachment or an event not written returned with the unit open; rolled back. Tests `IDN_ORG_003_AC12_ADeletionRequestedMeanwhileTakesNoInvitationAsync`, `CONV_DESIGN_003_AC5_ARevocationRefusedUnderTheLockIsRolledBackAsync`, `REG_INV_001_AnInvitationRevokedMeanwhileAttachesNothingAsync`, `CONV_DESIGN_003_AC5_APressRefusedUnderTheLockIsRolledBackAsync`, `CONV_DESIGN_003_AC5_AnEndThatFindsNoMembershipIsRolledBackAsync`. Reviewed, left: `InvitationService.SweepAsync`.
+- `ConfigurationAdministration.ChangeAsync` and `ChangeMemberAsync`, `ProtectedConfiguration.ChangeAsync`: refusals under the lock ended with a commit, and a refused write or an alert not raised returned with the unit open; rolled back. Tests `OPS_CFG_002_AC2_LengtheningOneRequiresStepUpAsync`, `ChangeAsync_AWarningThatIsNotTaken_IsRefusedAndNotWrittenDownAsync`, `OPS_ALERT_001_AnExportStepUpTurnedOffWithoutItsAlertIsNotMadeAsync`, `CONV_DESIGN_003_AC5_AMemberTheStoreRefusesIsRolledBackAsync`, `OPS_ALERT_001_AProtectedChangeWhoseAlertIsNotRaisedIsNotMadeAsync`.
+- `OrganizationService.CreateAsync`, `RequestDeletionAsync`, `CancelDeletionAsync`, `ReplacePolicyAsync`; `OrganizationDomainService`, the holding read, `AddDomainAsync`, `RemoveDomainAsync`; `DomainReverification.SweepAsync`: refusals under the lock ended with a commit, and a write refused or an alert not raised returned with the unit open; rolled back. Tests `OrganizationServiceTests.CONV_DESIGN_003_AC5_ADeletionRequestRefusedUnderTheLockIsRolledBackAsync`, `..._ACancellationRefusedUnderTheLockIsRolledBackAsync`, `..._APolicyRefusedUnderTheLocksIsRolledBackAsync`, `OrganizationDomainServiceTests.CONV_DESIGN_003_AC5_ADomainAddedWithNoResolverIsRolledBackAsync`, `..._ADomainAddedWithoutStepUpIsRolledBackAsync`, `..._ADomainRemovedWithoutStepUpIsRolledBackAsync`, `DomainReverificationTests.CONV_DESIGN_003_AC5_AFailedCheckWhoseAlertIsNotRaisedIsRolledBackAsync`, and, in the host's tests, `OrganizationPolicyEndpointTests.OPS_CFG_002_AC6_APolicyChangeIsDecidedUnderItsRowsLocksAsync` and `OrganizationDomainEndpointTests.OPS_CFG_002_AC6_AListChangeIsDecidedUnderItsRowLockAsync`, which asserted the commit. Reviewed, left: `VerifyDomainAsync`.
+- `AlertChannels.RaiseAsync`: the event not written; rolled back (`CONV_DESIGN_002_AnEventWhoseRowCannotBeWrittenFailsTheRaiseAsync`). `MailboxPublisher`, the record of a failed push: the alert not raised; rolled back (`CONV_DESIGN_003_AC5_AFailedPushWhoseAlertIsNotRaisedIsRolledBackAsync`). `DeploymentBootstrap.RunAsync`: a deployment already administered, an under-age date, a failed join and the alert not raised; rolled back (`DeploymentBootstrapTests.CONV_DESIGN_003_AC5_ADeploymentStoodUpAlreadyIsRolledBackAsync`, `..._AnUnderAgeAdministratorIsRolledBackAsync`).
+- Reviewed, left (no return between): `AppPasswords.RecordAsync`, `MaintenanceRecords` (two sites), `EventOutbox`, `CallbackReferences`.
+- Reviewed, left after the beginning though no row decides them, each for the order of refusals: the resolver missing in `OrganizationDomainService` (it would be answered before "already listed", which succeeds); the reads of configuration in the identifier's verification and in the registration's settle; "already administered" and the under-age date at bootstrap, which read what the transaction wrote or must see; the reason of a configuration change, judged with the direction under the lock.
+- `AlertChannels.RaiseAsync` and `ConfigurationAdministration.ChangeMemberAsync` begin a level inside their callers' unit of work and roll it back on failure; every caller returns that failure and rolls back.
+- No test reaches these changed returns, the fakes giving no such failure: the registration's settle (a policy read or the recovery codes failing), `OrganizationService.CreateAsync`, the configuration failure of the holding read, and the event not written in `AccountAdministration`, `IdentifierService`, `InvitationAcknowledgement` and `MembershipEnd`.
+- Parked: the under-age refusal of `RegistrationService.RecordAgeAsync` (question 78); the taken identifier at `RegistrationService.CompleteAsync` (question 79); the operations that discard a send's refusal inside their unit of work (question 80); the throttle's count inside the verification's unit of work (question 81).
+- Observed, outside the sweep: the holding read of `OrganizationDomainService` throws where `BeginAsync` fails although its operations return a result (CONV-DESIGN-003 criterion 7).
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1097,6 +1117,7 @@ The rollback is written inline at each return. `CredentialService.RefusedAsync`,
 | `configuration-keys.txt` at the merge of `part/gates` (`d5a7fc0e`) | `part/gates` changed the file's form, and the working branch had added `code.signin.attempts` and `code.signin.lifetime` | LIB-API-001 criterion 2; `10` section 4 | The new form, with both keys written in it |
 | `FingerprintKeyTests` at the merge of `part/gates` (`d5a7fc0e`) | `RestrictionKey` takes a kind since 122 | INF-HOST-003 criterion 4 | The test passes `RestrictionKeyKind.Destination`; test only |
 | `.gitleaks.toml` (`1a5a2af6`) | The scan of the full history flagged `PRIV-BREACH-002` under `generic-api-key` in `docs/reports/corrections-4.md` line 313 (from `a22c76f7`), where the row of D-166 D.8 cites the item beside its tests | OPS-DEP-004; the working guide's section 3, an allow-list entry for specification text | One entry: that file and the exact value `^PRIV-BREACH-002$`, `condition = "AND"`, reason "an item identifier a report cites beside the tests that carry it" |
+| Fakes and tests of the unit tests, at the X9 sweep (`a64c93e2`, `ccfec930`, `9c84477a`) | No fake let a membership end between the find and the end; no fake of `IDeploymentSeed` stood in the unit tests; two tests of the host asserted a commit on a refusal under the lock | CONV-DESIGN-003 criterion 5, CONV-TEST-007; the working guide's section 3, test infrastructure | `MembershipEndingInMemory` takes a hook as `InvitationStoreInMemory` has; `DeploymentSeedInMemory` is added; the two tests assert the rollback. No runtime code |
 
 ## 4. Open questions
 
@@ -2434,6 +2455,41 @@ part of 389 (3) and waits with 389 on question 48.
   1. Each is the operation's success and commits.
   2. An answer that changed nothing rolls back.
 - **Parked.** Those two returns, left committing.
+- **Answer:** pending.
+
+**78. Tier 3. REG-PROF-002 and CONV-DESIGN-003: the lock an under-age answer writes.**
+
+- **Item.** X9 at `RegistrationService.RecordAgeAsync` (question 58).
+- **What the code does.** An under-age date locks the age screen on the registration session, commits, and answers the refusal.
+- **What the specification says.** A refusal rolls back but where it keeps one of the counts or records CONV-DESIGN-003 lists; the locked screen of REG-PROF-002 is not among them, and a rollback loses the lock.
+- **Parked.** That return, left committing.
+- **Answer:** pending.
+
+**79. Tier 3. REG-SESS-005 criterion 4 and CONV-DESIGN-003: the session removed where a staged identifier was taken since.**
+
+- **Item.** X9 at `RegistrationService.CompleteAsync` (question 58).
+- **What the code does.** Where a staged identifier is taken or reserved since it was staged, the registration session is removed, the unit of work committed, and the session answered expired.
+- **What the specification says.** As for question 78: the removal is a write the list does not name, and a rollback leaves the session alive.
+- **Parked.** That return, left committing.
+- **Answer:** pending.
+
+**80. Tier 2. CONV-DESIGN-003: operations that discard a send's refusal inside their unit of work and commit.**
+
+- **Item.** X9 (question 58), the same matter as question 75.
+- **What the code does.** `INotificationHandler.SendAsync` begins a unit of work of its own, and the phone signals it consults another. These callers call it inside their unit of work, discard its result and commit: `AccountLifecycle.DeactivateAsync` and `DeleteAsync`; `IdentifierService`, the promotion, the backup, the undo, the stage, the notice to a holder, the swap and the surrender; `InvitationAcknowledgement`, the corporate address; `MembershipEnd`, the retirement; `AppPasswords.RecordAsync`. As the send stands it refuses only before its own beginning, so nothing marks the outer unit.
+- **What the specification says.** A call an operation must be able to survive being refused begins no unit of work of its own. The send is rebuilt by questions 27, 38 and 63, where it is judged in the caller's transaction.
+- **Readings.**
+  1. These sites wait for the governed send.
+  2. Each discards nothing: a refused send fails the operation.
+- **Parked.** Nothing is changed at these sites.
+- **Answer:** pending.
+
+**81. Tier 3. AUTH-ABUSE-001 and CONV-DESIGN-003: the throttle's count inside the registration's verification.**
+
+- **Item.** X9 at `RegistrationService.VerifyAsync` (question 58).
+- **What the code does.** A refused code is counted through `ThrottleService.FailedAsync`, which begins a level of its own inside the verification's outermost unit of work. The verification commits where the count succeeded and rolls back where it failed. The unit also holds the wrong try on the code's record.
+- **What the specification says.** "An operation whose refusal keeps such a count begins the outermost unit of work and is never called inside another's."
+- **Parked.** The site is left as `fe7a5cdc` made it.
 - **Answer:** pending.
 
 ## 5. Gate result
