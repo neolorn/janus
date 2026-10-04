@@ -245,6 +245,42 @@ public sealed class ProviderEventTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC5: an event whose change of state cannot be announced is
+    /// answered with that failure, and its unit of work is rolled back before it is
+    /// answered, so nothing of the event is committed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AnEventThatCannotBeAnnouncedRollsBackAsync()
+    {
+        var subject = SubjectId.New(_randomness);
+
+        _deployment.Accounts.Stands(subject, AccountState.Active);
+        _deployment.Identifiers.Reads(subject, Language);
+        _ = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, "only-apple@example.test");
+
+        _ = await LinkAsync(subject, Factor.Apple, AppleSubject);
+
+        _deployment.Events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        int committed = _deployment.Work.Committed;
+        int rolledBack = _deployment.Work.RolledBack;
+
+        Answer answered = await DeliveredAsync(
+            Apple,
+            Wrapped(_deployment.SocialProviders.Signed(
+                Factor.Apple,
+                "evt-1",
+                AppleEvent("consent-revoked", AppleSubject))));
+
+        Assert.Equal(StatusCodes.Status500InternalServerError, answered.Status);
+        Assert.Empty(_deployment.CredentialAudit.ProviderEvents);
+        Assert.False(_deployment.Work.Open);
+        Assert.Equal(committed, _deployment.Work.Committed);
+        Assert.Equal(rolledBack + 1, _deployment.Work.RolledBack);
+    }
+
+    /// <summary>
     /// IDN-LIFE-012a AC2, IDN-LIFE-013, CONV-DESIGN-003 AC6: a deletion begun while the
     /// withdrawal waited for the account's row is found under the lock, so the account
     /// is left to its deletion and no suspension is made or announced.

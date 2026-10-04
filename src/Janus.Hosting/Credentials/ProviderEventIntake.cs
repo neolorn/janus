@@ -119,6 +119,8 @@ internal sealed class ProviderEventIntake(
 
         if (taken.Match(_ => (Error?)null, error => error) is Error failed)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             await Refusal.WriteAsync(context, failed, cancellationToken).ConfigureAwait(false);
 
             return;
