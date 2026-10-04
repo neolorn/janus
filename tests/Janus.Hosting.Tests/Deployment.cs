@@ -138,6 +138,9 @@ internal sealed class Deployment : IAsyncDisposable
     /// <param name="logging">
     /// The least level the host logs at; every level, unless it says otherwise.
     /// </param>
+    /// <param name="codec">
+    /// Whether the host declares an image codec; it does, unless it says otherwise.
+    /// </param>
     /// <param name="resolver">
     /// Whether the host registers a DNS resolver; it does, unless it says otherwise.
     /// </param>
@@ -154,6 +157,7 @@ internal sealed class Deployment : IAsyncDisposable
         SignOnClient? client = null,
         IReadOnlyList<SocialProvider>? providers = null,
         LogLevel logging = LogLevel.Trace,
+        bool codec = true,
         bool resolver = true,
         PhoneSignalProvider? signals = null)
     {
@@ -202,6 +206,7 @@ internal sealed class Deployment : IAsyncDisposable
             signIn ?? Screen,
             client ?? Registered,
             providers ?? [SocialProviders.Google, SocialProviders.Apple],
+            codec,
             resolver);
 
         if (signals is not null)
@@ -768,6 +773,7 @@ internal sealed class Deployment : IAsyncDisposable
         AuthenticationAddresses signIn,
         SignOnClient client,
         IReadOnlyList<SocialProvider> providers,
+        bool codec,
         bool resolver)
     {
         _ = services.AddSingleton<TimeProvider>(Clock);
@@ -802,7 +808,10 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IDeviceStore, DeviceStoreInMemory>();
         _ = services.AddSingleton<ISessionAudit>(SessionAudit);
         _ = services.AddSingleton<IMembershipLookup>(Memberships);
-        _ = services.AddSingleton(Codec.Declared);
+        if (codec)
+        {
+            _ = services.AddSingleton(Codec.Declared);
+        }
         _ = services.AddSingleton<IPolicyRaiseStore>(Raises);
         _ = services.AddSingleton<IChallengeStore, ChallengeStoreInMemory>();
         _ = services.AddSingleton<IVerificationCodeStore, VerificationCodeStoreInMemory>();
@@ -927,11 +936,11 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped(provider => new ProfilePhotos(
             provider.GetRequiredService<IAccountDirectory>(),
             provider.GetRequiredService<ISettingsRestriction>(),
-            provider.GetRequiredService<IMembershipLookup>(),
+            provider.GetRequiredService<PolicyResolution>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IAccountAudit>(),
             provider.GetRequiredService<IUnitOfWork>(),
-            provider.GetRequiredService<ImageCodec>(),
+            provider.GetService<ImageCodec>(),
             provider.GetRequiredService<TimeProvider>()));
         _ = services.AddScoped<AccountService>();
         _ = services.AddScoped<IAccount>(provider => provider.GetRequiredService<AccountService>());
@@ -997,7 +1006,16 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IBreakGlass>(
             provider => provider.GetRequiredService<Janus.Authentication.BreakGlass.BreakGlassService>());
         _ = services.AddScoped<AlertDestinationChange>();
-        _ = services.AddScoped<IConfigurationAdministration, ConfigurationService>();
+        _ = services.AddScoped<IConfigurationAdministration>(provider => new ConfigurationService(
+            provider.GetRequiredService<AdministrativeScope>(),
+            provider.GetRequiredService<StepUpGuard>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<ConfigurationAdministration>(),
+            provider.GetRequiredService<AlertDestinationChange>(),
+            provider.GetRequiredService<AuthorizationDeclaration>(),
+            provider.GetRequiredService<Janus.Privacy.CategoryRetention>(),
+            provider.GetService<ImageCodec>(),
+            provider.GetRequiredService<IUnitOfWork>()));
         _ = services.AddSingleton<ISendAudit, SendAuditInMemory>();
         _ = services.AddScoped<RestrictionAdministration>();
         _ = services.AddScoped<IRestrictionSet, RestrictionSetService>();
@@ -1020,7 +1038,19 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IGroups, Janus.Authorization.Groups.GroupService>();
         _ = services.AddSingleton<Janus.Authentication.Organizations.IOrganizationDirectory>(Organizations);
         _ = services.AddSingleton<Janus.Authentication.Organizations.IOrganizationAudit>(OrganizationChanges);
-        _ = services.AddScoped<IOrganizations, Janus.Authentication.Organizations.OrganizationService>();
+        _ = services.AddScoped<IOrganizations>(provider => new Janus.Authentication.Organizations.OrganizationService(
+            provider.GetRequiredService<AdministrativeScope>(),
+            provider.GetRequiredService<StepUpGuard>(),
+            provider.GetRequiredService<Janus.Authentication.Organizations.IOrganizationDirectory>(),
+            provider.GetRequiredService<ISessionStore>(),
+            provider.GetRequiredService<Janus.Authentication.Organizations.IOrganizationAudit>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<ConfigurationAdministration>(),
+            provider.GetRequiredService<PolicyResolution>(),
+            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetService<ImageCodec>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>()));
         _ = services.AddSingleton<Janus.Authentication.Organizations.IDomainStore>(Domains);
 
         // The resolver is the host's to declare, and the domains are served with or

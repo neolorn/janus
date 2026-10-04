@@ -49,7 +49,7 @@ namespace Janus.Hosting;
 /// <param name="subscribers">The subject-event subscribers the host registered.</param>
 /// <param name="clients">The clients registered with the provider.</param>
 /// <param name="configuration">
-/// Where the organizations that show photos, and the domains each lists, are read.
+/// Where the stored policies that show photos, and the domains each lists, are read.
 /// </param>
 /// <remarks>
 /// Implements LIB-HOST-001, REG-PM-001, AUTH-SESS-012, BFF-SESS-006, IDN-ATTR-002,
@@ -59,11 +59,12 @@ namespace Janus.Hosting;
 /// password manager as a site that offers neither page, meeting an interactive
 /// authorization request with nowhere to send it, or reaching the first person who
 /// arrives holding nothing without knowing what to call itself at the provider. The
-/// codec is optional until a policy shows photos, and required from then on, because
-/// the library reads no image itself; the DNS resolver likewise until a lock lists a
-/// domain, because the library looks up no record itself. The mail server's client is
-/// optional until a mail server is registered, and required from then on, because which
-/// protocol client the server trusts is the deployment's to say. A social provider is
+/// codec is optional until a stored policy shows photos, the system's or an
+/// organization's, and required from then on, because the library reads no image
+/// itself; the DNS resolver likewise until a lock lists a domain, because the library
+/// looks up no record itself. The mail server's client is optional until a mail server
+/// is registered, and required from then on, because which protocol client the server
+/// trusts is the deployment's to say. A social provider is
 /// optional, and one declared is declared whole: named once, as a social provider, with
 /// the HTTPS address of its document and at least one client, since a declaration short
 /// of that would verify none of the events it was declared for; one that is malformed is
@@ -322,8 +323,9 @@ internal sealed class DeclarationCoverage(
         return null;
     }
 
-    // IDN-ATTR-002: a photo is available where an organization's policy says so, and
-    // the library has nothing to make one with unless the deployment declared a codec.
+    // IDN-ATTR-002, OPS-CFG-003: a photo is available where a stored policy's photos
+    // field says so, the system policy's or an organization's, and the library has
+    // nothing to make one with unless the deployment declared a codec.
     private async ValueTask<Result> PhotographedAsync(CancellationToken cancellationToken)
     {
         if (codec is not null)
@@ -335,11 +337,19 @@ internal sealed class DeclarationCoverage(
         bool shown = false;
 
         (await configuration
-                .ReadWrittenAsync(Settings.OrganizationPhoto, cancellationToken)
+                .ReadAsync(Settings.PolicyDefault, cancellationToken)
                 .ConfigureAwait(false))
-            .Switch(
-                written => shown = written.Any(organization => organization.Value),
-                error => failure = error);
+            .Switch(system => shown = system.Photos, error => failure = error);
+
+        if (failure is null && !shown)
+        {
+            (await configuration
+                    .ReadWrittenAsync(Settings.OrganizationPolicy, cancellationToken)
+                    .ConfigureAwait(false))
+                .Switch(
+                    written => shown = written.Values.Any(policy => policy.Photos is true),
+                    error => failure = error);
+        }
 
         if (failure is Error unreadable)
         {

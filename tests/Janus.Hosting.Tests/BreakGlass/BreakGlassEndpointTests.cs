@@ -93,6 +93,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
                 null,
                 null,
                 null,
+                null,
                 null));
 
         foreach (Permission permission in Permissions.All)

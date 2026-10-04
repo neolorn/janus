@@ -6,19 +6,13 @@ using System.Text.RegularExpressions;
 namespace Janus.Core.Tests;
 
 /// <summary>
-/// The rows chapter 10 holds and the rows the ledger owes it, read from the two
-/// documents as they stand (REF-001): the first backticked name in the first cell of
-/// every live row of the tables one section holds.
+/// The rows chapter 10 holds, read from the document as it stands and from it alone
+/// (REF-001 AC1, D-183): the first backticked name in the first cell of every live row
+/// of the tables one section holds.
 /// </summary>
 internal static class ReferenceRows
 {
     private const string Reference = "docs/spec/10-reference.md";
-
-    private const string Ledger = "docs/reports/decisions-pending-review.md";
-
-    // Where the ledger lists what chapter 10 does not hold yet. Everything above it
-    // is decisions, whose tables are not rows of the chapter.
-    private const string Owing = "# Rows for chapter 10";
 
     // The first backticked name in a cell, whatever marks follow it.
     private static readonly Regex Name = new(
@@ -46,12 +40,6 @@ internal static class ReferenceRows
         Names(Rows(Section(Lines(Reference), "## 1. "), "Code"));
 
     /// <summary>
-    /// The codes the ledger's section 1 owes chapter 10.
-    /// </summary>
-    public static IReadOnlySet<string> OwedCodes { get; } =
-        Names(Rows(Section(Owed(), "## Section 1, "), "Code"));
-
-    /// <summary>
     /// The keys chapter 10 section 4 holds a live row for, a family written as its
     /// prefix and one placeholder.
     /// </summary>
@@ -59,20 +47,10 @@ internal static class ReferenceRows
         Names(Rows(Section(Lines(Reference), "## 4. "), "Key"));
 
     /// <summary>
-    /// The keys the ledger's section 4 owes chapter 10, a family written as its prefix
-    /// and one placeholder.
-    /// </summary>
-    public static IReadOnlySet<string> OwedKeys { get; } =
-        Names(Rows(Section(Owed(), "## Section 4, "), "Key"));
-
-    /// <summary>
-    /// The keys whose row, in chapter 10 section 4 or among the rows the ledger owes
-    /// it, marks them P in its scope column.
+    /// The keys whose row in chapter 10 section 4 marks them P in its scope column.
     /// </summary>
     public static IReadOnlySet<string> MarkedProtected { get; } =
-        Names(Rows(Section(Lines(Reference), "## 4. "), "Key")
-            .Concat(Rows(Section(Owed(), "## Section 4, "), "Key"))
-            .Where(Protected));
+        Names(Rows(Section(Lines(Reference), "## 4. "), "Key").Where(Protected));
 
     /// <summary>
     /// The keys chapter 10 section 4.8 holds a live row for: the one list of keys the
@@ -91,14 +69,6 @@ internal static class ReferenceRows
 
     private static string[] Lines(string relativePath) =>
         Repository.ReadText(relativePath).ReplaceLineEndings("\n").Split('\n');
-
-    private static string[] Owed() =>
-    [
-        .. Lines(Ledger)
-            .SkipWhile(line => !string.Equals(line.TrimEnd(), Owing, StringComparison.Ordinal))
-            .Skip(1)
-            .TakeWhile(line => !line.StartsWith("# ", StringComparison.Ordinal)),
-    ];
 
     // The lines under the level-two heading opening with the text given, up to the
     // next heading of level one or two. A missing heading is a failure, since a

@@ -950,16 +950,21 @@ against the public contract of LIB-API-001.
   done step reads it from the session and never from a request.
 - An account shows a photo. `GET`, `PUT` and `DELETE /account/photo` read it, replace it
   and give it up, and the image is served through the session gate as `image/jpeg` from
-  no address a cache could share. Availability is the organization's, held in the key
-  `photo.enabled.<organization>` and off until an organization is given it; an account
-  of no organization, and one whose organization shows none, is answered as an account
-  with no photo, 404 `identity.photo.notfound`. The library reads no image itself: a
-  deployment declares an `ImageCodec`, which decides by content what an upload is, holds
-  it to `photo.maxdimension` and answers the JPEG that is stored. The photo is held in a
-  table and a port of its own, encrypted under the subject's own key like any other
-  personal field: nothing that reads an account reads image bytes, a dump yields no
-  photograph, and erasure of the key leaves the image unrecoverable. A deployment whose
-  policy shows photos and which declared no codec does not start.
+  no address a cache could share. Availability is the policy field `photos`, off by
+  default and resolved as every policy field is: an account of no organization follows
+  the system policy, and an account of several shows a photo only where every one of
+  them does; one whose policy withholds photos is answered as an account with no photo,
+  404 `identity.photo.notfound`. Bootstrap writes the administrative organization's
+  `photos` off, and a change that turns `photos` on while the deployment declares no
+  codec is refused with 422 `config.value.notallowed`, `details.field` `photos` and
+  `details.requires` `imageCodec`. The library reads no image itself: a deployment
+  declares an `ImageCodec`, which decides by content what an upload is, holds it to
+  `photo.maxdimension` and answers the JPEG that is stored. The photo is held in a table
+  and a port of its own, encrypted under the subject's own key like any other personal
+  field: nothing that reads an account reads image bytes, a dump yields no photograph,
+  and erasure of the key leaves the image unrecoverable. A deployment whose stored
+  policy shows photos, the system's or an organization's, and which declared no codec
+  does not start.
 - Every runtime configuration change goes through one operation that classifies it,
   gates it and writes it down. A configuration key loosens the way its row states; where
   a row states nothing, a key with only a ceiling loosens upward, a key with only a

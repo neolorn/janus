@@ -7,6 +7,7 @@ using Janus.Authentication.Organizations;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
+using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Configuration;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Identifiers;
@@ -101,6 +102,7 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
                     _clock),
                 policies,
                 _events,
+                new ImageCodecInMemory().Declared,
                 _work,
                 _clock);
         }

@@ -98,8 +98,8 @@ public sealed class SettingsCatalogueTests
 
     /// <summary>
     /// OPS-CFG-004: the list and chapter 10 section 4.8 are one list, so a key whose row
-    /// in chapter 10 section 4, or among the rows the ledger owes it, marks it P is a
-    /// row of section 4.8, and no key is marked P outside it (D-152).
+    /// in chapter 10 section 4 marks it P is a row of section 4.8, and no key is marked
+    /// P outside it (D-152).
     /// </summary>
     [Fact]
     public void OPS_CFG_004_AKeyMarkedProtectedIsOnTheOneList() =>
@@ -128,10 +128,8 @@ public sealed class SettingsCatalogueTests
     }
 
     /// <summary>
-    /// REF-001 AC1: a key or a family the catalogue holds and chapter 10 does not
-    /// fails here, unless the ledger owes chapter 10 its row. A row the ledger owes
-    /// that names nothing the catalogue holds fails as well, so what is owed cannot
-    /// outlive the key it is owed for.
+    /// REF-001 AC1: a key or a family the catalogue holds that is no live row of
+    /// chapter 10 fails here. The test reads chapter 10 alone (D-183).
     /// </summary>
     [Fact]
     public void REF_001_AC1_EveryKeyInTheSourceIsARowOfTheReference()
@@ -142,10 +140,7 @@ public sealed class SettingsCatalogueTests
             .. Settings.Families.Select(family => ReferenceRows.Family(family.Prefix)),
         ];
 
-        Assert.Empty(declared.Except(
-            ReferenceRows.ChapterKeys.Concat(ReferenceRows.OwedKeys),
-            StringComparer.Ordinal));
-        Assert.Empty(ReferenceRows.OwedKeys.Except(declared, StringComparer.Ordinal));
+        Assert.Empty(declared.Except(ReferenceRows.ChapterKeys, StringComparer.Ordinal));
     }
 
     /// <summary>
@@ -163,14 +158,13 @@ public sealed class SettingsCatalogueTests
 
     /// <summary>
     /// The same rule for a boolean, which loosens away from its default whichever way
-    /// that is, and for a family of booleans.
+    /// that is.
     /// </summary>
     [Fact]
     public void Loosening_ABoolean_LoosensAwayFromItsDefault()
     {
         Assert.Equal(SettingDirection.Decrease, Settings.AbuseThrottleEnabled.Loosening);
         Assert.Equal(SettingDirection.Increase, Settings.AlertingOwnerEnabled.Loosening);
-        Assert.Equal(SettingDirection.Increase, Settings.OrganizationPhoto.Loosening);
     }
 
     /// <summary>

@@ -1903,7 +1903,7 @@ Janus.Core.Policy
 Janus.Core.Policy.<Clone>$() -> Janus.Core.Policy!
 Janus.Core.Policy.CredentialRedundancy.get -> Janus.Core.CredentialRedundancy
 Janus.Core.Policy.CredentialRedundancy.init -> void
-Janus.Core.Policy.Deconstruct(out Janus.Core.AssuranceLevel RequiredAssurance, out System.Collections.Generic.IReadOnlySet<Janus.Core.Factor>! LoginFactors, out System.Collections.Generic.IReadOnlyDictionary<Janus.Core.StepUpAction, Janus.Core.Gate!>! Gates, out Janus.Core.CredentialRedundancy CredentialRedundancy, out bool SelfServiceRecovery, out System.Collections.Generic.IReadOnlyList<string!>! EmailDomains) -> void
+Janus.Core.Policy.Deconstruct(out Janus.Core.AssuranceLevel RequiredAssurance, out System.Collections.Generic.IReadOnlySet<Janus.Core.Factor>! LoginFactors, out System.Collections.Generic.IReadOnlyDictionary<Janus.Core.StepUpAction, Janus.Core.Gate!>! Gates, out Janus.Core.CredentialRedundancy CredentialRedundancy, out bool SelfServiceRecovery, out System.Collections.Generic.IReadOnlyList<string!>! EmailDomains, out bool Photos) -> void
 Janus.Core.Policy.EmailDomains.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Janus.Core.Policy.EmailDomains.init -> void
 Janus.Core.Policy.Equals(Janus.Core.Policy? other) -> bool
@@ -1911,7 +1911,9 @@ Janus.Core.Policy.Gates.get -> System.Collections.Generic.IReadOnlyDictionary<Ja
 Janus.Core.Policy.Gates.init -> void
 Janus.Core.Policy.LoginFactors.get -> System.Collections.Generic.IReadOnlySet<Janus.Core.Factor>!
 Janus.Core.Policy.LoginFactors.init -> void
-Janus.Core.Policy.Policy(Janus.Core.AssuranceLevel RequiredAssurance, System.Collections.Generic.IReadOnlySet<Janus.Core.Factor>! LoginFactors, System.Collections.Generic.IReadOnlyDictionary<Janus.Core.StepUpAction, Janus.Core.Gate!>! Gates, Janus.Core.CredentialRedundancy CredentialRedundancy, bool SelfServiceRecovery, System.Collections.Generic.IReadOnlyList<string!>! EmailDomains) -> void
+Janus.Core.Policy.Photos.get -> bool
+Janus.Core.Policy.Photos.init -> void
+Janus.Core.Policy.Policy(Janus.Core.AssuranceLevel RequiredAssurance, System.Collections.Generic.IReadOnlySet<Janus.Core.Factor>! LoginFactors, System.Collections.Generic.IReadOnlyDictionary<Janus.Core.StepUpAction, Janus.Core.Gate!>! Gates, Janus.Core.CredentialRedundancy CredentialRedundancy, bool SelfServiceRecovery, System.Collections.Generic.IReadOnlyList<string!>! EmailDomains, bool Photos) -> void
 Janus.Core.Policy.RequiredAssurance.get -> Janus.Core.AssuranceLevel
 Janus.Core.Policy.RequiredAssurance.init -> void
 Janus.Core.Policy.SelfServiceRecovery.get -> bool
@@ -1923,7 +1925,7 @@ Janus.Core.PolicyOverride
 Janus.Core.PolicyOverride.<Clone>$() -> Janus.Core.PolicyOverride!
 Janus.Core.PolicyOverride.CredentialRedundancy.get -> Janus.Core.CredentialRedundancy?
 Janus.Core.PolicyOverride.CredentialRedundancy.init -> void
-Janus.Core.PolicyOverride.Deconstruct(out Janus.Core.AssuranceLevel? RequiredAssurance, out System.Collections.Generic.IReadOnlySet<Janus.Core.Factor>? LoginFactors, out System.Collections.Generic.IReadOnlyDictionary<Janus.Core.StepUpAction, Janus.Core.Gate!>? Gates, out Janus.Core.CredentialRedundancy? CredentialRedundancy, out bool? SelfServiceRecovery, out System.Collections.Generic.IReadOnlyList<string!>? EmailDomains) -> void
+Janus.Core.PolicyOverride.Deconstruct(out Janus.Core.AssuranceLevel? RequiredAssurance, out System.Collections.Generic.IReadOnlySet<Janus.Core.Factor>? LoginFactors, out System.Collections.Generic.IReadOnlyDictionary<Janus.Core.StepUpAction, Janus.Core.Gate!>? Gates, out Janus.Core.CredentialRedundancy? CredentialRedundancy, out bool? SelfServiceRecovery, out System.Collections.Generic.IReadOnlyList<string!>? EmailDomains, out bool? Photos) -> void
 Janus.Core.PolicyOverride.EmailDomains.get -> System.Collections.Generic.IReadOnlyList<string!>?
 Janus.Core.PolicyOverride.EmailDomains.init -> void
 Janus.Core.PolicyOverride.Equals(Janus.Core.PolicyOverride? other) -> bool
@@ -1931,7 +1933,9 @@ Janus.Core.PolicyOverride.Gates.get -> System.Collections.Generic.IReadOnlyDicti
 Janus.Core.PolicyOverride.Gates.init -> void
 Janus.Core.PolicyOverride.LoginFactors.get -> System.Collections.Generic.IReadOnlySet<Janus.Core.Factor>?
 Janus.Core.PolicyOverride.LoginFactors.init -> void
-Janus.Core.PolicyOverride.PolicyOverride(Janus.Core.AssuranceLevel? RequiredAssurance, System.Collections.Generic.IReadOnlySet<Janus.Core.Factor>? LoginFactors, System.Collections.Generic.IReadOnlyDictionary<Janus.Core.StepUpAction, Janus.Core.Gate!>? Gates, Janus.Core.CredentialRedundancy? CredentialRedundancy, bool? SelfServiceRecovery, System.Collections.Generic.IReadOnlyList<string!>? EmailDomains) -> void
+Janus.Core.PolicyOverride.Photos.get -> bool?
+Janus.Core.PolicyOverride.Photos.init -> void
+Janus.Core.PolicyOverride.PolicyOverride(Janus.Core.AssuranceLevel? RequiredAssurance, System.Collections.Generic.IReadOnlySet<Janus.Core.Factor>? LoginFactors, System.Collections.Generic.IReadOnlyDictionary<Janus.Core.StepUpAction, Janus.Core.Gate!>? Gates, Janus.Core.CredentialRedundancy? CredentialRedundancy, bool? SelfServiceRecovery, System.Collections.Generic.IReadOnlyList<string!>? EmailDomains, bool? Photos) -> void
 Janus.Core.PolicyOverride.RequiredAssurance.get -> Janus.Core.AssuranceLevel?
 Janus.Core.PolicyOverride.RequiredAssurance.init -> void
 Janus.Core.PolicyOverride.SelfServiceRecovery.get -> bool?
@@ -3716,7 +3720,6 @@ static Janus.Core.Configuration.Settings.OidcAccessTokenLifetime.get -> Janus.Co
 static Janus.Core.Configuration.Settings.OidcCodeLifetime.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.OrganizationDeletionGrace.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.OrganizationMultipleMemberships.get -> Janus.Core.Configuration.FlagSetting!
-static Janus.Core.Configuration.Settings.OrganizationPhoto.get -> Janus.Core.Configuration.SettingFamily<bool>!
 static Janus.Core.Configuration.Settings.OrganizationPolicy.get -> Janus.Core.Configuration.SettingFamily<Janus.Core.PolicyOverride!>!
 static Janus.Core.Configuration.Settings.OutboxPollInterval.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.OutboxRetryFactor.get -> Janus.Core.Configuration.DecimalSetting!

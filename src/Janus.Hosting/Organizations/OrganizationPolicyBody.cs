@@ -28,6 +28,7 @@ internal static class OrganizationPolicyBody
         "gates",
         "credentialRedundancy",
         "selfServiceRecovery",
+        "photos",
     }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>

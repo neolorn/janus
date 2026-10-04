@@ -92,7 +92,6 @@ password.blocklist.sources multiple-choice R allowed=context,dictionary,leaked m
 password.floor.singlefactor integer R floor=15
 password.floor.withmfa integer R floor=8
 password.maximum integer R floor=64
-photo.enabled family R
 photo.maxbytes integer R ceiling=10485760
 photo.maxdimension integer R
 policy family R

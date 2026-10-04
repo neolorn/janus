@@ -45,7 +45,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     ];
 
     private static readonly string Showing =
-        Settings.OrganizationPhoto.For("2f8d4c1e-0000-7000-8000-000000000001").ToString();
+        Settings.OrganizationPolicy.For("2f8d4c1e-0000-7000-8000-000000000001").ToString();
 
     private static readonly string Forgotten =
         "DELETE FROM identity.settings WHERE key = '" + Showing + "';";
@@ -531,6 +531,69 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
 
             Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
             Assert.Equal("imageCodec", refused.Failure?.Details["key"].GetString());
+        }
+        finally
+        {
+            await WriteAsync(Forgotten, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// IDN-ATTR-002, OPS-CFG-003 AC4: the system policy is a stored policy like any
+    /// organization's, so a deployment whose <c>policy.default</c> shows photos and which
+    /// declared no codec is stopped as it starts.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_CFG_003_AC4_ADeploymentWhoseSystemPolicyShowsPhotosWithNoCodecIsRefusedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await WriteAsync(
+            "INSERT INTO identity.settings (key, value) VALUES ('" + Settings.PolicyDefault.Key + "', '"
+                + """{"requiredAssurance":"aal1","loginFactors":["passkey","password"],"gates":{},"credentialRedundancy":"advisory","selfServiceRecovery":true,"emailDomains":[],"photos":true}"""
+                + "');",
+            cancellationToken);
+
+        try
+        {
+            using IHost deployment = Deployed();
+
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await deployment.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+            Assert.Equal("imageCodec", refused.Failure?.Details["key"].GetString());
+        }
+        finally
+        {
+            await WriteAsync(
+                "DELETE FROM identity.settings WHERE key = '" + Settings.PolicyDefault.Key + "';",
+                cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// IDN-ATTR-002 AC3, OPS-CFG-003: a deployment whose stored policies show no photo,
+    /// as bootstrap leaves the administrative organization's, starts with no codec
+    /// declared.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task IDN_ATTR_002_AC3_ADeploymentThatShowsNoPhotosStartsWithNoCodecAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await WriteAsync(
+            "INSERT INTO identity.settings (key, value) VALUES ('" + Showing + "', '{\"photos\":false}');",
+            cancellationToken);
+
+        try
+        {
+            using IHost deployment = Deployed();
+
+            await deployment.StartAsync(cancellationToken);
+            await deployment.StopAsync(cancellationToken);
         }
         finally
         {
@@ -1387,7 +1450,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     // and nothing the declaration can carry.
     private async Task ShowingPhotosAsync(CancellationToken cancellationToken) =>
         await WriteAsync(
-            "INSERT INTO identity.settings (key, value) VALUES ('" + Showing + "', 'true');",
+            "INSERT INTO identity.settings (key, value) VALUES ('" + Showing + "', '{\"photos\":true}');",
             cancellationToken);
 
     // OPS-MIG-002: a deployment over a database created empty under the name given,

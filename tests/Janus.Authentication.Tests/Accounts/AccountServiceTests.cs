@@ -112,7 +112,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
     private ProfilePhotos Photos => new(
         _directory,
         _restriction,
-        _memberships,
+        new PolicyResolution(_memberships, _configuration, new PolicyRaiseStoreInMemory()),
         _configuration,
         _audit,
         _work,

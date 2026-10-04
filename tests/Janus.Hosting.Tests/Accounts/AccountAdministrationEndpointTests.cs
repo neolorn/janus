@@ -171,7 +171,7 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
 
         _deployment.Memberships.Place(member.Subject, organization);
         _deployment.Memberships.Place(bare.Subject, organization);
-        _deployment.Configuration.Set(Settings.OrganizationPhoto, organization.ToString(), true);
+        _deployment.Configuration.Set(Settings.PolicyDefault, Policies.SystemDefault with { Photos = true });
         _deployment.Accounts.Shows(member.Subject, Encoding.ASCII.GetBytes("a-photo"));
         _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Administration, Permissions.AccountManage);
 
@@ -188,7 +188,7 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
 
     /// <summary>
     /// IDN-ATTR-003 AC3 (D-166): an account that shows no photo, and one whose
-    /// organization shows none, are answered alike with <c>identity.photo.notfound</c>
+    /// organization's policy withholds photos, are answered alike with <c>identity.photo.notfound</c>
     /// in the body every refusal carries.
     /// </summary>
     /// <returns>The work of the test.</returns>
@@ -203,8 +203,11 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
 
         _deployment.Memberships.Place(bare.Subject, showing);
         _deployment.Memberships.Place(withheld.Subject, hiding);
-        _deployment.Configuration.Set(Settings.OrganizationPhoto, showing.ToString(), true);
-        _deployment.Configuration.Set(Settings.OrganizationPhoto, hiding.ToString(), false);
+        _deployment.Configuration.Set(Settings.PolicyDefault, Policies.SystemDefault with { Photos = true });
+        _deployment.Configuration.Set(
+            Settings.OrganizationPolicy,
+            hiding.ToString(),
+            PolicyOverride.None with { Photos = false });
         _deployment.Accounts.Shows(withheld.Subject, Encoding.ASCII.GetBytes("a-photo"));
         _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Administration, Permissions.AccountManage);
 
@@ -217,6 +220,48 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
             Assert.Equal(ErrorCodes.PhotoNotFound.ToString(), answer.Text("code"));
             Assert.Empty(answer.Json().GetProperty("details").EnumerateObject());
         }
+    }
+
+    /// <summary>
+    /// IDN-ATTR-002 AC5: an account of two organizations, one of which does not enable
+    /// photos, shows none, to itself and to an administrator alike, and is answered as
+    /// an account with no photo set; it shows the photo once both enable them.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ATTR_002_AC5_AnAccountOfTwoOrganizationsShowsAPhotoOnlyWhereBothEnableThemAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        var showing = OrganizationId.New(_deployment.Clock);
+        var hiding = OrganizationId.New(_deployment.Clock);
+
+        _deployment.Memberships.Place(subject, showing);
+        _deployment.Memberships.Place(subject, hiding);
+        _deployment.Configuration.Set(Settings.PolicyDefault, Policies.SystemDefault with { Photos = true });
+        _deployment.Configuration.Set(
+            Settings.OrganizationPolicy,
+            hiding.ToString(),
+            PolicyOverride.None with { Photos = false });
+        _deployment.Accounts.Shows(subject, Encoding.ASCII.GetBytes("a-photo"));
+        _deployment.Gate.Grant(subject, Administration, Permissions.AccountManage);
+
+        Answer own = await browser.SendAsync("GET", "/account/photo");
+        Answer administered = await browser.SendAsync("GET", PathOf(subject, "photo"));
+
+        _deployment.Configuration.Set(Settings.OrganizationPolicy, hiding.ToString(), PolicyOverride.None);
+
+        Answer shown = await browser.SendAsync("GET", "/account/photo");
+
+        foreach (Answer answer in new[] { own, administered })
+        {
+            Assert.Equal(StatusCodes.Status404NotFound, answer.Status);
+            Assert.Equal(ErrorCodes.PhotoNotFound.ToString(), answer.Text("code"));
+            Assert.Empty(answer.Json().GetProperty("details").EnumerateObject());
+        }
+
+        Assert.Equal(StatusCodes.Status200OK, shown.Status);
+        Assert.Equal("a-photo", shown.Body);
     }
 
     private static string PathOf(SubjectId subject, string operation) =>

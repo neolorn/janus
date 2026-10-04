@@ -53,7 +53,8 @@ public sealed class PolicySetting : Setting<Policy>
                     StringComparer.Ordinal),
                 SettingText.Of(value.CredentialRedundancy),
                 value.SelfServiceRecovery,
-                [.. value.EmailDomains]));
+                [.. value.EmailDomains],
+                value.Photos));
 
     private Result<Policy> Read(Written written)
     {
@@ -105,7 +106,8 @@ public sealed class PolicySetting : Setting<Policy>
                 gates,
                 redundancy,
                 written.SelfServiceRecovery,
-                written.EmailDomains));
+                written.EmailDomains,
+                written.Photos));
     }
 
     private Error Malformed() =>
@@ -119,7 +121,8 @@ public sealed class PolicySetting : Setting<Policy>
         Dictionary<string, WrittenGate>? Gates,
         string? CredentialRedundancy,
         bool SelfServiceRecovery,
-        string[]? EmailDomains);
+        string[]? EmailDomains,
+        bool Photos);
 
     private sealed record WrittenGate(string? Level, bool PhishingResistant, string? MaxAge);
 }

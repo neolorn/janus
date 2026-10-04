@@ -2,6 +2,7 @@ using System;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Factors;
@@ -25,6 +26,9 @@ namespace Janus.Authentication.Organizations;
 /// <param name="administration">Where an organization's policy key is written and recorded.</param>
 /// <param name="policies">Where what a change of policy raised is recorded.</param>
 /// <param name="alerts">Where a change of policy that weakens a step-up gate is told.</param>
+/// <param name="codec">
+/// What the deployment reads uploaded images with, or nothing where it declared none.
+/// </param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -45,6 +49,7 @@ internal sealed class OrganizationService(
     ConfigurationAdministration administration,
     PolicyResolution policies,
     IAlertChannels alerts,
+    ImageCodec? codec,
     IUnitOfWork work,
     TimeProvider time) : IOrganizations
 {
@@ -412,6 +417,13 @@ internal sealed class OrganizationService(
         if (replacement.EmailDomains is not null)
         {
             return Result.Failure(Malformed("emailDomains"));
+        }
+
+        // IDN-ATTR-002, OPS-CFG-003: a policy that shows photos needs the codec the host
+        // declares, so it is refused while there is none.
+        if (replacement.Photos is true && codec is null)
+        {
+            return Result.Failure(ProfilePhotos.Undeclared);
         }
 
         if (await directory.FindAsync(organization, cancellationToken).ConfigureAwait(false)
