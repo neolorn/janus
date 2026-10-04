@@ -29,8 +29,10 @@ internal sealed record SendDelivery(
     public int Attempts { get; init; }
 
     /// <summary>
-    /// When it is next due. A message just admitted is due at once, to the attempt that
-    /// follows its commit and to the publisher alike, and the claim decides between them.
+    /// When a pass may next claim it. A message whose immediate attempt follows the
+    /// commit is written due the first retry delay after its admission, with no jitter,
+    /// so that no pass takes it before that attempt, which claims it whatever this
+    /// instant, has had its chance (CONV-DESIGN-003, D-188).
     /// </summary>
     public DateTimeOffset NextAttemptAt { get; init; }
 
@@ -51,18 +53,20 @@ internal sealed record SendDelivery(
     /// <param name="message">What was undertaken.</param>
     /// <param name="reference">The reference drawn for it.</param>
     /// <param name="recordedAt">When it was admitted.</param>
+    /// <param name="held">How long after its admission the row is due for a pass.</param>
     /// <returns>The delivery.</returns>
     /// <exception cref="ArgumentNullException">The message is absent.</exception>
     public static SendDelivery Of(
         OutboundMessage message,
         SendReference reference,
-        DateTimeOffset recordedAt)
+        DateTimeOffset recordedAt,
+        TimeSpan held)
     {
         ArgumentNullException.ThrowIfNull(message);
 
         return new SendDelivery(SendDeliveryId.Of(recordedAt), recordedAt, message, reference)
         {
-            NextAttemptAt = recordedAt,
+            NextAttemptAt = recordedAt + held,
         };
     }
 

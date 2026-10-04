@@ -61,7 +61,7 @@ internal sealed class TotpService(
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<TotpEnrolment>(notBegun);
         }
@@ -116,7 +116,7 @@ internal sealed class TotpService(
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -212,7 +212,7 @@ internal sealed class TotpService(
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -261,7 +261,7 @@ internal sealed class TotpService(
             }
 
             if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notBegun)
+                .Match<Error?>(_ => null, error => error) is Error notBegun)
             {
                 return Result.Failure<AuthenticatorId>(notBegun);
             }

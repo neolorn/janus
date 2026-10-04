@@ -257,6 +257,37 @@ public sealed class UnitOfWorkTests(DatabaseFixture database) : IClassFixture<Da
         Assert.Throws<InvalidOperationException>(() => work.AfterCommit(_ => ValueTask.CompletedTask));
     }
 
+    /// <summary>
+    /// CONV-DESIGN-003: the level that opens the transaction is told it is the
+    /// outermost, a level that joins it is told it is not, and once the unit of work has
+    /// ended the scope's next operation opens the outermost again.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_BeginAnswersWhetherItsLevelIsTheOutermostAsync()
+    {
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+
+        bool opened = Outermost(await work.BeginAsync(TestContext.Current.CancellationToken));
+        bool joined = Outermost(await work.BeginAsync(TestContext.Current.CancellationToken));
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+        bool joinedAgain = Outermost(await work.BeginAsync(TestContext.Current.CancellationToken));
+        await work.RollbackAsync();
+        await work.RollbackAsync();
+        bool openedAgain = Outermost(await work.BeginAsync(TestContext.Current.CancellationToken));
+        await work.RollbackAsync();
+
+        Assert.True(opened);
+        Assert.False(joined);
+        Assert.False(joinedAgain);
+        Assert.True(openedAgain);
+    }
+
+    private static bool Outermost(Result<bool> begun) =>
+        begun.Match(
+            outermost => outermost,
+            error => throw new Xunit.Sdk.XunitException($"The unit of work refused: {error.Code}."));
+
     private static AccountRecord Account(SubjectId subject) =>
         new()
         {

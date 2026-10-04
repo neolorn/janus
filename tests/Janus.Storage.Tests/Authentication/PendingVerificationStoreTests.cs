@@ -157,7 +157,7 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
             PendingVerificationStore store = Store(verifying);
             IdentifierDirectory directory = Directory(verifying);
 
-            Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+            Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
             await directory.HoldAsync(subject, TestContext.Current.CancellationToken);
 
@@ -280,7 +280,7 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
         await using (StoreContext resending = database.Context())
         await using (var resend = new UnitOfWork(resending))
         {
-            Assert.True((await resend.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+            Assert.True((await resend.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
             Assert.NotNull(await Store(resending).FindForUpdateAsync(resent, TestContext.Current.CancellationToken));
 
             _ = await SweptAsync(now);
@@ -351,7 +351,7 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
         await using StoreContext context = database.Context();
         await using var work = new UnitOfWork(context);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         int ended = await Store(context).SweepAsync(now, TestContext.Current.CancellationToken);
 
@@ -371,7 +371,7 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
 
         _ = await store.FindAsync(staged, TestContext.Current.CancellationToken);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         PendingVerification held = Assert.IsType<PendingVerification>(
             await store.FindForUpdateAsync(staged, TestContext.Current.CancellationToken));

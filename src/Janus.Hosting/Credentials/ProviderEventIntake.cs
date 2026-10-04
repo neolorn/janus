@@ -100,7 +100,7 @@ internal sealed class ProviderEventIntake(
         Delivery delivered = Deliveries[provider];
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         if (!await CallbackIntake
                 .AdmittedAsync(context, callback, Anywhere, admission, work, log, cancellationToken)

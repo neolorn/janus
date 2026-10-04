@@ -407,7 +407,7 @@ internal static class BackgroundJobs
         IUnitOfWork work = services.GetRequiredService<IUnitOfWork>();
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return notBegun;
         }

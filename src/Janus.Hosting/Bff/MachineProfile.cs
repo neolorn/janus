@@ -49,7 +49,7 @@ internal sealed class MachineProfile(ILogger<MachineProfile> log) : IMiddleware
             IUnitOfWork work = context.RequestServices.GetRequiredService<IUnitOfWork>();
 
             (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+                .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
             await CallbackIntake
                 .CookieRefusedAsync(context, admission, work, cancellationToken)

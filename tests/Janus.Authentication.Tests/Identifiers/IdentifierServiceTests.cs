@@ -271,6 +271,45 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-003 AC4, REG-SESS-005: the notice to the holder of a number another
+    /// account tries to add spends the number's window only where its send is admitted.
+    /// One a restriction refused leaves the add as it would have been and the window
+    /// unmarked; one admitted marks it.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_003_AC4_AHoldersNoticeARestrictionRefusedSpendsNoWindowAsync()
+    {
+        const string otherNumber = "+441632960012";
+
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(SubjectId.New(_randomness), IdentifierKind.Phone, Number);
+        _ = _directory.Verified(SubjectId.New(_randomness), IdentifierKind.Phone, otherNumber);
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _notifications.RefusedChannel = SendKind.Sms;
+
+        Result refused = await Service.AddAsync(
+            Acting,
+            Stepped(),
+            IdentifierKind.Phone,
+            Number,
+            Source,
+            TestContext.Current.CancellationToken);
+        _notifications.Refusal = null;
+        Result admitted = await Service.AddAsync(
+            Acting,
+            Stepped(),
+            IdentifierKind.Phone,
+            otherNumber,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Accepted(refused);
+        Accepted(admitted);
+        Assert.Equal(otherNumber, Assert.Single(_notifications.Texts).Destination.Canonical);
+        Assert.Equal(otherNumber, Assert.Single(_notices.Told).Destination);
+    }
+
+    /// <summary>
     /// REG-IDENT-004 AC5, AC3, API-CONV-005: an add of a value another account holds is
     /// staged and listed as one of a fresh value is, and the account's own notice set
     /// hears of it alike. No code is sent, the ask is counted as its message would be,

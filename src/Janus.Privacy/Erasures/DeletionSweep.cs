@@ -105,7 +105,7 @@ internal sealed class DeletionSweep(
         ErasureReason reason = Because(deletion.By);
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         _ = await eraser.EraseAsync(deletion.Subject, reason, now, cancellationToken)
             .ConfigureAwait(false);

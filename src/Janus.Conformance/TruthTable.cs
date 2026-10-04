@@ -469,7 +469,7 @@ internal sealed class TruthTable<TResource>(
             IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
             (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+                .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
             (await scope.ServiceProvider.GetRequiredService<IDerivationMaterialiser>()
                     .RefreshAsync(

@@ -139,7 +139,7 @@ public sealed class ChallengeStoreTests(DatabaseFixture database)
         await using var work = new UnitOfWork(context);
         var challenges = new ChallengeStore(context, Deployment.Fingerprints);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         bool held = await challenges.FindForUpdateAsync(opened.Fingerprint, TestContext.Current.CancellationToken)
             is not null;

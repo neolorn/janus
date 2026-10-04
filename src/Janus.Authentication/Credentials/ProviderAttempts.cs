@@ -34,7 +34,7 @@ internal sealed class ProviderAttempts(IProviderAttemptStore store, IUnitOfWork 
         ArgumentNullException.ThrowIfNull(attempt);
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await store.BindAsync(binding, attempt, time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
@@ -54,7 +54,7 @@ internal sealed class ProviderAttempts(IProviderAttemptStore store, IUnitOfWork 
         ArgumentNullException.ThrowIfNull(binding);
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         ProviderAttempt? taken = await store.TakeAsync(binding, cancellationToken).ConfigureAwait(false);
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));

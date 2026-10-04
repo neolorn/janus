@@ -1456,7 +1456,7 @@ Janus.Core.ITakedowns.ReadAsync(Janus.Core.AccessContext! context, Janus.Core.Su
 Janus.Core.ITakedowns.ReverseAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.SubjectId subject, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IUnitOfWork
 Janus.Core.IUnitOfWork.AfterCommit(System.Func<System.Threading.CancellationToken, System.Threading.Tasks.ValueTask>! work) -> Janus.Core.Result
-Janus.Core.IUnitOfWork.BeginAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IUnitOfWork.BeginAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<bool>>
 Janus.Core.IUnitOfWork.CommitAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IUnitOfWork.RollbackAsync() -> System.Threading.Tasks.ValueTask
 Janus.Core.IdentifierAdded

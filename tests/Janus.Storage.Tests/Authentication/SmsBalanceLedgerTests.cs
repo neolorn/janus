@@ -51,7 +51,7 @@ public sealed class SmsBalanceLedgerTests(DatabaseFixture database) : IClassFixt
         await using StoreContext writing = database.Context();
         await using var work = new UnitOfWork(writing);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         await new SmsBalanceLedger(writing).RecordAsync(reading, Retained, TestContext.Current.CancellationToken);
 

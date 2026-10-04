@@ -624,7 +624,7 @@ public sealed class GrantStoreTests(DatabaseFixture database)
         await using var work = new UnitOfWork(writing);
         GrantStore store = Store(writing);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         Assert.NotNull(await new RoleStore(writing).FindForUpdateAsync(grant.Role, TestContext.Current.CancellationToken));
 

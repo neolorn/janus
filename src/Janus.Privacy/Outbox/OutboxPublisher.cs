@@ -382,7 +382,7 @@ internal sealed class OutboxPublisher(
         CancellationToken cancellationToken)
     {
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         TValue outcome;
 

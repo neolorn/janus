@@ -167,8 +167,8 @@ public sealed class FingerprintKeyTests(DatabaseFixture database) : IClassFixtur
             cancellationToken);
         await new ThrottleLedger(context, new DataConnections(context), ring)
             .FailedAsync(ThrottleScope.Source, "192.0.2." + tag, standing: 2, Noon, cancellationToken);
-        _ = await new NoticeLedger(context, new DataConnections(context), ring)
-            .FirstAsync("absent" + tag + "@example.test", Noon, TimeSpan.FromHours(1), cancellationToken);
+        await new NoticeLedger(context, new DataConnections(context), ring)
+            .MarkAsync("absent" + tag + "@example.test", Noon, TimeSpan.FromHours(1), cancellationToken);
         await new RegistrationSourceLedger(context, ring).RecordAsync("198.51.100." + tag, Noon, cancellationToken);
 
         var sends = new SendLedger(context, new DataConnections(context), ring);

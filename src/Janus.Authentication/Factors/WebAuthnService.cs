@@ -126,7 +126,7 @@ internal sealed class WebAuthnService(
         Authenticator enrolled = Enrolled(subject, kind, label, registration, party);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<AuthenticatorId>(notBegun);
         }
@@ -194,7 +194,7 @@ internal sealed class WebAuthnService(
         Authenticator enrolled = Enrolled(subject, discoverable, label, registration, party);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<AuthenticatorId>(notBegun);
         }
@@ -400,7 +400,7 @@ internal sealed class WebAuthnService(
         DateTimeOffset now = time.GetUtcNow();
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<Authenticator>(notBegun);
         }

@@ -39,6 +39,11 @@ internal sealed class GovernedSend(
     TimeProvider time,
     RandomNumberGenerator randomness) : IGovernedSend, IFollowedSend, ISendingRestrictions
 {
+    // AUTH-ABUSE-004: what the one attempt after the commit took, of the messages this
+    // operation undertook. A caller that follows a message reads it here: a row gone is
+    // not by itself a send taken.
+    private readonly HashSet<SendDeliveryId> _taken = [];
+
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">The message is absent.</exception>
     public async ValueTask<Result<SendReference>> UndertakeAsync(
@@ -59,21 +64,13 @@ internal sealed class GovernedSend(
 
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">The messages are absent.</exception>
-    public async ValueTask<bool> CarriedAsync(
+    public ValueTask<bool> CarriedAsync(
         IReadOnlyList<SendDeliveryId> admitted,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(admitted);
 
-        foreach (SendDeliveryId delivery in admitted)
-        {
-            if (await outbox.WaitsAsync(delivery, cancellationToken).ConfigureAwait(false))
-            {
-                return false;
-            }
-        }
-
-        return true;
+        return ValueTask.FromResult(admitted.All(_taken.Contains));
     }
 
     /// <inheritdoc/>
@@ -134,6 +131,10 @@ internal sealed class GovernedSend(
         IReadOnlyList<string?> owed = (await OwedAsync(message, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Held<IReadOnlyList<string?>>(error, ref failure));
 
+        TimeSpan initial = (await configuration
+                .ReadAsync(Settings.OutboxRetryInitial, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<TimeSpan>(error, ref failure));
+
         if (failure is not null)
         {
             return Result.Failure<IReadOnlyList<SendDelivery>>(failure);
@@ -156,9 +157,10 @@ internal sealed class GovernedSend(
 
         // AUTH-ABUSE-003: an ask of a sign-in link, an email code or a recovery is
         // answered before any transport is called, so its message is left to the
-        // publisher; every other message has one attempt after the commit. Either way the
-        // row is due from its admission, and the claim decides who carries it
-        // (CONV-DESIGN-003).
+        // publisher and is due at once. Every other message has one attempt after the
+        // commit: its row is written due the first retry delay after its admission, with
+        // no jitter, so that no pass takes it before that attempt has had its chance
+        // (CONV-DESIGN-003, AUTH-ABUSE-004, D-188).
         bool attempted = !MessageChannels.AnsweredFirst.Contains(message.Message);
         var admitted = new List<SendDelivery>(owed.Count);
 
@@ -169,7 +171,8 @@ internal sealed class GovernedSend(
             var delivery = SendDelivery.Of(
                 message with { Language = owed[index] },
                 reference,
-                now);
+                now,
+                attempted ? initial : TimeSpan.Zero);
 
             await outbox.AddAsync(delivery, cancellationToken).ConfigureAwait(false);
             await admission.CountAsync(reference, plans[index], now, cancellationToken).ConfigureAwait(false);
@@ -178,7 +181,7 @@ internal sealed class GovernedSend(
             {
                 SendDeliveryId written = delivery.Id;
 
-                work.AfterCommit(token => carrier.AttemptAsync(written, token))
+                work.AfterCommit(token => AttemptedAsync(written, token))
                     .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
             }
 
@@ -186,6 +189,14 @@ internal sealed class GovernedSend(
         }
 
         return Result.Success<IReadOnlyList<SendDelivery>>(admitted);
+    }
+
+    private async ValueTask AttemptedAsync(SendDeliveryId delivery, CancellationToken cancellationToken)
+    {
+        if (await carrier.AttemptAsync(delivery, cancellationToken).ConfigureAwait(false))
+        {
+            _ = _taken.Add(delivery);
+        }
     }
 
     private static TValue Held<TValue>(Error error, ref Error? failure)

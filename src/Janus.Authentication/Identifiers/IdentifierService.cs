@@ -142,7 +142,7 @@ internal sealed class IdentifierService(
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -291,7 +291,7 @@ internal sealed class IdentifierService(
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -422,7 +422,7 @@ internal sealed class IdentifierService(
             }
 
             if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notBegunAgain)
+                .Match<Error?>(_ => null, error => error) is Error notBegunAgain)
             {
                 return Result.Failure<LinkLanding>(notBegunAgain);
             }
@@ -501,7 +501,7 @@ internal sealed class IdentifierService(
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<LinkLanding>(notBegun);
         }
@@ -565,7 +565,7 @@ internal sealed class IdentifierService(
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -618,7 +618,7 @@ internal sealed class IdentifierService(
         DateTimeOffset now = time.GetUtcNow();
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -719,7 +719,7 @@ internal sealed class IdentifierService(
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -823,7 +823,7 @@ internal sealed class IdentifierService(
         DateTimeOffset now = time.GetUtcNow();
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -957,7 +957,7 @@ internal sealed class IdentifierService(
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -1171,7 +1171,7 @@ internal sealed class IdentifierService(
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -1797,9 +1797,9 @@ internal sealed class IdentifierService(
         // D-166 X3: the holder is told once however many ask at once.
         await notices.HoldAsync(canonical, cancellationToken).ConfigureAwait(false);
 
-        if (!await notices
-            .FirstAsync(canonical, time.GetUtcNow(), window, cancellationToken)
-            .ConfigureAwait(false))
+        DateTimeOffset now = time.GetUtcNow();
+
+        if (await notices.WasToldAsync(canonical, now, window, cancellationToken).ConfigureAwait(false))
         {
             return 0;
         }
@@ -1820,7 +1820,16 @@ internal sealed class IdentifierService(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        return sent.Match(_ => 1, _ => 0);
+        if (!sent.Match(_ => true, _ => false))
+        {
+            return 0;
+        }
+
+        // AUTH-ABUSE-003, D-188: the window is spent only where the send is admitted,
+        // so a notice a restriction refused leaves the holder to be told by the next.
+        await notices.MarkAsync(canonical, now, window, cancellationToken).ConfigureAwait(false);
+
+        return 1;
     }
 
     private async ValueTask<int> TellAsync(

@@ -96,7 +96,7 @@ internal sealed class DeadlineSweep(
         bool carried = false;
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         // D-166 X3: the request is carried under its row's lock, so one fulfilled or
         // refused while the pass read the queue is left as decided, not lapsed.

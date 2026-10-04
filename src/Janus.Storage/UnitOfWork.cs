@@ -30,23 +30,24 @@ internal sealed class UnitOfWork(StoreContext context) : IUnitOfWork
     private List<Func<CancellationToken, ValueTask>> _afterCommit = [];
 
     /// <inheritdoc/>
-    public async ValueTask<Result> BeginAsync(CancellationToken cancellationToken)
+    public async ValueTask<Result<bool>> BeginAsync(CancellationToken cancellationToken)
     {
         // An operation that calls another does not start a second transaction: the
         // outermost one is the one transaction the whole operation runs in, and the
-        // inner call commits nothing of its own (CONV-DESIGN-003).
+        // inner call commits nothing of its own (CONV-DESIGN-003). The level is told
+        // which it is, since only the outermost rolls back a success that wrote nothing.
         if (_transaction is not null)
         {
             _depth++;
 
-            return Result.Success();
+            return Result.Success(false);
         }
 
         _transaction = await context.Database
             .BeginTransactionAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return Result.Success();
+        return Result.Success(true);
     }
 
     /// <inheritdoc/>

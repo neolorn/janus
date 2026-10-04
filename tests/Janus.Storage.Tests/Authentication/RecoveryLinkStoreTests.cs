@@ -86,7 +86,7 @@ public sealed class RecoveryLinkStoreTests(DatabaseFixture database)
         await using var work = new UnitOfWork(context);
         var enrolments = new EnrolmentSessions(new RecoveryLinkStore(context), work, TimeProvider.System);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         bool held = await enrolments.HoldAsync(opened, TestContext.Current.CancellationToken);
 
@@ -108,7 +108,7 @@ public sealed class RecoveryLinkStoreTests(DatabaseFixture database)
         await using var work = new UnitOfWork(context);
         var links = new RecoveryLinkStore(context);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         RecoveryLink? link = await links.FindForUpdateAsync(
             token.Fingerprint(),

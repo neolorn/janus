@@ -447,7 +447,7 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
         await using StoreContext context = database.Context();
         await using var work = new UnitOfWork(context);
 
-        Assert.True((await work.BeginAsync(cancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(cancellationToken)).Match(_ => true, _ => false));
 
         await locked(context);
 

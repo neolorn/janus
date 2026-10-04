@@ -24,14 +24,31 @@ internal interface INoticeLedger
     ValueTask HoldAsync(string destination, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Whether this address may be told, recording the notice where it may.
+    /// Whether this address was told inside the window, under any version of the
+    /// fingerprint key. It records nothing.
+    /// </summary>
+    /// <param name="destination">The plain address, which the ledger stores hashed.</param>
+    /// <param name="at">When.</param>
+    /// <param name="window">One notice per address per this span.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>Whether a notice to it is suppressed rather than sent.</returns>
+    ValueTask<bool> WasToldAsync(
+        string destination,
+        DateTimeOffset at,
+        TimeSpan window,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Marks the address as told, which spends its window. The caller writes the mark
+    /// only once the notice's send is admitted, so a refused notice spends no window
+    /// (AUTH-ABUSE-003, D-188).
     /// </summary>
     /// <param name="destination">The plain address, which the ledger stores hashed.</param>
     /// <param name="at">When.</param>
     /// <param name="window">One notice per address per this span.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Whether the notice is sent rather than suppressed.</returns>
-    ValueTask<bool> FirstAsync(
+    /// <returns>The work of marking it.</returns>
+    ValueTask MarkAsync(
         string destination,
         DateTimeOffset at,
         TimeSpan window,

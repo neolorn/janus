@@ -29,6 +29,22 @@ against the public contract of LIB-API-001.
 - A recovery-code set carries `viewedAt` from the moment its codes are returned:
   `POST /account/recoverycodes` and the enrolment of a second step beside a password
   write it with the set, where it stayed unset until an export was reported.
+- An alert and a loss report's notification count as carried only where the one
+  attempt that follows their commit took them. One that attempt did not take counts
+  as not carried whatever later becomes of its row: the alert falls to its second
+  channel and the invalidation waits, also where the row was removed uncarried or a
+  later pass carried it.
+- A notice that a restriction refuses no longer spends its address's
+  `abuse.nonexistent.window`: the window is marked only where the notice's send is
+  admitted, for the notice to the holder of an address or number someone tried to
+  register or add as for the answer to an address no account holds, so the next ask
+  inside the window whose send is admitted tells the address.
+- `IConsents.GrantAsync` that finds the consent recorded meanwhile, and so writes
+  nothing, rolls its transaction back where it opened it and commits its level where it
+  joined a unit of work the caller opened, so a caller's own unit of work is never
+  marked by it.
+- `IUnitOfWork.BeginAsync` answers `Result<bool>`: whether the level it opened is the
+  outermost, or one that joined a unit of work another operation opened.
 - The `expiry-sweep` job removes an identifier's add, and a replace whose swap has not
   applied, once every verification-code record it holds is spent or past
   `code.verification.lifetime`: the new address's code and, where the old address must
@@ -205,12 +221,13 @@ against the public contract of LIB-API-001.
   and the row's outcome once, each only under the claim. A consumer still running when
   `outbox.claim.timeout` has passed is abandoned as one that did not take the event.
   The `events` table gains `claimed_until` (migration `ClaimAnEventBeforeItIsOffered`).
-- A message's row is claimed only where its next attempt is due, by the attempt that
-  follows the commit as by the `sends` job, so a row one attempt released and
-  rescheduled is not carried early by another. A message is due from its admission: it
-  is no longer held back from the job for `outbox.retry.initial`, and where the job
-  reaches a row before the attempt that follows the commit, the claim decides which of
-  them carries it.
+- A message's row is claimed only where its next attempt is due, so a row one attempt
+  released and rescheduled is not carried early by another. A new row whose immediate
+  attempt follows the commit is written due `outbox.retry.initial` after its admission,
+  with no jitter, and that attempt claims it whatever its due instant, so the `sends`
+  job takes a new row only once its immediate attempt has had its chance. A message
+  answered before any transport is called (a sign-in link, an email code, a recovery
+  ask) has no such attempt and is due to the job at once.
 - A message carried again that the restrictions or the gateway floor refuse fails for
   good: its row is removed without being carried, its count and the credit it spent are
   given back, and no alert is raised. It no longer waits as a failed attempt does.

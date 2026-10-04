@@ -95,7 +95,7 @@ internal sealed class OidcService(
         // someone's hands and there is no telling whose, so everything derived from the
         // record goes and the whole of it is recorded.
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await sessions.EndSpineAsync(session, now, cancellationToken).ConfigureAwait(false);
         await audit.ReusedAsync(subject, clientId, session, now, cancellationToken).ConfigureAwait(false);
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))

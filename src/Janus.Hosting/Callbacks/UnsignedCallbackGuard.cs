@@ -41,7 +41,7 @@ internal sealed class UnsignedCallbackGuard(IUnsignedCallback callback) : IMiddl
         ILogger log = context.RequestServices.GetRequiredService<ILogger<UnsignedCallbackGuard>>();
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         if (!await CallbackIntake
                 .AdmittedAsync(context, callback.Name, callback.Sources, admission, work, log, cancellationToken)
@@ -72,7 +72,7 @@ internal sealed class UnsignedCallbackGuard(IUnsignedCallback callback) : IMiddl
         if (!confirmed.Match(() => true, _ => false))
         {
             (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+                .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
             await CallbackIntake
                 .RefusedAsync(context, callback.Name, CallbackCheck.Confirmation, admission, work, log, cancellationToken)
                 .ConfigureAwait(false);

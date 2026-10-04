@@ -43,11 +43,14 @@ internal interface ISendOutbox
     /// <summary>
     /// Claims one message for an attempt, by one update that succeeds only where the
     /// row is due, its next attempt's instant come, and is unclaimed or its claim has
-    /// timed out. The caller commits it on its own before the handler is called.
+    /// timed out. The attempt that follows the commit claims a row that has had no
+    /// attempt whatever its due instant, since it is the row's first (D-188). The caller
+    /// commits the claim on its own before the handler is called.
     /// </summary>
     /// <param name="delivery">What it is held under.</param>
     /// <param name="now">The instant of the claim.</param>
     /// <param name="timeout">How long the claim stands.</param>
+    /// <param name="immediate">Whether the attempt is the one that follows the commit, not a pass's.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The claim, which the attempt's outcome is written under, or nothing where another
@@ -57,6 +60,7 @@ internal interface ISendOutbox
         SendDeliveryId delivery,
         DateTimeOffset now,
         TimeSpan timeout,
+        bool immediate,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -68,14 +72,6 @@ internal interface ISendOutbox
     ValueTask<SendDelivery?> FindAsync(
         SendDeliveryId delivery,
         CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Whether one admitted message still waits to be carried.
-    /// </summary>
-    /// <param name="delivery">What it is held under.</param>
-    /// <param name="cancellationToken">Abandons the read.</param>
-    /// <returns>Whether its row stands.</returns>
-    ValueTask<bool> WaitsAsync(SendDeliveryId delivery, CancellationToken cancellationToken);
 
     /// <summary>
     /// Whether erasure has overwritten the key of one admitted message, which is then

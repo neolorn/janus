@@ -173,7 +173,7 @@ internal sealed class LossReports(
         var report = LossReport.Open(held.Id, held.Subject, cancel, now, window);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<LossReported>(notBegun);
         }
@@ -220,7 +220,7 @@ internal sealed class LossReports(
             now);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegunAgain)
+            .Match<Error?>(_ => null, error => error) is Error notBegunAgain)
         {
             return Result.Failure<LossReported>(notBegunAgain);
         }
@@ -271,7 +271,7 @@ internal sealed class LossReports(
         DateTimeOffset now = time.GetUtcNow();
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -414,7 +414,7 @@ internal sealed class LossReports(
             report.Hold(now);
 
             if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notBegun)
+                .Match<Error?>(_ => null, error => error) is Error notBegun)
             {
                 return Result.Failure<int>(notBegun);
             }
@@ -450,7 +450,7 @@ internal sealed class LossReports(
             now);
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await reports.RecordAsync(report, cancellationToken).ConfigureAwait(false);
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
@@ -471,7 +471,7 @@ internal sealed class LossReports(
         CancellationToken cancellationToken)
     {
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<int>(notBegun);
         }
@@ -582,7 +582,7 @@ internal sealed class LossReports(
         };
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         var undertaken = new List<IReadOnlyList<SendDeliveryId>>();
 
