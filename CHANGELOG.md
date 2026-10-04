@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `CanonicalForm.TryDomainToAscii` gives a domain its ASCII form by UTS #46 processing
+  at Unicode 17.0.0 from tables the package carries: nontransitional, with
+  UseSTD3ASCIIRules, CheckHyphens, CheckBidi, CheckJoiners and VerifyDnsLength set and
+  invalid Punycode refused, in lower case. The form does not depend on the ICU of the
+  machine.
 - A route or query value that does not read as its type is refused 400
   `api.request.malformed` with `details.member` naming it, the first in the order the
   endpoint declares where more than one does not read. An identifier in a path that is
