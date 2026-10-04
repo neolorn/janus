@@ -158,12 +158,13 @@ against the public contract of LIB-API-001.
   and the row's outcome once, each only under the claim. A consumer still running when
   `outbox.claim.timeout` has passed is abandoned as one that did not take the event.
   The `events` table gains `claimed_until` (migration `ClaimAnEventBeforeItIsOffered`).
-- A message's row is claimed only where its next attempt is due, by the attempt that
-  follows the commit as by the `sends` job, so a row one attempt released and
-  rescheduled is not carried early by another. A message is due from its admission: it
-  is no longer held back from the job for `outbox.retry.initial`, and where the job
-  reaches a row before the attempt that follows the commit, the claim decides which of
-  them carries it.
+- A message's row is claimed only where its next attempt is due, so a row one attempt
+  released and rescheduled is not carried early by another. A new row whose immediate
+  attempt follows the commit is written due `outbox.retry.initial` after its admission,
+  with no jitter, and that attempt claims it whatever its due instant, so the `sends`
+  job takes a new row only once its immediate attempt has had its chance. A message
+  answered before any transport is called (a sign-in link, an email code, a recovery
+  ask) has no such attempt and is due to the job at once.
 - A message carried again that the restrictions or the gateway floor refuse fails for
   good: its row is removed without being carried, its count and the credit it spent are
   given back, and no alert is raised. It no longer waits as a failed attempt does.

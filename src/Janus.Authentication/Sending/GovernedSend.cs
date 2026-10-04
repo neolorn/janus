@@ -134,6 +134,10 @@ internal sealed class GovernedSend(
         IReadOnlyList<string?> owed = (await OwedAsync(message, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Held<IReadOnlyList<string?>>(error, ref failure));
 
+        TimeSpan initial = (await configuration
+                .ReadAsync(Settings.OutboxRetryInitial, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<TimeSpan>(error, ref failure));
+
         if (failure is not null)
         {
             return Result.Failure<IReadOnlyList<SendDelivery>>(failure);
@@ -156,9 +160,10 @@ internal sealed class GovernedSend(
 
         // AUTH-ABUSE-003: an ask of a sign-in link, an email code or a recovery is
         // answered before any transport is called, so its message is left to the
-        // publisher; every other message has one attempt after the commit. Either way the
-        // row is due from its admission, and the claim decides who carries it
-        // (CONV-DESIGN-003).
+        // publisher and is due at once. Every other message has one attempt after the
+        // commit: its row is written due the first retry delay after its admission, with
+        // no jitter, so that no pass takes it before that attempt has had its chance
+        // (CONV-DESIGN-003, AUTH-ABUSE-004, D-188).
         bool attempted = !MessageChannels.AnsweredFirst.Contains(message.Message);
         var admitted = new List<SendDelivery>(owed.Count);
 
@@ -169,7 +174,8 @@ internal sealed class GovernedSend(
             var delivery = SendDelivery.Of(
                 message with { Language = owed[index] },
                 reference,
-                now);
+                now,
+                attempted ? initial : TimeSpan.Zero);
 
             await outbox.AddAsync(delivery, cancellationToken).ConfigureAwait(false);
             await admission.CountAsync(reference, plans[index], now, cancellationToken).ConfigureAwait(false);

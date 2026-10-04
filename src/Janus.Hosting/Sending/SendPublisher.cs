@@ -69,7 +69,7 @@ internal sealed class SendPublisher(
             Schedule schedule = (await ScheduleAsync(cancellationToken).ConfigureAwait(false))
                 .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
-            (await CarriedAsync(delivery, schedule, cancellationToken).ConfigureAwait(false))
+            (await CarriedAsync(delivery, schedule, immediate: true, cancellationToken).ConfigureAwait(false))
                 .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         }
         catch (Exception fault) when (fault is not OperationCanceledException)
@@ -112,7 +112,8 @@ internal sealed class SendPublisher(
 
         foreach (SendDeliveryId delivery in due)
         {
-            bool taken = (await CarriedAsync(delivery, schedule, cancellationToken).ConfigureAwait(false))
+            bool taken = (await CarriedAsync(delivery, schedule, immediate: false, cancellationToken)
+                    .ConfigureAwait(false))
                 .Match(value => value, error => Held<bool>(error, ref failure));
 
             if (failure is not null)
@@ -158,10 +159,12 @@ internal sealed class SendPublisher(
 
     // One attempt at one message: claimed, judged again where it is a retry, carried
     // outside any transaction, and settled under the claim. It answers whether the
-    // handler took the message.
+    // handler took the message. The attempt that follows the commit claims its new row
+    // whatever its due instant; a pass claims a row only once it is due (D-188).
     private async ValueTask<Result<bool>> CarriedAsync(
         SendDeliveryId id,
         Schedule schedule,
+        bool immediate,
         CancellationToken cancellationToken)
     {
         DateTimeOffset now = time.GetUtcNow();
@@ -171,7 +174,7 @@ internal sealed class SendPublisher(
         // before the handler is called.
         SendClaim? claimed = (await InUnitAsync(
                 async () => Result.Success(await outbox
-                    .ClaimAsync(id, now, schedule.ClaimTimeout, cancellationToken)
+                    .ClaimAsync(id, now, schedule.ClaimTimeout, immediate, cancellationToken)
                     .ConfigureAwait(false)),
                 cancellationToken)
             .ConfigureAwait(false))
@@ -184,7 +187,7 @@ internal sealed class SendPublisher(
 
         if (claimed is not SendClaim claim)
         {
-            // Another attempt holds the row, or it is gone: it is that attempt's.
+            // Another attempt holds the row, it is not yet due, or it is gone.
             return Result.Success(false);
         }
 

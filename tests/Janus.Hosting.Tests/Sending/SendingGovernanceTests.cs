@@ -1481,12 +1481,11 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         Assert.Single(_outbox.Claimed);
     }
 
-
     /// <summary>
-    /// CONV-DESIGN-003 AC9: a claim is taken only on a due row, the immediate attempt's
-    /// and the pass's alike. A message just admitted is due at once; one an attempt
-    /// released and rescheduled is not claimed, and so not carried, before its next
-    /// attempt's instant has come.
+    /// CONV-DESIGN-003 AC9: a row an attempt released and rescheduled is not claimed, and
+    /// so not carried, before its next attempt's instant has come, by a pass or by an
+    /// attempt that follows a commit, which claims whatever the due instant only a row
+    /// that has had no attempt.
     /// </summary>
     [Fact]
     public async Task CONV_DESIGN_003_AC9_ARowReleasedAndRescheduledIsNotClaimedBeforeItIsDueAsync()
@@ -1494,8 +1493,6 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         _mail.Accepts = false;
 
         _ = await SentAsync(Mailed());
-
-        Assert.Equal(Noon, Assert.Single(_outbox.Written).NextAttemptAt);
 
         SendDelivery rescheduled = Assert.Single(_outbox.Waiting);
 
@@ -1508,6 +1505,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         await Path.Publisher.AttemptAsync(rescheduled.Id, TestContext.Current.CancellationToken);
 
+        Assert.Equal(0, await RetriedAsync());
         Assert.Empty(_mail.Taken);
         Assert.Single(_outbox.Claimed);
         Assert.Equal(1, Assert.Single(_outbox.Waiting).Attempts);
@@ -1518,6 +1516,36 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         Assert.Single(_mail.Taken);
         Assert.Empty(_outbox.Waiting);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC19, CONV-DESIGN-003 AC9: a new row is written due
+    /// <c>outbox.retry.initial</c> after its admission, with no jitter, and its immediate
+    /// attempt claims it before that instant. Where that attempt left the row unclaimed,
+    /// here by a fault at its claim, no pass claims it until the instant has come.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC19_NoPassClaimsANewRowBeforeTheFirstRetryDelayHasPassedAsync()
+    {
+        _configuration.Set(Settings.OutboxRetryInitial, TimeSpan.FromSeconds(40));
+        _outbox.Claiming = _ =>
+        {
+            _outbox.Claiming = null;
+
+            throw new InvalidOperationException("The claim was not written.");
+        };
+
+        _ = await SentAsync(Mailed());
+        _clock.Advance(TimeSpan.FromSeconds(39));
+        int early = await RetriedAsync();
+        int claims = _outbox.Claimed.Count;
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        int due = await RetriedAsync();
+
+        Assert.Equal(Noon.AddSeconds(40), Assert.Single(_outbox.Written).NextAttemptAt);
+        Assert.Equal((0, 1), (early, claims));
+        Assert.Equal(1, due);
+        Assert.Single(_mail.Taken);
     }
 
     /// <summary>

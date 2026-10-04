@@ -104,10 +104,11 @@ internal sealed class SendOutboxInMemory : ISendOutbox
         SendDeliveryId delivery,
         DateTimeOffset now,
         TimeSpan timeout,
+        bool immediate,
         CancellationToken cancellationToken)
     {
         if (!_held.TryGetValue(delivery, out SendDelivery? held)
-            || held.NextAttemptAt > now
+            || (held.NextAttemptAt > now && !(immediate && held.Attempts is 0))
             || (_claims.TryGetValue(delivery, out DateTimeOffset until) && until > now))
         {
             return ValueTask.FromResult<SendClaim?>(null);

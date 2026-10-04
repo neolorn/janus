@@ -219,6 +219,58 @@ public sealed class SendOutboxTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC9, AUTH-ABUSE-004 AC19: a new row is written due the first retry
+    /// delay after its admission. No pass claims it before that instant; the attempt that
+    /// follows the commit claims it whatever its due instant; and once that claim has
+    /// timed out and the instant has come, a pass takes it.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_ANewRowIsClaimedByItsImmediateAttemptAndByNoPassUntilItIsDueAsync()
+    {
+        SendDelivery first = Delivery("twelfth@example.test", subject: null, held: Held);
+        SendDelivery second = Delivery("thirteenth@example.test", subject: null, held: Held);
+        await WrittenAsync(first);
+        await WrittenAsync(second);
+
+        SendClaim? early = await ClaimedAsync(first.Id, Noon + Held - TimeSpan.FromSeconds(1));
+        SendClaim? immediate = await ClaimedAsync(first.Id, Noon, immediate: true);
+        SendClaim? again = await ClaimedAsync(first.Id, Noon, immediate: true);
+        SendClaim? timedOut = await ClaimedAsync(first.Id, Noon + Timeout);
+        SendClaim? due = await ClaimedAsync(second.Id, Noon + Held);
+
+        Assert.Null(early);
+        Assert.NotNull(immediate);
+        Assert.Null(again);
+        Assert.NotNull(timedOut);
+        Assert.NotNull(due);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC9: the attempt that follows the commit claims whatever the due
+    /// instant only a row that has had no attempt. One a pass carried first, released and
+    /// rescheduled is not claimed by it before its next attempt is due.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_AnImmediateAttemptDoesNotClaimARescheduledRowBeforeItIsDueAsync()
+    {
+        SendDelivery undertaken = Delivery("fourteenth@example.test", subject: null);
+
+        await WrittenAsync(undertaken);
+
+        SendClaim claim = await ClaimedAsync(undertaken.Id, Noon)
+            ?? throw new Xunit.Sdk.XunitException("The message was not claimed.");
+        SendDelivery refused = undertaken.Refused(Noon, TimeSpan.FromMinutes(10), 2.0m, jitter: 1.0);
+
+        await using (StoreContext recording = database.Context())
+        {
+            Assert.True(await Outbox(recording).RecordAsync(refused, claim, TestContext.Current.CancellationToken));
+        }
+
+        Assert.Null(await ClaimedAsync(undertaken.Id, Noon.AddMinutes(10) - TimeSpan.FromSeconds(1), immediate: true));
+        Assert.NotNull(await ClaimedAsync(undertaken.Id, Noon.AddMinutes(10), immediate: true));
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC9, INF-BG-001 AC4: a row is claimed by one conditional update,
     /// so of two attempts that reach it at once one takes it; while the claim stands no
     /// pass reads the row as due and no other attempt takes it; and once the claim has
@@ -416,10 +468,8 @@ public sealed class SendOutboxTests(DatabaseFixture database)
                 Values = new Dictionary<string, string>(StringComparer.Ordinal) { ["code"] = "482913" },
             },
             SendReference.Draw(_deployment.Randomness),
-            Noon) with
-        {
-            NextAttemptAt = Noon + (held ?? TimeSpan.Zero),
-        };
+            Noon,
+            held ?? TimeSpan.Zero);
     }
 
     private async Task WrittenAsync(SendDelivery delivery)
@@ -430,12 +480,14 @@ public sealed class SendOutboxTests(DatabaseFixture database)
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
-    // A claim as an attempt takes it: one conditional update, committed on its own.
-    private async Task<SendClaim?> ClaimedAsync(SendDeliveryId delivery, DateTimeOffset now)
+    // A claim as an attempt takes it, a pass's or the one that follows the commit: one
+    // conditional update, committed on its own.
+    private async Task<SendClaim?> ClaimedAsync(SendDeliveryId delivery, DateTimeOffset now, bool immediate = false)
     {
         await using StoreContext claiming = database.Context();
 
-        return await Outbox(claiming).ClaimAsync(delivery, now, Timeout, TestContext.Current.CancellationToken);
+        return await Outbox(claiming)
+            .ClaimAsync(delivery, now, Timeout, immediate, TestContext.Current.CancellationToken);
     }
 
     private SendDeliveryStore Outbox(StoreContext context) =>

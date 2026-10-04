@@ -84,13 +84,17 @@ internal sealed class SendDeliveryStore(
         SendDeliveryId delivery,
         DateTimeOffset now,
         TimeSpan timeout,
+        bool immediate,
         CancellationToken cancellationToken)
     {
         DateTimeOffset until = RowClaim.Until(now, timeout);
 
+        // D-188: a new row is due for a pass only after the first retry delay, and the
+        // attempt that follows its commit claims it before; a row that has had an
+        // attempt is claimed by either only once its next one is due.
         int claimed = await context.SendOutbox
             .Where(row => row.Id == delivery
-                && row.NextAttemptAt <= now
+                && (row.NextAttemptAt <= now || (immediate && row.Attempts == 0))
                 && (row.ClaimedUntil == null || row.ClaimedUntil <= now))
             .ExecuteUpdateAsync(
                 row => row.SetProperty(one => one.ClaimedUntil, until),
