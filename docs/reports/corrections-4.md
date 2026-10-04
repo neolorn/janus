@@ -925,6 +925,23 @@ and none carries a `$` root, a list index or a nested path written otherwise.
 - Reviewed, left: `SigningKeys.LengthenAsync`, `ClientRegistry.RegisterAsync`, `OidcService.ReuseAsync` (no return between).
 - Parked: `DeliveryReports.ReportAsync` (question 69), `BotDefence` (question 70), the limit of `SignInLinks.SpendCodeAsync` (question 71), `RegisteredSecrets.RotatedAsync` (question 72).
 
+#### X9, `part/rollback-factors`, merged as `c0c6d6bc` (`6a91c392`, `297df282`, `19efea40`, `168f4d10`, `853d036b`)
+
+The rollback is written inline at each return. `CredentialService.RefusedAsync`, which committed, is removed.
+
+- `TotpService.PresentAsync`: a code refused on the row under its lock ended with a commit; rolled back. Test `TotpServiceTests.CONV_DESIGN_003_AC5_ACodeSpentMeanwhileRollsBackAsync`. Reviewed, left: `BeginAsync`, `ConfirmAsync`, `AbandonAsync` (every refusal before the beginning).
+- `RecoveryCodeService.SpendAsync`: no set, or a code not of the set or spent, ended with a commit; rolled back. Test `AUTH_FACT_008_AC1_AUsedCodeIsRejectedOnSecondPresentationAsync`. Reviewed, left: `GenerateAsync`, `ShownAsync`.
+- `WebAuthnService.PresentAsync`: a credential gone or unusable under its lock ended with a commit; rolled back. Test `WebAuthnServiceTests.CONV_DESIGN_003_AC5_ACredentialInvalidatedMeanwhileRollsBackAsync`. The counter mismatch is question 74; `AUTH_FACT_014_AC3_ACounterMovingBackwardsIsRejectedAndAuditedAsync` holds what it does today. Reviewed, left: `CompleteAsync`, `UpgradeAsync`.
+- Reviewed, left: `VerificationCodes.IssueAsync`; `DeviceService.FailedAsync`, `RemoveAsync`, `RevokeTrustAsync`, `KnownAsync` (refusals before the beginning); `StepUpGuard` begins none.
+- `PasswordService.SetAsync`: the event not written returned with the unit open; rolled back. Test `PasswordServiceTests.CONV_DESIGN_003_AC5_APasswordThatCannotBeAnnouncedRollsBackAsync`. Reviewed, left: `VerifyAsync`.
+- `LossReports.SuspendAsync`, `CancelAsync` and `InvalidateAsync`: the announcement not written returned with the unit open; rolled back. `CancelAsync`: a report no longer running under the credential's lock ended with a commit; rolled back. Tests `LossReportsTests.CONV_DESIGN_003_AC5_ASuspensionThatCannotBeAnnouncedRollsBackAsync`, `CONV_DESIGN_003_AC5_ACancellationOfAReportEndedMeanwhileRollsBackAsync`, `CONV_DESIGN_003_AC5_ACancellationThatCannotBeAnnouncedRollsBackAsync`, `AUTH_RECOV_007_ASweepWhoseAnnouncementIsRefusedAnswersWithTheRefusalAsync`. Reviewed, left: `CarryAsync`, `RepeatAsync`.
+- `RecoveryService.CompleteAsync` and `BeginEnrolmentAsync`: a link refused under its lock, and a refused password, ended with a commit; rolled back. `StandAsync`: the day limit reached under the approvals' hold ended with a commit, and the alert not raised returned with the unit open; rolled back. Tests `AUTH_RECOV_002_AC1_TheLinkExpiresAndIsNotReusedAsync`, `AUTH_RECOV_002_TheEnrolmentLinkIsTheOnlyOneThatOpensASessionAsync`, `BFF_ABUSE_001_AC2_TwoCapsReachedLiftAtTheLaterOfThemAsync`, `CONV_DESIGN_002_AnApprovalWhoseAlertCannotBeWrittenCommitsNothingAsync`. Reviewed, left: `IssueAsync`, `SendAsync`, `EnrolmentSessions.EndAsync`.
+- `CredentialService.SetPasswordAsync`, `CompleteKeyAsync`, `ConfirmGeneratorAsync`: the enrolment session not open under its lock and the refused password, ceremony or confirmation ended with a commit; rolled back. The tail both enrolments share: recovery codes failed or the event not written returned with the unit open; rolled back. `RemoveAsync`, `LinkAsync`, `UnlinkAsync`: the refusals under the locks ended with a commit, and the event not written in `LinkAsync` returned with the unit open; rolled back. Tests `CredentialServiceTests.CONV_DESIGN_003_AC5_ARefusedPasswordRollsBackAsync`, `AUTH_FACT_002b_AC3_AFailedUpgradeChangesNothingAsync`, `CONV_DESIGN_003_AC5_AGeneratorConfirmedWithAWrongCodeRollsBackAsync`, `CONV_DESIGN_003_AC5_AnEnrolmentThatCannotBeAnnouncedRollsBackAsync`, `CONV_DESIGN_003_AC5_ARemovalOfAnUnknownCredentialRollsBackAsync`, `AUTH_RECOV_007_AC5_RemovingTheLastSecondStepRunsTheWindowAsync`, `CONV_DESIGN_003_AC5_ALinkOfAProviderLinkedMeanwhileRollsBackAsync`, `CONV_DESIGN_003_AC5_ALinkThatCannotBeAnnouncedRollsBackAsync`, `CONV_DESIGN_003_AC5_AnUnlinkOfAnIdentityGoneMeanwhileRollsBackAsync`. Reviewed, left: the opening of a key ceremony, `ProviderAttempts.BindAsync` and `TakeAsync`; `ProviderEvents` begins none.
+- `BreakGlassService.GenerateAsync`: the alert not raised returned with the unit open; rolled back. The unit that spends the credential: the conditional record answering false, the exempt session not begun and the use alert not raised returned with the unit open; rolled back. Tests `BreakGlassServiceTests.CONV_DESIGN_003_AC5_AGenerationThatCannotBeAlertedRollsBackAsync`, `CONV_DESIGN_003_AC5_AUseThatCannotBeAlertedRollsBackAsync`, `CONV_DESIGN_003_AC5_ARefusedCodeCommitsItsAttemptAndItsRecordAsync`. The attempt count and the failed authentication's record keep their commits; question 76.
+- No test reaches these changed returns, each sharing its statement or its operation with one that is tested: `BreakGlassService`, the conditional record answering false and the exempt session not begun; `CredentialService.CompleteKeyAsync` and `ConfirmGeneratorAsync`, the enrolment session found closed under its lock; the shared tail, recovery codes failing; `RemoveAsync`, the last linked way in; `RecoveryService.CompleteAsync`, the password refused by the nested set.
+- Parked: `VerificationCodes.PresentAsync` (question 73), the counter mismatch of `WebAuthnService.PresentAsync` (question 74), `RecoveryCodeReminders.RemindedAsync` (question 75), the refusals of `BreakGlassService.PresentAsync` (question 76), `DeviceService`'s standing check and the cancelled report of `LossReports.InvalidateAsync` (question 77).
+- Observed, outside the sweep: `CredentialService.SetPasswordAsync` ends the account's other sessions after its commit, in no unit of work; `DeviceService.VerifiedAsync` publishes `DeviceVerified` after the commit that remembered the browser (X1).
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -2371,6 +2388,52 @@ part of 389 (3) and waits with 389 on question 48.
   1. Where nothing was replaced the unit of work is rolled back, then the standing secret is read: as `SigningKeys.ChangeAsync`.
   2. The commit of nothing stays, since the operation succeeds.
 - **Parked.** `RegisteredSecrets.RotatedAsync`.
+- **Answer:** pending.
+
+**73. Tier 3. AUTH-FACT-004 and CONV-DESIGN-003: what a refused verification code may write (`VerificationCodes.PresentAsync`).**
+
+- **Item.** X9 at `VerificationCodes.PresentAsync` (question 58). It begins the outermost unit of work and always commits.
+- **What the code does.** Four refusals: nothing outstanding (`auth.code.expired`, nothing written); a code past its life (`auth.code.expired`, the row removed); a wrong try (the count written); the wrong try that reaches the limit (the row removed).
+- **What the specification says.** Such a refusal commits "that count or record and nothing else". The removal of a lapsed row and the removal at the limit are not a count; the first refusal writes nothing and by the letter rolls back. This is the same matter as question 71.
+- **Parked.** The whole of `PresentAsync`, left as it was. `VerificationCodesTests.CONV_DESIGN_003_AC5_AWrongTryCommitsItsCountAsync` holds the wrong try.
+- **Answer:** pending.
+
+**74. Tier 3. AUTH-FACT-014 criterion 3 and CONV-DESIGN-003: the audit record of a counter mismatch.**
+
+- **Item.** X9 at `WebAuthnService.PresentAsync` (question 58).
+- **What the code does.** `auth.webauthn.countermismatch` writes the audit record `auth.credential.countermismatch`, and nothing else, and commits. The operation begins the outermost unit of work.
+- **What the specification says.** AUTH-FACT-014 criterion 3 requires the event audited. CONV-DESIGN-003's list of refusals that commit does not name it, and a rollback discards the record.
+- **Parked.** That return, left committing.
+- **Answer:** pending.
+
+**75. Tier 2. CONV-DESIGN-003: sends inside a unit of work that goes on after one is refused (`RecoveryCodeReminders.RemindedAsync`).**
+
+- **Item.** X9 at `RecoveryCodeReminders.RemindedAsync` (question 58).
+- **What the code does.** It begins, calls `INotificationHandler.SendAsync` for each channel inside the unit of work, counts the sends that succeeded, discards each failure and commits. The send begins a unit of work of its own. A send that fails after its own beginning now marks the whole, and the reminder's commit would then throw. Where every channel refuses, the reminder commits having written nothing.
+- **What the specification says.** A call an operation must be able to survive being refused begins no unit of work of its own; a sweep site that cannot meet this is a question (D-183 question 58). The send is rebuilt by questions 27, 38 and 63.
+- **Readings.**
+  1. It waits for the governed send, where the admission decides in the caller's unit of work.
+  2. The reminder's sends move outside its unit of work.
+- **Parked.** `RemindedAsync`.
+- **Answer:** pending.
+
+**76. Tier 3. OPS-BOOT-004, CONV-LOG-005 and CONV-DESIGN-003: the units of a refused break-glass credential.**
+
+- **Item.** X9 at `BreakGlassService.PresentAsync` (question 58).
+- **What the code does.** (1) For a wrong or used code, the unit that takes the hold and compares commits having written nothing beyond the attempt, and the failed authentication's record is written in a second unit, with the throttle's failure after it: the refusal is not decided and recorded in one unit. (2) `auth.breakglass.consumed`, answered where the conditional record of the use finds it taken, now rolls back, and writes no record of a failed authentication and counts no failure.
+- **What the specification says.** CONV-DESIGN-003: a break-glass attempt and its alert stand, committed alone. CONV-LOG-005 names a refused break-glass credential a failed authentication.
+- **Parked.** Both paths, as they are after `853d036b`.
+- **Answer:** pending.
+
+**77. Tier 2. CONV-DESIGN-003: an answer that is not a failure and writes nothing.**
+
+- **Item.** X9 at `DeviceService`'s standing check (behind `TrustsAsync` and `RemembersAsync`) and at `LossReports.InvalidateAsync` (question 58).
+- **What the code does.** The standing check answers `false` under its lock, and the sweep answers success with a count of zero where the report was cancelled meanwhile; each commits an empty unit of work.
+- **What the specification says.** "With `CommitAsync` where it succeeds ... with `RollbackAsync` on every other return". Neither answer is a failure of the operation.
+- **Readings.**
+  1. Each is the operation's success and commits.
+  2. An answer that changed nothing rolls back.
+- **Parked.** Those two returns, left committing.
 - **Answer:** pending.
 
 ## 5. Gate result
