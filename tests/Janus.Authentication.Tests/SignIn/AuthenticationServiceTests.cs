@@ -139,6 +139,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             Throttle,
             _notifications,
             Signals,
+            new StepUpGuard(_live, _authenticators, _passwords, Policies, _identifiers, Signals, _clock),
             Codes,
             _configuration,
             _work,
@@ -2045,12 +2046,52 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-FACT-002b AC6: at a step-up the text code is withheld where the carrier
-    /// reports a recent change for the number: the ask is answered as every ask is, and
-    /// no code is issued or sent.
+    /// AUTH-FACT-002 AC7, AUTH-FACT-002b AC6: at a step-up the text code is withheld
+    /// where the carrier reports a recent change for the number: no code is issued or
+    /// sent, the consideration is recorded once, and the ask is answered with the
+    /// strictest of the policy's gates and the combinations left without the text code.
     /// </summary>
     [Fact]
     public async Task AUTH_FACT_002b_AC6_AReportedChangeWithholdsTheTextCodeFromAStepUpAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        Holds(subject, Factor.Totp);
+        Answers(PhoneSignal.Risk);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        Error refused = Refusal(await AskedAsync(began.Challenge, subject, Opened(subject)));
+
+        Assert.Equal(ErrorCodes.StepUpRequired, refused.Code);
+        Assert.Equal("present", refused.Details["outcome"].GetString());
+
+        Gate strictest = await StrictestAsync(subject);
+
+        Assert.Equal(
+            ("aal2", strictest.PhishingResistant, (long)strictest.MaximumAge.TotalSeconds),
+            (
+                refused.Details["required"].GetProperty("level").GetString(),
+                refused.Details["required"].GetProperty("phishingResistant").GetBoolean(),
+                refused.Details["required"].GetProperty("maxAge").GetInt64()));
+        Assert.Equal(
+            [["password", "totp"]],
+            refused.Details["options"].Deserialize<string[][]>());
+        Assert.Equal(JsonValueKind.Null, refused.Details["pendingUntil"].ValueKind);
+        Assert.Empty(_notifications.Texts);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Equal([(Factor.PhoneCode, (PhoneSignal?)PhoneSignal.Risk, (SubjectId?)subject)], _considered.Records);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC7: a step-up left with no combination once the text code is
+    /// withheld is told to report the loss, the account holding the level and being
+    /// unable to present it.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC7_AReportedChangeAtAStepUpLeavingNoCombinationAsksForALossReportAsync()
     {
         SubjectId subject = await AccountAsync();
 
@@ -2060,10 +2101,70 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         SignInChallenge began = await BeganAsync(Address);
 
-        Assert.True((await AskedAsync(began.Challenge, subject)).Match(offered => offered is null, _ => false));
+        Error refused = Refusal(await AskedAsync(began.Challenge, subject, Opened(subject)));
+
+        Assert.Equal(ErrorCodes.StepUpRequired, refused.Code);
+        Assert.Equal("report-loss", refused.Details["outcome"].GetString());
+        Assert.Empty(refused.Details["options"].Deserialize<string[][]>()!);
         Assert.Empty(_notifications.Texts);
-        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
         Assert.Equal([(Factor.PhoneCode, (PhoneSignal?)PhoneSignal.Risk, (SubjectId?)subject)], _considered.Records);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC7, AUTH-STEP-002: a step-up left with no combination by an account
+    /// that never reached the level the strictest gate asks is offered enrolment.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC7_AReportedChangeAtAStepUpThatNeverReachedTheGateOffersEnrolmentAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        Answers(PhoneSignal.Risk);
+        _configuration.Set(
+            Settings.PolicyDefault,
+            Janus.Core.Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Janus.Core.Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
+                Gates = Janus.Core.Policies.SystemDefault.Gates.ToDictionary(
+                    gate => gate.Key,
+                    gate => gate.Key is StepUpAction.AccountSuspend
+                        ? new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5))
+                        : gate.Value),
+            });
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        Error refused = Refusal(await AskedAsync(began.Challenge, subject, Opened(subject)));
+
+        Assert.Equal(ErrorCodes.StepUpRequired, refused.Code);
+        Assert.Equal("enrol", refused.Details["outcome"].GetString());
+        Assert.True(refused.Details["required"].GetProperty("phishingResistant").GetBoolean());
+        Assert.Empty(refused.Details["options"].Deserialize<string[][]>()!);
+    }
+
+    /// <summary>
+    /// `09` `POST /auth/step-up`: a step-up ask whose number answers <c>risk</c>, made
+    /// with no session of the asking account, judges no gate and is refused with no
+    /// details.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC7_AReportedChangeAtAStepUpWithNoSessionOfTheAccountJudgesNoGateAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        Answers(PhoneSignal.Risk);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        Error refused = Refusal(await AskedAsync(began.Challenge, subject, Opened(new SubjectId(Guid.NewGuid()))));
+
+        Assert.Equal(ErrorCodes.StepUpRequired, refused.Code);
+        Assert.Empty(refused.Details);
+        Assert.Empty(_notifications.Texts);
     }
 
     /// <summary>
@@ -2208,9 +2309,59 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Assert.NotEqual(default, subject);
     }
 
-    // AUTH-FACT-002 AC6: the text code asked for, in the language of the ask.
-    private ValueTask<Result<SignInProgress?>> AskedAsync(string challenge, SubjectId? stepping) =>
-        Service.AskAsync(challenge, Factor.PhoneCode, stepping, Source, Language, TestContext.Current.CancellationToken);
+    // AUTH-FACT-002 AC6: the text code asked for, in the language of the ask, at a
+    // sign-in or under the session a step-up raises.
+    private ValueTask<Result<SignInProgress?>> AskedAsync(
+        string challenge,
+        SubjectId? stepping,
+        SessionId? session = null) =>
+        Service.AskAsync(
+            challenge,
+            Factor.PhoneCode,
+            stepping,
+            session,
+            Source,
+            Language,
+            TestContext.Current.CancellationToken);
+
+    private static Error Refusal(Result<SignInProgress?> outcome) =>
+        outcome.Match(
+            _ => throw new Xunit.Sdk.XunitException("The ask was not refused."),
+            error => error);
+
+    // AUTH-STEP-002: what a step-up that names no action is judged against, which is
+    // the strictest of the gates of the policy in force, field by field.
+    private async ValueTask<Gate> StrictestAsync(SubjectId subject) =>
+        (await Policies.ForAsync(subject, TestContext.Current.CancellationToken)).Match(
+            policy => policy.Gates.Values.Aggregate(PolicyStrictness.Strictest),
+            error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+    // A session of the account that proved one factor now, which is what a step-up
+    // raises.
+    private SessionId Opened(SubjectId subject)
+    {
+        var session = Session.Begin(
+            SessionId.New(_clock),
+            subject,
+            new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
+            new SessionOrigin(Source, Browser),
+            _clock.GetUtcNow(),
+            TimeSpan.FromDays(1),
+            TimeSpan.FromDays(30),
+            breakGlassReason: null);
+
+        byte[] secret = new byte[32];
+        byte[] rotation = new byte[32];
+
+        _randomness.GetBytes(secret);
+        _randomness.GetBytes(rotation);
+        _live.AddAsync(session, secret, rotation, TestContext.Current.CancellationToken)
+            .AsTask()
+            .GetAwaiter()
+            .GetResult();
+
+        return session.Id;
+    }
 
     // AUTH-FACT-002b: the deployment's own provider, standing for the carrier.
     private void Answers(PhoneSignal signal) =>

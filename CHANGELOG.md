@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A `phoneCode` code asked for at `POST /auth/step-up`, where the number's signal answers
+  `risk`, is no longer answered 202: nothing is issued, sent or counted, and the ask is
+  answered 403 `auth.stepup.required` with `details` computed without the entry against
+  the strictest of the gates of the policy in force, field by field, the step-up naming
+  no action; `outcome` is `report-loss` or `enrol` where no combination is left.
 - Every event raised with the access context of a person who acted now carries
   `Effective` beside `Actor`, each as the context gives it: `AccountSuspended`,
   `AccountReactivated`, `AccountDeletionRequested` and `AccountDeletionCancelled` raised

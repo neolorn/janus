@@ -44,6 +44,7 @@ namespace Janus.Authentication.SignIn;
 /// <param name="throttle">The progressive delay.</param>
 /// <param name="sending">Where a message goes out.</param>
 /// <param name="signals">What is known about a number before a text leans on it.</param>
+/// <param name="guard">What a step-up left without its text code is judged by.</param>
 /// <param name="codes">The verification codes, which live and die on their own rules.</param>
 /// <param name="configuration">Where the lifetimes and the limits come from.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
@@ -78,6 +79,7 @@ internal sealed class AuthenticationService(
     ThrottleService throttle,
     IGovernedSend sending,
     PhoneSignals signals,
+    StepUpGuard guard,
     VerificationCodes codes,
     IConfigurationStore configuration,
     IUnitOfWork work,
@@ -239,13 +241,16 @@ internal sealed class AuthenticationService(
     /// <param name="challenge">The handle the sign-in or step-up opened with.</param>
     /// <param name="factor">The second step asked for.</param>
     /// <param name="stepping">The account stepping up, or nothing at a sign-in.</param>
+    /// <param name="session">The session the step-up raises, or nothing at a sign-in.</param>
     /// <param name="source">The address the ask came from.</param>
     /// <param name="language">The language the ask was made in.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// Nothing where the ask is answered as every ask is; at a sign-in whose number's
     /// signal answers <c>risk</c>, what the challenge then offers, or
-    /// <c>auth.factor.rejected</c> where it offers nothing; or the refusal of the send.
+    /// <c>auth.factor.rejected</c> where it offers nothing; at a step-up whose number's
+    /// signal answers <c>risk</c>, <c>auth.stepup.required</c> computed without the
+    /// entry; or the refusal of the send.
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     /// <remarks>
@@ -254,12 +259,15 @@ internal sealed class AuthenticationService(
     /// such credential and a policy that does not permit it are sent nothing and
     /// answered as an ask that sent its code. A number whose signal answers
     /// <c>risk</c> after a first factor is sent nothing either, and the sign-in is told
-    /// what is left to present, which an anonymous caller is never told.
+    /// what is left to present, which an anonymous caller is never told. At a step-up,
+    /// whose challenge names no action, what is left is judged against the strictest of
+    /// the policy's gates, field by field (AUTH-STEP-002, D-187).
     /// </remarks>
     public async ValueTask<Result<SignInProgress?>> AskAsync(
         string challenge,
         Factor factor,
         SubjectId? stepping,
+        SessionId? session,
         string source,
         string language,
         CancellationToken cancellationToken)
@@ -303,9 +311,14 @@ internal sealed class AuthenticationService(
             return Result.Failure<SignInProgress?>(failure);
         }
 
-        if (sent || stepping is not null)
+        if (sent)
         {
             return Result.Success<SignInProgress?>(null);
+        }
+
+        if (stepping is not null)
+        {
+            return await WithoutTextsAsync(subject, session, cancellationToken).ConfigureAwait(false);
         }
 
         // AUTH-FACT-002b AC6: the entries a text carries ride the one number, so the
@@ -1001,6 +1014,29 @@ internal sealed class AuthenticationService(
         failure = error;
 
         return default!;
+    }
+
+    // AUTH-FACT-002 AC7, AUTH-STEP-002 (D-187): a step-up whose text code the signal
+    // withheld is answered with what it then offers. Its challenge names no action, so
+    // that is judged against the strictest of the policy's gates, field by field, on the
+    // session the step-up raises; a session that is not the account's judges no gate, and
+    // one that already meets that gate is refused nothing.
+    private async ValueTask<Result<SignInProgress?>> WithoutTextsAsync(
+        SubjectId subject,
+        SessionId? session,
+        CancellationToken cancellationToken)
+    {
+        if (session is not SessionId raising)
+        {
+            return Result.Failure<SignInProgress?>(Error.From(ErrorCodes.StepUpRequired));
+        }
+
+        return (await guard.ChallengeWithoutTextsAsync(subject, raising, cancellationToken).ConfigureAwait(false))
+            .Match(
+                left => StepUpRefusal.Met(left)
+                    ? Result.Success<SignInProgress?>(null)
+                    : Result.Failure<SignInProgress?>(StepUpRefusal.Of(left)),
+                Result.Failure<SignInProgress?>);
     }
 
     // The account an identifier opens a sign-in for, the identifier itself where it is

@@ -130,7 +130,7 @@ internal sealed class StepUpGuard(
         SessionId session,
         StepUpAction action,
         CancellationToken cancellationToken) =>
-        ChallengedAsync(subject, session, action, enrolling: null, cancellationToken);
+        ChallengedAsync(subject, session, action, enrolling: null, textsWithheld: false, cancellationToken);
 
     /// <summary>
     /// What a session's proof amounts to against a gate named rather than enumerated:
@@ -156,8 +156,32 @@ internal sealed class StepUpGuard(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(gate);
 
-        return ChallengedAsync(subject, session, Named(gate), enrolling: null, cancellationToken);
+        return ChallengedAsync(subject, session, Named(gate), enrolling: null, textsWithheld: false, cancellationToken);
     }
+
+    /// <summary>
+    /// What a session's proof amounts to at a step-up that names no action, once the
+    /// carrier's signal has withheld the entries a text carries: the strictest of the
+    /// policy's gates, field by field, and the combinations left without those entries.
+    /// </summary>
+    /// <param name="subject">Whose account is stepping up.</param>
+    /// <param name="session">The session the step-up raises.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The challenge, met or not, or the refusal where the session is not the
+    /// account's.
+    /// </returns>
+    /// <remarks>
+    /// Implements AUTH-FACT-002 AC7 and AUTH-STEP-002 (D-187). The step-up's challenge
+    /// names no action, so it costs what a gate no policy states values for costs. The
+    /// signal was asked, and its consideration recorded, at the ask that came here; it
+    /// is not asked again.
+    /// </remarks>
+    public ValueTask<Result<StepUpChallenge>> ChallengeWithoutTextsAsync(
+        SubjectId subject,
+        SessionId session,
+        CancellationToken cancellationToken) =>
+        ChallengedAsync(subject, session, action: null, enrolling: null, textsWithheld: true, cancellationToken);
 
     /// <summary>
     /// What a named gate costs under the principal's policy, which a gate judged from a
@@ -206,7 +230,7 @@ internal sealed class StepUpGuard(
         StepUpAction action,
         Factor? enrolling,
         CancellationToken cancellationToken) =>
-        (await ChallengedAsync(subject, session, action, enrolling, cancellationToken).ConfigureAwait(false))
+        (await ChallengedAsync(subject, session, action, enrolling, textsWithheld: false, cancellationToken).ConfigureAwait(false))
             .Match<Error?>(
                 challenge => StepUpRefusal.Met(challenge) ? null : StepUpRefusal.Of(challenge),
                 error => error);
@@ -216,6 +240,7 @@ internal sealed class StepUpGuard(
         SessionId session,
         StepUpAction? action,
         Factor? enrolling,
+        bool textsWithheld,
         CancellationToken cancellationToken)
     {
         Session? live = await sessions.FindAsync(session, cancellationToken).ConfigureAwait(false);
@@ -254,10 +279,14 @@ internal sealed class StepUpGuard(
         // AUTH-FACT-002b AC6: where the carrier reports a recent change of SIM or of
         // network for the number, the entries a text carries are withheld from the
         // combinations offered; where none is left, the answer is the one an account
-        // that cannot reach the gate is given, and never a pass.
-        IReadOnlySet<Factor> withheld = challenge.Outcome is StepUpOutcome.Present
-            ? await WithheldAsync(subject, challenge.Combinations, cancellationToken).ConfigureAwait(false)
-            : FrozenSet<Factor>.Empty;
+        // that cannot reach the gate is given, and never a pass. An ask the signal
+        // already refused withholds every such entry the account could present, the one
+        // number carrying them all, and asks nothing again.
+        IReadOnlySet<Factor> withheld = textsWithheld
+            ? held.Usable.Where(usable => FactorCatalogue.Of(usable).Restricted).ToFrozenSet()
+            : challenge.Outcome is StepUpOutcome.Present
+                ? await WithheldAsync(subject, challenge.Combinations, cancellationToken).ConfigureAwait(false)
+                : FrozenSet<Factor>.Empty;
 
         return Result.Success(withheld.Count is 0
             ? challenge
