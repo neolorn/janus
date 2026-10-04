@@ -77,24 +77,26 @@ public sealed class BotDefenceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-008 AC2 and AC3: more registration sessions from one source in an
-    /// hour than the deployment admits presents one too.
+    /// AUTH-ABUSE-008 AC2 and AC3: the session a request would create is counted with
+    /// those already created from its source in the hour, so with the default of three
+    /// the fourth is shown the challenge, and a session older than the hour counts for
+    /// nothing.
     /// </summary>
     [Fact]
-    public async Task AUTH_ABUSE_008_AC3_RepeatedAttemptsFromOneSourcePresentAChallengeAsync()
+    public async Task AUTH_ABUSE_008_AC3_TheSessionTheRequestWouldCreateCountsTowardRepeatedAttemptsAsync()
     {
-        _configuration.Set(Settings.AbuseBotDefenceRepeatedAttempts, 2);
         _verifier = new ChallengeVerifier((_, _) => ValueTask.FromResult(false));
-
-        _sources.Given(Ordinary, Noon - TimeSpan.FromMinutes(90), Noon - TimeSpan.FromMinutes(80));
-
-        await PassedAsync(Ordinary);
 
         _sources.Given(
             Ordinary,
-            Noon - TimeSpan.FromMinutes(30),
+            Noon - TimeSpan.FromMinutes(90),
             Noon - TimeSpan.FromMinutes(20),
             Noon - TimeSpan.FromMinutes(10));
+
+        await PassedAsync(Ordinary);
+        Assert.Empty(_audit.Records);
+
+        _sources.Given(Ordinary, Noon - TimeSpan.FromMinutes(5));
 
         Assert.Equal(ErrorCodes.ChallengeRequired, Refusal(await CheckedAsync(Ordinary, null)));
         Assert.Equal(

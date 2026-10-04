@@ -140,16 +140,16 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
 
     /// <summary>
     /// AUTH-ABUSE-008 AC3: the sessions are counted by the source of the request, so
-    /// addresses of one IPv6 /64 are one source (AUTH-ABUSE-001), more sessions from it
-    /// in an hour than the deployment admits present the challenge, and each session
-    /// holds the whole address it was started from.
+    /// addresses of one IPv6 /64 are one source (AUTH-ABUSE-001), the session a request
+    /// would create is counted with those the source already has in the hour, and each
+    /// session holds the whole address it was started from.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
     public async Task AUTH_ABUSE_008_AC3_SessionsAreCountedByTheSourceOfTheRequestAsync()
     {
         await using Deployment deployment = Challenging();
-        deployment.Configuration.Set(Settings.AbuseBotDefenceRepeatedAttempts, 1);
+        deployment.Configuration.Set(Settings.AbuseBotDefenceRepeatedAttempts, 2);
 
         var first = IPAddress.Parse("2001:db8:1:2::1");
         var second = IPAddress.Parse("2001:db8:1:2::2");

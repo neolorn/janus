@@ -3140,3 +3140,7 @@ against the public contract of LIB-API-001.
 - `IRegistration.BeginAsync` takes the whole address of the request as `ipAddress`, the
   source its sessions are counted against as `source`, and the challenge token as
   `challengeToken`.
+- The `repeatedAttempts` signal counts the registration session a request would create
+  with those its source already created in the hour: with
+  `abuse.botdefence.repeatedattempts` at its default of 3, the fourth session from one
+  source in an hour is the one challenged.

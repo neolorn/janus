@@ -34,14 +34,14 @@ public sealed partial class RegistrationServiceTests
     }
 
     /// <summary>
-    /// AUTH-ABUSE-008 AC2 and AC3: each session created is counted against its source,
-    /// so more of them from one source in an hour than the deployment admits presents
-    /// the challenge, and another source is not held to that count.
+    /// AUTH-ABUSE-008 AC2 and AC3: each session created is counted against its source
+    /// and the one a request would create is counted with them, so with the default of
+    /// three the fourth from one source in an hour presents the challenge, and another
+    /// source is not held to that count.
     /// </summary>
     [Fact]
-    public async Task AUTH_ABUSE_008_AC2_RepeatedSessionsFromOneSourcePresentAChallengeAsync()
+    public async Task AUTH_ABUSE_008_AC3_TheFourthSessionFromOneSourceInAnHourPresentsAChallengeAsync()
     {
-        _configuration.Set(Settings.AbuseBotDefenceRepeatedAttempts, 2);
         Verifying();
 
         _ = Ok(await BegunFromAsync(Source));

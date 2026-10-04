@@ -25,8 +25,8 @@ public sealed class RegistrationBeginStoreTests(HostFixture host) : IClassFixtur
     private const string Source = "2001:db8:7:7::/64";
 
     /// <summary>
-    /// AUTH-ABUSE-008 AC3 and AC4: more sessions from one source in an hour than
-    /// <c>abuse.botdefence.repeatedattempts</c> fire the signal; with no verifier
+    /// AUTH-ABUSE-008 AC3 and AC4: the session that makes more from one source in an hour
+    /// than <c>abuse.botdefence.repeatedattempts</c> fires the signal; with no verifier
     /// declared it is recorded as <c>auth.botdefence.signalled</c> and the session is
     /// created, and every session created is counted.
     /// </summary>
@@ -37,7 +37,7 @@ public sealed class RegistrationBeginStoreTests(HostFixture host) : IClassFixtur
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         int admitted = Settings.AbuseBotDefenceRepeatedAttempts.Default;
 
-        for (int begun = 0; begun <= admitted; begun++)
+        for (int begun = 0; begun < admitted; begun++)
         {
             await BeginAsync(cancellationToken);
         }
@@ -50,10 +50,10 @@ public sealed class RegistrationBeginStoreTests(HostFixture host) : IClassFixtur
 
         Assert.Equal(1, await SignalledAsync());
         Assert.Equal(
-            admitted + 2,
+            admitted + 1,
             await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM identity.registration_sources"));
         Assert.Equal(
-            admitted + 2,
+            admitted + 1,
             await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM identity.registration_sessions"));
     }
 

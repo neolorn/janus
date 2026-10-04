@@ -174,6 +174,9 @@ internal sealed class BotDefence(
             .SinceAsync(source, now - Hour, cancellationToken)
             .ConfigureAwait(false);
 
-        return started > repeated ? BotDefenceSignal.RepeatedAttempts : null;
+        // AUTH-ABUSE-008 AC3: the session this request would create counts with those
+        // already created, so the one that makes more than the setting is the one
+        // challenged.
+        return started + 1 > repeated ? BotDefenceSignal.RepeatedAttempts : null;
     }
 }
