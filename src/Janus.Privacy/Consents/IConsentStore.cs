@@ -150,4 +150,19 @@ internal interface IConsentStore
         string document,
         string version,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Stamps as superseded, in one statement, every live consent of the purposes named
+    /// that was recorded against another document than the one its purpose names, and
+    /// answers which it stamped. A consent another transaction stamps meanwhile is
+    /// stamped by one of the two and answered to that one alone (PRIV-CONS-007 AC5).
+    /// </summary>
+    /// <param name="documents">The document each consent-based purpose now names, by purpose.</param>
+    /// <param name="at">When they were ended.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The consents it stamped, which is nothing where none was live against another document.</returns>
+    ValueTask<IReadOnlyList<EndedConsent>> SupersedeAgainstAnotherAsync(
+        IReadOnlyDictionary<string, string> documents,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
 }

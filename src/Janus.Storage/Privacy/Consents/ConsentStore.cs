@@ -72,6 +72,19 @@ internal sealed class ConsentStore(StoreContext context, DataConnections connect
             AND withdrawn_at IS NULL AND superseded_at IS NULL;
         """;
 
+    // PRIV-CONS-007 AC5: one conditional statement over every purpose at once. A row
+    // another start stamps first is held until that start commits and then fails the
+    // condition, so it is stamped once and answered to one of the two.
+    private const string SupersedeAgainstAnother =
+        """
+        UPDATE identity.consents AS held SET superseded_at = @at
+        FROM unnest(@purposes, @documents) AS named(purpose, document)
+        WHERE held.purpose = named.purpose
+            AND held.document <> named.document
+            AND held.withdrawn_at IS NULL AND held.superseded_at IS NULL
+        RETURNING held.subject, held.purpose;
+        """;
+
     private const string WithdrawObjection =
         """
         UPDATE identity.objections SET withdrawn_at = @at
@@ -232,6 +245,32 @@ internal sealed class ConsentStore(StoreContext context, DataConnections connect
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false))
                 .Select(consent => new HeldConsent(consent.Subject, Read(consent))),
+        ];
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<EndedConsent>> SupersedeAgainstAnotherAsync(
+        IReadOnlyDictionary<string, string> documents,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(documents);
+
+        string[] purposes = [.. documents.Keys];
+        string[] named = [.. purposes.Select(purpose => documents[purpose])];
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        return
+        [
+            .. (await ambient.Connection
+                    .QueryAsync<(Guid Subject, string Purpose)>(new CommandDefinition(
+                        SupersedeAgainstAnother,
+                        new { purposes, documents = named, at },
+                        ambient.Transaction,
+                        cancellationToken: cancellationToken))
+                    .ConfigureAwait(false))
+                .Select(ended => new EndedConsent(new SubjectId(ended.Subject), ended.Purpose)),
         ];
     }
 

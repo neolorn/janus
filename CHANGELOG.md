@@ -2615,3 +2615,8 @@ against the public contract of LIB-API-001.
 - Startup refuses a relationship source whose context maps the ancestry and the
   effective grants and not the consented resources, with
   `model.startup.declarationinvalid` naming the source and `context`.
+- At start, before the server serves, every live consent of a consent-based purpose
+  recorded against another document than the one the declaration now names for that
+  purpose is stamped superseded, with `ConsentChanged` `superseded` raised for each in
+  the same transaction. The stamp is one conditional statement, so of several processes
+  starting each consent is stamped and announced once.

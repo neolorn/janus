@@ -83,7 +83,7 @@ internal sealed class Supersession(
                 .PublishAsync(
                     new ConsentChanged(
                         at,
-                        Key(one, at),
+                        Key(one.Subject, one.Consent.Purpose, at),
                         one.Consent.Purpose,
                         ConsentChange.Superseded)
                     {
@@ -101,8 +101,16 @@ internal sealed class Supersession(
         return Result.Success(ended);
     }
 
-    private static string Key(HeldConsent one, DateTimeOffset at) =>
-        one.Subject.ToString()
-        + ":" + one.Consent.Purpose
+    /// <summary>
+    /// The key a superseded consent is announced under, one a subject, a purpose and
+    /// an instant, so a delivery made again is the same announcement.
+    /// </summary>
+    /// <param name="subject">Whose consent ended.</param>
+    /// <param name="purpose">The purpose it was given for.</param>
+    /// <param name="at">When it ended.</param>
+    /// <returns>The key.</returns>
+    internal static string Key(SubjectId subject, string purpose, DateTimeOffset at) =>
+        subject.ToString()
+        + ":" + purpose
         + ":Superseded@" + at.ToString("O", CultureInfo.InvariantCulture);
 }

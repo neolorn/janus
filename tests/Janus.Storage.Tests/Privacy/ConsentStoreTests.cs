@@ -322,6 +322,80 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
     }
 
     /// <summary>
+    /// PRIV-CONS-007 AC5: one statement stamps every live consent recorded against
+    /// another document than the one its purpose names, answers which it stamped, and
+    /// leaves a consent against the named document, a withdrawn one and one of a
+    /// purpose it was not asked about as they were.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_007_AC5_OneStatementStampsEveryLiveConsentAgainstAnotherDocumentAsync()
+    {
+        string moved = "moved-" + Guid.NewGuid().ToString("n");
+        string kept = "kept-" + Guid.NewGuid().ToString("n");
+        SubjectId behind = await RegisteredAsync();
+        SubjectId current = await RegisteredAsync();
+        SubjectId withdrawn = await RegisteredAsync();
+
+        await GrantedAsync(behind, Granted(moved, "1"));
+        await GrantedAsync(behind, Granted(kept, "1"));
+        await GrantedAsync(current, Granted(moved, "1") with { Document = "moved-terms" });
+        await GrantedAsync(withdrawn, Granted(moved, "1"));
+        Assert.True(await WritingAsync(store => store.WithdrawConsentAsync(
+            withdrawn,
+            moved,
+            Noon.AddDays(1),
+            TestContext.Current.CancellationToken)));
+
+        IReadOnlyList<EndedConsent> ended = await SupersededOnceAsync(moved, "moved-terms", Noon.AddDays(2));
+
+        Assert.Equal([new EndedConsent(behind, moved)], ended);
+        Assert.Equal(
+            [Noon.AddDays(2), null],
+            (await ConsentsAsync(behind))
+                .OrderByDescending(held => held.Purpose, StringComparer.Ordinal)
+                .Select(held => held.SupersededAt));
+        Assert.Null(Assert.Single(await ConsentsAsync(current)).SupersededAt);
+        Assert.Null(Assert.Single(await ConsentsAsync(withdrawn)).SupersededAt);
+        Assert.Empty(await SupersededOnceAsync(moved, "moved-terms", Noon.AddDays(3)));
+    }
+
+    /// <summary>
+    /// PRIV-CONS-007 AC5: two starts at once stamp each consent once: the statement of
+    /// the second waits for the first and then finds nothing left to stamp.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_007_AC5_TwoStartsAtOnceStampEachConsentOnceAsync()
+    {
+        string moved = "moved-" + Guid.NewGuid().ToString("n");
+        SubjectId[] subjects =
+        [
+            await RegisteredAsync(),
+            await RegisteredAsync(),
+            await RegisteredAsync(),
+        ];
+
+        foreach (SubjectId subject in subjects)
+        {
+            await GrantedAsync(subject, Granted(moved, "1"));
+        }
+
+        IReadOnlyList<EndedConsent>[] ended = await Task.WhenAll(
+            SupersededOnceAsync(moved, "moved-terms", Noon.AddDays(2)),
+            SupersededOnceAsync(moved, "moved-terms", Noon.AddDays(2)));
+
+        Assert.Equal(
+            subjects.OrderBy(subject => subject.Value),
+            ended.SelectMany(each => each).Select(one => one.Subject).OrderBy(subject => subject.Value));
+
+        foreach (SubjectId subject in subjects)
+        {
+            Assert.Equal(Noon.AddDays(2), Assert.Single(await ConsentsAsync(subject)).SupersededAt);
+        }
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-001a: an objection reads back as it was written, and withdrawing it
     /// leaves the record standing with the timestamp that ended it.
     /// </summary>
@@ -551,6 +625,29 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
 
         return await new ConsentStore(reading, new DataConnections(reading))
             .ObjectionsAsync(subject, TestContext.Current.CancellationToken);
+    }
+
+    // The stamp as a start makes it: in a transaction of its own, over the one purpose
+    // the case declares and the document it now names.
+    private async Task<IReadOnlyList<EndedConsent>> SupersededOnceAsync(
+        string purpose,
+        string document,
+        DateTimeOffset at)
+    {
+        await using StoreContext writing = database.Context();
+        await using var work = new UnitOfWork(writing);
+        var store = new ConsentStore(writing, new DataConnections(writing));
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        IReadOnlyList<EndedConsent> ended = await store.SupersedeAgainstAnotherAsync(
+            new Dictionary<string, string>(StringComparer.Ordinal) { [purpose] = document },
+            at,
+            TestContext.Current.CancellationToken);
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return ended;
     }
 
     // A grant as two requests make one at the same moment: each in a transaction of its

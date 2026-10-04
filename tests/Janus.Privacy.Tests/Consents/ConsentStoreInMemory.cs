@@ -208,5 +208,31 @@ internal sealed class ConsentStoreInMemory : IConsentStore
         ]);
     }
 
+    /// <inheritdoc/>
+    public ValueTask<IReadOnlyList<EndedConsent>> SupersedeAgainstAnotherAsync(
+        IReadOnlyDictionary<string, string> documents,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(documents);
+
+        List<EndedConsent> ended = [];
+
+        for (int index = 0; index < _consents.Count; index++)
+        {
+            (SubjectId subject, ConsentRecord record) = _consents[index];
+
+            if (record.Live
+                && documents.TryGetValue(record.Purpose, out string? named)
+                && !Same(record.Document, named))
+            {
+                _consents[index] = (subject, record with { SupersededAt = at });
+                ended.Add(new EndedConsent(subject, record.Purpose));
+            }
+        }
+
+        return ValueTask.FromResult<IReadOnlyList<EndedConsent>>(ended);
+    }
+
     private static bool Same(string one, string other) => string.Equals(one, other, StringComparison.Ordinal);
 }

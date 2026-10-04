@@ -44,6 +44,7 @@ internal static class PrivacyRegistration
         services.AddScoped<ILegalDocuments, LegalDocumentService>();
         services.AddScoped<AdministrativeScope>();
         services.AddScoped<Supersession>();
+        services.AddScoped<DocumentSupersession>();
         services.AddScoped<IConsents, ConsentService>();
         services.AddScoped<WorkingCalendar>();
         services.AddScoped<RestrictionGrant>();

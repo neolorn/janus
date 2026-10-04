@@ -314,6 +314,43 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
     }
 
     /// <summary>
+    /// PRIV-CONS-007 AC5: a start whose declaration names another document for a
+    /// consent-based purpose stamps the live consent recorded against the earlier one
+    /// superseded and announces it, a second start does neither again, and a consent
+    /// recorded against the document now named stands.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_007_AC5_AStartStampsAConsentAgainstAnotherDocumentOnceAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+        SubjectId behind = await deployment.AccountAsync(cancellationToken);
+        SubjectId current = await deployment.AccountAsync(cancellationToken);
+
+        await ConsentedAsync(behind, "privacy-notice", cancellationToken);
+        await ConsentedAsync(current, "recommendation-terms", cancellationToken);
+
+        using (IHost first = Deployed(document: "recommendation-terms"))
+        {
+            await first.StartAsync(cancellationToken);
+            await first.StopAsync(cancellationToken);
+        }
+
+        (bool Superseded, int Announced) once = await SupersededAsync(behind);
+
+        using (IHost second = Deployed(document: "recommendation-terms"))
+        {
+            await second.StartAsync(cancellationToken);
+            await second.StopAsync(cancellationToken);
+        }
+
+        Assert.Equal((true, 1), once);
+        Assert.Equal((true, 1), await SupersededAsync(behind));
+        Assert.Equal((false, 0), await SupersededAsync(current));
+    }
+
+    /// <summary>
     /// LIB-HOST-001, REG-PM-001: the frontend's pages are a declaration with no
     /// default, so a deployment that registered none is stopped as it starts rather
     /// than answering a password manager as a site that offers neither page.
@@ -1071,6 +1108,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
             typeof(ProviderStartService),
             typeof(RelayValidationService),
             typeof(LawfulBasisStartService),
+            typeof(DocumentSupersessionStartService),
         ];
 
         Assert.Equal(leading, provider.GetServices<IHostedService>().Take(leading.Length).Select(service => service.GetType()));
@@ -1606,6 +1644,44 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
             SELECT payload->>'Condition', payload->>'Severity', payload->'Details'->>'domain'
             FROM identity.events WHERE kind = 'AlertRaised' ORDER BY id
             """)];
+    }
+
+    // A written consent to the recommendations purpose, recorded against the document
+    // given, as a release before the one starting recorded it.
+    private async Task ConsentedAsync(SubjectId subject, string document, CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO identity.consents
+                (id, subject, purpose, document, notice_version, mechanism, kind, granted_at)
+            VALUES (@id, @subject, 'recommendations', @document, '1', 'dashboard', 'written', @at);
+            """,
+            new { id = Guid.CreateVersion7(), subject = subject.Value, document, at = Deployment.Noon },
+            cancellationToken: cancellationToken));
+    }
+
+    // Whether the subject's consent to the recommendations purpose is stamped
+    // superseded, and how many times its supersession was announced, as the rows of
+    // the events table (PRIV-CONS-007 AC5, CONV-DESIGN-002).
+    private async Task<(bool Superseded, int Announced)> SupersededAsync(SubjectId subject)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return (
+            await connection.ExecuteScalarAsync<bool>(
+                """
+                SELECT superseded_at IS NOT NULL FROM identity.consents
+                WHERE subject = @subject AND purpose = 'recommendations'
+                """,
+                new { subject = subject.Value }),
+            await connection.ExecuteScalarAsync<int>(
+                """
+                SELECT count(*)::int FROM identity.events
+                WHERE kind = 'ConsentChanged' AND payload->>'IdempotencyKey' LIKE @key
+                """,
+                new { key = subject + ":recommendations:Superseded@%" }));
     }
 
     private async Task WriteAsync(string statement, CancellationToken cancellationToken)
