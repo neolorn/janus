@@ -2975,3 +2975,6 @@ against the public contract of LIB-API-001.
   verification. A code presented after the attempt cap is now answered
   `auth.code.expired` where it was answered `auth.code.invalid`. A code outstanding
   when this version is deployed no longer verifies: a resend replaces it.
+- `GET /register/events` answers a browser that carries no registration session 404
+  `authz.resource.notfound`, with the body every refusal carries, where it answered a
+  404 with no body.
