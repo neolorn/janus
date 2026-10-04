@@ -24,4 +24,22 @@ internal interface ISubjectRestrictions
     /// not: it holds no grant either, so nothing is conferred to restrict.
     /// </returns>
     ValueTask<bool> IsRestrictedAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Whether the subject's processing is restricted, read with the account's row held
+    /// until the open transaction ends, so that a restriction commits before this read
+    /// or after that transaction.
+    /// </summary>
+    /// <param name="subject">The account.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Whether it is restricted as committed when the hold was taken, or nothing where
+    /// no transaction is open, in which nothing can be held.
+    /// </returns>
+    /// <remarks>
+    /// Implements AUTHZ-GATE-006 (D-183) and CONV-DESIGN-003. The hold is shared, so
+    /// actions of one account do not wait for each other, and a transaction that already
+    /// holds the row for a change of its own takes it again without waiting.
+    /// </remarks>
+    ValueTask<bool?> HoldAsync(SubjectId subject, CancellationToken cancellationToken);
 }

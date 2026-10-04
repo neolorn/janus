@@ -81,4 +81,35 @@ internal sealed class SubjectSets(
 
         return resolved;
     }
+
+    /// <summary>
+    /// Whether a modifying action of the principal is refused by a processing
+    /// restriction.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Whether the account is restricted, which a principal holding no account is not.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The context is absent.</exception>
+    /// <remarks>
+    /// Implements AUTHZ-GATE-006 (D-183). Inside a transaction the state is read with
+    /// the account's row held to that transaction's end, and never from the set resolved
+    /// before it, so a restriction commits before the action, which is refused here, or
+    /// after it. Outside one nothing can be held, and the resolved set answers.
+    /// </remarks>
+    public async ValueTask<bool> RestrictedAsync(
+        AccessContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Effective is not SubjectId subject)
+        {
+            return false;
+        }
+
+        return await restrictions.HoldAsync(subject, cancellationToken).ConfigureAwait(false)
+            ?? (await OfAsync(context, cancellationToken).ConfigureAwait(false)).Restricted;
+    }
 }

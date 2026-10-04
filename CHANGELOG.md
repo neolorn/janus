@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The gate judges a processing restriction with the account's row held wherever it is
+  asked for a modifying action inside an open unit of work, a host's own included: the
+  row is locked `FOR SHARE` to the end of that transaction and the state is read under
+  the lock, so a restriction commits before the action, which is then refused
+  `authz.restricted`, or after it. A reading action holds nothing.
 - The shipped mail-server adapter lists an account whose `emailAddress` does not read as
   an email address, or that holds none, with no address, where it failed the listing
   for an account holding none. Reconciliation reads such a listing whole: the account

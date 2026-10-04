@@ -28,4 +28,18 @@ internal sealed class SubjectRestrictions(StoreContext context) : ISubjectRestri
                 account => account.Subject == subject && account.State == AccountState.Restricted,
                 cancellationToken)
             .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask<bool?> HoldAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        // The transaction is the scope's, whoever opened it: an operation of the
+        // library, or a host that began the unit of work its own action writes in.
+        if (context.Database.CurrentTransaction is null)
+        {
+            return null;
+        }
+
+        return await AccountStore.SharedAsync(context, subject, cancellationToken).ConfigureAwait(false)
+            is AccountState.Restricted;
+    }
 }

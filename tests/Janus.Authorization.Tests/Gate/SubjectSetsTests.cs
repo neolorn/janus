@@ -173,6 +173,53 @@ public sealed class SubjectSetsTests
             property => Assert.DoesNotContain(property.Name, NotHeld, StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: inside a transaction a restriction is judged on the state
+    /// read with the account's row held, never on the set resolved before it, so one
+    /// committed after the set was resolved refuses.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_InsideATransactionTheRestrictionIsReadUnderTheHoldAsync()
+    {
+        var restrictions = new RestrictionsInMemory();
+        var sets = new SubjectSets(new GroupsInMemory(), new GrantsInMemory(), restrictions, new AdministrativeOrganizationInMemory());
+        SubjectId subject = Subject();
+        var context = AccessContext.Of(subject);
+
+        Assert.False(await sets.RestrictedAsync(context, TestContext.Current.CancellationToken));
+        Assert.Empty(restrictions.Held);
+
+        restrictions.Restrict(subject);
+
+        Assert.False(await sets.RestrictedAsync(context, TestContext.Current.CancellationToken));
+
+        restrictions.InTransaction = true;
+
+        Assert.True(await sets.RestrictedAsync(context, TestContext.Current.CancellationToken));
+        Assert.Equal([subject], restrictions.Held);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006: a principal holding no account has no row to hold and no
+    /// restriction to be refused by.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_APrincipalWithNoAccountHoldsNoRowAsync()
+    {
+        var restrictions = new RestrictionsInMemory { InTransaction = true };
+        var sets = new SubjectSets(new GroupsInMemory(), new GrantsInMemory(), restrictions, new AdministrativeOrganizationInMemory());
+
+        Assert.False(await sets.RestrictedAsync(
+            AccessContext.Of(SystemPrincipal.ForOrganization(
+                "retention",
+                "the nightly sweep",
+                new OrganizationId(Guid.NewGuid()))),
+            TestContext.Current.CancellationToken));
+        Assert.Empty(restrictions.Held);
+    }
+
     private static SubjectId Subject()
     {
         using var randomness = RandomNumberGenerator.Create();

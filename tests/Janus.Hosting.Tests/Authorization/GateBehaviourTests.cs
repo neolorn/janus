@@ -1883,6 +1883,173 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         Assert.False(await ChecksAsync(nested.Account, nested.Record, HostPermissions.Edit));
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction committed after a modifying action passed the
+    /// gate step refuses it where the gate is asked again inside the action's unit of
+    /// work, on a record and on the account's own settings alike, and a reading action
+    /// stays admitted.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedAfterTheGateStepRefusesInsideTheUnitOfWorkAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Edit]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        IAccessGate gate = scope.ServiceProvider.GetRequiredService<IAccessGate>();
+        ISettingsRestriction settings = scope.ServiceProvider.GetRequiredService<ISettingsRestriction>();
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var context = AccessContext.Of(nested.Account);
+
+        Assert.True((await gate.RequireAsync(
+                context, HostPermissions.Edit, nested.Record, Sources(reading), cancellationToken))
+            .Match(() => true, _ => false));
+        Assert.Null(await settings.RefusedAsync(context, cancellationToken));
+
+        await nested.Deployment.RestrictAsync(nested.Account, cancellationToken);
+
+        _ = await work.BeginAsync(cancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.Restricted,
+            (await gate.RequireAsync(context, HostPermissions.Edit, nested.Record, Sources(reading), cancellationToken))
+                .Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.Equal(ErrorCodes.Restricted, (await settings.RefusedAsync(context, cancellationToken))?.Code);
+        Assert.True((await gate.RequireAsync(
+                context, HostPermissions.Read, nested.Record, Sources(reading), cancellationToken))
+            .Match(() => true, _ => false));
+
+        await work.RollbackAsync();
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction begun while an admitted action holds the row
+    /// waits for that action to commit, a host's action in a unit of work it opened
+    /// included, and decides the account's next action.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionBegunWhileAnAdmittedActionHoldsTheRowWaitsForItAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Edit]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        Task restricted;
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            await using HostContext reading = host.Context();
+
+            IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+            _ = await work.BeginAsync(cancellationToken);
+
+            Assert.True((await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                    .RequireAsync(
+                        AccessContext.Of(nested.Account),
+                        HostPermissions.Edit,
+                        nested.Record,
+                        Sources(reading),
+                        cancellationToken))
+                .Match(() => true, _ => false));
+
+            restricted = nested.Deployment.RestrictAsync(nested.Account, cancellationToken);
+
+            await WaitingOnTheAccountAsync(cancellationToken);
+
+            Assert.False(restricted.IsCompleted);
+
+            _ = await work.CommitAsync(cancellationToken);
+        }
+
+        await restricted.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.Restricted,
+            await RefusalAsync(nested.Account, nested.Record, HostPermissions.Edit));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006: a reading action is refused by no restriction, so inside a unit
+    /// of work it holds no row and a restriction does not wait for it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AReadingActionInsideAUnitOfWorkHoldsNoRowAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Edit]);
+
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account),
+            nested.Role,
+            nested.Record,
+            false,
+            null,
+            null,
+            cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+        _ = await work.BeginAsync(cancellationToken);
+
+        Assert.True((await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .RequireAsync(
+                    AccessContext.Of(nested.Account),
+                    HostPermissions.Read,
+                    nested.Record,
+                    Sources(reading),
+                    cancellationToken))
+            .Match(() => true, _ => false));
+
+        await nested.Deployment
+            .RestrictAsync(nested.Account, cancellationToken)
+            .WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
+
+        await work.RollbackAsync();
+    }
+
+    // A statement is waiting on a lock of the accounts table, as the database itself
+    // reports it, so the case lets the holder commit only then.
+    private async Task WaitingOnTheAccountAsync(CancellationToken cancellationToken)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        bounded.CancelAfter(TimeSpan.FromSeconds(30));
+
+        while (await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                   "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%identity.accounts%'",
+                   cancellationToken: bounded.Token)) == 0)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(20), bounded.Token);
+        }
+    }
+
     private async Task<Capability> CapabilityAsync(Nested nested)
     {
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();

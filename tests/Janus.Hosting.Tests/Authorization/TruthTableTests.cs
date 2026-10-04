@@ -115,6 +115,13 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a grant in the administrative organization, to an account holding no membership of it", Decided.Denied),
         ("a check by background work, which holds no grant", Decided.Denied),
         ("a check refused inside work the caller rolls back", Decided.Denied),
+        ("a modifying check asked again inside the caller's unit of work", Decided.Allowed),
+        (
+            "a modifying check asked again inside the caller's unit of work, by a caller restricted since the gate step",
+            Decided.Restricted),
+        (
+            "a settings change asked again inside its unit of work, by a caller restricted since the gate step",
+            Decided.Restricted),
         ("a lookup of a record a fact in the host's data reaches, by a caller reading grants", Decided.Allowed),
         ("a fact in the host's data no grant was materialised for, after the drift check", Decided.Allowed),
         ("a materialised grant the host's data no longer supports, after the drift check", Decided.Denied),
@@ -782,6 +789,15 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "a check refused inside work the caller rolls back":
                 return await RolledBackAsync(caller, deployment.Organization);
 
+            case "a modifying check asked again inside the caller's unit of work":
+                return await AskedAgainAsync(deployment, caller, restricted: false, settings: false);
+
+            case "a modifying check asked again inside the caller's unit of work, by a caller restricted since the gate step":
+                return await AskedAgainAsync(deployment, caller, restricted: true, settings: false);
+
+            case "a settings change asked again inside its unit of work, by a caller restricted since the gate step":
+                return await AskedAgainAsync(deployment, caller, restricted: true, settings: true);
+
             case "a lookup of a record a fact in the host's data reaches, by a caller reading grants":
                 return await ViewedAsync(deployment, caller);
 
@@ -868,6 +884,48 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 AccessContext.Of(check.Principal),
                 TestContext.Current.CancellationToken))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    // AUTHZ-GATE-006 AC3: a modifying action that passed the gate step, asked again inside
+    // the unit of work it writes in, where the account's row is held. A restriction
+    // committed between the two refuses the second, and the case is decided by it.
+    private async Task<Decided> AskedAgainAsync(
+        Deployment deployment,
+        SubjectId caller,
+        bool restricted,
+        bool settings)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using AsyncServiceScope working = host.Services.CreateAsyncScope();
+
+        IUnitOfWork work = working.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var context = AccessContext.Of(caller);
+
+        async Task<Decided> AskAsync() =>
+            settings
+                ? await working.ServiceProvider.GetRequiredService<ISettingsRestriction>()
+                    .RefusedAsync(context, cancellationToken) is Error refused
+                    ? Refused(refused)
+                    : Decided.Allowed
+                : (await working.ServiceProvider.GetRequiredService<IAccessGate>()
+                        .RequireAsync(context, Permissions.GrantManage, deployment.Organization, cancellationToken))
+                    .Match(() => Decided.Allowed, Refused);
+
+        Assert.Equal(Decided.Allowed, await AskAsync());
+
+        if (restricted)
+        {
+            await deployment.RestrictAsync(caller, cancellationToken);
+        }
+
+        _ = await work.BeginAsync(cancellationToken);
+
+        Decided decided = await AskAsync();
+
+        await work.RollbackAsync();
+
+        return decided;
     }
 
     // AUTHZ-CONCEAL-004 AC4: a check the caller makes inside a unit of work it then rolls
