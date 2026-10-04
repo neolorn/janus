@@ -10,6 +10,15 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A domain of an organization's lock, and the domain of an address judged against it,
+  takes its ASCII form from the library's own UTS #46 processing and no longer from the
+  machine's ICU, so one domain is listed and compared in one form on every machine. A
+  domain with a hyphen in both its third and fourth places, a label under `xn--` that
+  does not decode to a valid label, or a label that breaks the Bidi Rule is now refused
+  as a domain that does not read; `xn--bcher-KVA.example` reads as
+  `xn--bcher-kva.example`; a domain written with the full stop of another script reads
+  with its labels separated. The two labels and the 236 octets are judged on the
+  converted name.
 - `CanonicalForm.TryDomainToAscii` gives a domain its ASCII form by UTS #46 processing
   at Unicode 17.0.0 from tables the package carries: nontransitional, with
   UseSTD3ASCIIRules, CheckHyphens, CheckBidi, CheckJoiners and VerifyDnsLength set and
