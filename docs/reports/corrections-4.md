@@ -1557,6 +1557,50 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - Public surface: the one line of `TruthTableAsync`, with its changelog line. No migration.
 - Parked: question 189.
 
+### `part/sign-in` (D-189), merged as `9904e5c5`: questions 173 and 174
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 173: the test of the step-up's `phoneCode` ask with a loss report in flight; nothing of the runtime changed | `e4d9f483` | AUTH-FACT-002 | `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtAStepUpWithALossReportInFlightIsAnsweredPendingAsync`, `SignInFlowTests.AUTH_FACT_002_AC7_ATextCodeAskedAtAStepUpWithALossReportInFlightIsAnsweredPendingAsync` |
+| Question 174: the list of codes that make a failed attempt gains `auth.credential.suspended` and is AUTH-ABUSE-001's ten | `9115168d` | AUTH-ABUSE-001 | `AuthenticationServiceTests.AUTH_ABUSE_001_AFailedAttemptIsAFactorRefusedWithAListedCode`, `AuthenticationServiceTests.AUTH_ABUSE_001_AStepUpCountsEveryRefusalAFactorAnswersAsync` |
+| Question 174: `POST /auth/factor` and `POST /auth/step-up` declare `auth.code.replayed`, `auth.credential.suspended` and the four `auth.webauthn.*` refusals | `8b42db7c` | CONV-DESIGN-006, AUTH-ABUSE-001 | `SignInFlowTests.CONV_DESIGN_006_AReplayedCodeIsAnsweredAtAStepUpAndAtASignInAsync`, `EndpointContractTests.LIB_API_001_AC2_TheEndpointsAreTheContract` |
+
+- Read against OPS-BOOT-004, nothing changed: `BreakGlassService` counts and records `auth.breakglass.invalid` and `auth.breakglass.consumed` and commits them with the attempt count (`BreakGlassServiceTests.CONV_DESIGN_003_AC10_ARefusedCodeCommitsItsKeptWritesTogetherAsync`, `BreakGlassServiceTests.OPS_BOOT_004_AConsumedCodeIsARefusedCredentialAsync`).
+- A `phoneCode` ask refused where no factor is left counts nothing: `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtTheAskLeavingNoFactorIsRefusedAsync` at a sign-in, the new test above at a step-up.
+- The unit suite was not run on the tree of `9115168d` alone; it ran with the changes of `8b42db7c` beside it.
+- No migration, no public surface change.
+- Parked: questions 190 to 193.
+
+### `part/bot-defence` (D-188 and D-189), merged as `ccc325b5`: questions 136 and 169 to 171
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 136: `RegistrationService.BeginAsync` asks the bot defence after the signed-in refusal and before anything of the session; a signal with a verifier declared answers 403 `auth.challenge.required` and creates nothing; `challengeToken` on `POST /register`; each session created is counted against its source | `b099d14a` | AUTH-ABUSE-008, FE-REG-001 | `RegistrationServiceTests.AUTH_ABUSE_008_AC1_AnOrdinaryRegistrationBeginsWithNoChallengeAsync`, `RegistrationServiceTests.AUTH_ABUSE_008_AC2_ARefusedRequestIsNotCountedAgainstItsSourceAsync`, `RegistrationServiceTests.AUTH_ABUSE_008_AC4_ASignalWithAVerifierCreatesNoSessionUntilAPassingTokenAsync`, `RegistrationServiceTests.AUTH_ABUSE_008_AC4_WithNoVerifierTheSignalIsRecordedAndTheSessionCreatedAsync`, `RegistrationServiceTests.AUTH_ABUSE_008_AC5_TheRecordIsCommittedAndNoUnitOfWorkIsOpenWhenTheVerifierIsAskedAsync`, `RegistrationServiceTests.BeginAsync_AChallengeOwedWithAnInvitationToken_LeavesTheInvitationUnopenedAsync`, `RegistrationServiceTests.BeginAsync_SignedInFromASignalledSource_IsRefusedWithoutAskingTheDefenceAsync`, `RegistrationWizardTests.FE_REG_001_AC3_NoRegistrationSessionExistsBeforeThePassingRepeatAsync`, `RegistrationWizardTests.AUTH_ABUSE_008_AC4_WithNoVerifierASignalledBeginIsRecordedAndCreatesTheSessionAsync`, `RegistrationWizardTests.AUTH_ABUSE_008_AC3_SessionsAreCountedByTheSourceOfTheRequestAsync`, `RegistrationBeginStoreTests.AUTH_ABUSE_008_AC3_EachSessionCreatedIsCountedAndTheSignalItBringsIsRecordedAsync` |
+| Question 170: `repeatedAttempts` counts the session the request would create | `054a49f8` | AUTH-ABUSE-008 | `BotDefenceTests.AUTH_ABUSE_008_AC3_TheSessionTheRequestWouldCreateCountsTowardRepeatedAttemptsAsync`, `RegistrationServiceTests.AUTH_ABUSE_008_AC3_TheFourthSessionFromOneSourceInAnHourPresentsAChallengeAsync` |
+| Question 169: `IDatacenterRangeSource` (public); the range file read, refused whole, refreshed by the job `datacenter-ranges` and judged for age; `abuse.botdefence.ranges.refresh` and `abuse.botdefence.ranges.maxage`; the ranges asked about the whole address, only while `datacenterRange` is counted; with no file or a stale one the signal does not fire and `degradation` is raised under `botdefence.ranges.absent` or `botdefence.ranges.stale` | `9fe6ee98` | AUTH-ABUSE-008, LIB-HOST-001, LIB-EXT-001, OPS-OBS-002, INF-BG-001 | `DatacenterRangesTests.AUTH_ABUSE_008_TheRangesHoldNothingTheyCouldCallOutWith`, `DatacenterRangesTests.AUTH_ABUSE_008_AC3_AnAddressIsMatchedAgainstTheRangesOfTheHostsFileAsync`, `DatacenterRangesTests.AUTH_ABUSE_008_EveryAddressIsMatchedAgainstTheCopyHeldAsync`, `DatacenterRangesTests.AUTH_ABUSE_008_AC3_WithNoRangeSourceTheSignalDoesNotFireAndDegradationIsRaisedAsync`, `DatacenterRangesTests.AUTH_ABUSE_008_AC3_WithNoFileReadTheSignalDoesNotFireAndDegradationIsRaisedAsync`, `DatacenterRangesTests.AUTH_ABUSE_008_AC3_AFileOlderThanItsMaximumAgeDoesNotFireAndIsRaisedStaleAsync`, `DatacenterRangesTests.AUTH_ABUSE_008_AC3_ARefreshReplacesTheCopyHeldAsync`, `DatacenterRangesTests.AUTH_ABUSE_008_AC3_TheRangeFileIsRefreshedByItsJobEveryRefreshInterval`, `DatacenterRangesTests.IDN_PRIN_001_AC3_TheRefreshRefusesAPrincipalThatMayNotMonitorAsync`, `DatacenterRangesTests.AUTH_ABUSE_008_AFailedRefreshKeepsTheCopyHeldUntilItIsStaleAsync`, `DatacenterRangesTests.AUTH_ABUSE_008_AFileThatCannotBeReadWholeIsRefusedAsync`, `DatacenterRangesTests.AUTH_ABUSE_008_AFileWithNoDateIsRefusedAsync`, `DatacenterRangesStoreTests.LIB_HOST_001_AC7_WithNoRangeSourceTheAbsenceIsRaisedWhileTheSignalIsCountedAsync`, `BotDefenceTests.AUTH_ABUSE_008_TheRangesAreMatchedAgainstTheWholeAddressAsync`, `BotDefenceTests.CheckAsync_ADegradationThatCannotBeRaised_RefusesTheCheckAsync`, `BotDefenceTests.CheckAsync_ASignalTheDeploymentDoesNotCount_FiresForNobodyAsync`, `RegistrationServiceTests.BeginAsync_ARangeDegradationThatCannotBeRaised_CreatesNoSessionAsync`, `RegistrationWizardTests.AUTH_ABUSE_008_TheRangesAreAskedAboutTheWholeAddressOfTheRequestAsync` |
+
+- The part was brought up to the working branch in `117bb3fd` before questions 169 and 170 were built; `b099d14a` is not rewritten, and its message's line "no range source is registered" is no longer true of the code.
+- Question 171: the order stands as `b099d14a` built it.
+- FE-REG-001 criterion 3, the frontend's half: no frontend project is in the tree. The server's half is the test above.
+- Public surface: `IRegistration.BeginAsync` (the parameters `ipAddress`, `source`, `challengeToken`), `IDatacenterRangeSource`, the two settings; a changelog line for each change.
+- The `degradation` is raised before the defence opens its unit of work, so it commits alone and stands where the request is then refused, as the raises of `password.blocklist.fallback` do.
+- Until this merge `SettingsCatalogueTests.REF_001_AC1_EveryLiveRowOfTheReferenceIsAKeyInTheSource` failed on the branch from `a6297785`, for the two `10` rows this part builds.
+- No migration.
+- Parked: question 194.
+
+### `part/enrolment-session` (D-189), merged as `0280d9a5`: questions 179, 176 and 177
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 179: the registration session stages the instant the security step returned the codes, and the terms step carries it into the set | `2d72207b` | AUTH-FACT-008, REG-SESS-006 | `RegistrationServiceTests.AUTH_FACT_008_AC4_ARegistrationsSetIsViewedWhenTheSecurityStepReturnedItAsync`, `RegistrationSessionStoreTests.AUTH_FACT_008_AC4_TheInstantTheCodesWereReturnedIsStagedWithThemAsync`, `RegistrationFlowTests.AUTH_FACT_008_AC4_ARegistrationsSetIsReadFromTheAccountAsViewedAtTheSecurityStepAsync` |
+| Question 176: the resolution stage records an enrolment session only on the eight routes `POST /enrol/begin` lists; the removal and the upgrade require a session and answer 401 `auth.session.expired`; in process the six operations of `ICredentials` the session does not reach refuse its authority `authz.denied` before any load | `11f15262` | BFF-ORDER-001, CONV-DESIGN-002, AUTH-RECOV-002 | `CredentialFlowTests.BFF_ORDER_001_AnEnrolmentSessionIsNoSessionOnARouteItDoesNotReachAsync`, `SessionRequirementTests.BFF_ORDER_001_TheRoutesAnEnrolmentSessionIsResolvedOnAreTheOnesListed`, `CredentialServiceTests.CONV_DESIGN_002_AC3_AnEnrolmentSessionsAuthorityIsDeniedBeforeAnyLoadAsync`, `CredentialServiceTests.AUTH_RECOV_002_AnEndedEnrolmentSessionIsExpiredAtWhatItReachedAsync`, `CredentialServiceTests.AUTH_RECOV_002_TheEnrolmentSessionIsDeniedWhatItDoesNotReachAsync`, `CredentialFlowTests.AUTH_RECOV_002_TheEnrolmentSessionDoesNotReachTheRecoveryCodesAsync`, `CredentialFlowTests.AUTH_RECOV_002_AnEndedEnrolmentSessionIsExpiredWithNoDetailsAsync` |
+| Question 177: a second step that showed codes marks the enrolment session (`recovery_links.codes_shown_at`) and does not end it; the report of the export on a marked session sets the export and ends the session in one unit of work and asks nothing of the restriction | `d9fbfd03` | AUTH-RECOV-006, AUTH-FACT-008, IDN-ACCT-007 | `CredentialServiceTests.AUTH_RECOV_006_AC5_AnEnrolmentSessionThatShowedCodesStaysOpenUntilTheirExportIsReportedAsync`, `CredentialServiceTests.AUTH_RECOV_006_AC5_TheReportSetsTheExportAndEndsTheEnrolmentSessionAsync`, `CredentialServiceTests.AUTH_RECOV_006_AC5_AnEnrolmentThatShowedNoCodesEndsTheEnrolmentSessionAsync`, `CredentialServiceTests.IDN_ACCT_007_AC2_ARestrictedAccountsReportCompletingAnEnrolmentSessionIsAdmittedAsync`, `CredentialServiceTests.IDN_ACCT_007_AC2_ARestrictedAccountEnrolsAKeyByRecoveryInAnEnrolmentSessionAsync`, `CredentialFlowTests.AUTH_RECOV_006_AC5_TheReportOfAnExportCompletesTheEnrolmentSessionAsync`, `CredentialFlowTests.IDN_ACCT_007_AC2_ARestrictedAccountsReportCompletingAnEnrolmentSessionIsAdmittedAsync`, `RecoveryLinkStoreTests.AUTH_RECOV_006_AC5_ThatASessionShowedRecoveryCodesIsKeptOnItsLinkAsync` |
+
+- Migration `20261004234232_KeepWhenAnEnrolmentSessionShowedRecoveryCodes`: a nullable column and a check, no hand-written operation. Merged without a snapshot conflict.
+- AUTH-RECOV-006 criteria 1 and 2, the frontend's half (FE-SEC-001): not this repository's code. No test runs two reports of one marked session at once; the hold is the lock `RecoveryLinkStoreTests.AUTH_RECOV_002_AC1_TwoCompletionsOfOneEnrolmentSessionAtOnceCompleteOnceAsync` covers.
+- No path of the truth-table change check is touched; no row. No public surface change.
+- Parked: questions 195 to 197.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1726,6 +1770,8 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 | `FingerprintKeyTests.INF_HOST_003_AC4_EveryStoreThatComputesAFingerprintIsDriven` (`fcd330be`) | The gate test lists every file of the storage project that computes a fingerprint and did not hold `ValueLock`, which keys its lock by one and writes no column | INF-HOST-003 criterion 4, CONV-DESIGN-003 | Test infrastructure: the scan test takes the lock under each version and the list holds `ValueLock` |
 | `tests/Janus.Hosting.Tests/Deployment.cs` (`1d6bc05b`) | The unit test deployment registers `OidcService` itself and did not register `ITokenMinting`, so `MailServerTokens` could not be built there | CONV-DESIGN-007 | Test infrastructure: the fixture registers the contract beside its implementation, as the area's own method does |
 | `SendPublisher.AttemptAsync` (`4e3820a6`) | The attempt now answers whether it took the message, and `LibraryStructureTests.CONV_ERR_003_AC2_NoCatchButTheOneAroundAfterCommitWorkCarriesOn` holds the catch to end with its log call | CONV-ERR-003 criterion 2 | The answer is returned after the try, so the catch ends with the log call and the test stands unchanged |
+| `BrowserProfileTests.AUTH_SESS_007_AC2_NoEndpointCanOptOut`, `BrowserProfileTests.BFF_CSRF_001_AC2_NoEndpointCanBeExcludedByConfigurationOrAttribute` (`11f15262`) | Both hold a fixed list of the files that read endpoint metadata, and the resolution stage now reads a marker to resolve an enrolment session on its listed routes | BFF-ORDER-001 stage 5, D-187 question 121 | `EnrolmentRoute.cs` and `SessionResolution.cs` join the list, since the reader takes no route out of any stage, and the assertions on the token and rate-limit stages stand |
+| `CHANGELOG.md`, the unreleased line of question 157 (`11f15262`) | It said the removal and the upgrade answer an enrolment session 403 `authz.denied` and an ended one 401 wherever presented | `09` `POST /enrol/begin` | An unreleased line is brought to what the row now states |
 
 ## 4. Open questions
 
@@ -4195,6 +4241,83 @@ part of 389 (3) and waits with 389 on question 48.
   1. The rule is about constructors and factories; a constant or a static helper is not the seam: as built, and what the test asserts.
   2. No naming of the three classes anywhere in `Janus.Hosting`: the names and helpers move off `KeyRing`, to a home no chapter names.
 - **Parked.** Those static reads, left as they are.
+- **Answer:** pending.
+
+**190. Tier 3. `09` `POST /auth/factor`, AUTH-ABUSE-001 and AUTH-RECOV-007: no presentation answers `auth.credential.suspended`.**
+
+- **Item.** Question 174.
+- **The contradiction.** The rows list `auth.credential.suspended` as a failed attempt at both routes. No factor's judgement answers it: a suspended passkey or security key answers `auth.factor.rejected` after its signature verifies; a suspended generator is left out of those a code is judged against; a suspended `phoneCode` is sent nothing and a code presented answers `auth.code.expired`. AUTH-RECOV-007 says a suspended authenticator is rejected and not with which code, nor whether before or after what was presented verifies, nor whether an anonymous caller at `/auth/factor` is told (AUTH-ABUSE-003).
+- **What the code does.** The list holds the code and both routes declare it; nothing answers it there.
+- **Parked.** What a suspended authenticator answers at a sign-in and at a step-up.
+- **Answer:** pending.
+
+**191. Tier 2. `09` `POST /auth/step-up`: `identity.identifier.domainnotallowed` at a step-up.**
+
+- **Item.** Question 174.
+- **What the code does.** Read from the code, not confirmed by a test: a pending `emailCode` can be presented at a step-up where the policy permits it, and the code's path judges the domain lock, which can answer 422 `identity.identifier.domainnotallowed`. The route does not declare it and its row does not list it.
+- **Readings.**
+  1. The row lists it at the step-up too.
+  2. A step-up never judges the domain lock.
+- **Parked.** That answer, left as it is.
+- **Answer:** pending.
+
+**192. Tier 2. `09` `POST /recovery/report-loss`: 422 `auth.credential.suspended`.**
+
+- **Item.** Question 174, met while reading the code's sites.
+- **What the code does.** `LossReports` answers 422 `auth.credential.suspended` for a report on a credential that is not active and has no report. The row lists 409 `auth.lossreport.notpermitted` and `auth.lossreport.pending` alone, and the route does not declare the code.
+- **Readings.**
+  1. The row and the declaration gain it.
+  2. The case answers one of the row's codes.
+- **Parked.** That answer, left as it is.
+- **Answer:** pending.
+
+**193. Tier 3. AUTH-STEP-002 criterion 4 and `09` `POST /auth/step-up`: factors presented over several calls.**
+
+- **Item.** Met while building question 174. Read from the code only; no test confirms or refutes it.
+- **The lead.** `AuthenticationService.RaiseAsync` removes the challenge after one factor, and `SessionService.PresentAsync` judges `Assurance.Proved` over the factors of that one call. If that is the whole of it, a password at one call and a generator's code at the next do not combine to reach the gate, against "called once per factor until the session reaches the gate".
+- **Parked.** Nothing built. The reading is to be confirmed by a test before anything is changed.
+- **Answer:** pending.
+
+**194. Tier 2. AUTH-ABUSE-008, INT-GEN-006 criterion 2 and `10` section 5.23: what the `datacenter-ranges` job itself raises.**
+
+- **Item.** Question 169.
+- **What the code does.** The job only reads. Absence and staleness are raised where an address is judged, at each `POST /register` while the signal is counted. A failed refresh with a fresh copy held raises nothing until that copy is stale.
+- **What the specification says.** The file is "refreshed and judged for age exactly as the IP location file is"; INT-GEN-006 criterion 2: "a failed refresh surfaces as a degradation", which the location code raises at the refresh under `location.database.refresh`. Section 5.23 names two scopes for the range file, `botdefence.ranges.absent` and `botdefence.ranges.stale`.
+- **Readings.**
+  1. As built.
+  2. A failed refresh raises at the refresh, under a third scope section 5.23 would name, or under `botdefence.ranges.absent` where nothing is held.
+  3. The job raises absence or staleness on each run while the signal is counted, so a deployment with no registrations hears of it.
+- **Parked.** Any raise made by the job itself.
+- **Answer:** pending.
+
+**195. Tier 3. CONV-DESIGN-002 criterion 3 and `09` `POST /enrol/begin`: the in-process refusal for an operation that takes only an access context.**
+
+- **Item.** Question 176.
+- **The contradiction.** Every operation the enrolment session does not reach refuses "an access context of an enrolment session's authority", the operations that meet no gate included. `AccessContext` (public: `Acting`, `Effective`, `Principal`, `BreakGlassReason`) cannot carry that authority: in process it exists only as `CredentialAuthority.Of(EnrolmentSessionId)` on `ICredentials` and as the `EnrolmentSessionId` overloads the session reaches. For the roughly 130 operations that take only an `AccessContext` the refused input cannot be constructed, so the criterion cannot be tested as written, and making it constructible needs a public member no chapter names. Over HTTP the case cannot arise: stage 5 hands no handler an enrolment session off the listed routes.
+- **What the code does.** The six operations of `ICredentials` that take a `CredentialAuthority` and are not listed refuse first, before any load.
+- **Parked.** The refusal in every operation that takes only an `AccessContext`, and in the five that meet no gate (`IReadVolume.ReturnedAsync`, `IProviderProbes.RunAsync`, `IDerivationMaterialiser.RefreshAsync`, `IRecovery.CancelLossAsync`, `IRegistration.BeginAsync`).
+- **Answer:** pending.
+
+**196. Tier 2. AUTH-RECOV-006 criterion 5: what ends an enrolment session that showed codes, besides the report.**
+
+- **Item.** Question 177.
+- **What the code does.** Once a second step showed codes, nothing the session does afterwards ends it but the report or its lifetime: a password set or a passkey enrolled meanwhile leaves it open.
+- **What the specification says.** It "stays open on its routes until `POST /account/recoverycodes/exported` reports them saved"; otherwise it ends "as before".
+- **Readings.**
+  1. As built.
+  2. A later enrolment that shows no codes ends it, leaving the shown codes unreportable in that session.
+- **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
+
+**197. Tier 2. `09` `POST /account/recoverycodes/exported` and IDN-ACCT-007: the report in an enrolment session whose second step showed no codes.**
+
+- **Item.** Question 177.
+- **What the code does.** As D-188 left it: the export is recorded against the account's set, a restricted account is refused `authz.restricted`, the session stays open.
+- **What the specification says.** The route is listed for the enrolment session "for the codes a second step enrolled beside a password shows"; the restriction's exemption is the report "completing an enrolment session".
+- **Readings.**
+  1. As built.
+  2. The report is refused there, under a code no chapter names.
+- **Parked.** Nothing: reading 1 is built.
 - **Answer:** pending.
 
 ## 5. Gate result
