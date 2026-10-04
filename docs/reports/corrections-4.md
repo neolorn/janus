@@ -1399,6 +1399,33 @@ Tests: `ValueLockTests.REG_SESS_005_AC6_ATermsStepAndAnotherAccountsAddAtOnceLea
 - No migration (the sweep is hand-written SQL in the store), no public surface change. After the merge: the fast checks, and `PendingVerificationStoreTests`, `ValueLockTests`, `IdentifierStoreTests` (34), `BackgroundJobsTests` and `ExpirySweepTests` (10) passed.
 - Parked: questions 151 to 153.
 
+### `part/endpoint-codes`, merged as `8ebdc490`: question 119 with questions 50 and 51 and D-166 382, and question 89
+
+The part ran in a worktree beside `part/identifiers`, not on `corrections-4` after the merges: it declares codes from the `09` rows and left the identifier handlers alone. After the merge the whole of `Janus.Hosting.Tests` ran under the test host's check (1390 passed).
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| The 147 mappings of the 26 endpoint files declare their row's codes, the codes their section's text gives and `integration.sms.balancefloor` where the preamble gives it | `5e34970e` | CONV-DESIGN-006 | `EndpointDeclarationTests.CONV_DESIGN_006_AC3_EveryEndpointCarriesADeclaration`, `EndpointDeclarationTests.CONV_DESIGN_006_AC3_AnEndpointDeclaresWhatItsSectionGivesIt`, `EndpointDeclarationTests.CONV_DESIGN_006_AnEndpointDeclaresEachCodeOnce` |
+| `GET /register/events` answers its 404 with `authz.resource.notfound` and a body | `59ef8f09` | BFF-CSRF-005b | `RegistrationFlowTests.BFF_CSRF_005b_AC1_AnotherBrowserReachesNoneOfTheRegistrationAsync`, `RegistrationFlowTests.BFF_CSRF_005b_AC2_NoTokenTravelsInAUrlAsync` |
+| An identifier offered before the age step answers 409 `identity.registration.incomplete` (question 159) | `8f58dfbe` | REG-SESS-002, REG-PROF-002 | `RegistrationServiceTests.REG_SESS_002_AC1_NoStepIsReachedOutOfOrderAsync`, `RegistrationServiceTests.REG_PROF_002_AC1_NoIdentifierIsTakenBeforeTheAgeScreenAsync`, `RegistrationServiceTests.PRIV_MINOR_001_AC1_NoAccountExistsWithoutTheDerivedAffirmationAsync`, `RegistrationWizardTests.FE_REG_005_AC1_NoStepIsReachableBeforeItsPredecessorAsync` |
+| The 422 `auth.enrolment.tokeninvalid` of `POST /account/recoverycodes` came from the handler taking an enrolment session, which `09` `POST /enrol/begin` does not list for the route; the route now requires an account session | `8f31668e` | AUTH-RECOV-002 | `CredentialFlowTests.AUTH_RECOV_002_TheEnrolmentSessionDoesNotReachTheRecoveryCodesAsync`, `CredentialFlowTests.AUTH_RECOV_002_TheEnrolmentSessionReachesThePasswordEndpointAsync`, `SessionRequirementTests` |
+| `POST /privacy/requests` with `type` `erasure` answers 400 `api.request.malformed` naming `type` (question 159) | `773bc7b4` | PRIV-RIGHT-001, API-CONV-003 | `PrivacyRequestEndpointTests.PRIV_RIGHT_001_AC1_ErasureIsNotARequestTypeOnThisEndpointAsync` |
+| The test host's check: a refusal must be declared, derived from the mounting, or `auth.throttled` or `system.fault` | `9aecd691` | CONV-DESIGN-006 | `EndpointAnswersTests.CONV_DESIGN_006_AC4_AnUndeclaredCodeFailsTheTest`, `EndpointAnswersTests.CONV_DESIGN_006_AC4_ADeclaredCodeAndThePipelinesPass`, `EndpointAnswersTests.CONV_DESIGN_006_AC4_AMountingAnswerPassesOnlyWhereTheMountingGivesIt`, `EndpointAnswersTests.CONV_DESIGN_006_AC4_ARefusalTheHostCannotReadFailsTheTest`, `EndpointAnswersTests.CONV_DESIGN_006_AC4_TheHostHoldsEveryResponseItCarriesAsync` |
+| `endpoints.txt` (163 method and route entries, then the pipeline) and its contract test; `Produces` for each answer | `64bc52ea` | LIB-API-001 | `EndpointContractTests.LIB_API_001_AC2_TheEndpointsAreTheContract`, `EndpointContractTests.LIB_API_001_AC2_EveryEndpointCarriesWhatTheContractIsGeneratedFrom` |
+| `release.sh` reads `endpoints.txt`. Ledger line 382 | `ef284c16` | LIB-API-001, CONV-VCS-005 | The two scenarios of D-166 382 (5), below |
+| Question 89, the finding: `derivation.materialised.driftcheck` joins `Settings.All` and `configuration-keys.txt` (question 160) | `033fbe86` | REF-001, AUTHZ-DERIVE-005 | `SettingsCatalogueTests.REF_001_AC1_EveryLiveRowOfTheReferenceIsAKeyInTheSource` |
+| Question 89: the reverse direction of the REF-001 tests | `dc5dd7e3` | REF-001 | `ErrorCodesTests.REF_001_AC1_EveryLiveRowOfTheReferenceIsACodeInTheSource`, `SettingsCatalogueTests.REF_001_AC1_EveryLiveRowOfTheReferenceIsAKeyInTheSource` |
+
+- CONV-DESIGN-006 criterion 3, "the codes its row gives": no test decides it beyond presence, the three section rules and no duplicate; every row and section text of `09` was read against the declarations.
+- D-166 382 (5), the two scenarios: no committed test. Run in scratch repositories: for an endpoint path changed and for a response member removed, an unmarked commit is refused, a marked one passes, a 1.1.0 release is refused and a 2.0.0 release with a migration note passes.
+- The pipeline section of `endpoints.txt` is the order of the `application.Use...` lines of `PipelineProfiles.Browser` in source; `BrowserProfileTests.BFF_OWN_003_AC2` asserts five stages by behaviour, not the whole list.
+- Readings applied in the declarations: the text of section 8 governs every `/admin` route, 8a included; section 6 gives `authz.restricted` to the change routes of identifiers, credentials, profile and preferences and `authz.denied` to the routes of the step-up actions it names; "requires step-up" or "gated" in a row gives `auth.stepup.required`; a shared row's code goes to each endpoint whose operation can meet the stated cause; `integration.sms.balancefloor` is on the nine routes that can send a code by SMS; `auth.session.expired` is declared where the handler itself refuses a browser with no session and the route is not session-required.
+- Section 1 of `10` holds both ways (156 codes). Nothing is exempted from the reverse direction.
+- `endpoints.txt` writes a leaf type that is no primitive by its CLR name, and marks nullability for nullable value types alone.
+- Left as it is: the provider-verified registration path still answers `identity.affirmation.required` through its `error=` redirect.
+- No migration, no public surface change.
+- Parked: questions 154 to 160.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1416,7 +1443,7 @@ Tests: `ValueLockTests.REG_SESS_005_AC6_ATermsStepAndAnotherAccountsAddAtOnceLea
 | Truth-table rows for D-166 entries 396 and 265 | They state the D-166 outcomes, so they belong with those fixes | Nothing: written in `cb73c32a` and `ef62ecdc` |
 | The full gate, the pull request for `corrections-4` | The push of `corrections-4` after `d5a7fc0e` was refused in the session's environment | The full gate: section 5. The pull request: the push |
 | Questions 21 to 65, as D-183 answers them | Each was parked until D-183 | Built (section 1, from "the housekeeping before D-183's items" on), but for the rows below |
-| Questions 50 and 51: the codes and the produced and accepted types as endpoint metadata, `endpoints.txt` and its contract test, the test host's check, the lines of `release.sh` and the two scenarios of D-166 382; ledger line 382 | What "the codes its `09` row gives" covers | Nothing: D-187 answers question 119; not yet built |
+| Questions 50 and 51: the codes and the produced and accepted types as endpoint metadata, `endpoints.txt` and its contract test, the test host's check, the lines of `release.sh` and the two scenarios of D-166 382; ledger line 382 | What "the codes its `09` row gives" covers | Nothing: built (`part/endpoint-codes`) |
 | Question 61 for the event rows and the erasure outbox | How a row that tracks several deliveries is claimed | Nothing: built (`part/sending`) |
 | Question 31 at an account identifier's add and replace of a held or reserved value; D-166 306 whole, the sweep of pending verifications (REG-IDENT-004 criterion 4, REG-IDENT-007 criterion 4); ledger lines 115 and 306 | Where the staged value is held; what the sweep waits for | Built (`part/identifiers`), but for questions 151 to 153 |
 | Question 62 at `AppPasswords.CreateAsync`, `RecoveryService.SendAsync`, `ErasureService.CompleteAsync` and the destination keys | A first write outside the unit of work, or two units of work | Nothing: built (`part/gate-sites`) |
@@ -1428,7 +1455,7 @@ Tests: `ValueLockTests.REG_SESS_005_AC6_ATermsStepAndAnotherAccountsAddAtOnceLea
 | Question 39 for an invitation's erased key | PRIV-RIGHT-005a against the code | Nothing: built (`part/privacy`) |
 | Question 24 for a caller in process | The rule is internal to `Janus.Core` | Nothing: built (`part/contracts`) |
 | Question 53 for an app password's `{id}`; `POST /account/recoverycodes/exported` | No typed value and no rule; no contract operation | Nothing: built (`part/contracts`) |
-| The reverse direction of the REF-001 tests | Question 25's "each direction" | Nothing: D-187 answers question 89; not yet built |
+| The reverse direction of the REF-001 tests | Question 25's "each direction" | Nothing: built (`part/endpoint-codes`) |
 | 209 (2), the IDNA mapping | The download is approved and made; the parameters of the processing are not stated | Nothing: built (`part/idna`) |
 
 **Slips.** None is rewritten; each commit is green on the fast checks unless said.
@@ -1564,6 +1591,7 @@ Tests: `ValueLockTests.REG_SESS_005_AC6_ATermsStepAndAnotherAccountsAddAtOnceLea
 | `DeviceStoreInMemory.Locking`, `SendingPath.Log` (`6c9a8044`, `681c2ff2`) | The fakes gave no hook for a change made under the lock, nor the log | CONV-DESIGN-003 criteria 10 and 12 | Test infrastructure: one hook and one property on the fakes |
 | `tests/Janus.Storage.Tests/ModelTests.cs`, `tests/Janus.Storage.Tests/schema.txt` (`5946f3d4`, `d014b8a3`) | The gate lists every column and did not hold `events.claimed_until` and `outbox.claimed_until` | CONV-DESIGN-003 | Test infrastructure: the two columns the claim needs join the lists the gate enforces |
 | `OutboxPublisher`, the catch-up pass (`d014b8a3`) | CONV-DESIGN-003 takes a claim only on a due row "where it carries one"; a completed erasure without its ledger line carries no next attempt | CONV-DESIGN-003, DR-016 criterion 5 | The catch-up claim is conditional on the row being unclaimed or timed out and still a completed erasure without its line, with no due condition |
+| `LibraryStructureTests.AUTH_ABUSE_002_AC2_OnlyTheBuilderAndTheStatusMapReadTheThrottledCode` (`5e34970e`) | The gate counted every file naming `ErrorCodes.Throttled`, and the endpoint files now name it in their declarations | CONV-DESIGN-006 | A declaration builds no refusal, so the test passes over declaration statements and still holds the builder and the status map as the only readers |
 
 ## 4. Open questions
 
@@ -3665,6 +3693,75 @@ part of 389 (3) and waits with 389 on question 48.
   1. It stays: the person adds again.
   2. The sweep locks its candidates and judges again inside a transaction.
 - **Parked.** Nothing built beyond reading 1.
+- **Answer:** pending.
+
+**154. Tier 2. CONV-DESIGN-006 criterion 3, AUTHZ-GATE-006 and IDN-ACCT-007: `authz.restricted` on the `/admin` routes that modify.**
+
+- **Item.** Question 119.
+- **What the code does.** Every `/admin` route that is not a GET, and `POST /account/deactivate` and `POST /account/delete`, declare `authz.restricted`; about 47 such routes answer it in tests.
+- **What the specification says.** `09` section 8 gives no `/admin` route that code. AUTHZ-GATE-006 refuses every modifying action of a restricted account with it.
+- **Readings.**
+  1. The routes declare it: as built.
+  2. `09` lists it only where a row does; the declarations go, and those answers then fail criterion 4.
+- **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
+
+**155. Tier 3. BFF-MACH-001 criterion 2, `09` section 10 and API-CONV-003: the code of a machine route refused for carrying the session cookie.**
+
+- **Item.** Question 119.
+- **The contradiction.** `MachineProfile` answers 403 `authz.denied` to a request carrying the session cookie on `GET /callbacks/sms/dlr` and `POST /callbacks/providers/{provider}` (and on `/oidc/par`, `/oidc/token` and `/oidc/userinfo`). BFF-MACH-001 criterion 2 names no code. `09` section 10 says every other refusal on a callback is `integration.callback.rejected`. API-CONV-003 gives `authz.denied` to a missing permission alone. The preamble's list of the mounting's answers holds no such entry.
+- **What the code does.** The test host's check derives `authz.denied` for a machine route that does not ignore the cookie, as what the mounting answers today, and `endpoints.txt` lists it under those entries.
+- **Parked.** The code of that refusal.
+- **Answer:** pending.
+
+**156. Tier 2. `09` `POST /auth/step-up`: the refusals of a presented factor.**
+
+- **Item.** Question 119.
+- **What the code does.** The route answers 422 `auth.factor.rejected` and can answer `auth.code.invalid` and `auth.code.expired`; the three are declared.
+- **What the specification says.** The row says "same request and response shape as `/auth/factor`" and lists `auth.factor.notpermitted`, `auth.stepup.required` and the 429 answers.
+- **Readings.**
+  1. The shape's refusals of a presented factor are the route's: as built.
+  2. The row's own list alone; the route then fails criterion 4.
+- **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
+
+**157. Tier 3. `09` `POST /enrol/begin` and D-148: what an enrolment session reaches, and what an ended one is answered.**
+
+- **Item.** Question 119, the trace of `auth.enrolment.tokeninvalid`.
+- **What the code does.** The enrolment session reaches `DELETE /account/credentials/{id}` and `POST /account/credentials/{id}/upgrade` with no gate, beside the routes the chapter names. An ended enrolment session answers 422 `auth.enrolment.tokeninvalid` on the credential routes it reaches (password, totp, webauthn register, remove, upgrade).
+- **What the specification says.** The enrolment session is usable only against password, webauthn register, totp and, for a lost mailbox, identifier replace. `10` defines `auth.enrolment.tokeninvalid` for the link token at `/enrol/begin`, and no row gives it to those routes; an ended registration session is 401 `auth.session.expired`.
+- **Parked.** Those routes' reach and answer for an enrolment session. Nothing is declared for it and no test sends an ended enrolment session there.
+- **Answer:** pending.
+
+**158. Tier 2. D-166 382 (3): `Accepts` on the three routes that read a raw body.**
+
+- **Item.** Questions 50 and 51.
+- **What the code does.** `PUT /account/photo`, `POST /callbacks/providers/{provider}` and `POST /callbacks/providers/{provider}/return` carry no `Accepts`; `endpoints.txt` shows no request for them.
+- **What the specification says.** D-166 382 (3) adds `Accepts` and `Produces` where they are missing. `Accepts` makes routing refuse a request by its content type, and IDN-ATTR-004 has the photo judged by its bytes, never by what the request called it.
+- **Readings.**
+  1. No `Accepts` on the three: as built.
+  2. `Accepts` with `*/*`, once its effect on a request with no content type is confirmed.
+- **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
+
+**159. Tier 2. REG-SESS-002, REG-PROF-002, PRIV-RIGHT-001 and API-CONV-003: two answers changed to their rows.**
+
+- **Item.** Question 119, "bring the routes to the `09` rows".
+- **What the code does.** An identifier offered before the age step answers 409 `identity.registration.incomplete`; it answered 422 `identity.affirmation.required`. `POST /privacy/requests` with `type` `erasure` answers 400 `api.request.malformed` naming `type`; it answered 403 `authz.denied`. The service's own guard for the type stays.
+- **What the specification says.** Section 2 of `09` gives the step endpoints `identity.registration.incomplete` for a step out of order. The row of `POST /privacy/requests` shapes `type` as `restriction|rectification`; `10` section 5.12c holds `erasure` as a spelling.
+- **Readings.**
+  1. Each answer is its row's: as built.
+  2. The earlier answers stand and the rows gain them.
+- **Parked.** Nothing: reading 1 is built. Each changes an answer, so it is raised here.
+- **Answer:** pending.
+
+**160. Tier 2. REF-001 criterion 1 and AUTHZ-DERIVE-005: `derivation.materialised.driftcheck` joins the catalogue's list.**
+
+- **Item.** Question 89.
+- **What the code did.** `Settings.DerivationMaterialisedDriftCheck` was declared and read by the drift check's job and absent from `Settings.All`: not validated at startup, not served by `/admin/config/{key}` or the command line, not in `configuration-keys.txt`.
+- **What the code does.** The key is in `Settings.All` and the contract file. It is now validated and can be set.
+- **What the specification says.** The row of `10` section 4.5a is live, and AUTHZ-DERIVE-005 uses the key.
+- **Parked.** Nothing: the chapter plainly uses the key. It changes behaviour, so it is raised here and not recorded as resolved by rule.
 - **Answer:** pending.
 
 ## 5. Gate result
