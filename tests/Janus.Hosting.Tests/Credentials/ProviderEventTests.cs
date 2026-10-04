@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
@@ -500,6 +501,60 @@ public sealed class ProviderEventTests : IAsyncDisposable
         Assert.Contains(
             _deployment.Mail.Taken,
             mail => string.Equals(mail.Destination.Value, address, StringComparison.Ordinal));
+        Assert.Equal(
+            (AuditActions.ProviderEventTaken, linked.Id, "consent-revoked", ProviderEventOutcome.AccountSuspended),
+            Assert.Single(_deployment.CredentialAudit.ProviderEvents));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC18, IDN-LIFE-012a AC2: the notice of a suspension a provider
+    /// event brings, refused by a restriction, fails nothing. The event is answered as
+    /// it would have been, and the suspension, its announcement and the event's record
+    /// are committed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC18_AnEventWhoseNoticeIsRefusedIsTakenAndCommittedAsync()
+    {
+        var subject = SubjectId.New(_randomness);
+
+        _deployment.Accounts.Stands(subject, AccountState.Active);
+        _deployment.Identifiers.Reads(subject, Language);
+        _ = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, "only-apple@example.test");
+
+        Authenticator linked = await LinkAsync(subject, Factor.Apple, AppleSubject);
+
+        _deployment.Configuration.Set(
+            Settings.Restrictions,
+            [
+                .. Settings.Restrictions.Default,
+                new Restriction(
+                    "every.notice",
+                    RestrictionKeyKind.Global,
+                    null,
+                    RestrictionPurpose.Notification,
+                    [new Bucket(1, TimeSpan.FromHours(24), BucketWindow.Sliding)]),
+            ]);
+
+        _deployment.SendLedger.Given(
+            new RestrictionKey("every.notice", RestrictionKeyKind.Global, "every.notice"),
+            _deployment.Clock.GetUtcNow());
+
+        int rolledBack = _deployment.Work.RolledBack;
+
+        Answer answered = await DeliveredAsync(
+            Apple,
+            Wrapped(_deployment.SocialProviders.Signed(
+                Factor.Apple,
+                "evt-1",
+                AppleEvent("consent-revoked", AppleSubject))));
+
+        Assert.Equal(StatusCodes.Status200OK, answered.Status);
+        Assert.False(_deployment.Work.Open);
+        Assert.Equal(rolledBack, _deployment.Work.RolledBack);
+        Assert.Empty(_deployment.Mail.Taken);
+        Assert.Equal(AccountState.Suspended, await StateAsync(subject));
+        _ = Assert.Single(_deployment.Events.Of<AccountSuspended>());
         Assert.Equal(
             (AuditActions.ProviderEventTaken, linked.Id, "consent-revoked", ProviderEventOutcome.AccountSuspended),
             Assert.Single(_deployment.CredentialAudit.ProviderEvents));

@@ -334,6 +334,86 @@ public sealed class DeadlineSweepTests : IAsyncDisposable
             entry => entry.Action.ToString() is "privacy.request.lapsed");
     }
 
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: a request decided while the pass waited for its row is
+    /// answered with nothing written, so the pass rolls its unit of work back and
+    /// commits nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ARequestDecidedMeanwhileRollsThePassBackAsync()
+    {
+        _ = await EnteredAsync(PrivacyRequestType.Erasure);
+
+        _clock.Advance(new DateTimeOffset(2026, 9, 29, 1, 0, 0, TimeSpan.FromHours(3)) - Noon);
+
+        _requests.Locking = request =>
+        {
+            _requests.Locking = null;
+            request.Fulfil(_clock.GetUtcNow());
+        };
+
+        _work.Reset();
+
+        Assert.Equal(0, await Sweep.SweepAsync(Sweeper, CancellationToken.None));
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: a request the pass reaches again between its warning and
+    /// its escalation is changed in nothing, so the pass rolls its unit of work back and
+    /// commits nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ARequestThePassChangesNothingOfRollsBackAsync()
+    {
+        _ = await SubmittedAsync(PrivacyRequestType.Restriction);
+
+        _clock.Advance(new DateTimeOffset(2026, 9, 23, 22, 0, 0, TimeSpan.Zero) - Noon);
+
+        Assert.Equal(1, await Sweep.SweepAsync(Sweeper, CancellationToken.None));
+
+        _work.Reset();
+
+        Assert.Equal(0, await Sweep.SweepAsync(Sweeper, CancellationToken.None));
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        _ = Assert.Single(_alerts.Raised);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC18, PRIV-RIGHT-002 AC4: the notice of a lapse that every channel
+    /// refuses fails nothing. The request is recorded deemed refused by lapse and
+    /// audited, and the pass commits both.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC18_ALapseWhoseNoticeIsRefusedIsRecordedAndCommittedAsync()
+    {
+        _ = await EnteredAsync(PrivacyRequestType.Erasure);
+
+        _clock.Advance(new DateTimeOffset(2026, 9, 29, 1, 0, 0, TimeSpan.FromHours(3)) - Noon);
+
+        _notices.Refuses = true;
+        _work.Reset();
+
+        Assert.Equal(1, await Sweep.SweepAsync(Sweeper, CancellationToken.None));
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Committed);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(PrivacyRequestStatus.DeemedRefusedByLapse, Assert.Single(_requests.Queue).Status);
+        Assert.DoesNotContain(_notices.Told, told => told.Message is MessageKind.PrivacyRequestLapsed);
+        Assert.Contains(
+            _audit.Entries,
+            entry => entry.Action.ToString() is "privacy.request.lapsed");
+    }
+
     private async Task<PrivacyRequestReceipt> SubmittedAsync(PrivacyRequestType type)
     {
         Result<PrivacyRequestReceipt> submitted = await Requests.SubmitAsync(

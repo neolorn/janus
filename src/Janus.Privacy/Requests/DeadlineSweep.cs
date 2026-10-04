@@ -100,11 +100,11 @@ internal sealed class DeadlineSweep(
 
         // D-166 X3: the request is carried under its row's lock, so one fulfilled or
         // refused while the pass read the queue is left as decided, not lapsed.
+        // CONV-DESIGN-003: nothing was written for it, so nothing is committed.
         if (await requests.FindForUpdateAsync(reached.Id, cancellationToken).ConfigureAwait(false)
             is not { Open: true } request)
         {
-            (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            await work.RollbackAsync().ConfigureAwait(false);
 
             return false;
         }
@@ -134,15 +134,21 @@ internal sealed class DeadlineSweep(
             carried = true;
         }
 
-        if (carried)
+        // CONV-DESIGN-003: a request reached between two of its instants is changed in
+        // nothing, and a pass that wrote nothing commits nothing.
+        if (!carried)
         {
-            await requests.RecordAsync(request, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return false;
         }
+
+        await requests.RecordAsync(request, cancellationToken).ConfigureAwait(false);
 
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
-        return carried;
+        return true;
     }
 
     private async ValueTask LapsedAsync(

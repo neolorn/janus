@@ -1582,6 +1582,235 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         Assert.Equal(1, _work.RolledBack);
     }
 
+    /// <summary>
+    /// AUTH-ABUSE-004 AC18: the notice of a promotion that a restriction refuses fails
+    /// nothing. The identifier is made primary and the change committed, with the answer
+    /// it would have had.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC18_APromotionWhoseNoticeIsRefusedIsCommittedAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+
+        Accepted(await Service.MakePrimaryAsync(
+            Acting,
+            second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Empty(_notifications.Carried);
+        Assert.True(Named(await HeldAsync(), Second).IsPrimary);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC18: the notice of a backup change that a restriction refuses
+    /// fails nothing. The setting is changed and committed, with the answer it would have
+    /// had.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC18_ABackupChangeWhoseNoticeIsRefusedIsCommittedAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Email, Second);
+
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+
+        Accepted(await Service.SetBackupAsync(
+            Acting,
+            IdentifierKind.Email,
+            BackupChoice.PrimaryOnly,
+            named: null,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Empty(_notifications.Carried);
+        Assert.Equal(Primary, Assert.Single(await NoticeSetAsync()).Canonical);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC18: the notices of a removal that a restriction refuses fail
+    /// nothing. The identifier leaves the account, its value is reserved for the undo,
+    /// and the removal is committed, with the answer it would have had.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC18_ARemovalWhoseNoticesAreRefusedIsCommittedAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+        SessionId session = Stepped();
+
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+
+        Accepted(await Service.RemoveAsync(
+            Acting,
+            session,
+            second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Empty(_notifications.Carried);
+        Assert.Null(await _directory.OwnerAsync(
+            IdentifierKind.Email,
+            Second,
+            TestContext.Current.CancellationToken));
+        Assert.True(await _directory.IsReservedAsync(
+            IdentifierKind.Email,
+            Second,
+            _clock.GetUtcNow(),
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC18: the notice of an undo that a restriction refuses fails
+    /// nothing. The identifier is restored and the undo committed, with the answer it
+    /// would have had.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC18_AnUndoWhoseNoticeIsRefusedIsCommittedAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+
+        Accepted(await Service.RemoveAsync(
+            Acting,
+            Stepped(),
+            second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        string undo = Undo();
+
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _work.Reset();
+
+        Accepted(await Service.UndoAsync(undo, Source, TestContext.Current.CancellationToken));
+
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(_person, await _directory.OwnerAsync(
+            IdentifierKind.Email,
+            Second,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC18: where the code of an addition is admitted and the notice to
+    /// the set is refused, the addition is staged and committed with the answer it would
+    /// have had: the code's refusal is the one the operation answers, the notice's is
+    /// not.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC18_AnAdditionWhoseNoticeIsRefusedIsStagedAndCommittedAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        SessionId session = Stepped();
+
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _notifications.RefusedChannel = SendKind.Email;
+
+        Accepted(await Service.AddAsync(
+            Acting,
+            session,
+            IdentifierKind.Phone,
+            Number,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(MessageKind.VerificationLink, Assert.Single(_notifications.Carried).Message);
+        Assert.Equal(Number, Assert.Single(_pending.All).Staged.Canonical);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC18, REG-SESS-005 AC1: the notice to the holder of a value another
+    /// account offers, refused by a restriction, fails nothing: the asker is answered as
+    /// it would have been, nothing is staged and no unit of work is left open.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC18_AnAdditionOfAHeldValueWhoseNoticeIsRefusedIsAnsweredAlikeAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        var other = SubjectId.New(_randomness);
+
+        _passwords.Hold(other, Noon);
+        _ = _directory.Verified(other, IdentifierKind.Email, Third);
+
+        SessionId session = Stepped();
+
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+
+        Accepted(await Service.AddAsync(
+            Acting,
+            session,
+            IdentifierKind.Email,
+            Third,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Empty(_pending.All);
+        Assert.Empty(_notifications.Carried);
+        Assert.Equal(other, await _directory.OwnerAsync(
+            IdentifierKind.Email,
+            Third,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC18: the undo notice of a swap that a restriction refuses fails
+    /// nothing. The verified replacement is applied and committed, with the answer it
+    /// would have had.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC18_ASwapWhoseNoticeIsRefusedIsAppliedAndCommittedAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        SessionId session = Stepped();
+
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _work.Reset();
+
+        await VerifiedAsync(email, session);
+
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Empty(_notifications.Texts);
+        Assert.Equal(Second, Named(await HeldAsync(), Second).Canonical);
+        Assert.DoesNotContain(
+            await HeldAsync(),
+            identifier => string.Equals(identifier.Canonical, Primary, StringComparison.Ordinal));
+    }
+
     // AUTHZ-GATE-006 AC3: the change made with the account restricted in the moment
     // before the next unit of work begins, which is after the change's gate step. It is
     // refused as the gate refuses, the unit of work it began is rolled back and none is

@@ -58,6 +58,13 @@ internal sealed class GovernedSendInMemory : IGovernedSend, IFollowedSend
     public Error? Refusal { get; set; }
 
     /// <summary>
+    /// The one channel the send refuses with <see cref="Refusal"/>, where a test stands
+    /// in for a restriction that one destination alone has exhausted; where it names
+    /// none, the refusal meets every message.
+    /// </summary>
+    public SendKind? RefusedChannel { get; set; }
+
+    /// <summary>
     /// Whether the attempt that follows a commit carries what was admitted, which a
     /// caller that follows its sends asks; false where a test stands in for a transport
     /// that refuses.
@@ -74,7 +81,7 @@ internal sealed class GovernedSendInMemory : IGovernedSend, IFollowedSend
             throw new InvalidOperationException("A send is undertaken inside the caller's unit of work.");
         }
 
-        if (Refusal is Error refused)
+        if (Refusal is Error refused && (RefusedChannel is null || RefusedChannel == message.Kind))
         {
             return ValueTask.FromResult(Result.Failure<SendReference>(refused));
         }
