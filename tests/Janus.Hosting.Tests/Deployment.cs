@@ -808,10 +808,14 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IDeviceStore, DeviceStoreInMemory>();
         _ = services.AddSingleton<ISessionAudit>(SessionAudit);
         _ = services.AddSingleton<IMembershipLookup>(Memberships);
+
+        // The codec is the host's to declare, and photos are served with or without
+        // one, as AddJanus serves them.
         if (codec)
         {
             _ = services.AddSingleton(Codec.Declared);
         }
+
         _ = services.AddSingleton<IPolicyRaiseStore>(Raises);
         _ = services.AddSingleton<IChallengeStore, ChallengeStoreInMemory>();
         _ = services.AddSingleton<IVerificationCodeStore, VerificationCodeStoreInMemory>();
