@@ -33,22 +33,25 @@ internal sealed class NoticeLedgerInMemory : INoticeLedger
     }
 
     /// <inheritdoc/>
-    public ValueTask<bool> FirstAsync(
+    public ValueTask<bool> WasToldAsync(
+        string destination,
+        DateTimeOffset at,
+        TimeSpan window,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Told.Any(notice =>
+            string.Equals(notice.Destination, destination, StringComparison.Ordinal)
+            && notice.At > at - window));
+
+    /// <inheritdoc/>
+    public ValueTask MarkAsync(
         string destination,
         DateTimeOffset at,
         TimeSpan window,
         CancellationToken cancellationToken)
     {
-        if (Told.Any(notice =>
-            string.Equals(notice.Destination, destination, StringComparison.Ordinal)
-            && notice.At > at - window))
-        {
-            return ValueTask.FromResult(false);
-        }
-
         Told.Add((destination, at));
 
-        return ValueTask.FromResult(true);
+        return ValueTask.CompletedTask;
     }
 
     /// <inheritdoc/>

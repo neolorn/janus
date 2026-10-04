@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A notice that a restriction refuses no longer spends its address's
+  `abuse.nonexistent.window`: the window is marked only where the notice's send is
+  admitted, for the notice to the holder of an address or number someone tried to
+  register or add as for the answer to an address no account holds, so the next ask
+  inside the window whose send is admitted tells the address.
 - `IConsents.GrantAsync` that finds the consent recorded meanwhile, and so writes
   nothing, rolls its transaction back where it opened it and commits its level where it
   joined a unit of work the caller opened, so a caller's own unit of work is never

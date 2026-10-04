@@ -2571,8 +2571,10 @@ internal sealed class RegistrationService(
         // D-166 X3: the holder is told once however many ask at once.
         await notices.HoldAsync(staged.Canonical, cancellationToken).ConfigureAwait(false);
 
-        if (!await notices
-            .FirstAsync(staged.Canonical, time.GetUtcNow(), window, cancellationToken)
+        DateTimeOffset now = time.GetUtcNow();
+
+        if (await notices
+            .WasToldAsync(staged.Canonical, now, window, cancellationToken)
             .ConfigureAwait(false))
         {
             return null;
@@ -2597,8 +2599,15 @@ internal sealed class RegistrationService(
             .ConfigureAwait(false);
 
         // A refusal to tell the holder is not a refusal of the step: the person
-        // registering sees the same outcome either way (REG-SESS-005 AC1).
-        return sent.Match(_ => (Error?)null, _ => null);
+        // registering sees the same outcome either way (REG-SESS-005 AC1). The window
+        // is spent only where the send is admitted, so a notice a restriction refused
+        // leaves the holder to be told by the next (AUTH-ABUSE-003, D-188).
+        if (sent.Match(_ => true, _ => false))
+        {
+            await notices.MarkAsync(staged.Canonical, now, window, cancellationToken).ConfigureAwait(false);
+        }
+
+        return null;
     }
 
     private async ValueTask WriteCredentialsAsync(

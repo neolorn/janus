@@ -920,7 +920,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         _notices.Holding = destination =>
         {
             _notices.Holding = null;
-            _ = _notices.FirstAsync(destination, _clock.GetUtcNow(), TimeSpan.FromHours(24), TestContext.Current.CancellationToken).AsTask();
+            _ = _notices.MarkAsync(destination, _clock.GetUtcNow(), TimeSpan.FromHours(24), TestContext.Current.CancellationToken).AsTask();
         };
 
         Assert.True(Succeeded(await Service.BeginAsync(

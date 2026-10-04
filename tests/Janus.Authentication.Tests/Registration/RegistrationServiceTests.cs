@@ -1992,6 +1992,28 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-003 AC4, REG-SESS-005: a holder's notice that a restriction refused
+    /// spends no window, so the next registration inside it that offers the address,
+    /// its notice admitted, tells the holder, and the one after that is suppressed.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_003_AC4_AHoldersNoticeARestrictionRefusedSpendsNoWindowAsync()
+    {
+        _directory.Held(IdentifierKind.Email, Address, SubjectId.New(_randomness));
+        _notifications.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+
+        _ = await AwaitingAsync();
+        int marked = _notices.Told.Count;
+        _notifications.Refusal = null;
+        _ = await AwaitingAsync();
+        _ = await AwaitingAsync();
+
+        Assert.Equal(0, marked);
+        Assert.Equal(MessageKind.AccountExists, Assert.Single(_notifications.Sent).Message);
+        Assert.Equal(Address, Assert.Single(_notices.Told).Destination);
+    }
+
+    /// <summary>
     /// IDN-ACCT-004 AC3: an address entered in fullwidth and mixed case and a number
     /// entered in Arabic-Indic digits are written with the account in their canonical
     /// forms, beside the forms the person entered.

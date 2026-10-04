@@ -128,8 +128,8 @@ public sealed class ExpirySweepTests(HostFixture host) : IClassFixture<HostFixtu
             at,
             cancellationToken);
         await services.GetRequiredService<IRegistrationSources>().RecordAsync(source, at, cancellationToken);
-        _ = await services.GetRequiredService<INoticeLedger>()
-            .FirstAsync(source + "@example.test", at, TimeSpan.FromHours(1), cancellationToken);
+        await services.GetRequiredService<INoticeLedger>()
+            .MarkAsync(source + "@example.test", at, TimeSpan.FromHours(1), cancellationToken);
         _ = await services.GetRequiredService<ICallbackLedger>()
             .ReceivedAsync(source, at, TimeSpan.FromMinutes(1), cancellationToken);
         await work.CommitAsync(cancellationToken);
