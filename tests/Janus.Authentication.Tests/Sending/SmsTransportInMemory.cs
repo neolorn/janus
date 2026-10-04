@@ -27,6 +27,11 @@ internal sealed class SmsTransportInMemory : ISmsTransport
     public decimal Balance { get; set; } = 1000m;
 
     /// <summary>
+    /// How many messages the transport takes before it refuses the rest.
+    /// </summary>
+    public int Takes { get; set; } = int.MaxValue;
+
+    /// <summary>
     /// How many times the balance was read.
     /// </summary>
     public int Reads { get; private set; }
@@ -34,7 +39,7 @@ internal sealed class SmsTransportInMemory : ISmsTransport
     /// <inheritdoc/>
     public ValueTask<Result> SendAsync(SmsMessage message, CancellationToken cancellationToken)
     {
-        if (!Accepts)
+        if (!Accepts || Taken.Count >= Takes)
         {
             return ValueTask.FromResult(Result.Failure(Error.From(ErrorCodes.SystemFault)));
         }

@@ -78,6 +78,7 @@ oidc.accesstoken.lifetime duration R ceiling=PT1H
 oidc.code.lifetime duration R ceiling=PT10M
 organization.deletion.grace duration R floor=P7D
 organization.multiplememberships flag R
+outbox.claim.timeout duration R floor=PT30S ceiling=PT10M
 outbox.poll.interval duration R ceiling=PT1M
 outbox.retry.factor decimal R floor=1.0
 outbox.retry.initial duration R

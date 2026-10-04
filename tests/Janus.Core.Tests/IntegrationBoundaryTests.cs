@@ -108,7 +108,7 @@ public sealed class IntegrationBoundaryTests
     // site and nowhere else.
     private static readonly string[] Payloads = ["new MailMessage(", "new SmsMessage("];
 
-    private static readonly string[] Mapping = ["SendingService.cs"];
+    private static readonly string[] Mapping = ["NotificationHandler.cs"];
 
     private static readonly string[] CoreProjects =
     [

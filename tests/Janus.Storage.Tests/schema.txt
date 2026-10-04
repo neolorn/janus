@@ -997,7 +997,7 @@ table send_outbox
   column enc_message bytea not null
   column attempts integer not null default 0
   column next_attempt_at timestamp with time zone not null default '-infinity'::timestamp with time zone
-  column taken_languages jsonb not null default '[]'::jsonb
+  column claimed_until timestamp with time zone
   constraint ck_send_outbox_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint pk_send_outbox PRIMARY KEY (id)
   index ix_send_outbox_due using btree (next_attempt_at)
@@ -1007,6 +1007,8 @@ table sends
   column sent_at timestamp with time zone not null
   column settles_at timestamp with time zone not null
   column fingerprint_version integer not null
+  column spent bytea[] not null default ARRAY[]::bytea[]
+  column spent_versions integer[] not null default ARRAY[]::integer[]
   constraint pk_sends PRIMARY KEY (reference)
   index ix_sends_settles_at using btree (settles_at)
 table sessions

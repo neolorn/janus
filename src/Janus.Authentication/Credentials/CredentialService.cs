@@ -68,7 +68,7 @@ internal sealed class CredentialService(
     IPasswordStore held,
     IIdentifierDirectory identifiers,
     ISessionStore sessions,
-    INotificationHandler sending,
+    IGovernedSend sending,
     ICredentialAudit audit,
     IEvents events,
     IConfigurationStore configuration,
@@ -142,6 +142,9 @@ internal sealed class CredentialService(
 
         await CompletedAsync(acting, cancellationToken).ConfigureAwait(false);
 
+        _ = await TellAsync(acting.Subject, MessageKind.SecurityNotice, source, cancellationToken)
+            .ConfigureAwait(false);
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
@@ -150,9 +153,6 @@ internal sealed class CredentialService(
 
         // IDN-LIFE-008: a changed password ends what was held under the old one.
         await EndOthersAsync(acting, cancellationToken).ConfigureAwait(false);
-
-        _ = await TellAsync(acting.Subject, MessageKind.SecurityNotice, source, cancellationToken)
-            .ConfigureAwait(false);
 
         return Result.Success();
     }
@@ -600,14 +600,14 @@ internal sealed class CredentialService(
             .RecordedAsync(Removed, acting.Subject, credential, now, cancellationToken)
             .ConfigureAwait(false);
 
+        _ = await TellAsync(acting.Subject, MessageKind.SecurityNotice, source, cancellationToken)
+            .ConfigureAwait(false);
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
             return Result.Failure(notCommitted);
         }
-
-        _ = await TellAsync(acting.Subject, MessageKind.SecurityNotice, source, cancellationToken)
-            .ConfigureAwait(false);
 
         return Result.Success();
     }
@@ -720,14 +720,14 @@ internal sealed class CredentialService(
             return Result.Failure(unannounced);
         }
 
+        _ = await TellAsync(acting.Subject, MessageKind.CredentialEnrolled, source, cancellationToken)
+            .ConfigureAwait(false);
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
             return Result.Failure(notCommitted);
         }
-
-        _ = await TellAsync(acting.Subject, MessageKind.CredentialEnrolled, source, cancellationToken)
-            .ConfigureAwait(false);
 
         return Result.Success();
     }
@@ -818,14 +818,14 @@ internal sealed class CredentialService(
             .RecordedAsync(Removed, acting.Subject, linked.Id, now, cancellationToken)
             .ConfigureAwait(false);
 
+        _ = await TellAsync(acting.Subject, MessageKind.SecurityNotice, source, cancellationToken)
+            .ConfigureAwait(false);
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
             return Result.Failure(notCommitted);
         }
-
-        _ = await TellAsync(acting.Subject, MessageKind.SecurityNotice, source, cancellationToken)
-            .ConfigureAwait(false);
 
         return Result.Success();
     }
@@ -1171,16 +1171,16 @@ internal sealed class CredentialService(
 
         await CompletedAsync(acting, cancellationToken).ConfigureAwait(false);
 
+        // AUTH-STEP-007 AC1: every recorded channel hears of it, and the enrolling
+        // session is not one of them.
+        _ = await TellAsync(acting.Subject, MessageKind.CredentialEnrolled, source, cancellationToken)
+            .ConfigureAwait(false);
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
             return Result.Failure<EnrolledCredential>(notCommitted);
         }
-
-        // AUTH-STEP-007 AC1: every recorded channel hears of it, and the enrolling
-        // session is not one of them.
-        _ = await TellAsync(acting.Subject, MessageKind.CredentialEnrolled, source, cancellationToken)
-            .ConfigureAwait(false);
 
         return Result.Success(new EnrolledCredential(
             credential,
@@ -1309,8 +1309,8 @@ internal sealed class CredentialService(
             // A notice one destination refuses still reaches the rest: the set exists
             // so that no one channel can silence it.
             Result<SendReference> sent = await sending
-                .SendAsync(
-                    new SendRequest(
+                .UndertakeAsync(
+                    new OutboundMessage(
                         destination,
                         message,
                         RestrictionPurpose.Notification,

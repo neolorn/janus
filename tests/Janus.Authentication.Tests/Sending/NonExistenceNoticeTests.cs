@@ -23,7 +23,7 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
 
     private readonly ConfigurationInMemory _configuration = new();
     private readonly NoticeLedgerInMemory _notices = new();
-    private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly GovernedSendInMemory _notifications = new();
     private readonly SendingRestrictionsInMemory _restrictions = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
@@ -35,6 +35,8 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
     /// </summary>
     public NonExistenceNoticeTests()
     {
+        _notifications.Work = _work;
+        _restrictions.Work = _work;
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, ["en", "ar"]);
     }
@@ -54,7 +56,7 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
     {
         Assert.True(await ToldAsync("nobody@example.test"));
 
-        SendRequest sent = Assert.Single(_notifications.Mail);
+        OutboundMessage sent = Assert.Single(_notifications.Mail);
 
         Assert.Equal("nobody@example.test", sent.Destination.Canonical);
         Assert.Equal(MessageKind.NoAccount, sent.Message);
@@ -117,8 +119,8 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
 
         Assert.False(await ToldAsync("nobody@example.test"));
 
-        SendRequest drawn = Assert.Single(_restrictions.Drawn);
-        SendRequest told = Assert.Single(_notifications.Mail);
+        OutboundMessage drawn = Assert.Single(_restrictions.Drawn);
+        OutboundMessage told = Assert.Single(_notifications.Mail);
 
         Assert.Equal("nobody@example.test", drawn.Destination.Canonical);
         Assert.Equal(MessageKind.SignInLink, drawn.Message);

@@ -30,6 +30,8 @@ public sealed class SendOutboxTests(DatabaseFixture database)
 
     private static readonly TimeSpan Held = TimeSpan.FromSeconds(30);
 
+    private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(2);
+
     private readonly Deployment _deployment = new(database);
 
     /// <summary>
@@ -107,8 +109,9 @@ public sealed class SendOutboxTests(DatabaseFixture database)
     }
 
     /// <summary>
-    /// IDN-PRIN-003: a message a transport has taken is removed, so the outbox holds
-    /// what is outstanding and no record of where anybody was written to.
+    /// IDN-PRIN-003: a message the handler has taken is removed under the claim its
+    /// attempt held, so the outbox holds what is outstanding and no record of where
+    /// anybody was written to.
     /// </summary>
     [Fact]
     public async Task IDN_PRIN_003_AMessageTakenLeavesNoRowAsync()
@@ -117,10 +120,12 @@ public sealed class SendOutboxTests(DatabaseFixture database)
 
         await WrittenAsync(undertaken);
 
+        SendClaim claim = await ClaimedAsync(undertaken.Id, Noon)
+            ?? throw new Xunit.Sdk.XunitException("The message was not claimed.");
+
         await using (StoreContext removing = database.Context())
         {
-            await Outbox(removing).RemoveAsync(undertaken.Id, TestContext.Current.CancellationToken);
-            await removing.SaveChangesAsync(TestContext.Current.CancellationToken);
+            Assert.True(await Outbox(removing).RemoveAsync(claim, TestContext.Current.CancellationToken));
         }
 
         await using StoreContext reading = database.Context();
@@ -129,9 +134,9 @@ public sealed class SendOutboxTests(DatabaseFixture database)
     }
 
     /// <summary>
-    /// D-022: what an attempt made of a message reads back as it was recorded, so a
-    /// retry waits as long as the schedule said and carries only the languages still
-    /// owed.
+    /// D-022, AUTH-ABUSE-004: what a failed attempt made of a message reads back as it
+    /// was recorded, so a retry waits as long as the schedule said, and the message
+    /// reads back with the reference drawn for it at its admission.
     /// </summary>
     [Fact]
     public async Task D_022_AnAttemptReadsBackAsItWasRecordedAsync()
@@ -141,14 +146,14 @@ public sealed class SendOutboxTests(DatabaseFixture database)
 
         await WrittenAsync(undertaken);
 
-        SendDelivery refused = undertaken
-            .Carried(["en"])
-            .Refused(attempted, TimeSpan.FromSeconds(30), 2.0m, jitter: 0.5);
+        SendClaim claim = await ClaimedAsync(undertaken.Id, Noon)
+            ?? throw new Xunit.Sdk.XunitException("The message was not claimed.");
+
+        SendDelivery refused = undertaken.Refused(attempted, TimeSpan.FromSeconds(30), 2.0m, jitter: 0.5);
 
         await using (StoreContext recording = database.Context())
         {
-            await Outbox(recording).RecordAsync(refused, TestContext.Current.CancellationToken);
-            await recording.SaveChangesAsync(TestContext.Current.CancellationToken);
+            Assert.True(await Outbox(recording).RecordAsync(refused, claim, TestContext.Current.CancellationToken));
         }
 
         await using StoreContext reading = database.Context();
@@ -159,12 +164,14 @@ public sealed class SendOutboxTests(DatabaseFixture database)
 
         Assert.Equal(1, held.Attempts);
         Assert.Equal(attempted.AddSeconds(15), held.NextAttemptAt);
-        Assert.Equal(["en"], held.Taken);
+        Assert.Null(held.Requested.Language);
+        Assert.Equal(undertaken.Reference.Value, held.Reference.Value);
+        Assert.Equal(undertaken.Reference.Value, held.Admitted.Reference.Value);
     }
 
     /// <summary>
     /// D-022, INF-BG-001: the publisher reads a message once its next attempt is due
-    /// and not before, so the path that undertook it is left to carry it first.
+    /// and not before, so the attempt that follows the commit is left to carry it first.
     /// </summary>
     [Fact]
     public async Task D_022_OnlyAMessageWhoseAttemptIsDueIsReadAsync()
@@ -177,14 +184,84 @@ public sealed class SendOutboxTests(DatabaseFixture database)
 
         await using StoreContext reading = database.Context();
 
-        IReadOnlyList<SendDelivery> read = await Outbox(reading)
+        IReadOnlyList<SendDeliveryId> read = await Outbox(reading)
             .DueAsync(Noon.AddSeconds(1), count: 100, TestContext.Current.CancellationToken);
 
-        Assert.Contains(due.Id, read.Select(one => one.Id));
-        Assert.DoesNotContain(waiting.Id, read.Select(one => one.Id));
-        Assert.Equal(
-            "fifth@example.test",
-            read.Single(one => one.Id == due.Id).Requested.Destination.Canonical);
+        Assert.Contains(due.Id, read);
+        Assert.DoesNotContain(waiting.Id, read);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC9, INF-BG-001 AC4: a row is claimed by one conditional update,
+    /// so of two attempts that reach it at once one takes it; while the claim stands no
+    /// pass reads the row as due and no other attempt takes it; and once the claim has
+    /// timed out the next attempt takes it over.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_ARowIsClaimedByOneAttemptUntilItsClaimTimesOutAsync()
+    {
+        SendDelivery undertaken = Delivery("seventh@example.test", subject: null, held: TimeSpan.Zero);
+
+        await WrittenAsync(undertaken);
+
+        SendClaim?[] claims = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => ClaimedAsync(undertaken.Id, Noon)));
+
+        SendClaim claim = Assert.Single(claims, one => one is not null)!.Value;
+
+        Assert.Equal(Noon + Timeout, claim.Until);
+        Assert.Null(await ClaimedAsync(undertaken.Id, Noon + Timeout - TimeSpan.FromSeconds(1)));
+
+        await using (StoreContext reading = database.Context())
+        {
+            Assert.DoesNotContain(
+                undertaken.Id,
+                await Outbox(reading).DueAsync(Noon.AddSeconds(1), count: 100, TestContext.Current.CancellationToken));
+            Assert.Contains(
+                undertaken.Id,
+                await Outbox(reading).DueAsync(Noon + Timeout, count: 100, TestContext.Current.CancellationToken));
+        }
+
+        Assert.NotNull(await ClaimedAsync(undertaken.Id, Noon + Timeout));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC9: an attempt's outcome is written by one statement conditional
+    /// on its claim, so an attempt whose claim was taken over changes nothing: the row
+    /// stands as the attempt that holds it left it.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_AnOutcomeWhoseClaimWasTakenOverChangesNothingAsync()
+    {
+        SendDelivery undertaken = Delivery("eighth@example.test", subject: null, held: TimeSpan.Zero);
+
+        await WrittenAsync(undertaken);
+
+        SendClaim abandoned = await ClaimedAsync(undertaken.Id, Noon)
+            ?? throw new Xunit.Sdk.XunitException("The message was not claimed.");
+        SendClaim taken = await ClaimedAsync(undertaken.Id, Noon + Timeout)
+            ?? throw new Xunit.Sdk.XunitException("The claim was not taken over.");
+
+        await using (StoreContext late = database.Context())
+        {
+            Assert.False(await Outbox(late).RecordAsync(
+                undertaken.Refused(Noon, TimeSpan.FromSeconds(30), 2.0m, jitter: 1),
+                abandoned,
+                TestContext.Current.CancellationToken));
+            Assert.False(await Outbox(late).RemoveAsync(abandoned, TestContext.Current.CancellationToken));
+        }
+
+        await using (StoreContext reading = database.Context())
+        {
+            SendDelivery held = await Outbox(reading)
+                .FindAsync(undertaken.Id, TestContext.Current.CancellationToken)
+                ?? throw new Xunit.Sdk.XunitException("The message is gone.");
+
+            Assert.Equal(0, held.Attempts);
+        }
+
+        await using StoreContext settling = database.Context();
+
+        Assert.True(await Outbox(settling).RemoveAsync(taken, TestContext.Current.CancellationToken));
     }
 
     /// <summary>
@@ -224,7 +301,7 @@ public sealed class SendOutboxTests(DatabaseFixture database)
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
-    private static SendDelivery Delivery(
+    private SendDelivery Delivery(
         string address,
         SubjectId? subject,
         string? language = "ar",
@@ -236,7 +313,7 @@ public sealed class SendOutboxTests(DatabaseFixture database)
         }
 
         return SendDelivery.Of(
-            new SendRequest(
+            new OutboundMessage(
                 SendDestination.Of(destination),
                 MessageKind.SecondStepCode,
                 RestrictionPurpose.SignIn,
@@ -246,6 +323,7 @@ public sealed class SendOutboxTests(DatabaseFixture database)
                 Subject = subject,
                 Values = new Dictionary<string, string>(StringComparer.Ordinal) { ["code"] = "482913" },
             },
+            SendReference.Draw(_deployment.Randomness),
             Noon,
             held ?? Held);
     }
@@ -256,6 +334,14 @@ public sealed class SendOutboxTests(DatabaseFixture database)
 
         await Outbox(writing).AddAsync(delivery, TestContext.Current.CancellationToken);
         await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    // A claim as an attempt takes it: one conditional update, committed on its own.
+    private async Task<SendClaim?> ClaimedAsync(SendDeliveryId delivery, DateTimeOffset now)
+    {
+        await using StoreContext claiming = database.Context();
+
+        return await Outbox(claiming).ClaimAsync(delivery, now, Timeout, TestContext.Current.CancellationToken);
     }
 
     private SendDeliveryStore Outbox(StoreContext context) =>

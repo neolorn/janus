@@ -73,7 +73,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     private readonly ThrottleLedgerInMemory _throttle = new();
     private readonly NoticeLedgerInMemory _notices = new();
     private readonly ConfigurationInMemory _configuration = new();
-    private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly GovernedSendInMemory _notifications = new();
     private readonly SendingRestrictionsInMemory _restrictions = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
@@ -87,6 +87,8 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     /// </summary>
     public RecoveryServiceTests()
     {
+        _notifications.Work = _work;
+        _restrictions.Work = _work;
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, [Language, "ar"]);
     }
@@ -859,7 +861,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
 
         _ = await Approving(approver, session, subject, Reason);
 
-        SendRequest link = Assert.Single(_notifications.Sent, sent => sent.Message is MessageKind.EnrolmentLink);
+        OutboundMessage link = Assert.Single(_notifications.Sent, sent => sent.Message is MessageKind.EnrolmentLink);
 
         Assert.Equal(RestrictionPurpose.SignIn, link.Purpose);
     }

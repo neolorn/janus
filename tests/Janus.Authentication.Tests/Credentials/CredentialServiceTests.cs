@@ -84,7 +84,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     private readonly ThrottleLedgerInMemory _throttle = new();
     private readonly NoticeLedgerInMemory _notices = new();
     private readonly ConfigurationInMemory _configuration = new();
-    private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly GovernedSendInMemory _notifications = new();
     private readonly SendingRestrictionsInMemory _restrictions = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
@@ -98,6 +98,8 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     /// </summary>
     public CredentialServiceTests()
     {
+        _notifications.Work = _work;
+        _restrictions.Work = _work;
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.ServiceName, "Example");
         _configuration.Set(Settings.NotificationLanguages, [Language]);
@@ -564,11 +566,12 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken));
 
         // CONV-DESIGN-003 AC5: the refused removal ends the unit of work it was decided
-        // in with nothing committed, and the window's report then commits on its own.
+        // in with nothing committed, and the window's report then commits on its own: the
+        // suspension, the notices it undertakes, and what became of them.
         Assert.False(_work.Open);
         Assert.Equal(1, _work.RolledBack);
-        Assert.Equal(2, _work.OutermostCommitted);
-        Assert.Equal(2, _work.Committed);
+        Assert.Equal(3, _work.OutermostCommitted);
+        Assert.Equal(3, _work.Committed);
 
         Assert.Equal(ErrorCodes.CredentialLastSecondFactor, window.Code);
         Assert.Equal(

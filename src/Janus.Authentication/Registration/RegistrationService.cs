@@ -58,7 +58,7 @@ namespace Janus.Authentication.Registration;
 internal sealed class RegistrationService(
     IRegistrationSessionStore sessions,
     IRegistrationDirectory directory,
-    INotificationHandler sending,
+    IGovernedSend sending,
     LandingLinks landing,
     INoticeLedger notices,
     PasswordService passwords,
@@ -1994,8 +1994,8 @@ internal sealed class RegistrationService(
         var link = OpaqueToken.Draw(randomness);
 
         Result<SendReference> sent = await sending
-            .SendAsync(
-                new SendRequest(
+            .UndertakeAsync(
+                new OutboundMessage(
                     Destination(staged),
                     MessageKind.VerificationLink,
                     RestrictionPurpose.Verification,
@@ -2057,8 +2057,8 @@ internal sealed class RegistrationService(
         // The holder is told and the person registering is told nothing: the message
         // names no requester and carries neither a code nor a link (REG-SESS-005 AC2).
         Result<SendReference> sent = await sending
-            .SendAsync(
-                new SendRequest(
+            .UndertakeAsync(
+                new OutboundMessage(
                     Destination(staged),
                     MessageKind.AccountExists,
                     RestrictionPurpose.Notification,

@@ -42,7 +42,7 @@ internal sealed class AccountLifecycle(
     IIdentifierDirectory identifiers,
     ILifecycleLinkStore links,
     ISessionStore sessions,
-    INotificationHandler sending,
+    IGovernedSend sending,
     LandingLinks landing,
     IAccountAudit audit,
     StepUpGuard stepUp,
@@ -587,8 +587,8 @@ internal sealed class AccountLifecycle(
             }
 
             Result<SendReference> sent = await sending
-                .SendAsync(
-                    new SendRequest(
+                .UndertakeAsync(
+                    new OutboundMessage(
                         destination,
                         message,
                         RestrictionPurpose.Notification,

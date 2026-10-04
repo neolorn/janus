@@ -700,6 +700,14 @@ public static class Settings
         new("outbox.retry.maxattempts", SettingScope.Runtime, 10, floor: 1);
 
     /// <summary>
+    /// How long a claim stands on a row that a delivery job or a send's immediate
+    /// attempt carries. An attempt still running then is abandoned as failed, and the
+    /// next pass may take the row (CONV-DESIGN-003).
+    /// </summary>
+    public static DurationSetting OutboxClaimTimeout { get; } =
+        new("outbox.claim.timeout", SettingScope.Runtime, "PT2M", floor: "PT30S", ceiling: "PT10M");
+
+    /// <summary>
     /// The interval of the one sweep, and so the longest a deadline waits past its
     /// instant.
     /// </summary>
@@ -1045,6 +1053,7 @@ public static class Settings
         OutboxRetryInitial,
         OutboxRetryFactor,
         OutboxRetryMaxAttempts,
+        OutboxClaimTimeout,
         SweepInterval,
         NotificationLanguages,
         NotificationEmailSendingDomain,

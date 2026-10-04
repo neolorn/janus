@@ -24,7 +24,7 @@ namespace Janus.Hosting.Privacy;
 /// </remarks>
 internal sealed class SubjectNotices(
     IIdentifierDirectory identifiers,
-    INotificationHandler sending,
+    IGovernedSend sending,
     IConfigurationStore configuration) : ISubjectNotices
 {
     private static readonly IReadOnlyDictionary<string, string> Nothing =
@@ -51,8 +51,8 @@ internal sealed class SubjectNotices(
             }
 
             Result<SendReference> sent = await sending
-                .SendAsync(
-                    new SendRequest(
+                .UndertakeAsync(
+                    new OutboundMessage(
                         destination,
                         message,
                         RestrictionPurpose.Notification,

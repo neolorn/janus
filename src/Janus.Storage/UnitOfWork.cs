@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -24,6 +25,9 @@ internal sealed class UnitOfWork(StoreContext context) : IUnitOfWork
 
     // An operation that joined the unit of work rolled back, so nothing of it commits.
     private bool _marked;
+
+    // What runs once the outermost transaction has committed; a rollback discards it.
+    private List<Func<CancellationToken, ValueTask>> _afterCommit = [];
 
     /// <inheritdoc/>
     public async ValueTask<Result> BeginAsync(CancellationToken cancellationToken)
@@ -85,6 +89,33 @@ internal sealed class UnitOfWork(StoreContext context) : IUnitOfWork
         await _transaction.DisposeAsync().ConfigureAwait(false);
         _transaction = null;
 
+        // CONV-DESIGN-002: what was registered runs now, outside any transaction. Each
+        // may begin and commit a unit of work of its own in this scope, so the list is
+        // taken before the first runs and nothing registered meanwhile is run twice.
+        List<Func<CancellationToken, ValueTask>> registered = _afterCommit;
+
+        _afterCommit = [];
+
+        foreach (Func<CancellationToken, ValueTask> work in registered)
+        {
+            await work(cancellationToken).ConfigureAwait(false);
+        }
+
+        return Result.Success();
+    }
+
+    /// <inheritdoc/>
+    public Result AfterCommit(Func<CancellationToken, ValueTask> work)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+
+        if (_transaction is null)
+        {
+            throw new InvalidOperationException("No unit of work is in progress to register work on.");
+        }
+
+        _afterCommit.Add(work);
+
         return Result.Success();
     }
 
@@ -131,6 +162,7 @@ internal sealed class UnitOfWork(StoreContext context) : IUnitOfWork
         _transaction = null;
         _depth = 0;
         _marked = false;
+        _afterCommit = [];
         context.ChangeTracker.Clear();
 
         await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);

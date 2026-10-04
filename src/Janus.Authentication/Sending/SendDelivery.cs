@@ -1,76 +1,77 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using Janus.Core;
 
 namespace Janus.Authentication.Sending;
 
 /// <summary>
-/// One message the library has undertaken to send, written in the transaction that
-/// made it necessary and carried afterwards.
+/// One message the library has admitted, written in the transaction that undertook it
+/// and carried afterwards.
 /// </summary>
 /// <param name="Id">What the row is held under.</param>
-/// <param name="RecordedAt">When the send was recorded.</param>
-/// <param name="Requested">What is to be sent.</param>
+/// <param name="RecordedAt">When the send was admitted.</param>
+/// <param name="Requested">What was undertaken, with what the restrictions judge it on.</param>
+/// <param name="Reference">The reference drawn for it, which it is counted and carried under.</param>
 /// <remarks>
-/// Implements D-022, INF-BG-001 and IDN-PRIN-003. A message is a working artefact: the
-/// row exists so that a message undertaken inside a transaction is not lost with the
-/// process that took it, and it is removed once a transport has taken it in every
-/// language it goes out in, or once its retry budget is spent.
+/// Implements D-022, AUTH-ABUSE-004, INF-BG-001 and IDN-PRIN-003. A message is a working
+/// artefact: the row exists so that a message admitted inside a transaction is not lost
+/// with the process that took it, and it is removed once the handler has taken it, or
+/// once it fails for good.
 /// </remarks>
 internal sealed record SendDelivery(
     SendDeliveryId Id,
     DateTimeOffset RecordedAt,
-    SendRequest Requested)
+    OutboundMessage Requested,
+    SendReference Reference)
 {
-    private static readonly IReadOnlyList<string> None = [];
-
     /// <summary>
-    /// How many attempts have been made without a transport taking every language.
+    /// How many attempts have been made without the handler taking the message.
     /// </summary>
     public int Attempts { get; init; }
 
     /// <summary>
-    /// When the publisher next carries it. A message just undertaken is held back by
-    /// the first retry delay, so the publisher does not carry a message the path that
-    /// undertook it is carrying at that moment.
+    /// When the publisher next carries it. A message whose immediate attempt follows the
+    /// commit is held back by the first retry delay, so the publisher leaves it to that
+    /// attempt.
     /// </summary>
     public DateTimeOffset NextAttemptAt { get; init; }
 
     /// <summary>
-    /// The languages a transport has already taken it in, which no retry sends again.
+    /// The admitted message as the handler that carries it receives it, with none of the
+    /// restrictions' inputs.
     /// </summary>
-    public IReadOnlyList<string> Taken { get; init; } = None;
+    public SendRequest Admitted =>
+        new(Requested.Destination, Requested.Message, Requested.Language, Reference)
+        {
+            Subject = Requested.Subject,
+            Values = Requested.Values,
+        };
 
     /// <summary>
-    /// A message just undertaken.
+    /// A message just admitted.
     /// </summary>
-    /// <param name="request">What is to be sent.</param>
-    /// <param name="recordedAt">When it was undertaken.</param>
-    /// <param name="held">How long the publisher leaves it to the path that undertook it.</param>
+    /// <param name="message">What was undertaken.</param>
+    /// <param name="reference">The reference drawn for it.</param>
+    /// <param name="recordedAt">When it was admitted.</param>
+    /// <param name="held">How long the publisher leaves it to the attempt that follows the commit.</param>
     /// <returns>The delivery.</returns>
-    /// <exception cref="ArgumentNullException">The request is absent.</exception>
-    public static SendDelivery Of(SendRequest request, DateTimeOffset recordedAt, TimeSpan held)
+    /// <exception cref="ArgumentNullException">The message is absent.</exception>
+    public static SendDelivery Of(
+        OutboundMessage message,
+        SendReference reference,
+        DateTimeOffset recordedAt,
+        TimeSpan held)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(message);
 
-        return new SendDelivery(SendDeliveryId.Of(recordedAt), recordedAt, request)
+        return new SendDelivery(SendDeliveryId.Of(recordedAt), recordedAt, message, reference)
         {
             NextAttemptAt = recordedAt + held,
         };
     }
 
     /// <summary>
-    /// The message once a transport has taken it in further languages.
-    /// </summary>
-    /// <param name="languages">The languages just taken.</param>
-    /// <returns>The message.</returns>
-    public SendDelivery Carried(IEnumerable<string> languages) =>
-        this with { Taken = [.. Taken.Union(languages, StringComparer.Ordinal)] };
-
-    /// <summary>
-    /// The message once an attempt has left a language untaken, its next attempt
-    /// scheduled with the delay growing by the factor per attempt, with full jitter.
+    /// The message once an attempt has left it untaken, its next attempt scheduled with
+    /// the delay growing by the factor per attempt, with full jitter.
     /// </summary>
     /// <param name="at">When the attempt was made.</param>
     /// <param name="initial">The first retry delay.</param>

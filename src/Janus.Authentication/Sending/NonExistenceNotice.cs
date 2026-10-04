@@ -32,7 +32,7 @@ namespace Janus.Authentication.Sending;
 /// </remarks>
 internal sealed class NonExistenceNotice(
     IConfigurationStore configuration,
-    INotificationHandler sending,
+    IGovernedSend sending,
     ISendingRestrictions restrictions,
     INoticeLedger ledger,
     IUnitOfWork work,
@@ -121,22 +121,22 @@ internal sealed class NonExistenceNotice(
 
         // Whoever holds the address, the ask is judged as the message it asked for,
         // in the language an address no account holds is written to.
-        var asked = new SendRequest(
+        var asked = new OutboundMessage(
             destination,
             message,
             purpose,
             source,
             RecipientLanguage.Found(language, languages));
 
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         if (unheld && destination.Kind is SendKind.Email)
         {
             DateTimeOffset now = time.GetUtcNow();
-
-            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notBegun)
-            {
-                return Result.Failure(notBegun);
-            }
 
             // D-166 X3: whether the address was told is read with its notices held, so
             // two asks at once tell it once.
@@ -148,15 +148,26 @@ internal sealed class NonExistenceNotice(
             {
                 return await ToldAsync(asked, now, threshold, cancellationToken).ConfigureAwait(false);
             }
-
-            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notCommitted)
-            {
-                return Result.Failure(notCommitted);
-            }
         }
 
-        return await restrictions.DrawAsync(asked, cancellationToken).ConfigureAwait(false);
+        // AUTH-ABUSE-004: an ask that sends nothing is judged and counted in this unit
+        // of work as its message would be, and a refusal leaves nothing of it.
+        Result drawn = await restrictions.DrawAsync(asked, cancellationToken).ConfigureAwait(false);
+
+        if (drawn.Match(() => (Error?)null, error => error) is Error refused)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(refused);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
+
+        return Result.Success();
     }
 
     private static TValue Held<TValue>(Error error, ref Error? failure)
@@ -172,13 +183,13 @@ internal sealed class NonExistenceNotice(
     // all: a template that named the asker would turn the notice itself into the
     // disclosure it exists to prevent.
     private async ValueTask<Result> ToldAsync(
-        SendRequest asked,
+        OutboundMessage asked,
         DateTimeOffset now,
         int threshold,
         CancellationToken cancellationToken)
     {
         Result<SendReference> sent = await sending
-            .SendAsync(asked with { Message = MessageKind.NoAccount }, cancellationToken)
+            .UndertakeAsync(asked with { Message = MessageKind.NoAccount }, cancellationToken)
             .ConfigureAwait(false);
 
         if (sent.Match(_ => (Error?)null, error => error) is Error refused)

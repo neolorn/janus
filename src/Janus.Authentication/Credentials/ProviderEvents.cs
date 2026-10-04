@@ -47,7 +47,7 @@ internal sealed class ProviderEvents(
     IAccountDirectory accounts,
     IIdentifierDirectory identifiers,
     ICredentialAudit audit,
-    INotificationHandler sending,
+    IGovernedSend sending,
     IConfigurationStore configuration,
     IEvents events,
     TimeProvider time)
@@ -392,8 +392,8 @@ internal sealed class ProviderEvents(
             }
 
             Result<SendReference> sent = await sending
-                .SendAsync(
-                    new SendRequest(
+                .UndertakeAsync(
+                    new OutboundMessage(
                         destination,
                         MessageKind.SecurityNotice,
                         RestrictionPurpose.Notification,

@@ -58,7 +58,7 @@ public sealed class LossReportsTests : IAsyncDisposable
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
-    private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly GovernedSendInMemory _notifications = new();
     private readonly EventsInMemory _events = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
@@ -70,6 +70,7 @@ public sealed class LossReportsTests : IAsyncDisposable
     /// </summary>
     public LossReportsTests()
     {
+        _notifications.Work = _work;
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, [Language, "ar"]);
     }

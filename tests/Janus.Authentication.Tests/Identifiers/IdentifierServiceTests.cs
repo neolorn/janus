@@ -58,7 +58,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
-    private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly GovernedSendInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
@@ -71,6 +71,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     /// </summary>
     public IdentifierServiceTests()
     {
+        _notifications.Work = _work;
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, English);
         _person = SubjectId.New(_randomness);
@@ -195,7 +196,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         await AddedAsync(Third);
 
-        SendRequest sent = _notifications.Mail.Single(one => one.Destination.Canonical == Third);
+        OutboundMessage sent = _notifications.Mail.Single(one => one.Destination.Canonical == Third);
 
         Assert.Equal(MessageKind.VerificationLink, sent.Message);
         Assert.Equal(["code", "link"], sent.Values.Keys.Order(StringComparer.Ordinal));
@@ -488,9 +489,9 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
             Source,
             TestContext.Current.CancellationToken));
 
-        SendRequest left = _notifications.Mail.Single(sent =>
+        OutboundMessage left = _notifications.Mail.Single(sent =>
             string.Equals(sent.Destination.Canonical, Second, StringComparison.Ordinal));
-        SendRequest kept = _notifications.Mail.Single(sent =>
+        OutboundMessage kept = _notifications.Mail.Single(sent =>
             string.Equals(sent.Destination.Canonical, Primary, StringComparison.Ordinal));
 
         Assert.Equal(MessageKind.IdentifierDetached, left.Message);
@@ -680,7 +681,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         Assert.Null((await _sessions.FindAsync(asking, TestContext.Current.CancellationToken))?.EndedAt);
 
-        SendRequest asked = _notifications.Mail.Last(
+        OutboundMessage asked = _notifications.Mail.Last(
             sent => sent.Message is MessageKind.IdentifierChangeConfirm);
 
         Accepted(await Service.LandAsync(
@@ -717,7 +718,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         await VerifiedAsync(email);
 
-        SendRequest asked = _notifications.Mail.Last(
+        OutboundMessage asked = _notifications.Mail.Last(
             sent => sent.Message is MessageKind.IdentifierChangeConfirm);
 
         Assert.Equal(RestrictionPurpose.Verification, asked.Purpose);
@@ -955,7 +956,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         Assert.Equal(Primary, Named(await HeldAsync(), Primary).Canonical);
 
-        SendRequest asked = _notifications.Mail.Last(
+        OutboundMessage asked = _notifications.Mail.Last(
             sent => sent.Message is MessageKind.IdentifierChangeConfirm);
 
         Accepted(await Service.LandAsync(
@@ -990,7 +991,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         await VerifiedAsync(email);
 
-        SendRequest asked = _notifications.Mail.Last(
+        OutboundMessage asked = _notifications.Mail.Last(
             sent => sent.Message is MessageKind.IdentifierChangeConfirm);
 
         _pending.Locking = identifier =>

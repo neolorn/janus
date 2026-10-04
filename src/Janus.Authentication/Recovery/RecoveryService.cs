@@ -66,7 +66,7 @@ internal sealed class RecoveryService(
     SessionService sessions,
     StepUpGuard stepUp,
     AdministrativeScope scope,
-    INotificationHandler sending,
+    IGovernedSend sending,
     LandingLinks landing,
     NonExistenceNotice nonExistence,
     PhoneSignals signals,
@@ -214,6 +214,15 @@ internal sealed class RecoveryService(
             await accounts.ReinstateAsync(link.Subject, cancellationToken).ConfigureAwait(false);
         }
 
+        _ = await NotifyAsync(
+                link.Subject,
+                MessageKind.SecurityNotice,
+                Nothing,
+                excluded: null,
+                source,
+                cancellationToken)
+            .ConfigureAwait(false);
+
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
@@ -229,15 +238,6 @@ internal sealed class RecoveryService(
         {
             return Result.Failure(failure);
         }
-
-        _ = await NotifyAsync(
-                link.Subject,
-                MessageKind.SecurityNotice,
-                Nothing,
-                excluded: null,
-                source,
-                cancellationToken)
-            .ConfigureAwait(false);
 
         return Result.Success();
     }
@@ -541,9 +541,15 @@ internal sealed class RecoveryService(
 
         // AUTH-ABUSE-004: a link a person asked for answers to the restrictions a
         // sign-in link answers to, and no notification restriction counts it.
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         _ = (await sending
-                .SendAsync(
-                    new SendRequest(
+                .UndertakeAsync(
+                    new OutboundMessage(
                         channel.Destination,
                         MessageKind.RecoveryLink,
                         RestrictionPurpose.SignIn,
@@ -562,13 +568,9 @@ internal sealed class RecoveryService(
 
         if (failure is not null)
         {
-            return Result.Failure(failure);
-        }
+            await work.RollbackAsync().ConfigureAwait(false);
 
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
-        {
-            return Result.Failure(notBegun);
+            return Result.Failure(failure);
         }
 
         await links
@@ -672,8 +674,8 @@ internal sealed class RecoveryService(
             }
 
             Result<SendReference> sent = await sending
-                .SendAsync(
-                    new SendRequest(
+                .UndertakeAsync(
+                    new OutboundMessage(
                         destination,
                         message,
                         RestrictionPurpose.Notification,
@@ -859,9 +861,15 @@ internal sealed class RecoveryService(
         string? language = await LanguageAsync(subject, requested: null, cancellationToken)
             .ConfigureAwait(false);
 
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<ApprovedRecovery>(notBegun);
+        }
+
         _ = (await sending
-                .SendAsync(
-                    new SendRequest(
+                .UndertakeAsync(
+                    new OutboundMessage(
                         channel.Destination,
                         MessageKind.EnrolmentLink,
                         RestrictionPurpose.SignIn,
@@ -880,13 +888,9 @@ internal sealed class RecoveryService(
 
         if (failure is not null)
         {
-            return Result.Failure<ApprovedRecovery>(failure);
-        }
+            await work.RollbackAsync().ConfigureAwait(false);
 
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
-        {
-            return Result.Failure<ApprovedRecovery>(notBegun);
+            return Result.Failure<ApprovedRecovery>(failure);
         }
 
         await links
@@ -907,12 +911,6 @@ internal sealed class RecoveryService(
             .ConfigureAwait(false);
         await approvals.SpendAsync(subject, now, cancellationToken).ConfigureAwait(false);
 
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure<ApprovedRecovery>(notCommitted);
-        }
-
         _ = await NotifyAsync(
                 subject,
                 MessageKind.SecurityNotice,
@@ -921,6 +919,12 @@ internal sealed class RecoveryService(
                 source,
                 cancellationToken)
             .ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<ApprovedRecovery>(notCommitted);
+        }
 
         return Result.Success(new ApprovedRecovery(now + lifetime));
     }

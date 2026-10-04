@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -44,6 +46,8 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
 
     private int _failed;
 
+    private List<Func<CancellationToken, ValueTask>> _afterCommit = [];
+
     /// <inheritdoc/>
     public ValueTask<Result> BeginAsync(CancellationToken cancellationToken)
     {
@@ -60,25 +64,58 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
     }
 
     /// <inheritdoc/>
-    public ValueTask<Result> CommitAsync(CancellationToken cancellationToken)
+    public async ValueTask<Result> CommitAsync(CancellationToken cancellationToken)
     {
         if (RefusesCommit is Error refused)
         {
             RefusesCommit = null;
             _failed++;
+            _afterCommit = [];
 
-            return ValueTask.FromResult(Result.Failure(refused));
+            return Result.Failure(refused);
         }
 
         Committed++;
 
-        return ValueTask.FromResult(Result.Success());
+        if (Open)
+        {
+            return Result.Success();
+        }
+
+        List<Func<CancellationToken, ValueTask>> registered = _afterCommit;
+
+        _afterCommit = [];
+
+        foreach (Func<CancellationToken, ValueTask> work in registered)
+        {
+            await work(cancellationToken);
+        }
+
+        return Result.Success();
+    }
+
+    /// <inheritdoc/>
+    public Result AfterCommit(Func<CancellationToken, ValueTask> work)
+    {
+        if (!Open)
+        {
+            throw new InvalidOperationException("No unit of work is in progress to register work on.");
+        }
+
+        _afterCommit.Add(work);
+
+        return Result.Success();
     }
 
     /// <inheritdoc/>
     public ValueTask RollbackAsync()
     {
         RolledBack++;
+
+        if (!Open)
+        {
+            _afterCommit = [];
+        }
 
         return ValueTask.CompletedTask;
     }
@@ -92,6 +129,7 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
         Committed = 0;
         RolledBack = 0;
         _failed = 0;
+        _afterCommit = [];
     }
 
     /// <inheritdoc/>

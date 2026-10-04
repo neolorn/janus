@@ -189,7 +189,7 @@ internal static class BackgroundJobs
             SystemOperation.Delivery,
             Settings.OutboxPollInterval,
             async (services, context, cancellationToken) => Done(
-                await services.GetRequiredService<SendingService>()
+                await services.GetRequiredService<SendPublisher>()
                     .RetryAsync(context, cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(

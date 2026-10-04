@@ -542,7 +542,7 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
             ? number
             : throw new Xunit.Sdk.XunitException("The number does not parse.");
 
-    private static SendRequest Texted() =>
+    private static OutboundMessage Texted() =>
         new(
             SendDestination.Of(Phone),
             MessageKind.VerificationCode,

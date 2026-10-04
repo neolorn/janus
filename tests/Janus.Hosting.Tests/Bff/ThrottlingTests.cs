@@ -289,6 +289,48 @@ public sealed class ThrottlingTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-003 AC7, AUTH-ABUSE-004: an ask of a sign-in link, an email code or a
+    /// recovery is answered before any transport is called, whether or not an account
+    /// holds the address: no mail is handed over while either request runs, both are
+    /// answered 202 alike, and the messages go once the publisher's pass carries them.
+    /// With a transport that refuses everything, both asks are still answered alike.
+    /// </summary>
+    /// <param name="path">The ask.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("/auth/link")]
+    [InlineData("/auth/email-otp")]
+    [InlineData("/recovery/begin")]
+    public async Task AUTH_ABUSE_003_AC7_AnAskIsAnsweredBeforeTheTransportIsCalledAsync(string path)
+    {
+        await RegisteredAsync();
+
+        int handed = 0;
+
+        _deployment.Mail.Handed = () => handed++;
+        _deployment.WorkerCarries = false;
+
+        (Answer held, Answer unheld, int sent) = await AskedAsync(path);
+
+        Assert.Equal(StatusCodes.Status202Accepted, held.Status);
+        AssertAlike(held, unheld);
+        Assert.Equal(0, handed);
+        Assert.Equal(0, sent);
+
+        Assert.Equal(2, await _deployment.CarrySendsAsync());
+        Assert.Equal(2, handed);
+
+        _deployment.Mail.Accepts = false;
+        _deployment.Clock.Advance(TimeSpan.FromHours(2));
+
+        (Answer refusedHeld, Answer refusedUnheld, _) = await AskedAsync(path);
+
+        Assert.Equal(StatusCodes.Status202Accepted, refusedHeld.Status);
+        AssertAlike(refusedHeld, refusedUnheld);
+        Assert.Equal(0, await _deployment.CarrySendsAsync());
+    }
+
+    /// <summary>
     /// BFF-ABUSE-002 AC1: a sign-in link asked for an address an account holds and
     /// one asked for an address nobody holds are answered alike: status, body and
     /// every header.

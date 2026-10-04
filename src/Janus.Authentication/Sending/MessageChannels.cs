@@ -92,6 +92,21 @@ internal static class MessageChannels
         ]);
 
     /// <summary>
+    /// The messages that answer an ask of a sign-in link, an email code or a recovery,
+    /// the notice to an address no account holds among them. The ask is answered before
+    /// any transport is called, whether its message is sent or not, so none of these has
+    /// an attempt inside the request: the outbox publisher carries each (AUTH-ABUSE-003,
+    /// AUTH-ABUSE-004).
+    /// </summary>
+    public static FrozenSet<MessageKind> AnsweredFirst { get; } = FrozenSet.ToFrozenSet(
+    [
+        MessageKind.SignInLink,
+        MessageKind.SignInCode,
+        MessageKind.RecoveryLink,
+        MessageKind.NoAccount,
+    ]);
+
+    /// <summary>
     /// The channels one message goes out on.
     /// </summary>
     /// <param name="message">The message.</param>

@@ -16,7 +16,7 @@ using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Alerting;
-using Janus.Hosting.Sending;
+using Janus.Hosting.Tests.Sending;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Alerting;
@@ -53,6 +53,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
 
     private readonly ConfigurationInMemory _configuration = new();
     private readonly SendLedgerInMemory _ledger = new();
+    private readonly SendOutboxInMemory _outbox = new();
     private readonly AlertLedgerInMemory _alerts = new();
     private readonly AlertLogInMemory _log = new();
     private readonly MessageTemplatesInMemory _templates = new();
@@ -106,21 +107,18 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
                 _clock),
             new AlertRouter(
                 _configuration,
-                new SendingService(
+                new SendingPath(
                     _configuration,
                     _ledger,
-                    new SendOutboxInMemory(),
+                    _outbox,
                     _templates,
                     _mail,
                     _sms,
-                    RestrictionKeySuppliers.None,
-                    Considered.Nothing(_work, _clock),
-                    new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
+                    _balances,
                     _work,
                     _events,
-                    _events,
                     _clock,
-                    _randomness),
+                    _randomness).Send,
                 _alerts,
                 _work,
                 _log),

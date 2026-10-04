@@ -64,7 +64,7 @@ internal sealed class InvitationAcknowledgement(
     DomainLock locks,
     IMembershipAttachment memberships,
     IMailboxStore mailboxes,
-    INotificationHandler sending,
+    IGovernedSend sending,
     IEvents events,
     IConfigurationStore configuration,
     IOrganizationAudit audit,
@@ -592,7 +592,7 @@ internal sealed class InvitationAcknowledgement(
 
         foreach (HeldIdentifier identifier in reached)
         {
-            var request = new SendRequest(
+            var request = new OutboundMessage(
                 Destination(identifier),
                 MessageKind.IdentifierAdded,
                 RestrictionPurpose.Notification,
@@ -606,7 +606,7 @@ internal sealed class InvitationAcknowledgement(
             // A security notice one destination refuses still reaches the rest: the
             // set exists so that no one channel can silence it.
             Result<SendReference> sent = await sending
-                .SendAsync(request, cancellationToken)
+                .UndertakeAsync(request, cancellationToken)
                 .ConfigureAwait(false);
 
             told += sent.Match(_ => 1, _ => 0);

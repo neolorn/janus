@@ -48,7 +48,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly IdentifierDirectoryInMemory _identifiers = new();
-    private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly GovernedSendInMemory _notifications = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly CredentialAuditInMemory _audit = new();
     private readonly SettingsRestrictionInMemory _restriction = new();
@@ -65,6 +65,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
     /// </summary>
     public AppPasswordsTests()
     {
+        _notifications.Work = _work;
         _tokens = new MailServerTokensInMemory(_sessions, _clock);
         _configuration.Set(Settings.NotificationLanguages, ["en"]);
         _person = SubjectId.New(_randomness);
@@ -111,7 +112,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
             (AuditActions.MailCredentialCreated, _person, issued.Id),
             Assert.Single(_audit.MailCredentials));
 
-        SendRequest notice = Assert.Single(_notifications.Sent);
+        OutboundMessage notice = Assert.Single(_notifications.Sent);
 
         Assert.Equal(MessageKind.SecurityNotice, notice.Message);
         Assert.Empty(notice.Values);

@@ -45,9 +45,7 @@ internal sealed class SendDeliveryConfiguration : IEntityTypeConfiguration<SendD
 
         builder.Property(delivery => delivery.NextAttemptAt).HasColumnName("next_attempt_at");
 
-        builder.Property(delivery => delivery.TakenLanguages)
-            .HasColumnName("taken_languages")
-            .HasColumnType("jsonb");
+        builder.Property(delivery => delivery.ClaimedUntil).HasColumnName("claimed_until");
 
         builder.Property(delivery => delivery.Subject)
             .HasColumnName("subject")

@@ -13,15 +13,18 @@ using Microsoft.EntityFrameworkCore;
 namespace Janus.Storage.Authentication.Sending;
 
 /// <summary>
-/// The messages undertaken but not yet carried in full, over the <c>send_outbox</c> table.
+/// The messages admitted but not yet carried, over the <c>send_outbox</c> table.
 /// </summary>
 /// <param name="context">The context the operation's writes are tracked on.</param>
 /// <param name="deployment">The deployment's data key, which the row's own key is wrapped under.</param>
 /// <param name="randomness">The randomness the key and the vectors are drawn from.</param>
 /// <remarks>
-/// Implements D-022, INF-BG-001, IDN-PRIN-003 and PRIV-RIGHT-005a. The whole message is
-/// one encrypted document under a key the row carries, so removing the row removes both
-/// the message and the only key that reads it.
+/// Implements D-022, AUTH-ABUSE-004, INF-BG-001, IDN-PRIN-003, PRIV-RIGHT-005a and
+/// CONV-DESIGN-003. The whole message is one encrypted document under a key the row
+/// carries, so removing the row removes both the message and the only key that reads
+/// it. A row is carried under a claim: one conditional update marks it claimed until an
+/// instant, and what the attempt made of it is written by one statement conditional on
+/// that instant, so two passes over the same rows carry each once.
 /// </remarks>
 internal sealed class SendDeliveryStore(
     StoreContext context,
@@ -43,12 +46,12 @@ internal sealed class SendDeliveryStore(
             {
                 Id = delivery.Id,
                 RecordedAt = delivery.RecordedAt,
+                Attempts = delivery.Attempts,
+                NextAttemptAt = delivery.NextAttemptAt,
                 Subject = delivery.Requested.Subject,
                 WrappedKey = PersonalFieldCipher.Wrap(dataKey, deploymentKey),
-                Message = Written(dataKey, delivery.Id, delivery.Requested),
+                Message = Written(dataKey, delivery),
             };
-
-            Attempted(record, delivery);
 
             await context.SendOutbox.AddAsync(record, cancellationToken).ConfigureAwait(false);
         }
@@ -60,12 +63,47 @@ internal sealed class SendDeliveryStore(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<SendDeliveryId>> DueAsync(
+        DateTimeOffset now,
+        int count,
+        CancellationToken cancellationToken) =>
+        await context.SendOutbox
+            .AsNoTracking()
+            .Where(delivery => delivery.NextAttemptAt <= now
+                && (delivery.ClaimedUntil == null || delivery.ClaimedUntil <= now))
+            .OrderBy(delivery => delivery.Id)
+            .Select(delivery => delivery.Id)
+            .Take(count)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask<SendClaim?> ClaimAsync(
+        SendDeliveryId delivery,
+        DateTimeOffset now,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        DateTimeOffset until = RowClaim.Until(now, timeout);
+
+        int claimed = await context.SendOutbox
+            .Where(row => row.Id == delivery && (row.ClaimedUntil == null || row.ClaimedUntil <= now))
+            .ExecuteUpdateAsync(
+                row => row.SetProperty(one => one.ClaimedUntil, until),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return claimed == 1 ? new SendClaim(delivery, until) : null;
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<SendDelivery?> FindAsync(
         SendDeliveryId delivery,
         CancellationToken cancellationToken)
     {
         SendDeliveryRecord? record = await context.SendOutbox
-            .FindAsync([delivery], cancellationToken)
+            .AsNoTracking()
+            .SingleOrDefaultAsync(row => row.Id == delivery, cancellationToken)
             .ConfigureAwait(false);
 
         if (record is null)
@@ -86,77 +124,37 @@ internal sealed class SendDeliveryStore(
     }
 
     /// <inheritdoc/>
-    public async ValueTask<IReadOnlyList<SendDelivery>> DueAsync(
-        DateTimeOffset now,
-        int count,
-        CancellationToken cancellationToken)
-    {
-        List<SendDeliveryRecord> rows = await context.SendOutbox
+    public async ValueTask<bool> WaitsAsync(SendDeliveryId delivery, CancellationToken cancellationToken) =>
+        await context.SendOutbox
             .AsNoTracking()
-            .Where(delivery => delivery.NextAttemptAt <= now)
-            .OrderBy(delivery => delivery.Id)
-            .Take(count)
-            .ToListAsync(cancellationToken)
+            .AnyAsync(row => row.Id == delivery, cancellationToken)
             .ConfigureAwait(false);
 
-        if (rows.Count is 0)
-        {
-            return [];
-        }
-
-        byte[] deploymentKey = await deployment.UnwrappedAsync(cancellationToken).ConfigureAwait(false);
-
-        try
-        {
-            return [.. rows.Select(row => Read(row, deploymentKey))];
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(deploymentKey);
-        }
-    }
-
     /// <inheritdoc/>
-    /// <remarks>
-    /// A row already removed was settled by another attempt, and is left as that
-    /// attempt left it.
-    /// </remarks>
-    /// <exception cref="ArgumentNullException">The delivery is absent.</exception>
-    public async ValueTask RecordAsync(SendDelivery delivery, CancellationToken cancellationToken)
+    public async ValueTask<bool> RecordAsync(
+        SendDelivery delivery,
+        SendClaim claim,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(delivery);
 
-        SendDeliveryRecord? record = await context.SendOutbox
-            .FindAsync([delivery.Id], cancellationToken)
-            .ConfigureAwait(false);
-
-        if (record is not null)
-        {
-            Attempted(record, delivery);
-        }
+        return await context.SendOutbox
+            .Where(row => row.Id == claim.Delivery && row.ClaimedUntil == claim.Until)
+            .ExecuteUpdateAsync(
+                row => row
+                    .SetProperty(one => one.Attempts, delivery.Attempts)
+                    .SetProperty(one => one.NextAttemptAt, delivery.NextAttemptAt)
+                    .SetProperty(one => one.ClaimedUntil, (DateTimeOffset?)null),
+                cancellationToken)
+            .ConfigureAwait(false) == 1;
     }
 
     /// <inheritdoc/>
-    public async ValueTask RemoveAsync(SendDeliveryId delivery, CancellationToken cancellationToken)
-    {
-        SendDeliveryRecord? record = await context.SendOutbox
-            .FindAsync([delivery], cancellationToken)
-            .ConfigureAwait(false);
-
-        if (record is not null)
-        {
-            context.SendOutbox.Remove(record);
-        }
-    }
-
-    private static void Attempted(SendDeliveryRecord record, SendDelivery delivery)
-    {
-        record.Attempts = delivery.Attempts;
-        record.NextAttemptAt = delivery.NextAttemptAt;
-        record.TakenLanguages = JsonSerializer.Serialize(
-            delivery.Taken.Order(StringComparer.Ordinal).ToList(),
-            SendDeliveryJson.Default.ListString);
-    }
+    public async ValueTask<bool> RemoveAsync(SendClaim claim, CancellationToken cancellationToken) =>
+        await context.SendOutbox
+            .Where(row => row.Id == claim.Delivery && row.ClaimedUntil == claim.Until)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false) == 1;
 
     // A message concerning an account is bound to its subject, and one concerning no
     // account to its own row (PRIV-RIGHT-005a, D-173); the data key is the row's own
@@ -184,25 +182,6 @@ internal sealed class SendDeliveryStore(
             : throw new InvalidOperationException("The stored number is not a number.");
     }
 
-    private byte[] Written(ReadOnlySpan<byte> dataKey, SendDeliveryId delivery, SendRequest request)
-    {
-        var document = new SendDeliveryDocument(
-            VocabularyConverter<SendKind>.Write(request.Kind),
-            request.Destination.Canonical,
-            VocabularyConverter<MessageKind>.Write(request.Message),
-            VocabularyConverter<RestrictionPurpose>.Write(request.Purpose),
-            request.Source,
-            request.Language,
-            request.Subject?.Value,
-            request.Values);
-
-        return PersonalFieldCipher.Encrypt(
-            dataKey,
-            Located(delivery, request.Subject),
-            JsonSerializer.SerializeToUtf8Bytes(document, SendDeliveryJson.Default.SendDeliveryDocument),
-            randomness);
-    }
-
     private static SendDelivery Read(SendDeliveryRecord record, ReadOnlySpan<byte> deploymentKey)
     {
         byte[] dataKey = PersonalFieldCipher.Unwrap(record.WrappedKey, deploymentKey);
@@ -223,7 +202,7 @@ internal sealed class SendDeliveryStore(
 
         SendKind kind = VocabularyConverter<SendKind>.Read(document.Kind);
 
-        var request = new SendRequest(
+        var message = new OutboundMessage(
             Destination(kind, document.Destination),
             VocabularyConverter<MessageKind>.Read(document.Message),
             VocabularyConverter<RestrictionPurpose>.Read(document.Purpose),
@@ -234,11 +213,36 @@ internal sealed class SendDeliveryStore(
             Values = new Dictionary<string, string>(document.Values, StringComparer.Ordinal),
         };
 
-        return new SendDelivery(record.Id, record.RecordedAt, request)
+        SendReference reference = SendReference.TryParse(document.Reference, out SendReference drawn)
+            ? drawn
+            : throw new InvalidOperationException("The stored reference is not a reference.");
+
+        return new SendDelivery(record.Id, record.RecordedAt, message, reference)
         {
             Attempts = record.Attempts,
             NextAttemptAt = record.NextAttemptAt,
-            Taken = JsonSerializer.Deserialize(record.TakenLanguages, SendDeliveryJson.Default.ListString) ?? [],
         };
+    }
+
+    private byte[] Written(ReadOnlySpan<byte> dataKey, SendDelivery delivery)
+    {
+        OutboundMessage message = delivery.Requested;
+
+        var document = new SendDeliveryDocument(
+            VocabularyConverter<SendKind>.Write(message.Kind),
+            message.Destination.Canonical,
+            VocabularyConverter<MessageKind>.Write(message.Message),
+            VocabularyConverter<RestrictionPurpose>.Write(message.Purpose),
+            message.Source,
+            message.Language,
+            message.Subject?.Value,
+            message.Values,
+            delivery.Reference.Value);
+
+        return PersonalFieldCipher.Encrypt(
+            dataKey,
+            Located(delivery.Id, message.Subject),
+            JsonSerializer.SerializeToUtf8Bytes(document, SendDeliveryJson.Default.SendDeliveryDocument),
+            randomness);
     }
 }

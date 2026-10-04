@@ -12,7 +12,7 @@ using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Alerting;
-using Janus.Hosting.Sending;
+using Janus.Hosting.Tests.Sending;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Alerting;
@@ -35,6 +35,7 @@ public sealed class AlertRouterTests : IAsyncDisposable
 
     private readonly ConfigurationInMemory _configuration = new();
     private readonly SendLedgerInMemory _ledger = new();
+    private readonly SendOutboxInMemory _outbox = new();
     private readonly AlertLedgerInMemory _alerts = new();
     private readonly AlertLogInMemory _log = new();
     private readonly MessageTemplatesInMemory _templates = new();
@@ -60,27 +61,10 @@ public sealed class AlertRouterTests : IAsyncDisposable
         _sms.Balance = 1000m;
     }
 
-    private AlertRouter Router =>
-        new(
-            _configuration,
-            new SendingService(
-                _configuration,
-                _ledger,
-                new SendOutboxInMemory(),
-                _templates,
-                _mail,
-                _sms,
-                RestrictionKeySuppliers.None,
-                Considered.Nothing(_work, _clock),
-                new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
-                _work,
-                _events,
-                _events,
-                _clock,
-                _randomness),
-            _alerts,
-            _work,
-            _log);
+    private SendingPath Path =>
+        new(_configuration, _ledger, _outbox, _templates, _mail, _sms, _balances, _work, _events, _clock, _randomness);
+
+    private AlertRouter Router => new(_configuration, Path.Send, _alerts, _work, _log);
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
@@ -301,7 +285,11 @@ public sealed class AlertRouterTests : IAsyncDisposable
     public async Task OPS_ALERT_002_TheClaimIsCommittedBeforeTheAlertIsSentAsync()
     {
         var witness = new TransactionWitness(_work);
-        var router = new AlertRouter(_configuration, witness, _alerts, _work, _log);
+        SendingPath path = Path;
+
+        path.Replaced = witness;
+
+        var router = new AlertRouter(_configuration, path.Send, _alerts, _work, _log);
 
         _ = await router.RaiseAsync(Raised(AlertCondition.RestrictionGranted), TestContext.Current.CancellationToken);
 
@@ -320,15 +308,13 @@ public sealed class AlertRouterTests : IAsyncDisposable
     // open when it was asked to.
     private sealed class TransactionWitness(UnitOfWorkInMemory work) : INotificationHandler
     {
-        private static readonly RandomNumberGenerator Randomness = RandomNumberGenerator.Create();
-
         public List<int> OpenAtSend { get; } = [];
 
-        public ValueTask<Result<SendReference>> SendAsync(SendRequest request, CancellationToken cancellationToken)
+        public ValueTask<Result> SendAsync(SendRequest request, CancellationToken cancellationToken)
         {
             OpenAtSend.Add(work.Opened - work.Committed);
 
-            return ValueTask.FromResult(Result.Success(SendReference.Draw(Randomness)));
+            return ValueTask.FromResult(Result.Success());
         }
     }
 }

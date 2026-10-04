@@ -29,7 +29,7 @@ namespace Janus.Authentication.Factors;
 internal sealed class RecoveryCodeReminders(
     IRecoveryCodeStore sets,
     IIdentifierDirectory identifiers,
-    INotificationHandler sending,
+    IGovernedSend sending,
     IConfigurationStore configuration,
     IUnitOfWork work,
     TimeProvider time)
@@ -172,8 +172,8 @@ internal sealed class RecoveryCodeReminders(
             reached++;
 
             Result<SendReference> sent = await sending
-                .SendAsync(
-                    new SendRequest(
+                .UndertakeAsync(
+                    new OutboundMessage(
                         destination,
                         MessageKind.RecoveryCodesReminder,
                         RestrictionPurpose.Notification,
