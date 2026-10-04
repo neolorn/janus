@@ -394,13 +394,13 @@ public sealed class SignInFlowTests : IAsyncDisposable
 
     /// <summary>
     /// AUTH-FACT-002 AC7, `09` `POST /auth/step-up`: a text code asked for at a step-up,
-    /// where the number's signal answers <c>risk</c>, sends nothing and is answered 403
-    /// <c>auth.stepup.required</c> with the combinations left without the entry, and
-    /// with <c>report-loss</c> once none is left.
+    /// where the number's signal answers <c>risk</c>, sends nothing and is answered 200
+    /// <c>factorRequired</c> naming the factors of the combinations left without the
+    /// entry, and 403 <c>auth.stepup.required</c> with <c>report-loss</c> once none is.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_FACT_002_AC7_ATextCodeAskedAtAStepUpForAReportedNumberIsAnsweredWithTheGateAsync()
+    public async Task AUTH_FACT_002_AC7_ATextCodeAskedAtAStepUpForAReportedNumberIsAnsweredWithWhatIsLeftAsync()
     {
         await using var reporting = new Deployment(
             signals: new PhoneSignalProvider((_, _) => ValueTask.FromResult(PhoneSignal.Risk)));
@@ -443,13 +443,14 @@ public sealed class SignInFlowTests : IAsyncDisposable
             ("challengeId", challenge),
             ("factor", "phoneCode"));
 
-        Assert.Equal(StatusCodes.Status403Forbidden, left.Status);
-        Assert.Equal("auth.stepup.required", left.Text("code"));
-        Assert.Equal("present", left.Json().GetProperty("details").GetProperty("outcome").GetString());
+        Assert.Equal(StatusCodes.Status200OK, left.Status);
+        Assert.Equal("factorRequired", left.Text("status"));
+        Assert.Equal("aal1", left.Text("assuranceLevel"));
         Assert.Equal(
-            [["password", "totp"]],
-            left.Json().GetProperty("details").GetProperty("options").Deserialize<string[][]>());
+            ["password", "totp"],
+            left.Json().GetProperty("required").EnumerateArray().Select(factor => factor.GetString()));
         Assert.Equal(StatusCodes.Status403Forbidden, none.Status);
+        Assert.Equal("auth.stepup.required", none.Text("code"));
         Assert.Equal("report-loss", none.Json().GetProperty("details").GetProperty("outcome").GetString());
         Assert.Empty(none.Json().GetProperty("details").GetProperty("options").EnumerateArray());
         Assert.Equal(sent, reporting.Sms.Taken.Count);

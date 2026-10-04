@@ -515,8 +515,8 @@ internal static class AuthenticationEndpoints
             .ConfigureAwait(false);
     }
 
-    // AUTH-FACT-002: an ask is accepted, save at a sign-in whose number's signal
-    // withheld the code, which is answered with what the challenge then offers.
+    // AUTH-FACT-002: an ask is accepted, save at a sign-in or a step-up whose number's
+    // signal withheld the code, which is answered with what the challenge then offers.
     private static IResult Asked(SignInProgress? offered) =>
         offered is null
             ? Accepted

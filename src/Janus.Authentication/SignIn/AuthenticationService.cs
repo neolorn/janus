@@ -265,8 +265,10 @@ internal sealed class AuthenticationService(
     /// Nothing where the ask is answered as every ask is; at a sign-in whose number's
     /// signal answers <c>risk</c>, what the challenge then offers, or
     /// <c>auth.factor.rejected</c> where it offers nothing; at a step-up whose number's
-    /// signal answers <c>risk</c>, <c>auth.stepup.required</c> computed without the
-    /// entry; or the refusal of the send.
+    /// signal answers <c>risk</c>, the factors of the combinations left without the
+    /// entry, none where the session already meets the gate, or
+    /// <c>auth.stepup.required</c> where no combination is left; or the refusal of the
+    /// send.
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     /// <remarks>
@@ -277,7 +279,8 @@ internal sealed class AuthenticationService(
     /// <c>risk</c> after a first factor is sent nothing either, and the sign-in is told
     /// what is left to present, which an anonymous caller is never told. At a step-up,
     /// whose challenge names no action, what is left is judged against the strictest of
-    /// the policy's gates, field by field (AUTH-STEP-002, D-187).
+    /// the policy's gates, field by field, and answered as a sign-in's ask is
+    /// (AUTH-STEP-002, D-187, D-188).
     /// </remarks>
     public async ValueTask<Result<SignInProgress?>> AskAsync(
         string challenge,
@@ -1035,24 +1038,53 @@ internal sealed class AuthenticationService(
     // AUTH-FACT-002 AC7, AUTH-STEP-002 (D-187): a step-up whose text code the signal
     // withheld is answered with what it then offers. Its challenge names no action, so
     // that is judged against the strictest of the policy's gates, field by field, on the
-    // session the step-up raises; a session that is not the account's judges no gate, and
-    // one that already meets that gate is refused nothing.
+    // session the step-up raises; a session that is not the account's judges no gate.
+    // The ask is answered as a sign-in's is (D-188): with the factors of the
+    // combinations left, or with none where the session already meets that gate, and
+    // it is refused only where no combination is left, with the gate and what the
+    // account does next.
     private async ValueTask<Result<SignInProgress?>> WithoutTextsAsync(
         SubjectId subject,
         SessionId? session,
         CancellationToken cancellationToken)
     {
-        if (session is not SessionId raising)
+        if (session is not SessionId raising
+            || await sessionStore.FindAsync(raising, cancellationToken).ConfigureAwait(false) is not Session live
+            || live.Subject != subject)
         {
             return Result.Failure<SignInProgress?>(Error.From(ErrorCodes.StepUpRequired));
         }
 
-        return (await guard.ChallengeWithoutTextsAsync(subject, raising, cancellationToken).ConfigureAwait(false))
-            .Match(
-                left => StepUpRefusal.Met(left)
-                    ? Result.Success<SignInProgress?>(null)
-                    : Result.Failure<SignInProgress?>(StepUpRefusal.Of(left)),
-                Result.Failure<SignInProgress?>);
+        Error? failure = null;
+
+        StepUpChallenge left = (await guard
+                .ChallengeWithoutTextsAsync(subject, raising, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Withheld<StepUpChallenge>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<SignInProgress?>(failure);
+        }
+
+        List<Factor> required = left.Outcome is StepUpOutcome.Present
+            ? [.. left.Combinations.SelectMany(combination => combination).Distinct()]
+            : [];
+
+        if (!StepUpRefusal.Met(left) && required.Count is 0)
+        {
+            return Result.Failure<SignInProgress?>(StepUpRefusal.Of(left));
+        }
+
+        return Result.Success<SignInProgress?>(new SignInProgress(
+            required.Count is 0 ? SignInStatus.Complete : SignInStatus.FactorRequired,
+            live.Attained,
+            live.PhishingResistant,
+            required,
+            TrustDeviceOffered: false,
+            Session: null,
+            Requirement: null,
+            PasswordChangeRequired: false));
     }
 
     // The account an identifier opens a sign-in for, the identifier itself where it is

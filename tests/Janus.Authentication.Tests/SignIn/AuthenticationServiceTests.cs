@@ -2311,8 +2311,9 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     /// <summary>
     /// AUTH-FACT-002 AC7, AUTH-FACT-002b AC6: at a step-up the text code is withheld
     /// where the carrier reports a recent change for the number: no code is issued or
-    /// sent, the consideration is recorded once, and the ask is answered with the
-    /// strictest of the policy's gates and the combinations left without the text code.
+    /// sent, the consideration is recorded once, and the ask is answered as a sign-in's
+    /// is, with the factors of the combinations left without the text code and what
+    /// the session has attained.
     /// </summary>
     [Fact]
     public async Task AUTH_FACT_002b_AC6_AReportedChangeWithholdsTheTextCodeFromAStepUpAsync()
@@ -2326,23 +2327,46 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         SignInChallenge began = await BeganAsync(Address);
 
-        Error refused = Refusal(await AskedAsync(began.Challenge, subject, Opened(subject)));
+        SignInProgress? offered = (await AskedAsync(began.Challenge, subject, Opened(subject))).Match(
+            progress => progress,
+            error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
 
-        Assert.Equal(ErrorCodes.StepUpRequired, refused.Code);
-        Assert.Equal("present", refused.Details["outcome"].GetString());
+        Assert.Equal(SignInStatus.FactorRequired, offered?.Status);
+        Assert.Equal([Factor.Password, Factor.Totp], offered?.Required);
+        Assert.Equal((AssuranceLevel.Aal1, false), (offered?.AssuranceLevel, offered?.PhishingResistant));
+        Assert.Null(offered?.Session);
+        Assert.Empty(_notifications.Texts);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Equal([(Factor.PhoneCode, (PhoneSignal?)PhoneSignal.Risk, (SubjectId?)subject)], _considered.Records);
+        Assert.Empty(_throttle.Counted);
+    }
 
-        Gate strictest = await StrictestAsync(subject);
+    /// <summary>
+    /// AUTH-FACT-002 AC7, `09` `POST /auth/step-up`: a step-up ask whose number answers
+    /// <c>risk</c>, made on a session that already meets the strictest of the policy's
+    /// gates, is answered with nothing required: nothing is issued or sent, and the
+    /// consideration is recorded once.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC7_AReportedChangeAtAStepUpTheSessionAlreadyMeetsRequiresNothingAsync()
+    {
+        SubjectId subject = await AccountAsync();
 
-        Assert.Equal(
-            ("aal2", strictest.PhishingResistant, (long)strictest.MaximumAge.TotalSeconds),
-            (
-                refused.Details["required"].GetProperty("level").GetString(),
-                refused.Details["required"].GetProperty("phishingResistant").GetBoolean(),
-                refused.Details["required"].GetProperty("maxAge").GetInt64()));
-        Assert.Equal(
-            [["password", "totp"]],
-            refused.Details["options"].Deserialize<string[][]>());
-        Assert.Equal(JsonValueKind.Null, refused.Details["pendingUntil"].ValueKind);
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        Holds(subject, Factor.Totp);
+        Answers(PhoneSignal.Risk);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        SignInProgress? met = (await AskedAsync(began.Challenge, subject, Opened(subject, AssuranceLevel.Aal2))).Match(
+            progress => progress,
+            error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
+
+        Assert.Equal(SignInStatus.Complete, met?.Status);
+        Assert.Empty(Assert.IsType<SignInProgress>(met).Required);
+        Assert.Equal((AssuranceLevel.Aal2, false), (met?.AssuranceLevel, met?.PhishingResistant));
+        Assert.Null(met?.Session);
         Assert.Empty(_notifications.Texts);
         Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
         Assert.Equal([(Factor.PhoneCode, (PhoneSignal?)PhoneSignal.Risk, (SubjectId?)subject)], _considered.Records);
@@ -2368,6 +2392,16 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.StepUpRequired, refused.Code);
         Assert.Equal("report-loss", refused.Details["outcome"].GetString());
+
+        Gate strictest = await StrictestAsync(subject);
+
+        Assert.Equal(
+            ("aal2", strictest.PhishingResistant, (long)strictest.MaximumAge.TotalSeconds),
+            (
+                refused.Details["required"].GetProperty("level").GetString(),
+                refused.Details["required"].GetProperty("phishingResistant").GetBoolean(),
+                refused.Details["required"].GetProperty("maxAge").GetInt64()));
+        Assert.Equal(JsonValueKind.Null, refused.Details["pendingUntil"].ValueKind);
         Assert.Empty(refused.Details["options"].Deserialize<string[][]>()!);
         Assert.Empty(_notifications.Texts);
         Assert.Equal([(Factor.PhoneCode, (PhoneSignal?)PhoneSignal.Risk, (SubjectId?)subject)], _considered.Records);
@@ -2641,13 +2675,13 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
 
     // A session of the account that proved one factor now, which is what a step-up
-    // raises.
-    private SessionId Opened(SubjectId subject)
+    // raises, or one that proved more.
+    private SessionId Opened(SubjectId subject, AssuranceLevel attained = AssuranceLevel.Aal1)
     {
         var session = Session.Begin(
             SessionId.New(_clock),
             subject,
-            new Assurance(AssuranceLevel.Aal1, PhishingResistant: false),
+            new Assurance(attained, PhishingResistant: false),
             new SessionOrigin(Source, Browser),
             _clock.GetUtcNow(),
             TimeSpan.FromDays(1),
