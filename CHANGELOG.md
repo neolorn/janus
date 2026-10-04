@@ -2990,3 +2990,6 @@ against the public contract of LIB-API-001.
   `api.request.malformed` naming `type`, where it was refused 403 `authz.denied`.
 - Every endpoint carries, as endpoint metadata, each answer it produces: the status and,
   where it writes a body, the body's type and content type, beside the codes it declares.
+- `derivation.materialised.driftcheck` is a key of the configuration: it is validated at
+  startup, read and set through `GET` and `PUT /admin/config/{key}` and the command line, and
+  listed with the others, where the drift check read it and nothing else knew it.

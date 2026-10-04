@@ -39,6 +39,7 @@ code.signin.attempts integer R ceiling=10
 code.signin.lifetime duration R ceiling=PT30M
 code.verification.attempts integer R ceiling=10
 code.verification.lifetime duration R ceiling=PT30M
+derivation.materialised.driftcheck duration R
 device.verification.enabled flag R
 device.verification.lifetime duration R ceiling=P365D
 domain.reverify.interval duration R floor=PT1H

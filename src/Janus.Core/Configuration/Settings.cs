@@ -1034,6 +1034,7 @@ public static class Settings
         AlertingSmsSeverityThreshold,
         MaintenanceExpiryWarningLead,
         AuthzReverseLookupBudget,
+        DerivationMaterialisedDriftCheck,
         OrganizationDeletionGrace,
         TakedownGrace,
         AccountDeletionGrace,
