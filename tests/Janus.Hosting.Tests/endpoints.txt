@@ -1547,6 +1547,7 @@ POST /register
   request application/json
     clientId: string
     invitationToken: string
+    challengeToken: string
   201
     application/json
       step: RegistrationStep
@@ -1560,7 +1561,7 @@ POST /register
       security.secondStep[]: Factor
       security.recoveryCodes[]: string
   400 api.request.malformed
-  403 auth.session.csrfinvalid
+  403 auth.challenge.required auth.session.csrfinvalid
   409 identity.registration.signedin
   422 identity.invitation.expired identity.invitation.identifiermismatch
   429 auth.throttled

@@ -13,5 +13,12 @@ namespace Janus.Hosting.Registration;
 /// The token of the invitation link the person pressed, where the registration is
 /// one an invitation opens (REG-INV-001).
 /// </param>
-/// <remarks>Implements REG-SESS-001, REG-INV-001 and API-REDIR-002.</remarks>
-internal sealed record BeginRegistrationRequest(string? ClientId, [property: NeverLogged] string? InvitationToken);
+/// <param name="ChallengeToken">
+/// The token the host's challenge produced, on a repeat after
+/// <c>auth.challenge.required</c> (AUTH-ABUSE-008).
+/// </param>
+/// <remarks>Implements REG-SESS-001, REG-INV-001, API-REDIR-002 and AUTH-ABUSE-008.</remarks>
+internal sealed record BeginRegistrationRequest(
+    string? ClientId,
+    [property: NeverLogged] string? InvitationToken,
+    [property: NeverLogged] string? ChallengeToken);

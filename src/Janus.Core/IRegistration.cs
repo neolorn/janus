@@ -33,20 +33,32 @@ public interface IRegistration
     /// The locale of the request, which its messages go out in and which the account
     /// keeps as its language preference (IDN-ATTR-001).
     /// </param>
-    /// <param name="source">
+    /// <param name="ipAddress">
     /// The whole address the registration is started from, which the session holds and
     /// the account's first session records where the terms step is completed in process
     /// (REG-SESS-001, AUTH-SESS-013). Nothing is counted against it: every count and
     /// delay of a registration uses the source of the request in hand (AUTH-ABUSE-001).
+    /// </param>
+    /// <param name="source">
+    /// The source of the request in hand, which the bot defence judges before the
+    /// session is created and which the session, once created, is counted against
+    /// (AUTH-ABUSE-008, AUTH-ABUSE-001).
     /// </param>
     /// <param name="invitationToken">
     /// The token of the invitation link the person pressed, or nothing for a public
     /// registration. The press is what verifies the email the invitation bound, and
     /// the invitation's organization governs every step from here (REG-INV-001).
     /// </param>
+    /// <param name="challengeToken">
+    /// The token the host's challenge produced, on a repeat after
+    /// <c>auth.challenge.required</c>, or nothing. The host's challenge verifier judges
+    /// it where a bot-defence signal fires (AUTH-ABUSE-008).
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The session, whose state is read with <see cref="StateAsync"/>, or the refusal:
+    /// <c>auth.challenge.required</c> where a bot-defence signal fired, the host declared
+    /// a challenge verifier and no passing token was presented, nothing created,
     /// <c>identity.invitation.expired</c> where the token opens no invitation,
     /// <c>identity.invitation.identifiermismatch</c> where the email it binds is an
     /// account's already, <c>identity.registration.signedin</c> where the browser is
@@ -56,8 +68,10 @@ public interface IRegistration
         AccessContext? signedIn,
         string client,
         string language,
+        string ipAddress,
         string source,
         [NeverLogged] string? invitationToken,
+        [NeverLogged] string? challengeToken,
         CancellationToken cancellationToken);
 
     /// <summary>

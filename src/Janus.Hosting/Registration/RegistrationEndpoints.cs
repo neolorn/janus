@@ -49,8 +49,9 @@ internal static class RegistrationEndpoints
         _ = group.MapPost("/", BeginAsync)
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.RegistrationSignedIn, ErrorCodes.InvitationExpired,
-                    ErrorCodes.InvitationIdentifierMismatch, ErrorCodes.Throttled))
+                    ErrorCodes.ChallengeRequired, ErrorCodes.RegistrationSignedIn,
+                    ErrorCodes.InvitationExpired, ErrorCodes.InvitationIdentifierMismatch,
+                    ErrorCodes.Throttled))
             .Produces<RegistrationStateView>(StatusCodes.Status201Created);
         _ = group.MapGet("/", StateAsync)
             .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionExpired))
@@ -176,7 +177,9 @@ internal static class RegistrationEndpoints
                     request.ClientId ?? string.Empty,
                     RequestOrigin.Language(context.Request),
                     RequestOrigin.Address(context.Request),
+                    RequestOrigin.Source(context.Request),
                     request.InvitationToken,
+                    request.ChallengeToken,
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(begun => begun, error => Withheld<RegistrationSessionId>(error, ref failure));

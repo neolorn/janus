@@ -98,7 +98,7 @@ internal static class AuthenticationRegistration
         services.AddScoped<ProviderAttempts>();
         services.AddScoped(provider => new BotDefence(
             provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetRequiredService<IDatacenterRanges>(),
+            provider.GetService<IDatacenterRanges>(),
             provider.GetRequiredService<IRegistrationSources>(),
             provider.GetRequiredService<IBotDefenceAudit>(),
             provider.GetRequiredService<IUnitOfWork>(),

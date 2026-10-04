@@ -13,7 +13,10 @@ namespace Janus.Authentication.Sending;
 /// of every customer is friction without proportionate benefit.
 /// </summary>
 /// <param name="configuration">Where the signals and their counts come from.</param>
-/// <param name="ranges">What answers whether a source is a datacenter address.</param>
+/// <param name="ranges">
+/// What answers whether a source is a datacenter address, or nothing where the
+/// deployment holds no range file.
+/// </param>
 /// <param name="sources">What counts registration sessions per source.</param>
 /// <param name="audit">Where a signal with no challenge behind it is written down.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
@@ -26,7 +29,7 @@ namespace Janus.Authentication.Sending;
 /// </remarks>
 internal sealed class BotDefence(
     IConfigurationStore configuration,
-    IDatacenterRanges ranges,
+    IDatacenterRanges? ranges,
     IRegistrationSources sources,
     IBotDefenceAudit audit,
     IUnitOfWork work,
@@ -126,6 +129,23 @@ internal sealed class BotDefence(
         return Result.Success();
     }
 
+    /// <summary>
+    /// Counts one registration session against the source that started it. It joins
+    /// the unit of work that creates the session, so a session that is not created is
+    /// not counted.
+    /// </summary>
+    /// <param name="source">The source the session was started from.</param>
+    /// <param name="at">When it started.</param>
+    /// <param name="cancellationToken">Abandons the write.</param>
+    /// <returns>The work of counting it.</returns>
+    /// <exception cref="ArgumentNullException">The source is absent.</exception>
+    public async ValueTask StartedAsync(string source, DateTimeOffset at, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        await sources.RecordAsync(source, at, cancellationToken).ConfigureAwait(false);
+    }
+
     private static TValue Held<TValue>(Error error, ref Error? failure)
     {
         failure = error;
@@ -140,7 +160,7 @@ internal sealed class BotDefence(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        if (watched.Contains(BotDefenceSignal.DatacenterRange) && ranges.Contains(source))
+        if (watched.Contains(BotDefenceSignal.DatacenterRange) && ranges is not null && ranges.Contains(source))
         {
             return BotDefenceSignal.DatacenterRange;
         }

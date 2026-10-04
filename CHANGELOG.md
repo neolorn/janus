@@ -3020,3 +3020,13 @@ against the public contract of LIB-API-001.
 - `derivation.materialised.driftcheck` is a key of the configuration: it is validated at
   startup, read and set through `GET` and `PUT /admin/config/{key}` and the command line, and
   listed with the others, where the drift check read it and nothing else knew it.
+- `POST /register` asks the bot defence before a registration session is created. Where a
+  signal fires and the host declared a challenge verifier, the request is answered 403
+  `auth.challenge.required` and creates nothing; repeated with the host's challenge token
+  as the body member `challengeToken`, a token the verifier passes creates the session and
+  one it fails is refused alike. Where no verifier is declared the signal is recorded as
+  `auth.botdefence.signalled` and the session created. Each session created is counted
+  against the source of its request, which is what the `repeatedAttempts` signal reads.
+- `IRegistration.BeginAsync` takes the whole address of the request as `ipAddress`, the
+  source its sessions are counted against as `source`, and the challenge token as
+  `challengeToken`.
