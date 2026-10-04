@@ -2598,3 +2598,7 @@ against the public contract of LIB-API-001.
   latest where none is live. The migration `KeepARecordForEachGrant` gives each record
   held an `id` and deletes none; reverting it is refused where a subject holds a second
   record of one purpose.
+- The view `identity.consented_resources`, written by the migration
+  `AddConsentedResources`: a row for each registered record whose data subject holds a
+  consent neither withdrawn nor superseded, with the purpose, the document and the kind
+  of that consent. The application role reads it.

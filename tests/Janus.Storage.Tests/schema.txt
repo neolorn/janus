@@ -227,6 +227,12 @@ table compliance_records
   column updated_at timestamp with time zone not null
   constraint ck_compliance_records_only CHECK ((id = 1))
   constraint pk_compliance_records PRIMARY KEY (id)
+view consented_resources
+  column resource_type text
+  column resource_id text
+  column purpose text
+  column document text
+  column kind text
 table consents
   column subject uuid not null
   column purpose text not null
