@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A rotation of a registered client's secret that another process made first, a change
+  of the signing keys with nothing due, and a longer lifetime stored against a key no
+  longer current each answer as before and commit nothing: an operation that succeeds
+  having written nothing ends its transaction by rolling it back.
 - A delivery report that fails for any cause but its rejection (a setting that does not
   read, a raise that cannot be written) leaves nothing of itself behind and no
   transaction open. A rejected report, like every rejected callback, keeps its

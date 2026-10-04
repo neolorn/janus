@@ -150,16 +150,15 @@ internal sealed class RegisteredSecrets(
             .ReplaceSecretAsync(clientId, issuedAt, fresh, now, replacedUntil, cancellationToken)
             .ConfigureAwait(false);
 
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure<byte[]>(notCommitted);
-        }
-
         if (replaced)
         {
-            return Result.Success(fresh);
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Success(fresh), Result.Failure<byte[]>);
         }
+
+        // CONV-DESIGN-003: where another process replaced it first, nothing was written
+        // here, so the unit of work is rolled back before the standing secret is read.
+        await work.RollbackAsync().ConfigureAwait(false);
 
         CryptographicOperations.ZeroMemory(fresh);
 

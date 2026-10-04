@@ -192,26 +192,33 @@ internal sealed class SigningKeyStore(
     }
 
     /// <inheritdoc/>
-    public async ValueTask RetireAsync(SigningKey key, DateTimeOffset now, CancellationToken cancellationToken)
+    public async ValueTask<bool> RetireAsync(SigningKey key, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(key);
 
-        _ = await context.SigningKeys
-            .Where(held => held.KeyId == key.KeyId && held.RetiresAt != null && held.RetiresAt <= now)
+        int retired = await context.SigningKeys
+            .Where(held => held.KeyId == key.KeyId
+                && held.PrivateKey != null
+                && held.RetiresAt != null
+                && held.RetiresAt <= now)
             .ExecuteUpdateAsync(
                 columns => columns.SetProperty(held => held.PrivateKey, (byte[]?)null),
                 cancellationToken)
             .ConfigureAwait(false);
+
+        return retired > 0;
     }
 
     /// <inheritdoc/>
-    public async ValueTask RemoveAsync(SigningKey key, DateTimeOffset now, CancellationToken cancellationToken)
+    public async ValueTask<bool> RemoveAsync(SigningKey key, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(key);
 
-        _ = await context.SigningKeys
+        int removed = await context.SigningKeys
             .Where(held => held.KeyId == key.KeyId && held.KeptUntil != null && held.KeptUntil <= now)
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
+
+        return removed > 0;
     }
 }

@@ -127,39 +127,43 @@ internal sealed class SigningKeys(
         IReadOnlyList<SigningKey> stored = await keys.HeldAsync(cancellationToken).ConfigureAwait(false);
         SigningKey? current = stored.SingleOrDefault(key => key.IsCurrent);
         SigningKey? next = stored.SingleOrDefault(key => key.IsNext);
-        bool made = true;
+        bool written = false;
+        bool lost = false;
 
         if (current is null)
         {
-            made = await MadeAsync(algorithm, now, first: true, cancellationToken).ConfigureAwait(false);
+            written = await MadeAsync(algorithm, now, first: true, cancellationToken).ConfigureAwait(false);
+            lost = !written;
         }
         else if (next is null && current.IsNextDue(now, cadence))
         {
-            made = await MadeAsync(algorithm, now, first: false, cancellationToken).ConfigureAwait(false);
+            written = await MadeAsync(algorithm, now, first: false, cancellationToken).ConfigureAwait(false);
+            lost = !written;
         }
         else if (next is not null && next.TakesOver(current, now, cadence))
         {
-            made = await keys
+            written = await keys
                 .PromoteAsync(next, current, now, current.OverlapEnd(now), now + Keeping, cancellationToken)
                 .ConfigureAwait(false);
+            lost = !written;
         }
 
         // AUTH-KEY-001 AC5, AC6: a retirement or a removal another process already made
         // leaves nothing to write, and the same end either way.
         foreach (SigningKey key in stored.Where(key => key.IsRetirementDue(now)))
         {
-            await keys.RetireAsync(key, now, cancellationToken).ConfigureAwait(false);
+            written |= await keys.RetireAsync(key, now, cancellationToken).ConfigureAwait(false);
         }
 
         foreach (SigningKey key in stored.Where(key => key.IsRemovalDue(now)))
         {
-            await keys.RemoveAsync(key, now, cancellationToken).ConfigureAwait(false);
+            written |= await keys.RemoveAsync(key, now, cancellationToken).ConfigureAwait(false);
         }
 
-        // X3: where another process made the key or the change first, nothing of this
-        // transaction is committed: it is rolled back, and the caller reads the stored
-        // keys that process left.
-        if (!made)
+        // X3, CONV-DESIGN-003: where another process made the key or the change first, or
+        // no change was due, nothing was written that stands: the transaction is rolled
+        // back, and the caller reads the stored keys as they are.
+        if (lost || !written)
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
@@ -194,7 +198,13 @@ internal sealed class SigningKeys(
             return Result.Failure(notBegun);
         }
 
-        _ = await keys.LengthenAsync(current, lifetime, cancellationToken).ConfigureAwait(false);
+        if (!await keys.LengthenAsync(current, lifetime, cancellationToken).ConfigureAwait(false))
+        {
+            // CONV-DESIGN-003: the key is no longer current, so nothing was written.
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success();
+        }
 
         return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
