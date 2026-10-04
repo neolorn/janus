@@ -58,12 +58,6 @@ internal static class OidcRegistration
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // AUTH-KEY-001, CONV-DESIGN-007: the signing keys are one set for the life of
-        // the process, which writes each change in a scope of its own.
-        services.AddSingleton(provider => new SigningCredentialSource(
-            provider.GetRequiredService<IServiceScopeFactory>(),
-            provider.GetRequiredService<TimeProvider>()));
-
         _ = services.AddOpenIddict()
             .AddCore(options =>
             {

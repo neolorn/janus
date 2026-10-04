@@ -34,10 +34,7 @@ internal static class DeliveryRegistration
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // AUTH-ABUSE-004, OPS-ALERT-001: the one path every message takes, and what
-        // decides whether it goes.
-        services.AddScoped<SmsBalance>();
-        services.AddScoped<RelayRegistration>();
+        // AUTH-ABUSE-004, OPS-ALERT-001: the one path every message takes.
         services.AddScoped<SendingService>();
         services.AddScoped<ISendingRestrictions>(provider => provider.GetRequiredService<SendingService>());
 

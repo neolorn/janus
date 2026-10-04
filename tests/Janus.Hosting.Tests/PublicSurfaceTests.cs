@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using Janus.Core;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Callbacks;
@@ -28,6 +29,16 @@ namespace Janus.Hosting.Tests;
 [Trait("kind", "contract")]
 public sealed class PublicSurfaceTests
 {
+    // A connection nothing is opened on.
+    private const string Connection = "Host=nowhere;Database=identity";
+
+    // CONV-DESIGN-007 AC8: the project whose own the shared framework's types are.
+    private const string Mounting = "Janus.Hosting";
+
+    // CONV-DESIGN-007: the shared framework a project takes the container's abstractions
+    // from.
+    private const string SharedFramework = "Microsoft.AspNetCore.App";
+
     // Every member a type declares, whatever its visibility.
     private const BindingFlags Declared =
         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
@@ -76,6 +87,32 @@ public sealed class PublicSurfaceTests
         typeof(ISmsTransport), // LIB-EXT-001 and LIB-HOST-001: SMS delivery.
         typeof(ISubjectEventSubscriber), // LIB-HOST-001: a subject-event handler.
     ];
+
+    // CONV-DESIGN-007 AC7: the registration method of each project, other than the
+    // hosting project, that defines a type the container registers. A project left out
+    // defines none and exposes none.
+    private static readonly Dictionary<string, string> RegistrationMethods = new(StringComparer.Ordinal)
+    {
+        ["Janus.Authentication"] = "AddAuthenticationArea",
+        ["Janus.Authorization"] = "AddAuthorizationArea",
+        ["Janus.Core"] = "AddCoreArea",
+        ["Janus.Privacy"] = "AddPrivacyArea",
+        ["Janus.Storage"] = "AddStorageArea",
+    };
+
+    // CONV-DESIGN-007 AC8: a namespace of the shared framework's own, wherever a file
+    // names it.
+    private static readonly Regex FrameworkNamespace = new(
+        @"\bMicrosoft\s*\.\s*AspNetCore\b",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
+
+    // CONV-DESIGN-007 AC8: a namespace of the framework's extensions, which the same
+    // reference brings, with the part of them the file names.
+    private static readonly Regex ExtensionsNamespace = new(
+        @"\bMicrosoft\s*\.\s*Extensions\s*\.\s*(?<part>\w+)",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
 
     // Every type the shipped assemblies declare.
     private static readonly Type[] ShippedTypes = [.. Shipped.SelectMany(name => Load(name).GetTypes())];
@@ -372,12 +409,143 @@ public sealed class PublicSurfaceTests
         Assert.Empty(activated);
     }
 
+    /// <summary>
+    /// CONV-DESIGN-007 AC7: each project that defines a type the container registers
+    /// exposes exactly one registration method, named for its project, static and out of
+    /// a host's reach, and no other project but the hosting project, whose own is the
+    /// entry point, exposes one.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_007_AC7_EachProjectExposesItsOneRegistrationMethodAndNoOtherExposesOne()
+    {
+        IEnumerable<string> exposed = Shipped
+            .Where(name => name != Mounting)
+            .SelectMany(name => Load(name)
+                .GetTypes()
+                .SelectMany(type => type.GetMethods(Declared))
+                .Where(Registers)
+                .Select(method => name + ": " + method.Name + (method.IsStatic && !method.DeclaringType!.IsVisible ? string.Empty : " in reach")));
+
+        Assert.Equal(
+            RegistrationMethods.Select(method => method.Key + ": " + method.Value).Order(StringComparer.Ordinal),
+            exposed.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-007 AC7: the entry point calls the registration method of every other
+    /// project, read as every registration such a method makes on its own being among
+    /// those the entry point makes, and each method registers the types of its own
+    /// project and of no other. Where a factory is declared to answer a contract, the
+    /// type it builds is read as the one shipped implementation of that contract.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_007_AC7_TheEntryPointCallsEveryMethodAndEachRegistersItsOwnProjectsTypesAlone()
+    {
+        string[] entry = [.. Registered().Select(Line)];
+
+        Assert.All(RegistrationMethods, method =>
+        {
+            ServiceDescriptor[] own = [.. Alone(method.Key, method.Value)];
+
+            Assert.NotEmpty(own);
+            Assert.Empty(own.Select(Line).Except(entry, StringComparer.Ordinal));
+            Assert.Empty(own
+                .Select(Built)
+                .OfType<Type>()
+                .Where(Ships)
+                .Where(type => type.Assembly.GetName().Name != method.Key)
+                .Select(type => type.FullName));
+        });
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-007 AC8: no project but the hosting project names a namespace of the
+    /// shared framework's own, and of the framework's extensions each names the
+    /// container's abstractions alone. A project that names them takes them by the
+    /// framework reference, and no project takes any of them as a package
+    /// (CONV-DESIGN-008).
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_007_AC8_OnlyTheHostingProjectUsesTheFrameworkAndTheOthersItsContainerAlone()
+    {
+        string[] others = [.. Shipped.Where(name => name != Mounting)];
+
+        IEnumerable<string> framework = others
+            .SelectMany(Repository.Project)
+            .Where(file => FrameworkNamespace.IsMatch(File.ReadAllText(file)));
+        IEnumerable<string> extensions = others
+            .SelectMany(Repository.Project)
+            .SelectMany(file => ExtensionsNamespace
+                .Matches(File.ReadAllText(file))
+                .Select(named => file + ": " + named.Groups["part"].Value))
+            .Where(named => !named.EndsWith(": DependencyInjection", StringComparison.Ordinal));
+        IEnumerable<string> unreferenced = Shipped
+            .Where(name => Repository.Project(name).Any(file => ExtensionsNamespace.IsMatch(File.ReadAllText(file))))
+            .Where(name => !ProjectFile(name)
+                .Descendants("FrameworkReference")
+                .Any(reference => reference.Attribute("Include")?.Value == SharedFramework));
+        IEnumerable<string> packaged = Shipped
+            .SelectMany(name => ProjectFile(name)
+                .Descendants("PackageReference")
+                .Select(reference => reference.Attribute("Include")!.Value)
+                .Where(package => package.StartsWith("Microsoft.Extensions.", StringComparison.Ordinal)
+                    || package.StartsWith("Microsoft.AspNetCore.", StringComparison.Ordinal))
+                .Select(package => name + ": " + package));
+
+        Assert.Empty(framework);
+        Assert.Empty(extensions);
+        Assert.Empty(unreferenced);
+        Assert.Empty(packaged);
+    }
+
     private static Assembly Load(string name) => Assembly.Load(new AssemblyName(name));
 
     // CONV-DESIGN-007 AC6: what the entry point registers for a deployment that declares
     // what the host fixture declares.
     private static IServiceCollection Registered() =>
-        new ServiceCollection().AddJanus("Host=nowhere;Database=identity", HostFixture.Declaration(), ApplicationKind.Public);
+        new ServiceCollection().AddJanus(Connection, HostFixture.Declaration(), ApplicationKind.Public);
+
+    // CONV-DESIGN-007 AC7: a registration method takes the collection it adds to first.
+    private static bool Registers(MethodInfo method) =>
+        method.GetParameters() is [ParameterInfo first, ..] && first.ParameterType == typeof(IServiceCollection);
+
+    // CONV-DESIGN-007 AC7: what one project's method registers on its own, given what the
+    // entry point is given.
+    private static ServiceCollection Alone(string project, string name)
+    {
+        MethodInfo registration = Load(project)
+            .GetTypes()
+            .SelectMany(type => type.GetMethods(Declared))
+            .Single(method => method.Name == name && Registers(method));
+        var services = new ServiceCollection();
+
+        _ = registration.Invoke(
+            null,
+            [
+                .. registration.GetParameters().Select(parameter =>
+                    parameter.ParameterType == typeof(IServiceCollection) ? services
+                    : parameter.ParameterType == typeof(AuthorizationDeclaration) ? HostFixture.Declaration()
+                    : (object)Connection),
+            ]);
+
+        return services;
+    }
+
+    // One registration: what it is asked for, how long it lives and what it makes.
+    private static string Line(ServiceDescriptor service) =>
+        service.ServiceType.FullName + " " + service.Lifetime + " " + Made(service)?.FullName;
+
+    // CONV-DESIGN-007 AC7: the type a registration builds: the one it makes, or, where its
+    // factory is declared to answer a contract, the one shipped implementation of that
+    // contract.
+    private static Type? Built(ServiceDescriptor service) =>
+        Made(service) is { IsInterface: true } contract
+            ? Implementations().Where(contract.IsAssignableFrom).ToArray() is [Type single] ? single : null
+            : Made(service);
+
+    // A project's own file, as the repository lays it out.
+    private static XDocument ProjectFile(string project) =>
+        XDocument.Load(Path.Combine(Repository.Root(), "src", project, project + ".csproj"));
 
     // The type a registration makes: the one it names, the instance it holds, or what its
     // factory is declared to answer.

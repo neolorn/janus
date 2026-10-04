@@ -5,10 +5,8 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Janus.Authentication.Alerting;
+using Janus.Authentication;
 using Janus.Authentication.Configuration;
-using Janus.Authentication.Events;
-using Janus.Authentication.Oidc;
 using Janus.Core;
 using Janus.Storage;
 using Microsoft.Extensions.DependencyInjection;
@@ -104,18 +102,21 @@ internal static class ConfigureCommand
             }));
 
     // What the command runs over: the storage area under the connection and the keys
-    // the document carried, and the change itself.
+    // the document carried, the authentication area, whose redirect check, event outbox
+    // and alert channels the change reads and writes through, and the change itself.
     private static ServiceProvider Composed(KeyDocument keys)
     {
         var services = new ServiceCollection();
 
         services.AddSingleton(TimeProvider.System);
+
+        // CONV-DESIGN-007, CONV-CODE-007: the ring the document was read into stands in
+        // the place of the one the core registers, so every service of the command
+        // borrows from the ring the command filled.
+        services.AddCoreArea();
         services.AddSingleton(keys.Ring);
         services.AddStorageArea(keys.Connection);
-        services.AddScoped<SchemaValidation>();
-        services.AddScoped<RedirectValidation>();
-        services.AddScoped<IEvents, EventOutbox>();
-        services.AddScoped<IAlertChannels, AlertChannels>();
+        services.AddAuthenticationArea();
         services.AddScoped<ProtectedConfiguration>();
 
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });

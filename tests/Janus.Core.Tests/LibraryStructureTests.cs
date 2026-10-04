@@ -1831,6 +1831,14 @@ public sealed class LibraryStructureTests
             permitted.Add("Janus.Core.Tests");
         }
 
+        // CONV-DESIGN-007: the key ring and the mail server in use are registered by
+        // Janus.Core's own method, which the hosting tests call to stand both up as the
+        // entry point does.
+        if (string.Equals(project, "Janus.Core", StringComparison.Ordinal))
+        {
+            permitted.Add("Janus.Hosting.Tests");
+        }
+
         // Janus.Storage holds the rows the protocol server keeps its own records in,
         // so the project that stands the server up reads them and its test project
         // stands the same server up over fakes of them (AUTH-OIDC-001, D-162).
