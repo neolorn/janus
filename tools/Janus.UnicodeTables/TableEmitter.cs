@@ -17,15 +17,23 @@ namespace Janus.UnicodeTables;
 /// </remarks>
 internal static class TableEmitter
 {
+    private const string IdnaSource = "the IDNA mapping table of UTS #46";
+
     /// <summary>
     /// Derives every table and writes it.
     /// </summary>
     /// <param name="database">The properties of every code point.</param>
+    /// <param name="idna">The IDNA mapping table of UTS #46.</param>
     /// <param name="directory">The directory to write into.</param>
     /// <param name="version">The Unicode version.</param>
-    internal static void Emit(UnicodeCharacterDatabase database, string directory, string version)
+    internal static void Emit(
+        UnicodeCharacterDatabase database,
+        IdnaMapping idna,
+        string directory,
+        string version)
     {
         ArgumentNullException.ThrowIfNull(database);
+        ArgumentNullException.ThrowIfNull(idna);
 
         var normalization = new Normalization(database);
 
@@ -42,6 +50,7 @@ internal static class TableEmitter
         EmitCategories(database, directory, version);
         EmitPrecis(database, precis, directory, version);
         EmitScripts(database, sets, directory, version);
+        EmitIdna(idna, directory, version);
     }
 
     private static void EmitVersion(string directory, string version)
@@ -284,6 +293,30 @@ internal static class TableEmitter
 
         file.CloseClass();
         file.Save(Path.Combine(directory, "ScriptTables.cs"));
+    }
+
+    private static void EmitIdna(IdnaMapping idna, string directory, string version)
+    {
+        var status = new SourceFile(version, IdnaSource);
+
+        status.Enumeration(
+            "IdnaStatus",
+            "The status the IDNA mapping table of UTS #46 section 5 gives a code point.",
+            IdnaMapping.Values);
+        status.Save(Path.Combine(directory, "IdnaStatus.cs"));
+
+        var file = new SourceFile(version, IdnaSource);
+
+        file.OpenClass(
+            "IdnaTables",
+            "The IDNA mapping table of UTS #46 section 5, from which a domain takes its ASCII"
+                + " form (REG-DOM-001).");
+
+        Runs(file, "Status", "the IDNA status", idna.Statuses, first: true);
+        Mapping(file, "Mapped", "the IDNA mapping", idna.Replacements, first: false);
+
+        file.CloseClass();
+        file.Save(Path.Combine(directory, "IdnaTables.cs"));
     }
 
     private static byte[] Flags(bool[] property)

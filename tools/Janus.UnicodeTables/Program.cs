@@ -5,13 +5,13 @@ namespace Janus.UnicodeTables;
 
 /// <summary>
 /// Writes the Unicode tables that <c>Janus.Core</c> carries, from the Unicode Character
-/// Database vendored beside this project.
+/// Database and the IDNA mapping table of UTS #46 vendored beside this project.
 /// </summary>
 /// <remarks>
 /// Implements IDN-ACCT-004 and CONV-LAYOUT-001. The tables are checked in and the gate
 /// of CONV-GATE-001 runs this again and fails on a diff, so the canonical form the
-/// library computes is the pinned version's and no machine's installed library can
-/// change it.
+/// library computes, and the ASCII form it gives a domain (REG-DOM-001), are the pinned
+/// version's and no machine's installed library can change them.
 /// </remarks>
 internal static class Program
 {
@@ -32,9 +32,10 @@ internal static class Program
 
         var files = new DatabaseFiles(database, Version);
         var characters = UnicodeCharacterDatabase.Read(files);
+        var idna = IdnaMapping.Read(files);
 
         Directory.CreateDirectory(output);
-        TableEmitter.Emit(characters, output, Version);
+        TableEmitter.Emit(characters, idna, output, Version);
 
         Console.Out.WriteLine("Unicode " + Version + " tables written to " + output);
 

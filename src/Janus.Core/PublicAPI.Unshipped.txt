@@ -3656,6 +3656,7 @@ static Janus.Core.Bucket.operator !=(Janus.Core.Bucket? left, Janus.Core.Bucket?
 static Janus.Core.Bucket.operator ==(Janus.Core.Bucket? left, Janus.Core.Bucket? right) -> bool
 static Janus.Core.CanonicalForm.AsciiDigits(string! value) -> string!
 static Janus.Core.CanonicalForm.Of(string! value) -> string!
+static Janus.Core.CanonicalForm.TryDomainToAscii(string! domain, out string! ascii) -> bool
 static Janus.Core.CanonicalForm.UnicodeVersion.get -> string!
 static Janus.Core.Capability.operator !=(Janus.Core.Capability? left, Janus.Core.Capability? right) -> bool
 static Janus.Core.Capability.operator ==(Janus.Core.Capability? left, Janus.Core.Capability? right) -> bool
