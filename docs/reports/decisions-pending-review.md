@@ -4915,6 +4915,8 @@ interval is now the new key rather than a constant.
 `registration.events.pollinterval`, from the row below. REG-SESS-003 should say what
 drives the stream and that the interval is the fallback.
 
+**Superseded by D-166.**
+
 ---
 
 ## 144. The photo is the library's and the codec is the host's

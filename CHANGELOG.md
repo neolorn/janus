@@ -2432,3 +2432,7 @@ against the public contract of LIB-API-001.
 - The link that asks the address a replace displaces to confirm it is sent under the
   `verification` purpose, as the new address's code is, so no `notification`
   restriction counts or refuses it.
+- A registration stream whose wait begins while the database channel that wakes it is
+  no longer listened on raises `degradation` with `details.component`
+  `registration-channel`, once per deduplication window, and the channel is opened
+  again; the stream goes on reading the state back on its interval meanwhile.
