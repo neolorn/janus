@@ -60,7 +60,8 @@ internal static class ProviderSignInEndpoints
                     string? intent,
                     string? returnTo,
                     CancellationToken cancellationToken) =>
-                    signIn.StartAsync(context, provider, intent, returnTo, cancellationToken));
+                    signIn.StartAsync(context, provider, intent, returnTo, cancellationToken))
+                .Declares(EndpointDeclaration.Answering());
 
             _ = endpoints.MapGet(
                 Start + route + Returned,
@@ -70,18 +71,24 @@ internal static class ProviderSignInEndpoints
                     string? state,
                     string? error,
                     CancellationToken cancellationToken) =>
-                    signIn.ReturnAsync(context, provider, code, state, error, cancellationToken));
+                    signIn.ReturnAsync(context, provider, code, state, error, cancellationToken))
+                .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionCsrfInvalid));
 
             _ = endpoints.MapMethods(
                 Return + route + Returned,
                 [HttpMethods.Get, HttpMethods.Post],
                 (HttpContext context, CancellationToken cancellationToken) =>
-                    ForwardAsync(context, route, cancellationToken));
+                    ForwardAsync(context, route, cancellationToken))
+                .Declares(EndpointDeclaration.Answering());
 
             _ = SessionRequired.On(endpoints.MapPost(
                 Link + route,
                 (ICredentials credentials, RequestSession browser, CancellationToken cancellationToken) =>
-                    LinkableAsync(credentials, browser, provider, cancellationToken)));
+                    LinkableAsync(credentials, browser, provider, cancellationToken)))
+                .Declares(EndpointDeclaration.Answering(
+                    ErrorCodes.StepUpRequired,
+                    ErrorCodes.Restricted,
+                    ErrorCodes.Denied));
 
             _ = SessionRequired.On(endpoints.MapDelete(
                 Link + route,
@@ -89,7 +96,12 @@ internal static class ProviderSignInEndpoints
                     RequestSession browser,
                     HttpContext context,
                     CancellationToken cancellationToken) =>
-                    UnlinkAsync(credentials, browser, context, provider, cancellationToken)));
+                    UnlinkAsync(credentials, browser, context, provider, cancellationToken)))
+                .Declares(EndpointDeclaration.Answering(
+                    ErrorCodes.StepUpRequired,
+                    ErrorCodes.Restricted,
+                    ErrorCodes.CredentialNotFound,
+                    ErrorCodes.LinkLastCredential));
         }
 
         return endpoints;

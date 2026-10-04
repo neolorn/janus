@@ -1,5 +1,7 @@
 using System;
+using System.Threading;
 using Janus.Core;
+using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -32,10 +34,13 @@ internal static class ProviderEventEndpoints
         foreach ((string route, Factor provider) in ProviderRoutes.Named)
         {
             _ = endpoints.MapPost(
-                Prefix + route,
-                context => context.RequestServices
-                    .GetRequiredService<ProviderEventIntake>()
-                    .TakeAsync(context, provider, context.RequestAborted));
+                    Prefix + route,
+                    (ProviderEventIntake intake, HttpContext context, CancellationToken cancellationToken) =>
+                        intake.TakeAsync(context, provider, cancellationToken))
+                .Declares(EndpointDeclaration.Answering(
+                    ErrorCodes.CallbackInProgress,
+                    ErrorCodes.CallbackRejected,
+                    ErrorCodes.SystemFault));
         }
 
         return endpoints;

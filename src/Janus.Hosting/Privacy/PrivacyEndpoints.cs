@@ -40,32 +40,67 @@ internal static class PrivacyEndpoints
 
         RouteGroupBuilder group = endpoints.MapGroup("/privacy");
 
-        _ = group.MapGet("/notice", NoticeAsync);
+        _ = group.MapGet("/notice", NoticeAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.DocumentNotFound));
         _ = group.MapGet("/documents/{document}", DocumentAsync)
-            .Declares(EndpointDeclaration.Answering().Binding<DocumentName>("document"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.DocumentNotFound)
+                .Binding<DocumentName>("document"));
 
-        _ = SessionRequired.On(group.MapGet("/consents", ConsentsAsync));
-        _ = SessionRequired.On(group.MapPost("/consents/{purpose}/grant", GrantAsync));
-        _ = SessionRequired.On(group.MapPost("/consents/{purpose}/withdraw", WithdrawAsync));
+        _ = SessionRequired.On(group.MapGet("/consents", ConsentsAsync))
+            .Declares(EndpointDeclaration.Answering());
+        _ = SessionRequired.On(group.MapPost("/consents/{purpose}/grant", GrantAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.NoticeUnpublished, ErrorCodes.PurposeNoConsent));
+        _ = SessionRequired.On(group.MapPost("/consents/{purpose}/withdraw", WithdrawAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.PurposeNoConsent));
 
-        _ = SessionRequired.On(group.MapGet("/objections", ObjectionsAsync));
-        _ = SessionRequired.On(group.MapPost("/objections/{purpose}", ObjectAsync));
-        _ = SessionRequired.On(group.MapDelete("/objections/{purpose}", WithdrawObjectionAsync));
+        _ = SessionRequired.On(group.MapGet("/objections", ObjectionsAsync))
+            .Declares(EndpointDeclaration.Answering());
+        _ = SessionRequired.On(group.MapPost("/objections/{purpose}", ObjectAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.NoticeUnpublished, ErrorCodes.PurposeNotObjectable));
+        _ = SessionRequired.On(group.MapDelete("/objections/{purpose}", WithdrawObjectionAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.PurposeNotObjectable));
 
-        _ = SessionRequired.On(group.MapPost("/requests", SubmitAsync));
-        _ = SessionRequired.On(group.MapGet("/export", ExportAsync));
+        _ = SessionRequired.On(group.MapPost("/requests", SubmitAsync))
+            .Declares(EndpointDeclaration.Answering());
+        _ = SessionRequired.On(group.MapGet("/export", ExportAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.StepUpRequired, ErrorCodes.Throttled));
 
-        _ = SessionRequired.On(endpoints.MapGet("/admin/ropa", RegisterAsync));
-        _ = SessionRequired.On(endpoints.MapPut("/admin/compliance/assessments", AssessmentsAsync));
+        _ = SessionRequired.On(endpoints.MapGet("/admin/ropa", RegisterAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.RequestMalformed, ErrorCodes.Denied));
+        _ = SessionRequired.On(endpoints.MapPut("/admin/compliance/assessments", AssessmentsAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted));
 
         RouteGroupBuilder queue = endpoints.MapGroup("/admin/privacy/requests");
 
-        _ = SessionRequired.On(queue.MapGet("/", QueueAsync));
-        _ = SessionRequired.On(queue.MapPost("/", EnterAsync));
+        _ = SessionRequired.On(queue.MapGet("/", QueueAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied));
+        _ = SessionRequired.On(queue.MapPost("/", EnterAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.RequestReceivedFuture, ErrorCodes.RequestInvalid));
         _ = SessionRequired.On(queue.MapPost("/{request}/fulfil", FulfilAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<PrivacyRequestId>("request"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
+                    ErrorCodes.RequestNotFound, ErrorCodes.RequestDecided)
+                .Binding<PrivacyRequestId>("request"));
         _ = SessionRequired.On(queue.MapPost("/{request}/refuse", RefuseAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<PrivacyRequestId>("request"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.RequestNotFound,
+                    ErrorCodes.RequestDecided)
+                .Binding<PrivacyRequestId>("request"));
 
         return endpoints;
     }

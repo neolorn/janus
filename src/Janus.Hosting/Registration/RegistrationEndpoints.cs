@@ -46,24 +46,77 @@ internal static class RegistrationEndpoints
 
         RouteGroupBuilder group = endpoints.MapGroup("/register");
 
-        _ = group.MapPost("/", BeginAsync);
-        _ = group.MapGet("/", StateAsync);
-        _ = group.MapPut("/age", AgeAsync);
-        _ = group.MapPut("/email", EmailAsync);
-        _ = group.MapPut("/phone", PhoneAsync);
-        _ = group.MapPost("/phone/skip", SkipPhoneAsync);
-        _ = group.MapPost("/identifiers", AddAsync);
+        _ = group.MapPost("/", BeginAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RegistrationSignedIn, ErrorCodes.InvitationExpired,
+                    ErrorCodes.InvitationIdentifierMismatch, ErrorCodes.Throttled));
+        _ = group.MapGet("/", StateAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.SessionExpired));
+        _ = group.MapPut("/age", AgeAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
+                    ErrorCodes.ProfileUnderage));
+        _ = group.MapPut("/email", EmailAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete, ErrorCodes.Throttled,
+                    ErrorCodes.RestrictionExceeded));
+        _ = group.MapPut("/phone", PhoneAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete, ErrorCodes.Throttled,
+                    ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor));
+        _ = group.MapPost("/phone/skip", SkipPhoneAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete));
+        _ = group.MapPost("/identifiers", AddAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
+                    ErrorCodes.IdentifierMaximum, ErrorCodes.IdentifierDomainNotAllowed,
+                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor));
         _ = group.MapPut("/identifiers/{id}", ChangeAsync)
-            .Declares(EndpointDeclaration.Answering().Binding<IdentifierId>("id"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
+                    ErrorCodes.IdentifierLocked, ErrorCodes.IdentifierDomainNotAllowed,
+                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor)
+                .Binding<IdentifierId>("id"));
         _ = group.MapDelete("/identifiers/{id}", DiscardAsync)
-            .Declares(EndpointDeclaration.Answering().Binding<IdentifierId>("id"));
-        _ = group.MapPost("/confirm", ConfirmAsync);
-        _ = group.MapPut("/security", SecurityAsync);
-        _ = group.MapPost("/terms", TermsAsync);
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
+                    ErrorCodes.IdentifierLastOfKind)
+                .Binding<IdentifierId>("id"));
+        _ = group.MapPost("/confirm", ConfirmAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete));
+        _ = group.MapPut("/security", SecurityAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.SessionExpired,
+                    ErrorCodes.RegistrationIncomplete, ErrorCodes.PasswordBlocklisted,
+                    ErrorCodes.PasswordTooShort, ErrorCodes.PasswordTooLong));
+        _ = group.MapPost("/terms", TermsAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.RegistrationIncomplete,
+                    ErrorCodes.NoticeUnpublished, ErrorCodes.AffirmationRequired,
+                    ErrorCodes.PurposeNoConsent));
         _ = group.MapPost("/verify/{id}", VerifyAsync)
-            .Declares(EndpointDeclaration.Answering().Binding<IdentifierId>("id"));
-        _ = group.MapGet("/events", EventsAsync);
-        _ = group.MapPost("/abandon", AbandonAsync);
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired,
+                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor)
+                .Binding<IdentifierId>("id"));
+        _ = group.MapGet("/events", EventsAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.ResourceNotFound));
+        _ = group.MapPost("/abandon", AbandonAsync)
+            .Declares(EndpointDeclaration.Answering());
 
         return endpoints;
     }

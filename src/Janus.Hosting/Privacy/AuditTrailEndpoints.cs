@@ -31,7 +31,7 @@ internal static class AuditTrailEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
 
         _ = SessionRequired.On(endpoints.MapGet("/admin/audit", OfSubjectAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<SubjectId>("subject"));
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied).Binding<SubjectId>("subject"));
 
         return endpoints;
     }

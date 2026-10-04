@@ -41,10 +41,22 @@ internal static class GrantEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
 
         _ = SessionRequired.On(endpoints.MapGet("/admin/grants", HeldAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<OrganizationId>("organization"));
-        _ = SessionRequired.On(endpoints.MapPost("/admin/grants", GrantAsync));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied)
+                .Binding<OrganizationId>("organization"));
+        _ = SessionRequired.On(endpoints.MapPost("/admin/grants", GrantAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.GrantDuplicate, ErrorCodes.GrantExpired,
+                    ErrorCodes.GrantReasonRequired, ErrorCodes.GrantUnresolved));
         _ = SessionRequired.On(endpoints.MapDelete("/admin/grants/{id}", RevokeAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<GrantId>("id"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.GrantNotFound, ErrorCodes.GrantReasonRequired)
+                .Binding<GrantId>("id"));
 
         return endpoints;
     }

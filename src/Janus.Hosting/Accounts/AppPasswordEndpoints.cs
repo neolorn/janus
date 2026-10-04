@@ -36,10 +36,19 @@ internal static class AppPasswordEndpoints
 
         RouteGroupBuilder group = endpoints.MapGroup("/account/mail/apppasswords");
 
-        _ = SessionRequired.On(group.MapGet("/", ListAsync));
-        _ = SessionRequired.On(group.MapPost("/", CreateAsync));
+        _ = SessionRequired.On(group.MapGet("/", ListAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.MailboxNotFound));
+        _ = SessionRequired.On(group.MapPost("/", CreateAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
+                    ErrorCodes.Denied, ErrorCodes.MailboxNotFound, ErrorCodes.CredentialLabelInvalid));
         _ = SessionRequired.On(group.MapDelete("/{id}", RevokeAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<AppPasswordId>("id"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.StepUpRequired, ErrorCodes.MailboxNotFound,
+                    ErrorCodes.CredentialNotFound)
+                .Binding<AppPasswordId>("id"));
 
         return endpoints;
     }

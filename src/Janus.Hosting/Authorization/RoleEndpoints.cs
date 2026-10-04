@@ -38,10 +38,19 @@ internal static class RoleEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        _ = SessionRequired.On(endpoints.MapGet("/admin/roles", AllAsync));
-        _ = SessionRequired.On(endpoints.MapPost("/admin/roles", DefineAsync));
+        _ = SessionRequired.On(endpoints.MapGet("/admin/roles", AllAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied));
+        _ = SessionRequired.On(endpoints.MapPost("/admin/roles", DefineAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired));
         _ = SessionRequired.On(endpoints.MapDelete("/admin/roles/{name}", RemoveAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<RoleName>("name"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.RoleNotFound, ErrorCodes.RoleInUse)
+                .Binding<RoleName>("name"));
 
         return endpoints;
     }

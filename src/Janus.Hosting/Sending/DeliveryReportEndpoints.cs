@@ -32,7 +32,10 @@ internal static class DeliveryReportEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        _ = endpoints.MapGet("/callbacks/sms/dlr", ReportAsync);
+        _ = endpoints.MapGet("/callbacks/sms/dlr", ReportAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.CallbackInProgress, ErrorCodes.CallbackRejected));
 
         return endpoints;
     }

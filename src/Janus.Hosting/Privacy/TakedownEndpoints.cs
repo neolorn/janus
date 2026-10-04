@@ -34,11 +34,24 @@ internal static class TakedownEndpoints
         RouteGroupBuilder group = endpoints.MapGroup("/admin/accounts/{subject}/takedown");
 
         _ = SessionRequired.On(group.MapPost("/", ExecuteAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<SubjectId>("subject"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.AccountNotFound, ErrorCodes.TakedownActive,
+                    ErrorCodes.AccountStateConflict)
+                .Binding<SubjectId>("subject"));
         _ = SessionRequired.On(group.MapGet("/", ReadAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<SubjectId>("subject"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.TakedownNotFound, ErrorCodes.AccountNotFound)
+                .Binding<SubjectId>("subject"));
         _ = SessionRequired.On(group.MapPost("/reverse", ReverseAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<SubjectId>("subject"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.TakedownNotFound, ErrorCodes.AccountNotFound,
+                    ErrorCodes.TakedownWindowElapsed)
+                .Binding<SubjectId>("subject"));
 
         return endpoints;
     }

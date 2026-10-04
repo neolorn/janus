@@ -9,11 +9,14 @@ using Microsoft.Extensions.Primitives;
 namespace Janus.Hosting.Bff;
 
 /// <summary>
-/// What an endpoint declares where it is mounted: the error codes its row of chapter
-/// 09 gives, and the route and query values it binds to a type.
+/// What an endpoint declares where it is mounted: the error codes chapter 09 gives it,
+/// and the route and query values it binds to a type.
 /// </summary>
 /// <remarks>
-/// Implements CONV-DESIGN-006 and API-CONV-003. It declares codes only, the status of
+/// Implements CONV-DESIGN-006 and API-CONV-003. The codes are its row's, those the text
+/// of its section gives the routes that text governs, and the gateway floor's where the
+/// chapter's preamble gives it. What its mounting answers, where its row does not give
+/// it, is derived and declared by no endpoint. It declares codes only, the status of
 /// each being the one <see cref="ApiStatus"/> maps. The values are declared in the
 /// order the request is read for the first that does not parse, and each declaration
 /// is generic over the value's type, so no reflection reads the handler
@@ -28,7 +31,7 @@ internal sealed class EndpointDeclaration
     }
 
     /// <summary>
-    /// The codes the endpoint's row gives.
+    /// The codes chapter 09 gives the endpoint, in the order declared.
     /// </summary>
     public IReadOnlyList<ErrorCode> Codes { get; }
 
@@ -38,7 +41,7 @@ internal sealed class EndpointDeclaration
     public IReadOnlyList<DeclaredValue> Values { get; }
 
     /// <summary>
-    /// Declares the codes an endpoint's row gives.
+    /// Declares the codes chapter 09 gives an endpoint.
     /// </summary>
     /// <param name="codes">The codes.</param>
     /// <returns>The declaration, binding no value yet.</returns>

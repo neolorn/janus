@@ -187,6 +187,13 @@ public sealed class LibraryStructureTests
         RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(5));
 
+    // CONV-DESIGN-006: what an endpoint declares where it is mounted, to the end of its
+    // statement.
+    private static readonly Regex Declaration = new(
+        @"\.Declares\([^;]*;",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
+
     // CONV-SETUP-004 AC3: a severity the .editorconfig sets, through a rule's own key,
     // for a category or every rule, for a naming rule, or after a style option's value.
     private static readonly Regex Severity = new(
@@ -512,13 +519,16 @@ public sealed class LibraryStructureTests
     /// <summary>
     /// AUTH-ABUSE-002 AC2: the throttled refusal has one builder, so every throttle of
     /// the library communicates the remaining delay in one shape. No file of the library
-    /// reads the code but the builder and the map of statuses.
+    /// reads the code but the builder and the map of statuses; an endpoint's declaration
+    /// names the code its row gives and builds no refusal (CONV-DESIGN-006).
     /// </summary>
     [Fact]
     public void AUTH_ABUSE_002_AC2_OnlyTheBuilderAndTheStatusMapReadTheThrottledCode() =>
         Assert.Equal(
             ["ApiStatus.cs", "Error.cs"],
-            Named(code => code.Contains("ErrorCodes.Throttled", StringComparison.Ordinal)));
+            Named(code => Declaration
+                .Replace(code, string.Empty)
+                .Contains("ErrorCodes.Throttled", StringComparison.Ordinal)));
 
     /// <summary>
     /// CONV-LAYOUT-001 AC3: every project's library dependencies are exactly the ones

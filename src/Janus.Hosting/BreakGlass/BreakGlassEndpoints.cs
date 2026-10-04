@@ -34,9 +34,17 @@ internal static class BreakGlassEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        _ = endpoints.MapPost("/auth/break-glass", PresentAsync);
-        _ = SessionRequired.On(endpoints.MapPost("/admin/break-glass/generate", GenerateAsync));
-        _ = SessionRequired.On(endpoints.MapGet("/admin/break-glass", StandingAsync));
+        _ = endpoints.MapPost("/auth/break-glass", PresentAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.BreakGlassConsumed,
+                    ErrorCodes.BreakGlassInvalid, ErrorCodes.Throttled));
+        _ = SessionRequired.On(endpoints.MapPost("/admin/break-glass/generate", GenerateAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired));
+        _ = SessionRequired.On(endpoints.MapGet("/admin/break-glass", StandingAsync))
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Denied));
 
         return endpoints;
     }

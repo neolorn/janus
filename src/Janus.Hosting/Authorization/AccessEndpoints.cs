@@ -31,7 +31,11 @@ internal static class AccessEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
 
         _ = SessionRequired.On(endpoints.MapGet("/admin/access", WhoCanAccessAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<ResourceType>("resourceType").Binding<ResourceId>("resourceId"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied)
+                .Binding<ResourceType>("resourceType")
+                .Binding<ResourceId>("resourceId"));
 
         return endpoints;
     }

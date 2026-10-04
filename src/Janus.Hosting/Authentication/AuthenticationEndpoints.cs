@@ -44,24 +44,46 @@ internal static class AuthenticationEndpoints
 
         RouteGroupBuilder group = endpoints.MapGroup("/auth");
 
-        _ = group.MapPost("/begin", BeginAsync);
-        _ = group.MapPost("/factor", PresentAsync);
-        _ = group.MapPost("/device/verify", VerifyDeviceAsync);
-        _ = SessionRequired.On(group.MapPost("/step-up", StepUpAsync));
-        _ = group.MapPost("/link", LinkAsync);
-        _ = group.MapPost("/link/abandon", AbandonLinkAsync);
-        _ = group.MapPost("/email-otp", CodeAsync);
-        _ = SessionRequired.On(group.MapPost("/logout", LogoutAsync));
-        _ = SessionRequired.On(group.MapGet("/session", SessionAsync));
+        _ = group.MapPost("/begin", BeginAsync)
+            .Declares(EndpointDeclaration.Answering());
+        _ = group.MapPost("/factor", PresentAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.PolicyGraceExpired,
+                    ErrorCodes.FactorRejected, ErrorCodes.FactorNotPermitted,
+                    ErrorCodes.IdentifierDomainNotAllowed, ErrorCodes.CodeInvalid,
+                    ErrorCodes.CodeExpired, ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded,
+                    ErrorCodes.SmsBalanceFloor));
+        _ = group.MapPost("/device/verify", VerifyDeviceAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired, ErrorCodes.RestrictionExceeded));
+        _ = SessionRequired.On(group.MapPost("/step-up", StepUpAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.StepUpRequired, ErrorCodes.FactorNotPermitted, ErrorCodes.FactorRejected,
+                    ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired, ErrorCodes.Throttled,
+                    ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor));
+        _ = group.MapPost("/link", LinkAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded));
+        _ = group.MapPost("/link/abandon", AbandonLinkAsync)
+            .Declares(EndpointDeclaration.Answering());
+        _ = group.MapPost("/email-otp", CodeAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded));
+        _ = SessionRequired.On(group.MapPost("/logout", LogoutAsync))
+            .Declares(EndpointDeclaration.Answering());
+        _ = SessionRequired.On(group.MapGet("/session", SessionAsync))
+            .Declares(EndpointDeclaration.Answering());
 
         // Chapter 09 section 3 lists the browsers the account knows under the account
         // and the sessions elsewhere, so the two lists are never read as one
         // (AUTH-SESS-013).
         RouteGroupBuilder devices = endpoints.MapGroup("/account/devices");
 
-        _ = SessionRequired.On(devices.MapGet("/", ListDevicesAsync));
+        _ = SessionRequired.On(devices.MapGet("/", ListDevicesAsync))
+            .Declares(EndpointDeclaration.Answering());
         _ = SessionRequired.On(devices.MapDelete("/{id}", ForgetDeviceAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<DeviceId>("id"));
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.ResourceNotFound).Binding<DeviceId>("id"));
 
         return endpoints;
     }

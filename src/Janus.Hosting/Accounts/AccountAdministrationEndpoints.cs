@@ -38,15 +38,35 @@ internal static class AccountAdministrationEndpoints
         RouteGroupBuilder group = endpoints.MapGroup("/admin/accounts/{subject}");
 
         _ = SessionRequired.On(group.MapPost("/suspend", SuspendAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<SubjectId>("subject"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
+                    ErrorCodes.AccountNotFound, ErrorCodes.AccountStateConflict)
+                .Binding<SubjectId>("subject"));
         _ = SessionRequired.On(group.MapPost("/reactivate", ReactivateAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<SubjectId>("subject"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
+                    ErrorCodes.AccountNotFound, ErrorCodes.AccountStateConflict)
+                .Binding<SubjectId>("subject"));
         _ = SessionRequired.On(group.MapPost("/restriction/lift", LiftRestrictionAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<SubjectId>("subject"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
+                    ErrorCodes.AccountNotFound, ErrorCodes.AccountStateConflict)
+                .Binding<SubjectId>("subject"));
         _ = SessionRequired.On(group.MapPost("/delete/cancel", CancelDeletionAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<SubjectId>("subject"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.Restricted, ErrorCodes.StepUpRequired,
+                    ErrorCodes.AccountNotFound, ErrorCodes.AccountStateConflict,
+                    ErrorCodes.TakedownActive, ErrorCodes.DeletionWindowElapsed)
+                .Binding<SubjectId>("subject"));
         _ = SessionRequired.On(group.MapGet("/photo", ReadPhotoAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<SubjectId>("subject"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.PhotoNotFound, ErrorCodes.AccountNotFound)
+                .Binding<SubjectId>("subject"));
 
         return endpoints;
     }

@@ -37,14 +37,32 @@ internal static class GroupEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
 
         _ = SessionRequired.On(endpoints.MapGet("/admin/groups", InAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<OrganizationId>("organization"));
-        _ = SessionRequired.On(endpoints.MapPost("/admin/groups", CreateAsync));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied)
+                .Binding<OrganizationId>("organization"));
+        _ = SessionRequired.On(endpoints.MapPost("/admin/groups", CreateAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted));
         _ = SessionRequired.On(endpoints.MapDelete("/admin/groups/{id}", RemoveAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<GroupId>("id"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.GroupInUse)
+                .Binding<GroupId>("id"));
         _ = SessionRequired.On(endpoints.MapPost("/admin/groups/{id}/members", AddMemberAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<GroupId>("id"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.GroupCycle, ErrorCodes.RequestInvalid)
+                .Binding<GroupId>("id"));
         _ = SessionRequired.On(endpoints.MapDelete("/admin/groups/{id}/members", RemoveMemberAsync))
-            .Declares(EndpointDeclaration.Answering().Binding<GroupId>("id"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RequestMalformed, ErrorCodes.Denied, ErrorCodes.Restricted,
+                    ErrorCodes.StepUpRequired, ErrorCodes.GroupCycle, ErrorCodes.RequestInvalid)
+                .Binding<GroupId>("id"));
 
         return endpoints;
     }

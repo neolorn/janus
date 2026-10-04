@@ -40,14 +40,34 @@ internal static class RecoveryEndpoints
 
         RouteGroupBuilder group = endpoints.MapGroup("/recovery");
 
-        _ = group.MapPost("/begin", BeginAsync);
-        _ = group.MapPost("/complete", CompleteAsync);
-        _ = SessionRequired.On(group.MapPost("/report-loss", ReportLossAsync));
+        _ = group.MapPost("/begin", BeginAsync)
+            .Declares(EndpointDeclaration.Answering(ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded));
+        _ = group.MapPost("/complete", CompleteAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RecoveryTokenInvalid, ErrorCodes.RecoveryTokenExpired));
+        _ = SessionRequired.On(group.MapPost("/report-loss", ReportLossAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.LossReportNotPermitted, ErrorCodes.LossReportPending));
         _ = group.MapPost("/report-loss/{id}/cancel", CancelLossAsync)
-            .Declares(EndpointDeclaration.Answering().Binding<AuthenticatorId>("id"));
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.SessionExpired, ErrorCodes.LossReportNotPermitted,
+                    ErrorCodes.LossReportPending)
+                .Binding<AuthenticatorId>("id"));
 
-        _ = SessionRequired.On(endpoints.MapPost("/admin/recovery/approve", ApproveAsync));
-        _ = endpoints.MapPost("/enrol/begin", EnrolAsync);
+        _ = SessionRequired.On(endpoints.MapPost("/admin/recovery/approve", ApproveAsync))
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.Denied, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
+                    ErrorCodes.RecoveryReasonRequired, ErrorCodes.RecoveryChannelNotOnAccount,
+                    ErrorCodes.RecoverySelfApproval, ErrorCodes.SmsBalanceFloor, ErrorCodes.Throttled,
+                    ErrorCodes.RestrictionExceeded));
+        _ = endpoints.MapPost("/enrol/begin", EnrolAsync)
+            .Declares(EndpointDeclaration
+                .Answering(
+                    ErrorCodes.RecoveryTokenExpired, ErrorCodes.EnrolmentTokenInvalid));
 
         return endpoints;
     }
