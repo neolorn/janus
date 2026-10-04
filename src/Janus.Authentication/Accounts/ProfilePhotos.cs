@@ -190,6 +190,16 @@ internal sealed class ProfilePhotos(
             return Result.Failure(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
         await directory.RecordPhotoAsync(subject, image, now, cancellationToken)
             .ConfigureAwait(false);
 
@@ -239,6 +249,16 @@ internal sealed class ProfilePhotos(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
         }
 
         await directory.RemovePhotoAsync(subject, cancellationToken).ConfigureAwait(false);

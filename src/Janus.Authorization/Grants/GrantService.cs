@@ -219,6 +219,16 @@ internal sealed class GrantService(
             return Result.Failure(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await RevokingRefusedAsync(context, grant, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
         // D-166 X3: the role and then the grant are read under their rows' locks, in the
         // order a grant's writing takes them, so a second revocation finds the first and
         // OPS-CFG-007 is judged on what the role allows as committed.
@@ -380,6 +390,17 @@ internal sealed class GrantService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure<GrantId>(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await ManagingRefusedAsync(context, grant.Organization, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<GrantId>(since);
         }
 
         // D-166 X3: a group is given a grant with its organization's groups held, which

@@ -1319,21 +1319,26 @@ internal sealed class AccessGate(
     /// Implements IDN-ACCT-007 AC2 and AUTHZ-GATE-006: a change to the account's own
     /// settings is a modifying action on the subject's own records, so it is refused
     /// under restriction as every modifying action is, and here, where every other
-    /// refusal of it is.
+    /// refusal of it is. Asked inside the operation's unit of work, it is judged with
+    /// the account's row held, as every modifying action is (D-183).
     /// </remarks>
     internal async ValueTask<Result> RequireSettingsChangeAsync(
         AccessContext context,
         CancellationToken cancellationToken) =>
-        (await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false)).Restricted
+        await subjects.RestrictedAsync(context, cancellationToken).ConfigureAwait(false)
             ? Result.Failure(Error.From(ErrorCodes.Restricted))
             : Result.Success();
 
+    // AUTHZ-GATE-006, D-183: the restriction decides a write, so inside a transaction it
+    // is judged with the account's row held to that transaction's end, whoever opened
+    // it, a host included. A reading action is refused by no restriction and holds
+    // nothing.
     private async ValueTask<bool> RestrictedAsync(
         AccessContext context,
         Permission permission,
         CancellationToken cancellationToken) =>
         !model.IsReading(permission)
-        && (await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false)).Restricted;
+        && await subjects.RestrictedAsync(context, cancellationToken).ConfigureAwait(false);
 
     // AUTHZ-GATE-002, PRIV-SENS-002: the consent a permission bound to a consent-based
     // purpose asks, read from the model once and given to the check and to both

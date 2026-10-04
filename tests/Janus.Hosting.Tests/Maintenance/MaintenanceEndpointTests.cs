@@ -238,6 +238,38 @@ public sealed class MaintenanceEndpointTests : IAsyncDisposable
         Assert.Empty(_deployment.Maintenance.Log);
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the caller committed after the gate step and
+    /// before the first write refuses the replacing of the licences and the recording of
+    /// a task, and neither is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesBothRecordsAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+        DateTimeOffset now = _deployment.Clock.GetUtcNow();
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync(
+                "PUT",
+                "/admin/compliance/licences",
+                Listed(new { id = Operating, kind = "licence", name = "Operating licence", expiresAt = now.AddYears(2) })));
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync(
+                "POST",
+                "/admin/compliance/maintenance",
+                ("task", "envelope-rotation"),
+                ("performedAt", now.AddDays(-1)),
+                ("note", "Rotated with the release.")));
+
+        Assert.Empty((await browser.SendAsync("GET", "/admin/compliance/licences")).Json().GetProperty("licences").EnumerateArray());
+        Assert.Empty(_deployment.Maintenance.Log);
+    }
+
     private async Task<Browser> AuthorisedAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);

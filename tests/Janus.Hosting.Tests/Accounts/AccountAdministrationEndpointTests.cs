@@ -264,6 +264,49 @@ public sealed class AccountAdministrationEndpointTests : IAsyncDisposable
         Assert.Equal("a-photo", shown.Body);
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the administrator committed after the gate
+    /// step and before the first write refuses a suspension, a reactivation, the lifting
+    /// of a restriction and the cancelling of a deletion, each leaving the account as it
+    /// stood.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesEachTransitionAsync()
+    {
+        Session active = await MemberAsync();
+        Session suspended = await MemberAsync();
+        Session restricted = await MemberAsync();
+        Session deleting = await MemberAsync();
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Administration, Permissions.AccountManage);
+
+        Assert.Equal(
+            StatusCodes.Status204NoContent,
+            (await browser.SendAsync("POST", PathOf(suspended.Subject, "suspend"))).Status);
+
+        _deployment.Accounts.Stands(restricted.Subject, AccountState.Restricted);
+        _deployment.Accounts.Deleting(deleting.Subject, DeletionOrigin.Self, _deployment.Clock.GetUtcNow().AddDays(-1));
+
+        foreach ((SubjectId subject, string operation, AccountState stands) in new[]
+        {
+            (active.Subject, "suspend", AccountState.Active),
+            (suspended.Subject, "reactivate", AccountState.Suspended),
+            (restricted.Subject, "restriction/lift", AccountState.Restricted),
+            (deleting.Subject, "delete/cancel", AccountState.Deleting),
+        })
+        {
+            await RestrictedSinceTheGateStep.RefusesAsync(
+                _deployment,
+                () => browser.SendAsync("POST", PathOf(subject, operation)));
+
+            Assert.Equal(stands, await StateAsync(subject));
+        }
+
+        Assert.Null(active.EndedAt);
+    }
+
     private static string PathOf(SubjectId subject, string operation) =>
         "/admin/accounts/" + subject.Value + "/" + operation;
 

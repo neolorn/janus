@@ -319,8 +319,8 @@ internal sealed class RecoveryService(
         }
 
         return await StandAsync(
+                context,
                 approver,
-                context.BreakGlassReason,
                 subject,
                 stated,
                 channel,
@@ -739,8 +739,8 @@ internal sealed class RecoveryService(
     // AUTH-RECOV-002: one approval is recorded, counted and alerted on; the link goes
     // out only once as many approvers as the deployment requires have stood behind it.
     private async ValueTask<Result<ApprovedRecovery>> StandAsync(
+        AccessContext context,
         SubjectId approver,
-        string? breakGlassReason,
         SubjectId subject,
         string reason,
         Channel channel,
@@ -779,6 +779,19 @@ internal sealed class RecoveryService(
             return Result.Failure<ApprovedRecovery>(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope
+                .RefusedAsync(context, Permissions.RecoveryApprove, cancellationToken)
+                .ConfigureAwait(false)
+            is Error restricted)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<ApprovedRecovery>(restricted);
+        }
+
         // D-166 X3: the approvals are counted under their hold, so approvals given at
         // once are counted against both day limits as approvals given one after another.
         await approvals.HoldAsync(cancellationToken).ConfigureAwait(false);
@@ -800,7 +813,7 @@ internal sealed class RecoveryService(
             .AddAsync(new RecoveryApproval(subject, approver, channel.Canonical, now), cancellationToken)
             .ConfigureAwait(false);
         await audit
-            .ApprovedAsync(approver, breakGlassReason, subject, reason, channel.Kind, now, cancellationToken)
+            .ApprovedAsync(approver, context.BreakGlassReason, subject, reason, channel.Kind, now, cancellationToken)
             .ConfigureAwait(false);
 
         // CONV-DESIGN-002: the alert's row is written in the transaction that records

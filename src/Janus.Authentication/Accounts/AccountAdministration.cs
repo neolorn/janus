@@ -94,6 +94,16 @@ internal sealed class AccountAdministration(
             return Result.Failure(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await AskedAgainAsync(context, acting, subject, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
         // D-166 X3: decided again on the account's row under its lock, so a transition
         // committed since the first decision is the one this one follows.
         await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
@@ -196,6 +206,16 @@ internal sealed class AccountAdministration(
             return Result.Failure(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await AskedAgainAsync(context, acting, subject, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
         // D-166 X3: as for a suspension.
         await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
 
@@ -279,6 +299,16 @@ internal sealed class AccountAdministration(
             return Result.Failure(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await AskedAgainAsync(context, acting, subject, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
         // D-166 X3: as for a suspension.
         await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
 
@@ -345,6 +375,16 @@ internal sealed class AccountAdministration(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await AskedAgainAsync(context, acting, subject, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
         }
 
         // D-166 X3: as for a suspension.
@@ -425,6 +465,24 @@ internal sealed class AccountAdministration(
     // What a suspension is refused with, where it is; an account an administrator
     // already suspended is settled with nothing to do, which is a refusal of nothing
     // and no state; otherwise the state it is suspended from.
+    // AUTHZ-GATE-006, D-183: the gate asked again inside the unit of work. Where the
+    // account acted on is the acting one, the operation goes on to lock that row itself,
+    // so it is taken for the change first and the gate judges it under that lock.
+    private async ValueTask<Error?> AskedAgainAsync(
+        AccessContext context,
+        SubjectId acting,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        if (acting == subject)
+        {
+            await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+        }
+
+        return await scope.RefusedAsync(context, Permissions.AccountManage, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     private async ValueTask<(Error? Refusal, AccountState? State)> SuspendableAsync(
         SubjectId subject,
         CancellationToken cancellationToken)

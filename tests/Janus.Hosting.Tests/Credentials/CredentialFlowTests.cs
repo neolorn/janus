@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Alerting;
@@ -380,6 +381,45 @@ public sealed class CredentialFlowTests : IAsyncDisposable
 
     // The account the tests act on, with the clock past the minute the registration's
     // own messages hold the address for (AUTH-ABUSE-004).
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the account committed after the gate step
+    /// and before the first write refuses the setting of a password, the generating of
+    /// recovery codes and the beginning and the confirming of a generator, and no
+    /// credential is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesEachCredentialChangeAsync()
+    {
+        Browser browser = await SignedInAsync();
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync("POST", "/account/password", ("password", Replacement)));
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync("POST", "/account/recoverycodes"));
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync("POST", "/account/factors/totp/begin", ("label", Label)));
+
+        Assert.Empty(await _deployment.Authenticators.OfAsync(subject, cancellationToken));
+
+        Answer begun = await browser.SendAsync("POST", "/account/factors/totp/begin", ("label", Label));
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync(
+                "POST",
+                "/account/factors/totp/confirm",
+                ("credentialId", begun.Text("id")),
+                ("code", Code(begun.Text("secret")))));
+
+        Assert.False(Assert.Single(await _deployment.Authenticators.OfAsync(subject, cancellationToken)).Confirmed);
+    }
+
     private async Task<Browser> SignedInAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);

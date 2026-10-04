@@ -19,6 +19,7 @@ using Janus.Hosting.Background;
 using Janus.Hosting.Bff;
 using Janus.Privacy.Consents;
 using Janus.Privacy.SubjectKeys;
+using Janus.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -115,6 +116,15 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a grant in the administrative organization, to an account holding no membership of it", Decided.Denied),
         ("a check by background work, which holds no grant", Decided.Denied),
         ("a check refused inside work the caller rolls back", Decided.Denied),
+        ("a modifying check asked again inside the caller's unit of work", Decided.Allowed),
+        (
+            "a modifying check asked again inside the caller's unit of work, by a caller restricted since the gate step",
+            Decided.Restricted),
+        (
+            "a settings change asked again inside its unit of work, by a caller restricted since the gate step",
+            Decided.Restricted),
+        ("a group created, by a caller managing groups", Decided.Allowed),
+        ("a group created, by a caller restricted since the gate step", Decided.Restricted),
         ("a lookup of a record a fact in the host's data reaches, by a caller reading grants", Decided.Allowed),
         ("a fact in the host's data no grant was materialised for, after the drift check", Decided.Allowed),
         ("a materialised grant the host's data no longer supports, after the drift check", Decided.Denied),
@@ -782,6 +792,22 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "a check refused inside work the caller rolls back":
                 return await RolledBackAsync(caller, deployment.Organization);
 
+            case "a modifying check asked again inside the caller's unit of work":
+                return await AskedAgainAsync(deployment, caller, restricted: false, settings: false);
+
+            case "a modifying check asked again inside the caller's unit of work, by a caller restricted since the gate step":
+                return await AskedAgainAsync(deployment, caller, restricted: true, settings: false);
+
+            case "a settings change asked again inside its unit of work, by a caller restricted since the gate step":
+                return await AskedAgainAsync(deployment, caller, restricted: true, settings: true);
+
+            case "a group created, by a caller managing groups":
+            case "a group created, by a caller restricted since the gate step":
+                return await GroupCreatedAsync(
+                    deployment,
+                    caller,
+                    restricted: scenario.EndsWith("since the gate step", StringComparison.Ordinal));
+
             case "a lookup of a record a fact in the host's data reaches, by a caller reading grants":
                 return await ViewedAsync(deployment, caller);
 
@@ -868,6 +894,89 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                 AccessContext.Of(check.Principal),
                 TestContext.Current.CancellationToken))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    // AUTHZ-GATE-006 AC3: a modifying action that passed the gate step, asked again inside
+    // the unit of work it writes in, where the account's row is held. A restriction
+    // committed between the two refuses the second, and the case is decided by it.
+    private async Task<Decided> AskedAgainAsync(
+        Deployment deployment,
+        SubjectId caller,
+        bool restricted,
+        bool settings)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using AsyncServiceScope working = host.Services.CreateAsyncScope();
+
+        IUnitOfWork work = working.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var context = AccessContext.Of(caller);
+
+        async Task<Decided> AskAsync() =>
+            settings
+                ? await working.ServiceProvider.GetRequiredService<ISettingsRestriction>()
+                    .RefusedAsync(context, cancellationToken) is Error refused
+                    ? Refused(refused)
+                    : Decided.Allowed
+                : (await working.ServiceProvider.GetRequiredService<IAccessGate>()
+                        .RequireAsync(context, Permissions.GrantManage, deployment.Organization, cancellationToken))
+                    .Match(() => Decided.Allowed, Refused);
+
+        Assert.Equal(Decided.Allowed, await AskAsync());
+
+        if (restricted)
+        {
+            await deployment.RestrictAsync(caller, cancellationToken);
+        }
+
+        _ = await work.BeginAsync(cancellationToken);
+
+        Decided decided = await AskAsync();
+
+        await work.RollbackAsync();
+
+        return decided;
+    }
+
+    // AUTHZ-GATE-006 AC3, CONV-DESIGN-002: a change through the library's own operation,
+    // which asks the gate at its gate step and again inside its unit of work. Where the
+    // case restricts the caller between the two, the operation refuses, leaves no
+    // transaction open and writes no group.
+    private async Task<Decided> GroupCreatedAsync(Deployment deployment, SubjectId caller, bool restricted)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using ServiceProvider interleaved = Interleaved(
+            async cancelled =>
+            {
+                if (restricted)
+                {
+                    await deployment.RestrictAsync(caller, cancelled);
+                }
+            });
+        await using AsyncServiceScope scope = interleaved.CreateAsyncScope();
+
+        Decided decided = (await scope.ServiceProvider.GetRequiredService<IGroups>()
+                .CreateAsync(
+                    AccessContext.Of(caller),
+                    deployment.Organization,
+                    "Reviewers",
+                    "A group for the reviewers.",
+                    cancellationToken))
+            .Match(_ => Decided.Allowed, Refused);
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        int written = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT count(*) FROM identity.groups WHERE organization = @organization;",
+            new { organization = deployment.Organization.Value },
+            cancellationToken: cancellationToken));
+
+        Assert.False(Assert.IsType<UnitOfWorkInterleaved>(
+            scope.ServiceProvider.GetRequiredService<IUnitOfWork>()).Open);
+        Assert.Equal(decided is Decided.Allowed ? 1 : 0, written);
+
+        return decided;
     }
 
     // AUTHZ-CONCEAL-004 AC4: a check the caller makes inside a unit of work it then rolls
@@ -1454,6 +1563,22 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             cancellationToken: cancellationToken));
 
         return new Case(host, deployment, account, record, sibling, inner, outer, HostPermissions.Publish);
+    }
+
+    // The same deployment with something committed on another connection in the moment
+    // before an operation's unit of work begins, which is after its gate step
+    // (AUTHZ-GATE-006 AC3).
+    private ServiceProvider Interleaved(Func<CancellationToken, Task> meanwhile)
+    {
+        var services = new ServiceCollection();
+
+        services.AddSingleton<TimeProvider>(new FixedTime(Deployment.Noon));
+        services.AddSingleton<ISecretSource>(HostFixture.Secrets(host.MaintenanceConnectionString));
+        services.AddJanus(host.ConnectionString, HostFixture.Declaration(), ApplicationKind.Public);
+        services.AddScoped<IUnitOfWork>(provider =>
+            new UnitOfWorkInterleaved(new UnitOfWork(provider.GetRequiredService<StoreContext>()), meanwhile));
+
+        return HostFixture.Started(services.BuildServiceProvider());
     }
 
     // The same deployment with the one derivation precomputed into grant rows, which

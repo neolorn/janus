@@ -447,6 +447,49 @@ public sealed class AccountServiceTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)));
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the account committed after the gate step
+    /// and before the first write refuses the choice of a username and of a preferred
+    /// second step, each inside its unit of work, which rolls back and leaves nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesAUsernameAndAPreferredStepAsync()
+    {
+        _configuration.Set(Settings.IdentifiersUsernameEnabled, value: true);
+        _directory.Holds(_person, Profile("Kestrel", null, null));
+
+        Authenticator key = SecondStepKey("The key", Noon);
+
+        _authenticators.Hold(key);
+
+        foreach (Func<ValueTask<Result>> change in new Func<ValueTask<Result>>[]
+        {
+            () => Service.EditProfileAsync(
+                Acting,
+                Stepped(),
+                new ProfileEdit(Username: Chosen),
+                TestContext.Current.CancellationToken),
+            () => Service.PreferSecondStepAsync(Acting, key.Id, TestContext.Current.CancellationToken),
+        })
+        {
+            int rolledBack = _work.RolledBack;
+
+            _restriction.Admitted = admitted => _work.Meanwhile = () => _restriction.Restrict(admitted);
+
+            ErrorCode refused = Refused(await change());
+
+            _restriction.Lift(_person);
+
+            Assert.Equal(ErrorCodes.Restricted, refused);
+            Assert.Equal(rolledBack + 1, _work.RolledBack);
+            Assert.False(_work.Open);
+        }
+
+        Assert.Null(await UsernameAsync());
+        Assert.False(key.IsPreferred);
+    }
+
     private static HeldProfile Profile(string? displayName, string? legalName, DateOnly? dateOfBirth)
     {
         DisplayName? shown = null;

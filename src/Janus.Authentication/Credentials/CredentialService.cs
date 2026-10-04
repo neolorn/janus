@@ -128,6 +128,16 @@ internal sealed class CredentialService(
             return Result.Failure(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await RestrictedSinceAsync(acting, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
         if (!await HeldOpenAsync(acting, cancellationToken).ConfigureAwait(false))
         {
             failure = Error.From(ErrorCodes.EnrolmentTokenInvalid);
@@ -198,7 +208,7 @@ internal sealed class CredentialService(
             return Result.Failure<CredentialCeremony>(gate);
         }
 
-        return await OpenAsync(acting.Subject, kind, upgrading: null, cancellationToken)
+        return await OpenAsync(acting, kind, upgrading: null, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -243,7 +253,7 @@ internal sealed class CredentialService(
             return Result.Failure<CredentialCeremony>(gate);
         }
 
-        return await OpenAsync(acting.Subject, discoverable, credential, cancellationToken)
+        return await OpenAsync(acting, discoverable, credential, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -332,6 +342,16 @@ internal sealed class CredentialService(
         // the invalidation of a reported credential holds while it judges what is left.
         await accounts.HoldAsync(acting.Subject, cancellationToken).ConfigureAwait(false);
 
+        // AUTHZ-GATE-006, D-183: the restriction is asked again under that lock, which the
+        // operation takes itself, so one committed since the gate step refuses the
+        // enrolment before anything is written.
+        if (await RestrictedSinceAsync(acting, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<EnrolledCredential>(since);
+        }
+
         AuthenticatorId enrolled = (await keys
                 .EnrolAsync(
                     acting.Subject,
@@ -409,6 +429,23 @@ internal sealed class CredentialService(
             return Result.Failure<GeneratorEnrolment>(Error.From(ErrorCodes.CredentialLabelInvalid));
         }
 
+        // AUTHZ-GATE-006, D-183: the generator's own write joins a unit of work begun
+        // here, where the restriction is asked again with the account's row held before
+        // any other lock, so one committed since the gate step refuses the enrolment
+        // before anything is written.
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<GeneratorEnrolment>(notBegun);
+        }
+
+        if (await RestrictedSinceAsync(acting, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<GeneratorEnrolment>(since);
+        }
+
         TotpEnrolment begun = (await generators
                 .BeginAsync(acting.Subject, named, cancellationToken)
                 .ConfigureAwait(false))
@@ -416,7 +453,15 @@ internal sealed class CredentialService(
 
         if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<GeneratorEnrolment>(failure);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<GeneratorEnrolment>(notCommitted);
         }
 
         return Result.Success(await generators
@@ -484,6 +529,16 @@ internal sealed class CredentialService(
         // the invalidation of a reported credential holds while it judges what is left.
         await accounts.HoldAsync(acting.Subject, cancellationToken).ConfigureAwait(false);
 
+        // AUTHZ-GATE-006, D-183: the restriction is asked again under that lock, which the
+        // operation takes itself, so one committed since the gate step refuses the
+        // enrolment before anything is written.
+        if (await RestrictedSinceAsync(acting, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<EnrolledCredential>(since);
+        }
+
         _ = (await generators
                 .ConfirmAsync(acting.Subject, credential, code, cancellationToken)
                 .ConfigureAwait(false))
@@ -536,13 +591,41 @@ internal sealed class CredentialService(
             return Result.Failure<GeneratedRecoveryCodes>(Error.From(ErrorCodes.FactorPasswordRequired));
         }
 
+        // AUTHZ-GATE-006, D-183: the set's own write joins a unit of work begun here,
+        // where the restriction is asked again with the account's row held before any
+        // other lock, so one committed since the gate step refuses the codes before
+        // anything is written.
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<GeneratedRecoveryCodes>(notBegun);
+        }
+
+        if (await RestrictedSinceAsync(acting, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<GeneratedRecoveryCodes>(since);
+        }
+
         IReadOnlyList<string> generated = (await codes
                 .GenerateAsync(acting.Subject, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<IReadOnlyList<string>>(error, ref failure));
 
-        return failure is not null
-            ? Result.Failure<GeneratedRecoveryCodes>(failure)
-            : Result.Success(new GeneratedRecoveryCodes(generated, time.GetUtcNow()));
+        if (failure is not null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<GeneratedRecoveryCodes>(failure);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<GeneratedRecoveryCodes>(notCommitted);
+        }
+
+        return Result.Success(new GeneratedRecoveryCodes(generated, time.GetUtcNow()));
     }
 
     /// <inheritdoc/>
@@ -577,6 +660,16 @@ internal sealed class CredentialService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await RestrictedSinceAsync(acting, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
         }
 
         // D-166 X3: the account's credentials are read under their locks, so of two
@@ -713,6 +806,16 @@ internal sealed class CredentialService(
         // account's row under its lock, so two links of one provider at once write one.
         await accounts.HoldAsync(acting.Subject, cancellationToken).ConfigureAwait(false);
 
+        // AUTHZ-GATE-006, D-183: the restriction is asked again under that lock, which the
+        // operation takes itself, so one committed since the gate step refuses the link
+        // before anything is written.
+        if (await RestrictedSinceAsync(acting, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
         if ((await authenticators.OfAsync(acting.Subject, cancellationToken).ConfigureAwait(false))
             .Any(credential => credential.Factor == provider))
         {
@@ -814,6 +917,16 @@ internal sealed class CredentialService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await RestrictedSinceAsync(acting, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
         }
 
         // D-166 X3: the last way in is judged again on the credentials under their locks,
@@ -983,6 +1096,14 @@ internal sealed class CredentialService(
             : Result.Success(new Acting(subject, live, Enrolment: null, held));
     }
 
+    // AUTHZ-GATE-006, D-183: the restriction asked again inside the unit of work, where
+    // the gate judges it with the account's row held. An enrolment session is not asked
+    // about the restriction, there as at the gate step (IDN-ACCT-007).
+    private async ValueTask<Error?> RestrictedSinceAsync(Acting acting, CancellationToken cancellationToken) =>
+        acting.Session is null
+            ? null
+            : await restriction.RefusedAsync(acting.Context, cancellationToken).ConfigureAwait(false);
+
     // AUTH-STEP-007: the gate applies to a session and is stated as the lower of what
     // the account reaches and what the credential contributes. An enrolment session
     // passes none of them, because the approver stood in for them before it existed.
@@ -1037,12 +1158,13 @@ internal sealed class CredentialService(
     // One ceremony stands per account: opening another replaces it, so an abandoned
     // challenge is never a second way in (AUTH-FACT-014).
     private async ValueTask<Result<CredentialCeremony>> OpenAsync(
-        SubjectId subject,
+        Acting acting,
         Factor kind,
         AuthenticatorId? upgrading,
         CancellationToken cancellationToken)
     {
         Error? failure = null;
+        SubjectId subject = acting.Subject;
 
         WebAuthnCeremony ceremony = (await keys
                 .BeginAsync(
@@ -1072,6 +1194,16 @@ internal sealed class CredentialService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure<CredentialCeremony>(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await RestrictedSinceAsync(acting, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<CredentialCeremony>(since);
         }
 
         await ceremonies

@@ -854,6 +854,44 @@ public sealed class GrantEndpointTests : IAsyncLifetime
                 .Order(StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction committed after the gate step and before the
+    /// first write refuses a grant and a revocation inside their unit of work, which
+    /// rolls back and leaves nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesAGrantAndARevocationAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Branch, Permissions.GrantManage);
+        Grant written = await WrittenAsync();
+
+        foreach (Func<Task<Answer>> change in new Func<Task<Answer>>[]
+        {
+            () => GrantedAsync(administrator, "organization", Branch.ToString()),
+            () => RevokedAsync(administrator, written.Id.ToString()),
+        })
+        {
+            int rolledBack = _deployment.Work.RolledBack;
+
+            _deployment.Gate.Admitted = _ => _deployment.Work.Meanwhile = () => _deployment.Gate.Restrict(actor);
+
+            Answer refused = await change();
+
+            _deployment.Gate.Lift(actor);
+
+            Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+            Assert.Equal(ErrorCodes.Restricted.ToString(), refused.Text("code"));
+            Assert.Equal(rolledBack + 1, _deployment.Work.RolledBack);
+            Assert.False(_deployment.Work.Open);
+        }
+
+        Grant held = Assert.Single(await HeldAsync(Branch));
+
+        Assert.Equal(written.Id, held.Id);
+        Assert.Null(held.RevokedAt);
+    }
+
     private static Task<Answer> RevokedAsync(Browser administrator, string id) =>
         administrator.SendAsync("DELETE", "/admin/grants/" + id, ("reason", "No longer needed."));
 

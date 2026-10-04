@@ -107,6 +107,17 @@ internal sealed class RoleService(
             return Result.Failure<bool>(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.RoleManage, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<bool>(since);
+        }
+
         // D-166 X3: the role is read under its row's lock, so two definitions at once are
         // made one after the other and the second is judged on what the first left.
         Role? held = await roles.FindForUpdateAsync(role.Name, cancellationToken).ConfigureAwait(false);
@@ -198,6 +209,17 @@ internal sealed class RoleService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.RoleManage, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
         }
 
         // X5, D-166: a path naming a role the deployment does not hold names no record,

@@ -35,6 +35,13 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
     public bool Open => Opened > Committed + RolledBack + _failed;
 
     /// <summary>
+    /// What another transaction commits as the next one opens, where a test sets it: a
+    /// change made after an operation's gate step and before its first write. It
+    /// happens once.
+    /// </summary>
+    public Action? Meanwhile { get; set; }
+
+    /// <summary>
     /// The failure the next opening answers, where a test sets one.
     /// </summary>
     public Error? RefusesBegin { get; set; }
@@ -56,6 +63,12 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
             RefusesBegin = null;
 
             return ValueTask.FromResult(Result.Failure(refused));
+        }
+
+        if (Meanwhile is Action meanwhile)
+        {
+            Meanwhile = null;
+            meanwhile();
         }
 
         Opened++;

@@ -663,6 +663,52 @@ public sealed class GroupEndpointTests : IAsyncLifetime
         Assert.Equal("reason", Member(left));
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction committed after the gate step and before the
+    /// first write refuses each change of a group inside its unit of work, which rolls
+    /// back and leaves nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesEachGroupChangeAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Branch, Permissions.GroupManage);
+        Group standing = await HeldAsync(Branch, "Standing");
+
+        await _deployment.Groups.AddMemberAsync(standing.Id, User, CancellationToken.None);
+
+        Group empty = await HeldAsync(Branch, "Empty");
+
+        foreach (Func<Task<Answer>> change in new Func<Task<Answer>>[]
+        {
+            () => CreatedAsync(administrator, "Tellers"),
+            () => RemovedAsync(administrator, empty.Id),
+            () => AddedAsync(administrator, empty.Id, User),
+            () => MemberRemovedAsync(administrator, standing.Id, User),
+        })
+        {
+            int rolledBack = _deployment.Work.RolledBack;
+
+            _deployment.Gate.Admitted = _ => _deployment.Work.Meanwhile = () => _deployment.Gate.Restrict(actor);
+
+            Answer refused = await change();
+
+            _deployment.Gate.Lift(actor);
+
+            Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+            Assert.Equal(ErrorCodes.Restricted.ToString(), refused.Text("code"));
+            Assert.Equal(rolledBack + 1, _deployment.Work.RolledBack);
+            Assert.False(_deployment.Work.Open);
+        }
+
+        Assert.Equal(
+            new[] { empty.Id.Value, standing.Id.Value }.Order(),
+            (await _deployment.Groups.InAsync(Branch, CancellationToken.None)).Select(group => group.Id.Value).Order());
+        Assert.Equal([User], await _deployment.Groups.MembersAsync(standing.Id, CancellationToken.None));
+        Assert.Empty(await _deployment.Groups.MembersAsync(empty.Id, CancellationToken.None));
+        Assert.Empty(_deployment.GroupChanges.Changes);
+    }
+
     private static GrantSubject User => GrantSubject.Of(new SubjectId(Holder));
 
     private static string Member(Answer answer)

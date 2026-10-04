@@ -429,6 +429,54 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
         return subject;
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the caller committed after the gate step and
+    /// before the first write refuses the entering, the fulfilling and the refusing of a
+    /// request: none is queued by the entry and the one decided on stays open.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesEachDecisionAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+        SubjectId subject = Borne();
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync(
+                "POST",
+                "/admin/privacy/requests/",
+                ("subject", subject.Value.ToString()),
+                ("type", "erasure"),
+                ("detail", "a letter asking to be erased"),
+                ("receivedAt", "2026-02-27"),
+                ("channel", "letter"),
+                ("identityConfirmation", "national identity card seen")));
+
+        Assert.Empty(_deployment.Requests.Queue);
+
+        Answer submitted = await browser.SendAsync(
+            "POST",
+            "/privacy/requests",
+            ("type", "rectification"),
+            ("detail", "the recorded total is wrong"));
+        string request = submitted.Json().GetProperty("requestId").GetGuid().ToString();
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync("POST", "/admin/privacy/requests/" + request + "/fulfil"));
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync(
+                "POST",
+                "/admin/privacy/requests/" + request + "/refuse",
+                ("reason", "the figure is the one the bank supplied")));
+
+        Assert.Equal(
+            "open",
+            Single(await browser.SendAsync("GET", "/admin/privacy/requests/")).GetProperty("status").GetString());
+    }
+
     private async Task<Browser> AuthorisedAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);

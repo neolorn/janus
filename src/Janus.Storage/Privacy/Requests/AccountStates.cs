@@ -25,6 +25,10 @@ namespace Janus.Storage.Privacy.Requests;
 internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessions) : IAccountStates
 {
     /// <inheritdoc/>
+    public async ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        _ = await accounts.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
+    /// <inheritdoc/>
     public async ValueTask<bool> RestrictAsync(
         SubjectId subject,
         DateTimeOffset at,

@@ -1062,6 +1062,30 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
     private static string Named(int which) => "person" + which.ToString(
         System.Globalization.CultureInfo.InvariantCulture) + "@example.test";
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the approver committed after the gate step
+    /// and before the first write refuses the approval inside its unit of work, which
+    /// rolls back: no approval is recorded and nothing is sent.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesAnApprovalAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        (SubjectId approver, SessionId session) = await ApproverAsync();
+
+        _notifications.Sent.Clear();
+        _work.Reset();
+        _gate.Admitted = admitted => _work.Meanwhile = () => _gate.Restrict(admitted);
+
+        Assert.Equal(ErrorCodes.Restricted, Refused(await Approving(approver, session, subject, Reason)));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_approvals.All);
+        Assert.Empty(_notifications.Sent);
+    }
+
     private ValueTask<Result<ApprovedRecovery>> Approving(
         SubjectId approver,
         SessionId session,

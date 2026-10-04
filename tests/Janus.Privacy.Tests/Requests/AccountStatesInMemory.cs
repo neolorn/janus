@@ -62,6 +62,9 @@ internal sealed class AccountStatesInMemory : IAccountStates
     public bool Holds(SubjectId subject) => _held.Contains(subject);
 
     /// <inheritdoc/>
+    public ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken) => ValueTask.CompletedTask;
+
+    /// <inheritdoc/>
     public async ValueTask<bool> RestrictAsync(
         SubjectId subject,
         DateTimeOffset at,

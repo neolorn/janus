@@ -62,6 +62,16 @@ internal interface IAccountStates
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Takes the account's row for a change, to the end of the transaction, where the
+    /// operation that goes on to change it must hold it before any other lock
+    /// (AUTHZ-GATE-006, CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of taking the lock.</returns>
+    ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Where an account stands.
     /// </summary>
     /// <param name="subject">Whose.</param>

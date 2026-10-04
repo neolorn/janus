@@ -128,6 +128,16 @@ internal sealed class AccountLifecycle(
         // committed since the first decision is the one this one follows.
         await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
 
+        // AUTHZ-GATE-006, D-183: the restriction is asked again under that lock, which the
+        // operation takes itself before any other, so one committed since the gate step
+        // refuses the deactivation before anything is written.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
         if (await UnadmittedAsync(subject, deletion: false, cancellationToken).ConfigureAwait(false)
             is Error moved)
         {

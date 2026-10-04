@@ -656,6 +656,42 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
         Assert.Empty(_deployment.Domains.Held);
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the administrator committed after the gate
+    /// step and before the first write refuses the adding, the verifying and the removing
+    /// of a domain, each leaving the list as it stood.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesEachDomainChangeAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync();
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("POST", PathOf(Branch), Listed));
+
+        Assert.Empty(await _deployment.Domains.OfAsync(Branch, TestContext.Current.CancellationToken));
+
+        JsonElement added = (await administrator.SendAsync("POST", PathOf(Branch), Listed)).Json();
+
+        _deployment.Dns.Publish(added.GetProperty("recordName").GetString()!, added.GetProperty("recordValue").GetString()!);
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("POST", PathOf(Branch) + "/" + Domain + "/verify", Reasoned));
+
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("DELETE", PathOf(Branch) + "/" + Domain, Reasoned));
+
+        Assert.True(Assert.Single(await _deployment.Domains.OfAsync(Branch, TestContext.Current.CancellationToken)).IsListed);
+        Assert.Equal(
+            [AuditActions.OrganizationDomainAdded],
+            _deployment.OrganizationChanges.Changes.Select(change => change.Action));
+    }
+
     private static string PathOf(OrganizationId organization) => "/admin/organizations/" + organization + "/domains";
 
     private static string PolicyOf(OrganizationId organization) => "/admin/organizations/" + organization + "/policy";

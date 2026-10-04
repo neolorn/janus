@@ -198,6 +198,19 @@ internal sealed class InvitationAcknowledgement(
             return Result.Failure(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the restriction is asked again inside the unit of work,
+        // with the account's row held before any other lock, so one committed since the
+        // gate step refuses the membership before anything is written. Attaching the
+        // membership goes on to lock that row itself, so it is taken for the change.
+        await identifiers.HoldAsync(invitee, cancellationToken).ConfigureAwait(false);
+
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
         // D-166 X3: the invitation is read again under its lock, so a revocation
         // committed meanwhile stops the membership, and of two acknowledgements at once
         // only the first attaches.

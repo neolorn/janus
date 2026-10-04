@@ -439,6 +439,37 @@ public sealed class OrganizationEndpointTests : IAsyncDisposable
         return answer.Json().GetProperty("details").GetProperty("member").GetString()!;
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the administrator committed after the gate
+    /// step and before the first write refuses the creating of an organization, a
+    /// deletion's request and its cancelling, and nothing of any is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesEachLifecycleChangeAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Administration);
+        OrganizationId leaving = new(Guid.NewGuid());
+        DateTimeOffset requested = _deployment.Clock.GetUtcNow() - TimeSpan.FromDays(2);
+
+        _deployment.Organizations.Seed(leaving, deletionRequestedAt: requested);
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync(
+                "POST",
+                "/admin/organizations",
+                ("name", "Northern branch"),
+                ("reason", "Opening a branch.")));
+        await RestrictedSinceTheGateStep.RefusesAsync(_deployment, () => RequestedAsync(administrator, Branch));
+        await RestrictedSinceTheGateStep.RefusesAsync(_deployment, () => CancelledAsync(administrator, leaving));
+
+        Assert.Null((await StandingAsync(Branch)).DeletionRequestedAt);
+        Assert.Equal(requested, (await StandingAsync(leaving)).DeletionRequestedAt);
+        Assert.Empty(_deployment.OrganizationChanges.Changes);
+        Assert.Empty(_deployment.Changes.Written);
+    }
+
     private static Task<Answer> RequestedAsync(
         Browser administrator,
         OrganizationId organization,

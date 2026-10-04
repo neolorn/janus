@@ -463,6 +463,40 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     }
 
     // The account the flow registered, which the endpoints answer for.
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the account committed after the gate step
+    /// and before the first write refuses a change of the profile, of the preferences and
+    /// of a credential's label, and each stays as it stood.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesEachSettingAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        Guid credential = Enrolled(Registered());
+        string profile = Profile(await browser.SendAsync("GET", "/account")).GetRawText();
+        string preferences = (await browser.SendAsync("GET", "/account/preferences")).Body;
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync("PUT", "/account/profile", ("displayName", "Someone Else")));
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync(
+                "PUT",
+                "/account/preferences",
+                ("declared", new Dictionary<string, string>(StringComparer.Ordinal) { ["theme"] = "dark" })));
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync("PATCH", "/account/credentials/" + credential, ("label", "The one at home")));
+
+        Assert.Equal(profile, Profile(await browser.SendAsync("GET", "/account")).GetRawText());
+        Assert.Equal(preferences, (await browser.SendAsync("GET", "/account/preferences")).Body);
+        Assert.Equal(
+            "This laptop",
+            Single(await browser.SendAsync("GET", "/account/credentials")).GetProperty("label").GetString());
+    }
+
     private SubjectId Registered() => _deployment.Directory.Created[^1].Subject;
 
     // One credential on that account, of the kind the list shows most about.

@@ -76,6 +76,17 @@ internal sealed class MaintenanceRecords(
             return Result.Failure(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.ComplianceManage, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
         await store.ReplaceLicencesAsync(licences, cancellationToken).ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
@@ -155,6 +166,17 @@ internal sealed class MaintenanceRecords(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure<MaintenanceEntry>(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.ComplianceManage, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<MaintenanceEntry>(since);
         }
 
         await store.RecordAsync(entry, cancellationToken).ConfigureAwait(false);

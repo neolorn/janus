@@ -721,7 +721,34 @@ internal sealed class SessionService(
             return Result.Failure(challenged);
         }
 
-        return await EndAccountAsync(subject, cancellationToken).ConfigureAwait(false);
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope
+                .RefusedAsync(context, Permissions.SessionRevokeAccount, cancellationToken)
+                .ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        await sessions.EndAccountAsync(subject, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
+
+        return Result.Success();
     }
 
     /// <inheritdoc/>
@@ -758,6 +785,18 @@ internal sealed class SessionService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope
+                .RefusedAsync(context, Permissions.SessionRevoke, cancellationToken)
+                .ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
         }
 
         await sessions.EndEveryAsync(time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
