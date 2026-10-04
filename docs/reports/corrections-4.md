@@ -615,7 +615,7 @@ CONV-DESIGN-008 criterion 3, "no project's build reports MSB3277": no test decid
 
 What earlier runs left: nine worktrees held uncommitted work whose commits were all in the branch; each is kept as a patch outside the repository and removed with its branch. The reason rule of the configuration route that one of them carried is on the branch at the endpoint and in the service (`ConfigurationEndpointTests.OPS_CFG_005_EveryChangeCarriesAReasonAsync`, `ConfigurationAdministrationTests.OPS_CFG_008_AC2_ATighteningWithNoReasonIsRefusedAsync`). Four stashes are dropped: three held earlier states of the docs, and every file of the fourth is in the history (the changelog describes `MapAuthorizationTables`).
 
-**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The parts of D-183 the owner's split names run each in a worktree of its own cut from `7bce9374`: gates and sessions are merged (below), sessions without questions 31 and 42; sending, privacy and authorization are not. Questions 68 to 96 park the sites they name. The work after the merges is not started.
+**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The parts of D-183 the owner's split names run each in a worktree of its own cut from `7bce9374`: gates, sessions and privacy are merged (below), sessions without questions 31 and 42 and privacy without questions 29 and 30; sending and authorization are not. Questions 68 to 100 park the sites they name. The work after the merges is not started.
 
 ### The section C sweeps, place by place
 
@@ -1042,6 +1042,22 @@ After the merge: build 0 warnings 0 errors, format clean, 2946 unit tests, 139 c
 - **Not built in the part:** question 31 with 306 (the registration and identifier codes through the verification-code record, the record for a held or reserved value, the expiry sweep; ledger lines 115 and 306) and question 42 (the registration session's credential authority, the staged ceremony and unconfirmed generator; ledger line 129). Neither was started. Both are taken up on the working branch after `part/sending` is merged, since each rebuilds code the governed send changes.
 - The integration classes `TruthTableTests`, `GateBehaviourTests`, `SignInFlowTests`, `SourceRateLimitingTests`, `ThrottlingTests`, `RegistrationFlowTests`, `RegistrationWizardTests`, `SessionStoreTests`, `ModelTests` and `SchemaContractTests` passed on the part.
 
+#### D-183, `part/privacy`, merged as `965a8201` (`3963b184`, `0b11699d`, `67b5c544`, `2247202a`, `f2ef4d42`, `46968c21`, `ea174da9`, `c972731e`)
+
+After the merge: build 0 warnings 0 errors, format clean, 2991 unit tests, 139 contract tests. Three migrations: `AllowAbsentRequestDetail` (the column nullable; hand-written, an empty detail made null and back), `NarrowWhatAFingerprintRetirementDeletes` (hand-written alone: eight `REVOKE DELETE` from the maintenance credential, and their grants back), `AddLawfulBases` (the table; hand-written, its grant to the runtime credential). The snapshot merged without conflict beside the sessions part's migration, and the model has no change a migration does not carry (`dotnet ef migrations has-pending-model-changes`), so nothing was regenerated.
+
+- **Question 21** (`3963b184`; API-CONV-002, CONV-CODE-006, `09` section 8a). This brings `e747407f` to the answer: `detail` is nullable from the endpoint to the column, null records none, a given value that is blank or past 1024 characters after trimming is refused, and the empty string is never stored. Tests: `PrivacyRequestTests.API_CONV_002_AnEntryWithNoDetailRecordsNoneAsync`, `PrivacyRequestTests.API_CONV_002_AnEntryWithABlankOrOverlongDetailIsMalformedAsync`, `PrivacyRequestEndpointTests.API_CONV_002_AnEntryWithNoDetailIsTakenAndRecordsNoneAsync`, `PrivacyRequestEndpointTests.API_CONV_002_AnEntryWithADetailOutsideTheBoundIsRefusedBeforeTheServiceAsync`, `PrivacyRequestStoreTests.API_CONV_002_AnEntryWithNoDetailIsStoredAsNoneAsync`, `SchemaContractTests.LIB_API_001_AC2_TheLibraryOwnedSchemaIsTheContractAsync`.
+- **Question 44** (`0b11699d`; IDN-LIFE-003 criterion 5, PRIV-RIGHT-001 criterion 4). `b1960a2e` stands; no code changed. One test for the case none held: `AccountTests.IDN_LIFE_003_AC5_AReversalToAnOutOfBandDeletionKeepsTheSuspensionItHolds`.
+- **Question 45** (`67b5c544`; PRIV-RIGHT-001, IDN-LIFE-003, OPS-BOOT-002, `09` section 8a). The entry refuses a subject no account bears with 422 `api.request.invalid` naming `subject`; the fulfilment no longer answers `identity.account.notfound`: a subject with no account is a fault, an erasure of the reserved emergency account is `authz.denied` before the step-up, and a deletion that does not begin is recorded fulfilled only where the account is found deleting or deleted under its lock. Tests: `PrivacyRequestTests.PRIV_RIGHT_001_AnEntryForASubjectNoAccountBearsIsInvalidAsync`, `PrivacyRequestTests.OPS_BOOT_002_AnErasureOfTheReservedAccountIsDeniedBeforeTheStepUpAsync`, `PrivacyRequestTests.PRIV_RIGHT_001_IDN_LIFE_003_AnErasureOfASubjectNoAccountBearsIsAFaultAsync`, `PrivacyRequestTests.PRIV_RIGHT_001_IDN_LIFE_003_ADeletionThatWillNotBeginIsAFaultAsync`, `PrivacyRequestEndpointTests.PRIV_RIGHT_001_AnEntryForASubjectNoAccountBearsIsRefusedAsync`, `AccountStatesTests.OPS_BOOT_002_TheReservedAccountIsNeverTakenDownAsync`.
+- **Question 24** (`2247202a`; INT-SMS-003, `09` sections 7 and 8a). The read, the publication and the translation routes refuse a document name outside the rule with 400 `api.request.malformed` naming `document`, as the handler's first act. Tests: `PublicationEndpointTests.INT_SMS_003_APublicationUnderANameOutsideTheRuleIsMalformedAsync`, `PublicationEndpointTests.INT_SMS_003_ATranslationUnderANameOutsideTheRuleIsMalformedAsync`, `LegalDocumentEndpointTests.INT_SMS_003_AReadOfANameOutsideTheRuleIsMalformedAsync`. Not decided by a test: "answered before the body is read" (question 97). A caller in process: question 98.
+- **Question 65** (`f2ef4d42`; PRIV-ROPA-001, API-CONV-002, CONV-CODE-006). `dataOwner` and `organizationalSecurityMeasures` are trimmed, refused 400 `api.request.malformed` naming the member where blank or past 1024 characters, at the endpoint and in the service, kept trimmed, and cleared when omitted. Tests: `ProcessingRecordsEndpointTests.API_CONV_002_AStatementOutsideTheBoundIsRefusedBeforeTheServiceAsync`, `ProcessingRecordsEndpointTests.API_CONV_002_AStatementIsKeptTrimmedAndAnOmittedOneIsClearedAsync`, `ProcessingRecordsTests.API_CONV_002_AStatementOutsideTheBoundIsMalformedAsync`, `ProcessingRecordsTests.API_CONV_002_AStatementIsRecordedTrimmedAndAnOmittedOneIsClearedAsync`. The spelling elsewhere: question 99.
+- **Question 26** (`46968c21`; OPS-SEC-003 criterion 3, OPS-SEC-001 criterion 2, CONV-CODE-007). An unwrap under a version the ring does not hold reads the erased marker first, then throws a fault that carries the ring's own answer (`model.startup.secretunavailable`, the key and the version); the fault log writes its code and details; a command that meets one ends with exit 1 and the code; the start refuses where a live subject key stands under a version the source lacks. Tests: `PersonalFieldCipherTests.OPS_SEC_003_AC3_AKeyUnderARetiredVersionFailsWithANamedError`, `PersonalFieldCipherTests.OPS_SEC_003_AC3_AnErasedKeyUnderARetiredVersionReadsAsErased`, `FaultLogTests.OPS_SEC_003_AC3_AFaultThatCarriesACodeIsLoggedWithItsCodeAndDetails`, `FaultLogTests.BFF_ERR_002_AC2_AFaultThatCarriesNoCodeIsLoggedByItsTypeAlone`, `KeyMaterialTests.OPS_SEC_001_AC2_StartupFailsNamedWhereALiveSubjectKeyStandsUnderAVersionTheSourceLacksAsync`, `SubjectKeyStoreTests.OPS_SEC_001_AC2_TheVersionsReadAreThoseOfTheKeysThatAreNotErasedAsync`, `RegisterClientTests.OPS_SEC_003_AC3_AValueUnderAVersionTheDocumentLacksEndsTheCommandWithTheCodeAsync`. Not decided by a new test: "a request is answered `system.fault`" (the translation answers every exception so, held by the BFF-ERR-002 tests) and "a job fails its run" (the worker records a thrown fault through the fault log). Ledger: 317 "Superseded by D-166".
+- **Question 33** (`ea174da9`; OPS-SEC-003, OPS-MIG-003a criterion 4, PRIV-RIGHT-005c). A sign-in in progress under a previous version counts as pending; the retirement deletes only unspent credit under a previous version and released username holds; the maintenance credential loses `DELETE` on the eight ledgers. Tests: `FingerprintRotationTests.OPS_SEC_003_AC6_RetirementWaitsWhileASignInInProgressCarriesThePreviousVersionAsync`, `FingerprintRotationTests.OPS_SEC_003_AC6_RetirementDeletesOnlyUnspentCreditAndReleasedHoldsAsync`, `DatabaseRoleTests.OPS_MIG_003a_AC4_TheMaintenanceRoleReachesTheFingerprintsAndNoOtherColumnAsync`. Ledger: 318 "Superseded by D-166".
+- **Question 28** (`c972731e`; PRIV-BASIS-001, CONV-ENUM-001, `10` section 5.7). `LawfulBasisDeclaration` gains `Label`; the table `identity.lawful_bases`, written whole by a leading hosted service at the start, under a table lock; the model refuses a key named twice or an empty key or label with `model.startup.declarationinvalid`; the records of processing emit the label. Tests: `AuthorizationModelTests.PRIV_BASIS_001_AListNamingAKeyTwiceOrAnEmptyKeyOrLabelFailsStartup`, `DeclaredProcessingTests.PRIV_BASIS_001_TheShippedDeclarationCarriesTheDeclaredProperties`, `ProcessingRecordsTests.PRIV_BASIS_001_AC2_TheBasisColumnCarriesTheDeclaredLabelAsync`, `LawfulBasisSeedTests.PRIV_BASIS_001_AC6_TheStartWritesTheDeclaredListInOneTransactionAsync`, `LawfulBasisSeedTests.CONV_DESIGN_003_AC7_ATransactionThatFailsIsAFaultNamingItsCodeAsync`, `LawfulBasisStoreTests.PRIV_BASIS_001_AC6_AfterAStartTheTableHoldsExactlyTheDeclaredBasesAsync`, `LawfulBasisStoreTests.PRIV_BASIS_001_AC6_TwoStartsWithDifferentListsLeaveOneWholeListAsync`, `LawfulBasisStoreTests.PRIV_BASIS_001_OnlyTheRuntimeCredentialWritesTheTableAsync`, `StartupValidationTests.AUTHZ_MODEL_004_AC2_TheChecksStartBeforeEverythingElseRegistered`, `ModelTests.REG_ACCT_001_AC2_NoFieldExistsOutsideTheGroupsTheTableNames`.
+- **Not built in the part:** question 30 (the consent and objection rows re-keyed to a row per grant, the grant while a live record stands) and question 29 (the consented resources: the view, the third source of the filter, the consent condition, its truth-table case), which depends on 30 and on question 22 of `part/authorization`. Neither was started; ledger lines 133 and 147 are not written. Both are taken up after `part/authorization` is merged.
+- `ea174da9` and `c972731e` change `AuthorizationModel.cs` and no truth-table case (question 100). The check passes over the branch's range.
+- The integration classes `PrivacyRequestStoreTests`, `SchemaContractTests`, `AccountStatesTests`, `SubjectKeyStoreTests`, `FingerprintRotationTests`, `DatabaseRoleTests`, `LawfulBasisStoreTests`, `MigrationRunTests`, `RegisterClientTests`, `KeyRotationTests`, `FingerprintKeyRotationTests`, `StartupValidationTests` and `BackgroundJobsTests` passed on the part. No parked site of questions 69 to 88 was touched.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1205,6 +1221,9 @@ After the merge: build 0 warnings 0 errors, format clean, 2946 unit tests, 139 c
 | `DeclarationCoverage.Origin` (`64b1a154`) | The scan reads a text parameter named `address` as an email address taken untyped; this one is a client's return address or the sign-in address, for which no typed value exists | CONV-DESIGN-004 criterion 2, "where a typed identifier or value exists" | The parameter is renamed `location`; behaviour unchanged |
 | 146 (4), an ask with a risk signal (`52482ed5`), the row above | The row was recorded as Tier 1 | D-183, the audit of the Tier 1 records | It was not Tier 1: it decided a step-up's outcome from rules for anonymous asks. The sign-in half is corrected in `0c3746d8`; the step-up half waits on question 94 |
 | `StepUpGates`, the values of 328 (`669bac7b`), the row above | The row was recorded as Tier 1 | D-183, the audit of the Tier 1 records | The main line stands; its failure rules were not Tier 1. They are built as LIB-HOST-004 criterion 4 now states them in `d52cacfb` |
+| `AssessmentsRequest`, the body of `PUT /admin/compliance/assessments` (`f2ef4d42`) | The member was read from the wire as `organisationalSecurityMeasures` | `09` section 8a, the route's row; D-183 question 65 | The request member is spelled `organizationalSecurityMeasures` as `09` spells it. For audit: the response of `GET /admin/ropa`, two public members and the column keep the other spelling (question 99) |
+| Fakes of the unit tests (`46968c21`, `c972731e`) | The unit compositions start every hosted service with no database, and the start now reads the subject keys' versions and writes the lawful bases | CONV-TEST-007; the working guide's section 3, test infrastructure | A fake of the subject-key store and one of the lawful-basis store are registered in the fixtures; no runtime code |
+| `BreakGlassEndpointTests` and `PrivacyRequestEndpointTests` (`67b5c544`) | Two fixtures entered a request for a subject the account-states fake did not hold, which the entry now refuses | `09` section 8a; D-183 question 45; the working guide's section 3, test infrastructure | The fixture holds the subject's account, one line in each place |
 
 ## 4. Open questions
 
@@ -1703,7 +1722,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2946 unit tests, 139 c
      service and at the endpoint.
 - **Parked.** The detail rule of `EnterAsync` alone. `e747407f` built it while parked, as
   reading 3 (section 2).
-- **Answer:** pending.
+- **Answer:** D-183. Built in `3963b184` (`part/privacy`), which brings `e747407f` to the answer.
 
 **22. Tier 2. D-166 265 and LIB-HOST-001: the shape of a relationship source.**
 
@@ -1759,7 +1778,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2946 unit tests, 139 c
      declares. Smallest fix: as 1.
   3. As is: the width covers declared names only.
 - **Parked.** Nothing; 120 is otherwise built.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `2247202a` (`part/privacy`); questions 97 and 98 follow from it.
 
 **25. Tier 2. D-166 144 and 315 against entry 403 and the closed ledger: the retired `photo.enabled` family.**
 
@@ -1789,7 +1808,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2946 unit tests, 139 c
 - **What the specification says.** The item names the code and its details, and not the
   path by which a refusal reaches a request from a value read in a store.
 - **Parked.** 317 (2), ledger line 317.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `46968c21` (`part/privacy`).
 
 **27. Tier 2. D-166 118: the governed send contract.**
 
@@ -1825,7 +1844,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2946 unit tests, 139 c
   3. As 1, with a `sensitive_categories` table.
   4. The command or a migration writes the rows.
 - **Parked.** 156.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `c972731e` (`part/privacy`).
 
 **29. Tier 3. D-166 133 and 147 (1) to (4), AUTHZ-GATE-002 and PRIV-CONS-007: the consented resources against the document a purpose now names.**
 
@@ -1840,7 +1859,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2946 unit tests, 139 c
 - **Parked.** 133 and 147 (1) to (3), the gate's reading of another document,
   `ConsentGateTests.PRIV_CONS_007_APurposeGivenAnotherDocumentAsksItsSubjectsAgainAsync`,
   ledger lines 133 and 147. Point (4) is in `c573f655`.
-- **Answer:** pending.
+- **Answer:** D-183. Not yet built.
 
 **30. Tier 3. D-166 133 and 147 (5) and PRIV-CONS-001: a grant while a live record stands.**
 
@@ -1849,7 +1868,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2946 unit tests, 139 c
   purpose stands. A unique partial index refuses a second live row.
 - **What the specification says.** No chapter says.
 - **Parked.** 133 and 147 (5).
-- **Answer:** pending.
+- **Answer:** D-183. Not yet built.
 
 **31. Tier 3. D-166 115 (2), AUTH-FACT-004 criterion 3, REG-SESS-005 criterion 1 and AUTH-ABUSE-003: verifying a code for a held identifier.**
 
@@ -1892,7 +1911,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2946 unit tests, 139 c
 - **What the code needs.** One rule. The log and the chapter differ on what retirement
   forgets.
 - **Parked.** 318 (3), ledger line 318. 318 (1) and (2) are in `98eebc5c`.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `ea174da9` (`part/privacy`).
 
 **34. Tier 2. D-166 136 against `10` `alerting.denials.threshold`: the actor of a principal's refusal.**
 
@@ -2075,7 +2094,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2946 unit tests, 139 c
 - **What the code does.** `b1960a2e` keeps `RestrictionHeld`, and an out-of-band deletion's
   held suspension, on a reversal to a held deletion or suspension, as the chapter says.
 - **Parked.** Nothing more; the reversal is committed as said, under the open question.
-- **Answer:** pending.
+- **Answer:** D-183. `b1960a2e` stands; a test added in `0b11699d` (`part/privacy`).
 
 **45. Tier 2. An out-of-band erasure by the account's state (`0149b6d6`): the fulfilment's codes against `09`.**
 
@@ -2091,7 +2110,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2946 unit tests, 139 c
   3. The fulfilment never refuses on the account; it records the request fulfilled.
 - **Parked.** Nothing more; `0149b6d6` is committed with the codes of reading 1, and the
   ledger lines of the D.5 items are written.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `67b5c544` (`part/privacy`).
 
 **46. Tier 2. D-166 328 and CONV-VCS-004: truth-table rows for the step-up gate.**
 
@@ -2408,7 +2427,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2946 unit tests, 139 c
   2. Blank clears as omitted; only the upper bound applies.
   3. Record content, outside X4; nothing changes.
 - **Parked.** The free text of that route.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `f2ef4d42` (`part/privacy`); question 99 follows from it.
 
 **66. Withdrawn.** It asked after the row `abuse.source.sitelimit` of section F, which is
 part of 389 (3) and waits with 389 on question 48.
@@ -2727,6 +2746,50 @@ part of 389 (3) and waits with 389 on question 48.
 - **Readings.**
   1. As built.
   2. Only `LandAsync` takes it, and the four others count against a source the session carries, which the rule forbids for a request arriving from elsewhere.
+- **Parked.** Nothing.
+- **Answer:** pending.
+
+**97. Tier 2. `09` section 8a and question 24: a document name refused "before the body is read".**
+
+- **Item.** Question 24.
+- **What the code needs.** The publication and translation handlers take their body as a bound parameter; the framework reads it before the handler runs. A name outside the rule with an unreadable body is answered for the body.
+- **What the specification says.** `09` section 8a: 400 naming `document`, "answered before the body is read". CONV-DESIGN-006: a typed route value binds through `IParsable` and the error translation names the first declared value that does not parse (question 53); `{document}` binds as text today.
+- **Readings.**
+  1. The handler's first check, as built: every readable body is answered naming `document`.
+  2. The document name becomes a typed value declared with question 53's metadata, so the stage names it whatever the body: a public value type in `Janus.Core` and the three handlers.
+- **Parked.** Nothing; reading 1 is built.
+- **Answer:** pending.
+
+**98. Tier 2. INT-SMS-003 and question 24: a document name outside the rule from a caller in process.**
+
+- **Item.** Question 24.
+- **What the code needs.** `ILegalDocuments.PublishAsync`, `TranslateAsync` and `ReadAsync` take the name as text and refuse none; a host in process can publish under a name the read route then refuses. The rule (`PlaceName`) is internal to `Janus.Core`, which grants its internals to Hosting and the command alone, so `Janus.Privacy` cannot apply it.
+- **What the specification says.** D-183 question 24 and `09` name the routes; INT-SMS-003 bounds the name at declaration and at the routes.
+- **Readings.**
+  1. The routes alone, as built.
+  2. The service refuses too: the rule made public in `Janus.Core`, a change of the public surface.
+- **Parked.** The refusal in process.
+- **Answer:** pending.
+
+**99. Tier 2. `09` section 8a and PRIV-ROPA-001: the spelling of the organizational measures outside the request.**
+
+- **Item.** Question 65.
+- **What the code does.** The request member is `organizationalSecurityMeasures`. The response of `GET /admin/ropa` writes `organisationalSecurityMeasures`; `ComplianceRecord.OrganisationalSecurityMeasures`, `ProcessingRegister.OrganisationalSecurityMeasures` and the column `organisational_measures` keep that spelling.
+- **What the specification says.** `09` spells the request member alone; PRIV-ROPA-001 writes "Organisational" in the template's field name and `organizational-measures-missing` for the finding.
+- **Readings.**
+  1. Only the request member follows `09`, as built.
+  2. The response member, the two public members and the column follow: a rename of each, the `PublicAPI` lines and a migration.
+- **Parked.** Nothing.
+- **Answer:** pending.
+
+**100. Tier 2. CONV-VCS-004: two commits that change `AuthorizationModel.cs` and no truth-table case.**
+
+- **Item.** Questions 33 and 28.
+- **What the code does.** `ea174da9` removes eight lines of the maintenance credential's listing from the serialized model (OPS-MIG-003a criterion 4); `c972731e` gives the lawful basis list its coded refusal at the start. Neither changes an outcome a truth-table case states, and neither commit touches the table. The check reads a range: it passes over the branch, and fails over a range that holds these two alone.
+- **What the specification says.** A change to permission logic comes with a change to the truth table; the check counts every file of the authorization area.
+- **Readings.**
+  1. They are not changes of permission logic; they stand.
+  2. Every change under the area's paths carries a table change: the two changes move to files outside the paths, or each gains a case.
 - **Parked.** Nothing.
 - **Answer:** pending.
 
