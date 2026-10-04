@@ -4272,3 +4272,32 @@ its commits can be read.
 - Every commit from `42fded79` (the merge of `part/value-lock`) to `7ed0a7e5` carries the one integration failure above, which no fast check runs.
 - The pull request is not opened: the branch is not on GitHub from `d5a7fc0e` on, and the push is the owner's.
 - Open: questions 127 to 160 (section 4). Not built for them: question 83 and the tests of CONV-DESIGN-007 criterion 7's third and fourth clauses (128); question 93 (144); one case of question 94 (145); the call sites of the bot-defence check (136); `viewedAt` at generation (140); the bootstrap's judgement (142); the answer of a pressed token whose pending verification is gone and the throttle on the account's verify route (151); the sites questions 127, 130, 133 to 135, 143, 152, 155 and 157 leave as they are.
+
+**`corrections-4`, after the items of D-188.** Full gate at `1c97c92a`, run once and locally, job by job as the gates workflow runs it (range base `b6d14fef`, the merge base with `main`). The pipeline's run on the pull request covers `ec98ceb5`; no pipeline run exists for the commits after it.
+
+| Job | Result |
+|---|---|
+| Locked restore | passed |
+| Public surface files up to date (`release.sh`) | passed |
+| Format | passed |
+| Unit tests | passed, 3475 |
+| Contract tests | passed, 147 |
+| Unicode tables regenerate without a diff | passed |
+| Integration tests | passed, 1018 |
+| Policy coverage test | passed, 3 |
+| Truth-table suite (change check and suite) | passed, 103 |
+| Double migration run | passed (no migration since the last gate) |
+| Janus.Analyzers rules, permitted outcome, forbidden log values | passed, 22, 4 and 4 |
+| Dependency allow-list | passed |
+| InternalsVisibleTo allow-list | passed |
+| Forbidden markers and commented-out code | passed |
+| Acceptance-criterion test names | passed |
+| Commit message format | passed |
+| Changelog line present | passed |
+| Destructive-operation detection report | passed with `DESTRUCTIVE_DDL_GATE` set to `disabled` for the run, as the repository variable is (question 54) |
+| Dependency vulnerability alerting | passed |
+| Secret scanning | passed: the pinned scanner, run locally as the pipeline runs it, over the whole history at the commit that carries this table: no finding |
+
+- `dec8e8d2` fails the truth-table change check over itself alone and passes over the range (section 1, `part/seams`).
+- Not merged: `part/bot-defence` (question 136, `b099d14a`), kept as a local branch until question 169 is answered.
+- Open: questions 161 to 187 (section 4). Not built for them: the startup log of the rules set aside (161); the comparison of the identifier with an origin's host (163); the fourth-clause test of CONV-DESIGN-007 criterion 7 and its sites (168); question 136 on the working branch (169 to 171); the answer of the other session-required routes to an enrolment session, when that session ends after a second step's codes, and the narrowing of its reach on the verify route (176 to 178); `viewedAt` of a registration's set (179); the replace half of question 153 and the repeated add the sweep overtakes (180, 181); a second removal row for one identifier (185); the due instant of a row with no immediate attempt (186).
