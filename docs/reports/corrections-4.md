@@ -1533,6 +1533,30 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - Public surface: the one line of `IUnitOfWork.BeginAsync`, with its changelog line. No migration.
 - Parked: questions 186 and 187.
 
+### `part/relying-party` (D-189), merged as `0432c57b`: questions 163 and 161
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 163: the relying party identifier, configured or derived, and the hosts it is judged against are held and compared in the ASCII form the conversion gives | `be0ce325` | AUTH-FACT-010 | `RelyingPartyTests.AUTH_FACT_010_AC5_AnAsciiIdentifierSitsOverAnOriginWrittenInUnicode`, `RelyingPartyTests.AUTH_FACT_010_AC5_AUnicodeIdentifierSitsOverAnOriginWrittenInAscii`, `RelyingPartyTests.AUTH_FACT_010_AC5_AnUnsetIdentifierDerivesInAsciiForm`, `RelyingPartyTests.AUTH_FACT_010_AC5_AnIdentifierOverNoOriginIsRefusedInEitherForm`, `PublicSuffixListTests.AUTH_FACT_010_AHostTheConversionRefusesDoesNotRead`, `RelyingPartyTests.AUTH_FACT_010_AC1_ANameWithNoAsciiFormIsRefused` |
+| Question 161: `PublicSuffixList.SetAside` holds each rule set aside as the list writes it, and a test pins them by name (none today); nothing logs them | `644cb95d` | AUTH-FACT-010, CONV-VCS-005 | `PublicSuffixListTests.CONV_VCS_005_AC4_ThePinMatchesTheRulesTheShippedListSetsAside`, `PublicSuffixListTests.AUTH_FACT_010_AC4_AListThatSetsAsideOneRuleMoreOrOneFewerDoesNotMatchThePin`, `PublicSuffixListTests.AUTH_FACT_010_ARuleTheConversionRefusesIsSetAsideAndNamed` |
+
+- `RelyingParty.Id` is now in ASCII lower case whether configured or derived; an identifier configured in Unicode or upper case was held as written before.
+- The pin is a unit test beside the other tests of the embedded lists; `release.sh` runs no tests and there is no separate release test kind.
+- No migration, no public surface change.
+- Parked: question 188.
+
+### `part/seams` (D-189), merged as `b67a8106`: question 168 and the change of question 166
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 168: `Janus.Core` declares the internal `IKeyRingFilling` (the filling of the ring, the recording of the mail server in use, the clearing at the stop), implemented by the internal `KeyRingFilling` and registered by `AddCoreArea`; `KeyRingService` and the factory in `KeyRingRegistration.cs` take it and the public `IKeyRing`; the fourth clause's test | `2ee29986` | CONV-DESIGN-007 | `PublicSurfaceTests.CONV_DESIGN_007_AC7_NoConstructorOrFactoryOfTheHostingProjectNamesASeamsImplementation`, `KeyRingFillingTests.Fill_AfterEachSecretIsHeld_TheRingLendsEachAndTheMailServersOnceCompleted`, `KeyRingFillingTests.CONV_CODE_007_AC3_AReadBeforeTheStepThatReadsTheSecretIsDoneThrows`, `KeyRingFillingTests.CONV_CODE_007_AC3_TheClearingLeavesEveryArrayOfTheRingZero`, `KeyRingFillingTests.CONV_DESIGN_007_AC5_TheChoiceRecordedIsTheOneTheMailServerInUseAnswers` |
+| Question 166: `ConformanceSuite.TruthTableAsync` takes the deployment factory as optional; a table that holds a step-up case with none is refused, naming the scenario, before anything is written | `62d1c881` | LIB-TEST-001 | `ConformanceSuiteTests.LIB_TEST_001_AC2_AStepUpCaseWithNoFactoryIsRefusedBeforeAnythingIsWrittenAsync`, and the five tests of tables with no step-up case, which now pass no factory |
+
+- LIB-PKG-001's dependency test and the `InternalsVisibleTo` grants were compared with CONV-LAYOUT-002 criterion 1: nothing differs but the grant of `Janus.Core` to `Janus.Hosting.Tests`, recorded under Resolved by rule (`66771b55`, `a8dc5501`), which the criterion still does not name. Nothing changed.
+- Neither commit touches a path of the truth-table change check; no row.
+- Public surface: the one line of `TruthTableAsync`, with its changelog line. No migration.
+- Parked: question 189.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -4149,6 +4173,29 @@ part of 389 (3) and waits with 389 on question 48.
   2. A type the chapter names.
 - **Parked.** Nothing: reading 1 is built. It is the public surface, so it is raised here.
 - **Answer:** D-189.
+
+**188. Tier 2. AUTH-FACT-010 and AUTH-FACT-012 criterion 1: a configured origin written in Unicode against a ceremony's origin.**
+
+- **Item.** Question 163.
+- **What the code does.** `WebAuthnCeremonies` admits a ceremony whose origin is among `RelyingParty.Origins` as configured, compared ordinally. A browser writes its origin with the host in ASCII form, so a deployment that writes `webauthn.origins` in Unicode starts (criterion 5) and then refuses every ceremony from that origin.
+- **What the specification says.** AUTH-FACT-010 gives the ASCII form to the names the comparison at the start reads. No item says in which form a configured origin is compared with a ceremony's, and AUTH-FACT-012 criterion 1 has the well-known document list "exactly the configured origins".
+- **Readings.**
+  1. The origins a ceremony is matched against are held with their host in ASCII form; the document lists them as configured.
+  2. Both the match and the document use the ASCII form.
+  3. It stays: a host writes `webauthn.origins` as a browser writes an origin.
+- **Parked.** That comparison, left as it is.
+- **Answer:** pending.
+
+**189. Tier 2. CONV-DESIGN-007 criterion 7, fourth clause: `KeyRing`'s static members read in `KeyRingService`, and the shape of the contract.**
+
+- **Item.** Question 168.
+- **What the code does.** `KeyRingService` takes `IKeyRingFilling` and `IKeyRing`, and still names the class `KeyRing` in method bodies for four constants (`KeyEncryptionKeysName`, `FingerprintKeysName`, `MaintenanceCredentialName`, `MailServerSecret`) and two static helpers (`Unavailable`, `Named`), which build the `model.startup.secretunavailable` refusals. The contract is one interface over the two seams, so a new internal class `KeyRingFilling` implements it over `KeyRing` and `MailServerInUse`; it carries `Clear`, since the service clears the ring at the stop.
+- **What the specification says.** Criterion 7: "no factory or constructor of `Janus.Hosting` names the implementation of a seam". The body: a seam is reached from `Janus.Hosting` "only through a contract, never through its implementation".
+- **Readings.**
+  1. The rule is about constructors and factories; a constant or a static helper is not the seam: as built, and what the test asserts.
+  2. No naming of the three classes anywhere in `Janus.Hosting`: the names and helpers move off `KeyRing`, to a home no chapter names.
+- **Parked.** Those static reads, left as they are.
+- **Answer:** pending.
 
 ## 5. Gate result
 
