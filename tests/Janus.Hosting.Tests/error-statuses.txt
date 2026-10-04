@@ -12,7 +12,9 @@ auth.credential.notfound 404
 auth.credential.notupgradable 409
 auth.credential.suspended 422
 auth.enrolment.tokeninvalid 422
+auth.factor.notenrolled 409
 auth.factor.notpermitted 422
+auth.factor.passwordrequired 409
 auth.factor.rejected 422
 auth.factor.required 422
 auth.lossreport.notpermitted 409

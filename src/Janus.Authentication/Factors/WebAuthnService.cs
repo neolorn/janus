@@ -110,7 +110,7 @@ internal sealed class WebAuthnService(
             && !await SecondStep.AvailableAsync(passwords, subject, cancellationToken)
                 .ConfigureAwait(false))
         {
-            return Result.Failure<AuthenticatorId>(Error.From(ErrorCodes.FactorNotPermitted));
+            return Result.Failure<AuthenticatorId>(Error.From(ErrorCodes.FactorPasswordRequired));
         }
 
         RelyingParty party = await RelyingParty.ForAsync(configuration, cancellationToken)

@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A second step (a code generator, a security key under two-step) or a recovery-code
+  set asked for on an account that holds no password is refused 409
+  `auth.factor.passwordrequired`, where it answered 422 `auth.factor.notpermitted`.
+  The error catalogue also gains `auth.factor.notenrolled` (409), for an account that
+  holds no enrolment of the kind an operation acts on.
 - The shipped mail-server adapter lists an account whose `emailAddress` does not read as
   an email address, or that holds none, with no address, where it failed the listing
   for an account holding none. Reconciliation reads such a listing whole: the account

@@ -701,7 +701,7 @@ public sealed class WebAuthnServiceTests : IAsyncDisposable
         SubjectId subject = Without();
 
         Assert.Equal(
-            ErrorCodes.FactorNotPermitted,
+            ErrorCodes.FactorPasswordRequired,
             Refusal(await Service.CompleteAsync(
                 subject,
                 Factor.SecurityKey,

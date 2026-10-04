@@ -255,6 +255,19 @@ public sealed class RecoveryCodeServiceTests : IAsyncDisposable
                 "ABCDE-FGHJK",
                 TestContext.Current.CancellationToken)));
 
+    /// <summary>
+    /// AUTH-FACT-008: an account holding no set has none to record as exported, and
+    /// the refusal names that.
+    /// </summary>
+    [Fact]
+    public async Task ShownAsync_AnAccountHoldingNoSet_IsRefusedAsNotEnrolledAsync() =>
+        Assert.Equal(
+            ErrorCodes.FactorNotEnrolled,
+            Refusal(await Service.ShownAsync(
+                Subject(),
+                exported: true,
+                TestContext.Current.CancellationToken)));
+
     private static TValue Value<TValue>(Result<TValue> result) =>
         result.Match(value => value, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
 

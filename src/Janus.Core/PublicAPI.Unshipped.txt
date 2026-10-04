@@ -3964,7 +3964,9 @@ static Janus.Core.ErrorCodes.EndpointInsecure.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.EnrolmentTokenInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ErasureNotFailed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ErasureNotFound.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.FactorNotEnrolled.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.FactorNotPermitted.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.FactorPasswordRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.FactorRejected.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.FactorRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GrantDuplicate.get -> Janus.Core.ErrorCode

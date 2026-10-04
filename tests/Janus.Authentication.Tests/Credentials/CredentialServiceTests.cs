@@ -417,7 +417,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
         _ = await KeyAsync(subject, session, synced: true);
 
         Assert.Equal(
-            ErrorCodes.FactorNotPermitted,
+            ErrorCodes.FactorPasswordRequired,
             Refused(await Service.GenerateRecoveryCodesAsync(
                 Authority(subject, session),
                 TestContext.Current.CancellationToken)));
@@ -436,7 +436,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
         (SubjectId subject, SessionId session) = await SignedInAsync(password: false);
 
         Assert.Equal(
-            ErrorCodes.FactorNotPermitted,
+            ErrorCodes.FactorPasswordRequired,
             Refused(await Service.BeginGeneratorAsync(
                 Authority(subject, session),
                 "Phone",
