@@ -193,6 +193,7 @@ public sealed class PublicSurfaceTests
         nameof(IAuthentication) + "." + nameof(IAuthentication.ForgetDeviceAsync),
         nameof(IAuthentication) + "." + nameof(IAuthentication.ListDevicesAsync),
         nameof(IAuthentication) + "." + nameof(IAuthentication.StepUpAsync),
+        nameof(ICredentials) + "." + nameof(ICredentials.MarkRecoveryCodesExportedAsync),
         nameof(IConsents) + "." + nameof(IConsents.GrantAsync),
         nameof(IConsents) + "." + nameof(IConsents.ObjectAsync),
         nameof(IConsents) + "." + nameof(IConsents.ObjectionsAsync),

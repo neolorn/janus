@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `ICredentials.MarkRecoveryCodesExportedAsync` records that the person copied,
+  downloaded or printed the recovery-code set the account holds, and
+  `POST /account/recoverycodes/exported` maps it. An account holding no set is refused
+  `auth.factor.notenrolled`. The instant is read as `exportedAt` in `GET /account`.
 - `AppPasswordId` is a mail app password's identifier in the mail server's own form,
   the JMAP `Id` of RFC 8620 section 1.2: 1 to 255 letters, digits, `-` and `_`.
   `IAppPasswords.RevokeAsync` and `IMailServer.RevokeAppPasswordAsync` take it, and
