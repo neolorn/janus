@@ -111,6 +111,16 @@ internal sealed class TakedownService(
             return Result.Failure<ExecutedTakedown>(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await AskedAgainAsync(context, subject, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<ExecutedTakedown>(since);
+        }
+
         // AUTH-SESS-010 AC2: the suspension and the end of every session are both the
         // library's, so they are one transaction and not two steps.
         // D-166 X3, X5: refused under the account's lock, the takedown is answered for
@@ -293,6 +303,16 @@ internal sealed class TakedownService(
             return Result.Failure(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await AskedAgainAsync(context, subject, cancellationToken).ConfigureAwait(false) is Error restricted)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(restricted);
+        }
+
         // IDN-LIFE-003: the window is judged again under the lock, and an erasure that
         // committed first leaves the window closed.
         if (!await accounts.ReverseTakedownAsync(subject, now, windows, cancellationToken).ConfigureAwait(false))
@@ -413,6 +433,22 @@ internal sealed class TakedownService(
         }
 
         return context.Acting is SubjectId ? null : Error.From(ErrorCodes.Denied);
+    }
+
+    // AUTHZ-GATE-006, D-183: the gate asked again inside the unit of work. Where the
+    // account acted on is the acting one, the operation goes on to lock that row itself,
+    // so it is taken for the change first and the gate judges it under that lock.
+    private async ValueTask<Error?> AskedAgainAsync(
+        AccessContext context,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        if (context.Acting is SubjectId acting && acting == subject)
+        {
+            await accounts.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+        }
+
+        return await DeniedAsync(context, cancellationToken).ConfigureAwait(false);
     }
 
     // 09 section 8a: the session's proof is judged after every other refusal, so a

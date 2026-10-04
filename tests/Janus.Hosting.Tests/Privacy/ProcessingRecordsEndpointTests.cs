@@ -282,6 +282,28 @@ public sealed class ProcessingRecordsEndpointTests : IAsyncDisposable
         register.GetProperty("flags").EnumerateArray()
             .Select(flag => flag.GetProperty("finding").GetString()!);
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the caller committed after the gate step and
+    /// before the first write refuses the statements, which stay as they stood.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesTheStatementsAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+        string? owner = _deployment.Compliance.Held.DataOwner;
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync(
+                "PUT",
+                "/admin/compliance/assessments",
+                ("dataOwner", "the head of customer operations"),
+                ("organizationalSecurityMeasures", "annual training")));
+
+        Assert.Equal(owner, _deployment.Compliance.Held.DataOwner);
+    }
+
     private async Task<Browser> AuthorisedAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);

@@ -207,6 +207,36 @@ public sealed class PublicationEndpointTests : IAsyncDisposable
         Assert.Empty(_deployment.Documents.Versions);
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the caller committed after the gate step and
+    /// before the first write refuses a publication and a translation, and neither is
+    /// written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesAPublicationAndATranslationAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+        const string governing = """{ "text": "The governing text.", "governingLanguage": "ar", "material": false }""";
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync("POST", "/admin/documents/terms/versions", governing));
+
+        Assert.Empty(_deployment.Documents.Versions);
+
+        string version = (await browser.SendAsync("POST", "/admin/documents/terms/versions", governing)).Text("version");
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync(
+                "PUT",
+                $"/admin/documents/terms/versions/{version}/translations/en",
+                """{ "text": "The translation." }"""));
+
+        Assert.Empty(Assert.Single(_deployment.Documents.Versions).Translations);
+    }
+
     private async Task<Browser> AuthorisedAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);

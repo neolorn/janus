@@ -104,6 +104,7 @@ internal sealed class PrivacyRequestService(
                     QueuedRequest.Submitted(subject, type, stated, today, now, deadline),
                     Submitted,
                     context,
+                    entered: false,
                     now,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -192,6 +193,7 @@ internal sealed class PrivacyRequestService(
                         deadline),
                     Entered,
                     context,
+                    entered: true,
                     now,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -273,6 +275,17 @@ internal sealed class PrivacyRequestService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await AskedAgainAsync(context, acting, asked.Subject, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
         }
 
         // D-166 X3: the request is decided under its row's lock, so a refusal or the
@@ -373,6 +386,17 @@ internal sealed class PrivacyRequestService(
             return Result.Failure(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.PrivacyRequestManage, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
         // D-166 X3: decided under the row's lock, as a fulfilment is.
         QueuedRequest held = (await DecidableAsync(request, held: true, cancellationToken)
                 .ConfigureAwait(false))
@@ -434,6 +458,25 @@ internal sealed class PrivacyRequestService(
     // of staff working the queue under `privacyrequest:manage` has that business, so
     // what they are told apart is the permission, the identifier and the decision that
     // already stands (PRIV-RIGHT-001).
+    // AUTHZ-GATE-006, D-183: the gate asked again inside the unit of work. Where the
+    // request is the acting account's own, the fulfilment goes on to lock that row
+    // itself, so it is taken for the change first and the gate judges it under that lock.
+    private async ValueTask<Error?> AskedAgainAsync(
+        AccessContext context,
+        SubjectId acting,
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        if (acting == subject)
+        {
+            await accounts.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+        }
+
+        return await scope
+            .RefusedAsync(context, Permissions.PrivacyRequestManage, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     private async ValueTask<Result<QueuedRequest>> DecidableAsync(
         PrivacyRequestId request,
         bool held,
@@ -525,6 +568,7 @@ internal sealed class PrivacyRequestService(
         QueuedRequest request,
         AuditAction action,
         AccessContext context,
+        bool entered,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -532,6 +576,21 @@ internal sealed class PrivacyRequestService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure<PrivacyRequestReceipt>(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: a request entered on a subject's behalf passed the gate,
+        // which is asked again inside the unit of work, with the acting account's row
+        // held before any other lock, so a restriction committed since the gate step
+        // refuses the entry before anything is written. A subject's own submission asks
+        // no permission and is not asked here.
+        if (entered
+            && await scope
+                .RefusedAsync(context, Permissions.PrivacyRequestManage, cancellationToken)
+                .ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<PrivacyRequestReceipt>(since);
         }
 
         // D-166 X3: whether one of the type stands open is read again with the

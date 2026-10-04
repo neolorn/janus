@@ -224,6 +224,40 @@ public sealed class TakedownEndpointTests : IAsyncDisposable
         Assert.Equal(AccountState.Active, _deployment.AccountStates.Of(Ahmed));
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the caller committed after the gate step and
+    /// before the first write refuses a takedown and its reversal, and the account stands
+    /// as it stood before each.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesATakedownAndItsReversalAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync(
+                "POST",
+                Takedown,
+                ("trigger", "customer-report"),
+                ("reason", "a parent wrote in")));
+
+        Assert.Equal(AccountState.Active, _deployment.AccountStates.Of(Ahmed));
+
+        _ = await browser.SendAsync(
+            "POST",
+            Takedown,
+            ("trigger", "customer-report"),
+            ("reason", "a parent wrote in"));
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync("POST", $"{Takedown}/reverse", ("reason", "an adult, misjudged")));
+
+        Assert.Equal(AccountState.Deleting, _deployment.AccountStates.Of(Ahmed));
+    }
+
     private async Task<Browser> AuthorisedAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);

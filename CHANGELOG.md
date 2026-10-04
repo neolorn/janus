@@ -26,6 +26,11 @@ against the public contract of LIB-API-001.
   acknowledgement, ask the gate again inside their unit of work before the first
   write, with the acting account's row locked first. A restriction committed after the
   first ask refuses the change `authz.restricted` and leaves nothing written.
+- Publishing and translating a legal document, declaring the processing records,
+  entering, fulfilling and refusing a privacy request, executing and reversing a
+  takedown ask the gate again inside their unit of work before the first write. A
+  restriction of the acting account committed after the first ask refuses the change
+  `authz.restricted` and leaves nothing written.
 - The shipped mail-server adapter lists an account whose `emailAddress` does not read as
   an email address, or that holds none, with no address, where it failed the listing
   for an account holding none. Reconciliation reads such a listing whole: the account
