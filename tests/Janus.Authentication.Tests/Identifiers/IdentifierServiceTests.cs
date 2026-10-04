@@ -503,7 +503,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         Assert.Equal(MessageKind.IdentifierRemoved, kept.Message);
         Assert.NotEmpty(kept.Token());
 
-        Assert.True(await _directory.IsReservedAsync(
+        Assert.NotNull(await _directory.ReservedToAsync(
             IdentifierKind.Email,
             Second,
             _clock.GetUtcNow(),
@@ -566,6 +566,220 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken));
 
         Assert.Equal(Second, Assert.Single(_pending.All).Staged.Canonical);
+    }
+
+    /// <summary>
+    /// REG-SESS-005, CONV-DESIGN-003: an addition judges the value under its lock, and
+    /// its verification writes under it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_SESS_005_AnAdditionAndItsVerificationLockTheValueAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        await AddedAsync(Second);
+        await VerifiedAsync(Named(await HeldAsync(), Second).Id);
+
+        Assert.Equal(
+            [(IdentifierKind.Email, Second), (IdentifierKind.Email, Second)],
+            _directory.Locked);
+    }
+
+    /// <summary>
+    /// REG-SESS-005: a value another account took while the addition waited for the
+    /// value's lock is judged held under that lock, so nothing is staged and nothing
+    /// is written to the account.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_SESS_005_AValueTakenWhileTheAdditionWaitedForItsLockIsJudgedHeldAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        var other = SubjectId.New(_randomness);
+
+        _directory.Locking = values =>
+        {
+            _directory.Locking = null;
+            _ = _directory.Verified(other, IdentifierKind.Email, Second);
+
+            return ValueTask.CompletedTask;
+        };
+
+        await AddedAsync(Second);
+
+        Assert.Empty(_pending.All);
+        Assert.DoesNotContain(
+            await HeldAsync(),
+            identifier => string.Equals(identifier.Canonical, Second, StringComparison.Ordinal));
+        Assert.Equal(other, await _directory.OwnerAsync(
+            IdentifierKind.Email,
+            Second,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-IDENT-006: a removal reserves the value under its lock, and the undo writes
+    /// it back under the same lock.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_ARemovalAndItsUndoLockTheValueAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+
+        Accepted(await Service.RemoveAsync(
+            Acting,
+            Stepped(),
+            second,
+            Source,
+            TestContext.Current.CancellationToken));
+        Accepted(await Service.UndoAsync(Undo(), Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            [(IdentifierKind.Email, Second), (IdentifierKind.Email, Second)],
+            _directory.Locked);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007: the swap writes the new value and reserves the displaced one,
+    /// each under its lock, both asked for at once so they are taken in one order.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_007_TheSwapLocksTheNewValueAndTheDisplacedOneAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+        await VerifiedAsync(email);
+
+        Assert.Equal(
+            [(IdentifierKind.Email, Second), (IdentifierKind.Email, Second), (IdentifierKind.Email, Primary)],
+            _directory.Locked);
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 AC8: an account that adds again a value it removed and verifies
+    /// it within the window ends the value's reservation, and the undo link is then
+    /// answered as one past its window.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AC8_AValueAddedAgainAndVerifiedLeavesItsUndoPastItsWindowAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+
+        Accepted(await Service.RemoveAsync(
+            Acting,
+            Stepped(),
+            second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        string undo = Undo();
+
+        await AddedAsync(Second);
+        await VerifiedAsync(Named(await HeldAsync(), Second).Id);
+
+        Assert.Equal(
+            ErrorCodes.ChangeWindowElapsed,
+            Refused(await Service.UndoAsync(undo, Source, TestContext.Current.CancellationToken)));
+        Assert.True(Named(await HeldAsync(), Second).IsVerified);
+        Assert.Null(await _directory.ReservedToAsync(
+            IdentifierKind.Email,
+            Second,
+            _clock.GetUtcNow(),
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 AC8: an account that replaces back to a value it replaced, and
+    /// verifies it within the window, ends that value's reservation, and the first
+    /// replace's undo link is then answered as one past its window.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AC8_AReplaceBackLeavesTheFirstUndoPastItsWindowAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+        await VerifiedAsync(email);
+
+        string undo = _notifications.Texts.Last(sent => sent.Message is MessageKind.IdentifierRemoved).Token();
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Primary,
+            Source,
+            TestContext.Current.CancellationToken));
+        await VerifiedAsync(email);
+
+        Assert.Equal(
+            ErrorCodes.ChangeWindowElapsed,
+            Refused(await Service.UndoAsync(undo, Source, TestContext.Current.CancellationToken)));
+        Assert.Equal(Primary, Named(await HeldAsync(), Primary).Canonical);
+        Assert.Equal(_person, await _directory.ReservedToAsync(
+            IdentifierKind.Email,
+            Second,
+            _clock.GetUtcNow(),
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-IDENT-006: an undo pressed while the account's own addition of the removed
+    /// value waits unverified restores the value, and the unproved addition ends as an
+    /// abandoned one does, so the account holds the value once.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AnUndoWhileTheValueWaitsUnverifiedAgainRestoresItOnceAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+
+        Accepted(await Service.RemoveAsync(
+            Acting,
+            Stepped(),
+            second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        string undo = Undo();
+
+        await AddedAsync(Second);
+
+        Accepted(await Service.UndoAsync(undo, Source, TestContext.Current.CancellationToken));
+
+        HeldIdentifier restored = Named(await HeldAsync(), Second);
+
+        Assert.Equal(second, restored.Id);
+        Assert.True(restored.IsVerified);
+        Assert.Empty(_pending.All);
+        Assert.Empty(_codes.All);
     }
 
     /// <summary>
@@ -1665,7 +1879,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
             IdentifierKind.Email,
             Second,
             TestContext.Current.CancellationToken));
-        Assert.True(await _directory.IsReservedAsync(
+        Assert.NotNull(await _directory.ReservedToAsync(
             IdentifierKind.Email,
             Second,
             _clock.GetUtcNow(),

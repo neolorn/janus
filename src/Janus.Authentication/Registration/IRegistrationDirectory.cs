@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -42,6 +43,20 @@ internal interface IRegistrationDirectory
         IdentifierKind kind,
         string canonical,
         DateTimeOffset now,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Takes the lock on each value the registration is about to write to its account,
+    /// held until the operation's transaction ends, so whether each is held or reserved
+    /// is judged and the account written with no other transaction taking or reserving
+    /// one in between (CONV-DESIGN-003, REG-SESS-005).
+    /// </summary>
+    /// <param name="values">The values, each with its kind and its canonical form.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of taking the locks.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask LockValuesAsync(
+        IReadOnlyList<(IdentifierKind Kind, string Canonical)> values,
         CancellationToken cancellationToken);
 
     /// <summary>

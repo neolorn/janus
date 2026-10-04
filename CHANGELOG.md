@@ -10,6 +10,28 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Whether an email address or a phone number is held by an account or reserved for an
+  undo, and whether a username is taken or held, is decided under a lock on the value,
+  held to the end of the transaction that decides it. A registration's terms step, an
+  identifier's add, verification, replace, removal and undo, a corporate address taken
+  on at an acknowledgement, the bootstrap, a username's choice and an erasure's hold of
+  a username take it before they judge or write, so two of them on one value run one
+  after the other and the second judges what the first committed, where it could meet
+  the unique constraint and be answered `system.fault`. The lock is taken once for
+  each fingerprint key version the process holds, so processes on either side of a
+  fingerprint key rotation wait on each other.
+- A value reserved for an undo to an account is free to that account: it adds the
+  value again, or replaces back to it, as it would a fresh one. Verifying the add,
+  applying the replace, or taking the value on as a corporate address ends the
+  reservation, and the undo link of the removal is then answered 422
+  `identity.change.windowelapsed`. An undo pressed while the account's own add of the
+  removed value still waits for its code restores the value and ends that add.
+- An acknowledgement that would take on a corporate address another account holds, or
+  one reserved for an undo to another account, is refused
+  `identity.invitation.identifiermismatch` under the address's lock and attaches
+  nothing.
+- A lookup of an identifier, a reservation or a username hold by its value reads every
+  fingerprint key version held in one statement.
 - A domain of an organization's lock, and the domain of an address judged against it,
   takes its ASCII form from the library's own UTS #46 processing and no longer from the
   machine's ICU, so one domain is listed and compared in one form on every machine. A

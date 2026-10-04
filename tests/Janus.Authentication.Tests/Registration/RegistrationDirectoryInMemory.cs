@@ -86,7 +86,28 @@ internal sealed class RegistrationDirectoryInMemory(IIdentifierDirectory? identi
         }
 
         return identifiers is not null
-            && await identifiers.IsReservedAsync(kind, canonical, now, cancellationToken);
+            && await identifiers.ReservedToAsync(kind, canonical, now, cancellationToken) is not null;
+    }
+
+    /// <summary>
+    /// Every value an operation locked, in the order it asked for them.
+    /// </summary>
+    public List<(IdentifierKind Kind, string Canonical)> Locked { get; } = [];
+
+    /// <summary>
+    /// What another transaction committed on a value while this one waited for its
+    /// lock, applied as the lock is taken.
+    /// </summary>
+    public Func<IReadOnlyList<(IdentifierKind Kind, string Canonical)>, ValueTask>? Locking { get; set; }
+
+    /// <inheritdoc/>
+    public ValueTask LockValuesAsync(
+        IReadOnlyList<(IdentifierKind Kind, string Canonical)> values,
+        CancellationToken cancellationToken)
+    {
+        Locked.AddRange(values);
+
+        return Locking?.Invoke(values) ?? ValueTask.CompletedTask;
     }
 
     /// <inheritdoc/>

@@ -16,6 +16,7 @@ using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Events;
 using Janus.Storage.Authentication.Sessions;
 using Janus.Storage.Identity.Accounts;
+using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Privacy.Erasures;
 using Janus.Storage.Privacy.Requests;
 using Janus.Storage.Settings;
@@ -606,7 +607,8 @@ public sealed class AccountStatesTests(DatabaseFixture database)
             context,
             Sessions(context),
             new ConfigurationStore(context, new DataConnections(context)),
-            new DataConnections(context));
+            new DataConnections(context),
+            new IdentifierStore(context, _deployment.Ring, _deployment.Randomness));
 
     // The second transaction is waiting on the account row the first holds, as the
     // database itself reports it, so the case lets the first commit only then.

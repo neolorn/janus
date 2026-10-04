@@ -246,6 +246,22 @@ internal sealed class DeploymentBootstrap(
                 cancellationToken)
             .ConfigureAwait(false);
 
+        // REG-SESS-005, CONV-DESIGN-003: every value the bootstrap writes to an account is
+        // written under its lock, all of them taken in one order.
+        List<(IdentifierKind Kind, string Canonical)> written =
+        [
+            (IdentifierKind.Email, email.Canonical),
+            (IdentifierKind.Phone, phone!.Canonical),
+            (IdentifierKind.Email, Canary().Canonical),
+        ];
+
+        if (mailbox is not null)
+        {
+            written.Add((IdentifierKind.Email, mailbox.Canonical));
+        }
+
+        await identifiers.LockValuesAsync(written, cancellationToken).ConfigureAwait(false);
+
         var administrator = SubjectId.New(randomness);
         var personal = IdentifierId.New(time);
 

@@ -241,6 +241,17 @@ internal sealed class InvitationAcknowledgement(
 
         invitation = standing;
 
+        // REG-SESS-005, REG-INV-001: the corporate address is taken on under its lock, and
+        // whether an account holds it, or it is reserved for an undo to another account,
+        // is judged under that lock before anything is written.
+        if (corporate
+            && await CorporateTakenAsync(bound, invitee, now, cancellationToken).ConfigureAwait(false))
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.InvitationIdentifierMismatch));
+        }
+
         MembershipId membership = (await memberships
                 .AttachAsync(
                     invitee,
@@ -415,6 +426,27 @@ internal sealed class InvitationAcknowledgement(
                     .OwnerAsync(IdentifierKind.Email, Canonical(IdentifierKind.Email, corporate), cancellationToken)
                     .ConfigureAwait(false)
                 is not null;
+    }
+
+    private async ValueTask<bool> CorporateTakenAsync(
+        InvitedIdentifiers bound,
+        SubjectId invitee,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        string canonical = Canonical(
+            IdentifierKind.Email,
+            bound.CorporateEmail ?? throw new InvalidOperationException("The invitation names no corporate address."));
+
+        await identifiers
+            .LockValuesAsync([(IdentifierKind.Email, canonical)], cancellationToken)
+            .ConfigureAwait(false);
+
+        return await identifiers.OwnerAsync(IdentifierKind.Email, canonical, cancellationToken).ConfigureAwait(false)
+                is not null
+            || (await identifiers.ReservedToAsync(IdentifierKind.Email, canonical, now, cancellationToken).ConfigureAwait(false)
+                    is SubjectId reserved
+                && reserved != invitee);
     }
 
     // REG-INV-001: what the invitation attaches is granted by its inviter, so it is

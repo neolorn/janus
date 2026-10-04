@@ -166,6 +166,10 @@ internal sealed class IdentifierService(
             return Result.Failure(Error.From(ErrorCodes.IdentifierMaximum));
         }
 
+        // REG-SESS-005, CONV-DESIGN-003: whether the value is held or reserved is judged
+        // under its lock, taken after the set's and before the code's send is counted.
+        await directory.LockValuesAsync([(kind, canonical)], cancellationToken).ConfigureAwait(false);
+
         Error? refused = await StageAsync(
                 subject, session, held, kind, entered, canonical, maximum, source, cancellationToken)
             .ConfigureAwait(false);
@@ -774,6 +778,10 @@ internal sealed class IdentifierService(
 
         HeldIdentifier going = held.Find(identifier)!;
 
+        // REG-IDENT-006: the removal reserves the value under its lock, so an add of it
+        // presented meanwhile finds it held or reserved, never free.
+        await directory.LockValuesAsync([(going.Kind, going.Canonical)], cancellationToken).ConfigureAwait(false);
+
         await codes.EndAsync(Holder(identifier), cancellationToken).ConfigureAwait(false);
         await pending.RemoveAsync(identifier, cancellationToken).ConfigureAwait(false);
 
@@ -861,6 +869,11 @@ internal sealed class IdentifierService(
         // once the second finds the value already back and answers as for a spent link.
         await directory.HoldAsync(given.Subject, cancellationToken).ConfigureAwait(false);
 
+        // REG-IDENT-006: the undo writes the value back under its lock. A write of the
+        // value to the account meanwhile ended the reservation, and the link then
+        // answers as one past its window.
+        await directory.LockValuesAsync([(given.Kind, given.Canonical)], cancellationToken).ConfigureAwait(false);
+
         if (await directory
                 .GivenUpAsync(OpaqueToken.Of(linkToken).Fingerprint(), cancellationToken)
                 .ConfigureAwait(false) is null)
@@ -868,6 +881,16 @@ internal sealed class IdentifierService(
             await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Failure(Error.From(ErrorCodes.ChangeWindowElapsed));
+        }
+
+        // The account may have added the value again and not yet proved it: the undo
+        // restores the value, so the unproved addition ends as an abandoned one does.
+        if (Standing(await directory.HeldAsync(given.Subject, cancellationToken).ConfigureAwait(false), given.Canonical)
+            is { IsVerified: false } again)
+        {
+            await codes.EndAsync(Holder(again.Id), cancellationToken).ConfigureAwait(false);
+            await pending.RemoveAsync(again.Id, cancellationToken).ConfigureAwait(false);
+            await directory.DiscardAsync(given.Subject, again.Id, cancellationToken).ConfigureAwait(false);
         }
 
         await directory.TakeBackAsync(given.Id, maximum, cancellationToken).ConfigureAwait(false);
@@ -1059,6 +1082,10 @@ internal sealed class IdentifierService(
 
             return Result.Failure(since);
         }
+
+        // REG-SESS-005, CONV-DESIGN-003: whether the new value is held or reserved is
+        // judged under its lock, taken before the code's send is counted.
+        await directory.LockValuesAsync([(changing.Kind, canonical)], cancellationToken).ConfigureAwait(false);
 
         if (await TakenAsync(subject, changing.Kind, canonical, source, cancellationToken)
             .ConfigureAwait(false))
@@ -1324,7 +1351,8 @@ internal sealed class IdentifierService(
 
     // The fresh case and the case where the value is out of reach are one path: the
     // caller cannot tell which happened and nothing is written either way
-    // (REG-SESS-005, REG-IDENT-004).
+    // (REG-SESS-005, REG-IDENT-004). A value reserved to the account asking is free to
+    // it (REG-IDENT-006). The caller holds the value's lock.
     private async ValueTask<bool> TakenAsync(
         SubjectId subject,
         IdentifierKind kind,
@@ -1345,9 +1373,10 @@ internal sealed class IdentifierService(
         }
 
         return owner is not null
-            || await directory
-                .IsReservedAsync(kind, canonical, time.GetUtcNow(), cancellationToken)
-                .ConfigureAwait(false);
+            || (await directory
+                    .ReservedToAsync(kind, canonical, time.GetUtcNow(), cancellationToken)
+                    .ConfigureAwait(false) is SubjectId reserved
+                && reserved != subject);
     }
 
     private async ValueTask<Error?> StageAsync(
@@ -1704,6 +1733,9 @@ internal sealed class IdentifierService(
         }
         else
         {
+            // REG-SESS-005: an add's verification writes under the value's lock.
+            await directory.LockValuesAsync([(staged.Kind, staged.Canonical)], cancellationToken).ConfigureAwait(false);
+
             await directory
                 .ProveAsync(waiting.Subject, staged.Id, now, cancellationToken)
                 .ConfigureAwait(false);
@@ -1756,6 +1788,14 @@ internal sealed class IdentifierService(
         {
             return Result.Success();
         }
+
+        // REG-IDENT-007: the swap writes the new value to the account and reserves the
+        // displaced one, each under its lock, both taken in one order.
+        await directory
+            .LockValuesAsync(
+                [(staged.Kind, staged.Canonical), (displaced.Kind, displaced.Canonical)],
+                cancellationToken)
+            .ConfigureAwait(false);
 
         var undo = OpaqueToken.Draw(randomness);
 

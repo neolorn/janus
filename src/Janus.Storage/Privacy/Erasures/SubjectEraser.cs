@@ -8,6 +8,7 @@ using Janus.Authorization.Grants;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Identity.Accounts;
+using Janus.Identity.Identifiers;
 using Janus.Privacy.Erasures;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Factors;
@@ -28,9 +29,10 @@ namespace Janus.Storage.Privacy.Erasures;
 /// <param name="sessions">Where the subject's sessions are held.</param>
 /// <param name="configuration">Where the username hold's length is read.</param>
 /// <param name="connections">Where the grant counter statement takes its connection from.</param>
+/// <param name="identifiers">Where the subject's username is read and its lock is taken.</param>
 /// <remarks>
-/// Implements PRIV-RIGHT-005, PRIV-RIGHT-005a, PRIV-RIGHT-005c, IDN-LIFE-003b,
-/// IDN-LIFE-014, IDN-ACCT-002, IDN-PRIN-003 and DR-016. Every write here is made on one
+/// Implements PRIV-RIGHT-005, PRIV-RIGHT-005a, PRIV-RIGHT-005c, REG-IDENT-009,
+/// IDN-LIFE-003b, IDN-LIFE-014, IDN-ACCT-002, IDN-PRIN-003 and DR-016. Every write here is made on one
 /// context and committed by the caller's unit of work, so the three writes and the
 /// erasures row reach the database together or not at all. No row is removed: the
 /// photo's bytes are held under the same key as every other personal field, so
@@ -42,7 +44,8 @@ internal sealed class SubjectEraser(
     StoreContext context,
     ISessionStore sessions,
     IConfigurationStore configuration,
-    DataConnections connections) : ISubjectEraser
+    DataConnections connections,
+    IIdentifierStore identifiers) : ISubjectEraser
 {
     // IDN-LIFE-014: no person revokes an erased account's grants, so the nil subject
     // stands as the revoker, and the requirement is the reason.
@@ -83,9 +86,9 @@ internal sealed class SubjectEraser(
         await sessions.EndAccountAsync(subject, at, cancellationToken).ConfigureAwait(false);
         await MarkErasedAsync(subject, erased, cancellationToken).ConfigureAwait(false);
         await RevokeGrantsAsync(subject, at, cancellationToken).ConfigureAwait(false);
+        await HoldUsernameAsync(subject, at, cancellationToken).ConfigureAwait(false);
         await DestroyKeyAsync(subject, cancellationToken).ConfigureAwait(false);
         await EraseOutstandingMessagesAsync(subject, cancellationToken).ConfigureAwait(false);
-        await HoldUsernameAsync(subject, at, cancellationToken).ConfigureAwait(false);
         await NeutraliseFingerprintsAsync(subject, cancellationToken).ConfigureAwait(false);
 
         var erasure = Erasure.Begun(subject, at, reason);
@@ -213,7 +216,9 @@ internal sealed class SubjectEraser(
 
     // REG-IDENT-009: the name stays out of reach for the evidential period, and the
     // fingerprint is the only thing left that knows it, so the hold is taken before
-    // the fingerprints are neutralised.
+    // the fingerprints are neutralised. It is written under the username's lock, which
+    // is keyed by the name under every version of the fingerprint key held, so the name
+    // is read while the subject's key still stands (PRIV-RIGHT-005, CONV-DESIGN-003).
     private async ValueTask HoldUsernameAsync(
         SubjectId subject,
         DateTimeOffset at,
@@ -229,6 +234,13 @@ internal sealed class SubjectEraser(
         {
             return;
         }
+
+        Identifier named = (await identifiers.FindBySubjectAsync(subject, cancellationToken).ConfigureAwait(false))
+            .OfKind(IdentifierKind.Username)[0];
+
+        await identifiers
+            .LockValuesAsync([(IdentifierKind.Username, named.Canonical)], cancellationToken)
+            .ConfigureAwait(false);
 
         TimeSpan held = (await configuration
                 .ReadAsync(Janus.Core.Configuration.Settings.RetentionConsent, cancellationToken)

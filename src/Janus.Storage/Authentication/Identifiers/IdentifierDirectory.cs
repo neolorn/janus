@@ -40,12 +40,12 @@ internal sealed class IdentifierDirectory(
         identifiers.FindHolderAsync(kind, canonical, cancellationToken);
 
     /// <inheritdoc/>
-    public ValueTask<bool> IsReservedAsync(
+    public ValueTask<SubjectId?> ReservedToAsync(
         IdentifierKind kind,
         string canonical,
         DateTimeOffset now,
         CancellationToken cancellationToken) =>
-        identifiers.IsReservedAsync(kind, canonical, now, cancellationToken);
+        identifiers.FindReservedToAsync(kind, canonical, now, cancellationToken);
 
     /// <inheritdoc/>
     public ValueTask<bool> IsHeldAsync(
@@ -90,6 +90,13 @@ internal sealed class IdentifierDirectory(
     /// <exception cref="InvalidOperationException">No transaction is open.</exception>
     public ValueTask HoldAsync(SubjectId subject, CancellationToken cancellationToken) =>
         identifiers.HoldAsync(subject, cancellationToken);
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public ValueTask LockValuesAsync(
+        IReadOnlyList<(IdentifierKind Kind, string Canonical)> values,
+        CancellationToken cancellationToken) =>
+        identifiers.LockValuesAsync(values, cancellationToken);
 
     /// <inheritdoc/>
     public async ValueTask TakeOnAsync(
@@ -159,6 +166,10 @@ internal sealed class IdentifierDirectory(
         set.KeepPersonal(personal);
 
         await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
+
+        await identifiers
+            .EndReservationAsync(subject, IdentifierKind.Email, address.Value, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -220,6 +231,12 @@ internal sealed class IdentifierDirectory(
         set.Verify(id, at);
 
         await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
+
+        Identifier proved = Required(set, id);
+
+        await identifiers
+            .EndReservationAsync(subject, proved.Kind, proved.Canonical, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -270,6 +287,13 @@ internal sealed class IdentifierDirectory(
         displaced.Replace(entered, canonical, at);
 
         await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
+
+        // REG-IDENT-006: a replace back to a value the account replaced writes that
+        // value to the account it is reserved to, which ends the reservation before the
+        // displaced value takes one of its own.
+        await identifiers
+            .EndReservationAsync(subject, displaced.Kind, canonical, cancellationToken)
+            .ConfigureAwait(false);
 
         await identifiers.RecordRemovalAsync(removal, cancellationToken).ConfigureAwait(false);
     }

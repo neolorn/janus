@@ -1034,6 +1034,13 @@ internal sealed class RegistrationService(
             return Result.Failure<RegistrationOutcome>(notBegun);
         }
 
+        // REG-SESS-005, CONV-DESIGN-003: every value the account is about to hold is
+        // locked before any is judged, so none is taken or reserved between the
+        // judgement and the write.
+        await directory
+            .LockValuesAsync([.. live.Identifiers.Select(staged => (staged.Kind, staged.Canonical))], cancellationToken)
+            .ConfigureAwait(false);
+
         // REG-SESS-005 AC4: a staged identifier another account took, or that became
         // reserved for an undo, since it was staged ends the session here, before the
         // account is written, and the step is answered as an expired session.

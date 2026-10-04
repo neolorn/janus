@@ -1389,6 +1389,83 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-SESS-005, REG-INV-002: the corporate address is taken on under its lock. One
+    /// another account took while the acknowledgement waited for that lock is judged
+    /// held under it, so the acknowledgement is the mismatch and nothing attaches.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_SESS_005_ACorporateAddressTakenWhileTheAcknowledgementWaitedForItsLockIsRefusedAsync()
+    {
+        _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+
+        string token = _notifications.Mail[^1].Token();
+        SubjectId member = Holder();
+        SubjectId other = Holder();
+
+        _ = _identifiers.Verified(member, IdentifierKind.Email, Personal);
+        _authenticators.Hold(Passkey(member));
+        Accepted(await OpenAsync(member, token));
+
+        _identifiers.Locking = values =>
+        {
+            _identifiers.Locking = null;
+            _ = _identifiers.Verified(other, IdentifierKind.Email, Corporate);
+
+            return ValueTask.CompletedTask;
+        };
+
+        Assert.Equal(
+            ErrorCodes.InvitationIdentifierMismatch,
+            Failure(await AcknowledgeAsync(member, _invitations.Held[0].Id)).Code);
+        Assert.Equal([(IdentifierKind.Email, Corporate)], _identifiers.Locked);
+        Assert.Empty(_attachments.Attached);
+        Assert.Null(Assert.Single(_mailboxes.Held).Holder);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// REG-IDENT-006, REG-INV-002: a corporate address reserved for an undo to another
+    /// account is not taken on, and one reserved to the account acknowledging is
+    /// written to it, which ends the reservation.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_ACorporateAddressReservedToTheAccountIsTakenOnAndItsReservationEndsAsync()
+    {
+        _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+
+        string token = _notifications.Mail[^1].Token();
+        SubjectId member = Holder();
+
+        _ = _identifiers.Verified(member, IdentifierKind.Email, Personal);
+        IdentifierId given = _identifiers.Verified(member, IdentifierKind.Email, Corporate);
+        _authenticators.Hold(Passkey(member));
+
+        await _identifiers.GiveUpAsync(
+            member,
+            given,
+            _clock.GetUtcNow(),
+            _clock.GetUtcNow() + TimeSpan.FromHours(72),
+            [4, 2],
+            TestContext.Current.CancellationToken);
+        Accepted(await OpenAsync(member, token));
+
+        Accepted(await AcknowledgeAsync(member, _invitations.Held[0].Id));
+
+        Assert.Equal(member, await _identifiers.OwnerAsync(
+            IdentifierKind.Email,
+            Corporate,
+            TestContext.Current.CancellationToken));
+        Assert.Null(await _identifiers.ReservedToAsync(
+            IdentifierKind.Email,
+            Corporate,
+            _clock.GetUtcNow(),
+            TestContext.Current.CancellationToken));
+        Assert.Null(await _identifiers.GivenUpAsync([4, 2], TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// REG-INV-002 and IDN-LIFE-009a AC2: an invitation attached to another account, or
     /// to none, is answered as one that does not exist; one that expired, was revoked,
     /// or whose organization is on its way out no longer stands.
