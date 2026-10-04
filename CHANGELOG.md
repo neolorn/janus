@@ -10,6 +10,8 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A turn of the background worker that finds no lapse to claim rolls its transaction
+  back.
 - Adding a member a group already holds and taking out one it does not hold answer as
   before and roll their transaction back.
 - A withdrawal of a consent or of an objection made meanwhile, an objection that meets
