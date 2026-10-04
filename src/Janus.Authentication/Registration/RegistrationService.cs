@@ -45,6 +45,7 @@ namespace Janus.Authentication.Registration;
 /// <param name="throttle">The progressive delay a registration's asks and tries are held to.</param>
 /// <param name="codes">Where the code that verifies a staged identifier is issued and answered.</param>
 /// <param name="restrictions">What an ask that sends nothing draws on.</param>
+/// <param name="defence">What judges the source before a session is created and counts the session.</param>
 /// <param name="capture">Where the consent controls the person ticked are recorded.</param>
 /// <param name="configuration">Where the registration settings are read.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
@@ -54,7 +55,7 @@ namespace Janus.Authentication.Registration;
 /// <remarks>
 /// Implements REG-SESS-001 to REG-SESS-008, REG-PROF-002, REG-IDENT-010, REG-INV-001,
 /// REG-INV-002, REG-MAIL-001, REG-DOM-001, IDN-LIFE-009a, API-REDIR-002, AUTH-FACT-004,
-/// AUTH-ABUSE-001 and AUTH-ABUSE-003. Every answer is the same whether or not the identifier presented
+/// AUTH-ABUSE-001, AUTH-ABUSE-003 and AUTH-ABUSE-008. Every answer is the same whether or not the identifier presented
 /// belongs to an account already: the lookup decides only whether a code goes out and
 /// whether the holder is told. The one exception is the email an invitation binds,
 /// whose link only its mailbox received.
@@ -82,6 +83,7 @@ internal sealed class RegistrationService(
     ThrottleService throttle,
     VerificationCodes codes,
     ISendingRestrictions restrictions,
+    BotDefence defence,
     IConsents capture,
     IConfigurationStore configuration,
     IUnitOfWork work,
@@ -96,17 +98,31 @@ internal sealed class RegistrationService(
         AccessContext? signedIn,
         string client,
         string language,
+        string ipAddress,
         string source,
         [NeverLogged] string? invitationToken,
+        [NeverLogged] string? challengeToken,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(language);
+        ArgumentNullException.ThrowIfNull(ipAddress);
         ArgumentNullException.ThrowIfNull(source);
 
         if (signedIn is not null)
         {
             return await SignedInAsync(signedIn, invitationToken, cancellationToken).ConfigureAwait(false);
+        }
+
+        // AUTH-ABUSE-008: the defence is asked before anything of the session exists.
+        // Its record is committed alone and the host's verifier asked with no unit of
+        // work open (CONV-DESIGN-003), so the session's own begins only after it. A
+        // degradation of the range file is raised in a unit of work of its own as well,
+        // and one that cannot be raised refuses the begin (OPS-OBS-002).
+        if ((await defence.CheckAsync(ipAddress, source, challengeToken, cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error challenged)
+        {
+            return Result.Failure<RegistrationSessionId>(challenged);
         }
 
         Error? failure = null;
@@ -134,7 +150,7 @@ internal sealed class RegistrationService(
             originating?.ClientId
                 ?? await DefaultClientAsync(cancellationToken).ConfigureAwait(false),
             language,
-            source,
+            ipAddress,
             now,
             lifetime);
 
@@ -176,6 +192,7 @@ internal sealed class RegistrationService(
         }
 
         await sessions.AddAsync(session, cancellationToken).ConfigureAwait(false);
+        await defence.StartedAsync(source, now, cancellationToken).ConfigureAwait(false);
 
         if (invitation is not null)
         {

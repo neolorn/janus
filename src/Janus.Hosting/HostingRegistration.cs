@@ -12,6 +12,7 @@ using Janus.Authentication.Factors;
 using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Oidc;
 using Janus.Authentication.Passwords;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authorization;
 using Janus.Authorization.Gate;
@@ -234,6 +235,17 @@ public static class HostingRegistration
             provider.GetRequiredService<IAlertChannels>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<ILocationResolver>(provider => provider.GetRequiredService<LocationDatabase>());
+
+        // AUTH-ABUSE-008: one copy of the datacenter range file for the process, read
+        // from the file the deployment supplies, where it supplies one.
+        services.AddSingleton<DatacenterRangeCopy>();
+        services.AddScoped(provider => new DatacenterRanges(
+            provider.GetRequiredService<DatacenterRangeCopy>(),
+            provider.GetService<IDatacenterRangeSource>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetRequiredService<TimeProvider>()));
+        services.AddScoped<IDatacenterRanges>(provider => provider.GetRequiredService<DatacenterRanges>());
 
         // REG-PM-001, LIB-HOST-001: the frontend's pages are the host's to declare and
         // the library has no address to fall back on, so a deployment that registered

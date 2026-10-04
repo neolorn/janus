@@ -1281,6 +1281,8 @@ Janus.Core.ICredentials.RemoveAsync(Janus.Core.CredentialAuthority! authority, J
 Janus.Core.ICredentials.SetPasswordAsync(Janus.Core.CredentialAuthority! authority, string! password, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.ICredentials.UnlinkAsync(Janus.Core.CredentialAuthority! authority, Janus.Core.Factor provider, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.ICredentials.UpgradeKeyAsync(Janus.Core.CredentialAuthority! authority, Janus.Core.AuthenticatorId credential, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.CredentialCeremony!>>
+Janus.Core.IDatacenterRangeSource
+Janus.Core.IDatacenterRangeSource.OpenAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.IO.Stream!>>
 Janus.Core.IDerivationMaterialiser
 Janus.Core.IDerivationMaterialiser.RefreshAsync<TResource>(Janus.Core.AccessContext! context, string! derivation, Janus.Core.ResourceId resource, Janus.Core.FilterSources<TResource>! sources, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.DerivationRefresh!>>
 Janus.Core.IDnsResolver
@@ -1398,7 +1400,7 @@ Janus.Core.IRegistration
 Janus.Core.IRegistration.AbandonAsync(Janus.Core.RegistrationSessionId? session, string? linkToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IRegistration.AcceptTermsAsync(Janus.Core.RegistrationSessionId session, string! termsVersion, string! noticeVersion, System.Collections.Generic.IReadOnlyDictionary<string!, bool>! consents, Janus.Core.DeviceDescription! device, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationCompleted!>>
 Janus.Core.IRegistration.AddAsync(Janus.Core.RegistrationSessionId session, Janus.Core.IdentifierKind kind, string! value, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
-Janus.Core.IRegistration.BeginAsync(Janus.Core.AccessContext? signedIn, string! client, string! language, string! source, string? invitationToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationSessionId>>
+Janus.Core.IRegistration.BeginAsync(Janus.Core.AccessContext? signedIn, string! client, string! language, string! ipAddress, string! source, string? invitationToken, string? challengeToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationSessionId>>
 Janus.Core.IRegistration.ChangeAsync(Janus.Core.RegistrationSessionId session, Janus.Core.IdentifierId identifier, string! value, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
 Janus.Core.IRegistration.ConfirmAsync(Janus.Core.RegistrationSessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
 Janus.Core.IRegistration.DiscardAsync(Janus.Core.RegistrationSessionId session, Janus.Core.IdentifierId identifier, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.RegistrationState!>>
@@ -3697,6 +3699,8 @@ static Janus.Core.Configuration.ConfigurationKey.operator ==(Janus.Core.Configur
 static Janus.Core.Configuration.ConfiguredSetting.operator !=(Janus.Core.Configuration.ConfiguredSetting? left, Janus.Core.Configuration.ConfiguredSetting? right) -> bool
 static Janus.Core.Configuration.ConfiguredSetting.operator ==(Janus.Core.Configuration.ConfiguredSetting? left, Janus.Core.Configuration.ConfiguredSetting? right) -> bool
 static Janus.Core.Configuration.RestrictionSetSetting.Loosens(Janus.Core.Restriction? before, Janus.Core.Restriction? after) -> bool
+static Janus.Core.Configuration.Settings.AbuseBotDefenceRangesMaxAge.get -> Janus.Core.Configuration.DurationSetting!
+static Janus.Core.Configuration.Settings.AbuseBotDefenceRangesRefresh.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.AbuseBotDefenceRepeatedAttempts.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.AbuseBotDefenceSignals.get -> Janus.Core.Configuration.MultipleChoiceSetting<Janus.Core.Configuration.BotDefenceSignal>!
 static Janus.Core.Configuration.Settings.AbuseNonexistentWindow.get -> Janus.Core.Configuration.DurationSetting!

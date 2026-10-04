@@ -149,6 +149,10 @@ internal sealed class Deployment : IAsyncDisposable
     /// What the carrier reports about a number, where the host declared something to
     /// ask (AUTH-FACT-002b); nothing, unless it says otherwise.
     /// </param>
+    /// <param name="verifier">
+    /// What judges a challenge token, where the host declared a challenge verifier
+    /// (AUTH-ABUSE-008); nothing, unless it says otherwise.
+    /// </param>
     public Deployment(
         ApplicationKind application = ApplicationKind.Public,
         PasskeyAddresses? addresses = null,
@@ -160,7 +164,8 @@ internal sealed class Deployment : IAsyncDisposable
         LogLevel logging = LogLevel.Trace,
         bool codec = true,
         bool resolver = true,
-        PhoneSignalProvider? signals = null)
+        PhoneSignalProvider? signals = null,
+        ChallengeVerifier? verifier = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
@@ -214,6 +219,11 @@ internal sealed class Deployment : IAsyncDisposable
         if (signals is not null)
         {
             _ = builder.Services.AddSingleton(signals);
+        }
+
+        if (verifier is not null)
+        {
+            _ = builder.Services.AddSingleton(verifier);
         }
 
         _application = builder.Build();
@@ -328,6 +338,21 @@ internal sealed class Deployment : IAsyncDisposable
     /// The registration sessions as they stand.
     /// </summary>
     public RegistrationSessionStoreInMemory Registrations { get; } = new();
+
+    /// <summary>
+    /// The datacenter ranges the bot defence reads (AUTH-ABUSE-008).
+    /// </summary>
+    public DatacenterRangesInMemory Ranges { get; } = new();
+
+    /// <summary>
+    /// The registration sessions counted per source (AUTH-ABUSE-008).
+    /// </summary>
+    public RegistrationSourcesInMemory Sources { get; } = new();
+
+    /// <summary>
+    /// The bot-defence signals recorded (AUTH-ABUSE-008).
+    /// </summary>
+    public BotDefenceAuditInMemory Signalled { get; } = new();
 
     /// <summary>
     /// The channel the waiting screen's stream waits on.
@@ -970,6 +995,17 @@ internal sealed class Deployment : IAsyncDisposable
             provider.GetRequiredService<IUnitOfWork>(),
             provider.GetRequiredService<TimeProvider>()));
         _ = services.AddScoped<NonExistenceNotice>();
+        _ = services.AddSingleton<IDatacenterRanges>(Ranges);
+        _ = services.AddSingleton<IRegistrationSources>(Sources);
+        _ = services.AddSingleton<IBotDefenceAudit>(Signalled);
+        _ = services.AddScoped(provider => new BotDefence(
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<IDatacenterRanges>(),
+            provider.GetRequiredService<IRegistrationSources>(),
+            provider.GetRequiredService<IBotDefenceAudit>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetService<ChallengeVerifier>(),
+            provider.GetRequiredService<TimeProvider>()));
         _ = services.AddScoped<ThrottleService>();
         _ = services.AddSingleton<IThrottleLedger, ThrottleLedgerInMemory>();
         _ = services.AddSingleton<ICredentialAudit>(CredentialAudit);

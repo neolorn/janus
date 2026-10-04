@@ -102,9 +102,14 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     private readonly ThrottleLedgerInMemory _throttle = new();
     private readonly VerificationCodeStoreInMemory _codes = new();
     private readonly SendingRestrictionsInMemory _restrictions = new();
+    private readonly DatacenterRangesInMemory _ranges = new();
+    private readonly RegistrationSourcesInMemory _sources = new();
+    private readonly BotDefenceAuditInMemory _signalled = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
+
+    private ChallengeVerifier? _verifier;
 
     /// <summary>
     /// A deployment that has named the keys with no default: the gateway's balance
@@ -177,6 +182,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             new ThrottleService(_configuration, _throttle, _work, _events, _clock),
             new VerificationCodes(_codes, _configuration, _work, _clock, _randomness),
             _restrictions,
+            new BotDefence(_configuration, _ranges, _sources, _signalled, _work, _verifier, _clock),
             _consents,
             _configuration,
             _work,
@@ -2836,7 +2842,15 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     private async Task<Result<RegistrationSessionId>> InvitedAsync(string token) =>
-        await Service.BeginAsync(signedIn: null, Client, Language, Source, token, TestContext.Current.CancellationToken);
+        await Service.BeginAsync(
+            signedIn: null,
+            Client,
+            Language,
+            Source,
+            Source,
+            token,
+            challengeToken: null,
+            TestContext.Current.CancellationToken);
 
     private async Task<Result<RegistrationSessionId>> SignedInAsync(SubjectId holder, string? invitationToken) =>
         await Service.BeginAsync(
@@ -2844,7 +2858,9 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             Client,
             Language,
             Source,
+            Source,
             invitationToken,
+            challengeToken: null,
             TestContext.Current.CancellationToken);
 
     // An organization locked to one domain, verified.
@@ -2875,7 +2891,15 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     private async Task<RegistrationSessionId> StartedAsync()
     {
         Result<RegistrationSessionId> begun = await Service
-            .BeginAsync(signedIn: null, Client, Language, Source, invitationToken: null, TestContext.Current.CancellationToken);
+            .BeginAsync(
+                signedIn: null,
+                Client,
+                Language,
+                Source,
+                Source,
+                invitationToken: null,
+                challengeToken: null,
+                TestContext.Current.CancellationToken);
 
         return begun.Match(session => session, Throw<RegistrationSessionId>);
     }

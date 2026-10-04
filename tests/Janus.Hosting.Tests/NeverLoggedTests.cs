@@ -47,6 +47,7 @@ public sealed class NeverLoggedTests
             Member<CancelLossRequest>(nameof(CancelLossRequest.Token)),
             Member<EnrolmentRequest>(nameof(EnrolmentRequest.Token)),
             Member<BeginRegistrationRequest>(nameof(BeginRegistrationRequest.InvitationToken)),
+            Member<BeginRegistrationRequest>(nameof(BeginRegistrationRequest.ChallengeToken)),
             Member<PresentFactorRequest>(nameof(PresentFactorRequest.Value)),
             Member<PresentFactorRequest>(nameof(PresentFactorRequest.LinkToken)),
             Member<VerifyRequest>(nameof(VerifyRequest.Code)),

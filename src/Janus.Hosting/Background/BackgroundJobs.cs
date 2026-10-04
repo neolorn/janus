@@ -238,6 +238,19 @@ internal static class BackgroundJobs
                 .RefreshAsync(context, cancellationToken)
                 .ConfigureAwait(false)),
         BackgroundJob.Every(
+            "datacenter-ranges",
+            "AUTH-ABUSE-008",
+            SystemOperation.Monitoring,
+            Settings.AbuseBotDefenceRangesRefresh,
+            async (services, context, cancellationToken) =>
+            {
+                await services.GetRequiredService<DatacenterRanges>()
+                    .RefreshAsync(context, cancellationToken)
+                    .ConfigureAwait(false);
+
+                return Result.Success();
+            }),
+        BackgroundJob.Every(
             "read-volume-baseline",
             "OPS-ALERT-005",
             SystemOperation.Monitoring,

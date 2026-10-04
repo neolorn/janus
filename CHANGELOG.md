@@ -3152,3 +3152,29 @@ against the public contract of LIB-API-001.
 - `derivation.materialised.driftcheck` is a key of the configuration: it is validated at
   startup, read and set through `GET` and `PUT /admin/config/{key}` and the command line, and
   listed with the others, where the drift check read it and nothing else knew it.
+- `POST /register` asks the bot defence before a registration session is created. Where a
+  signal fires and the host declared a challenge verifier, the request is answered 403
+  `auth.challenge.required` and creates nothing; repeated with the host's challenge token
+  as the body member `challengeToken`, a token the verifier passes creates the session and
+  one it fails is refused alike. Where no verifier is declared the signal is recorded as
+  `auth.botdefence.signalled` and the session created. Each session created is counted
+  against the source of its request, which is what the `repeatedAttempts` signal reads.
+- `IRegistration.BeginAsync` takes the whole address of the request as `ipAddress`, the
+  source its sessions are counted against as `source`, and the challenge token as
+  `challengeToken`.
+- The `repeatedAttempts` signal counts the registration session a request would create
+  with those its source already created in the hour: with
+  `abuse.botdefence.repeatedattempts` at its default of 3, the fourth session from one
+  source in an hour is the one challenged.
+- A deployment can supply its datacenter ranges through `IDatacenterRangeSource`, in the
+  format the interface documents: a dated UTF-8 file of one tab-separated range a line,
+  first address and last address. The `datacenterRange` signal matches the whole address
+  a `POST /register` arrived on, never the source its sessions are counted under,
+  against a copy read in process on first use and refreshed by the `datacenter-ranges`
+  job every `abuse.botdefence.ranges.refresh` (a day). A file that cannot be read whole
+  is refused and the copy held before it kept. The library ships no ranges: while
+  `datacenterRange` is among `abuse.botdefence.signals` and no file is held, or the one
+  held is older by its own date than `abuse.botdefence.ranges.maxage` (30 days), the
+  signal does not fire and `degradation` is raised under `botdefence.ranges.absent` or
+  `botdefence.ranges.stale`, until the deployment supplies a file or takes the signal
+  out of the set.

@@ -1,3 +1,5 @@
+abuse.botdefence.ranges.maxage duration R
+abuse.botdefence.ranges.refresh duration R
 abuse.botdefence.repeatedattempts integer R
 abuse.botdefence.signals multiple-choice R allowed=datacenterRange,repeatedAttempts
 abuse.nonexistent.window duration R
