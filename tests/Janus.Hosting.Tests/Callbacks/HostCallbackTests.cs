@@ -485,6 +485,26 @@ public sealed class HostCallbackTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC5: a refused callback whose alert cannot be raised is answered
+    /// with that failure, and its unit of work is rolled back before it is answered.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ARefusalWhoseAlertCannotBeRaisedRollsBackAsync()
+    {
+        _configuration.Set(Settings.AlertingCallbackThreshold, 0);
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        HttpContext answered = await SentAsync(Events, Body, SignedHostCallback.Signing(Body, Noon, "a-guessed-secret"));
+
+        Assert.Equal(StatusCodes.Status500InternalServerError, answered.Response.StatusCode);
+        Assert.Equal(0, _reached);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
     /// BFF-MACH-001 AC2 and AC3: a host's callback authenticates by what its provider
     /// sends, and one carrying a browser's session cookie is refused before its checks.
     /// </summary>

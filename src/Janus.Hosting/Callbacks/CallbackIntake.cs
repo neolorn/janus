@@ -134,7 +134,7 @@ internal static class CallbackIntake
     }
 
     // The counts are kept whenever the callback was answered as rejected; any other
-    // failure leaves the transaction to roll back with the request's scope.
+    // failure rolls the transaction back before it is answered.
     private static async ValueTask AnsweredAsync(
         HttpContext context,
         Error error,
@@ -145,6 +145,10 @@ internal static class CallbackIntake
         {
             (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
                 .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+        }
+        else
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
         }
 
         await Refusal.WriteAsync(context, error, cancellationToken).ConfigureAwait(false);
