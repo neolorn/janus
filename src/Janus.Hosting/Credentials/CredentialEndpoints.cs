@@ -37,8 +37,10 @@ internal static class CredentialEndpoints
         RouteGroupBuilder account = endpoints.MapGroup("/account");
 
         _ = account.MapPost("/password", SetPasswordAsync);
-        _ = account.MapDelete("/credentials/{id:guid}", RemoveAsync);
-        _ = account.MapPost("/credentials/{id:guid}/upgrade", UpgradeAsync);
+        _ = account.MapDelete("/credentials/{id}", RemoveAsync)
+            .Declares(EndpointDeclaration.Answering().Binding<AuthenticatorId>("id"));
+        _ = account.MapPost("/credentials/{id}/upgrade", UpgradeAsync)
+            .Declares(EndpointDeclaration.Answering().Binding<AuthenticatorId>("id"));
         _ = account.MapPost("/factors/totp/begin", BeginGeneratorAsync);
         _ = account.MapPost("/factors/totp/confirm", ConfirmGeneratorAsync);
         _ = account.MapPost("/recoverycodes", GenerateRecoveryCodesAsync);

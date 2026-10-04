@@ -12,7 +12,7 @@ namespace Janus.Core;
 /// Implements AUTHZ-GRANT-004, chapter 10 section 3, CONV-DESIGN-004. A default
 /// instance was never read, so it has no text to give and no row can carry it.
 /// </remarks>
-public readonly partial record struct RoleName
+public readonly partial record struct RoleName : IParsable<RoleName>
 {
     private readonly string? _value;
 
@@ -53,6 +53,28 @@ public readonly partial record struct RoleName
         name = new RoleName(value);
         return true;
     }
+
+    /// <summary>
+    /// Reads a role name as a route or a query carries it.
+    /// </summary>
+    /// <param name="s">The text.</param>
+    /// <param name="provider">Unused: a role name is written one way.</param>
+    /// <returns>The value the text names.</returns>
+    /// <exception cref="FormatException">The text is not a role name.</exception>
+    static RoleName IParsable<RoleName>.Parse(string s, IFormatProvider? provider) =>
+        TryParse(s, out RoleName result)
+            ? result
+            : throw new FormatException("The text is not a role name.");
+
+    /// <summary>
+    /// Reads a role name as a route or a query carries it.
+    /// </summary>
+    /// <param name="s">The text.</param>
+    /// <param name="provider">Unused: a role name is written one way.</param>
+    /// <param name="result">The value, where the text names one.</param>
+    /// <returns>Whether the text is a role name.</returns>
+    static bool IParsable<RoleName>.TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out RoleName result) =>
+        TryParse(s, out result);
 
     /// <summary>
     /// The name as it crosses the boundary.

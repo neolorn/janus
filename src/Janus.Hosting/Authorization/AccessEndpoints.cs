@@ -30,7 +30,8 @@ internal static class AccessEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        _ = SessionRequired.On(endpoints.MapGet("/admin/access", WhoCanAccessAsync));
+        _ = SessionRequired.On(endpoints.MapGet("/admin/access", WhoCanAccessAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<ResourceType>("resourceType").Binding<ResourceId>("resourceId"));
 
         return endpoints;
     }
@@ -38,28 +39,18 @@ internal static class AccessEndpoints
     private static async Task<IResult> WhoCanAccessAsync(
         IAccessGate gate,
         RequestSession browser,
-        string? resourceType,
-        string? resourceId,
+        ResourceType resourceType,
+        ResourceId resourceId,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(gate);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (!ResourceType.TryParse(resourceType, out ResourceType type))
-        {
-            return Answers.Malformed("resourceType");
-        }
-
-        if (string.IsNullOrWhiteSpace(resourceId))
-        {
-            return Answers.Malformed("resourceId");
-        }
-
         return Answers.Of(
             await gate
                 .WhoCanAccessAsync(
                     browser.Asking,
-                    new ResourceReference(type, ResourceId.Parse(resourceId)),
+                    new ResourceReference(resourceType, resourceId),
                     cancellationToken)
                 .ConfigureAwait(false),
             access => TypedResults.Json(

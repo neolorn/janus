@@ -32,7 +32,8 @@ internal static class SessionRevocationEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        _ = SessionRequired.On(endpoints.MapPost("/admin/accounts/{subject:guid}/sessions/revoke", RevokeAccountAsync));
+        _ = SessionRequired.On(endpoints.MapPost("/admin/accounts/{subject}/sessions/revoke", RevokeAccountAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<SubjectId>("subject"));
         _ = SessionRequired.On(endpoints.MapPost("/admin/sessions/revoke-all", RevokeEveryAsync));
 
         return endpoints;

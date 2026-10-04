@@ -140,7 +140,7 @@ internal sealed class RecoveryCodeService(
 
         if (held is null)
         {
-            return Result.Failure(Error.From(ErrorCodes.FactorRejected));
+            return Result.Failure(Error.From(ErrorCodes.FactorNotEnrolled));
         }
 
         DateTimeOffset now = time.GetUtcNow();

@@ -533,7 +533,7 @@ internal sealed class CredentialService(
         if (!await SecondStep.AvailableAsync(held, acting.Subject, cancellationToken)
             .ConfigureAwait(false))
         {
-            return Result.Failure<GeneratedRecoveryCodes>(Error.From(ErrorCodes.FactorNotPermitted));
+            return Result.Failure<GeneratedRecoveryCodes>(Error.From(ErrorCodes.FactorPasswordRequired));
         }
 
         IReadOnlyList<string> generated = (await codes
@@ -1030,7 +1030,7 @@ internal sealed class CredentialService(
 
         return SecondStep.Is(kind)
             && !await SecondStep.AvailableAsync(held, subject, cancellationToken).ConfigureAwait(false)
-                ? Error.From(ErrorCodes.FactorNotPermitted)
+                ? Error.From(ErrorCodes.FactorPasswordRequired)
                 : null;
     }
 

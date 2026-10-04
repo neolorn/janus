@@ -650,6 +650,21 @@ public static class ErrorCodes
     public static ErrorCode FactorRequired { get; } = ErrorCode.Parse("auth.factor.required");
 
     /// <summary>
+    /// A second step or a recovery-code set was asked for on an account that holds no
+    /// password, and a second step is second to one. Set a password first.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-002b, AUTH-FACT-008, chapter 10 section 1.2.</remarks>
+    public static ErrorCode FactorPasswordRequired { get; } =
+        ErrorCode.Parse("auth.factor.passwordrequired");
+
+    /// <summary>
+    /// The account holds no enrolment of the kind the operation acts on. Enrol one,
+    /// then ask again.
+    /// </summary>
+    /// <remarks>Implements AUTH-FACT-008, chapter 10 section 1.2.</remarks>
+    public static ErrorCode FactorNotEnrolled { get; } = ErrorCode.Parse("auth.factor.notenrolled");
+
+    /// <summary>
     /// The account holds no such credential. Name one the credential list carries.
     /// </summary>
     /// <remarks>Implements AUTH-FACT-001, chapter 10 section 1.2.</remarks>

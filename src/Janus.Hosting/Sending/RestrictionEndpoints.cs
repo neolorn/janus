@@ -20,7 +20,8 @@ namespace Janus.Hosting.Sending;
 /// Implements AUTH-ABUSE-004, OPS-CFG-002, LIB-API-005, CONV-CODE-006 and
 /// CONV-DESIGN-006. Each is one line to <see cref="IRestrictionSet"/>, which judges the
 /// permission, the step-up and what the reason says; a body missing a member it
-/// requires is refused before it is called.
+/// requires is refused before it is called. A name outside the rule of a restriction's
+/// name is refused the same way on every route that takes one (chapter 09 section 8).
 /// </remarks>
 internal static class RestrictionEndpoints
 {
@@ -75,6 +76,11 @@ internal static class RestrictionEndpoints
         ArgumentNullException.ThrowIfNull(restrictions);
         ArgumentNullException.ThrowIfNull(browser);
 
+        if (!PlaceName.Holds(name))
+        {
+            return Answers.Malformed("name");
+        }
+
         return Answers.Of(
             await restrictions
                 .ReadAsync(browser.Asking, name, cancellationToken)
@@ -96,6 +102,11 @@ internal static class RestrictionEndpoints
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(restrictions);
         ArgumentNullException.ThrowIfNull(browser);
+
+        if (!PlaceName.Holds(name))
+        {
+            return Answers.Malformed("name");
+        }
 
         (Restriction? replacement, string member) = body.Read(name);
 
@@ -134,6 +145,11 @@ internal static class RestrictionEndpoints
         ArgumentNullException.ThrowIfNull(restrictions);
         ArgumentNullException.ThrowIfNull(browser);
 
+        if (!PlaceName.Holds(name))
+        {
+            return Answers.Malformed("name");
+        }
+
         if (Overlong(body.Reason))
         {
             return Answers.Malformed("reason");
@@ -161,6 +177,11 @@ internal static class RestrictionEndpoints
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(restrictions);
         ArgumentNullException.ThrowIfNull(browser);
+
+        if (!PlaceName.Holds(name))
+        {
+            return Answers.Malformed("name");
+        }
 
         if (string.IsNullOrWhiteSpace(body.KeyValue))
         {

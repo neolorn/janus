@@ -287,7 +287,7 @@ public sealed class TotpServiceTests : IAsyncDisposable
         SubjectId subject = Without();
 
         Assert.Equal(
-            ErrorCodes.FactorNotPermitted,
+            ErrorCodes.FactorPasswordRequired,
             Refusal(await Service.BeginAsync(
                 subject,
                 Label(),

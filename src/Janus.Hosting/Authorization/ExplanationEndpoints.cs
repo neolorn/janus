@@ -29,8 +29,10 @@ internal static class ExplanationEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        _ = SessionRequired.On(endpoints.MapGet("/admin/explanations/{correlationId:guid}", ResolveAsync));
-        _ = SessionRequired.On(endpoints.MapGet("/account/explanations/{correlationId:guid}", ResolveOwnAsync));
+        _ = SessionRequired.On(endpoints.MapGet("/admin/explanations/{correlationId}", ResolveAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<AuditRecordId>("correlationId"));
+        _ = SessionRequired.On(endpoints.MapGet("/account/explanations/{correlationId}", ResolveOwnAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<AuditRecordId>("correlationId"));
 
         return endpoints;
     }

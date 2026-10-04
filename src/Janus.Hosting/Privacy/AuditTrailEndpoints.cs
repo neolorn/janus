@@ -30,7 +30,8 @@ internal static class AuditTrailEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        _ = SessionRequired.On(endpoints.MapGet("/admin/audit", OfSubjectAsync));
+        _ = SessionRequired.On(endpoints.MapGet("/admin/audit", OfSubjectAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<SubjectId>("subject"));
 
         return endpoints;
     }
@@ -38,22 +39,17 @@ internal static class AuditTrailEndpoints
     private static async Task<IResult> OfSubjectAsync(
         IAuditTrail trail,
         RequestSession browser,
-        string? subject,
+        SubjectId subject,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(trail);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (!Guid.TryParse(subject, out Guid whose))
-        {
-            return Answers.Malformed("subject");
-        }
-
         return Answers.Of(
             await trail
                 .OfSubjectAsync(
                     browser.Asking,
-                    new SubjectId(whose),
+                    subject,
                     cancellationToken)
                 .ConfigureAwait(false),
             entries => TypedResults.Json(

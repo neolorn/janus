@@ -10,6 +10,18 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A route or query value that does not read as its type is refused 400
+  `api.request.malformed` with `details.member` naming it, the first in the order the
+  endpoint declares where more than one does not read. An identifier in a path that is
+  not a UUID was answered 404 before and is now this refusal, and a restriction name
+  outside the rule of a name is refused the same way on every `/admin/restrictions`
+  route that takes one. `RoleName`, `ResourceType`, `ResourceId` and
+  `ConfigurationKey` implement `IParsable<T>`.
+- A second step (a code generator, a security key under two-step) or a recovery-code
+  set asked for on an account that holds no password is refused 409
+  `auth.factor.passwordrequired`, where it answered 422 `auth.factor.notpermitted`.
+  The error catalogue also gains `auth.factor.notenrolled` (409), for an account that
+  holds no enrolment of the kind an operation acts on.
 - The shipped mail-server adapter lists an account whose `emailAddress` does not read as
   an email address, or that holds none, with no address, where it failed the listing
   for an account holding none. Reconciliation reads such a listing whole: the account
@@ -2652,8 +2664,9 @@ against the public contract of LIB-API-001.
   a new-device code and every notice an operation owes are undertaken in the
   transaction of that operation. An invitation whose link the restrictions refuse is
   not issued and reserves nothing.
-- `NotificationRequested` is no longer emitted: every message is carried from the
-  library's send outbox.
+- No event is emitted for a message: every message is carried from the library's send
+  outbox to the notification handler, and an alert travels on its `AlertRaised` row.
+  The event type `NotificationRequested` is retired with it.
 - An erased wrapped key is 32 zero bytes wherever one is held, with no marker byte in
   them, and every unwrap refuses that value before it is tried. An erasure overwrites
   with it the key of every message admitted for the subject and not yet carried, in the

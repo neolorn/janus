@@ -112,6 +112,8 @@ internal static class ApiStatus
         [ErrorCodes.LossReportPending] = StatusCodes.Status409Conflict,
         [ErrorCodes.LossReportNotPermitted] = StatusCodes.Status409Conflict,
         [ErrorCodes.CredentialNotUpgradable] = StatusCodes.Status409Conflict,
+        [ErrorCodes.FactorPasswordRequired] = StatusCodes.Status409Conflict,
+        [ErrorCodes.FactorNotEnrolled] = StatusCodes.Status409Conflict,
         [ErrorCodes.RequestDuplicate] = StatusCodes.Status409Conflict,
         [ErrorCodes.RequestDecided] = StatusCodes.Status409Conflict,
         [ErrorCodes.ErasureNotFailed] = StatusCodes.Status409Conflict,

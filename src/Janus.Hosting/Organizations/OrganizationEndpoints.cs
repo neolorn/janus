@@ -43,25 +43,36 @@ internal static class OrganizationEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
 
         _ = SessionRequired.On(endpoints.MapPost("/admin/organizations", CreateAsync));
-        _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id:guid}/delete", RequestDeletionAsync));
-        _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id:guid}/delete/cancel", CancelDeletionAsync));
-        _ = SessionRequired.On(endpoints.MapGet("/admin/organizations/{id:guid}/policy", PolicyAsync));
-        _ = SessionRequired.On(endpoints.MapPut("/admin/organizations/{id:guid}/policy", ReplacePolicyAsync));
-        _ = SessionRequired.On(endpoints.MapGet("/admin/organizations/{id:guid}/domains", DomainsAsync));
-        _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id:guid}/domains", AddDomainAsync));
+        _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id}/delete", RequestDeletionAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<OrganizationId>("id"));
+        _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id}/delete/cancel", CancelDeletionAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<OrganizationId>("id"));
+        _ = SessionRequired.On(endpoints.MapGet("/admin/organizations/{id}/policy", PolicyAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<OrganizationId>("id"));
+        _ = SessionRequired.On(endpoints.MapPut("/admin/organizations/{id}/policy", ReplacePolicyAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<OrganizationId>("id"));
+        _ = SessionRequired.On(endpoints.MapGet("/admin/organizations/{id}/domains", DomainsAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<OrganizationId>("id"));
+        _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id}/domains", AddDomainAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<OrganizationId>("id"));
         _ = SessionRequired.On(endpoints.MapPost(
-            "/admin/organizations/{id:guid}/domains/{domain}/verify",
-            VerifyDomainAsync));
+            "/admin/organizations/{id}/domains/{domain}/verify",
+            VerifyDomainAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<OrganizationId>("id"));
         _ = SessionRequired.On(endpoints.MapDelete(
-            "/admin/organizations/{id:guid}/domains/{domain}",
-            RemoveDomainAsync));
-        _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id:guid}/invitations", InviteAsync));
+            "/admin/organizations/{id}/domains/{domain}",
+            RemoveDomainAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<OrganizationId>("id"));
+        _ = SessionRequired.On(endpoints.MapPost("/admin/organizations/{id}/invitations", InviteAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<OrganizationId>("id"));
         _ = SessionRequired.On(endpoints.MapDelete(
-            "/admin/organizations/{id:guid}/invitations/{invitationId:guid}",
-            RevokeInvitationAsync));
+            "/admin/organizations/{id}/invitations/{invitationId}",
+            RevokeInvitationAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<OrganizationId>("id").Binding<InvitationId>("invitationId"));
         _ = SessionRequired.On(endpoints.MapDelete(
-            "/admin/organizations/{id:guid}/memberships/{subject:guid}",
-            EndMembershipAsync));
+            "/admin/organizations/{id}/memberships/{subject}",
+            EndMembershipAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<OrganizationId>("id").Binding<SubjectId>("subject"));
 
         return endpoints;
     }

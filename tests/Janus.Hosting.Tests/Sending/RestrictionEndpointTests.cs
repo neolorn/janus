@@ -361,6 +361,50 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-004, chapter 09 section 8, D-183: a path naming a restriction outside
+    /// the rule of a restriction's name is a request the boundary does not read, refused
+    /// naming <c>name</c> on every route that takes one, and nothing changes.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_004_ANameOutsideItsRuleIsMalformedOnEveryRouteAsync()
+    {
+        Browser administrator = await AuthorisedAsync(
+            Permissions.RestrictionEdit,
+            Permissions.RestrictionGrant,
+            Permissions.SystemAdminister);
+
+        Answer read = await administrator.SendAsync("GET", "/admin/restrictions/No..Such");
+        Answer edited = await administrator.SendAsync(
+            "PUT",
+            "/admin/restrictions/No..Such",
+            ("key", "destination"),
+            ("buckets", Tighter),
+            ("reason", "a tidy set"));
+        Answer deleted = await administrator.SendAsync(
+            "DELETE",
+            "/admin/restrictions/No..Such",
+            ("reason", "a tidy set"));
+        Answer granted = await administrator.SendAsync(
+            "POST",
+            "/admin/restrictions/No..Such/grant",
+            ("keyValue", "+201001234567"),
+            ("credit", 3),
+            ("reason", "their carrier dropped both codes"));
+
+        Assert.All(
+            new[] { read, edited, deleted, granted },
+            answer =>
+            {
+                Assert.Equal(StatusCodes.Status400BadRequest, answer.Status);
+                Assert.Equal(ErrorCodes.RequestMalformed.ToString(), answer.Text("code"));
+                Assert.Equal("name", answer.Json().GetProperty("details").GetProperty("member").GetString());
+            });
+        Assert.Empty(_deployment.Events.Of<SendingRestrictionChanged>());
+        Assert.Empty(_deployment.Events.Of<SendingRestrictionGranted>());
+    }
+
+    /// <summary>
     /// API-CONV-002, CONV-CODE-006 AC2, D-166: a reason past 1024 characters after
     /// trimming is a request the boundary does not read, refused naming it at the edit,
     /// the deletion and the grant, and nothing changes.

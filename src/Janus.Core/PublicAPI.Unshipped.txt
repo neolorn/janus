@@ -1782,14 +1782,6 @@ Janus.Core.MessageTemplate.Text.get -> string!
 Janus.Core.MessageTemplate.Text.init -> void
 Janus.Core.NeverLoggedAttribute
 Janus.Core.NeverLoggedAttribute.NeverLoggedAttribute() -> void
-Janus.Core.NotificationRequested
-Janus.Core.NotificationRequested.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out Janus.Core.MessageKind Message, out Janus.Core.SendKind Kind) -> void
-Janus.Core.NotificationRequested.Equals(Janus.Core.NotificationRequested? other) -> bool
-Janus.Core.NotificationRequested.Kind.get -> Janus.Core.SendKind
-Janus.Core.NotificationRequested.Kind.init -> void
-Janus.Core.NotificationRequested.Message.get -> Janus.Core.MessageKind
-Janus.Core.NotificationRequested.Message.init -> void
-Janus.Core.NotificationRequested.NotificationRequested(System.DateTimeOffset RaisedAt, string! IdempotencyKey, Janus.Core.MessageKind Message, Janus.Core.SendKind Kind) -> void
 Janus.Core.ObjectionChanged
 Janus.Core.ObjectionChanged.Deconstruct(out System.DateTimeOffset RaisedAt, out string! IdempotencyKey, out string! Purpose, out bool Objecting) -> void
 Janus.Core.ObjectionChanged.Equals(Janus.Core.ObjectionChanged? other) -> bool
@@ -3276,10 +3268,6 @@ override Janus.Core.MembershipId.ToString() -> string!
 override Janus.Core.MessageTemplate.Equals(object? obj) -> bool
 override Janus.Core.MessageTemplate.GetHashCode() -> int
 override Janus.Core.MessageTemplate.ToString() -> string!
-override Janus.Core.NotificationRequested.<Clone>$() -> Janus.Core.NotificationRequested!
-override Janus.Core.NotificationRequested.Equals(object? obj) -> bool
-override Janus.Core.NotificationRequested.GetHashCode() -> int
-override Janus.Core.NotificationRequested.ToString() -> string!
 override Janus.Core.ObjectionChanged.<Clone>$() -> Janus.Core.ObjectionChanged!
 override Janus.Core.ObjectionChanged.Equals(object? obj) -> bool
 override Janus.Core.ObjectionChanged.GetHashCode() -> int
@@ -3523,7 +3511,6 @@ override sealed Janus.Core.IdentifierAdded.Equals(Janus.Core.DomainEvent? other)
 override sealed Janus.Core.IdentifierPrimaryChanged.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.IdentifierRemoved.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.MembershipChanged.Equals(Janus.Core.DomainEvent? other) -> bool
-override sealed Janus.Core.NotificationRequested.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.ObjectionChanged.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.OrganizationErased.Equals(Janus.Core.DomainEvent? other) -> bool
 override sealed Janus.Core.RestrictionChanged.Equals(Janus.Core.SubjectEvent? other) -> bool
@@ -3966,7 +3953,9 @@ static Janus.Core.ErrorCodes.EndpointInsecure.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.EnrolmentTokenInvalid.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ErasureNotFailed.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.ErasureNotFound.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.FactorNotEnrolled.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.FactorNotPermitted.get -> Janus.Core.ErrorCode
+static Janus.Core.ErrorCodes.FactorPasswordRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.FactorRejected.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.FactorRequired.get -> Janus.Core.ErrorCode
 static Janus.Core.ErrorCodes.GrantDuplicate.get -> Janus.Core.ErrorCode
@@ -4193,8 +4182,6 @@ static Janus.Core.MembershipId.operator !=(Janus.Core.MembershipId left, Janus.C
 static Janus.Core.MembershipId.operator ==(Janus.Core.MembershipId left, Janus.Core.MembershipId right) -> bool
 static Janus.Core.MessageTemplate.operator !=(Janus.Core.MessageTemplate? left, Janus.Core.MessageTemplate? right) -> bool
 static Janus.Core.MessageTemplate.operator ==(Janus.Core.MessageTemplate? left, Janus.Core.MessageTemplate? right) -> bool
-static Janus.Core.NotificationRequested.operator !=(Janus.Core.NotificationRequested? left, Janus.Core.NotificationRequested? right) -> bool
-static Janus.Core.NotificationRequested.operator ==(Janus.Core.NotificationRequested? left, Janus.Core.NotificationRequested? right) -> bool
 static Janus.Core.ObjectionChanged.operator !=(Janus.Core.ObjectionChanged? left, Janus.Core.ObjectionChanged? right) -> bool
 static Janus.Core.ObjectionChanged.operator ==(Janus.Core.ObjectionChanged? left, Janus.Core.ObjectionChanged? right) -> bool
 static Janus.Core.ObjectionRecord.operator !=(Janus.Core.ObjectionRecord? left, Janus.Core.ObjectionRecord? right) -> bool

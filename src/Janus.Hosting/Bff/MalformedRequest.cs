@@ -9,14 +9,18 @@ using Microsoft.Extensions.Logging;
 namespace Janus.Hosting.Bff;
 
 /// <summary>
-/// The answer to a request whose body the reader could not turn into what the endpoint
-/// takes, which never reaches the endpoint to be refused there.
+/// The answer to a request the framework could not bind to what the endpoint takes, a
+/// route or query value that does not read as its type or a body the reader could not
+/// turn into the endpoint's, which never reaches the endpoint to be refused there.
 /// </summary>
 /// <remarks>
-/// Implements API-CONV-002 and BFF-ORDER-001 stage 11. It stands outermost, so the
-/// refusal it writes is the last thing to touch the response and every stage inside it
-/// answers as it always did. What it says is the shape of the body and nothing of its
-/// contents: the member the reader stopped at, never the value it was reading.
+/// Implements API-CONV-002, API-CONV-003, CONV-DESIGN-006 and BFF-ORDER-001 stage 11.
+/// It stands outermost, so the refusal it writes is the last thing to touch the
+/// response and every stage inside it answers as it always did. It names the first
+/// value the endpoint declares, in the order declared, that the request's text does
+/// not read as; where each reads, the failure is the body's, and what it says is the
+/// shape of the body and nothing of its contents: the member the reader stopped at,
+/// never the value it was reading.
 /// </remarks>
 internal sealed class MalformedRequest(ILogger<MalformedRequest> log) : IMiddleware
 {
@@ -43,7 +47,8 @@ internal sealed class MalformedRequest(ILogger<MalformedRequest> log) : IMiddlew
                 throw;
             }
 
-            string? member = Member(unreadable);
+            string? member = EndpointDeclaration.Of(context.GetEndpoint())?.Unread(context.Request)
+                ?? Member(unreadable);
 
             BrowserProfileLog.BodyUnreadable(log, context.TraceIdentifier, member);
             await Refusal

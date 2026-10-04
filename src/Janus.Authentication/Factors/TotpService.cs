@@ -57,7 +57,7 @@ internal sealed class TotpService(
             && !await SecondStep.AvailableAsync(passwords, subject, cancellationToken)
                 .ConfigureAwait(false))
         {
-            return Result.Failure<TotpEnrolment>(Error.From(ErrorCodes.FactorNotPermitted));
+            return Result.Failure<TotpEnrolment>(Error.From(ErrorCodes.FactorPasswordRequired));
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
