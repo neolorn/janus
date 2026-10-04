@@ -3883,7 +3883,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. Always logged, at Information, with the count as its one field, by a start step of `Janus.Hosting`.
   2. Logged at Warning, and only where the count is above zero.
 - **Parked.** The log line, its start step and its test.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **162. Tier 2. AUTH-FACT-010: a configured origin's host, or the identifier, that has no ASCII form.**
 
@@ -3894,7 +3894,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. Refused with `model.startup.rpid`: as built.
   2. An uncoded fault, as before.
 - **Parked.** Nothing: reading 1 is built. It changes what stops a start, so it is raised here.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **163. Tier 2. AUTH-FACT-010: the comparison of the identifier with an origin's host.**
 
@@ -3905,7 +3905,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The comparison is over ASCII forms as well.
   2. It stays: the answer names the list alone.
 - **Parked.** That comparison, left as it is.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **164. Tier 2. LIB-TEST-001 criterion 2: a step-up case that names a permission bound to no gate, refused "at its construction".**
 
@@ -3916,7 +3916,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The run refuses it before any write: as built, no surface change.
   2. `TruthTableCase` gains a constructor or factory taking the `AuthorizationDeclaration`: a new public member.
 - **Parked.** Nothing: reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **165. Tier 2. `10` section 5.30: `stepup-phishingresistance-unmet` where the gate asks no phishing resistance.**
 
@@ -3927,7 +3927,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The finding stands; a host whose gate asks none leaves the case out of its table: as built.
   2. The suite refuses the scenario as unwritable where the gate asks none; it has no public way to read the gate's cost.
 - **Parked.** Nothing: reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **166. Tier 2. LIB-API-001 and LIB-TEST-001: the shape of the deployment factory and of the case type.**
 
@@ -3941,7 +3941,7 @@ part of 389 (3) and waits with 389 on question 48.
   - The met report's instant is read from the passed container's `TimeProvider`.
 - **What the specification says.** LIB-API-001 and LIB-TEST-001 name the delegate and what it builds, not its signature.
 - **Parked.** Nothing: built as above.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **167. Tier 2. BFF-MACH-001 criterion 2, BFF-MACH-002 and INT-GEN-003 criterion 4: the cookie refusal against the rate limit.**
 
@@ -3952,7 +3952,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The rate limit first: as built.
   2. The cookie refusal ahead of the rate limit, counted as a rejection alone.
 - **Parked.** Nothing: reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **168. Tier 2. CONV-DESIGN-007 criterion 7, fourth clause: the sites beyond the two factories, and where the three OIDC handlers live.**
 
@@ -3965,14 +3965,14 @@ part of 389 (3) and waits with 389 on question 48.
   3. The clause covers a type behind a contract of another area that `Janus.Hosting` could ask instead; the library's internal services and the ring are outside it, and the chapter says so.
   Open under each: whether a service asked inside a job's or a middleware's body counts.
 - **Parked.** The fourth-clause test, and those constructors and that factory, left as they are.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **169. Tier 3. AUTH-ABUSE-008 criterion 3: the datacenter range file has no source.**
 
 - **Item.** Question 136.
 - **The gap.** `IDatacenterRanges` has no implementation and no registration under `src`. `AuthenticationRegistration` builds `BotDefence` with it required, so once `POST /register` calls the check, every such request of a real composition faults. Criterion 3: "`datacenterRange` matches a bundled range file refreshed like the IP location database (INT-GEN-006)". No chapter states whether the file is in the package or the host's, whose ranges it holds, its format, its refresh and maximum-age keys, what a missing or stale file does, or whether it is matched against the whole address or the AUTH-ABUSE-001 source. LIB-HOST-001 has no row for it, and CONV-VCS-005's list of embedded lists does not name one.
 - **Parked.** The range source, and with it the merge of `part/bot-defence`: the part builds question 136 (`b099d14a`, fast checks green) over a `BotDefence` that takes the ranges as optional and judges `datacenterRange` only where one is registered, which leaves a signal that is on by default silent in every real deployment. That is a decision on the signal's semantics, so the part is not merged and its branch is kept until this is answered.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **170. Tier 2. AUTH-ABUSE-008 criterion 3: whether the session being started counts toward "more than".**
 
@@ -3983,7 +3983,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. Sessions already created are counted: as built.
   2. The session the request would create counts: the fourth request is challenged.
 - **Parked.** With question 169.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **171. Tier 2. `09` `POST /register`: where the bot defence stands among the route's refusals.**
 
@@ -3995,7 +3995,7 @@ part of 389 (3) and waits with 389 on question 48.
   2. The defence before the signed-in refusal as well.
   3. The invitation judged before the defence.
 - **Parked.** With question 169.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **172. Tier 2. `09` `POST /auth/step-up` and AUTH-FACT-002: how "the combinations" travel in the 200 `factorRequired` answer.**
 
@@ -4006,7 +4006,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The flat list: as built.
   2. The combinations travel as combinations, which changes the shape `09` gives.
 - **Parked.** Nothing: reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **173. Tier 3. AUTH-FACT-002 criterion 7: a loss report already pending at the step-up's `phoneCode` ask.**
 
@@ -4014,7 +4014,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The gap.** The chapters give 403 `auth.stepup.required` "with `outcome` `report-loss` or `enrol` only where none is left". The guard can also answer `pending` (a loss report in flight) with no combination, and no chapter names that case for this ask.
 - **What the code does.** It answers the 403 with `outcome` `pending` and `pendingUntil`, as before. No test drives it.
 - **Parked.** That case, left as it is.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **174. Tier 3. AUTH-ABUSE-001: question 135 at a step-up, and which failures are refusals.**
 
@@ -4022,7 +4022,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The gap.** D-188 names "a sign-in, a sign-in code's or a device check's path". A step-up's presentation runs through the same two methods, so a fault at a step-up no longer counts or writes `auth.stepup.failed`; the chapters do not name the step-up for the rule. The line between a refusal and a fault is a list of nine codes in `AuthenticationService` (`auth.factor.rejected`, `auth.factor.notpermitted`, `auth.code.invalid`, `auth.code.expired`, `auth.code.replayed` and the four `auth.webauthn.*` refusals); a refusal a factor answers under another code would go uncounted, and no chapter gives the list.
 - **What the code does.** As above: both built, since the path is shared.
 - **Parked.** Nothing further.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **175. Tier 3. AUTH-FACT-004 and CONV-DESIGN-003: what follows a right sign-in code other than the domain lock's refusal.**
 
@@ -4033,7 +4033,7 @@ part of 389 (3) and waits with 389 on question 48.
   - The lock on the address the sign-in was opened with is judged after the factor's unit of work has committed, for every factor, and is told uncounted; untouched.
 - **What the code does.** As above.
 - **Parked.** Nothing further.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **176. Tier 3. `09` `POST /enrol/begin`, the `10` row `authz.denied` and BFF-ORDER-001 stage 8: an open enrolment session on any other route that requires a session.**
 
@@ -4041,7 +4041,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The contradiction.** `POST /enrol/begin` and the `10` row say any other route refuses the enrolment session 403 `authz.denied`. Stage 8 says an endpoint that requires a session refuses a request without one 401 `auth.session.expired`; the section 6 preamble's derived answers hold no 403 `authz.denied`, and only the rows of the removal and the upgrade were given it. FE-API-004 reads a 401 with no `details` as the session having ended.
 - **What the code does.** `GET /account`, `PATCH /account/credentials/{id}`, `POST /account/recoverycodes` and the like answer 401 `auth.session.expired` to a browser holding an open enrolment session and no session. In process, generation, link, linkable and unlink refuse an enrolment authority `authz.denied`.
 - **Parked.** Those routes' answer. `CredentialFlowTests.AUTH_RECOV_002_TheEnrolmentSessionDoesNotReachTheRecoveryCodesAsync` stands asserting 401.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **177. Tier 3. AUTH-FACT-008 and AUTH-RECOV-002: the export's report for the codes a second-step enrolment showed.**
 
@@ -4049,7 +4049,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The contradiction.** The route "is reached for the codes a second step enrolled beside a password shows". Completing the enrolment ends the enrolment session, in the unit of work that shows the codes, and an ended one is 401 `auth.session.expired` wherever presented: the report for those codes arrives on an ended session.
 - **What the code does.** The route admits an open enrolment session. When the session ends is as it was.
 - **Parked.** When the enrolment session ends where its second step showed codes.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **178. Tier 3. REG-IDENT-007 and `09` `POST /account/identifiers/{id}/verify`: "for that replace".**
 
@@ -4057,7 +4057,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The gap.** `POST /enrol/begin` lists the verify route for the replace of a lost mailbox. Today any open enrolment session, lost mailbox or not, proves any pending verification of its account, an add or a replace a signed-in session staged included. The chapter limits the reach, and the row gives no answer for the excess.
 - **What the code does.** On that route only the ended session's answer changed (401).
 - **Parked.** The narrowing of the reach.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **179. Tier 2. AUTH-FACT-008 criterion 4: `viewedAt` of the set a registration's security step returned.**
 
@@ -4069,7 +4069,7 @@ part of 389 (3) and waits with 389 on question 48.
   2. The terms step's instant.
   3. Unset, which fails criterion 4 for such an account.
 - **Parked.** The registration's set, left as it is.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **180. Tier 2. REG-IDENT-007 and question 153: there is no resend of a replace's code.**
 
@@ -4080,7 +4080,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. No resend of a replace exists and the sentence binds a later route: nothing to build.
   2. A repeated replace with the same value sends the code again, as a repeated add does.
 - **Parked.** The replace half of question 153.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **181. Tier 2. REG-IDENT-004: a repeated add whose pending verification the sweep takes between the set's read and the row's lock.**
 
@@ -4091,7 +4091,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built: the person asks again.
   2. The request stages afresh.
 - **Parked.** That fall-through.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **182. Tier 3. REG-SESS-003 against `09` `POST /account/identifiers/{id}/verify`: which presses are held to the source's delay.**
 
@@ -4099,7 +4099,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The contradiction.** The row says every code and press is counted and throttled as at `POST /register/verify/{id}`. REG-SESS-003 says every press is first held to the throttle's delay. `RegistrationService.LandAsync` asks the delay only for a pressed token that opens nothing; a press that opens a verification is held to none.
 - **What the code does.** `IdentifierService.LandAsync` holds every press to its source's delay first, as REG-SESS-003 reads; the registration route is untouched, so the two differ.
 - **Parked.** The registration route's presses.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **183. Tier 3. `09` `POST /account/identifiers/{id}/verify`: "every code ... is counted", for a code that names no pending verification of the account.**
 
@@ -4107,7 +4107,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The gap.** A typed code whose `{id}` names no pending verification of the account, or one found before the lock and gone under it, has no identifier to count against, and the scope of a count by the source alone is not stated.
 - **What the code does.** `auth.code.invalid`, uncounted and not delayed, as the registration route refuses a code for an identifier its session does not hold.
 - **Parked.** Nothing further.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **184. Tier 3. REG-IDENT-007: a displaced address's confirmation pressed past its lifetime while its pending verification still exists.**
 
@@ -4115,7 +4115,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The gap.** The press opens a verification, so it is no "pressed token that opens nothing"; whether "every press here is counted" reaches it is not stated.
 - **What the code does.** 422 `auth.code.expired`, rolled back, not counted, as before.
 - **Parked.** Nothing further.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **185. Tier 2. REG-IDENT-006: a second removal row for one identifier.**
 
@@ -4126,7 +4126,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The second removal replaces the identifier's standing row.
   2. The key becomes one that admits both rows.
 - **Parked.** That case, left as it is.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **186. Tier 2. CONV-DESIGN-003, AUTH-ABUSE-004 and the `10` row `outbox.retry.initial` against AUTH-ABUSE-003: the due instant of a row that has no immediate attempt.**
 
@@ -4137,7 +4137,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. Every new row is held: such a message reaches a transport no sooner than `outbox.retry.initial` and the poll interval.
   2. Only a row that has an immediate attempt is held: as built.
 - **Parked.** The due instant of those rows.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 **187. Tier 2. CONV-DESIGN-003 and LIB-API-001: the type of what `IUnitOfWork.BeginAsync` answers.**
 
@@ -4148,7 +4148,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. `Result<bool>`: as built.
   2. A type the chapter names.
 - **Parked.** Nothing: reading 1 is built. It is the public surface, so it is raised here.
-- **Answer:** pending.
+- **Answer:** D-189.
 
 ## 5. Gate result
 
