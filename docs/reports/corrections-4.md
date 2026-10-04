@@ -1267,6 +1267,28 @@ Every site questions 75, 80 and 88 name already undertook its send through `IGov
 - The Unicode tables regenerate without a diff. The pinned scanner over the history with the part's commits (1106 commits): no finding.
 - The version of `IdnaTestV2.txt` is checked by no code; the generator checks the mapping table's.
 
+### `part/units-of-work`, merged as `bb40a74b`: questions 69 to 74, 76 to 79, 81, 87, 112 and the empty successes of 88
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Questions 69 and 87: a rejected callback or provider event commits its counts, record and raise; every other failure rolls back | `177cb9a9` | CONV-DESIGN-003, INT-GEN-003 | `DeliveryReportsTests.CONV_DESIGN_003_AC10_ARejectedReportCommitsItsCountsAndItsRaiseAsync`, `DeliveryReportsTests.CONV_DESIGN_003_AC10_AReportWhoseRaiseIsNotWrittenRollsBackAsync`, `HostCallbackTests.CONV_DESIGN_003_AC10_ARejectedCallbackCommitsItsCountsAndItsRaiseAsync`, `ProviderEventTests.CONV_DESIGN_003_AC10_ARejectedProviderEventCommitsItsRecordAndItsCountsAsync` |
+| Question 72: a replacement another process made first rolls back, then the standing secret is read; `SigningKeys` likewise where nothing is due (`ISigningKeyStore.RetireAsync` and `RemoveAsync` answer whether they wrote) | `2f6ffde2` | CONV-DESIGN-003 | `RegisteredSecretsTests.CONV_DESIGN_003_AC10_AReplacementAnotherProcessMadeFirstIsRolledBackAsync`, `RegisteredSecretsTests.CONV_DESIGN_003_AC10_AReplacementThatWasMadeCommitsAsync`, `SigningKeysTests.CONV_DESIGN_003_AC10_AChangeWithNothingDueIsRolledBackAsync`, `SigningKeysTests.CONV_DESIGN_003_AC10_ALifetimeAgainstAKeyNoLongerCurrentIsRolledBackAsync` |
+| Questions 77 and 88, a success that wrote nothing rolls back: `DeviceService.StandsAsync`, `LossReports.InvalidateAsync`; `ConsentService.WithdrawAsync`, `WithdrawObjectionAsync` and `ObjectAsync`, `OrganizationErasureSweep.ErasedAsync`, `KeyRotation`, `FingerprintKeyRotation`; `GroupService.AddMemberAsync` and `RemoveMemberAsync`, with two truth-table rows; `BackgroundWorker.RaiseLapseAsync`; and, found by the sweep, the suspension of `AccountAdministration`, the revocation of `InvitationService`, the deletion request and its cancellation of `OrganizationService` | `6c9a8044`, `45980934`, `1168896d`, `1b0ab3ca`, `27b20faf` | CONV-DESIGN-003 | `DeviceServiceTests.CONV_DESIGN_003_AC10_ATrustRevokedMeanwhileIsRolledBackAsync`, `LossReportsTests.CONV_DESIGN_003_AC10_AWindowEndForACancelledReportIsRolledBackAsync`, `ConsentTests.CONV_DESIGN_003_AC10_AChangeMadeMeanwhileIsRolledBackAsync`, `OrganizationErasureSweepTests.CONV_DESIGN_003_AC10_AnErasureOfAWindowCancelledMeanwhileIsRolledBackAsync`, `KeyRotationTests.CONV_DESIGN_003_AC10_APassWithNothingLeftIsRolledBackAsync`, `KeyRotationTests.CONV_DESIGN_003_AC10_ACompletionAnotherRunMadeIsRolledBackAsync`, `FingerprintKeyRotationTests.CONV_DESIGN_003_AC10_APassWithNothingLeftIsRolledBackAsync`, `FingerprintKeyRotationTests.CONV_DESIGN_003_AC10_ACompletionAnotherRunMadeIsRolledBackAsync`, `GroupEndpointTests.CONV_DESIGN_003_AC10_AMemberChangeThatWritesNothingIsRolledBackAsync`, `GroupEndpointTests.AUTHZ_GROUP_001_AChangeThatChangesNothingRecordsNothingAsync`, `BackgroundWorkerTests.CONV_DESIGN_003_AC10_ATurnThatFindsNoLapseRollsBackAsync`, `BackgroundWorkerTests.CONV_DESIGN_003_AC5_ALapseThatCannotBeRaisedRollsBackAsync`, `AccountAdministrationTests.CONV_DESIGN_003_AC10_ASuspensionMadeMeanwhileIsRolledBackAsync`, `OrganizationServiceTests.CONV_DESIGN_003_AC10_AChangeMadeMeanwhileIsRolledBackAsync`, `InvitationServiceTests.CONV_DESIGN_003_AC10_ARevocationMadeMeanwhileIsRolledBackAsync`, `TruthTableTests` (101) |
+| Question 112: a fault in a send's immediate attempt is logged (`SendLog.AttemptLeft`) and left to the publisher; the two gate tests admit that one catch | `681c2ff2` | CONV-DESIGN-003, CONV-ERR-003 | `SendingGovernanceTests.CONV_DESIGN_003_AC12_AFaultInTheImmediateAttemptLeavesTheAnswerAndTheRowAsync`, `LibraryStructureTests.CONV_ERR_003_AC2_NoCatchButTheOneAroundAfterCommitWorkCarriesOn`, `FailClosedTests.AUTH_PRIN_001_AC3_NoPathReturnsAnAllowOnAnException` |
+| Question 70, the phone signal: `PhoneSignals.AllowsAsync` asks the provider before the unit of work begins; `ConsiderAsync` records the answer in the unit of work that follows and never calls the provider | `95f248a5` | AUTH-FACT-002b, CONV-DESIGN-003 | `SendingGovernanceTests.AUTH_FACT_002b_AC6_TheSignalIsConsideredBeforeARestrictedFactorGoesAsync`, `SendingGovernanceTests.AUTH_FACT_002b_TheProviderIsNeverAskedInsideAUnitOfWorkAsync`, `SendingGovernanceTests.AUTH_FACT_002b_AC6_AReportedChangeIsRecordedWhereItIsAskedAsync`, `SendingGovernanceTests.AUTH_FACT_002b_AC6_ARecoveryLinkByTextIsConsideredBeforeItGoesAsync` |
+| Question 70, `BotDefence`: stands; it answers `auth.challenge.required` already, and no source names `bff.challenge.required` | `22941105` | AUTH-ABUSE-008 | `BotDefenceTests.AUTH_ABUSE_008_AC5_TheSignalIsCommittedBeforeTheVerifierIsAskedAndStandsAsync` |
+| Question 76: `BreakGlassService.PresentAsync` is one unit of work; every refused code, a consumed one included, commits the attempt's count, the failed authentication's record and the source's failure together; a refusal by the limit commits the count with its raise | `f246296c` | OPS-BOOT-004, CONV-DESIGN-003, CONV-LOG-005 | `BreakGlassServiceTests.CONV_DESIGN_003_AC10_ARefusedCodeCommitsItsKeptWritesTogetherAsync`, `BreakGlassServiceTests.OPS_BOOT_004_AConsumedCodeIsARefusedCredentialAsync`, `BreakGlassServiceTests.OPS_BOOT_004_AC7_ARefusalByTheLimitCommitsItsCountAndItsRaiseTogetherAsync`, `BreakGlassServiceTests.CONV_DESIGN_003_AC10_ALimitWhoseRaiseIsNotWrittenRollsBackAsync`, `BreakGlassServiceTests.CONV_DESIGN_003_AC5_AUseThatCannotBeAlertedRollsBackAsync` |
+| Questions 71, 73 and 74: `SignInLinks.SpendCodeAsync` and `VerificationCodes.PresentAsync` decide in their caller's unit of work; a code gone or past its lifetime writes nothing on the code's record; the sign-in code, the WebAuthn ceremony and the device code begin the outermost unit, and a refusal that keeps a write commits its kept writes together; the counter mismatch commits with the failed authentication's record and the source's failure | `bc42d32c` | CONV-DESIGN-003, AUTH-FACT-004, AUTH-FACT-014, AUTH-ABUSE-001, CONV-LOG-005 | `AuthenticationServiceTests.CONV_DESIGN_003_AC10_AWrongSignInCodeIsCountedInItsCallersUnitOfWorkAsync`, `AuthenticationServiceTests.CONV_DESIGN_003_AC10_ASignInCodeGoneUnderItsLockWritesNothingAsync`, `AuthenticationServiceTests.CONV_DESIGN_003_AC10_AWrongSignInCodeCommitsItsKeptWritesTogetherAsync`, `AuthenticationServiceTests.CONV_DESIGN_003_AC10_ASignInCodePastItsLifetimeCommitsOnlyItsRecordAndItsCountsAsync`, `AuthenticationServiceTests.CONV_DESIGN_003_AC10_AWrongDeviceCodeCommitsItsKeptWritesTogetherAsync`, `AuthenticationServiceTests.CONV_DESIGN_003_AC10_ADeviceCodePastItsLifetimeCommitsOnlyItsRecordAndItsCountsAsync`, `AuthenticationServiceTests.AUTH_FACT_014_AC3_ACounterThatDidNotAdvanceCommitsItsThreeWritesTogetherAsync`, `AuthenticationServiceTests.CONV_DESIGN_003_AC10_AnAssertionRefusedOtherwiseIsRolledBackAndCountedAsync`, `VerificationCodesTests.CONV_DESIGN_003_AC10_AWrongTryIsCountedInItsCallersUnitOfWorkAsync`, `VerificationCodesTests.CONV_DESIGN_003_AC10_ATryPastTheLifetimeLeavesTheRecordAsItStoodAsync` |
+| Questions 78, 79 and 81: stand as built; 79 answers `auth.session.expired` with no details already | `c445dc5e` | CONV-DESIGN-003, REG-PROF-002, REG-SESS-005 | `RegistrationServiceTests.CONV_DESIGN_003_AC10_AnUnderAgeAnswerCommitsTheSessionsEndAndItsLockAsync`, `RegistrationServiceTests.CONV_DESIGN_003_AC10_AnIdentifierTakenSinceCommitsTheSessionsEndAsync`, `RegistrationServiceTests.CONV_DESIGN_003_AC5_AWrongCodeCommitsItsCountsAsync` |
+
+- Three tests are replaced by the criterion 10 tests above: `AuthenticationServiceTests.CONV_DESIGN_003_AC5_AWrongSignInCodeKeepsItsCountAsync`, `AuthenticationServiceTests.CONV_DESIGN_003_AC5_ASignInCodeGoneUnderItsLockIsRolledBackAsync`, `VerificationCodesTests.CONV_DESIGN_003_AC5_AWrongTryCommitsItsCountAsync`.
+- What changed beside the questions' own words: an assertion that verified and is refused afterwards no longer advances the stored counter; where a count cannot be written no audit record stands; a break-glass failure that is no refusal rolls back the attempt's global count; a presentation no longer removes a lapsed verification code's record (the sweep does).
+- CONV-DESIGN-003 criterion 12, "carried by the next pass": the test holds the row left standing after the fault; no publisher pass was run over it. Criterion 11 falls on no site of this part.
+- The fast checks ran once over the tree of `45980934` to `27b20faf` together, not between each.
+- The cancel-deletion branch of `AccountAdministration` made to roll back is unreachable (`CancellableAsync` never answers both null) and has no test.
+- No public surface change, no migration, no ledger line.
+- Parked: questions 131 to 136.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1292,7 +1314,7 @@ Every site questions 75, 80 and 88 name already undertook its send through `IGov
 | The correction of `52482ed5`, the step-up half | Which gate the answer is computed against | Nothing: D-187 answers question 94; not yet built |
 | Question 22: the audit record of a grant the drift check writes | No audit action for it | Nothing: D-187 answers question 101; not yet built |
 | Question 57: nine registrations still in Hosting, the commands' own registrations, two inner compositions; the test of criterion 7's third clause | The registrations that could not move | Questions 82 and 84 to 86: built (`part/registrations`). Question 83 and the test of the third clause: question 128 |
-| Question 58: the sites the sweep parked | Which refusals keep a write; a send inside a caller's unit; a success that writes nothing | The sends of 75, 80 and 88: built (`part/unit-sends`). The rest: D-186, not yet built |
+| Question 58: the sites the sweep parked | Which refusals keep a write; a send inside a caller's unit; a success that writes nothing | Built (`part/unit-sends`, `part/units-of-work`), but for questions 127 and 131 to 136 |
 | Question 39 for an invitation's erased key | PRIV-RIGHT-005a against the code | Nothing: D-187 answers question 113; not yet built |
 | Question 24 for a caller in process | The rule is internal to `Janus.Core` | Nothing: D-187 answers question 98; not yet built |
 | Question 53 for an app password's `{id}`; `POST /account/recoverycodes/exported` | No typed value and no rule; no contract operation | Nothing: D-187 answers questions 118 and 117; not yet built |
@@ -1427,6 +1449,9 @@ Every site questions 75, 80 and 88 name already undertook its send through `IGov
 | Fakes and fixtures for question 62 (`c269fb1a`, `ca559838`, `be484f95`, `804b666e`, `94e4ad4e`) | No fixture could commit a restriction between the gate step and the first write; two fixtures called a service with no grant, which the ask inside the unit of work now refuses; one hook of `InvitationServiceTests` ran twice now that the row is held twice | AUTHZ-GATE-006 criterion 3; CONV-TEST-007; the working guide's section 3, test infrastructure | The fakes of the unit of work and of the gate let a restriction be committed meanwhile; the fixtures grant what the route's gate step already requires; the hook fires once. No assertion weakened, no runtime code |
 | `tools/Janus.UnicodeTables/ucd/` (`4970fa4b`) | CONV-LAYOUT-001 and IDN-ACCT-004 say the IDNA files are carried beside the Unicode Character Database files and name no directory | IDN-ACCT-004 | The two files sit in the directory that holds the Unicode Character Database files, which `NOTICE` names |
 | `src/Janus.Core/Unicode/Punycode.cs` (`121c66a8`) | `LibraryStructureTests.CONV_CODE_007_AC1_NoHashTokenOrCodeIsComparedButInConstantTime` reads a variable named `code` compared by `!=` as a secret | CONV-CODE-007 criterion 1 | The loop variable is named `point`; a code point is no secret and the test is untouched |
+| `tests/Janus.Storage.Tests/Authentication/VerificationCodesTests.cs` (`bc42d32c`) | The helper presented a code with no unit of work, and `VerificationCodes.PresentAsync` now decides in its caller's | CONV-DESIGN-003 | Test infrastructure: the helper begins and commits the unit of work around each presentation |
+| `LibraryStructureTests` CONV_ERR_003_AC2, `FailClosedTests` AUTH_PRIN_001_AC3 (`681c2ff2`) | Both refused every catch that carries on; CONV-ERR-003 now exempts the one around work registered to run after the commit | CONV-ERR-003 criterion 2 | The gate tests admit that one catch in `SendPublisher.AttemptAsync` and hold every other |
+| `DeviceStoreInMemory.Locking`, `SendingPath.Log` (`6c9a8044`, `681c2ff2`) | The fakes gave no hook for a change made under the lock, nor the log | CONV-DESIGN-003 criteria 10 and 12 | Test infrastructure: one hook and one property on the fakes |
 
 ## 4. Open questions
 
@@ -3293,6 +3318,63 @@ part of 389 (3) and waits with 389 on question 48.
   1. It stays: the suffix list is no domain lock.
   2. It takes the library's conversion, with the checks REG-DOM-001 names or without the STD3 rules.
 - **Parked.** That line, left as it is.
+- **Answer:** pending.
+
+**131. Tier 2. CONV-DESIGN-003 and CONV-ERR-003: where the catch of question 112 sits.**
+
+- **Item.** Question 112.
+- **What the code does.** The catch is in `SendPublisher.AttemptAsync`, in `Janus.Hosting`, where logging lives. `UnitOfWork.CommitAsync` lets a fault of any other work registered to run after the commit leave; `Janus.Storage` has no logging.
+- **What the specification says.** CONV-DESIGN-003: a fault inside work registered to run after the commit is logged and left to the publisher. The only such work today is a send's immediate attempt.
+- **Readings.**
+  1. The rule is the immediate attempt's: as built.
+  2. Every registration is covered: the loop in the unit of work catches and logs, which needs a logger reachable from `Janus.Storage`.
+- **Parked.** Nothing built beyond reading 1.
+- **Answer:** pending.
+
+**132. Tier 3. AUTH-FACT-002b: a restricted factor undertaken with a phone-signal provider declared and no signal asked beforehand.**
+
+- **Item.** Question 70, the phone signal.
+- **What the code does.** `PhoneSignals.ConsiderAsync` records the answer `AllowsAsync` remembered before the unit of work began. Where a provider is declared and nothing was asked for the number, it throws (a fault).
+- **What the specification says.** AUTH-FACT-002b: the signal is asked before the unit of work begins and its consideration recorded in the unit that follows. It does not say what a send does where no ask came first.
+- **Parked.** Nothing: the fault stands as built, since the other course lets a restricted factor go unconsidered.
+- **Answer:** pending.
+
+**133. Tier 2. CONV-DESIGN-003: `ConsentService.GrantAsync` where nothing was added or ended.**
+
+- **Item.** Question 88's rule, a success that wrote nothing.
+- **What the code does.** The return commits. The method is called joined by the registration and outermost by the endpoint, and `IUnitOfWork` gives a level no way to know which it is.
+- **What the specification says.** A success that wrote nothing rolls back; a level joined inside another's unit of work that succeeds ends with `CommitAsync`.
+- **Readings.**
+  1. It stays: the joined call must commit.
+  2. The method is split, or the port tells a level its depth, so that the outermost call rolls back.
+- **Parked.** That return, left committing.
+- **Answer:** pending.
+
+**134. Tier 3. AUTH-FACT-004 and CONV-DESIGN-003: a domain lock's refusal after the sign-in code is spent.**
+
+- **Item.** `AuthenticationService.CodeAsync` (question 71's operation).
+- **What the code does.** The right code is spent and committed; then `SignInLinks.LockedAsync` may refuse for a domain lock, and that refusal is counted in a second unit of work. The refusal follows a write that is not kept.
+- **What the specification says.** CONV-DESIGN-003: an operation decides every refusal that keeps a write before it makes any write that is not kept, and every return but a success or a kept refusal rolls back.
+- **Parked.** That path, as it was before the part.
+- **Answer:** pending.
+
+**135. Tier 2. AUTH-ABUSE-001 and CONV-LOG-005: a failure that is no refusal inside the code and device paths.**
+
+- **Item.** `AuthenticationService`, the sign-in code and the device code (questions 71 and 73).
+- **What the code does.** A failure such as a setting that does not read is rolled back, then counted and recorded as a failed attempt in a unit of work of its own, as before the part. The registration counts no such failure.
+- **What the specification says.** AUTH-ABUSE-001 counts failed attempts; CONV-LOG-005 records a failed authentication. Neither says whether a fault of the library's own is one.
+- **Readings.**
+  1. It is counted, as the sign-in did.
+  2. It is not: only a refused credential is a failed attempt.
+- **Parked.** Left as it was.
+- **Answer:** pending.
+
+**136. Tier 3. AUTH-ABUSE-008: `BotDefence.CheckAsync` has no caller.**
+
+- **Item.** Question 70.
+- **What the code does.** `BotDefence` is registered and nothing under `src` calls `CheckAsync`, so no signal is recorded and no verifier asked on any route.
+- **What the specification says.** AUTH-ABUSE-008: every signal is recorded, a verifier declared or not, and the routes it names may answer `auth.challenge.required`.
+- **Parked.** The call sites of the check. `BotDefence` itself is as question 70 leaves it.
 - **Answer:** pending.
 
 ## 5. Gate result
