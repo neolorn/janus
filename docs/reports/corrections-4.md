@@ -1241,6 +1241,18 @@ Every site questions 75, 80 and 88 name already undertook its send through `IGov
 - Left to later work: `IdentifierService.AddAsync` and `ReplaceAsync` commit a success that wrote nothing for a reserved value or a holder already told (question 115 rebuilds the path); `PhoneSignals.ConsiderAsync` is asked inside the caller's unit of work (question 70).
 - Parked: question 127.
 
+### `part/registrations`, merged as `594b9a07`: questions 82 to 86
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 85: `Janus.Cli` references `Janus.Privacy` directly; three test lockfiles gain the one line; no package is added. The types only a command uses stay with the commands | `7724c067` | CONV-LAYOUT-001 | `LibraryStructureTests.CONV_LAYOUT_001_AC3_DependenciesAreExactlyTheOnesTheTableGives` |
+| Question 82: the four defaults are registered by `AddCoreArea`, each where none is registered; the host's declaration and `DeclaredProcessing` stay in Hosting | `da126146` | CONV-DESIGN-007 | `PublicSurfaceTests.CONV_DESIGN_007_AC7_TheShippedDefaultsAreTheCoreMethodsEachWhereNoneIsRegistered` |
+| Question 86: as built; each inner composition registers the filled ring and calls `AddStorageArea` | `832df1c2` | CONV-DESIGN-007, CONV-CODE-007 | `PublicSurfaceTests.CONV_DESIGN_007_AJobsOwnCompositionRegistersTheFilledRingAndNeverCallsTheCoreMethod` |
+
+- Question 84: nothing to build; `SendingValidation` stays registered in `DeliveryRegistration.cs`.
+- No changelog line: nothing a reader of the package sees changes. No ledger line is owed.
+- Parked: question 83 and the test of criterion 7's third clause (question 128).
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1265,7 +1277,7 @@ Every site questions 75, 80 and 88 name already undertook its send through `IGov
 | Question 46: the filter half of the six unmet step-up rows; the seven step-up scenarios of the conformance suite | Criterion 2 against the filter of a bound action; how the suite arranges a provider's report | Nothing: D-187 answers questions 92 and 93; not yet built |
 | The correction of `52482ed5`, the step-up half | Which gate the answer is computed against | Nothing: D-187 answers question 94; not yet built |
 | Question 22: the audit record of a grant the drift check writes | No audit action for it | Nothing: D-187 answers question 101; not yet built |
-| Question 57: nine registrations still in Hosting, the commands' own registrations, two inner compositions; the test of criterion 7's third clause | The registrations that could not move | Nothing: D-187 answers questions 82 to 86; not yet built |
+| Question 57: nine registrations still in Hosting, the commands' own registrations, two inner compositions; the test of criterion 7's third clause | The registrations that could not move | Questions 82 and 84 to 86: built (`part/registrations`). Question 83 and the test of the third clause: question 128 |
 | Question 58: the sites the sweep parked | Which refusals keep a write; a send inside a caller's unit; a success that writes nothing | The sends of 75, 80 and 88: built (`part/unit-sends`). The rest: D-186, not yet built |
 | Question 39 for an invitation's erased key | PRIV-RIGHT-005a against the code | Nothing: D-187 answers question 113; not yet built |
 | Question 24 for a caller in process | The rule is internal to `Janus.Core` | Nothing: D-187 answers question 98; not yet built |
@@ -3233,6 +3245,16 @@ part of 389 (3) and waits with 389 on question 48.
   1. The mark stands: one attempt per window. Nothing changes.
   2. A refused notice leaves the window unmarked: the mark is written only once the send is admitted.
 - **Parked.** That site, left as it is.
+- **Answer:** pending.
+
+**128. Tier 3. CONV-DESIGN-007 criterion 7, D-187 question 83 and LIB-API-001: the two factories cannot be built from `IAccessGate`.**
+
+- **Item.** Question 83, and criterion 7's third and fourth clauses.
+- **What the code needs.** `GatedSettings` is built from `AccessGate.RequireSettingsChangeAsync(AccessContext, CancellationToken)` and `GatedUnscopedRefusal` from `AccessGate.RefuseUnscopedAsync(AccessContext, Permission, CancellationToken)`. Both are internal members of `AccessGate`. `IAccessGate` declares neither, and no public member of it gives either answer.
+- **What the specification says.** CONV-DESIGN-007: a factory of `Janus.Hosting` asks for `IAccessGate`, never `AccessGate`; criterion 7: no factory of `Janus.Hosting` names an implementation of another project where a contract of it exists. D-187 question 83: the factories take `IAccessGate`, and the seam test holds `AccessGate` to its own file and Authorization's registration. LIB-API-001 gives `IAccessGate` neither member.
+- **The contradiction.** The factories must work from `IAccessGate`, and the members they need exist on `AccessGate` alone. Reaching them is a change to the public `IAccessGate`, a new type, or `AccessGate` named in `Janus.Hosting`; no chapter states which.
+- **A second site of the same shape.** The factory of `MailServerTokens` in `HostingRegistration.cs` asks for `OidcService`, which implements `IOidc`, for `OidcService.MintAsync`, which `IOidc` does not declare. `AuthorizationIssue`, `TokenIssue` and `TokenReuse` take `OidcService` by constructor.
+- **Parked.** All of question 83 (the move of `AccessGate` and `IAccessGate`, the two factories, the seam test) and the tests of criterion 7's third and fourth clauses. With question 82 built, what `AddJanus` registers of other projects' types is `SendingValidation`, `AuthorizationDeclaration`, `DeclaredProcessing` and `AccessGate`.
 - **Answer:** pending.
 
 ## 5. Gate result
