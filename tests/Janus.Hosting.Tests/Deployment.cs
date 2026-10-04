@@ -1164,6 +1164,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<RegisteredSecrets>();
         _ = services.AddScoped<OidcService>();
         _ = services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
+        _ = services.AddScoped<ITokenMinting>(provider => provider.GetRequiredService<OidcService>());
         _ = services.AddSingleton(provider => new SigningCredentialSource(
             provider.GetRequiredService<IServiceScopeFactory>(),
             provider.GetRequiredService<TimeProvider>()));
