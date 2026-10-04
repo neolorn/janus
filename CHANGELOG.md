@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A route or query value that does not read as its type is refused 400
+  `api.request.malformed` with `details.member` naming it, the first in the order the
+  endpoint declares where more than one does not read. An identifier in a path that is
+  not a UUID was answered 404 before and is now this refusal, and a restriction name
+  outside the rule of a name is refused the same way on every `/admin/restrictions`
+  route that takes one. `RoleName`, `ResourceType`, `ResourceId` and
+  `ConfigurationKey` implement `IParsable<T>`.
 - A second step (a code generator, a security key under two-step) or a recovery-code
   set asked for on an account that holds no password is refused 409
   `auth.factor.passwordrequired`, where it answered 422 `auth.factor.notpermitted`.

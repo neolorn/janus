@@ -444,7 +444,10 @@ public sealed class BrowserProfileTests : IDisposable
     /// needs less than the stages give it (BFF-STEP-001). The third reader is the
     /// logging of BFF-LOG-002, which only ever takes a body out of a log, and the
     /// fourth is error translation, which asks only whether routing found an endpoint,
-    /// once every stage has run, to answer a path none serves. The one stage that
+    /// once every stage has run, to answer a path none serves. The fifth is the
+    /// declaration of CONV-DESIGN-006, which the stage that answers a request the
+    /// framework could not bind reads after the endpoint was reached, to name the value
+    /// that did not parse; it enforces nothing and excuses nothing. The one stage that
     /// reads a key is the flood limit of stage 4, which reads its two limits and nothing
     /// else (BFF-ORDER-001), runs before the token is checked and either refuses the
     /// request or hands it on to every stage after it.
@@ -453,7 +456,15 @@ public sealed class BrowserProfileTests : IDisposable
     public void AUTH_SESS_007_AC2_NoEndpointCanOptOut()
     {
         Assert.Equal(
-            ["ErrorTranslation.cs", "SensitiveBodyLogging.cs", "SessionRequired.cs", "SessionRequirement.cs"],
+            [
+                "EndpointDeclaration.cs",
+                "EndpointDeclarations.cs",
+                "ErrorTranslation.cs",
+                "MalformedRequest.cs",
+                "SensitiveBodyLogging.cs",
+                "SessionRequired.cs",
+                "SessionRequirement.cs",
+            ],
             Reading("GetEndpoint", "Metadata"));
         Assert.DoesNotContain("Metadata", Repository.Source("ErrorTranslation"), StringComparison.Ordinal);
 
@@ -569,13 +580,24 @@ public sealed class BrowserProfileTests : IDisposable
     /// a request, and that is settled in the one place the library names the routes.
     /// The one other reader of the metadata is the logging of BFF-LOG-002, which
     /// enforces no token and only ever takes a body out of a log; error translation
-    /// reads no metadata, only whether an endpoint was found, after every stage.
+    /// reads no metadata, only whether an endpoint was found, after every stage. The
+    /// declaration of CONV-DESIGN-006 is read by the stage that answers a request the
+    /// framework could not bind, after the endpoint was reached, to name the value that
+    /// did not parse; it enforces no token and excuses none.
     /// </summary>
     [Fact]
     public void BFF_CSRF_001_AC2_NoEndpointCanBeExcludedByConfigurationOrAttribute()
     {
         Assert.Equal(
-            ["ErrorTranslation.cs", "SensitiveBodyLogging.cs", "SessionRequired.cs", "SessionRequirement.cs"],
+            [
+                "EndpointDeclaration.cs",
+                "EndpointDeclarations.cs",
+                "ErrorTranslation.cs",
+                "MalformedRequest.cs",
+                "SensitiveBodyLogging.cs",
+                "SessionRequired.cs",
+                "SessionRequirement.cs",
+            ],
             Reading("GetEndpoint", "Metadata"));
         Assert.DoesNotContain("Metadata", Repository.Source("ErrorTranslation"), StringComparison.Ordinal);
 

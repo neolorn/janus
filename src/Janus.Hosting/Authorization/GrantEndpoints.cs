@@ -40,9 +40,11 @@ internal static class GrantEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        _ = SessionRequired.On(endpoints.MapGet("/admin/grants", HeldAsync));
+        _ = SessionRequired.On(endpoints.MapGet("/admin/grants", HeldAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<OrganizationId>("organization"));
         _ = SessionRequired.On(endpoints.MapPost("/admin/grants", GrantAsync));
-        _ = SessionRequired.On(endpoints.MapDelete("/admin/grants/{id:guid}", RevokeAsync));
+        _ = SessionRequired.On(endpoints.MapDelete("/admin/grants/{id}", RevokeAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<GrantId>("id"));
 
         return endpoints;
     }
@@ -50,18 +52,13 @@ internal static class GrantEndpoints
     private static async Task<IResult> HeldAsync(
         IGrants grants,
         RequestSession browser,
-        string? organization,
+        OrganizationId organization,
         string? subjectType,
         string? subjectId,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(grants);
         ArgumentNullException.ThrowIfNull(browser);
-
-        if (!Guid.TryParse(organization, out Guid whose))
-        {
-            return Answers.Malformed("organization");
-        }
 
         SubjectType? type = subjectType switch
         {
@@ -84,7 +81,7 @@ internal static class GrantEndpoints
             await grants
                 .HeldAsync(
                     browser.Asking,
-                    new OrganizationId(whose),
+                    organization,
                     new GrantSubject(holderType, holder),
                     cancellationToken)
                 .ConfigureAwait(false),

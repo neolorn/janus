@@ -61,8 +61,10 @@ internal static class PrivacyEndpoints
 
         _ = SessionRequired.On(queue.MapGet("/", QueueAsync));
         _ = SessionRequired.On(queue.MapPost("/", EnterAsync));
-        _ = SessionRequired.On(queue.MapPost("/{request:guid}/fulfil", FulfilAsync));
-        _ = SessionRequired.On(queue.MapPost("/{request:guid}/refuse", RefuseAsync));
+        _ = SessionRequired.On(queue.MapPost("/{request}/fulfil", FulfilAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<PrivacyRequestId>("request"));
+        _ = SessionRequired.On(queue.MapPost("/{request}/refuse", RefuseAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<PrivacyRequestId>("request"));
 
         return endpoints;
     }

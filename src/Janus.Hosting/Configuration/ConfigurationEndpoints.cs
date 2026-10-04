@@ -36,8 +36,10 @@ internal static class ConfigurationEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        _ = SessionRequired.On(endpoints.MapGet("/admin/config/{key}", ReadAsync));
-        _ = SessionRequired.On(endpoints.MapPut("/admin/config/{key}", ChangeAsync));
+        _ = SessionRequired.On(endpoints.MapGet("/admin/config/{key}", ReadAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<ConfigurationKey>("key"));
+        _ = SessionRequired.On(endpoints.MapPut("/admin/config/{key}", ChangeAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<ConfigurationKey>("key"));
 
         return endpoints;
     }
@@ -46,7 +48,7 @@ internal static class ConfigurationEndpoints
         IConfigurationAdministration administration,
         AuthorizationDeclaration declaration,
         RequestSession browser,
-        string key,
+        ConfigurationKey key,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(administration);
@@ -74,7 +76,7 @@ internal static class ConfigurationEndpoints
         IConfigurationAdministration administration,
         AuthorizationDeclaration declaration,
         RequestSession browser,
-        string key,
+        ConfigurationKey key,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
@@ -122,13 +124,13 @@ internal static class ConfigurationEndpoints
             Nothing);
     }
 
-    // The catalogue and the categories the host declared are what name a key; a name
-    // outside them, or outside the key format, is not a key this interface knows.
-    private static ConfigurationKey? Known(string key, AuthorizationDeclaration declaration) =>
+    // The catalogue and the categories the host declared are what name a key; a
+    // well-formed name outside them is not a key this interface knows.
+    private static ConfigurationKey? Known(ConfigurationKey key, AuthorizationDeclaration declaration) =>
         Settings.All
             .Select(setting => setting.Key)
             .Concat(declaration.RetentionFloors.Keys.Select(Settings.HostCategoryRetention.For))
-            .Where(known => string.Equals(known.ToString(), key, StringComparison.Ordinal))
+            .Where(known => known == key)
             .Select(known => (ConfigurationKey?)known)
             .FirstOrDefault();
 }

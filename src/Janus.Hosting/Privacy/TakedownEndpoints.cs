@@ -31,11 +31,14 @@ internal static class TakedownEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        RouteGroupBuilder group = endpoints.MapGroup("/admin/accounts/{subject:guid}/takedown");
+        RouteGroupBuilder group = endpoints.MapGroup("/admin/accounts/{subject}/takedown");
 
-        _ = SessionRequired.On(group.MapPost("/", ExecuteAsync));
-        _ = SessionRequired.On(group.MapGet("/", ReadAsync));
-        _ = SessionRequired.On(group.MapPost("/reverse", ReverseAsync));
+        _ = SessionRequired.On(group.MapPost("/", ExecuteAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<SubjectId>("subject"));
+        _ = SessionRequired.On(group.MapGet("/", ReadAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<SubjectId>("subject"));
+        _ = SessionRequired.On(group.MapPost("/reverse", ReverseAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<SubjectId>("subject"));
 
         return endpoints;
     }

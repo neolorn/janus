@@ -35,13 +35,18 @@ internal static class AccountAdministrationEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        RouteGroupBuilder group = endpoints.MapGroup("/admin/accounts/{subject:guid}");
+        RouteGroupBuilder group = endpoints.MapGroup("/admin/accounts/{subject}");
 
-        _ = SessionRequired.On(group.MapPost("/suspend", SuspendAsync));
-        _ = SessionRequired.On(group.MapPost("/reactivate", ReactivateAsync));
-        _ = SessionRequired.On(group.MapPost("/restriction/lift", LiftRestrictionAsync));
-        _ = SessionRequired.On(group.MapPost("/delete/cancel", CancelDeletionAsync));
-        _ = SessionRequired.On(group.MapGet("/photo", ReadPhotoAsync));
+        _ = SessionRequired.On(group.MapPost("/suspend", SuspendAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<SubjectId>("subject"));
+        _ = SessionRequired.On(group.MapPost("/reactivate", ReactivateAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<SubjectId>("subject"));
+        _ = SessionRequired.On(group.MapPost("/restriction/lift", LiftRestrictionAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<SubjectId>("subject"));
+        _ = SessionRequired.On(group.MapPost("/delete/cancel", CancelDeletionAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<SubjectId>("subject"));
+        _ = SessionRequired.On(group.MapGet("/photo", ReadPhotoAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<SubjectId>("subject"));
 
         return endpoints;
     }

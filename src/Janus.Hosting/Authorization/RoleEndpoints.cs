@@ -40,7 +40,8 @@ internal static class RoleEndpoints
 
         _ = SessionRequired.On(endpoints.MapGet("/admin/roles", AllAsync));
         _ = SessionRequired.On(endpoints.MapPost("/admin/roles", DefineAsync));
-        _ = SessionRequired.On(endpoints.MapDelete("/admin/roles/{name}", RemoveAsync));
+        _ = SessionRequired.On(endpoints.MapDelete("/admin/roles/{name}", RemoveAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<RoleName>("name"));
 
         return endpoints;
     }
@@ -108,17 +109,12 @@ internal static class RoleEndpoints
         [FromBody] RoleRemovalBody body,
         IRoles roles,
         RequestSession browser,
-        string name,
+        RoleName name,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(roles);
         ArgumentNullException.ThrowIfNull(browser);
-
-        if (!RoleName.TryParse(name, out RoleName role))
-        {
-            return Answers.Malformed("name");
-        }
 
         // API-CONV-002, X4: the reason is free text, 1 to 1024 characters after
         // trimming, refused before the service is called (CONV-CODE-006 AC2).
@@ -132,7 +128,7 @@ internal static class RoleEndpoints
                 .RemoveAsync(
                     browser.Asking,
                     browser.Required.Id,
-                    role,
+                    name,
                     reason,
                     cancellationToken)
                 .ConfigureAwait(false),

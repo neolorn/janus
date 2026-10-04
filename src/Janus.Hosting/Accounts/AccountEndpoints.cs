@@ -55,20 +55,28 @@ internal static class AccountEndpoints
         _ = SessionRequired.On(group.MapPut("/preferences", SetPreferencesAsync));
 
         _ = SessionRequired.On(group.MapPost("/identifiers", AddIdentifierAsync));
-        _ = group.MapPost("/identifiers/{id:guid}/verify", VerifyIdentifierAsync);
-        _ = SessionRequired.On(group.MapPost("/identifiers/{id:guid}/primary", MakePrimaryAsync));
+        _ = group.MapPost("/identifiers/{id}/verify", VerifyIdentifierAsync)
+            .Declares(EndpointDeclaration.Answering().Binding<IdentifierId>("id"));
+        _ = SessionRequired.On(group.MapPost("/identifiers/{id}/primary", MakePrimaryAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<IdentifierId>("id"));
         _ = SessionRequired.On(group.MapPut("/identifiers/backup", SetBackupAsync));
-        _ = SessionRequired.On(group.MapDelete("/identifiers/{id:guid}", RemoveIdentifierAsync));
-        _ = group.MapPost("/identifiers/{id:guid}/undo", UndoIdentifierAsync);
-        _ = group.MapPut("/identifiers/{id:guid}/replace", ReplaceIdentifierAsync);
-        _ = group.MapPost("/identifiers/{id:guid}/abandon", AbandonIdentifierAsync);
+        _ = SessionRequired.On(group.MapDelete("/identifiers/{id}", RemoveIdentifierAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<IdentifierId>("id"));
+        _ = group.MapPost("/identifiers/{id}/undo", UndoIdentifierAsync)
+            .Declares(EndpointDeclaration.Answering().Binding<IdentifierId>("id"));
+        _ = group.MapPut("/identifiers/{id}/replace", ReplaceIdentifierAsync)
+            .Declares(EndpointDeclaration.Answering().Binding<IdentifierId>("id"));
+        _ = group.MapPost("/identifiers/{id}/abandon", AbandonIdentifierAsync)
+            .Declares(EndpointDeclaration.Answering().Binding<IdentifierId>("id"));
 
         _ = SessionRequired.On(group.MapGet("/credentials", ListCredentialsAsync));
-        _ = SessionRequired.On(group.MapPatch("/credentials/{id:guid}", LabelCredentialAsync));
+        _ = SessionRequired.On(group.MapPatch("/credentials/{id}", LabelCredentialAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<AuthenticatorId>("id"));
         _ = SessionRequired.On(group.MapPut("/secondstep/preferred", PreferSecondStepAsync));
 
         _ = SessionRequired.On(group.MapGet("/sessions", ListSessionsAsync));
-        _ = SessionRequired.On(group.MapDelete("/sessions/{id:guid}", EndSessionAsync));
+        _ = SessionRequired.On(group.MapDelete("/sessions/{id}", EndSessionAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<SessionId>("id"));
 
         _ = SessionRequired.On(group.MapPost("/deactivate", DeactivateAsync));
         _ = group.MapPost("/reactivate", ReactivateAsync);

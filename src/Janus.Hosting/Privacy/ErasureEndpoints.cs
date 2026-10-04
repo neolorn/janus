@@ -36,8 +36,10 @@ internal static class ErasureEndpoints
         RouteGroupBuilder group = endpoints.MapGroup("/admin/erasures");
 
         _ = SessionRequired.On(group.MapGet("/", ListAsync));
-        _ = SessionRequired.On(group.MapGet("/{id:guid}", ReadAsync));
-        _ = SessionRequired.On(group.MapPost("/{id:guid}/complete", CompleteAsync));
+        _ = SessionRequired.On(group.MapGet("/{id}", ReadAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<ErasureId>("id"));
+        _ = SessionRequired.On(group.MapPost("/{id}/complete", CompleteAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<ErasureId>("id"));
 
         return endpoints;
     }

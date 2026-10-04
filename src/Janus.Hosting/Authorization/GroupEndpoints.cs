@@ -36,11 +36,15 @@ internal static class GroupEndpoints
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        _ = SessionRequired.On(endpoints.MapGet("/admin/groups", InAsync));
+        _ = SessionRequired.On(endpoints.MapGet("/admin/groups", InAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<OrganizationId>("organization"));
         _ = SessionRequired.On(endpoints.MapPost("/admin/groups", CreateAsync));
-        _ = SessionRequired.On(endpoints.MapDelete("/admin/groups/{id:guid}", RemoveAsync));
-        _ = SessionRequired.On(endpoints.MapPost("/admin/groups/{id:guid}/members", AddMemberAsync));
-        _ = SessionRequired.On(endpoints.MapDelete("/admin/groups/{id:guid}/members", RemoveMemberAsync));
+        _ = SessionRequired.On(endpoints.MapDelete("/admin/groups/{id}", RemoveAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<GroupId>("id"));
+        _ = SessionRequired.On(endpoints.MapPost("/admin/groups/{id}/members", AddMemberAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<GroupId>("id"));
+        _ = SessionRequired.On(endpoints.MapDelete("/admin/groups/{id}/members", RemoveMemberAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<GroupId>("id"));
 
         return endpoints;
     }
@@ -48,22 +52,17 @@ internal static class GroupEndpoints
     private static async Task<IResult> InAsync(
         IGroups groups,
         RequestSession browser,
-        string? organization,
+        OrganizationId organization,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(groups);
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (!Guid.TryParse(organization, out Guid whose))
-        {
-            return Answers.Malformed("organization");
-        }
-
         return Answers.Of(
             await groups
                 .InAsync(
                     browser.Asking,
-                    new OrganizationId(whose),
+                    organization,
                     cancellationToken)
                 .ConfigureAwait(false),
             held => TypedResults.Json<IReadOnlyList<GroupView>>(

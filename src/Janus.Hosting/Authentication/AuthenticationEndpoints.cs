@@ -60,7 +60,8 @@ internal static class AuthenticationEndpoints
         RouteGroupBuilder devices = endpoints.MapGroup("/account/devices");
 
         _ = SessionRequired.On(devices.MapGet("/", ListDevicesAsync));
-        _ = SessionRequired.On(devices.MapDelete("/{id:guid}", ForgetDeviceAsync));
+        _ = SessionRequired.On(devices.MapDelete("/{id}", ForgetDeviceAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<DeviceId>("id"));
 
         return endpoints;
     }

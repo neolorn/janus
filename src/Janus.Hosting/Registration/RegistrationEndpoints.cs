@@ -53,12 +53,15 @@ internal static class RegistrationEndpoints
         _ = group.MapPut("/phone", PhoneAsync);
         _ = group.MapPost("/phone/skip", SkipPhoneAsync);
         _ = group.MapPost("/identifiers", AddAsync);
-        _ = group.MapPut("/identifiers/{id:guid}", ChangeAsync);
-        _ = group.MapDelete("/identifiers/{id:guid}", DiscardAsync);
+        _ = group.MapPut("/identifiers/{id}", ChangeAsync)
+            .Declares(EndpointDeclaration.Answering().Binding<IdentifierId>("id"));
+        _ = group.MapDelete("/identifiers/{id}", DiscardAsync)
+            .Declares(EndpointDeclaration.Answering().Binding<IdentifierId>("id"));
         _ = group.MapPost("/confirm", ConfirmAsync);
         _ = group.MapPut("/security", SecurityAsync);
         _ = group.MapPost("/terms", TermsAsync);
-        _ = group.MapPost("/verify/{id:guid}", VerifyAsync);
+        _ = group.MapPost("/verify/{id}", VerifyAsync)
+            .Declares(EndpointDeclaration.Answering().Binding<IdentifierId>("id"));
         _ = group.MapGet("/events", EventsAsync);
         _ = group.MapPost("/abandon", AbandonAsync);
 

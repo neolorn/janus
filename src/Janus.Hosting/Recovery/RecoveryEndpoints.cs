@@ -43,7 +43,8 @@ internal static class RecoveryEndpoints
         _ = group.MapPost("/begin", BeginAsync);
         _ = group.MapPost("/complete", CompleteAsync);
         _ = SessionRequired.On(group.MapPost("/report-loss", ReportLossAsync));
-        _ = group.MapPost("/report-loss/{id:guid}/cancel", CancelLossAsync);
+        _ = group.MapPost("/report-loss/{id}/cancel", CancelLossAsync)
+            .Declares(EndpointDeclaration.Answering().Binding<AuthenticatorId>("id"));
 
         _ = SessionRequired.On(endpoints.MapPost("/admin/recovery/approve", ApproveAsync));
         _ = endpoints.MapPost("/enrol/begin", EnrolAsync);
