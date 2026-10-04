@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Policies;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -17,6 +18,7 @@ namespace Janus.Hosting.Alerting;
 /// change alert reaches them and not their replacements, so that redirecting the
 /// alerting cannot be done quietly by whoever holds one stepped-up session.
 /// </summary>
+/// <param name="scope">Whether the caller may still change the configuration.</param>
 /// <param name="configuration">Where the destination lists are read.</param>
 /// <param name="administration">The one operation a runtime setting is written through.</param>
 /// <param name="router">What carries the alert to the previous destinations.</param>
@@ -24,10 +26,11 @@ namespace Janus.Hosting.Alerting;
 /// <param name="work">The transaction the change and its event are written in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements OPS-ALERT-004a and OPS-ALERT-004. The notice is not suppressible: no
-/// setting reaches it, which is the hole the requirement closed.
+/// Implements OPS-ALERT-004a, OPS-ALERT-004 and AUTHZ-GATE-006. The notice is not
+/// suppressible: no setting reaches it, which is the hole the requirement closed.
 /// </remarks>
 internal sealed class AlertDestinationChange(
+    AdministrativeScope scope,
     IConfigurationStore configuration,
     ConfigurationAdministration administration,
     AlertRouter router,
@@ -135,6 +138,19 @@ internal sealed class AlertDestinationChange(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-186: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written. The notice given
+        // above stands as the notice of a change requested and not made, as it does for a
+        // change refused as superseded (OPS-ALERT-004a AC8).
+        if (await scope.RefusedAsync(context, Permissions.ConfigurationManage, cancellationToken)
+                .ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
         }
 
         // OPS-ALERT-004a AC7: the destinations told above are those the change replaces

@@ -86,6 +86,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
         var administrative = OrganizationId.New(_clock);
         _administrative.Organization = administrative;
         _gate.GrantEveryone(administrative, Permissions.SystemAdminister);
+        _gate.GrantEveryone(administrative, Permissions.ConfigurationManage);
     }
 
     private AlertDestinationChange Change => Announcing(_events);
@@ -94,6 +95,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
     // an event row that cannot be written without refusing the sends before it.
     private AlertDestinationChange Announcing(IEvents announced) =>
         new(
+            new AdministrativeScope(_gate, _administrative),
             _configuration,
             new ConfigurationAdministration(
                 _configuration,
@@ -249,6 +251,43 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
         Assert.Equal(winner, await DestinationsAsync(Settings.AlertingEmailDestinations));
         Assert.Empty(_changes.Written);
         Assert.Empty(_events.Published.OfType<AlertRaised>());
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(_work.Opened, _work.Committed + _work.RolledBack);
+    }
+
+    /// <summary>
+    /// OPS-ALERT-004a AC8 and AUTHZ-GATE-006: a change whose account was restricted after
+    /// its previous destinations were told is refused <c>authz.restricted</c> when the
+    /// gate is asked again inside its unit of work. It writes nothing and raises no
+    /// <c>alert-destination-changed</c>, and the notice already given stands.
+    /// </summary>
+    [Fact]
+    public async Task OPS_ALERT_004a_AC8_AChangeRefusedAtTheSecondAskWritesNothingAndItsNoticeStandsAsync()
+    {
+        var actor = SubjectId.New(_randomness);
+
+        bool held = false;
+
+        _mail.Handed = () => _gate.Restrict(actor);
+        _configuration.Holding = _ => held = true;
+
+        Result refused = await Change.ChangeAsync(
+            SendKind.Email,
+            Elsewhere,
+            "an incident",
+            Satisfied,
+            AccessContext.Of(actor),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.Restricted, refused.Match(() => default(ErrorCode?), error => error.Code));
+        Assert.Equal(
+            ThreeAddresses.Order(StringComparer.Ordinal),
+            _mail.Taken.Select(mail => mail.Destination.Value).Order(StringComparer.Ordinal));
+        Assert.Equal(ThreeAddresses, await DestinationsAsync(Settings.AlertingEmailDestinations));
+        Assert.Empty(_changes.Written);
+        Assert.Empty(_events.Published.OfType<AlertRaised>());
+        Assert.False(held);
         Assert.False(_work.Open);
         Assert.Equal(1, _work.RolledBack);
         Assert.Equal(_work.Opened, _work.Committed + _work.RolledBack);

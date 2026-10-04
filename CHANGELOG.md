@@ -128,6 +128,12 @@ against the public contract of LIB-API-001.
   first ask refuses the completion `authz.restricted` and closes nothing. A ledger line
   the completion appended before its unit of work stands, and a replay reads a line
   appended twice as one erasure.
+- A change of an alert destination list asks the gate again inside its unit of work
+  before the first write. A restriction of the acting account committed after the first
+  ask refuses the change `authz.restricted`: nothing is written and no
+  `alert-destination-changed` is raised, and the notice already given to the
+  destinations it would have replaced stands as the notice of a change requested and
+  not made.
 - The shipped mail-server adapter lists an account whose `emailAddress` does not read as
   an email address, or that holds none, with no address, where it failed the listing
   for an account holding none. Reconciliation reads such a listing whole: the account

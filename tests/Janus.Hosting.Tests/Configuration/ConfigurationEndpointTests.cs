@@ -474,6 +474,42 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-ALERT-004a AC8 and AUTHZ-GATE-006: a restriction of the caller committed after
+    /// the gate step refuses a destination change 403 <c>authz.restricted</c> inside its
+    /// unit of work. The list in force is unchanged, no change is written down, and the
+    /// destinations it would have replaced were told of the change requested.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_ALERT_004a_AC8_ADestinationChangeRefusedAtTheSecondAskLeavesItsNoticeStandingAsync()
+    {
+        _deployment.Configuration.Set(Settings.NotificationLanguages, OneLanguage);
+        _deployment.Configuration.Set(Settings.AlertingEmailDestinations, Operations);
+
+        Browser administrator = await AuthorisedAsync(
+            Permissions.ConfigurationManage,
+            Permissions.SystemAdminister);
+
+        int before = _deployment.Mail.Taken.Count;
+        int raised = _deployment.Events.Of<AlertRaised>().Count;
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync(
+                "PUT",
+                "/admin/config/alerting.email.destinations",
+                ("value", Elsewhere),
+                ("reason", "a new rota")));
+
+        Assert.Contains(
+            _deployment.Mail.Taken.Skip(before),
+            mail => string.Equals(mail.Destination.Value, Operations[0], StringComparison.Ordinal));
+        Assert.Equal(Operations, await InForceAsync(Settings.AlertingEmailDestinations));
+        Assert.Empty(_deployment.Changes.Written);
+        Assert.Equal(raised, _deployment.Events.Of<AlertRaised>().Count);
+    }
+
+    /// <summary>
     /// CONV-CODE-006 AC2 and chapter 09 section 8: a change whose body carries no reason
     /// is refused with the reason code, naming the key, before the service is reached,
     /// so a caller the service would refuse for want of the permission is answered for
