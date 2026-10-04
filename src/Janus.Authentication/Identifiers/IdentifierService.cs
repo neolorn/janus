@@ -149,8 +149,9 @@ internal sealed class IdentifierService(
 
         if (Standing(held, canonical) is null && held.OfKind(kind).Count >= maximum)
         {
-            return await SettledAsync(Error.From(ErrorCodes.IdentifierMaximum), cancellationToken)
-                .ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.IdentifierMaximum));
         }
 
         Error? refused = await StageAsync(
@@ -159,6 +160,8 @@ internal sealed class IdentifierService(
 
         if (refused is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(refused);
         }
 
@@ -247,14 +250,18 @@ internal sealed class IdentifierService(
             || waiting.Subject != subject
             || waiting.Staged is { IsVerified: true } or { CodeExpiresAt: null } or { Code: null })
         {
-            return await SettledAsync(Error.From(ErrorCodes.CodeInvalid), cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.CodeInvalid));
         }
 
         StagedIdentity staged = waiting.Staged;
 
         if (now >= staged.CodeExpiresAt)
         {
-            return await SettledAsync(Error.From(ErrorCodes.CodeExpired), cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.CodeExpired));
         }
 
         Error? failure = null;
@@ -265,7 +272,9 @@ internal sealed class IdentifierService(
 
         if (failure is not null)
         {
-            return await SettledAsync(failure, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(failure);
         }
 
         if (staged.CodeSpent || !VerificationCode.Matches(staged.Code!, code))
@@ -274,7 +283,10 @@ internal sealed class IdentifierService(
 
             await pending.RecordAsync(waiting, cancellationToken).ConfigureAwait(false);
 
-            return await SettledAsync(Error.From(ErrorCodes.CodeInvalid), cancellationToken).ConfigureAwait(false);
+            // AUTH-FACT-004, CONV-DESIGN-003: the wrong try is counted on the code's
+            // record whatever the outcome, so this refusal commits the count alone.
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(() => Result.Failure(Error.From(ErrorCodes.CodeInvalid)), Result.Failure);
         }
 
         staged.Verify(now);
@@ -284,6 +296,8 @@ internal sealed class IdentifierService(
 
         if (settled.Match(() => (Error?)null, error => error) is Error unsettled)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unsettled);
         }
 
@@ -337,8 +351,9 @@ internal sealed class IdentifierService(
             if (await pending.FindForUpdateAsync(waiting.Identifier, cancellationToken).ConfigureAwait(false)
                 is not PendingVerification confirming)
             {
-                return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                    .Match(() => Result.Failure<LinkLanding>(Error.From(ErrorCodes.CodeInvalid)), Result.Failure<LinkLanding>);
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure<LinkLanding>(Error.From(ErrorCodes.CodeInvalid));
             }
 
             waiting = confirming;
@@ -352,6 +367,8 @@ internal sealed class IdentifierService(
 
             if (settled.Match(() => (Error?)null, error => error) is Error unsettled)
             {
+                await work.RollbackAsync().ConfigureAwait(false);
+
                 return Result.Failure<LinkLanding>(unsettled);
             }
 
@@ -393,8 +410,9 @@ internal sealed class IdentifierService(
         if (await pending.FindForUpdateAsync(waiting.Identifier, cancellationToken).ConfigureAwait(false)
             is not PendingVerification pressing)
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Failure<LinkLanding>(Error.From(ErrorCodes.CodeInvalid)), Result.Failure<LinkLanding>);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<LinkLanding>(Error.From(ErrorCodes.CodeInvalid));
         }
 
         waiting = pressing;
@@ -413,6 +431,8 @@ internal sealed class IdentifierService(
 
         if (landed.Match(() => (Error?)null, error => error) is Error unlanded)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<LinkLanding>(unlanded);
         }
 
@@ -510,7 +530,9 @@ internal sealed class IdentifierService(
 
         if (Unpromotable(held.Find(identifier)) is Error moved)
         {
-            return await SettledAsync(moved, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(moved);
         }
 
         HeldIdentifier promoted = held.Find(identifier)!;
@@ -539,6 +561,8 @@ internal sealed class IdentifierService(
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unpublished);
         }
 
@@ -596,7 +620,9 @@ internal sealed class IdentifierService(
 
         if (Named(held, kind, choice, named) is Error moved)
         {
-            return await SettledAsync(moved, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(moved);
         }
 
         await directory
@@ -688,7 +714,9 @@ internal sealed class IdentifierService(
 
         if (await UnremovableAsync(held, identifier, cancellationToken).ConfigureAwait(false) is Error moved)
         {
-            return await SettledAsync(moved, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(moved);
         }
 
         HeldIdentifier going = held.Find(identifier)!;
@@ -720,6 +748,8 @@ internal sealed class IdentifierService(
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unpublished);
         }
 
@@ -781,8 +811,9 @@ internal sealed class IdentifierService(
                 .GivenUpAsync(OpaqueToken.Of(linkToken).Fingerprint(), cancellationToken)
                 .ConfigureAwait(false) is null)
         {
-            return await SettledAsync(Error.From(ErrorCodes.ChangeWindowElapsed), cancellationToken)
-                .ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.ChangeWindowElapsed));
         }
 
         await directory.TakeBackAsync(given.Id, maximum, cancellationToken).ConfigureAwait(false);
@@ -810,6 +841,8 @@ internal sealed class IdentifierService(
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unpublished);
         }
 
@@ -987,6 +1020,8 @@ internal sealed class IdentifierService(
         if (await SendCodeAsync(waiting, source, cancellationToken).ConfigureAwait(false)
             is Error refused)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(refused);
         }
 
@@ -994,6 +1029,8 @@ internal sealed class IdentifierService(
             && await AskOldAsync(waiting, changing, source, cancellationToken).ConfigureAwait(false)
                 is Error asked)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(asked);
         }
 
@@ -1122,11 +1159,6 @@ internal sealed class IdentifierService(
 
         return waiting is null ? null : (waiting, fingerprint);
     }
-
-    // A refusal decided under the set's lock ends the transaction that took the lock.
-    private async ValueTask<Result> SettledAsync(Error refusal, CancellationToken cancellationToken) =>
-        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match(() => Result.Failure(refusal), Result.Failure);
 
     // The personal email stays on the account for the whole membership (REG-MAIL-001),
     // the primary of a kind is not removed, and neither is the last way a kind reaches.

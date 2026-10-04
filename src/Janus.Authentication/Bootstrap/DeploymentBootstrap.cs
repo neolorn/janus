@@ -165,6 +165,8 @@ internal sealed class DeploymentBootstrap(
         // OPS-BOOT-001 AC1: a deployment that has a system administrator is stood up.
         if (await seed.AdministeredAsync(cancellationToken).ConfigureAwait(false))
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<BootstrapEnrolment>(Error.From(ErrorCodes.Denied));
         }
 
@@ -198,6 +200,8 @@ internal sealed class DeploymentBootstrap(
 
         if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<BootstrapEnrolment>(failure);
         }
 
@@ -209,6 +213,8 @@ internal sealed class DeploymentBootstrap(
 
         if (affirmation is not AttributeRequirement.Off && !adult)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<BootstrapEnrolment>(Error.From(ErrorCodes.ProfileUnderage));
         }
 
@@ -258,6 +264,8 @@ internal sealed class DeploymentBootstrap(
         if (await JoinAsync(administrator, organization, [SystemAdministrator], now, cancellationToken).ConfigureAwait(false)
             is Error unjoined)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<BootstrapEnrolment>(unjoined);
         }
 
@@ -292,6 +300,8 @@ internal sealed class DeploymentBootstrap(
         if (await JoinAsync(emergency, organization, [SystemAdministrator], now, cancellationToken).ConfigureAwait(false)
             is Error unjoinedEmergency)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<BootstrapEnrolment>(unjoinedEmergency);
         }
 
@@ -316,6 +326,8 @@ internal sealed class DeploymentBootstrap(
         if (await JoinAsync(canary, organization, [], now, cancellationToken).ConfigureAwait(false)
             is Error unjoinedCanary)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<BootstrapEnrolment>(unjoinedCanary);
         }
 
@@ -351,6 +363,8 @@ internal sealed class DeploymentBootstrap(
                 .ConfigureAwait(false))
             .Match(() => (Error?)null, error => error) is Error unannounced)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<BootstrapEnrolment>(unannounced);
         }
 

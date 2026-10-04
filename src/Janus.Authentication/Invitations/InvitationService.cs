@@ -234,17 +234,17 @@ internal sealed class InvitationService(
         if ((await directory.HoldAsync(organization, cancellationToken).ConfigureAwait(false))?.DeletionRequestedAt
             is not null)
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(
-                    () => Result.Failure<IssuedInvitation>(Error.From(ErrorCodes.Denied)),
-                    Result.Failure<IssuedInvitation>);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<IssuedInvitation>(Error.From(ErrorCodes.Denied));
         }
 
         if ((await RolesAsync(context, organization, attached, held: true, cancellationToken).ConfigureAwait(false))
             .Match<Error?>(_ => null, error => error) is Error unnamed)
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Failure<IssuedInvitation>(unnamed), Result.Failure<IssuedInvitation>);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<IssuedInvitation>(unnamed);
         }
 
         if (reservation is not null)
@@ -338,14 +338,18 @@ internal sealed class InvitationService(
         held = await invitations.FindForUpdateAsync(invitation, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("An invitation's row is never removed.");
 
+        if (held.IsAcknowledged)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.InvitationExpired));
+        }
+
+        // An invitation revoked meanwhile stands as asked: the operation is done with
+        // nothing to write.
         if (!held.Stands)
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(
-                    () => held.IsAcknowledged
-                        ? Result.Failure(Error.From(ErrorCodes.InvitationExpired))
-                        : Result.Success(),
-                    Result.Failure);
+            return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
 
         await WithdrawnAsync(held, acting, context.BreakGlassReason, now, cancellationToken).ConfigureAwait(false);

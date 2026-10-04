@@ -651,6 +651,9 @@ public sealed class InvitationServiceTests : IAsyncDisposable
             _organizations.Seed(organization, deletionRequestedAt: Noon, name: _organizations.NameOf(organization));
 
         Assert.Equal(ErrorCodes.Denied, Failure(await IssueAsync(Customer, Request(email: Personal))).Code);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
         Assert.Empty(_invitations.Held);
     }
 
@@ -982,8 +985,12 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Accepted(await OpenAsync(holder, token));
 
         _invitations.Locking = held => held.Revoke(Noon.AddMinutes(1));
+        _work.Reset();
 
         Assert.Equal(ErrorCodes.InvitationExpired, Failure(await AcknowledgeAsync(holder, invitation.Id)).Code);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
         Assert.Empty(_attachments.Attached);
         Assert.Empty(_events.Of<MembershipChanged>());
         Assert.Null(invitation.AcknowledgedAt);
@@ -1901,6 +1908,69 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 BackupEligible: backedUp,
                 BackupState: backedUp),
             Noon);
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a revocation that finds the invitation acknowledged under
+    /// its lock rolls its unit of work back and commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ARevocationRefusedUnderTheLockIsRolledBackAsync()
+    {
+        IssuedInvitation issued = Accepted(await IssueAsync(Customer, Request(phone: Number)));
+        SubjectId holder = Holder();
+        _invitations.Locking = held =>
+        {
+            held.AttachTo(holder, Noon);
+            held.Acknowledge(Noon);
+        };
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.InvitationExpired, Failure(await RevokeAsync(Customer, issued.Id)).Code);
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.False(_invitations.Held[0].IsRevoked);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a link whose invitation is revoked while the press waited
+    /// for its lock rolls its unit of work back and attaches nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_APressRefusedUnderTheLockIsRolledBackAsync()
+    {
+        string token = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+        _invitations.Locking = held => held.Revoke(Noon.AddMinutes(1));
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.InvitationExpired, Failure(await OpenAsync(Holder(), token)).Code);
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Null(_invitations.Held[0].Invitee);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: an end that finds the membership ended while it waited for
+    /// its row rolls its unit of work back and commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AnEndThatFindsNoMembershipIsRolledBackAsync()
+    {
+        SubjectId holder = Holder();
+        _memberships.Place(holder, Customer);
+        _ending.Ending = () => _ = _memberships.Leave(holder, Customer);
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.MembershipNotFound, Failure(await EndAsync(Customer, holder)).Code);
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_ending.Ended);
+    }
 
     private ValueTask<Result> AcknowledgeAsync(SubjectId holder, InvitationId invitation) =>
         Service.AcknowledgeAsync(

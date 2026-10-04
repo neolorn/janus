@@ -361,8 +361,8 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
     /// <summary>
     /// OPS-CFG-002 AC6 and X3 of D-166 (178): a change of the list is decided on the list
     /// in force under the lock of the organization's policy row, taken inside its one
-    /// unit of work, which the write joins; a refusal made under it ends that unit of
-    /// work before it answers (X9).
+    /// unit of work, which the write joins; a refusal made under it rolls that unit of
+    /// work back before it answers (CONV-DESIGN-003).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -380,7 +380,9 @@ public sealed class OrganizationDomainEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status403Forbidden, withheld.Status);
         Assert.Equal([member], _deployment.Configuration.Held);
-        Assert.Equal(_deployment.Work.Opened, _deployment.Work.Committed);
+        Assert.False(_deployment.Work.Open);
+        Assert.Equal(1, _deployment.Work.RolledBack);
+        Assert.Equal(_deployment.Work.Opened, _deployment.Work.Committed + _deployment.Work.RolledBack);
 
         _deployment.Gate.Grant(subject, Administration, Permissions.SystemAdminister);
         _deployment.Configuration.Held.Clear();

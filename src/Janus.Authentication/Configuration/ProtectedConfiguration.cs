@@ -91,6 +91,8 @@ internal sealed class ProtectedConfiguration(
             if (await RaiseAsync(AlertCondition.ProtectedSettingChanged, value.Key, now, cancellationToken).ConfigureAwait(false)
                 is Error unannounced)
             {
+                await work.RollbackAsync().ConfigureAwait(false);
+
                 return Result.Failure(unannounced);
             }
 
@@ -100,6 +102,8 @@ internal sealed class ProtectedConfiguration(
                 && await RaiseAsync(AlertCondition.GoverningLanguageChanged, value.Key, now, cancellationToken).ConfigureAwait(false)
                     is Error unannouncedLanguage)
             {
+                await work.RollbackAsync().ConfigureAwait(false);
+
                 return Result.Failure(unannouncedLanguage);
             }
         }
@@ -107,6 +111,8 @@ internal sealed class ProtectedConfiguration(
         if ((await CompleteAsync(cancellationToken).ConfigureAwait(false)).Match(() => (Error?)null, failure => failure)
             is Error incomplete)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(incomplete);
         }
 

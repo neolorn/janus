@@ -204,11 +204,15 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
             TestContext.Current.CancellationToken));
 
         _directory.Holding = held => _directory.Suspended(held, SuspensionOrigin.Administrator);
+        _work.Reset();
 
         Assert.Equal(
             ErrorCodes.AccountAdministrativelySuspended,
             Refused(await Lifecycle.ReactivateAsync(Link(), TestContext.Current.CancellationToken)));
 
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
         Assert.Equal(AccountState.Suspended, await StateAsync());
         Assert.Equal(
             SuspensionOrigin.Administrator,
@@ -449,6 +453,9 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.AccountStateConflict, Refused(refused));
         Assert.Equal("suspended", Conflicted(refused, "state"));
         Assert.Equal("administrator", Conflicted(refused, "suspendedBy"));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
         Assert.Equal(
             SuspensionOrigin.Administrator,
             await _directory.SuspendedByAsync(_person, TestContext.Current.CancellationToken));
@@ -510,9 +517,53 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
                 Source,
                 TestContext.Current.CancellationToken)));
 
+        Assert.False(_work.Open);
         Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
         Assert.Empty(_events.Published);
         Assert.Empty(_audit.Recorded);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a deletion refused under the account's lock, for a suspension
+    /// committed since it was first judged, rolls its unit of work back and commits
+    /// nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ADeletionRefusedUnderTheLockIsRolledBackAsync()
+    {
+        _directory.Holding = held => _directory.Suspended(held, SuspensionOrigin.Administrator);
+
+        Assert.Equal(
+            ErrorCodes.AccountStateConflict,
+            Refused(await Lifecycle.DeleteAsync(Acting, Stepped(), Source, TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Null(await _directory.DeletingAsync(_person, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a cancellation by the link refused under the account's lock,
+    /// for a takedown begun since it was first judged, rolls its unit of work back and
+    /// commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ACancellationRefusedUnderTheLockIsRolledBackAsync()
+    {
+        _ = Value(await Lifecycle.DeleteAsync(Acting, Stepped(), Source, TestContext.Current.CancellationToken));
+        _directory.Holding = held => _directory.Deleting(held, DeletionOrigin.Takedown, Noon);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.TakedownActive,
+            Refused(await Lifecycle.CancelDeletionAsync(Link(), TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(AccountState.Deleting, await StateAsync());
     }
 
     private static void Accepted(Result outcome) =>

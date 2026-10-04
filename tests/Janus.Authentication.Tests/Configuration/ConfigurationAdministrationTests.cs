@@ -117,6 +117,9 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
             Wanting);
 
         Assert.Equal(ErrorCodes.StepUpRequired, refusal.Code);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
         Assert.Empty(_changes.Written);
         Assert.Equal(Settings.SessionAal2Inactivity.Default, await InForceAsync(Settings.SessionAal2Inactivity));
     }
@@ -511,6 +514,32 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)).Match(value => value.SelfServiceRecovery, _ => null));
     }
 
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a member's value the store refuses, after the unit of work
+    /// began, rolls it back, and nothing is written down.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AMemberTheStoreRefusesIsRolledBackAsync()
+    {
+        Result changed = await Administration.ChangeMemberAsync(
+            Settings.HostCategoryRetention,
+            "invoices",
+            TimeSpan.FromDays(-1),
+            TimeSpan.FromDays(30),
+            loosening: false,
+            "a shorter retention",
+            SubjectId.New(_randomness),
+            breakGlassReason: null,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(changed.Match(() => true, _ => false));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_changes.Written);
+    }
+
     private static async Task<IReadOnlyList<ConfigurationKey>> KeysAsync(
         ValueTask<IReadOnlyList<ConfigurationChange>> reading)
     {
@@ -612,7 +641,9 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.Denied, refusal.Code);
         Assert.Empty(_changes.Written);
+        Assert.False(_work.Open);
         Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>
@@ -634,7 +665,9 @@ public sealed class ConfigurationAdministrationTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.Denied, refusal.Code);
         Assert.Empty(_changes.Written);
+        Assert.False(_work.Open);
         Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     // The one change OPS-CFG-005 AC1 and OPS-CFG-008 AC2 read the record of: the

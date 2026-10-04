@@ -379,6 +379,9 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
                 Source,
                 TestContext.Current.CancellationToken)));
 
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
         Assert.True(Named(await HeldAsync(), Second).IsPrimary);
         Assert.DoesNotContain(_events.Published, raised => raised is IdentifierRemoved);
     }
@@ -963,6 +966,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         _pending.Locking = identifier =>
             _ = _pending.RemoveAsync(identifier, TestContext.Current.CancellationToken).AsTask();
+        _work.Reset();
 
         Assert.Equal(
             ErrorCodes.CodeInvalid,
@@ -973,6 +977,9 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
                 Source,
                 TestContext.Current.CancellationToken)));
 
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
         Assert.Equal(Primary, Named(await HeldAsync(), Primary).Canonical);
     }
 
@@ -1186,6 +1193,219 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private AccessContext Acting => AccessContext.Of(_person);
 
     private SessionId Stepped() => Opened(Noon, _person);
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: an addition whose code the send refuses, after the identifier
+    /// was staged, rolls its unit of work back and commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AnAdditionWhoseSendIsRefusedIsRolledBackAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _notifications.Refusal = Error.From(ErrorCodes.Throttled);
+
+        Assert.Equal(
+            ErrorCodes.Throttled,
+            Refused(await Service.AddAsync(
+                Acting,
+                Stepped(),
+                IdentifierKind.Email,
+                Second,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5, AUTH-FACT-004: a wrong code is counted on the verification
+    /// and that count is committed alone, with no rollback.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AWrongCodeCommitsItsCountAloneAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        await AddedAsync(Second);
+        IdentifierId second = Named(await HeldAsync(), Second).Id;
+        string wrong = VerificationCode.Read(Waiting(second).Staged.Code!) == "000000" ? "000001" : "000000";
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.CodeInvalid,
+            Refused(await Service.VerifyAsync(
+                Acting,
+                Stepped(),
+                second,
+                wrong,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Committed);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(1, Waiting(second).Staged.WrongAttempts);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a code presented after it expired counts nothing, so the
+    /// refusal rolls its unit of work back and commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AnExpiredCodeIsRolledBackAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        await AddedAsync(Second);
+        IdentifierId second = Named(await HeldAsync(), Second).Id;
+        string code = VerificationCode.Read(Waiting(second).Staged.Code!);
+        _clock.Advance(Settings.CodeVerificationLifetime.Default);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            Refused(await Service.VerifyAsync(
+                Acting,
+                Stepped(),
+                second,
+                code,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(0, Waiting(second).Staged.WrongAttempts);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a press that finds its verification gone under the lock
+    /// rolls its unit of work back and commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_APressOnAVerificationGoneMeanwhileIsRolledBackAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        SessionId browser = Stepped();
+        Accepted(await Service.AddAsync(
+            Acting,
+            browser,
+            IdentifierKind.Email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+        string link = _notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Token();
+        _pending.Locking = identifier =>
+            _ = _pending.RemoveAsync(identifier, TestContext.Current.CancellationToken).AsTask();
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.CodeInvalid,
+            Refused(await Service.LandAsync(browser, link, press: true, Source, TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a promotion refused under the set's lock, for an identifier
+    /// that left the set since it was first judged, rolls its unit of work back and
+    /// commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_APromotionRefusedUnderTheLockIsRolledBackAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+        _directory.Holding = subject =>
+            _directory.DiscardAsync(subject, second, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.IdentifierInvalid,
+            Refused(await Service.MakePrimaryAsync(Acting, second, Source, TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a backup setting refused under the set's lock, for an
+    /// identifier that left the set since it was first judged, rolls its unit of work
+    /// back and commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ABackupRefusedUnderTheLockIsRolledBackAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+        _directory.Holding = subject =>
+            _directory.DiscardAsync(subject, second, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.IdentifierInvalid,
+            Refused(await Service.SetBackupAsync(
+                Acting,
+                IdentifierKind.Email,
+                BackupChoice.Named,
+                second,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: an undo that finds the value already back under the set's
+    /// lock rolls its unit of work back and commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AnUndoSpentMeanwhileIsRolledBackAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+        Accepted(await Service.RemoveAsync(Acting, Stepped(), second, Source, TestContext.Current.CancellationToken));
+        _directory.Holding = _ =>
+            _directory.TakeBackAsync(second, maximum: 5, TestContext.Current.CancellationToken);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.ChangeWindowElapsed,
+            Refused(await Service.UndoAsync(Undo(), Source, TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a replacement whose code the send refuses, after the change
+    /// was staged, rolls its unit of work back and commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AReplacementWhoseSendIsRefusedIsRolledBackAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _notifications.Refusal = Error.From(ErrorCodes.Throttled);
+
+        Assert.Equal(
+            ErrorCodes.Throttled,
+            Refused(await Service.ReplaceAsync(
+                Acting,
+                Stepped(),
+                email,
+                Second,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
 
     private SessionId Stepped(SubjectId subject) => Opened(_clock.GetUtcNow(), subject);
 

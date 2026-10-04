@@ -948,6 +948,8 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             ["performance"] = true,
         };
 
+        _work.Reset();
+
         Result<RegistrationCompleted> refused = await Service.AcceptTermsAsync(
             session,
             Terms,
@@ -957,6 +959,9 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken);
 
         Assert.Equal(ErrorCodes.PurposeNoConsent, Refused(refused));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
         Assert.Equal(0, _consents.Recorded);
     }
 
@@ -1934,6 +1939,187 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             Settings.LinkInvitationLifetime.Default));
 
         return token.Value;
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a link whose invitation is revoked while the press waited
+    /// for its lock rolls the unit of work back, and no registration is opened.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ALinkRefusedUnderTheInvitationsLockIsRolledBackAsync()
+    {
+        string token = Issued(email: Address);
+        _invitations.Locking = held => held.Revoke(_clock.GetUtcNow());
+
+        Assert.Equal(ErrorCodes.InvitationExpired, Refused(await InvitedAsync(token)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_sessions.All);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: an age answered out of its step, decided under the session's
+    /// lock, rolls the unit of work back and commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AnAgeAnsweredOutOfStepIsRolledBackAsync()
+    {
+        RegistrationSessionId session = await AgedAsync();
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.RegistrationIncomplete,
+            Refused(await Service.RecordAgeAsync(session, Adult, TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5, AUTH-FACT-004, AUTH-ABUSE-001: a wrong code is counted on the
+    /// code's record and against the delay, and the refusal commits those counts with
+    /// no rollback.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AWrongCodeCommitsItsCountsAsync()
+    {
+        RegistrationSessionId session = await AwaitingAsync();
+        IdentifierId staged = Identity(session, IdentifierKind.Email).Id;
+        string wrong = Code(session, IdentifierKind.Email) == "000000" ? "000001" : "000000";
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.CodeInvalid,
+            Refused(await Service.VerifyAsync(session, staged, wrong, TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(1, Identity(session, IdentifierKind.Email).WrongAttempts);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a code presented for an identifier the session does not
+    /// stage counts nothing, so the refusal rolls the unit of work back.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ACodeForNoStagedIdentifierIsRolledBackAsync()
+    {
+        RegistrationSessionId session = await AwaitingAsync();
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.RegistrationIncomplete,
+            Refused(await Service.VerifyAsync(
+                session,
+                IdentifierId.New(_clock),
+                "000000",
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: an identifier whose code the send refuses, after it was
+    /// staged, rolls the unit of work back at the step and at the confirm step alike.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AStagedIdentifierWhoseSendIsRefusedIsRolledBackAsync()
+    {
+        RegistrationSessionId stepping = await AgedAsync();
+        RegistrationSessionId confirming = await StagedAsync();
+        _notifications.Refusal = Error.From(ErrorCodes.Throttled);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.Throttled,
+            Refused(await Service.StageAsync(
+                stepping,
+                IdentifierKind.Email,
+                "other@example.test",
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.Throttled,
+            Refused(await Service.AddAsync(
+                confirming,
+                IdentifierKind.Email,
+                "second@example.test",
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(2, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a bound identifier whose code the send refuses rolls the
+    /// unit of work back and commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ABoundIdentifierWhoseSendIsRefusedIsRolledBackAsync()
+    {
+        RegistrationSessionId session = Ok(await InvitedAsync(Issued(email: Address, phone: Number)));
+        _ = Ok(await Service.RecordAgeAsync(session, Adult, TestContext.Current.CancellationToken));
+        _notifications.Refusal = Error.From(ErrorCodes.Throttled);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.Throttled,
+            Refused(await Service.StageAsync(session, IdentifierKind.Phone, Number, TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a changed identifier whose code the send refuses rolls the
+    /// unit of work back and commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AChangedIdentifierWhoseSendIsRefusedIsRolledBackAsync()
+    {
+        RegistrationSessionId session = await AwaitingAsync();
+        IdentifierId staged = Identity(session, IdentifierKind.Email).Id;
+        _notifications.Refusal = Error.From(ErrorCodes.Throttled);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.Throttled,
+            Refused(await Service.ChangeAsync(
+                session,
+                staged,
+                "other@example.test",
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: an address a provider supplied whose code the send refuses
+    /// rolls the unit of work back and commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ASuppliedAddressWhoseSendIsRefusedIsRolledBackAsync()
+    {
+        RegistrationSessionId session = await AgedAsync();
+        _notifications.Refusal = Error.From(ErrorCodes.Throttled);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.Throttled,
+            Refused(await ProvidedAsync(session, Factor.Apple, AppleSubject, Address, verified: true)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     private async Task<Result<RegistrationSessionId>> InvitedAsync(string token) =>

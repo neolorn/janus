@@ -73,8 +73,9 @@ internal sealed class InvitationOpening(
             is not Invitation unopened
             || !unopened.Opens(now))
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Failure(Error.From(ErrorCodes.InvitationExpired)), Result.Failure);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.InvitationExpired));
         }
 
         invitation = unopened;

@@ -520,6 +520,76 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.PhotoNotFound, Refused(await PhotoAsync(Acting, bare)));
     }
 
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a suspension refused under the account's lock, for a deletion
+    /// begun since it was first judged, rolls its unit of work back and commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ASuspensionRefusedUnderTheLockIsRolledBackAsync()
+    {
+        _directory.Holding = held => _directory.Deleting(held, DeletionOrigin.Self, Noon);
+
+        Assert.Equal(ErrorCodes.AccountStateConflict, Refused(await SuspendAsync(_member)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a reactivation refused under the account's lock, for an
+    /// account that came back since it was first judged, rolls its unit of work back and
+    /// commits nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AReactivationRefusedUnderTheLockIsRolledBackAsync()
+    {
+        _directory.Suspended(_member, SuspensionOrigin.Administrator);
+        _directory.Holding = held => _directory.Stands(held, AccountState.Active);
+
+        Assert.Equal(ErrorCodes.AccountStateConflict, Refused(await ReactivateAsync(_member)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a lift refused under the account's lock, for a restriction
+    /// that ended since it was first judged, rolls its unit of work back and commits
+    /// nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ALiftRefusedUnderTheLockIsRolledBackAsync()
+    {
+        _directory.Stands(_member, AccountState.Restricted);
+        _directory.Holding = held => _directory.Stands(held, AccountState.Active);
+
+        Assert.Equal(ErrorCodes.AccountStateConflict, Refused(await LiftAsync(_member)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a cancellation refused under the account's lock, for a
+    /// takedown begun since it was first judged, rolls its unit of work back and commits
+    /// nothing.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ACancellationRefusedUnderTheLockIsRolledBackAsync()
+    {
+        _directory.Deleting(_member, DeletionOrigin.Self, Noon.AddDays(-1));
+        _directory.Holding = held => _directory.Deleting(held, DeletionOrigin.Takedown, Noon);
+
+        Assert.Equal(ErrorCodes.TakedownActive, Refused(await CancelAsync(_member)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
     private static DateTimeOffset Stale =>
         Noon - Settings.SessionStepUpRecency.Default - TimeSpan.FromMinutes(1);
 

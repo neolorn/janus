@@ -95,7 +95,9 @@ internal sealed class ConfigurationAdministration(
 
         if (failure is not null)
         {
-            return await EndedAsync(failure, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(failure);
         }
 
         bool loosening = Loosens(setting, before, value);
@@ -103,7 +105,9 @@ internal sealed class ConfigurationAdministration(
         if (await RefusalAsync(setting.Key, loosening, reason, challenge, context, cancellationToken)
                 .ConfigureAwait(false) is Error refused)
         {
-            return await EndedAsync(refused, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(refused);
         }
 
         _ = (await writes
@@ -113,6 +117,8 @@ internal sealed class ConfigurationAdministration(
 
         if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(failure);
         }
 
@@ -133,6 +139,8 @@ internal sealed class ConfigurationAdministration(
                         .ConfigureAwait(false))
                     .Match(() => (Error?)null, error => error) is Error unalerted)
             {
+                await work.RollbackAsync().ConfigureAwait(false);
+
                 return Result.Failure(unalerted);
             }
         }
@@ -148,6 +156,8 @@ internal sealed class ConfigurationAdministration(
                     .ConfigureAwait(false))
                 .Match(() => (Error?)null, error => error) is Error unannounced)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unannounced);
         }
 
@@ -157,6 +167,8 @@ internal sealed class ConfigurationAdministration(
             && (await relay.CheckAsync(cancellationToken).ConfigureAwait(false))
                 .Match<Error?>(() => null, error => error) is Error unraised)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unraised);
         }
 
@@ -242,6 +254,8 @@ internal sealed class ConfigurationAdministration(
                 .ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error refused)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(refused);
         }
 
@@ -464,20 +478,6 @@ internal sealed class ConfigurationAdministration(
             > 1024 => Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement("reason")),
             _ => null,
         };
-
-    // X9: a refusal made under the row's lock has written nothing, so the unit of work
-    // is ended before the refusal returns, which releases the row and leaves the scope
-    // clean for the next operation.
-    private async ValueTask<Result> EndedAsync(Error refusal, CancellationToken cancellationToken)
-    {
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure(notCommitted);
-        }
-
-        return Result.Failure(refusal);
-    }
 
     private static bool Relayed(ConfigurationKey key) =>
         key == Settings.PolicyDefault.Key
