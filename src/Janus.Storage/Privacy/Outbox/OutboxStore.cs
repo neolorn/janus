@@ -18,7 +18,9 @@ namespace Janus.Storage.Privacy.Outbox;
 /// <remarks>
 /// Implements IDN-LIFE-003a and CONV-DESIGN-003. A delivery is added onto the
 /// transaction in progress and committed by the caller's unit of work, so a fact and
-/// its delivery reach the database together or not at all.
+/// its delivery reach the database together or not at all. A pass claims a row whole by
+/// one conditional update, and its renewal, each confirmation and the outcome are written
+/// only under that claim.
 /// </remarks>
 internal sealed class OutboxStore(StoreContext context, TimeProvider time) : IOutboxStore
 {
@@ -46,19 +48,161 @@ internal sealed class OutboxStore(StoreContext context, TimeProvider time) : IOu
     }
 
     /// <inheritdoc/>
-    public async ValueTask<IReadOnlyList<Delivery>> DueAsync(
+    public async ValueTask<IReadOnlyList<DeliveryId>> DueAsync(
         DateTimeOffset now,
         CancellationToken cancellationToken) =>
-    [
-        .. (await context.Outbox
-                .Include(delivery => delivery.Confirmations)
-                .Where(delivery => delivery.Status == Core.ErasureStatus.AwaitingSubscribers
-                    && delivery.NextAttemptAt <= now)
-                .OrderBy(delivery => delivery.RaisedAt)
-                .ToListAsync(cancellationToken)
+        await context.Outbox
+            .AsNoTracking()
+            .Where(delivery => delivery.Status == Core.ErasureStatus.AwaitingSubscribers
+                && delivery.NextAttemptAt <= now
+                && (delivery.ClaimedUntil == null || delivery.ClaimedUntil <= now))
+            .OrderBy(delivery => delivery.RaisedAt)
+            .ThenBy(delivery => delivery.Id)
+            .Select(delivery => delivery.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async ValueTask<DeliveryClaim?> ClaimAsync(
+        DeliveryId delivery,
+        DateTimeOffset now,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        DateTimeOffset until = RowClaim.Until(now, timeout);
+
+        int claimed = await context.Outbox
+            .Where(row => row.Id == delivery
+                && row.Status == Core.ErasureStatus.AwaitingSubscribers
+                && row.NextAttemptAt <= now
+                && (row.ClaimedUntil == null || row.ClaimedUntil <= now))
+            .ExecuteUpdateAsync(
+                row => row.SetProperty(one => one.ClaimedUntil, until),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return claimed == 1 ? new DeliveryClaim(delivery, until) : null;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<DeliveryClaim?> ClaimUnledgeredAsync(
+        DeliveryId delivery,
+        DateTimeOffset now,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        DateTimeOffset until = RowClaim.Until(now, timeout);
+
+        int claimed = await context.Outbox
+            .Where(row => row.Id == delivery
+                && row.Kind == SubjectEventKind.ErasureRequested
+                && row.Status == Core.ErasureStatus.Complete
+                && !row.Confirmations.Any(confirmation =>
+                    confirmation.Subscriber == ErasureLedgerSubscriber.Called)
+                && (row.ClaimedUntil == null || row.ClaimedUntil <= now))
+            .ExecuteUpdateAsync(
+                row => row.SetProperty(one => one.ClaimedUntil, until),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return claimed == 1 ? new DeliveryClaim(delivery, until) : null;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<DeliveryClaim?> RenewAsync(
+        DeliveryClaim claim,
+        DateTimeOffset now,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        DateTimeOffset until = RowClaim.Until(now, timeout);
+
+        int renewed = await context.Outbox
+            .Where(row => row.Id == claim.Delivery && row.ClaimedUntil == claim.Until)
+            .ExecuteUpdateAsync(
+                row => row.SetProperty(one => one.ClaimedUntil, until),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return renewed == 1 ? claim with { Until = until } : null;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The update that finds the claim still standing changes nothing and holds the row
+    /// until the transaction ends, so no pass takes the row over between it and the
+    /// confirmation written with it.
+    /// </remarks>
+    public async ValueTask<bool> ConfirmAsync(
+        DeliveryClaim claim,
+        string subscriber,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(subscriber);
+
+        int held = await context.Outbox
+            .Where(row => row.Id == claim.Delivery && row.ClaimedUntil == claim.Until)
+            .ExecuteUpdateAsync(
+                row => row.SetProperty(one => one.ClaimedUntil, claim.Until),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (held != 1)
+        {
+            return false;
+        }
+
+        if (!await context.OutboxConfirmations
+                .AnyAsync(
+                    confirmation => confirmation.Delivery == claim.Delivery && confirmation.Subscriber == subscriber,
+                    cancellationToken)
                 .ConfigureAwait(false))
-            .Select(Read),
-    ];
+        {
+            await context.OutboxConfirmations
+                .AddAsync(
+                    new DeliveryConfirmationRecord
+                    {
+                        Delivery = claim.Delivery,
+                        Subscriber = subscriber,
+                        ConfirmedAt = at,
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> RecordAsync(Delivery delivery, DeliveryClaim claim, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(delivery);
+
+        Core.ErasureStatus status = delivery.Status;
+        int attempts = delivery.Attempts;
+        DateTimeOffset next = delivery.NextAttemptAt;
+
+        return await context.Outbox
+            .Where(row => row.Id == claim.Delivery && row.ClaimedUntil == claim.Until)
+            .ExecuteUpdateAsync(
+                row => row
+                    .SetProperty(one => one.Status, status)
+                    .SetProperty(one => one.Attempts, attempts)
+                    .SetProperty(one => one.NextAttemptAt, next)
+                    .SetProperty(one => one.ClaimedUntil, (DateTimeOffset?)null),
+                cancellationToken)
+            .ConfigureAwait(false) == 1;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> ReleaseAsync(DeliveryClaim claim, CancellationToken cancellationToken) =>
+        await context.Outbox
+            .Where(row => row.Id == claim.Delivery && row.ClaimedUntil == claim.Until)
+            .ExecuteUpdateAsync(
+                row => row.SetProperty(one => one.ClaimedUntil, (DateTimeOffset?)null),
+                cancellationToken)
+            .ConfigureAwait(false) == 1;
 
     /// <inheritdoc/>
     public async ValueTask<Delivery?> FindAsync(
@@ -193,25 +337,23 @@ internal sealed class OutboxStore(StoreContext context, TimeProvider time) : IOu
     ];
 
     /// <inheritdoc/>
-    public async ValueTask<IReadOnlyList<Delivery>> UnledgeredAsync(
+    public async ValueTask<IReadOnlyList<DeliveryId>> UnledgeredAsync(
         int skip,
         int take,
         CancellationToken cancellationToken) =>
-    [
-        .. (await context.Outbox
-                .Include(row => row.Confirmations)
-                .Where(row => row.Kind == SubjectEventKind.ErasureRequested
-                    && row.Status == Core.ErasureStatus.Complete
-                    && !row.Confirmations.Any(confirmation =>
-                        confirmation.Subscriber == ErasureLedgerSubscriber.Called))
-                .OrderBy(row => row.RaisedAt)
-                .ThenBy(row => row.Id)
-                .Skip(skip)
-                .Take(take)
-                .ToListAsync(cancellationToken)
-                .ConfigureAwait(false))
-            .Select(Read),
-    ];
+        await context.Outbox
+            .AsNoTracking()
+            .Where(row => row.Kind == SubjectEventKind.ErasureRequested
+                && row.Status == Core.ErasureStatus.Complete
+                && !row.Confirmations.Any(confirmation =>
+                    confirmation.Subscriber == ErasureLedgerSubscriber.Called))
+            .OrderBy(row => row.RaisedAt)
+            .ThenBy(row => row.Id)
+            .Select(row => row.Id)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
     private static DeliveryProgress Progress(DeliveryRecord held) =>
         new(

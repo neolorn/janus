@@ -72,7 +72,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
 
         Assert.Equal(Ahmed, raised.Subject);
         Assert.Equal(delivery.IdempotencyKey, raised.IdempotencyKey);
-        Assert.Equal(ErasureStatus.Complete, delivery.Status);
+        Assert.Equal(ErasureStatus.Complete, _outbox.Held(delivery.Id).Status);
     }
 
     /// <summary>
@@ -92,13 +92,13 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
         Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
 
         Assert.Equal(0, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
-        Assert.Equal(ErasureStatus.AwaitingSubscribers, delivery.Status);
-        Assert.Equal(["host"], delivery.Confirmed);
+        Assert.Equal(ErasureStatus.AwaitingSubscribers, _outbox.Held(delivery.Id).Status);
+        Assert.Equal(["host"], _outbox.Held(delivery.Id).Confirmed);
 
         warehouse.Confirms = true;
 
         Assert.Equal(1, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
-        Assert.Equal(ErasureStatus.Complete, delivery.Status);
+        Assert.Equal(ErasureStatus.Complete, _outbox.Held(delivery.Id).Status);
     }
 
     /// <summary>
@@ -115,10 +115,10 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
 
         await Publisher(_whole).PublishAsync(Carrier, CancellationToken.None);
 
-        Assert.Equal(ErasureStatus.AwaitingSubscribers, delivery.Status);
-        Assert.Equal(1, delivery.Attempts);
-        Assert.Empty(delivery.Confirmed);
-        Assert.True(delivery.NextAttemptAt > Noon);
+        Assert.Equal(ErasureStatus.AwaitingSubscribers, _outbox.Held(delivery.Id).Status);
+        Assert.Equal(1, _outbox.Held(delivery.Id).Attempts);
+        Assert.Empty(_outbox.Held(delivery.Id).Confirmed);
+        Assert.True(_outbox.Held(delivery.Id).NextAttemptAt > Noon);
     }
 
     /// <summary>
@@ -138,13 +138,13 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
         Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
 
         Assert.Equal(0, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
-        Assert.Equal(ErasureStatus.AwaitingSubscribers, delivery.Status);
-        Assert.Equal(["warehouse"], delivery.Confirmed);
+        Assert.Equal(ErasureStatus.AwaitingSubscribers, _outbox.Held(delivery.Id).Status);
+        Assert.Equal(["warehouse"], _outbox.Held(delivery.Id).Confirmed);
 
         host.Faults = false;
 
         Assert.Equal(1, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
-        Assert.Equal(ErasureStatus.Complete, delivery.Status);
+        Assert.Equal(ErasureStatus.Complete, _outbox.Held(delivery.Id).Status);
     }
 
     /// <summary>
@@ -191,19 +191,19 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
 
         await Publisher(_whole).PublishAsync(Carrier, CancellationToken.None);
 
-        Assert.Equal(Noon.AddSeconds(30), delivery.NextAttemptAt);
+        Assert.Equal(Noon.AddSeconds(30), _outbox.Held(delivery.Id).NextAttemptAt);
 
         _clock.Advance(TimeSpan.FromMinutes(1));
 
         await Publisher(_whole).PublishAsync(Carrier, CancellationToken.None);
 
-        Assert.Equal(Noon.AddMinutes(1).AddSeconds(60), delivery.NextAttemptAt);
+        Assert.Equal(Noon.AddMinutes(1).AddSeconds(60), _outbox.Held(delivery.Id).NextAttemptAt);
 
         _clock.Advance(TimeSpan.FromMinutes(5));
 
         await Publisher(_none).PublishAsync(Carrier, CancellationToken.None);
 
-        Assert.Equal(_clock.GetUtcNow(), delivery.NextAttemptAt);
+        Assert.Equal(_clock.GetUtcNow(), _outbox.Held(delivery.Id).NextAttemptAt);
     }
 
     /// <summary>
@@ -223,7 +223,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
         Assert.Empty(_alerts.Raised);
 
         Assert.Equal(1, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
-        Assert.Equal(ErasureStatus.Failed, delivery.Status);
+        Assert.Equal(ErasureStatus.Failed, _outbox.Held(delivery.Id).Status);
 
         PrivacyAlertRaised raised = Assert.Single(_alerts.Raised);
 
@@ -253,7 +253,10 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
         _ = await Assert.ThrowsAsync<InvalidOperationException>(
             async () => await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
 
-        Assert.Equal(0, _work.Committed);
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(_work.Opened, _work.Committed + _work.RolledBack);
+        Assert.Empty(_alerts.Raised);
     }
 
     /// <summary>
@@ -270,7 +273,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
         Delivery delivery = await RaisedAsync(SubjectEventKind.RestrictionChanged);
 
         Assert.Equal(1, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
-        Assert.Equal(ErasureStatus.Complete, delivery.Status);
+        Assert.Equal(ErasureStatus.Complete, _outbox.Held(delivery.Id).Status);
     }
 
     /// <summary>
@@ -301,7 +304,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
 
         Assert.Equal(2, erasure.Attempts);
         Assert.Equal(ErasureStatus.Complete, erasure.Status);
-        Assert.Equal(ErasureStatus.Complete, delivery.Status);
+        Assert.Equal(ErasureStatus.Complete, _outbox.Held(delivery.Id).Status);
     }
 
     /// <summary>
@@ -322,15 +325,15 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
         _erasures.Add(erasure);
 
         Assert.Equal(0, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
-        Assert.Equal(ErasureStatus.AwaitingSubscribers, delivery.Status);
+        Assert.Equal(ErasureStatus.AwaitingSubscribers, _outbox.Held(delivery.Id).Status);
         Assert.Equal(ErasureStatus.AwaitingSubscribers, erasure.Status);
-        Assert.Equal(["host"], delivery.Confirmed);
+        Assert.Equal(["host"], _outbox.Held(delivery.Id).Confirmed);
         Assert.Empty(_ledger.Lines);
 
         _ledger.Durable = true;
 
         Assert.Equal(1, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
-        Assert.Equal(ErasureStatus.Complete, delivery.Status);
+        Assert.Equal(ErasureStatus.Complete, _outbox.Held(delivery.Id).Status);
         Assert.Equal(ErasureStatus.Complete, erasure.Status);
         Assert.Single(_ledger.Lines);
     }
@@ -386,7 +389,7 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
         await Publisher(_none).PublishAsync(Carrier, CancellationToken.None);
         await Publisher(_none).PublishAsync(Carrier, CancellationToken.None);
 
-        Assert.Equal(ErasureStatus.Failed, delivery.Status);
+        Assert.Equal(ErasureStatus.Failed, _outbox.Held(delivery.Id).Status);
 
         PrivacyAlertRaised raised = Assert.Single(_alerts.Raised);
 
@@ -410,8 +413,8 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
         Delivery delivery = await RaisedAsync(SubjectEventKind.RestrictionChanged);
 
         Assert.Equal(1, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
-        Assert.Equal(ErasureStatus.Complete, delivery.Status);
-        Assert.Equal(["host"], delivery.Confirmed);
+        Assert.Equal(ErasureStatus.Complete, _outbox.Held(delivery.Id).Status);
+        Assert.Equal(["host"], _outbox.Held(delivery.Id).Confirmed);
     }
 
     /// <summary>
@@ -440,13 +443,13 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
         closed.CompleteManually();
         await _outbox.AddAsync(closed, CancellationToken.None);
 
-        int attempts = confirmed.Attempts;
+        int attempts = _outbox.Held(confirmed.Id).Attempts;
 
         _ledger = new ErasureLedgerInMemory { Durable = false };
 
         Assert.Equal(0, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
         Assert.Empty(_ledger.Lines);
-        Assert.DoesNotContain("erasure-ledger", confirmed.Confirmed);
+        Assert.DoesNotContain("erasure-ledger", _outbox.Held(confirmed.Id).Confirmed);
 
         _ledger.Durable = true;
 
@@ -459,12 +462,220 @@ public sealed class OutboxPublisherTests : IAsyncDisposable
                 "2026-09-18T12:00:00Z 11111111-1111-4111-8111-111111111111 erasure-request",
             ],
             _ledger.Lines);
-        Assert.Contains("erasure-ledger", confirmed.Confirmed);
-        Assert.Contains("erasure-ledger", closed.Confirmed);
-        Assert.Equal((ErasureStatus.Complete, attempts), (confirmed.Status, confirmed.Attempts));
-        Assert.Equal(ErasureStatus.Complete, closed.Status);
+        Assert.Contains("erasure-ledger", _outbox.Held(confirmed.Id).Confirmed);
+        Assert.Contains("erasure-ledger", _outbox.Held(closed.Id).Confirmed);
+        Assert.Equal((ErasureStatus.Complete, attempts), (_outbox.Held(confirmed.Id).Status, _outbox.Held(confirmed.Id).Attempts));
+        Assert.Equal(ErasureStatus.Complete, _outbox.Held(closed.Id).Status);
         Assert.Equal(ErasureStatus.Complete, row.Status);
         Assert.Equal(attempts, row.Attempts);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC9, INF-BG-001: an outbox row is claimed whole by one claim
+    /// committed on its own, the claim is renewed before each subscriber is called, the
+    /// erasure ledger's line among them, each confirmation is written as it happens and
+    /// the row's outcome once, every write in a unit of work, and no subscriber is called
+    /// while one is open.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_ADeliveryIsClaimedWholeAndItsClaimRenewedBeforeEachSubscriberAsync()
+    {
+        var open = new List<bool>();
+        var renewals = new List<int>();
+        var host = new SubscriberInMemory("host", required: true);
+        var warehouse = new SubscriberInMemory("warehouse", required: true);
+
+        host.Meanwhile = () =>
+        {
+            open.Add(_work.Open);
+            renewals.Add(_outbox.Renewed.Count);
+            _clock.Advance(TimeSpan.FromSeconds(90));
+        };
+        warehouse.Meanwhile = () =>
+        {
+            open.Add(_work.Open);
+            renewals.Add(_outbox.Renewed.Count);
+        };
+
+        _subscribers.Add(host);
+        _subscribers.Add(warehouse);
+        _ledger = new ErasureLedgerInMemory();
+        _outbox.Work = _work;
+
+        Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
+
+        _work.Reset();
+
+        Assert.Equal(1, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
+
+        DeliveryClaim claim = Assert.Single(_outbox.Claimed);
+
+        Assert.Equal(Noon + TimeSpan.FromMinutes(2), claim.Until);
+        Assert.Equal([false, false], open);
+        Assert.Equal([2, 3], renewals);
+        Assert.Equal(
+            [Noon + TimeSpan.FromMinutes(2), Noon + TimeSpan.FromMinutes(2), Noon + TimeSpan.FromSeconds(210)],
+            _outbox.Renewed.Select(renewed => renewed.Until));
+        Assert.Equal(["erasure-ledger", "host", "warehouse"], _outbox.Confirmations);
+        Assert.Single(_ledger.Lines);
+        Assert.Equal(1, _outbox.Outcomes);
+        Assert.False(_outbox.WroteOutsideAUnitOfWork);
+        Assert.Equal((8, 8, 0), (_work.Opened, _work.Committed, _work.RolledBack));
+        Assert.Equal((ErasureStatus.Complete, 1), (_outbox.Held(delivery.Id).Status, _outbox.Held(delivery.Id).Attempts));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC9, IDN-LIFE-003a: an attempt is one pass over the subscribers
+    /// still to confirm. A subscriber that faults leaves its delivery unconfirmed, the
+    /// subscribers after it are still offered the event, and the pass counts one attempt
+    /// for the row and for its erasure.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_AnAttemptIsOnePassOverTheSubscribersStillToConfirmAsync()
+    {
+        var host = new SubscriberInMemory("host", required: true) { Faults = true };
+        var warehouse = new SubscriberInMemory("warehouse", required: true);
+        var analytics = new SubscriberInMemory("analytics", required: false) { Confirms = false };
+
+        _subscribers.Add(host);
+        _subscribers.Add(warehouse);
+        _subscribers.Add(analytics);
+
+        Delivery delivery = await RaisedAsync(SubjectEventKind.ErasureRequested);
+        var erasure = Erasure.Begun(Ahmed, Noon, ErasureReason.ErasureRequest);
+
+        _erasures.Add(erasure);
+
+        Assert.Equal(0, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
+
+        Assert.Single(host.Offered);
+        Assert.Single(warehouse.Offered);
+        Assert.Single(analytics.Offered);
+        Assert.Equal(["warehouse"], _outbox.Confirmations);
+        Assert.Equal(1, _outbox.Held(delivery.Id).Attempts);
+        Assert.Equal(1, erasure.Attempts);
+        Assert.Equal(1, _outbox.Outcomes);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC9: a pass stops where the renewal of its claim changes nothing.
+    /// A row another pass took over while a subscriber ran is that pass's: no further
+    /// subscriber is offered the event, and no attempt, status or alert is written.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_APassStopsWhereTheRenewalOfItsClaimChangesNothingAsync()
+    {
+        var host = new SubscriberInMemory("host", required: true) { Confirms = false };
+        var warehouse = new SubscriberInMemory("warehouse", required: true);
+
+        _subscribers.Add(host);
+        _subscribers.Add(warehouse);
+        _configuration.Set(Settings.OutboxRetryMaxAttempts, 1);
+
+        Delivery delivery = await RaisedAsync(SubjectEventKind.RestrictionChanged);
+
+        host.Meanwhile = () => _outbox.TakeOver(delivery.Id, Noon + TimeSpan.FromMinutes(10));
+
+        Assert.Equal(0, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
+
+        Assert.Single(host.Offered);
+        Assert.Empty(warehouse.Offered);
+        Assert.Single(_outbox.Renewed);
+        Assert.Equal(0, _outbox.Outcomes);
+        Assert.Equal((ErasureStatus.AwaitingSubscribers, 0), (_outbox.Held(delivery.Id).Status, _outbox.Held(delivery.Id).Attempts));
+        Assert.Empty(_alerts.Raised);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC9: a confirmation and an outcome are written only under the
+    /// claim. A subscriber that confirmed while another pass took the row over has its
+    /// confirmation left unwritten by this pass, which stops and writes no outcome.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_AConfirmationWhoseClaimWasTakenOverIsNotWrittenAsync()
+    {
+        var host = new SubscriberInMemory("host", required: true);
+        var warehouse = new SubscriberInMemory("warehouse", required: true);
+
+        _subscribers.Add(host);
+        _subscribers.Add(warehouse);
+
+        Delivery delivery = await RaisedAsync(SubjectEventKind.RestrictionChanged);
+
+        host.Meanwhile = () => _outbox.TakeOver(delivery.Id, Noon + TimeSpan.FromMinutes(10));
+
+        Assert.Equal(0, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
+
+        Assert.Single(host.Offered);
+        Assert.Empty(warehouse.Offered);
+        Assert.Empty(_outbox.Confirmations);
+        Assert.Empty(_outbox.Held(delivery.Id).Confirmed);
+        Assert.Equal(0, _outbox.Outcomes);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC9, INF-BG-001: a row another pass holds is not carried, and one
+    /// whose claim has timed out is carried by the next pass.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_ADeliveryAnotherPassHoldsIsCarriedOnlyOnceItsClaimTimesOutAsync()
+    {
+        var host = new SubscriberInMemory("host", required: true);
+
+        _subscribers.Add(host);
+
+        Delivery delivery = await RaisedAsync(SubjectEventKind.RestrictionChanged);
+
+        _outbox.TakeOver(delivery.Id, Noon + TimeSpan.FromMinutes(2));
+
+        Assert.Equal(0, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
+        Assert.Empty(host.Offered);
+        Assert.Empty(_outbox.Claimed);
+
+        _clock.Advance(TimeSpan.FromMinutes(2));
+
+        Assert.Equal(1, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
+        Assert.Single(host.Offered);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC9, DR-016 AC5: a completed erasure another pass holds for its
+    /// line is not written down by this one, so of two passes one appends the line; the
+    /// pass that does confirms it under its claim and releases the claim.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_ACompletedErasureAnotherPassHoldsIsNotWrittenDownTwiceAsync()
+    {
+        var completed = Delivery.Of(Ahmed, SubjectEventKind.ErasureRequested, Noon.AddDays(-2));
+
+        completed.Complete();
+        await _outbox.AddAsync(completed, CancellationToken.None);
+
+        _ledger = new ErasureLedgerInMemory();
+        _outbox.Work = _work;
+        _outbox.TakeOver(completed.Id, Noon + TimeSpan.FromMinutes(2));
+
+        Assert.Equal(0, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
+        Assert.Empty(_ledger.Lines);
+        Assert.Empty(_outbox.Claimed);
+
+        _clock.Advance(TimeSpan.FromMinutes(2));
+
+        Assert.Equal(0, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
+        Assert.Single(_ledger.Lines);
+        Assert.Single(_outbox.Claimed);
+        Assert.Equal(["erasure-ledger"], _outbox.Confirmations);
+        Assert.False(_outbox.WroteOutsideAUnitOfWork);
+
+        Assert.Equal(0, await Publisher(_none).PublishAsync(Carrier, CancellationToken.None));
+        Assert.Single(_ledger.Lines);
+        Assert.Single(_outbox.Claimed);
     }
 
     private async ValueTask<Delivery> RaisedAsync(SubjectEventKind kind)

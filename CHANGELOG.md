@@ -10,6 +10,17 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- An outbox row is claimed whole before any subscriber is called, the erasure ledger's
+  line among them, by one conditional update that succeeds only where the row is due
+  and unclaimed or its claim has timed out, so one pass of the `outbox` job carries a
+  row at a time whatever the number of processes. The pass renews its claim before each
+  subscriber and stops where another pass has taken the row over; each confirmation is
+  written as it happens and the row's attempts, schedule and status once, each only
+  under the claim, and one pass counts one attempt. A completed erasure waiting for its
+  ledger line is claimed the same way, so two passes do not append it twice. A
+  subscriber still running when `outbox.claim.timeout` has passed is abandoned as one
+  that did not confirm. The `outbox` table gains `claimed_until` (migration
+  `ClaimAnOutboxRowBeforeItIsDelivered`).
 - An emitted event's row is claimed whole before any consumer is called, by one
   conditional update that succeeds only where the row is due and unclaimed or its claim
   has timed out, so one pass of the `events` job carries a row at a time whatever the

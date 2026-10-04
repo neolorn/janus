@@ -593,6 +593,7 @@ public sealed class ModelTests
             // Not an account field: one fact about a subject the host has its own half
             // of, and each subscriber's confirmation of it (IDN-LIFE-003a).
             "outbox.attempts",
+            "outbox.claimed_until",
             "outbox.id",
             "outbox.kind",
             "outbox.next_attempt_at",
