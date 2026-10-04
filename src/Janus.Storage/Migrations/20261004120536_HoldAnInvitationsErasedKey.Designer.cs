@@ -3,6 +3,7 @@ using System;
 using Janus.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Janus.Storage.Migrations;
 
 [DbContext(typeof(StoreContext))]
-partial class StoreContextModelSnapshot : ModelSnapshot
+[Migration("20261004120536_HoldAnInvitationsErasedKey")]
+partial class HoldAnInvitationsErasedKey
 {
-    protected override void BuildModel(ModelBuilder modelBuilder)
+    /// <inheritdoc />
+    protected override void BuildTargetModel(ModelBuilder modelBuilder)
     {
 #pragma warning disable 612, 618
         modelBuilder
@@ -3884,10 +3887,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<string>("IdentityConfirmation")
                     .HasColumnType("text")
                     .HasColumnName("identity_confirmation");
-
-                b.Property<DateTimeOffset?>("ReceiptSentAt")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("receipt_sent_at");
 
                 b.Property<DateOnly>("ReceivedAt")
                     .HasColumnType("date")

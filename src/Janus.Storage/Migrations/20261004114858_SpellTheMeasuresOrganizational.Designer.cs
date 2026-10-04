@@ -3,6 +3,7 @@ using System;
 using Janus.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Janus.Storage.Migrations;
 
 [DbContext(typeof(StoreContext))]
-partial class StoreContextModelSnapshot : ModelSnapshot
+[Migration("20261004114858_SpellTheMeasuresOrganizational")]
+partial class SpellTheMeasuresOrganizational
 {
-    protected override void BuildModel(ModelBuilder modelBuilder)
+    /// <inheritdoc />
+    protected override void BuildTargetModel(ModelBuilder modelBuilder)
     {
 #pragma warning disable 612, 618
         modelBuilder
@@ -900,7 +903,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnName("token");
 
                 b.Property<byte[]>("WrappedKey")
-                    .IsRequired()
                     .HasColumnType("bytea")
                     .HasColumnName("wrapped_key");
 
@@ -935,7 +937,7 @@ partial class StoreContextModelSnapshot : ModelSnapshot
 
                         t.HasCheckConstraint("ck_invitations_inviter_not_max_uuid", "inviter <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'");
 
-                        t.HasCheckConstraint("ck_invitations_key", "(enc_identifiers IS NULL) = (wrapped_key = decode(repeat('00', 32), 'hex'))");
+                        t.HasCheckConstraint("ck_invitations_key", "(enc_identifiers IS NULL) = (wrapped_key IS NULL)");
 
                         t.HasCheckConstraint("ck_invitations_outcome", "revoked_at IS NULL OR acknowledged_at IS NULL");
                     });
@@ -3884,10 +3886,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<string>("IdentityConfirmation")
                     .HasColumnType("text")
                     .HasColumnName("identity_confirmation");
-
-                b.Property<DateTimeOffset?>("ReceiptSentAt")
-                    .HasColumnType("timestamp with time zone")
-                    .HasColumnName("receipt_sent_at");
 
                 b.Property<DateOnly>("ReceivedAt")
                     .HasColumnType("date")

@@ -230,7 +230,7 @@ public sealed class ModelTests
             "compliance_records.assessment_links",
             "compliance_records.data_owner",
             "compliance_records.id",
-            "compliance_records.organisational_measures",
+            "compliance_records.organizational_measures",
             "compliance_records.updated_at",
 
             // Not an account field: what the subject consented to, against which document
@@ -652,6 +652,7 @@ public sealed class ModelTests
             "privacy_requests.escalated_at",
             "privacy_requests.id",
             "privacy_requests.identity_confirmation",
+            "privacy_requests.receipt_sent_at",
             "privacy_requests.received_at",
             "privacy_requests.status",
             "privacy_requests.subject",

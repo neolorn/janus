@@ -164,7 +164,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
             StringComparer.Ordinal);
 
         Assert.Equal("the data protection officer", narrowed.DataOwner);
-        Assert.Equal("annual training", narrowed.OrganisationalSecurityMeasures);
+        Assert.Equal("annual training", narrowed.OrganizationalSecurityMeasures);
     }
 
     /// <summary>
@@ -309,7 +309,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
             TestContext.Current.CancellationToken);
 
         Assert.Equal("the operations lead", _compliance.Held.DataOwner);
-        Assert.Equal(new string('d', 1024), _compliance.Held.OrganisationalSecurityMeasures);
+        Assert.Equal(new string('d', 1024), _compliance.Held.OrganizationalSecurityMeasures);
 
         _ = await records.DeclareAsync(
             AccessContext.Of(Mona),
@@ -317,7 +317,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
             TestContext.Current.CancellationToken);
 
         Assert.Null(_compliance.Held.DataOwner);
-        Assert.Equal("annual training", _compliance.Held.OrganisationalSecurityMeasures);
+        Assert.Equal("annual training", _compliance.Held.OrganizationalSecurityMeasures);
     }
 
     /// <summary>
@@ -354,7 +354,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
         Assert.Equal("the operations lead", supplied.DataOwner);
-        Assert.Equal("annual access review", supplied.OrganisationalSecurityMeasures);
+        Assert.Equal("annual access review", supplied.OrganizationalSecurityMeasures);
         Assert.Equal(["LIA-1"], supplied.AssessmentLinks);
         Assert.DoesNotContain(supplied.Flags, flag => flag.Subject.Length is 0);
     }

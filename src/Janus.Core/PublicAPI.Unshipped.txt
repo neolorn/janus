@@ -412,13 +412,13 @@ Janus.Core.ComplianceRecord
 Janus.Core.ComplianceRecord.<Clone>$() -> Janus.Core.ComplianceRecord!
 Janus.Core.ComplianceRecord.AssessmentLinks.get -> System.Collections.Generic.IReadOnlyList<string!>!
 Janus.Core.ComplianceRecord.AssessmentLinks.init -> void
-Janus.Core.ComplianceRecord.ComplianceRecord(string? DataOwner, string? OrganisationalSecurityMeasures, System.Collections.Generic.IReadOnlyList<string!>! AssessmentLinks) -> void
+Janus.Core.ComplianceRecord.ComplianceRecord(string? DataOwner, string? OrganizationalSecurityMeasures, System.Collections.Generic.IReadOnlyList<string!>! AssessmentLinks) -> void
 Janus.Core.ComplianceRecord.DataOwner.get -> string?
 Janus.Core.ComplianceRecord.DataOwner.init -> void
-Janus.Core.ComplianceRecord.Deconstruct(out string? DataOwner, out string? OrganisationalSecurityMeasures, out System.Collections.Generic.IReadOnlyList<string!>! AssessmentLinks) -> void
+Janus.Core.ComplianceRecord.Deconstruct(out string? DataOwner, out string? OrganizationalSecurityMeasures, out System.Collections.Generic.IReadOnlyList<string!>! AssessmentLinks) -> void
 Janus.Core.ComplianceRecord.Equals(Janus.Core.ComplianceRecord? other) -> bool
-Janus.Core.ComplianceRecord.OrganisationalSecurityMeasures.get -> string?
-Janus.Core.ComplianceRecord.OrganisationalSecurityMeasures.init -> void
+Janus.Core.ComplianceRecord.OrganizationalSecurityMeasures.get -> string?
+Janus.Core.ComplianceRecord.OrganizationalSecurityMeasures.init -> void
 Janus.Core.ConcealmentBehaviour
 Janus.Core.ConcealmentBehaviour.Conceal = 0 -> Janus.Core.ConcealmentBehaviour
 Janus.Core.ConcealmentBehaviour.Disclose = 1 -> Janus.Core.ConcealmentBehaviour
@@ -2048,7 +2048,7 @@ Janus.Core.PrivacyRequest.DecisionDue.get -> System.DateTimeOffset
 Janus.Core.PrivacyRequest.DecisionDue.init -> void
 Janus.Core.PrivacyRequest.DecisionReason.get -> string?
 Janus.Core.PrivacyRequest.DecisionReason.init -> void
-Janus.Core.PrivacyRequest.Deconstruct(out Janus.Core.PrivacyRequestId Id, out Janus.Core.SubjectId Subject, out Janus.Core.PrivacyRequestType Type, out string? Detail, out System.DateOnly ReceivedAt, out System.DateTimeOffset CreatedAt, out System.DateTimeOffset ReceiptSentAt, out System.DateTimeOffset DecisionDue, out Janus.Core.PrivacyRequestStatus Status, out System.DateTimeOffset? DecidedAt, out string? DecisionReason, out string? Channel, out string? IdentityConfirmation) -> void
+Janus.Core.PrivacyRequest.Deconstruct(out Janus.Core.PrivacyRequestId Id, out Janus.Core.SubjectId Subject, out Janus.Core.PrivacyRequestType Type, out string? Detail, out System.DateOnly ReceivedAt, out System.DateTimeOffset CreatedAt, out System.DateTimeOffset? ReceiptSentAt, out System.DateTimeOffset DecisionDue, out Janus.Core.PrivacyRequestStatus Status, out System.DateTimeOffset? DecidedAt, out string? DecisionReason, out string? Channel, out string? IdentityConfirmation) -> void
 Janus.Core.PrivacyRequest.Detail.get -> string?
 Janus.Core.PrivacyRequest.Detail.init -> void
 Janus.Core.PrivacyRequest.Equals(Janus.Core.PrivacyRequest? other) -> bool
@@ -2057,8 +2057,8 @@ Janus.Core.PrivacyRequest.Id.init -> void
 Janus.Core.PrivacyRequest.IdentityConfirmation.get -> string?
 Janus.Core.PrivacyRequest.IdentityConfirmation.init -> void
 Janus.Core.PrivacyRequest.Open.get -> bool
-Janus.Core.PrivacyRequest.PrivacyRequest(Janus.Core.PrivacyRequestId Id, Janus.Core.SubjectId Subject, Janus.Core.PrivacyRequestType Type, string? Detail, System.DateOnly ReceivedAt, System.DateTimeOffset CreatedAt, System.DateTimeOffset ReceiptSentAt, System.DateTimeOffset DecisionDue, Janus.Core.PrivacyRequestStatus Status, System.DateTimeOffset? DecidedAt, string? DecisionReason, string? Channel, string? IdentityConfirmation) -> void
-Janus.Core.PrivacyRequest.ReceiptSentAt.get -> System.DateTimeOffset
+Janus.Core.PrivacyRequest.PrivacyRequest(Janus.Core.PrivacyRequestId Id, Janus.Core.SubjectId Subject, Janus.Core.PrivacyRequestType Type, string? Detail, System.DateOnly ReceivedAt, System.DateTimeOffset CreatedAt, System.DateTimeOffset? ReceiptSentAt, System.DateTimeOffset DecisionDue, Janus.Core.PrivacyRequestStatus Status, System.DateTimeOffset? DecidedAt, string? DecisionReason, string? Channel, string? IdentityConfirmation) -> void
+Janus.Core.PrivacyRequest.ReceiptSentAt.get -> System.DateTimeOffset?
 Janus.Core.PrivacyRequest.ReceiptSentAt.init -> void
 Janus.Core.PrivacyRequest.ReceivedAt.get -> System.DateOnly
 Janus.Core.PrivacyRequest.ReceivedAt.init -> void
@@ -2096,10 +2096,10 @@ Janus.Core.PrivacyRequestReceipt
 Janus.Core.PrivacyRequestReceipt.<Clone>$() -> Janus.Core.PrivacyRequestReceipt!
 Janus.Core.PrivacyRequestReceipt.DecisionDue.get -> System.DateTimeOffset
 Janus.Core.PrivacyRequestReceipt.DecisionDue.init -> void
-Janus.Core.PrivacyRequestReceipt.Deconstruct(out Janus.Core.PrivacyRequestId RequestId, out System.DateTimeOffset ReceiptSentAt, out System.DateTimeOffset DecisionDue) -> void
+Janus.Core.PrivacyRequestReceipt.Deconstruct(out Janus.Core.PrivacyRequestId RequestId, out System.DateTimeOffset? ReceiptSentAt, out System.DateTimeOffset DecisionDue) -> void
 Janus.Core.PrivacyRequestReceipt.Equals(Janus.Core.PrivacyRequestReceipt? other) -> bool
-Janus.Core.PrivacyRequestReceipt.PrivacyRequestReceipt(Janus.Core.PrivacyRequestId RequestId, System.DateTimeOffset ReceiptSentAt, System.DateTimeOffset DecisionDue) -> void
-Janus.Core.PrivacyRequestReceipt.ReceiptSentAt.get -> System.DateTimeOffset
+Janus.Core.PrivacyRequestReceipt.PrivacyRequestReceipt(Janus.Core.PrivacyRequestId RequestId, System.DateTimeOffset? ReceiptSentAt, System.DateTimeOffset DecisionDue) -> void
+Janus.Core.PrivacyRequestReceipt.ReceiptSentAt.get -> System.DateTimeOffset?
 Janus.Core.PrivacyRequestReceipt.ReceiptSentAt.init -> void
 Janus.Core.PrivacyRequestReceipt.RequestId.get -> Janus.Core.PrivacyRequestId
 Janus.Core.PrivacyRequestReceipt.RequestId.init -> void
@@ -2154,7 +2154,7 @@ Janus.Core.ProcessingRegister.CrossBorderBasis.get -> string?
 Janus.Core.ProcessingRegister.CrossBorderBasis.init -> void
 Janus.Core.ProcessingRegister.DataOwner.get -> string?
 Janus.Core.ProcessingRegister.DataOwner.init -> void
-Janus.Core.ProcessingRegister.Deconstruct(out System.DateTimeOffset GeneratedAt, out string! HostingEnvironment, out Janus.Core.Configuration.HostingLocation HostingLocation, out string? CrossBorderBasis, out string? DataOwner, out string? OrganisationalSecurityMeasures, out System.Collections.Generic.IReadOnlyList<string!>! AssessmentLinks, out System.Collections.Generic.IReadOnlyList<Janus.Core.ProcessingRecord!>! Records, out System.Collections.Generic.IReadOnlyList<Janus.Core.RecipientRecord!>! Recipients, out System.Collections.Generic.IReadOnlyList<Janus.Core.RegisterFlag!>! Flags) -> void
+Janus.Core.ProcessingRegister.Deconstruct(out System.DateTimeOffset GeneratedAt, out string! HostingEnvironment, out Janus.Core.Configuration.HostingLocation HostingLocation, out string? CrossBorderBasis, out string? DataOwner, out string? OrganizationalSecurityMeasures, out System.Collections.Generic.IReadOnlyList<string!>! AssessmentLinks, out System.Collections.Generic.IReadOnlyList<Janus.Core.ProcessingRecord!>! Records, out System.Collections.Generic.IReadOnlyList<Janus.Core.RecipientRecord!>! Recipients, out System.Collections.Generic.IReadOnlyList<Janus.Core.RegisterFlag!>! Flags) -> void
 Janus.Core.ProcessingRegister.Equals(Janus.Core.ProcessingRegister? other) -> bool
 Janus.Core.ProcessingRegister.Flags.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RegisterFlag!>!
 Janus.Core.ProcessingRegister.Flags.init -> void
@@ -2164,9 +2164,9 @@ Janus.Core.ProcessingRegister.HostingEnvironment.get -> string!
 Janus.Core.ProcessingRegister.HostingEnvironment.init -> void
 Janus.Core.ProcessingRegister.HostingLocation.get -> Janus.Core.Configuration.HostingLocation
 Janus.Core.ProcessingRegister.HostingLocation.init -> void
-Janus.Core.ProcessingRegister.OrganisationalSecurityMeasures.get -> string?
-Janus.Core.ProcessingRegister.OrganisationalSecurityMeasures.init -> void
-Janus.Core.ProcessingRegister.ProcessingRegister(System.DateTimeOffset GeneratedAt, string! HostingEnvironment, Janus.Core.Configuration.HostingLocation HostingLocation, string? CrossBorderBasis, string? DataOwner, string? OrganisationalSecurityMeasures, System.Collections.Generic.IReadOnlyList<string!>! AssessmentLinks, System.Collections.Generic.IReadOnlyList<Janus.Core.ProcessingRecord!>! Records, System.Collections.Generic.IReadOnlyList<Janus.Core.RecipientRecord!>! Recipients, System.Collections.Generic.IReadOnlyList<Janus.Core.RegisterFlag!>! Flags) -> void
+Janus.Core.ProcessingRegister.OrganizationalSecurityMeasures.get -> string?
+Janus.Core.ProcessingRegister.OrganizationalSecurityMeasures.init -> void
+Janus.Core.ProcessingRegister.ProcessingRegister(System.DateTimeOffset GeneratedAt, string! HostingEnvironment, Janus.Core.Configuration.HostingLocation HostingLocation, string? CrossBorderBasis, string? DataOwner, string? OrganizationalSecurityMeasures, System.Collections.Generic.IReadOnlyList<string!>! AssessmentLinks, System.Collections.Generic.IReadOnlyList<Janus.Core.ProcessingRecord!>! Records, System.Collections.Generic.IReadOnlyList<Janus.Core.RecipientRecord!>! Recipients, System.Collections.Generic.IReadOnlyList<Janus.Core.RegisterFlag!>! Flags) -> void
 Janus.Core.ProcessingRegister.Recipients.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.RecipientRecord!>!
 Janus.Core.ProcessingRegister.Recipients.init -> void
 Janus.Core.ProcessingRegister.Records.get -> System.Collections.Generic.IReadOnlyList<Janus.Core.ProcessingRecord!>!

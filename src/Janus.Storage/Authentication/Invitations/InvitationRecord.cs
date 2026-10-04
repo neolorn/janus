@@ -9,8 +9,8 @@ namespace Janus.Storage.Authentication.Invitations;
 /// <remarks>
 /// Implements IDN-LIFE-009a, REG-INV-001, REG-MAIL-001 and PRIV-RIGHT-005a. What the
 /// invitation binds is one encrypted document under a key the row carries, because no
-/// query reads inside it and it is forgotten whole: clearing the document and its key
-/// leaves nothing that reads it. The link's token is kept only as its fingerprint.
+/// query reads inside it and it is forgotten whole: clearing the document and erasing
+/// its key leaves nothing that reads it. The link's token is kept only as its fingerprint.
 /// </remarks>
 internal sealed class InvitationRecord
 {
@@ -29,9 +29,10 @@ internal sealed class InvitationRecord
 
     /// <summary>
     /// The <c>wrapped_key</c> column: the row's data key, wrapped under the deployment's
-    /// data key, while the identifiers are kept.
+    /// data key, while the identifiers are kept, and the 32 zero bytes of an erased key
+    /// once they are forgotten.
     /// </summary>
-    public byte[]? WrappedKey { get; set; }
+    public byte[] WrappedKey { get; set; } = [];
 
     /// <summary>The <c>enc_identifiers</c> column: what the invitation binds.</summary>
     public byte[]? EncryptedIdentifiers { get; set; }

@@ -12,6 +12,7 @@ namespace Janus.Privacy.Requests;
 /// <param name="Detail">What was written.</param>
 /// <param name="ReceivedAt">The calendar date it reached the company.</param>
 /// <param name="CreatedAt">When it entered the queue.</param>
+/// <param name="ReceiptSentAt">When its receipt was admitted, where one was.</param>
 /// <param name="DecisionDue">When the decision is due by.</param>
 /// <param name="WarnAt">When the Normal alert is due.</param>
 /// <param name="EscalateAt">When the High alert is due.</param>
@@ -33,6 +34,7 @@ internal sealed record HeldRequest(
     string? Detail,
     DateOnly ReceivedAt,
     DateTimeOffset CreatedAt,
+    DateTimeOffset? ReceiptSentAt,
     DateTimeOffset DecisionDue,
     DateTimeOffset WarnAt,
     DateTimeOffset EscalateAt,

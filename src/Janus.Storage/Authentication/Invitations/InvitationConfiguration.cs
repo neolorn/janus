@@ -1,5 +1,7 @@
 using System;
+using System.Globalization;
 using Janus.Core;
+using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Mailboxes;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Identity.Organizations;
@@ -31,9 +33,14 @@ internal sealed class InvitationConfiguration : IEntityTypeConfiguration<Invitat
 
         builder.ToTable(Table, table =>
         {
+            // PRIV-RIGHT-005a AC14: what the invitation binds is kept under its key, and
+            // once it is forgotten the key is the 32 zero bytes of an erased key. No
+            // third shape exists.
             table.HasCheckConstraint(
                 "ck_invitations_key",
-                "(enc_identifiers IS NULL) = (wrapped_key IS NULL)");
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"(enc_identifiers IS NULL) = (wrapped_key = decode(repeat('00', {PersonalDataFormat.DataKeyLength}), 'hex'))"));
             table.HasCheckConstraint(
                 "ck_invitations_forgotten",
                 "enc_identifiers IS NULL OR (revoked_at IS NULL AND acknowledged_at IS NULL)");

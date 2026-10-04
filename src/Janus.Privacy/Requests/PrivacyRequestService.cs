@@ -27,8 +27,9 @@ namespace Janus.Privacy.Requests;
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
 /// Implements LIB-API-005, PRIV-RIGHT-001, PRIV-RIGHT-002 and chapter 09 sections 7
-/// and 8a. The receipt is sent inside the transaction that puts the request on the
-/// queue, so a queued request the subject was never told about does not exist.
+/// and 8a. The receipt is undertaken inside the transaction that puts the request on
+/// the queue, so no receipt goes out for a request that was not queued, and a receipt a
+/// sending restriction refuses leaves the request standing with no receipt.
 /// </remarks>
 internal sealed class PrivacyRequestService(
     IPrivacyRequestStore requests,
@@ -604,6 +605,18 @@ internal sealed class PrivacyRequestService(
             return Result.Failure<PrivacyRequestReceipt>(Error.From(ErrorCodes.RequestDuplicate));
         }
 
+        // PRIV-RIGHT-002 AC1, AUTH-ABUSE-004: the receipt is undertaken in the transaction
+        // that queues the request and carried after its commit, because a receipt for a
+        // request that was not queued would be the one thing worse than none. A receipt
+        // no channel admits, as one a sending restriction refuses, does not unqueue the
+        // request or stop the clock: the request is written with no receipt.
+        if (await notices
+                .TellAsync(request.Subject, MessageKind.PrivacyRequestReceived, Source, cancellationToken)
+                .ConfigureAwait(false) > 0)
+        {
+            request.ReceiptAdmitted();
+        }
+
         await requests.AddAsync(request, cancellationToken).ConfigureAwait(false);
         await audit
             .RecordedAsync(
@@ -614,14 +627,6 @@ internal sealed class PrivacyRequestService(
                 now,
                 Named(request),
                 cancellationToken)
-            .ConfigureAwait(false);
-
-        // PRIV-RIGHT-002, AUTH-ABUSE-004: the receipt is undertaken in the transaction
-        // that queues the request and carried after its commit, because a receipt for a
-        // request that was not queued would be the one thing worse than none, and a
-        // channel that will not take it does not unqueue the request or stop the clock.
-        _ = await notices
-            .TellAsync(request.Subject, MessageKind.PrivacyRequestReceived, Source, cancellationToken)
             .ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))

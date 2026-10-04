@@ -52,6 +52,7 @@ internal sealed class PrivacyRequestConfiguration : IEntityTypeConfiguration<Pri
         builder.Property(request => request.Detail).HasColumnName("detail");
         builder.Property(request => request.ReceivedAt).HasColumnName("received_at");
         builder.Property(request => request.CreatedAt).HasColumnName("created_at");
+        builder.Property(request => request.ReceiptSentAt).HasColumnName("receipt_sent_at");
         builder.Property(request => request.DecisionDue).HasColumnName("decision_due");
         builder.Property(request => request.WarnAt).HasColumnName("warn_at");
         builder.Property(request => request.EscalateAt).HasColumnName("escalate_at");

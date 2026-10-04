@@ -222,7 +222,7 @@ table callbacks
 table compliance_records
   column id integer not null
   column data_owner text
-  column organisational_measures text
+  column organizational_measures text
   column assessment_links jsonb not null
   column updated_at timestamp with time zone not null
   constraint ck_compliance_records_only CHECK ((id = 1))
@@ -459,7 +459,7 @@ table invitations
   column organization uuid not null
   column inviter uuid not null
   column token bytea not null
-  column wrapped_key bytea
+  column wrapped_key bytea not null
   column enc_identifiers bytea
   column roles text[] not null
   column documents jsonb not null
@@ -475,7 +475,7 @@ table invitations
   constraint ck_invitations_forgotten CHECK (((enc_identifiers IS NULL) OR ((revoked_at IS NULL) AND (acknowledged_at IS NULL))))
   constraint ck_invitations_invitee_not_max_uuid CHECK ((invitee <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_invitations_inviter_not_max_uuid CHECK ((inviter <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
-  constraint ck_invitations_key CHECK (((enc_identifiers IS NULL) = (wrapped_key IS NULL)))
+  constraint ck_invitations_key CHECK (((enc_identifiers IS NULL) = (wrapped_key = decode(repeat('00'::text, 32), 'hex'::text))))
   constraint ck_invitations_outcome CHECK (((revoked_at IS NULL) OR (acknowledged_at IS NULL)))
   constraint fk_invitations_invitee FOREIGN KEY (invitee) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
   constraint fk_invitations_inviter FOREIGN KEY (inviter) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
@@ -832,6 +832,7 @@ table privacy_requests
   column identity_confirmation text
   column warned_at timestamp with time zone
   column escalated_at timestamp with time zone
+  column receipt_sent_at timestamp with time zone
   constraint ck_privacy_requests_status CHECK ((status = ANY (ARRAY['deemed-refused-by-lapse'::text, 'fulfilled'::text, 'granted-by-lapse'::text, 'open'::text, 'refused'::text])))
   constraint ck_privacy_requests_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_privacy_requests_type CHECK ((type = ANY (ARRAY['erasure'::text, 'rectification'::text, 'restriction'::text])))

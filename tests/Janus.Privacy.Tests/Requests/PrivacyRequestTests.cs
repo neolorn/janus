@@ -114,6 +114,59 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-RIGHT-002 AC1: a receipt every channel refuses, as a sending restriction
+    /// does, leaves the request standing: it is queued, audited and committed with its
+    /// deadline, and it carries no receipt-sent timestamp.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_002_AC1_ASubmittedRequestWhoseReceiptIsRefusedStandsWithNoReceiptAsync()
+    {
+        _notices.Refuses = true;
+
+        PrivacyRequestReceipt receipt = await SubmittedAsync(PrivacyRequestType.Restriction);
+
+        QueuedRequest held = Assert.Single(_requests.Queue);
+
+        Assert.Null(receipt.ReceiptSentAt);
+        Assert.Null(held.ReceiptSentAt);
+        Assert.Null(held.Read().ReceiptSentAt);
+        Assert.Equal(receipt.RequestId, held.Id);
+        Assert.Equal(PrivacyRequestStatus.Open, held.Status);
+        Assert.Equal(Noon, held.CreatedAt);
+        Assert.Equal(receipt.DecisionDue, held.DecisionDue);
+        Assert.Empty(_notices.Told);
+        Assert.Contains(_audit.Entries, entry => entry.Action == AuditActions.RequestSubmitted);
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Committed);
+        Assert.Equal(0, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-002 AC1: a request entered out of band whose receipt every channel
+    /// refuses stands the same way, and its clock still runs from the date received.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_002_AC1_AnEnteredRequestWhoseReceiptIsRefusedStandsWithNoReceiptAsync()
+    {
+        _notices.Refuses = true;
+
+        PrivacyRequestReceipt receipt =
+            await EnteredAsync(PrivacyRequestType.Erasure, new DateOnly(2026, 9, 18));
+
+        QueuedRequest held = Assert.Single(_requests.Queue);
+
+        Assert.Null(receipt.ReceiptSentAt);
+        Assert.Null(held.ReceiptSentAt);
+        Assert.Equal(PrivacyRequestStatus.Open, held.Status);
+        Assert.Equal(new DateOnly(2026, 9, 18), held.ReceivedAt);
+        Assert.Equal(receipt.DecisionDue, held.DecisionDue);
+        Assert.Equal(1, _work.Committed);
+        Assert.Equal(0, _work.RolledBack);
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-001 AC1: the subject reaches restriction and rectification without
     /// a support contact, holding nothing but their own session.
     /// </summary>

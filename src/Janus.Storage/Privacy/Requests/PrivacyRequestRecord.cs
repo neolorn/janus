@@ -30,6 +30,12 @@ internal sealed class PrivacyRequestRecord
     /// <summary>The <c>created_at</c> column.</summary>
     public DateTimeOffset CreatedAt { get; set; }
 
+    /// <summary>
+    /// The <c>receipt_sent_at</c> column: when the receipt was admitted, null where a
+    /// sending restriction refused it.
+    /// </summary>
+    public DateTimeOffset? ReceiptSentAt { get; set; }
+
     /// <summary>The <c>decision_due</c> column.</summary>
     public DateTimeOffset DecisionDue { get; set; }
 

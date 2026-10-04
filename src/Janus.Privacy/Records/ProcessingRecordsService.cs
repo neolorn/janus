@@ -157,7 +157,7 @@ internal sealed class ProcessingRecordsService(
             location,
             basis,
             supplied.DataOwner,
-            supplied.OrganisationalSecurityMeasures,
+            supplied.OrganizationalSecurityMeasures,
             supplied.AssessmentLinks,
             records,
             recipients,
@@ -190,7 +190,7 @@ internal sealed class ProcessingRecordsService(
             return Result.Failure(Malformed("dataOwner"));
         }
 
-        string? measures = record.OrganisationalSecurityMeasures?.Trim();
+        string? measures = record.OrganizationalSecurityMeasures?.Trim();
 
         if (measures is { Length: 0 or > 1024 })
         {
@@ -216,7 +216,7 @@ internal sealed class ProcessingRecordsService(
 
         await compliance
             .RecordAsync(
-                record with { DataOwner = dataOwner, OrganisationalSecurityMeasures = measures },
+                record with { DataOwner = dataOwner, OrganizationalSecurityMeasures = measures },
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -260,7 +260,7 @@ internal sealed class ProcessingRecordsService(
             flags.Add(new RegisterFlag(RegisterFinding.DataOwnerMissing, string.Empty));
         }
 
-        if (string.IsNullOrWhiteSpace(supplied.OrganisationalSecurityMeasures))
+        if (string.IsNullOrWhiteSpace(supplied.OrganizationalSecurityMeasures))
         {
             flags.Add(new RegisterFlag(RegisterFinding.OrganizationalMeasuresMissing, string.Empty));
         }

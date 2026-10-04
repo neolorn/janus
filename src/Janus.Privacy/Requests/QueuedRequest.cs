@@ -32,7 +32,6 @@ internal sealed class QueuedRequest
         Detail = detail;
         ReceivedAt = receivedAt;
         CreatedAt = createdAt;
-        ReceiptSentAt = createdAt;
         DecisionDue = deadline.Due;
         WarnAt = deadline.WarnAt;
         EscalateAt = deadline.EscalateAt;
@@ -59,8 +58,11 @@ internal sealed class QueuedRequest
     /// <summary>When it entered the queue.</summary>
     public DateTimeOffset CreatedAt { get; }
 
-    /// <summary>When the automatic receipt went out, which is entry.</summary>
-    public DateTimeOffset ReceiptSentAt { get; }
+    /// <summary>
+    /// When the automatic receipt was admitted, which is entry, or nothing where a
+    /// sending restriction refused it.
+    /// </summary>
+    public DateTimeOffset? ReceiptSentAt { get; private set; }
 
     /// <summary>The end of the sixth working day after submission.</summary>
     public DateTimeOffset DecisionDue { get; }
@@ -171,6 +173,7 @@ internal sealed class QueuedRequest
             held.Channel,
             held.IdentityConfirmation)
         {
+            ReceiptSentAt = held.ReceiptSentAt,
             Status = held.Status,
             DecidedAt = held.DecidedAt,
             DecisionReason = held.DecisionReason,
@@ -178,6 +181,12 @@ internal sealed class QueuedRequest
             EscalatedAt = held.EscalatedAt,
         };
     }
+
+    /// <summary>
+    /// The automatic receipt was admitted for sending as the request entered the queue.
+    /// A receipt no channel admitted leaves the request as it stands, with none.
+    /// </summary>
+    public void ReceiptAdmitted() => ReceiptSentAt = CreatedAt;
 
     /// <summary>
     /// A human decided to do what was asked.

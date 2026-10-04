@@ -79,6 +79,28 @@ against the public contract of LIB-API-001.
   (`AuditActions.GrantMaterialised`, `AuditActions.GrantRetracted`), in the transaction
   that corrects the drift: a security record naming the principal
   `derivation-driftcheck`, the reason `AUTHZ-DERIVE-005`, the grant and its role.
+- A privacy request whose receipt a sending restriction refuses is queued all the same:
+  the request stands, its clock runs, and `receiptSentAt` is answered null by
+  `POST /me/privacy-requests`, `POST /admin/privacy-requests` and the queue, where it
+  was answered with the creation instant whether the receipt was admitted or not.
+  `PrivacyRequest.ReceiptSentAt` and `PrivacyRequestReceipt.ReceiptSentAt` are now
+  nullable, and a migration adds `privacy_requests.receipt_sent_at`, set to the
+  creation instant for every request already queued.
+- An invitation that is revoked, acknowledged, found expired by the sweep or attached to
+  a subject who is erased holds, in place of its wrapped key, the 32 zero bytes of an
+  erased key and no longer an absent one, so one erased value stands wherever a wrapped
+  key is held; what it bound is cleared as before. `invitations.wrapped_key` is now
+  required, `ck_invitations_key` holds the bound identifiers absent exactly where the
+  key is the erased one, and a migration gives the erased key to every invitation
+  already forgotten.
+- The organizational security measures of the records of processing are spelled
+  `organizational` wherever the library names them: the answer of `GET /admin/ropa`
+  carries `organizationalSecurityMeasures`, as the request of
+  `PUT /admin/compliance/assessments` already did; the public members are
+  `ComplianceRecord.OrganizationalSecurityMeasures` and
+  `ProcessingRegister.OrganizationalSecurityMeasures`; and a migration renames the
+  column to `compliance_records.organizational_measures`, keeping the statement it
+  holds.
 - A domain of an organization's lock, and the domain of an address judged against it,
   takes its ASCII form from the library's own UTS #46 processing and no longer from the
   machine's ICU, so one domain is listed and compared in one form on every machine. A

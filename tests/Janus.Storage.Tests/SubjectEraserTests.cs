@@ -940,12 +940,13 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
     }
 
     /// <summary>
-    /// PRIV-RIGHT-005a: what an invitation attached to the subject binds is forgotten
-    /// with the rest of their fields, while the row still names who invited into what;
+    /// PRIV-RIGHT-005a AC14: what an invitation attached to the subject binds is forgotten
+    /// with the rest of their fields, its key overwritten with the 32 zero bytes of an
+    /// erased key, while the row still names who invited into what;
     /// an invitation attached to nobody keeps what it binds until it is used or expires.
     /// </summary>
     [Fact]
-    public async Task PRIV_RIGHT_005a_WhatAnAttachedInvitationBindsGoesWithTheSubjectAsync()
+    public async Task PRIV_RIGHT_005a_AC14_WhatAnAttachedInvitationBindsGoesWithTheSubjectAsync()
     {
         SubjectId subject = await DeletingAccountAsync();
         OrganizationId organization = await _deployment.OrganizationAsync(Noon);
@@ -971,7 +972,8 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
         InvitationRecord kept = await reading.Invitations
             .SingleAsync(row => row.Id == standing.Id, TestContext.Current.CancellationToken);
 
-        Assert.Equal((null, null), (forgotten.EncryptedIdentifiers, forgotten.WrappedKey));
+        Assert.Null(forgotten.EncryptedIdentifiers);
+        Assert.Equal(new byte[32], forgotten.WrappedKey);
         Assert.Equal((subject, inviter, organization), (forgotten.Invitee, forgotten.Inviter, forgotten.Organization));
         Assert.NotNull(kept.EncryptedIdentifiers);
     }
