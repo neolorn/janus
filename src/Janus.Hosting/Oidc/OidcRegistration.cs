@@ -114,6 +114,13 @@ internal static class OidcRegistration
                 // against the published key set, which it cannot do if it is encrypted.
                 _ = options.DisableAccessTokenEncryption();
 
+                // BFF-MACH-001 AC2: a request to one of the provider's machine routes
+                // that carries the session cookie is refused with the protocol's
+                // invalid_request, before the server judges anything it presents.
+                CookieRefused<OpenIddictServerEvents.ValidatePushedAuthorizationRequestContext>(options);
+                CookieRefused<OpenIddictServerEvents.ValidateTokenRequestContext>(options);
+                CookieRefused<OpenIddictServerEvents.ValidateUserInfoRequestContext>(options);
+
                 _ = options.AddEventHandler<OpenIddictServerEvents.ValidatePushedAuthorizationRequestContext>(
                     handler => handler
                         .UseScopedHandler<RegisteredDestination>()
@@ -202,6 +209,13 @@ internal static class OidcRegistration
 
         return services;
     }
+
+    private static void CookieRefused<TContext>(OpenIddictServerBuilder options)
+        where TContext : OpenIddictServerEvents.BaseValidatingContext =>
+        _ = options.AddEventHandler<TContext>(
+            handler => handler
+                .UseScopedHandler<SessionCookieRefused<TContext>>()
+                .SetOrder(SessionCookieRefused<TContext>.Order));
 
     private static void ErrorAlone<TContext>(OpenIddictServerBuilder options)
         where TContext : OpenIddictServerEvents.BaseRequestContext =>

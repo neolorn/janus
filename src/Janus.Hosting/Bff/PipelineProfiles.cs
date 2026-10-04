@@ -83,14 +83,20 @@ public static class PipelineProfiles
         // mounts the profile and chooses nothing about what it covers. Chapter 09
         // section 8: the emergency credential is presented from a browser that may
         // still hold a stale session for the domain, so there the cookie is ignored
-        // rather than refused.
+        // rather than refused. A callback carrying the cookie is refused by the profile
+        // as a rejected callback is; a protocol endpoint of the provider carrying it is
+        // refused by the provider, in its protocol's shape.
         return application
             .UseWhen(
                 context => MachineRoutes.Governs(context.Request.Path)
-                    && !MachineRoutes.IgnoresCookie(context.Request.Path),
+                    && !MachineRoutes.IgnoresCookie(context.Request.Path)
+                    && !MachineRoutes.AnswersByProtocol(context.Request.Path),
+                Machine)
+            .UseWhen(
+                context => MachineRoutes.AnswersByProtocol(context.Request.Path),
                 branch =>
                 {
-                    Machine(branch);
+                    Marked(branch);
                     _ = branch.UseAuthentication();
                 })
             .UseWhen(
@@ -217,7 +223,7 @@ public static class PipelineProfiles
         });
     }
 
-    // The stages every route on the machine profile passes.
+    // The stages every callback on the machine profile passes.
     private static void Machine(IApplicationBuilder branch)
     {
         Marked(branch);

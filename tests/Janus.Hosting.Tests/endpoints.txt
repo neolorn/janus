@@ -1360,7 +1360,6 @@ POST /auth/webauthn/register/complete
   422 auth.credential.labelinvalid auth.webauthn.algorithmnotallowed auth.webauthn.userverificationrequired
 POST /callbacks/providers/apple
   200
-  403 authz.denied
   409 integration.callback.inprogress
   422 integration.callback.rejected
   429 integration.callback.rejected
@@ -1375,7 +1374,6 @@ POST /callbacks/providers/google
     application/json
       err: string
       description: string
-  403 authz.denied
   409 integration.callback.inprogress
   422 integration.callback.rejected
   429 integration.callback.rejected
@@ -1386,7 +1384,6 @@ POST /callbacks/providers/google/return
   303
 GET /callbacks/sms/dlr
   200
-  403 authz.denied
   409 integration.callback.inprogress
   422 integration.callback.rejected
   429 integration.callback.rejected

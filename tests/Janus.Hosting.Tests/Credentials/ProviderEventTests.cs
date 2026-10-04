@@ -839,8 +839,10 @@ public sealed class ProviderEventTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-012a AC3 and BFF-MACH-001 AC2: the endpoint is on the machine profile,
-    /// so a delivery carrying a browser's session cookie is refused and changes nothing.
+    /// IDN-LIFE-012a AC3, BFF-MACH-001 AC2 and chapter 09 section 10: the endpoint is
+    /// on the machine profile, so a delivery carrying a browser's session cookie is
+    /// refused as every rejected callback is, 422 with no interval and on the route of
+    /// a provider that follows RFC 8935 too, and changes nothing.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -858,7 +860,9 @@ public sealed class ProviderEventTests : IAsyncDisposable
                 GoogleEvent(Risc + "sessions-revoked", GoogleSubject)),
             BrowserCookies.Session + "=stale");
 
-        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+        Assert.Equal(ErrorCodes.CallbackRejected.ToString(), refused.Text("code"));
+        Assert.Null(refused.Header(HeaderNames.RetryAfter));
         Assert.Equal(live, Live(subject).Count);
         Assert.Equal(AuthenticatorState.Active, Held(linked).State);
     }

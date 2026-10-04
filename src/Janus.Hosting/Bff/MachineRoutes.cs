@@ -39,6 +39,16 @@ internal static class MachineRoutes
         new("/callbacks/providers/apple/return"),
     ];
 
+    // BFF-MACH-001: the provider's protocol endpoints refuse a session cookie as their
+    // protocol refuses a bad request, which the provider answers and not the profile.
+    // Every other governed route that refuses the cookie is a callback.
+    private static readonly PathString[] Protocol =
+    [
+        new("/oidc/par"),
+        new("/oidc/token"),
+        new("/oidc/userinfo"),
+    ];
+
     /// <summary>
     /// Every path the machine profile governs.
     /// </summary>
@@ -49,18 +59,7 @@ internal static class MachineRoutes
     /// </summary>
     /// <param name="path">The path the request arrived at.</param>
     /// <returns>Whether it is one of the library's machine routes.</returns>
-    public static bool Governs(PathString path)
-    {
-        foreach (PathString governed in Governed)
-        {
-            if (path.Equals(governed, System.StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    public static bool Governs(PathString path) => Among(Governed, path);
 
     /// <summary>
     /// Whether a route on the machine profile ignores a session cookie rather than
@@ -68,11 +67,21 @@ internal static class MachineRoutes
     /// </summary>
     /// <param name="path">The path the request arrived at.</param>
     /// <returns>Whether the cookie is ignored there.</returns>
-    public static bool IgnoresCookie(PathString path)
+    public static bool IgnoresCookie(PathString path) => Among(CookieIgnored, path);
+
+    /// <summary>
+    /// Whether a route on the machine profile is one of the provider's protocol
+    /// endpoints, which answer in the shape their protocol fixes.
+    /// </summary>
+    /// <param name="path">The path the request arrived at.</param>
+    /// <returns>Whether the provider answers there.</returns>
+    public static bool AnswersByProtocol(PathString path) => Among(Protocol, path);
+
+    private static bool Among(PathString[] routes, PathString path)
     {
-        foreach (PathString ignoring in CookieIgnored)
+        foreach (PathString route in routes)
         {
-            if (path.Equals(ignoring, System.StringComparison.OrdinalIgnoreCase))
+            if (path.Equals(route, System.StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }

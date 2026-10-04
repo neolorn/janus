@@ -162,6 +162,39 @@ internal static class CallbackIntake
         return refused;
     }
 
+    /// <summary>
+    /// Refuses a callback that arrived carrying the browser's session cookie, inside
+    /// the transaction the caller opened: the callback is counted against its source
+    /// first, as every callback is, and within the rate limit the refusal is counted as
+    /// a rejection and answered as one.
+    /// </summary>
+    /// <param name="context">The request.</param>
+    /// <param name="admission">What counts callbacks and rejections and raises the alert.</param>
+    /// <param name="work">The transaction the counts are kept in.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of answering it.</returns>
+    /// <remarks>Implements BFF-MACH-001 criterion 2 and INT-GEN-003 criterion 4.</remarks>
+    public static async ValueTask CookieRefusedAsync(
+        HttpContext context,
+        CallbackAdmission admission,
+        IUnitOfWork work,
+        CancellationToken cancellationToken)
+    {
+        string source = RequestOrigin.Source(context.Request);
+
+        Result admitted = await admission.AdmitAsync(source, cancellationToken).ConfigureAwait(false);
+        Result refused = admitted.Match(() => true, _ => false)
+            ? await admission.RejectAsync(source, cancellationToken).ConfigureAwait(false)
+            : admitted;
+
+        await AnsweredAsync(
+                context,
+                refused.Match(() => Error.From(ErrorCodes.CallbackRejected), error => error),
+                work,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     private static async ValueTask AnsweredAsync(
         HttpContext context,
         Error error,

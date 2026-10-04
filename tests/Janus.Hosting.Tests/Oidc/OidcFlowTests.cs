@@ -12,6 +12,7 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.Net.Http.Headers;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Oidc;
@@ -677,26 +678,49 @@ public sealed class OidcFlowTests
     }
 
     /// <summary>
-    /// BFF-MACH-001 AC2: a machine route refuses a request that arrives carrying a
-    /// browser's session cookie.
+    /// BFF-MACH-001 AC2, LIB-API-003 AC5: each of the provider's machine routes refuses
+    /// a request that arrives carrying a browser's session cookie with its protocol's
+    /// <c>invalid_request</c>, the code alone, in a body on the pushed request and the
+    /// token request (RFC 6749 section 5.2, RFC 9126 section 2.3) and in the challenge
+    /// on the userinfo request (RFC 6750 section 3), before it reads what the request
+    /// presents: no reference is issued, and the code the token request carried is
+    /// still exchanged by the request that carries no cookie.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task BFF_MACH_001_AC2_ACookieOnAMachineRouteIsRefusedAsync()
+    public async Task BFF_MACH_001_AC2_ACookieOnAnOidcRouteIsRefusedWithInvalidRequestAsync()
     {
         await using var deployment = new Deployment();
 
         Browser browser = await RelyingParty.PreparedAsync(deployment);
+        var machine = new Machine(deployment);
         string code = await RelyingParty.CodeAsync(deployment, browser, RelyingParty.Application);
         string cookie = Janus.Hosting.Bff.BrowserCookies.Session
             + "="
             + browser.Cookies[Janus.Hosting.Bff.BrowserCookies.Session];
 
-        Answer refused = await new Machine(deployment)
+        Answer pushed = await machine.PostCarryingAsync(
+            "/oidc/par",
+            cookie,
+            RelyingParty.Request(RelyingParty.Application, silent: true, RelyingParty.Destination, "openid email"));
+        Answer exchanged = await machine
             .PostCarryingAsync("/oidc/token", cookie, RelyingParty.Code(code, RelyingParty.Application));
+        Answer claims = await machine.CallCarryingAsync("/oidc/userinfo", cookie);
+        Answer taken = await machine.PostAsync("/oidc/token", RelyingParty.Code(code, RelyingParty.Application));
 
-        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
-        Assert.Equal(ErrorCodes.Denied.ToString(), refused.Text("code"));
+        Assert.All(
+            new[] { pushed, exchanged },
+            refused =>
+            {
+                Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+                Assert.Equal("invalid_request", refused.Text("error"));
+                Assert.Equal("error", Assert.Single(refused.Json().EnumerateObject()).Name);
+            });
+        Assert.Equal(StatusCodes.Status400BadRequest, claims.Status);
+        Assert.Equal("Bearer error=\"invalid_request\"", claims.Header(HeaderNames.WWWAuthenticate));
+        Assert.Empty(claims.Body);
+        Assert.Equal(StatusCodes.Status200OK, taken.Status);
+        Assert.NotEmpty(taken.Text("access_token"));
     }
 
     /// <summary>
