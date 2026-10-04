@@ -491,27 +491,28 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// PRIV-RIGHT-001, IDN-LIFE-003 (D-166): an erasure whose window cannot begin fails
-    /// the fulfilment, which leaves the request open and records no decision.
+    /// PRIV-RIGHT-001, IDN-LIFE-003 (D-183): the fulfilment of an erasure refuses nothing
+    /// on the account's existence, which the entry checked, so a request whose subject
+    /// bears no account is a fault and no refusal; the request stays open and no
+    /// decision is recorded.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task PRIV_RIGHT_001_IDN_LIFE_003_AnErasureThatCannotBeginFailsTheFulfilmentAsync()
+    public async Task PRIV_RIGHT_001_IDN_LIFE_003_AnErasureOfASubjectNoAccountBearsIsAFaultAsync()
     {
         PrivacyRequestReceipt receipt =
             await EnteredAsync(PrivacyRequestType.Erasure, new DateOnly(2026, 9, 18));
 
         _accounts.Forget(Ahmed);
 
-        Result fulfilled = await Requests
-            .FulfilAsync(AccessContext.Of(Mona), Browser, receipt.RequestId, CancellationToken.None);
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () => await Requests
+            .FulfilAsync(AccessContext.Of(Mona), Browser, receipt.RequestId, CancellationToken.None));
 
-        Assert.Equal(ErrorCodes.AccountNotFound, fulfilled.Match(() => default, error => error.Code));
         Assert.Equal(PrivacyRequestStatus.Open, Assert.Single(_requests.Queue).Status);
         Assert.Null(_accounts.Deleting);
         Assert.False(_work.Open);
         Assert.Equal(1, _work.Committed);
-        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(0, _work.RolledBack);
     }
 
     /// <summary>
@@ -880,6 +881,80 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
 
         Assert.True(entered.Match(_ => true, _ => false));
         Assert.Null(Assert.Single(_requests.Queue).Detail);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001, 09 section 8a (D-183): a request entered for a subject no account
+    /// bears is refused naming the member, whatever its type, and the queue takes
+    /// nothing.
+    /// </summary>
+    /// <param name="type">What the entry asks for.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(PrivacyRequestType.Erasure)]
+    [InlineData(PrivacyRequestType.Restriction)]
+    [InlineData(PrivacyRequestType.Rectification)]
+    public async Task PRIV_RIGHT_001_AnEntryForASubjectNoAccountBearsIsInvalidAsync(PrivacyRequestType type)
+    {
+        _accounts.Forget(Ahmed);
+
+        Result<PrivacyRequestReceipt> refused = await Requests.EnterAsync(
+            AccessContext.Of(Mona),
+            Entry(type, new DateOnly(2026, 9, 18)),
+            CancellationToken.None);
+
+        Assert.Equal(ErrorCodes.RequestInvalid, refused.Match(_ => default, error => error.Code));
+        Assert.Equal("subject", Member(refused));
+        Assert.Empty(_requests.Queue);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-002, 09 section 8a (D-183): an erasure of the reserved emergency account
+    /// is refused as a missing permission once the account is read, before the session
+    /// is asked for a step-up, and the request stays open.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_BOOT_002_AnErasureOfTheReservedAccountIsDeniedBeforeTheStepUpAsync()
+    {
+        PrivacyRequestReceipt receipt =
+            await EnteredAsync(PrivacyRequestType.Erasure, new DateOnly(2026, 9, 18));
+
+        _accounts.Reserve(Ahmed);
+        _stepUp.Closed = Error.From(ErrorCodes.StepUpRequired);
+
+        Result fulfilled = await Requests
+            .FulfilAsync(AccessContext.Of(Mona), Browser, receipt.RequestId, CancellationToken.None);
+
+        Assert.Equal(ErrorCodes.Denied, fulfilled.Match(() => default, error => error.Code));
+        Assert.Empty(_stepUp.Asked);
+        Assert.Equal(AccountState.Active, _accounts.Of(Ahmed));
+        Assert.Equal(PrivacyRequestStatus.Open, Assert.Single(_requests.Queue).Status);
+    }
+
+    /// <summary>
+    /// PRIV-RIGHT-001, IDN-LIFE-003 (D-183): a deletion that will not begin once the
+    /// fulfilment has found the account in a state that begins one is a fault, never a
+    /// refusal and never a request recorded fulfilled that erased nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001_IDN_LIFE_003_ADeletionThatWillNotBeginIsAFaultAsync()
+    {
+        PrivacyRequestReceipt receipt =
+            await EnteredAsync(PrivacyRequestType.Erasure, new DateOnly(2026, 9, 18));
+
+        _accounts.Holding = subject =>
+        {
+            _accounts.Holding = null;
+            _accounts.Forget(subject);
+        };
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () => await Requests
+            .FulfilAsync(AccessContext.Of(Mona), Browser, receipt.RequestId, CancellationToken.None));
+
+        Assert.Equal(PrivacyRequestStatus.Open, Assert.Single(_requests.Queue).Status);
     }
 
     private static PrivacyRequestEntry Entry(PrivacyRequestType type, DateOnly receivedAt) =>

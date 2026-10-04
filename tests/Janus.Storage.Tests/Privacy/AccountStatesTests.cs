@@ -506,8 +506,9 @@ public sealed class AccountStatesTests(DatabaseFixture database)
     }
 
     /// <summary>
-    /// OPS-BOOT-002: the reserved account reads back as the reserved account, a
-    /// takedown leaves it standing, and the database holds no second one.
+    /// OPS-BOOT-002: the reserved account reads back as the reserved account and stands
+    /// as it for an erasure request's fulfilment to refuse, a takedown leaves it standing,
+    /// and the database holds no second one.
     /// </summary>
     [Fact]
     public async Task OPS_BOOT_002_TheReservedAccountIsNeverTakenDownAsync()
@@ -541,6 +542,7 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
         Assert.True(read.IsEmergency);
         Assert.Equal(AccountState.Active, read.State);
+        Assert.True((await StandingAsync(reserved)).Emergency);
 
         await using StoreContext again = database.Context();
 

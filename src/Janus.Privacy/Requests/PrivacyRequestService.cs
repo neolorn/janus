@@ -144,6 +144,14 @@ internal sealed class PrivacyRequestService(
             return Result.Failure<PrivacyRequestReceipt>(Malformed("identityConfirmation"));
         }
 
+        // 09 section 8a (D-183): a request is entered for a subject an account bears, so
+        // that the fulfilment has no existence left to refuse on.
+        if (await accounts.StandingAsync(entry.Subject, cancellationToken).ConfigureAwait(false) is null)
+        {
+            return Result.Failure<PrivacyRequestReceipt>(
+                Error.From(ErrorCodes.RequestInvalid, "member", JsonSerializer.SerializeToElement("subject")));
+        }
+
         DateTimeOffset now = time.GetUtcNow();
         Error? failure = null;
 
@@ -225,13 +233,22 @@ internal sealed class PrivacyRequestService(
 
         Error? failure = null;
 
-        _ = (await DecidableAsync(request, held: false, cancellationToken)
+        QueuedRequest asked = (await DecidableAsync(request, held: false, cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Held<QueuedRequest>(error, ref failure));
 
         if (failure is not null)
         {
             return Result.Failure(failure);
+        }
+
+        // OPS-BOOT-002, 09 section 8a: the reserved account is the one way in the
+        // emergency leaves, so its erasure is refused once the account is read, before
+        // the session is asked for anything.
+        if (asked.Type is PrivacyRequestType.Erasure
+            && (await BorneAsync(asked.Subject, cancellationToken).ConfigureAwait(false)).Emergency)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
         // 09 section 8a, D-166 X8: a fulfilment acts on another person's data or
@@ -452,37 +469,37 @@ internal sealed class PrivacyRequestService(
                 return Result.Success(false);
 
             // 09 section 8a, IDN-LIFE-003: a fulfilled erasure follows the state it
-            // finds. An account already in its window, by any origin, keeps the window
-            // running, and one already erased needs nothing; any other enters the window
-            // the same way self-service deletion does, because the reversal period is the
-            // subject's whichever door the request came through, and a refusal of that
-            // fails the fulfilment.
+            // finds and refuses nothing on it. An account already in its window, by any
+            // origin, keeps the window running, and one already erased needs nothing;
+            // any other enters the window the same way self-service deletion does,
+            // because the reversal period is the subject's whichever door the request
+            // came through.
             case PrivacyRequestType.Erasure:
-                AccountStanding? standing = await accounts
-                    .StandingAsync(request.Subject, cancellationToken)
-                    .ConfigureAwait(false);
-
-                if (standing is null)
-                {
-                    return Result.Failure<bool>(Error.From(ErrorCodes.AccountNotFound));
-                }
-
-                if (standing.State is AccountState.Deleting or AccountState.Deleted)
+                if (Away(await BorneAsync(request.Subject, cancellationToken).ConfigureAwait(false)))
                 {
                     return Result.Success(false);
                 }
 
-                // D-166 X3: under the account's lock the window is begun only from a
-                // state that admits it, so a refusal there is a window another
+                if (await accounts
+                        .BeginDeletionAsync(
+                            request.Subject,
+                            DeletionOrigin.OutOfBandRequest,
+                            now,
+                            cancellationToken)
+                        .ConfigureAwait(false))
+                {
+                    return Result.Success(true);
+                }
+
+                // D-166 X3: the window is begun under the account's lock, which this
+                // transaction now holds, so one that did not begin is a window another
                 // transaction began, or an erasure it finished, since the read above,
-                // which the request is recorded fulfilled against as above.
-                return Result.Success(await accounts
-                    .BeginDeletionAsync(
-                        request.Subject,
-                        DeletionOrigin.OutOfBandRequest,
-                        now,
-                        cancellationToken)
-                    .ConfigureAwait(false));
+                // and the request is recorded fulfilled against it as above. A deletion
+                // that will not begin from any other state is a fault (D-183).
+                return Away(await BorneAsync(request.Subject, cancellationToken).ConfigureAwait(false))
+                    ? Result.Success(false)
+                    : throw new InvalidOperationException(
+                        "The deletion a fulfilled erasure request owes did not begin.");
 
             // Rectification of data the subject cannot edit is the correction itself,
             // which is the deployment's own record and not the library's: what the
@@ -493,6 +510,15 @@ internal sealed class PrivacyRequestService(
         }
     }
 
+    private static bool Away(AccountStanding standing) =>
+        standing.State is AccountState.Deleting or AccountState.Deleted;
+
+    // 09 section 8a (D-183): the entry refused a subject no account bears and an
+    // account's row is never removed, so a request whose subject bears none is a broken
+    // invariant, and a fault.
+    private async ValueTask<AccountStanding> BorneAsync(SubjectId subject, CancellationToken cancellationToken) =>
+        await accounts.StandingAsync(subject, cancellationToken).ConfigureAwait(false)
+        ?? throw new InvalidOperationException("A privacy request names a subject no account bears.");
 
     private async ValueTask<Result<PrivacyRequestReceipt>> QueuedAsync(
         QueuedRequest request,

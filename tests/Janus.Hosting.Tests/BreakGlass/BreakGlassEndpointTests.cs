@@ -505,6 +505,7 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
         SubjectId subject = _deployment.Directory.Created[^1].Subject;
         var owner = new Browser(_deployment);
 
+        _deployment.AccountStates.Hold(subject, AccountState.Active);
         _ = await PresentedAsync(owner, credential);
 
         Answer entered = await owner.SendAsync(

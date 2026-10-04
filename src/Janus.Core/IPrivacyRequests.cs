@@ -44,7 +44,8 @@ public interface IPrivacyRequests
     /// The receipt, or the refusal: <c>api.request.malformed</c> naming <c>channel</c>
     /// or <c>identityConfirmation</c> where either is blank or longer than 1024
     /// characters after trimming, or <c>detail</c> where one is given and is,
-    /// <c>privacy.request.receivedfuture</c> for a date
+    /// <c>api.request.invalid</c> naming <c>subject</c> where no account bears the
+    /// subject, <c>privacy.request.receivedfuture</c> for a date
     /// later than today in the deployment's zone, <c>privacy.request.duplicate</c>
     /// where an identical request is already open.
     /// </returns>
@@ -72,8 +73,10 @@ public interface IPrivacyRequests
     /// <param name="request">Which request.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Success, or the refusal: <c>auth.stepup.required</c> where the session has not
-    /// proved it recently enough, judged after every other refusal.
+    /// Success, or the refusal: <c>authz.denied</c> for an erasure of the reserved
+    /// emergency account, <c>auth.stepup.required</c> where the session has not proved
+    /// it recently enough, judged after every other refusal. An erasure refuses nothing
+    /// on the account's state.
     /// </returns>
     ValueTask<Result> FulfilAsync(
         AccessContext context,
