@@ -1516,6 +1516,23 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - No migration, no public surface change.
 - Parked: questions 180 to 185.
 
+### `part/unit-sends` (D-188), merged as `8084443c`: questions 133, 127 and 150
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 133: `IUnitOfWork.BeginAsync` answers `Result<bool>`, true where the level it opened is the outermost | `54d98f2d` | CONV-DESIGN-003, LIB-API-001 | `UnitOfWorkTests.CONV_DESIGN_003_BeginAnswersWhetherItsLevelIsTheOutermostAsync` |
+| Question 133: `ConsentService.GrantAsync` rolls back a grant that wrote nothing only where its level is the outermost; a joined one commits | `c08cba76` | CONV-DESIGN-003 | `ConsentTests.CONV_DESIGN_003_AC10_AnOutermostGrantThatAddsNothingIsRolledBackAsync`, `ConsentTests.CONV_DESIGN_003_AC10_AJoinedGrantThatAddsNothingCommitsItsLevelAsync` |
+| Question 127: the notice ledger reads (`WasToldAsync`) and marks (`MarkAsync`) apart; the non-existence notice and the two holder's notices mark only where the send is admitted | `49c1c581` | AUTH-ABUSE-003, REG-SESS-005 | `NonExistenceNoticeTests.AUTH_ABUSE_003_AC4_ANoticeARestrictionRefusedSpendsNoWindowAsync`, `RegistrationServiceTests.AUTH_ABUSE_003_AC4_AHoldersNoticeARestrictionRefusedSpendsNoWindowAsync`, `IdentifierServiceTests.AUTH_ABUSE_003_AC4_AHoldersNoticeARestrictionRefusedSpendsNoWindowAsync`, `NoticeLedgerTests.AUTH_ABUSE_003_AC4_TheWindowIsSpentOnlyByTheMarkAsync`, `NoticeLedgerTests.AUTH_ABUSE_003_AC4_AsksAtOnceTellTheAddressOnceAsync` |
+| Question 150: a new row that has an immediate attempt is written due `outbox.retry.initial` after its admission, with no jitter; the immediate attempt claims a row never attempted whatever its due instant; a pass claims only a due row. The change of `0521afe1` is undone | `64f1d70e` | CONV-DESIGN-003, AUTH-ABUSE-004, INF-BG-001 | `SendOutboxTests.CONV_DESIGN_003_AC9_ANewRowIsClaimedByItsImmediateAttemptAndByNoPassUntilItIsDueAsync`, `SendOutboxTests.CONV_DESIGN_003_AC9_AnImmediateAttemptDoesNotClaimARescheduledRowBeforeItIsDueAsync`, `SendingGovernanceTests.CONV_DESIGN_003_AC9_ARowReleasedAndRescheduledIsNotClaimedBeforeItIsDueAsync`, `SendingGovernanceTests.AUTH_ABUSE_004_AC19_NoPassClaimsANewRowBeforeTheFirstRetryDelayHasPassedAsync` |
+| Question 150: a followed send counts as carried only where its immediate attempt took it; `ISendOutbox.WaitsAsync` is removed | `4e3820a6` | AUTH-ABUSE-004 | `SendingGovernanceTests.AUTH_ABUSE_004_AC19_AFollowedSendIsCarriedOnlyWhereItsImmediateAttemptTookItAsync`, `SendingGovernanceTests.AUTH_ABUSE_004_AC19_ASendNotTakenCountsAsNotCarriedWhateverBecomesOfItsRowAsync` |
+
+- Question 148, read in the code: `SendPublisher` removes a row under its claim once the handler took its delivery, and a text message with no known language is one row for each declared language. Nothing built.
+- `54d98f2d` changes the form of the call after `BeginAsync` in 122 files and nothing else in them.
+- In the merge commit: the five call sites the other parts added take the new form, and `CredentialService`'s report of an export, which wrote nothing where an earlier one stands, rolls back only where its level is the outermost.
+- The two tests of the followed send were written before the code and first run after it.
+- Public surface: the one line of `IUnitOfWork.BeginAsync`, with its changelog line. No migration.
+- Parked: questions 186 and 187.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1683,6 +1700,8 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 | `OutboxPublisher`, the catch-up pass (`d014b8a3`) | CONV-DESIGN-003 takes a claim only on a due row "where it carries one"; a completed erasure without its ledger line carries no next attempt | CONV-DESIGN-003, DR-016 criterion 5 | The catch-up claim is conditional on the row being unclaimed or timed out and still a completed erasure without its line, with no due condition |
 | `LibraryStructureTests.AUTH_ABUSE_002_AC2_OnlyTheBuilderAndTheStatusMapReadTheThrottledCode` (`5e34970e`) | The gate counted every file naming `ErrorCodes.Throttled`, and the endpoint files now name it in their declarations | CONV-DESIGN-006 | A declaration builds no refusal, so the test passes over declaration statements and still holds the builder and the status map as the only readers |
 | `FingerprintKeyTests.INF_HOST_003_AC4_EveryStoreThatComputesAFingerprintIsDriven` (`fcd330be`) | The gate test lists every file of the storage project that computes a fingerprint and did not hold `ValueLock`, which keys its lock by one and writes no column | INF-HOST-003 criterion 4, CONV-DESIGN-003 | Test infrastructure: the scan test takes the lock under each version and the list holds `ValueLock` |
+| `tests/Janus.Hosting.Tests/Deployment.cs` (`1d6bc05b`) | The unit test deployment registers `OidcService` itself and did not register `ITokenMinting`, so `MailServerTokens` could not be built there | CONV-DESIGN-007 | Test infrastructure: the fixture registers the contract beside its implementation, as the area's own method does |
+| `SendPublisher.AttemptAsync` (`4e3820a6`) | The attempt now answers whether it took the message, and `LibraryStructureTests.CONV_ERR_003_AC2_NoCatchButTheOneAroundAfterCommitWorkCarriesOn` holds the catch to end with its log call | CONV-ERR-003 criterion 2 | The answer is returned after the try, so the catch ends with the log call and the test stands unchanged |
 
 ## 4. Open questions
 
@@ -4107,6 +4126,28 @@ part of 389 (3) and waits with 389 on question 48.
   1. The second removal replaces the identifier's standing row.
   2. The key becomes one that admits both rows.
 - **Parked.** That case, left as it is.
+- **Answer:** pending.
+
+**186. Tier 2. CONV-DESIGN-003, AUTH-ABUSE-004 and the `10` row `outbox.retry.initial` against AUTH-ABUSE-003: the due instant of a row that has no immediate attempt.**
+
+- **Item.** Question 150.
+- **What the code does.** A message answered before any transport is called (a sign-in link, an email code, the recovery asks) has no immediate attempt; its row is written due at once and the `sends` job carries it. Only a row that has an immediate attempt is held for `outbox.retry.initial`.
+- **What the specification says.** Every new send row is due `outbox.retry.initial` after its admission and no pass claims it before then; the reason given is the immediate attempt.
+- **Readings.**
+  1. Every new row is held: such a message reaches a transport no sooner than `outbox.retry.initial` and the poll interval.
+  2. Only a row that has an immediate attempt is held: as built.
+- **Parked.** The due instant of those rows.
+- **Answer:** pending.
+
+**187. Tier 2. CONV-DESIGN-003 and LIB-API-001: the type of what `IUnitOfWork.BeginAsync` answers.**
+
+- **Item.** Question 133.
+- **What the code does.** `ValueTask<Result<bool>>`, true where the level is the outermost.
+- **What the specification says.** `BeginAsync` "answers whether" the level it opened is the outermost; no chapter names the type. CONV-DESIGN-005 criterion 1 has a library operation return `Result` or `Result<T>`.
+- **Readings.**
+  1. `Result<bool>`: as built.
+  2. A type the chapter names.
+- **Parked.** Nothing: reading 1 is built. It is the public surface, so it is raised here.
 - **Answer:** pending.
 
 ## 5. Gate result
