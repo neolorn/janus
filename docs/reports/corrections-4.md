@@ -1592,6 +1592,7 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 | `tests/Janus.Storage.Tests/ModelTests.cs`, `tests/Janus.Storage.Tests/schema.txt` (`5946f3d4`, `d014b8a3`) | The gate lists every column and did not hold `events.claimed_until` and `outbox.claimed_until` | CONV-DESIGN-003 | Test infrastructure: the two columns the claim needs join the lists the gate enforces |
 | `OutboxPublisher`, the catch-up pass (`d014b8a3`) | CONV-DESIGN-003 takes a claim only on a due row "where it carries one"; a completed erasure without its ledger line carries no next attempt | CONV-DESIGN-003, DR-016 criterion 5 | The catch-up claim is conditional on the row being unclaimed or timed out and still a completed erasure without its line, with no due condition |
 | `LibraryStructureTests.AUTH_ABUSE_002_AC2_OnlyTheBuilderAndTheStatusMapReadTheThrottledCode` (`5e34970e`) | The gate counted every file naming `ErrorCodes.Throttled`, and the endpoint files now name it in their declarations | CONV-DESIGN-006 | A declaration builds no refusal, so the test passes over declaration statements and still holds the builder and the status map as the only readers |
+| `FingerprintKeyTests.INF_HOST_003_AC4_EveryStoreThatComputesAFingerprintIsDriven` (`fcd330be`) | The gate test lists every file of the storage project that computes a fingerprint and did not hold `ValueLock`, which keys its lock by one and writes no column | INF-HOST-003 criterion 4, CONV-DESIGN-003 | Test infrastructure: the scan test takes the lock under each version and the list holds `ValueLock` |
 
 ## 4. Open questions
 
@@ -3857,3 +3858,32 @@ its commits can be read.
 
 - One commit is red on its own: `28c53a12` fails `ProductNameTests.CONV_NAME_001_AC2`, corrected in the merge `88174fd5` (section 1).
 - The pull request is not opened: the branch is not on GitHub from `d5a7fc0e` on, and the push is the owner's.
+
+**`corrections-4`, after the items of D-185, D-186 and D-187.** Full gate at `7ed0a7e5`, run once and locally, job by job as the gates workflow runs it (range base `b6d14fef`, the merge base with `main`). No pipeline run exists for the branch from `d5a7fc0e` on, so there is no run identifier.
+
+| Job | Result |
+|---|---|
+| Locked restore | passed |
+| Public surface files up to date (`release.sh`) | passed |
+| Format | passed |
+| Unit tests | passed, 3396 |
+| Contract tests | passed, 145 |
+| Unicode tables regenerate without a diff | passed |
+| Integration tests | 1007 run, one failed at `7ed0a7e5`: `FingerprintKeyTests.INF_HOST_003_AC4_EveryStoreThatComputesAFingerprintIsDriven`, whose list did not hold `ValueLock`. Corrected in `fcd330be` (section 3); the integration tests of `Janus.Storage.Tests` were run again at `fcd330be`: passed, 580. The rest of the gate was not run again |
+| Policy coverage test | passed, 3 |
+| Truth-table suite (change check and suite) | passed, 103 |
+| Double migration run | passed (against a `postgres:17-alpine` container whose credential was drawn for the run; no release is tagged, so run two starts from the empty schema) |
+| Janus.Analyzers rules, permitted outcome, forbidden log values | passed, 22 |
+| Dependency allow-list | passed |
+| InternalsVisibleTo allow-list | passed |
+| Forbidden markers and commented-out code | passed |
+| Acceptance-criterion test names | passed |
+| Commit message format | passed |
+| Changelog line present | passed |
+| Destructive-operation detection report | passed with `DESTRUCTIVE_DDL_GATE` set to `disabled` for the run, as the repository variable is (question 54). Of the migrations since the last gate it lists `HoldAnInvitationsErasedKey` (`wrapped_key` set not null, `ck_invitations_key` dropped and added); `SpellTheMeasuresOrganizational`, `KeepWhetherARequestsReceiptWasSent`, `ClaimAnEventBeforeItIsOffered` and `ClaimAnOutboxRowBeforeItIsDelivered` are judged and list nothing |
+| Dependency vulnerability alerting | passed |
+| Secret scanning | passed: the pinned scanner, run locally as the pipeline runs it, over the 1160 commits of the history at `fcd330be`, with the allow-list entry of question 126: no finding |
+
+- Every commit from `42fded79` (the merge of `part/value-lock`) to `7ed0a7e5` carries the one integration failure above, which no fast check runs.
+- The pull request is not opened: the branch is not on GitHub from `d5a7fc0e` on, and the push is the owner's.
+- Open: questions 127 to 160 (section 4). Not built for them: question 83 and the tests of CONV-DESIGN-007 criterion 7's third and fourth clauses (128); question 93 (144); one case of question 94 (145); the call sites of the bot-defence check (136); `viewedAt` at generation (140); the bootstrap's judgement (142); the answer of a pressed token whose pending verification is gone and the throttle on the account's verify route (151); the sites questions 127, 130, 133 to 135, 143, 152, 155 and 157 leave as they are.
