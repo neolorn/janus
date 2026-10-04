@@ -14,12 +14,15 @@ namespace Janus.Storage.Privacy.Consents;
 /// The consent and objection records, over the <c>consents</c> and
 /// <c>objections</c> tables.
 /// </summary>
-/// <param name="context">The context the operation's reads and writes run on.</param>
-/// <param name="connections">Where the lock statement takes its connection from.</param>
+/// <param name="context">The context the operation's reads run on.</param>
+/// <param name="connections">Where each written statement takes its connection from.</param>
 /// <remarks>
 /// Implements PRIV-CONS-001, PRIV-RIGHT-001a and CONV-DESIGN-003. Nothing here
-/// deletes: a withdrawal writes a timestamp onto the row that is there, because the
-/// record is the evidence the law asks for.
+/// deletes or overwrites: a grant is a row of its own, and a withdrawal or a
+/// supersession writes a timestamp onto the row that is there, because the record is
+/// the evidence the law asks for. Each write is one conditional statement, so what it
+/// answers is what the table then holds, and no read keeps a row the context would
+/// answer from afterwards.
 /// </remarks>
 internal sealed class ConsentStore(StoreContext context, DataConnections connections) : IConsentStore
 {
@@ -28,6 +31,52 @@ internal sealed class ConsentStore(StoreContext context, DataConnections connect
     // transaction; no read takes this lock.
     private const string Hold =
         "SELECT pg_advisory_xact_lock(hashtextextended('identity.consents/' || CAST(@subject AS text), 0));";
+
+    // PRIV-CONS-001 AC4, AC6: the index over live rows decides whether the grant is a
+    // record, so one written meanwhile, by whatever writer, leaves this one unwritten.
+    private const string AddConsent =
+        """
+        INSERT INTO identity.consents
+            (id, subject, purpose, document, notice_version, mechanism, kind, granted_at)
+        VALUES
+            (@id, @subject, @purpose, @document, @version, @mechanism, @kind, @at)
+        ON CONFLICT (subject, purpose) WHERE withdrawn_at IS NULL AND superseded_at IS NULL DO NOTHING;
+        """;
+
+    private const string AddObjection =
+        """
+        INSERT INTO identity.objections
+            (id, subject, purpose, document, notice_version, mechanism, recorded_at)
+        VALUES
+            (@id, @subject, @purpose, @document, @version, @mechanism, @at)
+        ON CONFLICT (subject, purpose) WHERE withdrawn_at IS NULL DO NOTHING;
+        """;
+
+    // The record that stands for a purpose is the live one, or the latest where none
+    // is live; it is stamped only where it has not been taken back.
+    private const string WithdrawConsent =
+        """
+        UPDATE identity.consents SET withdrawn_at = @at
+        WHERE id = (
+                SELECT id FROM identity.consents
+                WHERE subject = @subject AND purpose = @purpose
+                ORDER BY (withdrawn_at IS NULL AND superseded_at IS NULL) DESC, granted_at DESC, id DESC
+                LIMIT 1)
+            AND withdrawn_at IS NULL;
+        """;
+
+    private const string Supersede =
+        """
+        UPDATE identity.consents SET superseded_at = @at
+        WHERE subject = @subject AND purpose = @purpose
+            AND withdrawn_at IS NULL AND superseded_at IS NULL;
+        """;
+
+    private const string WithdrawObjection =
+        """
+        UPDATE identity.objections SET withdrawn_at = @at
+        WHERE subject = @subject AND purpose = @purpose AND withdrawn_at IS NULL;
+        """;
 
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">No transaction is open.</exception>
@@ -38,27 +87,7 @@ internal sealed class ConsentStore(StoreContext context, DataConnections connect
             throw new InvalidOperationException("A subject's consents are held only inside the operation's transaction.");
         }
 
-        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
-
-        _ = await ambient.Connection
-            .ExecuteAsync(new CommandDefinition(
-                Hold,
-                new { subject = subject.Value },
-                ambient.Transaction,
-                cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
-
-        // A record the context already tracks was read before the lock, so it is read
-        // again: what the change is decided on is the record as committed.
-        foreach (ConsentRecordRow row in context.Consents.Local.Where(row => row.Subject == subject).ToList())
-        {
-            await context.Entry(row).ReloadAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        foreach (ObjectionRecordRow row in context.Objections.Local.Where(row => row.Subject == subject).ToList())
-        {
-            await context.Entry(row).ReloadAsync(cancellationToken).ConfigureAwait(false);
-        }
+        _ = await ExecuteAsync(Hold, new { subject = subject.Value }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -67,8 +96,10 @@ internal sealed class ConsentStore(StoreContext context, DataConnections connect
         CancellationToken cancellationToken) =>
     [
         .. (await context.Consents
+                .AsNoTracking()
                 .Where(consent => consent.Subject == subject)
                 .OrderBy(consent => consent.GrantedAt)
+                .ThenBy(consent => consent.Id)
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false))
             .Select(Read),
@@ -80,86 +111,102 @@ internal sealed class ConsentStore(StoreContext context, DataConnections connect
         CancellationToken cancellationToken) =>
     [
         .. (await context.Objections
+                .AsNoTracking()
                 .Where(objection => objection.Subject == subject)
                 .OrderBy(objection => objection.RecordedAt)
+                .ThenBy(objection => objection.Id)
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false))
             .Select(Read),
     ];
 
     /// <inheritdoc/>
-    public async ValueTask RecordAsync(
+    /// <exception cref="ArgumentException">The record is not live.</exception>
+    public async ValueTask<bool> AddAsync(
         SubjectId subject,
         ConsentRecord consent,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(consent);
 
-        ConsentRecordRow? held = await context.Consents
-            .FindAsync([subject, consent.Purpose], cancellationToken)
-            .ConfigureAwait(false);
-
-        if (held is null)
+        if (!consent.Live)
         {
-            context.Consents.Add(new ConsentRecordRow
-            {
-                Subject = subject,
-                Purpose = consent.Purpose,
-                Document = consent.Document,
-                NoticeVersion = consent.NoticeVersion,
-                Mechanism = consent.Mechanism,
-                Kind = consent.Kind,
-                GrantedAt = consent.GrantedAt,
-                WithdrawnAt = consent.WithdrawnAt,
-                SupersededAt = consent.SupersededAt,
-            });
-
-            return;
+            throw new ArgumentException("A consent is added live; what ends it is stamped onto it.", nameof(consent));
         }
 
-        held.Document = consent.Document;
-        held.NoticeVersion = consent.NoticeVersion;
-        held.Mechanism = consent.Mechanism;
-        held.Kind = consent.Kind;
-        held.GrantedAt = consent.GrantedAt;
-        held.WithdrawnAt = consent.WithdrawnAt;
-        held.SupersededAt = consent.SupersededAt;
+        return await AddedAsync(
+                AddConsent,
+                new
+                {
+                    id = Guid.CreateVersion7(consent.GrantedAt),
+                    subject = subject.Value,
+                    purpose = consent.Purpose,
+                    document = consent.Document,
+                    version = consent.NoticeVersion,
+                    mechanism = VocabularyConverter<ConsentMechanism>.Write(consent.Mechanism),
+                    kind = VocabularyConverter<ConsentKind>.Write(consent.Kind),
+                    at = consent.GrantedAt,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public async ValueTask RecordAsync(
+    /// <exception cref="ArgumentException">The record is not standing.</exception>
+    public async ValueTask<bool> AddAsync(
         SubjectId subject,
         ObjectionRecord objection,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(objection);
 
-        ObjectionRecordRow? held = await context.Objections
-            .FindAsync([subject, objection.Purpose], cancellationToken)
-            .ConfigureAwait(false);
-
-        if (held is null)
+        if (!objection.Standing)
         {
-            context.Objections.Add(new ObjectionRecordRow
-            {
-                Subject = subject,
-                Purpose = objection.Purpose,
-                Document = objection.Document,
-                NoticeVersion = objection.NoticeVersion,
-                Mechanism = objection.Mechanism,
-                RecordedAt = objection.RecordedAt,
-                WithdrawnAt = objection.WithdrawnAt,
-            });
-
-            return;
+            throw new ArgumentException("An objection is added standing; its withdrawal is stamped onto it.", nameof(objection));
         }
 
-        held.Document = objection.Document;
-        held.NoticeVersion = objection.NoticeVersion;
-        held.Mechanism = objection.Mechanism;
-        held.RecordedAt = objection.RecordedAt;
-        held.WithdrawnAt = objection.WithdrawnAt;
+        return await AddedAsync(
+                AddObjection,
+                new
+                {
+                    id = Guid.CreateVersion7(objection.RecordedAt),
+                    subject = subject.Value,
+                    purpose = objection.Purpose,
+                    document = objection.Document,
+                    version = objection.NoticeVersion,
+                    mechanism = VocabularyConverter<ConsentMechanism>.Write(objection.Mechanism),
+                    at = objection.RecordedAt,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
     }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> WithdrawConsentAsync(
+        SubjectId subject,
+        string purpose,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        await ExecuteAsync(WithdrawConsent, new { subject = subject.Value, purpose, at }, cancellationToken)
+            .ConfigureAwait(false) == 1;
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> SupersedeAsync(
+        SubjectId subject,
+        string purpose,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        await ExecuteAsync(Supersede, new { subject = subject.Value, purpose, at }, cancellationToken)
+            .ConfigureAwait(false) == 1;
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> WithdrawObjectionAsync(
+        SubjectId subject,
+        string purpose,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        await ExecuteAsync(WithdrawObjection, new { subject = subject.Value, purpose, at }, cancellationToken)
+            .ConfigureAwait(false) == 1;
 
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<HeldConsent>> LiveAgainstAnotherAsync(
@@ -175,11 +222,13 @@ internal sealed class ConsentStore(StoreContext context, DataConnections connect
         return
         [
             .. (await context.Consents
+                    .AsNoTracking()
                     .Where(consent => consent.WithdrawnAt == null
                         && consent.SupersededAt == null
                         && named.Contains(consent.Purpose)
                         && (consent.Document != document || consent.NoticeVersion != version))
                     .OrderBy(consent => consent.GrantedAt)
+                    .ThenBy(consent => consent.Id)
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false))
                 .Select(consent => new HeldConsent(consent.Subject, Read(consent))),
@@ -199,4 +248,33 @@ internal sealed class ConsentStore(StoreContext context, DataConnections connect
 
     private static ObjectionRecord Read(ObjectionRecordRow row) =>
         new(row.Purpose, row.Document, row.NoticeVersion, row.Mechanism, row.RecordedAt, row.WithdrawnAt);
+
+    // A record names its subject's account, which the same operation may have added
+    // and not yet saved (a registration's consents), so what the context tracks is
+    // written before the statement that refers to it.
+    private async ValueTask<bool> AddedAsync(
+        string statement,
+        object parameters,
+        CancellationToken cancellationToken)
+    {
+        _ = await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return await ExecuteAsync(statement, parameters, cancellationToken).ConfigureAwait(false) == 1;
+    }
+
+    private async ValueTask<int> ExecuteAsync(
+        string statement,
+        object parameters,
+        CancellationToken cancellationToken)
+    {
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        return await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                statement,
+                parameters,
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
 }

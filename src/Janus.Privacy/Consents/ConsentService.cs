@@ -93,6 +93,18 @@ internal sealed class ConsentService(
             return Result.Failure(Error.From(ErrorCodes.NoticeUnpublished));
         }
 
+        string document = declared.Document ?? Notice;
+
+        // PRIV-CONS-001 AC6: a live record the purpose admits is the consent this grant
+        // asks for, so the answer is the grant's and nothing is written, announced or
+        // recorded.
+        if (Standing(await consents.ConsentsAsync(subject, cancellationToken).ConfigureAwait(false), purpose)
+            is { Live: true } admitted
+            && Admits(admitted, document, kind))
+        {
+            return Result.Success();
+        }
+
         DateTimeOffset now = time.GetUtcNow();
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -103,32 +115,72 @@ internal sealed class ConsentService(
 
         await consents.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
 
-        // PRIV-CONS-001, PRIV-CONS-007: a grant from the subject's own pages over a
-        // consent a material revision ended, and the subject never took back, is the
-        // answer to being asked again. It is judged here, on the record as the grant's
-        // transaction reads it, so a host calling the contract is answered as the
-        // endpoint is.
-        IReadOnlyList<ConsentRecord> held = await consents
-            .ConsentsAsync(subject, cancellationToken)
-            .ConfigureAwait(false);
+        bool ended = false;
+        bool added = false;
 
-        if (mechanism is ConsentMechanism.Dashboard
-            && Of(held, purpose) is { SupersededAt: not null, WithdrawnAt: null })
+        // PRIV-CONS-001 AC6: the grant is decided on the record as its transaction reads
+        // it, and added only where no live record stands; where one was written
+        // meanwhile the addition is not made, and the grant is decided again on that
+        // record.
+        while (!added)
         {
-            mechanism = ConsentMechanism.Reconsent;
+            ConsentRecord? standing = Standing(
+                await consents.ConsentsAsync(subject, cancellationToken).ConfigureAwait(false),
+                purpose);
+
+            if (standing is { Live: true })
+            {
+                if (Admits(standing, document, kind))
+                {
+                    break;
+                }
+
+                // A live record the purpose no longer admits is ended by the grant that
+                // replaces it, in that grant's transaction.
+                ended |= await consents
+                    .SupersedeAsync(subject, purpose, now, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            // PRIV-CONS-001, PRIV-CONS-007: a grant from the subject's own pages over a
+            // consent that was ended, and the subject never took back, is the answer to
+            // being asked again, whoever calls the contract.
+            if (mechanism is ConsentMechanism.Dashboard
+                && (ended || standing is { SupersededAt: not null, WithdrawnAt: null }))
+            {
+                mechanism = ConsentMechanism.Reconsent;
+            }
+
+            added = await consents
+                .AddAsync(
+                    subject,
+                    new ConsentRecord(
+                        purpose,
+                        document,
+                        version,
+                        mechanism,
+                        kind,
+                        now,
+                        WithdrawnAt: null,
+                        SupersededAt: null),
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
 
-        var granted = new ConsentRecord(
-            purpose,
-            declared.Document ?? Notice,
-            version,
-            mechanism,
-            kind,
-            now,
-            WithdrawnAt: null,
-            SupersededAt: null);
+        if (ended
+            && await AnnouncedAsync(subject, purpose, ConsentChange.Superseded, now, cancellationToken)
+                .ConfigureAwait(false) is Error unended)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
 
-        await consents.RecordAsync(subject, granted, cancellationToken).ConfigureAwait(false);
+            return Result.Failure(unended);
+        }
+
+        if (!added)
+        {
+            return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         if (await AnnouncedAsync(subject, purpose, ConsentChange.Granted, now, cancellationToken)
                 .ConfigureAwait(false) is Error unannounced)
         {
@@ -185,7 +237,7 @@ internal sealed class ConsentService(
         // PRIV-CONS-008 AC5: a consent the subject does not hold is withdrawn already,
         // so the answer is the withdrawal's and nothing is written, announced or
         // recorded.
-        if (Of(held, purpose) is not { WithdrawnAt: null })
+        if (Standing(held, purpose) is not { WithdrawnAt: null })
         {
             return Result.Success();
         }
@@ -198,19 +250,18 @@ internal sealed class ConsentService(
             return Result.Failure(notBegun);
         }
 
-        // D-166 X3: the consent is read again with the subject's records held, so a
+        // D-166 X3: the consent is read again with the subject's records held, and the
+        // record that stands is stamped only where it has not been taken back, so a
         // withdrawal at the same moment is announced and recorded once.
         await consents.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
 
-        if (Of(await consents.ConsentsAsync(subject, cancellationToken).ConfigureAwait(false), purpose)
-            is not { WithdrawnAt: null } consent)
+        if (Standing(await consents.ConsentsAsync(subject, cancellationToken).ConfigureAwait(false), purpose)
+                is not { WithdrawnAt: null } consent
+            || !await consents.WithdrawConsentAsync(subject, purpose, now, cancellationToken).ConfigureAwait(false))
         {
             return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        await consents
-            .RecordAsync(subject, consent with { WithdrawnAt = now }, cancellationToken)
-            .ConfigureAwait(false);
         if (await AnnouncedAsync(subject, purpose, ConsentChange.Withdrawn, now, cancellationToken)
                 .ConfigureAwait(false) is Error unannounced)
         {
@@ -284,6 +335,14 @@ internal sealed class ConsentService(
             return Result.Failure(Error.From(ErrorCodes.NoticeUnpublished));
         }
 
+        // PRIV-RIGHT-001a AC6: an objection that stands is the one this asks for, so the
+        // answer is the objection's and nothing is written, announced or recorded.
+        if (Standing(await consents.ObjectionsAsync(subject, cancellationToken).ConfigureAwait(false), purpose)
+            is not null)
+        {
+            return Result.Success();
+        }
+
         DateTimeOffset now = time.GetUtcNow();
         var objection = new ObjectionRecord(purpose, Notice, version, mechanism, now, WithdrawnAt: null);
 
@@ -293,7 +352,13 @@ internal sealed class ConsentService(
             return Result.Failure(notBegun);
         }
 
-        await consents.RecordAsync(subject, objection, cancellationToken).ConfigureAwait(false);
+        // It is added only where none stands, so one recorded meanwhile leaves this one
+        // unwritten and is the objection this asks for.
+        if (!await consents.AddAsync(subject, objection, cancellationToken).ConfigureAwait(false))
+        {
+            return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         if (await ObjectedAsync(subject, purpose, objecting: true, now, cancellationToken)
                 .ConfigureAwait(false) is Error unannounced)
         {
@@ -350,7 +415,7 @@ internal sealed class ConsentService(
 
         // PRIV-RIGHT-001a AC6: an objection the subject has not made is withdrawn
         // already, so the answer is the withdrawal's and nothing is written.
-        if (Of(held, purpose) is not { WithdrawnAt: null })
+        if (Standing(held, purpose) is null)
         {
             return Result.Success();
         }
@@ -366,15 +431,13 @@ internal sealed class ConsentService(
         // D-166 X3: read again with the subject's records held, as for a consent.
         await consents.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
 
-        if (Of(await consents.ObjectionsAsync(subject, cancellationToken).ConfigureAwait(false), purpose)
-            is not { WithdrawnAt: null } objection)
+        if (Standing(await consents.ObjectionsAsync(subject, cancellationToken).ConfigureAwait(false), purpose)
+                is not ObjectionRecord objection
+            || !await consents.WithdrawObjectionAsync(subject, purpose, now, cancellationToken).ConfigureAwait(false))
         {
             return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        await consents
-            .RecordAsync(subject, objection with { WithdrawnAt = now }, cancellationToken)
-            .ConfigureAwait(false);
         if (await ObjectedAsync(subject, purpose, objecting: false, now, cancellationToken)
                 .ConfigureAwait(false) is Error unannounced)
         {
@@ -403,11 +466,21 @@ internal sealed class ConsentService(
         return Result.Success();
     }
 
-    private static ConsentRecord? Of(IReadOnlyList<ConsentRecord> held, string purpose) =>
-        held.LastOrDefault(record => string.Equals(record.Purpose, purpose, StringComparison.Ordinal));
+    // The record that stands for a purpose among the records a subject holds, oldest
+    // first: the live one, or the latest where none is live.
+    private static ConsentRecord? Standing(IReadOnlyList<ConsentRecord> held, string purpose) =>
+        held.LastOrDefault(record => record.Live && string.Equals(record.Purpose, purpose, StringComparison.Ordinal))
+        ?? held.LastOrDefault(record => string.Equals(record.Purpose, purpose, StringComparison.Ordinal));
 
-    private static ObjectionRecord? Of(IReadOnlyList<ObjectionRecord> held, string purpose) =>
-        held.LastOrDefault(record => string.Equals(record.Purpose, purpose, StringComparison.Ordinal));
+    private static ObjectionRecord? Standing(IReadOnlyList<ObjectionRecord> held, string purpose) =>
+        held.LastOrDefault(record =>
+            record.Standing && string.Equals(record.Purpose, purpose, StringComparison.Ordinal));
+
+    // PRIV-CONS-001, AUTHZ-GATE-002: a purpose admits a record given against the document
+    // it now names, written where it requires the written path, as the gate reads one.
+    private static bool Admits(ConsentRecord record, string document, ConsentKind required) =>
+        string.Equals(record.Document, document, StringComparison.Ordinal)
+        && (required is ConsentKind.Ordinary || record.Kind is ConsentKind.Written);
 
     private static string Key(SubjectId subject, string purpose, string change, DateTimeOffset at) =>
         subject.ToString()

@@ -10,10 +10,11 @@ namespace Janus.Storage.Privacy.Consents;
 /// How a consent is stored.
 /// </summary>
 /// <remarks>
-/// Implements PRIV-CONS-001, PRIV-CONS-002, PRIV-CONS-004 and CONV-ENUM-001. The key
-/// is the subject and the purpose, which is what makes a bundled record
-/// unrepresentable; the mechanism and the capture path are constrained columns
-/// because the code branches on each value.
+/// Implements PRIV-CONS-001, PRIV-CONS-002, PRIV-CONS-004 and CONV-ENUM-001. A row
+/// names one purpose, which is what makes a bundled record unrepresentable, and a
+/// subject holds one live row a purpose, which the index keeps whatever two grants at
+/// once decide (CONV-DESIGN-003); the mechanism and the capture path are constrained
+/// columns because the code branches on each value.
 /// </remarks>
 internal sealed class ConsentConfiguration : IEntityTypeConfiguration<ConsentRecordRow>
 {
@@ -35,8 +36,9 @@ internal sealed class ConsentConfiguration : IEntityTypeConfiguration<ConsentRec
                 MaxUuid.Refused("subject"));
         });
 
-        builder.HasKey(consent => new { consent.Subject, consent.Purpose })
-            .HasName("pk_consents");
+        builder.HasKey(consent => consent.Id).HasName("pk_consents");
+
+        builder.Property(consent => consent.Id).HasColumnName("id").ValueGeneratedNever();
 
         builder.Property(consent => consent.Subject)
             .HasColumnName("subject")
@@ -63,6 +65,16 @@ internal sealed class ConsentConfiguration : IEntityTypeConfiguration<ConsentRec
             .HasForeignKey(consent => consent.Subject)
             .HasConstraintName("fk_consents_subject")
             .OnDelete(DeleteBehavior.Restrict);
+
+        // PRIV-CONS-001 AC4: at most one live record a subject and purpose.
+        builder.HasIndex(consent => new { consent.Subject, consent.Purpose })
+            .HasDatabaseName("ux_consents_live")
+            .IsUnique()
+            .HasFilter("withdrawn_at IS NULL AND superseded_at IS NULL");
+
+        // What one subject holds is read whole, oldest first.
+        builder.HasIndex(consent => new { consent.Subject, consent.GrantedAt })
+            .HasDatabaseName("ix_consents_subject");
 
         // PRIV-CONS-007: a material revision reads every live consent at once.
         builder.HasIndex(consent => consent.NoticeVersion)

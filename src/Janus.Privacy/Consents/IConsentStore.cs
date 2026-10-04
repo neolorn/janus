@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,10 +10,11 @@ namespace Janus.Privacy.Consents;
 /// Where the consent and objection records are.
 /// </summary>
 /// <remarks>
-/// Implements PRIV-CONS-001, PRIV-RIGHT-001a and CONV-DESIGN-003. One record a
-/// subject and purpose: withdrawal sets a timestamp on the record that is there and
-/// a later consent replaces it, so the row is the history of one decision and never
-/// a second opinion about the same one.
+/// Implements PRIV-CONS-001, PRIV-RIGHT-001a and CONV-DESIGN-003. A record a grant
+/// and a record an objection: a later one is added beside the earlier, what ends one
+/// is stamped onto it, and nothing here overwrites or removes a record. A subject
+/// holds at most one live record a purpose, so an addition answers whether it was
+/// made.
 /// </remarks>
 internal interface IConsentStore
 {
@@ -49,28 +51,88 @@ internal interface IConsentStore
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Writes a consent, replacing what the subject last decided about that purpose.
+    /// Adds a consent as a record of its own, where the subject holds no live record
+    /// for its purpose.
     /// </summary>
     /// <param name="subject">Whose.</param>
-    /// <param name="consent">The record.</param>
+    /// <param name="consent">The record, live.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The work of writing it.</returns>
-    ValueTask RecordAsync(
+    /// <returns>
+    /// Whether it was added: <see langword="false"/> where a live record for the
+    /// purpose stands, whoever wrote it and however lately, and nothing was written.
+    /// </returns>
+    ValueTask<bool> AddAsync(
         SubjectId subject,
         ConsentRecord consent,
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Writes an objection, replacing what the subject last decided about that
-    /// purpose.
+    /// Adds an objection as a record of its own, where the subject holds no standing
+    /// objection to its purpose.
     /// </summary>
     /// <param name="subject">Whose.</param>
-    /// <param name="objection">The record.</param>
+    /// <param name="objection">The record, standing.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The work of writing it.</returns>
-    ValueTask RecordAsync(
+    /// <returns>
+    /// Whether it was added: <see langword="false"/> where an objection to the purpose
+    /// stands, whoever wrote it and however lately, and nothing was written.
+    /// </returns>
+    ValueTask<bool> AddAsync(
         SubjectId subject,
         ObjectionRecord objection,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Stamps as withdrawn the record that stands for the subject's consent to one
+    /// purpose: the live one, or the latest where none is live, a superseded consent
+    /// being the subject's to take back too.
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="at">When it was taken back.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Whether a record was stamped: <see langword="false"/> where the subject holds
+    /// none for the purpose or it is withdrawn already.
+    /// </returns>
+    ValueTask<bool> WithdrawConsentAsync(
+        SubjectId subject,
+        string purpose,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Stamps as superseded the subject's live consent to one purpose.
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="at">When it was ended.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Whether a record was stamped: <see langword="false"/> where no live record for
+    /// the purpose stands.
+    /// </returns>
+    ValueTask<bool> SupersedeAsync(
+        SubjectId subject,
+        string purpose,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Stamps as withdrawn the subject's standing objection to one purpose.
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    /// <param name="purpose">The purpose.</param>
+    /// <param name="at">When it was taken back.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Whether a record was stamped: <see langword="false"/> where no objection to the
+    /// purpose stands.
+    /// </returns>
+    ValueTask<bool> WithdrawObjectionAsync(
+        SubjectId subject,
+        string purpose,
+        DateTimeOffset at,
         CancellationToken cancellationToken);
 
     /// <summary>

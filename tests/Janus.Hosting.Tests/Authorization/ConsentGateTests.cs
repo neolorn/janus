@@ -127,6 +127,64 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     /// <summary>
+    /// PRIV-CONS-001 AC4, AUTHZ-GATE-005 AC3: the record the gate reads is the live one,
+    /// so a consent given again after a withdrawal admits the action and leaves the
+    /// capability no residual, the withdrawn record standing beside it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AC4_AConsentGivenAgainAfterAWithdrawalAdmitsTheActionAsync()
+    {
+        Granted granted = await GrantedAsync();
+
+        await RecordAsync(
+            granted.Account,
+            Held(ConsentKind.Written) with { WithdrawnAt = Deployment.Noon.AddDays(1) });
+
+        Assert.Equal(ErrorCodes.ConsentRequired, await RefusalAsync(granted));
+
+        await RecordAsync(
+            granted.Account,
+            Held(ConsentKind.Written) with { GrantedAt = Deployment.Noon.AddDays(2) });
+
+        Assert.Null(await RefusalAsync(granted));
+        Assert.Empty(await RequiredAsync(granted));
+    }
+
+    /// <summary>
+    /// PRIV-CONS-001 AC4, PRIV-CONS-007 AC4: where no record is live the gate reads the
+    /// latest, so a consent given after a supersession and then withdrawn is refused as
+    /// required, and not as the superseded one before it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_001_AC4_WhereNoRecordIsLiveTheLatestDecidesTheRefusalAsync()
+    {
+        Granted granted = await GrantedAsync();
+
+        await RecordAsync(
+            granted.Account,
+            Held(ConsentKind.Written) with { SupersededAt = Deployment.Noon.AddDays(1) });
+
+        Assert.Equal(ErrorCodes.ConsentSuperseded, await RefusalAsync(granted));
+
+        await RecordAsync(
+            granted.Account,
+            Held(ConsentKind.Written) with { GrantedAt = Deployment.Noon.AddDays(2) });
+
+        Assert.Null(await RefusalAsync(granted));
+
+        await RecordAsync(
+            granted.Account,
+            Held(ConsentKind.Written) with { WithdrawnAt = Deployment.Noon.AddDays(3) });
+
+        Assert.Equal(ErrorCodes.ConsentRequired, await RefusalAsync(granted));
+        Assert.Equal(
+            [CapabilityResidual.Consent],
+            (await RequiredAsync(granted))[HostPermissions.Recommend]);
+    }
+
+    /// <summary>
     /// PRIV-SENS-002a AC1: the same record is read under the purpose resting on the
     /// contract whether the consent-based one was ever given, withdrawn, or never
     /// asked for.
@@ -435,10 +493,34 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
 
         IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
-        await work.BeginAsync(TestContext.Current.CancellationToken);
-        await scope.ServiceProvider.GetRequiredService<IConsentStore>()
-            .RecordAsync(subject, consent, TestContext.Current.CancellationToken);
-        await work.CommitAsync(TestContext.Current.CancellationToken);
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        IConsentStore store = scope.ServiceProvider.GetRequiredService<IConsentStore>();
+
+        await work.BeginAsync(cancellationToken);
+
+        // PRIV-CONS-001: a live record replaces the live one that stands, and a record
+        // that ended is the standing one stamped, or one added and then stamped.
+        if (consent.Live)
+        {
+            _ = await store.SupersedeAsync(subject, consent.Purpose, consent.GrantedAt, cancellationToken);
+        }
+
+        _ = await store.AddAsync(
+            subject,
+            consent with { WithdrawnAt = null, SupersededAt = null },
+            cancellationToken);
+
+        if (consent.SupersededAt is { } superseded)
+        {
+            _ = await store.SupersedeAsync(subject, consent.Purpose, superseded, cancellationToken);
+        }
+
+        if (consent.WithdrawnAt is { } withdrawn)
+        {
+            _ = await store.WithdrawConsentAsync(subject, consent.Purpose, withdrawn, cancellationToken);
+        }
+
+        await work.CommitAsync(cancellationToken);
     }
 
     // The type a document sits in declares a derivation, so the check is asked with the

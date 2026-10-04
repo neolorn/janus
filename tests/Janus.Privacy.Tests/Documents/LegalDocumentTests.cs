@@ -373,7 +373,7 @@ public sealed class LegalDocumentTests : IAsyncDisposable
     {
         Permit();
 
-        await _consents.RecordAsync(
+        _consents.Keep(
             Officer,
             new ConsentRecord(
                 "recommendations",
@@ -383,8 +383,7 @@ public sealed class LegalDocumentTests : IAsyncDisposable
                 ConsentKind.Ordinary,
                 Noon,
                 WithdrawnAt: null,
-                SupersededAt: null),
-            CancellationToken.None);
+                SupersededAt: null));
 
         _events.Refusal = Error.From(ErrorCodes.SystemFault);
 

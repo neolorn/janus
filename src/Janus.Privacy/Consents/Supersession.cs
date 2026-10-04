@@ -64,11 +64,21 @@ internal sealed class Supersession(
             .LiveAgainstAnotherAsync(purposes, document, version, cancellationToken)
             .ConfigureAwait(false);
 
+        int ended = 0;
+
         foreach (HeldConsent one in held)
         {
-            await consents
-                .RecordAsync(one.Subject, one.Consent with { SupersededAt = at }, cancellationToken)
-                .ConfigureAwait(false);
+            // PRIV-CONS-001: the live record is stamped where it still is live, so one
+            // its subject took back meanwhile is neither ended twice nor announced.
+            if (!await consents
+                    .SupersedeAsync(one.Subject, one.Consent.Purpose, at, cancellationToken)
+                    .ConfigureAwait(false))
+            {
+                continue;
+            }
+
+            ended++;
+
             Result published = await events
                 .PublishAsync(
                     new ConsentChanged(
@@ -88,7 +98,7 @@ internal sealed class Supersession(
             }
         }
 
-        return Result.Success(held.Count);
+        return Result.Success(ended);
     }
 
     private static string Key(HeldConsent one, DateTimeOffset at) =>

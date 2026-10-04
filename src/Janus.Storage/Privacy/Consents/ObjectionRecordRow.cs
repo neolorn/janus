@@ -14,6 +14,11 @@ namespace Janus.Storage.Privacy.Consents;
 internal sealed class ObjectionRecordRow
 {
     /// <summary>
+    /// The <c>id</c> column: the row's own identifier, which no contract carries.
+    /// </summary>
+    public Guid Id { get; set; }
+
+    /// <summary>
     /// The <c>subject</c> column.
     /// </summary>
     public SubjectId Subject { get; set; }

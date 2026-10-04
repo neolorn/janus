@@ -238,6 +238,7 @@ public sealed class ModelTests
             // deleted: a withdrawal is a timestamp, because the record is the evidence.
             "consents.document",
             "consents.granted_at",
+            "consents.id",
             "consents.kind",
             "consents.mechanism",
             "consents.notice_version",
@@ -513,6 +514,7 @@ public sealed class ModelTests
             // Not an account field: the purposes on an objectable basis the subject has
             // objected to (PRIV-RIGHT-001a).
             "objections.document",
+            "objections.id",
             "objections.mechanism",
             "objections.notice_version",
             "objections.purpose",
