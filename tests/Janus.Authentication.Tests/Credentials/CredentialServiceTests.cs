@@ -433,6 +433,33 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-008 AC4: a set is viewed in the unit of work whose response returns
+    /// it, the second-step enrolment's and the generation's alike, so a set returned
+    /// has the instant, and neither leaves it exported.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AC4_ASetReturnedIsViewedInTheUnitOfWorkThatReturnsItAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+
+        _ = await ConfirmedAsync(subject, session);
+        RecoveryCodeSet brought = (await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!;
+        await PresentedAsync(subject, session);
+        _clock.Advance(TimeSpan.FromMinutes(3));
+        int committed = _work.OutermostCommitted;
+        GeneratedRecoveryCodes generated = Value(await Service.GenerateRecoveryCodesAsync(
+            Authority(subject, session),
+            TestContext.Current.CancellationToken));
+        RecoveryCodeSet regenerated = (await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!;
+
+        Assert.Equal((Noon, null), (brought.ViewedAt, brought.ExportedAt));
+        Assert.Equal((generated.GeneratedAt, null), (regenerated.ViewedAt, regenerated.ExportedAt));
+        Assert.Equal(Noon + TimeSpan.FromMinutes(3), regenerated.ViewedAt);
+        Assert.Equal(committed + 1, _work.OutermostCommitted);
+    }
+
+    /// <summary>
     /// AUTH-FACT-008 AC4 and AUTH-RECOV-006 AC2: the report of a copy, download or
     /// print is recorded on the set the account holds, at the instant it is made.
     /// </summary>

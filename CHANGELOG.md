@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A recovery-code set carries `viewedAt` from the moment its codes are returned:
+  `POST /account/recoverycodes` and the enrolment of a second step beside a password
+  write it with the set, where it stayed unset until an export was reported.
 - The `expiry-sweep` job removes an identifier's add, and a replace whose swap has not
   applied, once every verification-code record it holds is spent or past
   `code.verification.lifetime`: the new address's code and, where the old address must

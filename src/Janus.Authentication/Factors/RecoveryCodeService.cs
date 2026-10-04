@@ -33,7 +33,8 @@ internal sealed class RecoveryCodeService(
 {
     /// <summary>
     /// Issues a set, replacing whatever the account held: no code of the previous set
-    /// validates afterwards.
+    /// validates afterwards. The set is written as viewed, since the response of the
+    /// operation that calls this returns the codes (AUTH-FACT-008).
     /// </summary>
     /// <param name="subject">Whose set.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
@@ -58,10 +59,14 @@ internal sealed class RecoveryCodeService(
             return Result.Failure<IReadOnlyList<string>>(notBegun);
         }
 
-        await sets.ReplaceAsync(
-                RecoveryCodeSet.Of(subject, drawn.Hashes, time.GetUtcNow()),
-                cancellationToken)
-            .ConfigureAwait(false);
+        DateTimeOffset now = time.GetUtcNow();
+        var issued = RecoveryCodeSet.Of(subject, drawn.Hashes, now);
+
+        // AUTH-FACT-008: the response of the unit of work this write joins returns the
+        // codes, the one time they are shown, so the set is viewed where it is written.
+        issued.Viewed(now);
+
+        await sets.ReplaceAsync(issued, cancellationToken).ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)

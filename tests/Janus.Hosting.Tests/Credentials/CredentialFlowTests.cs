@@ -145,6 +145,29 @@ public sealed class CredentialFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-008 AC4: the set a generation returns is read from the account as
+    /// viewed at the instant it was returned, and as not exported.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AC4_AGeneratedSetIsReadFromTheAccountAsViewedAsync()
+    {
+        Browser browser = await SignedInAsync();
+
+        Answer generated = await browser.SendAsync("POST", "/account/recoverycodes");
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(1));
+        Answer account = await browser.SendAsync("GET", "/account");
+
+        Assert.Equal(StatusCodes.Status200OK, account.Status);
+        Assert.Equal(
+            generated.Json().GetProperty("generatedAt").GetDateTimeOffset(),
+            account.Json().GetProperty("recoveryCodes").GetProperty("viewedAt").GetDateTimeOffset());
+        Assert.Equal(
+            JsonValueKind.Null,
+            account.Json().GetProperty("recoveryCodes").GetProperty("exportedAt").ValueKind);
+    }
+
+    /// <summary>
     /// AUTH-FACT-008 AC4, AUTH-RECOV-006 AC2 and LIB-API-005: the frontend's report of a
     /// copy, download or print is answered with nothing, and the account reads when it
     /// was made.

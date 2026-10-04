@@ -122,16 +122,15 @@ public sealed class RecoveryCodeServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-FACT-008 AC4: the set records when the codes were shown and when they
-    /// were exported, and the export stays unset otherwise.
+    /// AUTH-FACT-008 AC4: the set is written as viewed by the generation that returns
+    /// its codes, and the export stays unset until it is reported and leaves the view
+    /// where it stood.
     /// </summary>
     [Fact]
     public async Task AUTH_FACT_008_AC4_TheSetRecordsWhenItWasShownAndExportedAsync()
     {
         SubjectId subject = Subject();
         await GeneratedAsync(subject);
-
-        await Service.ShownAsync(subject, exported: false, TestContext.Current.CancellationToken);
 
         RecoveryCodeSet shown = (await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!;
 
