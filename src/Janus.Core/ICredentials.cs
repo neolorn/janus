@@ -139,12 +139,14 @@ public interface ICredentials
     /// <summary>
     /// Records that the person copied, downloaded or printed the recovery-code set the
     /// account holds (AUTH-FACT-008, AUTH-RECOV-006). The operation is over the
-    /// caller's own set and asks no gate.
+    /// caller's own set; it asks no step-up, and the report changes the set's record,
+    /// so a restricted account is refused it (IDN-ACCT-007).
     /// </summary>
     /// <param name="context">Who is asking, whose set it is.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Nothing, or <c>auth.factor.notenrolled</c> where the account holds no set, or
+    /// Nothing, or <c>authz.restricted</c> for a restricted account,
+    /// <c>auth.factor.notenrolled</c> where the account holds no set, or
     /// <c>authz.denied</c> where the context names no account.
     /// </returns>
     ValueTask<Result> MarkRecoveryCodesExportedAsync(

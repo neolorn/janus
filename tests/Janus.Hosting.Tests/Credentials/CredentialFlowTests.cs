@@ -197,6 +197,51 @@ public sealed class CredentialFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-ACCT-007 AC2 and chapter 09 section 6: recording an export is a change, so a
+    /// restricted account's report is refused 403 with the restriction's code, with no
+    /// step-up asked, and the account reads the set as not exported.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedAccountsReportOfAnExportIsRefusedAsync()
+    {
+        Browser browser = await SignedInAsync();
+        _ = await browser.SendAsync("POST", "/account/recoverycodes");
+        _deployment.Restriction.Restrict(_deployment.Directory.Created[^1].Subject);
+
+        Answer refused = await browser.SendAsync("POST", "/account/recoverycodes/exported");
+        Answer account = await browser.SendAsync("GET", "/account");
+
+        Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+        Assert.Equal(ErrorCodes.Restricted.ToString(), refused.Text("code"));
+        Assert.Equal(
+            JsonValueKind.Null,
+            account.Json().GetProperty("recoveryCodes").GetProperty("exportedAt").ValueKind);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the account committed after the gate step
+    /// and before the first write refuses the report of an export, and the account
+    /// reads the set as not exported.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesTheExportAsync()
+    {
+        Browser browser = await SignedInAsync();
+        _ = await browser.SendAsync("POST", "/account/recoverycodes");
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync("POST", "/account/recoverycodes/exported"));
+        Answer account = await browser.SendAsync("GET", "/account");
+
+        Assert.Equal(
+            JsonValueKind.Null,
+            account.Json().GetProperty("recoveryCodes").GetProperty("exportedAt").ValueKind);
+    }
+
+    /// <summary>
     /// AUTH-FACT-008 and chapter 09 section 4: an account holding no set is answered
     /// with the service's refusal.
     /// </summary>

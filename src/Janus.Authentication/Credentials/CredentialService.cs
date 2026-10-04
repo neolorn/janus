@@ -642,7 +642,51 @@ internal sealed class CredentialService(
             return Result.Failure(Error.From(ErrorCodes.Denied));
         }
 
-        return await codes.ShownAsync(subject, exported: true, cancellationToken).ConfigureAwait(false);
+        // IDN-ACCT-007: the report changes the set's record, so a restricted account is
+        // refused it as it is any other change. No step-up is asked.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
+            is Error restricted)
+        {
+            return Result.Failure(restricted);
+        }
+
+        if (!await codes.IssuedAsync(subject, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure(Error.From(ErrorCodes.FactorNotEnrolled));
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the report before anything is written.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        Error? failure = null;
+
+        bool written = (await codes.ExportedAsync(subject, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<bool>(error, ref failure));
+
+        // CONV-DESIGN-003: a report that changed nothing, an earlier one standing, is a
+        // success that wrote nothing, and commits nothing.
+        if (failure is not null || !written)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return failure is null ? Result.Success() : Result.Failure(failure);
+        }
+
+        return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

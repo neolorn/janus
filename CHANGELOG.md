@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `POST /account/recoverycodes/exported` and
+  `ICredentials.MarkRecoveryCodesExportedAsync` refuse a restricted account 403
+  `authz.restricted`, as every other change to its credentials is refused; no step-up
+  is asked. A report made again leaves the first `exportedAt` standing.
 - A recovery-code set carries `viewedAt` from the moment its codes are returned:
   `POST /account/recoverycodes` and the enrolment of a second step beside a password
   write it with the set, where it stayed unset until an export was reported.

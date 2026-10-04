@@ -389,7 +389,7 @@ POST /account/recoverycodes
 POST /account/recoverycodes/exported
   204
   401 auth.session.expired
-  403 auth.session.csrfinvalid
+  403 auth.session.csrfinvalid authz.restricted
   409 auth.factor.notenrolled
 PUT /account/secondstep/preferred
   request application/json

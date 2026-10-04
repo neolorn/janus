@@ -503,6 +503,77 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-ACCT-007 AC2: recording an export changes the set's record, so a restricted
+    /// account is refused it with the code the gate refuses a modifying action with,
+    /// before any unit of work begins, and the set stays unexported.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedAccountRecordsNoExportAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        _ = await ConfirmedAsync(subject, session);
+        _restriction.Restrict(subject);
+        int opened = _work.Opened;
+
+        ErrorCode refused = Refused(await Service.MarkRecoveryCodesExportedAsync(
+            AccessContext.Of(subject),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.Restricted, refused);
+        Assert.Equal(opened, _work.Opened);
+        Assert.Null((await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.ExportedAt);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the account committed after the gate step
+    /// and before the first write refuses the report of an export inside its unit of
+    /// work, which rolls back and leaves the set unexported.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesTheExportAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        _ = await ConfirmedAsync(subject, session);
+
+        await RestrictedSinceTheGateStepAsync(
+            subject,
+            async () => Refused(await Service.MarkRecoveryCodesExportedAsync(
+                AccessContext.Of(subject),
+                TestContext.Current.CancellationToken)));
+
+        Assert.Null((await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.ExportedAt);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: the first report of an export commits its write, and a
+    /// report made again, which changes nothing, is a success that wrote nothing and
+    /// leaves its unit of work rolled back with the first instant standing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AnExportReportedAgainWritesNothingAndRollsBackAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        _ = await ConfirmedAsync(subject, session);
+        int committed = _work.OutermostCommitted;
+        int rolledBack = _work.RolledBack;
+
+        Accepted(await Service.MarkRecoveryCodesExportedAsync(
+            AccessContext.Of(subject),
+            TestContext.Current.CancellationToken));
+        _clock.Advance(TimeSpan.FromMinutes(2));
+        Accepted(await Service.MarkRecoveryCodesExportedAsync(
+            AccessContext.Of(subject),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal((committed + 1, rolledBack + 1), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.False(_work.Open);
+        Assert.Equal(Noon, (await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.ExportedAt);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-002 AC3: the operation is over the caller's own set, so a context
     /// that names no account is denied and no set is read for it.
     /// </summary>

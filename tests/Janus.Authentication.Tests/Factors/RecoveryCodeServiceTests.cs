@@ -138,7 +138,7 @@ public sealed class RecoveryCodeServiceTests : IAsyncDisposable
         Assert.Null(shown.ExportedAt);
 
         _clock.Advance(TimeSpan.FromMinutes(1));
-        await Service.ShownAsync(subject, exported: true, TestContext.Current.CancellationToken);
+        Assert.True(Value(await Service.ExportedAsync(subject, TestContext.Current.CancellationToken)));
 
         RecoveryCodeSet exported = (await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!;
 
@@ -157,12 +157,12 @@ public sealed class RecoveryCodeServiceTests : IAsyncDisposable
         SubjectId subject = Subject();
         await GeneratedAsync(subject);
 
-        await Service.ShownAsync(subject, exported: true, TestContext.Current.CancellationToken);
+        Assert.True(Value(await Service.ExportedAsync(subject, TestContext.Current.CancellationToken)));
 
         Assert.Equal(Noon, (await SetAsync(subject)).ExportedAt);
 
         _clock.Advance(TimeSpan.FromMinutes(1));
-        await Service.ShownAsync(subject, exported: true, TestContext.Current.CancellationToken);
+        Assert.False(Value(await Service.ExportedAsync(subject, TestContext.Current.CancellationToken)));
 
         Assert.Equal(Noon, (await SetAsync(subject)).ExportedAt);
     }
@@ -259,13 +259,11 @@ public sealed class RecoveryCodeServiceTests : IAsyncDisposable
     /// the refusal names that.
     /// </summary>
     [Fact]
-    public async Task ShownAsync_AnAccountHoldingNoSet_IsRefusedAsNotEnrolledAsync() =>
+    public async Task ExportedAsync_AnAccountHoldingNoSet_IsRefusedAsNotEnrolledAsync() =>
         Assert.Equal(
             ErrorCodes.FactorNotEnrolled,
-            Refusal(await Service.ShownAsync(
-                Subject(),
-                exported: true,
-                TestContext.Current.CancellationToken)));
+            (await Service.ExportedAsync(Subject(), TestContext.Current.CancellationToken))
+                .Match<ErrorCode?>(_ => null, error => error.Code));
 
     private static TValue Value<TValue>(Result<TValue> result) =>
         result.Match(value => value, error => throw new Xunit.Sdk.XunitException(error.Code.ToString()));
