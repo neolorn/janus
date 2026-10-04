@@ -136,7 +136,10 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // reports of the caller where no session of the library carries the request: every
     // outcome of the report against the gate (AUTHZ-TEST-001 AC1, LIB-HOST-004,
     // AUTH-STEP-002, AUTH-STEP-003). The gate is one the host names, costing the
-    // strictest of the gates of the policy the caller is under.
+    // strictest of the gates of the policy the caller is under. The caller's grant admits
+    // the record in every case, so what decides is the gate, and a list asked under the
+    // action is refused with the code the check answers (AUTHZ-TEST-001 AC2,
+    // AUTHZ-GATE-005).
     private static readonly (string Scenario, Decided Decided)[] StepUps =
     [
         ("a report that meets the gate", Decided.Allowed),
@@ -227,16 +230,18 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Assert.Equal(decided, await OperationAsync(scenario));
 
     /// <summary>
-    /// AUTHZ-TEST-001 AC1, LIB-HOST-004 AC3, AC4, AUTH-STEP-003 AC1: every case of the
-    /// step-up table decides the way the table says through the single check, and where
-    /// the report meets the gate both renderings of the filter list the record.
+    /// AUTHZ-TEST-001 AC1, AC2, AUTHZ-GATE-005, LIB-HOST-004 AC3, AC4, AUTH-STEP-003 AC1:
+    /// every case of the step-up table decides the way the table says through the single
+    /// check, and both renderings of the filter answer the same: the record listed where
+    /// the report meets the gate, and the filter refused with the code the check answers
+    /// where it does not.
     /// </summary>
     /// <param name="scenario">The case.</param>
     /// <param name="decided">What it decides.</param>
     /// <returns>The work of running it.</returns>
     [Theory]
     [MemberData(nameof(StepUpCases))]
-    public async Task AUTHZ_TEST_001_AC1_EveryStepUpCaseDecidesTheWayTheTableSaysAsync(
+    public async Task AUTHZ_TEST_001_AC2_EveryStepUpCaseDecidesTheSameWayThroughBothPathsAsync(
         string scenario,
         Decided decided)
     {
@@ -245,12 +250,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         await using ServiceProvider? reporting = Reporting(scenario);
 
         Assert.Equal(decided, await ChecksAsync(written, reporting));
-
-        if (decided is Decided.Allowed)
-        {
-            Assert.Equal(Decided.Allowed, await ExpressionAdmitsAsync(written, reporting));
-            Assert.Equal(Decided.Allowed, await FragmentAdmitsAsync(written, reporting));
-        }
+        Assert.Equal(decided, await ExpressionAdmitsAsync(written, reporting));
+        Assert.Equal(decided, await FragmentAdmitsAsync(written, reporting));
     }
 
     /// <summary>
@@ -482,19 +483,26 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
     private static async Task<Expression<Func<HostDocument, bool>>> ExpressionAsync(
         Case written,
+        HostContext reading) =>
+        Rendered(await FilteredAsync(written, reading, deployment: null));
+
+    // The expression the gate renders for the case, or the refusal it answers before
+    // rendering one (AUTHZ-GATE-005).
+    private static async Task<Result<Expression<Func<HostDocument, bool>>>> FilteredAsync(
+        Case written,
         HostContext reading,
-        IServiceProvider? deployment = null)
+        IServiceProvider? deployment)
     {
         await using AsyncServiceScope scope = (deployment ?? written.Host.Services).CreateAsyncScope();
 
-        return Rendered(await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+        return await scope.ServiceProvider.GetRequiredService<IAccessGate>()
             .FilterAsync(
                 AccessContext.Of(written.Account),
                 written.Asked,
                 written.Record.Type,
                 written.Deployment.Organization,
                 Sources(reading),
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken);
     }
 
     private static TheoryData<string, Decided> Read((string Scenario, Decided Decided)[] table)
@@ -567,23 +575,25 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         {
             await using HostContext reading = host.Context();
 
-            return await reading.Documents
-                .Where(await ExpressionAsync(written, reading, deployment))
-                .AnyAsync(
-                    document => document.Id == written.Record.Id.ToString(),
-                    TestContext.Current.CancellationToken)
-                ? Decided.Allowed
-                : Decided.Denied;
+            return await (await FilteredAsync(written, reading, deployment)).Match(
+                async expression => await reading.Documents
+                    .Where(expression)
+                    .AnyAsync(
+                        document => document.Id == written.Record.Id.ToString(),
+                        TestContext.Current.CancellationToken)
+                    ? Decided.Allowed
+                    : Decided.Denied,
+                refused => Task.FromResult(Refused(refused)));
         });
 
     private async Task<Decided> FragmentAdmitsAsync(Case written, IServiceProvider? deployment = null) =>
         await RaisedOrAsync(async () =>
         {
-            SqlFilter fragment;
+            Result<SqlFilter> rendered;
 
             await using (AsyncServiceScope scope = (deployment ?? host.Services).CreateAsyncScope())
             {
-                fragment = Rendered(await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                rendered = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
                     .FragmentAsync(
                         AccessContext.Of(written.Account),
                         written.Asked,
@@ -591,8 +601,17 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                         written.Deployment.Organization,
                         "identity_authz_row",
                         "id",
-                        TestContext.Current.CancellationToken));
+                        TestContext.Current.CancellationToken);
             }
+
+            // AUTHZ-GATE-005: a fragment the gate refuses before rendering decides the
+            // case by the code it answers.
+            if (rendered.Match<Error?>(_ => null, refused => refused) is Error refusal)
+            {
+                return Refused(refusal);
+            }
+
+            SqlFilter fragment = Rendered(rendered);
 
             var arguments = new DynamicParameters();
 
