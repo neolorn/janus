@@ -57,6 +57,10 @@ against the public contract of LIB-API-001.
   abandoned, settled or never issued) answers 422 `auth.code.expired`, where it
   answered `auth.code.invalid`, and is counted against the source alone; one merely
   opened counts nothing.
+- The expiry sweep ends pending identifier verifications in a transaction: it locks
+  its candidates, passing over any row another transaction holds, and judges each
+  again before it deletes, so a resend of an add's code, which holds the pending
+  verification's row while it writes, keeps its record.
 - `ICredentials.MarkRecoveryCodesExportedAsync` records that the person copied,
   downloaded or printed the recovery-code set the account holds, and
   `POST /account/recoverycodes/exported` maps it. An account holding no set is refused

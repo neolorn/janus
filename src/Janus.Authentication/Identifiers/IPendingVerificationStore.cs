@@ -88,7 +88,10 @@ internal interface IPendingVerificationStore
     /// Ends every verification that no verification-code record holds any longer: one
     /// whose code and, for a replace, whose confirmation are each spent or past their
     /// lifetime. An add goes with nothing else to remove, and a replace leaves the
-    /// identifier as it stood (REG-IDENT-004, REG-IDENT-007, OPS-OBS-003).
+    /// identifier as it stood (REG-IDENT-004, REG-IDENT-007, OPS-OBS-003). The caller
+    /// holds the transaction it runs in: the candidates are locked, one a resend holds
+    /// is passed over, and each is judged again before it is deleted, so a resend in
+    /// flight keeps its record (D-188).
     /// </summary>
     /// <param name="now">The instant a record's lifetime is judged at.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>

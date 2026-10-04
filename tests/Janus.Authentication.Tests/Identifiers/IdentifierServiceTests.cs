@@ -3172,6 +3172,32 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-004 (D-188): a resend of an add's code holds the pending verification's
+    /// row while it writes: the row is locked before the code is drawn again, so the
+    /// sweep passes over it and the resend in flight keeps its record.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_004_AResendOfAnAddsCodeHoldsItsRowBeforeItWritesAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        await AddedAsync(Second);
+        IdentifierId second = Named(await HeldAsync(), Second).Id;
+        int sent = _notifications.Mail.Count(message => message.Message is MessageKind.VerificationLink);
+        var held = new List<(IdentifierId Row, int Sent, bool Open)>();
+
+        _pending.Locking = identifier => held.Add((
+            identifier,
+            _notifications.Mail.Count(message => message.Message is MessageKind.VerificationLink),
+            _work.Open));
+
+        await AddedAsync(Second);
+
+        Assert.Equal([(second, sent, true)], held);
+        Assert.Equal(sent + 1, _notifications.Mail.Count(message => message.Message is MessageKind.VerificationLink));
+        Assert.Equal(second, Assert.Single(_pending.All).Identifier);
+    }
+
+    /// <summary>
     /// REG-SESS-003 AC6, AUTH-ABUSE-001: the codes of an account's identifier are counted
     /// and throttled as a registration's are. A refused code is counted against the
     /// source and the identifier, and while the delay stands a further code is refused
