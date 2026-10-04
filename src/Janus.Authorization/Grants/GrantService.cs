@@ -233,8 +233,9 @@ internal sealed class GrantService(
 
         if (moved is not null)
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Failure(moved), Result.Failure);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(moved);
         }
 
         held = standing!;
@@ -410,8 +411,9 @@ internal sealed class GrantService(
 
         if (refused is not null)
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Failure<GrantId>(refused), Result.Failure<GrantId>);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<GrantId>(refused);
         }
 
         await grants.CreateAsync(grant, cancellationToken).ConfigureAwait(false);

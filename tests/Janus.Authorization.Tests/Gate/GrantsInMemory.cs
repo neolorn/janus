@@ -38,9 +38,22 @@ internal sealed class GrantsInMemory : IGrantStore
     public void Bump(SubjectId subject) =>
         _versions[subject] = _versions.GetValueOrDefault(subject) + 1;
 
+    /// <summary>
+    /// What another transaction does to a grant while a revocation waits for its row, so
+    /// a test may move the grant under a decision about to be taken.
+    /// </summary>
+    public Action<Grant>? Locking { get; set; }
+
     /// <inheritdoc/>
-    public ValueTask<Grant?> FindForUpdateAsync(GrantId id, CancellationToken cancellationToken) =>
-        FindAsync(id, cancellationToken);
+    public ValueTask<Grant?> FindForUpdateAsync(GrantId id, CancellationToken cancellationToken)
+    {
+        if (_grants.GetValueOrDefault(id) is Grant held)
+        {
+            Locking?.Invoke(held);
+        }
+
+        return FindAsync(id, cancellationToken);
+    }
 
     /// <inheritdoc/>
     public ValueTask<Grant?> FindAsync(GrantId id, CancellationToken cancellationToken)
