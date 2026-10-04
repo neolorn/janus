@@ -1286,10 +1286,12 @@ against the public contract of LIB-API-001.
   a party verifying a token offline can refuse one issued to any other client. The token
   and userinfo routes are carried on the machine profile, a second pipeline profile that
   reads no cookie and asks for no synchronizer token, and refuses a request that arrives
-  with one. `IOidc` carries the two operations a host calls in process and the library
-  answers over HTTP, `ClaimsAsync` and `KeysAsync`; `ClaimsAsync` takes the caller's
-  `AccessContext` and answers the claims of its effective identity alone, and
-  `authz.denied` where it names none.
+  with one. `IOidc` carries what a host calls in process and the library answers over
+  HTTP, `ClaimsAsync` and `KeysAsync`; `ClaimsAsync` takes the caller's `AccessContext`
+  and answers the claims of its effective identity alone, and `authz.denied` where it
+  names none. `KeysAsync`, the read of the published key set, is no operation: it takes
+  no access context, meets no gate and answers the public keys `GET /oidc/jwks`
+  publishes and nothing else.
 - An application establishes its own session from the one the authentication application
   holds without a line of host code: `GET /auth/signon` forwards the browser to the
   provider with proof key and a state bound to its pre-authentication session,

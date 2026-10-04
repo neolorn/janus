@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using Janus.Core;
@@ -437,6 +438,36 @@ public sealed class PublicSurfaceTests
         Assert.Empty(OwnOperations.Concat(Ungated).Except(operations.Select(operation => operation.Name)));
         Assert.Empty(resolving);
         Assert.Empty(unmet);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002 AC3, LIB-API-005: the read of the provider's published key set
+    /// is no operation. It takes no access context, so no gate is asked of it, and what
+    /// it answers is the public key, its identifier, its algorithm and when it retires,
+    /// and nothing of a person or of a private key.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_002_AC3_TheReadOfThePublishedKeySetTakesNoAccessContextAndAnswersPublicKeysAlone()
+    {
+        MethodInfo read = typeof(IOidc).GetMethod(nameof(IOidc.KeysAsync))!;
+
+        Assert.Equal([typeof(CancellationToken)], read.GetParameters().Select(parameter => parameter.ParameterType));
+        Assert.Equal(typeof(ValueTask<Result<IReadOnlyList<PublishedSigningKey>>>), read.ReturnType);
+        Assert.Equal(
+            [
+                nameof(PublishedSigningKey.Algorithm),
+                nameof(PublishedSigningKey.KeyId),
+                nameof(PublishedSigningKey.PublicKey),
+                nameof(PublishedSigningKey.RetiresAt),
+            ],
+            typeof(PublishedSigningKey)
+                .GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                .Select(property => property.Name)
+                .Where(name => name != "EqualityContract")
+                .Order(StringComparer.Ordinal));
+        Assert.DoesNotContain(
+            ServiceContracts().SelectMany(Operations),
+            operation => operation.Name == nameof(IOidc) + "." + nameof(IOidc.KeysAsync));
     }
 
     /// <summary>
