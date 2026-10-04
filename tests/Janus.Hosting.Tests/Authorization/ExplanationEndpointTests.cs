@@ -49,7 +49,42 @@ public sealed class ExplanationEndpointTests : IAsyncDisposable
         Assert.Equal(Permissions.SessionRevoke.ToString(), resolved.Text("permission"));
         Assert.Equal(subject.Value, resolved.Json().GetProperty("principal").GetProperty("acting").GetGuid());
         Assert.Equal(subject.Value, resolved.Json().GetProperty("principal").GetProperty("effective").GetGuid());
+        Assert.False(resolved.Json().GetProperty("principal").TryGetProperty("name", out _));
+        Assert.False(resolved.Json().GetProperty("principal").TryGetProperty("reason", out _));
         Assert.Equal(JsonValueKind.Null, resolved.Json().GetProperty("grant").ValueKind);
+    }
+
+    /// <summary>
+    /// AUTHZ-CONCEAL-004 AC3, AUTHZ-GATE-004: the identifier of a refusal of background
+    /// work resolves, for the support role, to the principal's name and stated reason.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_004_AC3_ARefusalOfBackgroundWorkResolvesToItsNameAndReasonAsync()
+    {
+        (Browser browser, SubjectId subject, _) = await RefusedAsync();
+
+        _ = await _deployment.Gate.RequireAsync(
+            AccessContext.Of(SystemPrincipal.ForDeployment(
+                "mail-reconciliation",
+                "INT-MAIL-007",
+                SystemOperation.Reconciliation)),
+            Permissions.SessionRevoke,
+            Administration,
+            TestContext.Current.CancellationToken);
+
+        Guid correlation = _deployment.Gate.Refusals[^1].Value;
+
+        _deployment.Gate.Grant(subject, Administration, Permissions.AuditRead);
+
+        Answer resolved = await browser.SendAsync("GET", $"/admin/explanations/{correlation}");
+        JsonElement principal = resolved.Json().GetProperty("principal");
+
+        Assert.Equal(StatusCodes.Status200OK, resolved.Status);
+        Assert.Equal("mail-reconciliation", principal.GetProperty("name").GetString());
+        Assert.Equal("INT-MAIL-007", principal.GetProperty("reason").GetString());
+        Assert.Equal(JsonValueKind.Null, principal.GetProperty("acting").ValueKind);
+        Assert.Equal(JsonValueKind.Null, principal.GetProperty("effective").ValueKind);
     }
 
     /// <summary>

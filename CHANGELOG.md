@@ -156,6 +156,15 @@ against the public contract of LIB-API-001.
 - An entry of the audit trail read by subject carries the data subject its record
   concerns (`AuditEntry.Subject`, `subject` on `GET /admin/audit`), null where the record
   concerns none.
+- A refusal of background work is recorded as its other actions are: the nil subject
+  under both identities, with the principal's name and stated reason. Its correlation
+  identifier resolves to them (`ExplainedPrincipal.Name`, `ExplainedPrincipal.Reason`;
+  `principal.name` and `principal.reason` on the explanation routes, present only for a
+  system principal). A migration makes both identities required on every audit record
+  and stops where the trail holds a record naming none. `denial-spike` counts a system
+  principal's refusals by its name, so each principal is an actor of its own and the
+  alert names it; refusals recording the nil subject and no principal count as one
+  actor.
 - `no-emergency-credential` is raised by the hourly `emergency-credential` job for as
   long as no break-glass credential stands, including after one is spent, and stops only
   when one is generated.

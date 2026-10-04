@@ -49,15 +49,6 @@ internal sealed class AccessAudit(DataConnections connections, IServiceScopeFact
         """
         INSERT INTO identity.audit_records
             (id, category, occurred_at, action, acting_subject, effective_subject,
-             organization, details, breakglass_reason)
-        VALUES (@id, @category, @at, @action, @acting, @effective, @organization,
-                CAST(@details AS jsonb), @breakGlassReason);
-        """;
-
-    private const string AppendExport =
-        """
-        INSERT INTO identity.audit_records
-            (id, category, occurred_at, action, acting_subject, effective_subject,
              organization, details, principal, principal_reason, breakglass_reason)
         VALUES (@id, @category, @at, @action, @acting, @effective, @organization,
                 CAST(@details AS jsonb), @principal, @reason, @breakGlassReason);
@@ -67,6 +58,8 @@ internal sealed class AccessAudit(DataConnections connections, IServiceScopeFact
         """
         SELECT acting_subject AS "Acting",
                effective_subject AS "Effective",
+               principal AS "Principal",
+               principal_reason AS "PrincipalReason",
                breakglass_reason AS "BreakGlassReason",
                organization AS "Organization",
                occurred_at AS "At",
@@ -80,14 +73,18 @@ internal sealed class AccessAudit(DataConnections connections, IServiceScopeFact
         SELECT count(*)::int
         FROM identity.audit_records
         WHERE category = @category AND action = @action AND acting_subject = @acting
+          AND principal IS NULL
           AND occurred_at >= @from AND occurred_at < @until;
         """;
 
-    private const string ByNobody =
+    // Background work records the nil subject, so the principal's rows are found through
+    // the index on the acting subject and told apart by the name.
+    private const string ByPrincipal =
         """
         SELECT count(*)::int
         FROM identity.audit_records
-        WHERE category = @category AND action = @action AND acting_subject IS NULL
+        WHERE category = @category AND action = @action AND acting_subject = @acting
+          AND principal = @principal
           AND occurred_at >= @from AND occurred_at < @until;
         """;
 
@@ -116,8 +113,14 @@ internal sealed class AccessAudit(DataConnections connections, IServiceScopeFact
                         category = VocabularyConverter<AuditCategory>.Write(AuditCategory.Security),
                         at = denial.At.ToUniversalTime(),
                         action = Denied.ToString(),
-                        acting = denial.Acting?.Value,
-                        effective = denial.Effective?.Value,
+
+                        // AUTHZ-CONCEAL-004, IDN-AUD-001: a refusal of background work
+                        // names the nil subject under both identities beside its
+                        // principal, as every row its work leaves does.
+                        acting = (denial.Acting ?? default).Value,
+                        effective = (denial.Effective ?? default).Value,
+                        principal = denial.Principal,
+                        reason = denial.PrincipalReason,
                         breakGlassReason = denial.BreakGlassReason,
                         organization = denial.Organization?.Value,
                         details = Written(denial),
@@ -137,7 +140,7 @@ internal sealed class AccessAudit(DataConnections connections, IServiceScopeFact
 
         await ambient.Connection
             .ExecuteAsync(new CommandDefinition(
-                AppendExport,
+                Append,
                 new
                 {
                     id = export.Id.Value,
@@ -182,7 +185,8 @@ internal sealed class AccessAudit(DataConnections connections, IServiceScopeFact
 
     /// <inheritdoc/>
     public async ValueTask<int> CountAsync(
-        SubjectId? acting,
+        SubjectId acting,
+        string? principal,
         DateTimeOffset from,
         DateTimeOffset until,
         CancellationToken cancellationToken)
@@ -191,12 +195,13 @@ internal sealed class AccessAudit(DataConnections connections, IServiceScopeFact
 
         return await ambient.Connection
             .ExecuteScalarAsync<int>(new CommandDefinition(
-                acting is null ? ByNobody : ByActor,
+                principal is null ? ByActor : ByPrincipal,
                 new
                 {
                     category = VocabularyConverter<AuditCategory>.Write(AuditCategory.Security),
                     action = Denied.ToString(),
-                    acting = acting?.Value,
+                    acting = acting.Value,
+                    principal,
                     from = from.ToUniversalTime(),
                     until = until.ToUniversalTime(),
                 },
@@ -266,10 +271,16 @@ internal sealed class AccessAudit(DataConnections connections, IServiceScopeFact
             JsonSerializer.Deserialize(row.Details, AuditDocument.Default.DictionaryStringJsonElement)
             ?? throw new InvalidOperationException("The recorded refusal carries no fields.");
 
+        // The nil subject beside a principal stands for no account, so the refusal reads
+        // back as the gate made it: under no identity, by the principal named.
+        bool ofAPerson = row.Principal is null;
+
         return new DeniedAccess(
             correlation,
-            row.Acting is Guid acting ? new SubjectId(acting) : null,
-            row.Effective is Guid effective ? new SubjectId(effective) : null,
+            ofAPerson ? new SubjectId(row.Acting) : null,
+            ofAPerson ? new SubjectId(row.Effective) : null,
+            row.Principal,
+            row.PrincipalReason,
             row.BreakGlassReason,
             row.Organization is Guid organization ? new OrganizationId(organization) : null,
             Core.Permission.Parse(Field(details, Permission)),
@@ -314,9 +325,13 @@ internal sealed class AccessAudit(DataConnections connections, IServiceScopeFact
     // The columns as the row holds them, before the fields are read back.
     private sealed class RecordedDenial
     {
-        public Guid? Acting { get; init; }
+        public Guid Acting { get; init; }
 
-        public Guid? Effective { get; init; }
+        public Guid Effective { get; init; }
+
+        public string? Principal { get; init; }
+
+        public string? PrincipalReason { get; init; }
 
         public string? BreakGlassReason { get; init; }
 

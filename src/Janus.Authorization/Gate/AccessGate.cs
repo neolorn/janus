@@ -248,7 +248,7 @@ internal sealed class AccessGate(
             .ConfigureAwait(false);
 
         return Result.Success(Explanation(
-            new ExplainedPrincipal(context.Acting, context.Effective),
+            Asking(context),
             permission,
             Deciding(decided, resource)));
     }
@@ -284,7 +284,7 @@ internal sealed class AccessGate(
             : null;
 
         return Result.Success(Explanation(
-            new ExplainedPrincipal(context.Acting, context.Effective),
+            Asking(context),
             permission,
             Deciding(decided, resource) ?? derivedGrant));
     }
@@ -362,7 +362,7 @@ internal sealed class AccessGate(
         return recorded is not null
             && Discloses(recorded.Type)
             && Resolved(recorded) is { } explained
-            && explained.Principal == new ExplainedPrincipal(context.Acting, context.Effective)
+            && explained.Principal == Asking(context)
                 ? Result.Success(explained)
                 : Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied));
     }
@@ -370,7 +370,7 @@ internal sealed class AccessGate(
     // CONV-LOG-006: a recorded refusal is explained by the path that explains a live
     // decision, from the grant that decided it as the refusal recorded it.
     private static AccessExplanation Resolved(DeniedAccess recorded) => Explanation(
-        new ExplainedPrincipal(recorded.Acting, recorded.Effective),
+        new ExplainedPrincipal(recorded.Acting, recorded.Effective, recorded.Principal, recorded.PrincipalReason),
         recorded.Permission,
         recorded.Grant);
 
@@ -1060,6 +1060,11 @@ internal sealed class AccessGate(
             .ConfigureAwait(false));
     }
 
+    // AUTHZ-GATE-004, D-166: who an explanation is made for, the name and the reason
+    // present only where background work asks.
+    private static ExplainedPrincipal Asking(AccessContext context) =>
+        new(context.Acting, context.Effective, context.Principal?.Name, context.Principal?.Reason);
+
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
 
@@ -1190,9 +1195,9 @@ internal sealed class AccessGate(
 
     // AUTHZ-CONCEAL-004, CONV-LOG-005: one path answers every refusal, and the
     // identifier it hands back is the row the refusal was recorded as. The same path
-    // counts it towards its actor's denial spike (AUTHZ-GATE-004, OPS-ALERT-001). A request made
-    // under no account is refused with an identifier like any other; the row names
-    // nobody, and that absence is the recorded fact.
+    // counts it towards its actor's denial spike (AUTHZ-GATE-004, OPS-ALERT-001). A
+    // request of background work is refused with an identifier like any other, and the
+    // row names its principal and the reason it stated.
     private async ValueTask<Result> RefusedAsync(
         AccessContext context,
         Permission permission,
@@ -1219,6 +1224,8 @@ internal sealed class AccessGate(
             correlation,
             context.Acting,
             context.Effective,
+            context.Principal?.Name,
+            context.Principal?.Reason,
             context.BreakGlassReason,
             organization,
             permission,

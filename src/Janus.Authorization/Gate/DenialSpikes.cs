@@ -17,8 +17,10 @@ namespace Janus.Authorization.Gate;
 /// <remarks>
 /// Implements AUTHZ-GATE-004 and OPS-ALERT-001 (D-153). The windows are fixed and ten
 /// minutes long, counted from the Unix epoch, so every instance of the library places a
-/// refusal in the same window. Every refusal that names no actor is counted together,
-/// so a run of them is raised like any actor's.
+/// refusal in the same window. A system principal's refusals are counted by its name,
+/// so one job's run neither hides in another's nor raises it and the alert names the
+/// job; every other refusal is counted by the acting subject it records, those
+/// recording the nil subject and no principal together (D-183).
 /// </remarks>
 internal sealed class DenialSpikes(
     IAccessAudit audit,
@@ -48,7 +50,7 @@ internal sealed class DenialSpikes(
         DateTimeOffset opened = Opened(denial.At);
 
         int denials = await audit
-            .CountAsync(denial.Acting, opened, opened + Window, cancellationToken)
+            .CountAsync(denial.Acting ?? default, denial.Principal, opened, opened + Window, cancellationToken)
             .ConfigureAwait(false);
 
         if (denials > threshold)
@@ -56,7 +58,7 @@ internal sealed class DenialSpikes(
             (await alerts
                     .RaiseAsync(
                         AlertCondition.DenialSpike,
-                        denial.Acting?.ToString(),
+                        denial.Actor,
                         new Dictionary<string, JsonElement>(StringComparer.Ordinal)
                         {
                             ["denials"] = JsonSerializer.SerializeToElement(denials),

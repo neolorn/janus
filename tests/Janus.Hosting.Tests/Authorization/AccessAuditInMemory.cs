@@ -47,10 +47,14 @@ internal sealed class AccessAuditInMemory : IAccessAudit
 
     /// <inheritdoc/>
     public ValueTask<int> CountAsync(
-        SubjectId? acting,
+        SubjectId acting,
+        string? principal,
         DateTimeOffset from,
         DateTimeOffset until,
         CancellationToken cancellationToken) =>
         ValueTask.FromResult(_denials.Count(denial =>
-            denial.Acting == acting && denial.At >= from && denial.At < until));
+            (denial.Acting ?? default) == acting
+            && denial.Principal == principal
+            && denial.At >= from
+            && denial.At < until));
 }

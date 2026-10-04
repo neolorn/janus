@@ -484,29 +484,42 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         AuditRecordId correlation = await RefusedAsync(deployed, deployed.Record, HostPermissions.Read);
 
         Assert.Equal(
-            new Identified(deployed.Account.Value, deployed.Account.Value),
+            new Identified(deployed.Account.Value, deployed.Account.Value, Principal: null, Reason: null),
             await IdentifiedAsync(correlation));
     }
 
     /// <summary>
-    /// AUTHZ-CONCEAL-004 AC1: a request made under no account is refused with a
-    /// correlation identifier like every other refusal, and the row it resolves to is
-    /// there, naming the permission and naming nobody.
+    /// AUTHZ-CONCEAL-004 AC1 and AC3, IDN-AUD-001 AC1: a refusal of background work is
+    /// recorded as its other actions are, the nil subject under both identities beside
+    /// the principal's name and stated reason, and its identifier resolves to that name
+    /// and reason; a person's refusal resolves to neither.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task AUTHZ_CONCEAL_004_AC1_ARefusalUnderNoAccountCarriesAnIdentifierAsync()
+    public async Task AUTHZ_CONCEAL_004_AC1_ARefusalOfBackgroundWorkNamesThePrincipalAndItsReasonAsync()
     {
         Deployed deployed = await DeployAsync(granted: false);
 
-        AuditRecordId correlation = await RefusedAsync(
+        AuditRecordId ofWork = await RefusedAsync(
             AccessContext.Of(SystemPrincipal.ForOrganization(
                 "import", "the nightly import", deployed.Deployment.Organization)),
             deployed.Record,
             HostPermissions.Read);
+        AuditRecordId ofAPerson = await RefusedAsync(deployed, deployed.Record, HostPermissions.Read);
 
-        Assert.Equal(1, await RecordedAsync(correlation));
-        Assert.Equal(new Identified(null, null), await IdentifiedAsync(correlation));
+        AccessExplanation work = await ResolvedAsync(deployed, ofWork);
+        AccessExplanation person = await ResolvedAsync(deployed, ofAPerson);
+
+        Assert.Equal(
+            new Identified(Guid.Empty, Guid.Empty, "import", "the nightly import"),
+            await IdentifiedAsync(ofWork));
+        Assert.Equal(
+            new ExplainedPrincipal(Acting: null, Effective: null, "import", "the nightly import"),
+            work.Principal);
+        Assert.Equal(HostPermissions.Read, work.Permission);
+        Assert.Equal(
+            new ExplainedPrincipal(deployed.Account, deployed.Account, Name: null, Reason: null),
+            person.Principal);
     }
 
     /// <summary>
@@ -1027,7 +1040,8 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
 
         return await connection.QuerySingleAsync<Identified>(new CommandDefinition(
             """
-            SELECT acting_subject AS "Acting", effective_subject AS "Effective"
+            SELECT acting_subject AS "Acting", effective_subject AS "Effective",
+                   principal AS "Principal", principal_reason AS "Reason"
             FROM identity.audit_records
             WHERE id = @id;
             """,
@@ -1051,9 +1065,9 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
         return new AuditRecordId(refusal.Details["correlation"].GetGuid());
     }
 
-    // The two identity columns of one record, read as the row holds them, either
-    // absent where the refusal names nobody.
-    private sealed record Identified(Guid? Acting, Guid? Effective);
+    // Who one record names, read as the row holds it: the two identities, and the
+    // principal and its reason where background work acted.
+    private sealed record Identified(Guid Acting, Guid Effective, string? Principal, string? Reason);
 
     private async Task<Deployed> DeployAsync(bool granted)
     {

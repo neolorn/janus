@@ -93,7 +93,7 @@ internal sealed class AccessGateInMemory : IAccessGate
         return ValueTask.FromResult(Result.Success(new AccessExplanation(
             AccessOutcome.Denied,
             permission,
-            new ExplainedPrincipal(context.Acting, context.Effective),
+            new ExplainedPrincipal(context.Acting, context.Effective, context.Principal?.Name, context.Principal?.Reason),
             Grant: null)));
     }
 

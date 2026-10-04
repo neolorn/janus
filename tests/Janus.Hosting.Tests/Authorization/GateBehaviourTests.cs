@@ -635,35 +635,50 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
-    /// AUTHZ-GATE-004, OPS-ALERT-001 AC1: the refusals that name no acting subject are
-    /// counted together, so a run of them raises <c>denial-spike</c> with no scope.
+    /// AUTHZ-GATE-004, OPS-ALERT-001 AC1: the refusals recording the nil subject and no
+    /// principal are counted as one actor, so a run of them raises <c>denial-spike</c>
+    /// naming that subject.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
     public async Task OPS_ALERT_001_AC1_ARunOfRefusalsNamingNoOneIsRaisedAsync()
     {
         Nested nested = await NestAsync();
+        int before = await SpikesAsync(default(SubjectId).ToString());
 
         for (int each = 0; each <= Settings.AlertingDenialsThreshold.Default; each++)
         {
-            await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
-            await using HostContext reading = host.Context();
-
-            Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
-                .RequireAsync(
-                    AccessContext.Of(SystemPrincipal.ForOrganization(
-                        "import",
-                        "the nightly import",
-                        nested.Deployment.Organization)),
-                    HostPermissions.Read,
-                    nested.Record,
-                    Sources(reading),
-                    TestContext.Current.CancellationToken);
-
-            Assert.Equal(ErrorCodes.Denied, outcome.Match(() => ErrorCodes.SystemFault, error => error.Code));
+            Assert.False(await ChecksAsync(default, nested.Record));
         }
 
-        Assert.NotEqual(0, await SpikesAsync(null));
+        Assert.Equal(before + 1, await SpikesAsync(default(SubjectId).ToString()));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-004, OPS-ALERT-001 AC1, D-183: a system principal's refusals are counted
+    /// by its name, so each principal is an actor of its own: one job's refusals neither
+    /// raise another's spike nor hide in it, and the alert names the job.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_ALERT_001_AC1_APrincipalsRefusalsAreCountedByItsNameAsync()
+    {
+        Nested nested = await NestAsync();
+        string runaway = "import-" + Guid.NewGuid().ToString("n")[..8];
+        string other = "export-" + Guid.NewGuid().ToString("n")[..8];
+
+        for (int each = 0; each < Settings.AlertingDenialsThreshold.Default; each++)
+        {
+            await RefusedAsWorkAsync(runaway, nested);
+        }
+
+        await RefusedAsWorkAsync(other, nested);
+
+        Assert.Equal((0, 0), (await SpikesAsync(runaway), await SpikesAsync(other)));
+
+        await RefusedAsWorkAsync(runaway, nested);
+
+        Assert.Equal((1, 0), (await SpikesAsync(runaway), await SpikesAsync(other)));
     }
 
     /// <summary>
@@ -1798,7 +1813,11 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             new { account = account.Value });
     }
 
-    private async Task<int> SpikesAsync(SubjectId? account)
+    private async Task<int> SpikesAsync(SubjectId account) => await SpikesAsync(account.ToString());
+
+    // The spikes raised for one actor: an account by its identifier, background work by
+    // its principal's name.
+    private async Task<int> SpikesAsync(string actor)
     {
         await using NpgsqlConnection connection = await host.OpenAsync();
 
@@ -1807,7 +1826,28 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             SELECT count(*)::int FROM identity.raised_alerts
             WHERE condition = 'denial-spike' AND idempotency_key LIKE @key
             """,
-            new { key = Alerts.Key(AlertCondition.DenialSpike, scope: null, account?.ToString()) + "@%" });
+            new { key = Alerts.Key(AlertCondition.DenialSpike, scope: null, actor) + "@%" });
+    }
+
+    // One refusal of background work acting for the deployment's organization under the
+    // name given.
+    private async Task RefusedAsWorkAsync(string principal, Nested nested)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+            .RequireAsync(
+                AccessContext.Of(SystemPrincipal.ForOrganization(
+                    principal,
+                    "the nightly import",
+                    nested.Deployment.Organization)),
+                HostPermissions.Read,
+                nested.Record,
+                Sources(reading),
+                TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.Denied, outcome.Match(() => ErrorCodes.SystemFault, error => error.Code));
     }
 
     // The statements of every connection that read the grants or the ancestry, which

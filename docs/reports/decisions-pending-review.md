@@ -4657,6 +4657,8 @@ lifecycle events and that an authorization refusal made under no account names n
 identity, the absence being the recorded fact. AUTHZ-CONCEAL-004 should say the
 identifier is carried whoever asked.
 
+**Superseded by D-166.**
+
 ---
 
 ## 137. The audit actions are a catalogue, and the closed vocabularies are listed

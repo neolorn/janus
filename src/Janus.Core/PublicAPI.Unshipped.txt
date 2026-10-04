@@ -975,12 +975,16 @@ Janus.Core.ExplainedGrant.SubjectType.init -> void
 Janus.Core.ExplainedPrincipal
 Janus.Core.ExplainedPrincipal.Acting.get -> Janus.Core.SubjectId?
 Janus.Core.ExplainedPrincipal.Acting.init -> void
-Janus.Core.ExplainedPrincipal.Deconstruct(out Janus.Core.SubjectId? Acting, out Janus.Core.SubjectId? Effective) -> void
+Janus.Core.ExplainedPrincipal.Deconstruct(out Janus.Core.SubjectId? Acting, out Janus.Core.SubjectId? Effective, out string? Name, out string? Reason) -> void
 Janus.Core.ExplainedPrincipal.Effective.get -> Janus.Core.SubjectId?
 Janus.Core.ExplainedPrincipal.Effective.init -> void
 Janus.Core.ExplainedPrincipal.Equals(Janus.Core.ExplainedPrincipal other) -> bool
 Janus.Core.ExplainedPrincipal.ExplainedPrincipal() -> void
-Janus.Core.ExplainedPrincipal.ExplainedPrincipal(Janus.Core.SubjectId? Acting, Janus.Core.SubjectId? Effective) -> void
+Janus.Core.ExplainedPrincipal.ExplainedPrincipal(Janus.Core.SubjectId? Acting, Janus.Core.SubjectId? Effective, string? Name, string? Reason) -> void
+Janus.Core.ExplainedPrincipal.Name.get -> string?
+Janus.Core.ExplainedPrincipal.Name.init -> void
+Janus.Core.ExplainedPrincipal.Reason.get -> string?
+Janus.Core.ExplainedPrincipal.Reason.init -> void
 Janus.Core.ExportRecord
 Janus.Core.ExportRecord.<Clone>$() -> Janus.Core.ExportRecord!
 Janus.Core.ExportRecord.Deconstruct(out System.Collections.Generic.IReadOnlyDictionary<string!, string!>! Values) -> void

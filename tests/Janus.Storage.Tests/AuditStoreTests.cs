@@ -63,18 +63,20 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
     }
 
     /// <summary>
-    /// IDN-AUD-001 AC1: an event that is not an authorization refusal is refused by
-    /// the database without both identities, so the one action that may name nobody
-    /// is the only one that can (AUTHZ-CONCEAL-004).
+    /// IDN-AUD-001 AC1, AUTHZ-CONCEAL-004: a record without both identities is refused
+    /// by the database, an authorization refusal like every other event, so no row
+    /// names nobody.
     /// </summary>
     [Fact]
-    public async Task IDN_AUD_001_AC1_AnEventNamingNobodyIsRefusedByTheDatabaseAsync()
+    public async Task IDN_AUD_001_AC1_ARefusalNamingNobodyIsRefusedByTheDatabaseAsync()
     {
-        PostgresException refused = await Assert.ThrowsAsync<PostgresException>(
+        PostgresException anEvent = await Assert.ThrowsAsync<PostgresException>(
             async () => await WriteAsync(Suspended.ToString()));
+        PostgresException aRefusal = await Assert.ThrowsAsync<PostgresException>(
+            async () => await WriteAsync("authz.access.denied"));
 
-        Assert.Equal("23514", refused.SqlState);
-        Assert.Equal(1, await WriteAsync("authz.access.denied"));
+        Assert.Equal(PostgresErrorCodes.NotNullViolation, anEvent.SqlState);
+        Assert.Equal(PostgresErrorCodes.NotNullViolation, aRefusal.SqlState);
     }
 
     /// <summary>

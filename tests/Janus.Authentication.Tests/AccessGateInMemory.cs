@@ -78,7 +78,7 @@ internal sealed class AccessGateInMemory : IAccessGate
             new AccessExplanation(
                 AccessOutcome.Denied,
                 permission,
-                new ExplainedPrincipal(context.Acting, context.Effective),
+                new ExplainedPrincipal(context.Acting, context.Effective, context.Principal?.Name, context.Principal?.Reason),
                 Grant: null)));
 
         return ValueTask.FromResult(Refused());
@@ -135,7 +135,7 @@ internal sealed class AccessGateInMemory : IAccessGate
         return ValueTask.FromResult(Result.Success(new AccessExplanation(
             AccessOutcome.Denied,
             permission,
-            new ExplainedPrincipal(context.Acting, context.Effective),
+            new ExplainedPrincipal(context.Acting, context.Effective, context.Principal?.Name, context.Principal?.Reason),
             Grant: null)));
     }
 
@@ -205,7 +205,7 @@ internal sealed class AccessGateInMemory : IAccessGate
         return ValueTask.FromResult(Recorded(
             correlation,
             explanation => context.Acting is not null
-                && explanation.Principal == new ExplainedPrincipal(context.Acting, context.Effective)));
+                && explanation.Principal == new ExplainedPrincipal(context.Acting, context.Effective, context.Principal?.Name, context.Principal?.Reason)));
     }
 
     /// <inheritdoc/>

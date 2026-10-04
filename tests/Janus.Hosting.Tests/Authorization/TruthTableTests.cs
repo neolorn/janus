@@ -90,6 +90,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a page's record whose subject gave no consent to its purpose", Decided.ConsentRequired),
         ("a grant in the administrative organization, to a member of it", Decided.Allowed),
         ("a grant in the administrative organization, to an account holding no membership of it", Decided.Denied),
+        ("a check by background work, which holds no grant", Decided.Denied),
     ];
 
     /// <summary>
@@ -633,6 +634,18 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     managing,
                     caller,
                     member: scenario == "a grant in the administrative organization, to a member of it");
+
+            case "a check by background work, which holds no grant":
+                return (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                        .RequireAsync(
+                            AccessContext.Of(SystemPrincipal.ForOrganization(
+                                "import",
+                                "the nightly import",
+                                deployment.Organization)),
+                            Permissions.GrantRead,
+                            deployment.Organization,
+                            cancellationToken))
+                    .Match(() => Decided.Allowed, Refused);
 
             default:
                 throw new ArgumentOutOfRangeException(nameof(scenario), scenario, "No such case.");
