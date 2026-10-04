@@ -615,7 +615,7 @@ CONV-DESIGN-008 criterion 3, "no project's build reports MSB3277": no test decid
 
 What earlier runs left: nine worktrees held uncommitted work whose commits were all in the branch; each is kept as a patch outside the repository and removed with its branch. The reason rule of the configuration route that one of them carried is on the branch at the endpoint and in the service (`ConfigurationEndpointTests.OPS_CFG_005_EveryChangeCarriesAReasonAsync`, `ConfigurationAdministrationTests.OPS_CFG_008_AC2_ATighteningWithNoReasonIsRefusedAsync`). Four stashes are dropped: three held earlier states of the docs, and every file of the fourth is in the history (the changelog describes `MapAuthorizationTables`).
 
-**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth, each in a worktree of its own cut from `83819e32`; all five are merged (below). Questions 69 to 88 park the sites they name. The parts of D-183 the owner's split names (sending, privacy, sessions, authorization, gates) and the work after their merges are not started.
+**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The parts of D-183 the owner's split names run each in a worktree of its own cut from `7bce9374`: gates is merged (below); sending, privacy, sessions and authorization are not. Questions 68 to 91 park the sites they name. The work after the merges is not started.
 
 ### The section C sweeps, place by place
 
@@ -993,6 +993,34 @@ The rollback is written inline. `EndedAsync` (`RoleService`, `ConfigurationServi
 - Parked: the rejected callback at `CallbackIntake` (question 87); the sends joined to `DeadlineSweep` and to the provider event's intake (question 88); the returns that answer success having written nothing (question 77).
 - Observed, outside the sweep: where `SendingService.SendAsync` or `AlertRouter.RaiseAsync` joins a caller's unit of work (the deadline sweep's lapse, the provider event's notice, the worker's lapse of the alert dispatch), the transport is called with the caller's transaction open (CONV-DESIGN-002); it goes with the governed send.
 
+#### D-183, `part/gates`, merged as `b9aa3038` (`9bac4a40`, `64b1a154`, `893d7258`, `bebf5dbd`, `367b7496`, `dd009fb7`)
+
+After the merge: build 0 warnings 0 errors, format clean, 2925 unit tests, 139 contract tests. No migration. No permission logic changed.
+
+- **Question 25** (`9bac4a40`, `dd009fb7`; IDN-ATTR-002, OPS-CFG-003, REF-001). The family `photo.enabled.<organization>` is removed; `Policy` and `PolicyOverride` gain `Photos`, resolved as every field; the profile photo reads the resolved policy; bootstrap writes the administrative organization's photos false; the organization's policy and `policy.default` refuse photos true without a codec with `config.value.notallowed`; the start reads `policy.default` and every `policy.<organization>`. The two REF-001 tests, `BFF_ERR_001_AC3` and `OPS_CFG_004` read chapter 10 alone. Tests:
+  - `ProfilePhotosTests.IDN_ATTR_002_AC1_AnAccountInNoOrganizationShowsAPhotoExactlyWhenTheSystemPolicyDoesAsync`, `ProfilePhotosTests.IDN_ATTR_002_AC2_AnOrganizationIsGivenPhotosByItsPolicyAloneAsync`
+  - `BootstrapTests.IDN_ATTR_002_AC3_BootstrapWritesTheAdministrativeOrganizationsPhotosOffAsync`
+  - `StartupValidationTests.IDN_ATTR_002_AC3_ADeploymentThatShowsNoPhotosStartsWithNoCodecAsync`, `OPS_CFG_003_AC4_ADeploymentWhoseSystemPolicyShowsPhotosWithNoCodecIsRefusedAsync`, `IDN_ATTR_002_ADeploymentThatShowsPhotosWithNoCodecIsRefusedAsync`, `IDN_ATTR_002_ADeploymentThatShowsPhotosAndDeclaredACodecStartsAsync`
+  - `OrganizationPolicyEndpointTests.IDN_ATTR_002_AC4_PhotosAreNotTurnedOnWithoutACodecAsync`
+  - `AccountAdministrationEndpointTests.IDN_ATTR_002_AC5_AnAccountOfTwoOrganizationsShowsAPhotoOnlyWhereBothEnableThemAsync`, `IDN_ATTR_003_AC3_AnAccountWithoutAPhotoIsAnsweredWithTheCodeAsync`
+  - `AccountAdministrationTests.IDN_ATTR_002_APhotoThePolicyWithholdsIsNotReadAsync`
+  - `SettingsCatalogueTests.REF_001_AC1_EveryKeyInTheSourceIsARowOfTheReference`, `OPS_CFG_004_AKeyMarkedProtectedIsOnTheOneList`, `LIB_API_001_AC2_TheKeysAreTheContract`
+  - `ErrorCodesTests.REF_001_AC1_EveryCodeInTheSourceIsARowOfTheReference`, `BFF_ERR_001_AC3_EveryCodeTheBoundaryCanAnswerIsInTheReference`
+  - Ledger: entry 144 "Superseded by D-166"; entry 403 "Superseded by D-183".
+  - Parked: the reverse direction of the REF-001 tests (question 89).
+- **Question 49** (`64b1a154`; CONV-DESIGN-004). The scan reads every project under `src` and `tools`, with no file-level exclusion; a match is exempt only as a member a package's interface fixes, or as the wrapped value in the declaration of the typed value itself. `BrowserProfileLog.Concealed` and `ConcealedTooLate` take `AuditRecordId`. Tests: `PublicSurfaceTests.CONV_DESIGN_004_AC2_NoMethodTakesAValueAsItsUnderlyingType`, `PublicSurfaceTests.CONV_DESIGN_004_AC2_OnlyAMemberAPackagesInterfaceFixesIsExempt`.
+- **Question 52** (`893d7258`; INT-MAIL-001, INT-MAIL-007). The JMAP adapter lists an account whose `emailAddress` is absent or not text with no address, where it failed the listing; an unreadable permissions member still fails it. Tests: `MailboxReconciliationTests.INT_MAIL_007_AC9_AnAccountWhoseAddressDoesNotReadIsCountedOrIsADifferenceAsync`, `JmapMailServerTests.INT_MAIL_007_AC9_AnAccountWhoseAddressDoesNotReadIsListedWithNoneAsync`. Question 91.
+- **Question 55** (`bebf5dbd`; LIB-API-005, CONV-DESIGN-002). The signature already took no access context. Test: `PublicSurfaceTests.CONV_DESIGN_002_AC3_TheReadOfThePublishedKeySetTakesNoAccessContextAndAnswersPublicKeysAlone`.
+- **Question 56** (`367b7496`; IDN-LIFE-012a, LIB-API-003). The intake reads the token first, then verifies; the Google route answers 400 with `err` and `description` failure by failure in the chapter's order; the Apple route answers 422 `integration.callback.rejected`; a provider document that cannot be read rolls back and answers 500 `system.fault`, claiming nothing. The audience is compared exactly. Tests, all `ProviderEventTests`:
+  - `IDN_LIFE_012a_AC8_EachFailureOnTheGoogleRouteIsAnsweredWithItsErrAsync` (12 cases), `IDN_LIFE_012a_AC8_AnEventWhoseLifetimeHasNotPassedIsCarriedAsync`, `IDN_LIFE_012a_AC8_AnEventOfAProviderNotDeclaredIsAnsweredInvalidIssuerAsync`, `IDN_LIFE_012a_AC8_AProviderDocumentThatCannotBeReadIsAFaultAndClaimsNothingAsync`
+  - `IDN_LIFE_012a_AC7_AnEventCarryingNoJtiChangesNothingAndIsRefusedAsync`
+  - `IDN_LIFE_012a_AC3_TheAppleRouteRefusesAnUnsignedEventAsARejectedCallbackAsync`, `IDN_LIFE_012a_AC3_AnEventOfAProviderNotDeclaredIsRefusedOnTheAppleRouteAsync`
+  - `IDN_LIFE_012a_AC1_AnUnsignedEventChangesNothingAndIsAuditedAsRejectedAsync`
+  - Not decided by a test: "the provider may deliver again", beyond the redelivery the fault test makes.
+  - The parked site of question 87 was touched: `CallbackIntake.RefusedAsync` is split so that the Google route can answer in its own shape; what a rejected callback commits is unchanged.
+  - A token whose `nbf` is in the future: question 90.
+- For audit: `OrganizationService` and `ConfigurationService` take the codec as a constructor parameter, registered by a factory that asks the container for it; `Policy` and `PolicyOverride` gain a trailing positional member.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1151,6 +1179,9 @@ The rollback is written inline. `EndedAsync` (`RoleService`, `ConfigurationServi
 | Fakes and tests of the unit tests, at the X9 sweep (`a64c93e2`, `ccfec930`, `9c84477a`) | No fake let a membership end between the find and the end; no fake of `IDeploymentSeed` stood in the unit tests; two tests of the host asserted a commit on a refusal under the lock | CONV-DESIGN-003 criterion 5, CONV-TEST-007; the working guide's section 3, test infrastructure | `MembershipEndingInMemory` takes a hook as `InvitationStoreInMemory` has; `DeploymentSeedInMemory` is added; the two tests assert the rollback. No runtime code |
 | `Janus.Core.csproj` and the fixtures of `Janus.Hosting.Tests` (`66771b55`, `a8dc5501`) | The fixtures stood the key ring up through `AddKeyRing` of Hosting, which question 57 removes, and relied on the provider's setup to register `SigningCredentialSource`, now registered by `AddAuthenticationArea` | CONV-DESIGN-007; the working guide's section 3, a grant to a test project and a fixture arrangement | `Janus.Core` grants `InternalsVisibleTo` to `Janus.Hosting.Tests`, and `LibraryStructureTests` permits it; the fixtures call `AddCoreArea` and register `SigningCredentialSource` themselves. No runtime code. CONV-LAYOUT-002 criterion 1's list in `08` does not name the grant |
 | Fakes of the unit tests, at the X9 sweep (`124cd764`, `1b363b33`, `4c8b33d8`, `e01c8c06`, `946567cd`, `0c7962b2`) | No test could reach a refusal under the lock of a grant or of a reversed takedown; the two rotations had no unit test; the worker's tests kept no unit of work to assert on | CONV-DESIGN-003 criterion 5, CONV-TEST-007; the working guide's section 3, test infrastructure | `GrantsInMemory` takes a locking hook; `AccountStatesInMemory.ReverseTakedownAsync` calls the holding hook; `KeyRingInMemory`, `KeyRotationStoreInMemory` and `FingerprintRotationStoreInMemory` are added; the fixtures of `BackgroundWorkerTests`, `AlertDestinationChangeTests` and `EventPublisherTests` expose what the assertions read. No runtime code, no grant |
+| `tests/Janus.Hosting.Tests/PublicSurfaceTests.cs` (`64b1a154`) | D-166 Tier 1 correction (1) places the scan of CONV-DESIGN-004 criterion 2 in `LibraryStructureTests`, whose project references `Janus.Core` alone, and the exempt members now sit in `Janus.Storage` and `Janus.Hosting` | CONV-TEST-001; the working guide's section 3, test infrastructure | A test that reads the shipped assemblies lives in the test project that references every shipped project; no reference or grant was added |
+| `PublicSurfaceTests.CONV_DESIGN_004_AC2_OnlyAMemberAPackagesInterfaceFixesIsExempt` (`64b1a154`) | Criterion 2 admits "an assembly of a package CONV-DESIGN-008 lists, or names as one a listed package brings"; the provider's store interfaces are declared in `OpenIddict.Abstractions`, which the listed packages bring and the table does not name | D-166 Tier 1 correction (1), which fixes "an assembly named OpenIddict.*" for those members | The test admits an assembly named as a listed or named package, or named `OpenIddict.*` |
+| `DeclarationCoverage.Origin` (`64b1a154`) | The scan reads a text parameter named `address` as an email address taken untyped; this one is a client's return address or the sign-in address, for which no typed value exists | CONV-DESIGN-004 criterion 2, "where a typed identifier or value exists" | The parameter is renamed `location`; behaviour unchanged |
 
 ## 4. Open questions
 
@@ -1722,7 +1753,7 @@ The rollback is written inline. `EndedAsync` (`RoleService`, `ConfigurationServi
   3. Drop the reverse assertion. This weakens the gate.
 - **Parked.** The removal of the `photo.enabled` family, the photos half of X6, ledger line
   144. The patch is held aside.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `9bac4a40` and `dd009fb7` (`part/gates`).
 
 **26. Tier 3. D-166 317 (2) and OPS-SEC-003 criterion 3: a retired version's unwrap as a coded refusal.**
 
@@ -2111,7 +2142,7 @@ The rollback is written inline. `EndedAsync` (`RoleService`, `ConfigurationServi
   (iii) another the owner names.
 - **Parked.** The exemption rule and its test; `BrowserProfileLog` and `Concealment`
   unchanged. `LeakedPasswordCorpus.Range` takes a `Uri` (`afc9d0cb`).
-- **Answer:** pending.
+- **Answer:** D-183. Built in `64b1a154` (`part/gates`).
 
 **50. Tier 2. D-166 359 and 382 (3): which statuses `endpoints.txt` lists.**
 
@@ -2151,7 +2182,7 @@ The rollback is written inline. `EndedAsync` (`RoleService`, `ConfigurationServi
   1. Keep `EmailAddress?`, null for an address that does not parse.
   2. `EmailAddress`; a listing holding such an address faults.
 - **Parked.** Nothing more; `ae35b431` is committed under reading 1.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `893d7258` (`part/gates`); question 91 follows from it.
 
 **53. Tier 2. D-166 Tier 1 correction (1) and `08`: four routes that bind a string.**
 
@@ -2193,7 +2224,7 @@ The rollback is written inline. `EndedAsync` (`RoleService`, `ConfigurationServi
   3. `KeySetAnswer` as 1, `SignOn` as 2.
 - **Parked.** The signature of `IOidc.KeysAsync`, its two callers, its `PublicAPI` line,
   ledger line 160. The `ClaimsAsync` half is in `d7a913fe`.
-- **Answer:** pending.
+- **Answer:** D-183. Held by a test in `bebf5dbd` (`part/gates`); no code path changed.
 
 **56. Tier 3. D-166 282 against `07` LIB-API-003 and `09` section 10: a provider event's refusal.**
 
@@ -2212,7 +2243,7 @@ The rollback is written inline. `EndedAsync` (`RoleService`, `ConfigurationServi
 - **Parked.** The Google 400 writer in `ProviderEventIntake`, the Google 422 expectation of
   `ProviderEventTests`, the IDN-LIFE-012a criterion 3 tests on both routes, E.5, ledger
   line 282.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `367b7496` (`part/gates`); question 90 follows from it.
 
 **57. Tier 2. D-166 E.4 and CONV-DESIGN-007: the area registration methods.**
 
@@ -2593,6 +2624,35 @@ part of 389 (3) and waits with 389 on question 48.
   1. These sites wait for the governed send (questions 27, 38 and 63), where nothing is carried inside the caller's transaction.
   2. The callers roll back and fail where the send fails.
 - **Parked.** Both callers, unchanged. The same reading decides the further sites the sweep counted under question 77: `ConsentService` (a withdrawal made meanwhile, twice), `OrganizationErasureSweep` (cancelled meanwhile), `DeadlineSweep` (decided meanwhile), the rotations' re-read at completion and their passes with nothing left, `GroupService.AddMemberAsync` (already a member), `GroupService.RemoveMemberAsync` and the worker's lapse check, each answering success with nothing written and committing.
+- **Answer:** pending.
+
+**89. Tier 2. REF-001 criterion 1 and D-183 question 25: the directions the reference tests read.**
+
+- **Item.** Question 25.
+- **What the code needs.** Whether the two tests also assert that every live row of chapter 10 sections 1 and 4 is in the source.
+- **What the specification says.** REF-001 criterion 1 states one direction (in the source, and no live row fails) and "the test reads this document alone". D-183 question 25 says the tests read chapter 10 alone "in each direction they read now"; before, they read the source into the chapter or the ledger, and what the ledger owed into the source.
+- **Readings.**
+  1. One direction, as the criterion states. Built.
+  2. Both: one assertion more in each of the two tests. It can hold only on the working branch after every part is merged and questions 50 and 51 are built, since rows such as `abuse.source.sitelimit`, `outbox.claim.timeout`, `auth.factor.notenrolled`, `auth.factor.passwordrequired` and `config.change.superseded` are built elsewhere.
+- **Parked.** The reverse assertion.
+- **Answer:** pending.
+
+**90. Tier 3. IDN-LIFE-012a criterion 8 and `09` section 10: a Security Event Token whose `nbf` is in the future.**
+
+- **Item.** Question 56.
+- **What the code does.** A token not yet valid is refused, as before the change, and on the Google route it is answered with the lifetime's code, `invalid_request`.
+- **What the specification says.** `09` section 10 fixes the failures and their order and names `exp` alone for the lifetime; it says nothing of `nbf`.
+- **Parked.** Nothing further. The refusal is left standing.
+- **Answer:** pending.
+
+**91. Tier 2. INT-MAIL-001: an account whose `emailAddress` member is absent or not text.**
+
+- **Item.** Question 52.
+- **What the specification says.** INT-MAIL-001: "its address (none where emailAddress does not read as an email address)", and "an answer that does not read" is a failure. INT-MAIL-007: "it never fails the listing".
+- **Readings.**
+  1. Absent or not text is none. Built (`893d7258`).
+  2. Only text that does not parse is none, and a missing member is an answer that does not read: four lines of `JmapMailServer.MailboxesAsync` and one account of the adapter's test go back.
+- **Parked.** Nothing.
 - **Answer:** pending.
 
 ## 5. Gate result
