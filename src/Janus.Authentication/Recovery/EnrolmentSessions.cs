@@ -57,6 +57,46 @@ internal sealed class EnrolmentSessions(
             && !link.HasExpired(time.GetUtcNow());
 
     /// <summary>
+    /// Whether a second step enrolled in a session showed recovery codes, so that the
+    /// report of their export is what completes the enrolment (AUTH-RECOV-006, D-189).
+    /// </summary>
+    /// <param name="session">Which session.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Whether it is open and showed them.</returns>
+    public async ValueTask<bool> ShowedCodesAsync(
+        EnrolmentSessionId session,
+        CancellationToken cancellationToken) =>
+        await links.FindAsync(session, cancellationToken).ConfigureAwait(false)
+            is RecoveryLink { CodesShownAt: not null } link
+            && !link.HasExpired(time.GetUtcNow());
+
+    /// <summary>
+    /// Keeps that the second step a session has just enrolled showed recovery codes,
+    /// in the transaction that enrolled it: the session then stays open on its routes
+    /// until the report of their export or the end of its lifetime (AUTH-RECOV-006,
+    /// D-189).
+    /// </summary>
+    /// <param name="session">Which session.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The work of keeping it.</returns>
+    public async ValueTask CodesShownAsync(EnrolmentSessionId session, CancellationToken cancellationToken)
+    {
+        RecoveryLink? link = await links.FindAsync(session, cancellationToken).ConfigureAwait(false);
+
+        if (link is null)
+        {
+            return;
+        }
+
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+        link.ShowCodes(time.GetUtcNow());
+        await links.RecordAsync(link, cancellationToken).ConfigureAwait(false);
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    /// <summary>
     /// Ends one, which completing the enrolment does: what the person set is used by
     /// signing in with it (D-148).
     /// </summary>

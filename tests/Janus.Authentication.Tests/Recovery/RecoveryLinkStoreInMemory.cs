@@ -32,6 +32,12 @@ internal sealed class RecoveryLinkStoreInMemory : IRecoveryLinkStore
     /// </summary>
     public IReadOnlyList<RecoveryLink> Held => [.. _links.Values];
 
+    /// <summary>
+    /// How many times the link an enrolment session stands on has been read, under a
+    /// lock or not.
+    /// </summary>
+    public int SessionReads { get; private set; }
+
     /// <inheritdoc/>
     public ValueTask<RecoveryLink?> FindAsync(
         byte[] fingerprint,
@@ -47,8 +53,12 @@ internal sealed class RecoveryLinkStoreInMemory : IRecoveryLinkStore
     /// <inheritdoc/>
     public ValueTask<RecoveryLink?> FindAsync(
         EnrolmentSessionId session,
-        CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_links.Values.SingleOrDefault(link => link.Session == session));
+        CancellationToken cancellationToken)
+    {
+        SessionReads++;
+
+        return ValueTask.FromResult(_links.Values.SingleOrDefault(link => link.Session == session));
+    }
 
     /// <inheritdoc/>
     public ValueTask<RecoveryLink?> FindForUpdateAsync(

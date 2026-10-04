@@ -34,6 +34,14 @@ internal sealed class RequestSession
     public OpaqueToken? FirstContactSecret { get; private set; }
 
     /// <summary>
+    /// The enrolment session the browser carries, where the request reached one of the
+    /// routes chapter 09 lists for it at <c>POST /enrol/begin</c>, or nothing: on any
+    /// other route the request goes on as one that carried none (BFF-ORDER-001 stage
+    /// 5, D-189).
+    /// </summary>
+    public EnrolmentSessionId? Enrolment { get; private set; }
+
+    /// <summary>
     /// The session the request arrived on, where the stage that requires one let the
     /// request through.
     /// </summary>
@@ -104,6 +112,12 @@ internal sealed class RequestSession
         FirstContact = contact;
         FirstContactSecret = secret;
     }
+
+    /// <summary>
+    /// Records the enrolment session the browser carries, on a route that resolves one.
+    /// </summary>
+    /// <param name="enrolment">The enrolment session.</param>
+    public void Resolved(EnrolmentSessionId enrolment) => Enrolment = enrolment;
 
     // OPS-BOOT-002, D-170: a break-glass session hands the reason given at its use to
     // every operation made on it, with the account, and no other session has one.

@@ -387,6 +387,46 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-008 AC4, REG-SESS-006: the set a registration's security step returned
+    /// is read from the account as viewed at the instant that step returned it, not at
+    /// the instant the terms step wrote it, and as not exported.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AC4_ARegistrationsSetIsReadFromTheAccountAsViewedAtTheSecurityStepAsync()
+    {
+        _deployment.Configuration.Set(Settings.ServiceName, "Example");
+        Browser browser = await Flow.ConfirmedAsync(_deployment);
+        _ = await browser.SendAsync("PUT", "/register/security", ("password", "tenletters12"));
+        Answer begun = await browser.SendAsync("POST", "/account/factors/totp/begin", ("label", "Authenticator"));
+        DateTimeOffset returned = _deployment.Clock.GetUtcNow();
+        Answer confirmed = await browser.SendAsync(
+            "POST",
+            "/account/factors/totp/confirm",
+            ("credentialId", begun.Text("id")),
+            ("code", Generated(begun.Text("secret"))));
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(4));
+
+        Answer completed = await browser.SendAsync(
+            "POST",
+            "/register/terms",
+            ("termsVersion", "terms-3"),
+            ("noticeVersion", "notice-2"));
+        Flow.Carried(_deployment);
+        Answer account = await browser.SendAsync("GET", "/account");
+
+        Assert.Equal(StatusCodes.Status200OK, confirmed.Status);
+        Assert.Equal(StatusCodes.Status201Created, completed.Status);
+        Assert.Equal(StatusCodes.Status200OK, account.Status);
+        Assert.Equal(
+            returned,
+            account.Json().GetProperty("recoveryCodes").GetProperty("viewedAt").GetDateTimeOffset());
+        Assert.Equal(
+            JsonValueKind.Null,
+            account.Json().GetProperty("recoveryCodes").GetProperty("exportedAt").ValueKind);
+    }
+
+    /// <summary>
     /// REG-SESS-006: the registration session is accepted in place of an account's
     /// session for the security step alone, so before it the enrolment endpoints
     /// answer a registering browser as they answer one that holds nothing.

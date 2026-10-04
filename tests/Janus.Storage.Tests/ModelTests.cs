@@ -733,6 +733,7 @@ public sealed class ModelTests
             // Not an account field: a recovery link, answered to by what it fingerprints
             // to, and, once spent, the enrolment session it opened (AUTH-RECOV-002).
             "recovery_links.approver",
+            "recovery_links.codes_shown_at",
             "recovery_links.expires_at",
             "recovery_links.issued_at",
             "recovery_links.mailbox_lost",

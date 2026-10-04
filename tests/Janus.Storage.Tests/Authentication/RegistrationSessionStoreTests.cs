@@ -3,8 +3,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Dapper;
+using Janus.Authentication.Passwords;
 using Janus.Authentication.Registration;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Janus.Storage.Authentication.Registration;
 using Npgsql;
 using Xunit;
@@ -180,6 +182,32 @@ public sealed class RegistrationSessionStoreTests(DatabaseFixture database) : IC
         Assert.Equal(-1, dumped.AsSpan().IndexOf(Encoding.UTF8.GetBytes(Convert.ToBase64String(secret))));
         Assert.Equal(-1, dumped.AsSpan().IndexOf(Encoding.UTF8.GetBytes(challenge)));
         Assert.Null(await Store(after).FindAsync(opened.Id, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-008 AC4, REG-SESS-006: the instant the security step returned the
+    /// recovery codes is staged with them in the session's document and comes back as
+    /// it was staged.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AC4_TheInstantTheCodesWereReturnedIsStagedWithThemAsync()
+    {
+        RegistrationSession opened = Opened();
+        var code = PasswordHash.Of(new Argon2StrengthClass(19456, 2), 1, new byte[16], new byte[32]);
+        opened.StageRecoveryCodes([code], Noon.AddMinutes(3));
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Store(writing).AddAsync(opened, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+        await using StoreContext reading = database.Context();
+        RegistrationSession read = Assert.IsType<RegistrationSession>(
+            await Store(reading).FindAsync(opened.Id, TestContext.Current.CancellationToken));
+
+        Assert.Equal(Noon.AddMinutes(3), read.RecoveryCodesViewedAt);
+        Assert.Equal(code.Encoded, Assert.Single(read.RecoveryCodes!).Encoded);
     }
 
     /// <inheritdoc/>

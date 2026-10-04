@@ -23,6 +23,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
     // does not is kept out of it: the stage refuses exactly this list.
     private static readonly string[] Held =
     [
+        "DELETE /account/credentials/{id}",
         "DELETE /account/devices/{id}",
         "DELETE /account/identifiers/{id}",
         "DELETE /account/link/apple",
@@ -73,6 +74,7 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "GET /privacy/export",
         "GET /privacy/objections",
         "PATCH /account/credentials/{id}",
+        "POST /account/credentials/{id}/upgrade",
         "POST /account/deactivate",
         "POST /account/delete",
         "POST /account/identifiers",
@@ -130,6 +132,20 @@ public sealed class SessionRequirementTests : IAsyncDisposable
         "PUT /admin/documents/{document}/versions/{version}/translations/{language}",
     ];
 
+    // Every route chapter 09 lists for the enrolment session at POST /enrol/begin, by
+    // method and path: the only routes on which stage 5 resolves one.
+    private static readonly string[] Reached =
+    [
+        "POST /account/factors/totp/begin",
+        "POST /account/factors/totp/confirm",
+        "POST /account/identifiers/{id}/verify",
+        "POST /account/password",
+        "POST /account/recoverycodes/exported",
+        "POST /auth/webauthn/register/begin",
+        "POST /auth/webauthn/register/complete",
+        "PUT /account/identifiers/{id}/replace",
+    ];
+
     private readonly Deployment _deployment = new();
 
     /// <summary>
@@ -152,6 +168,23 @@ public sealed class SessionRequirementTests : IAsyncDisposable
                 .Where(SessionRequired.Asks)
                 .Select(Named)
                 .Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// BFF-ORDER-001 stage 5, D-189: the routes on which an enrolment session is
+    /// resolved are fixed where they are mounted and are exactly those chapter 09 lists
+    /// at <c>POST /enrol/begin</c>; none of them is a route that requires a session.
+    /// </summary>
+    [Fact]
+    public void BFF_ORDER_001_TheRoutesAnEnrolmentSessionIsResolvedOnAreTheOnesListed()
+    {
+        Assert.Equal(
+            Reached.Order(StringComparer.Ordinal),
+            _deployment.Endpoints
+                .Where(EnrolmentRoute.Is)
+                .Select(Named)
+                .Order(StringComparer.Ordinal));
+        Assert.DoesNotContain(_deployment.Endpoints, endpoint => EnrolmentRoute.Is(endpoint) && SessionRequired.Asks(endpoint));
     }
 
     /// <summary>

@@ -18,16 +18,35 @@ against the public contract of LIB-API-001.
   `auth.webauthn.algorithmnotallowed`, `auth.webauthn.countermismatch`,
   `auth.webauthn.rpidchanged` and `auth.webauthn.userverificationrequired` join the
   codes the two routes already listed.
+- The recovery-code set of an account that enrolled a second step beside a password
+  while registering carries `viewedAt`: the instant the security step returned the
+  codes, kept on the registration session and written with the set at the terms
+  step, where the set was written with it unset.
+- An enrolment session whose second step showed recovery codes no longer ends when
+  that step is enrolled: it stays open on its routes until
+  `POST /account/recoverycodes/exported` reports the codes saved, which sets
+  `exportedAt` and ends it, or until the end of its lifetime. That report is admitted
+  for a restricted account. An enrolment that showed no codes ends the session as
+  before. The migration `KeepWhenAnEnrolmentSessionShowedRecoveryCodes` adds the
+  column `recovery_links.codes_shown_at`.
+- Over HTTP an enrolment session is resolved only on the routes `POST /enrol/begin`
+  lists. On every other route the request goes on as one that carried none and the
+  browser keeps its cookie, so a route that requires a session answers 401
+  `auth.session.expired` with no details: `DELETE /account/credentials/{id}` and
+  `POST /account/credentials/{id}/upgrade` answer it so, where they answered 403
+  `authz.denied`. In process `ICredentials.RemoveAsync`, `UpgradeKeyAsync`,
+  `GenerateRecoveryCodesAsync`, `LinkableAsync`, `LinkAsync` and `UnlinkAsync`
+  refuse an enrolment session's authority `authz.denied` before anything is read,
+  whether the session stands or has ended.
 - An enrolment session reaches the routes `POST /enrol/begin` lists and no other
-  credential route: `DELETE /account/credentials/{id}` and
-  `POST /account/credentials/{id}/upgrade` refuse it 403 `authz.denied`, as do
-  `ICredentials.RemoveAsync`, `UpgradeKeyAsync`, `GenerateRecoveryCodesAsync`,
-  `LinkableAsync` and `UnlinkAsync`. `POST /account/recoverycodes/exported` now
+  credential route: `ICredentials.RemoveAsync`, `UpgradeKeyAsync`,
+  `GenerateRecoveryCodesAsync`, `LinkableAsync` and `UnlinkAsync` refuse it
+  `authz.denied`. `POST /account/recoverycodes/exported` now
   admits it, through the new overload
   `ICredentials.MarkRecoveryCodesExportedAsync(EnrolmentSessionId, CancellationToken)`,
   and asks the gate for the restriction there too. An enrolment session that has
-  ended is answered 401 `auth.session.expired` with no details wherever it is
-  presented, where the credential and identifier routes answered 422
+  ended is answered 401 `auth.session.expired` with no details on the routes it
+  reached, where the credential and identifier routes answered 422
   `auth.enrolment.tokeninvalid`; that code is now the link token's at
   `POST /enrol/begin` alone.
 - `POST /account/recoverycodes/exported` and

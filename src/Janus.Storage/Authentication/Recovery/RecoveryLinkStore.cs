@@ -133,6 +133,7 @@ internal sealed class RecoveryLinkStore(StoreContext context) : IRecoveryLinkSto
                     MailboxLost = link.MailboxLost,
                     Session = link.Session,
                     SpentAt = link.SpentAt,
+                    CodesShownAt = link.CodesShownAt,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -150,6 +151,7 @@ internal sealed class RecoveryLinkStore(StoreContext context) : IRecoveryLinkSto
 
         record.Session = link.Session;
         record.SpentAt = link.SpentAt;
+        record.CodesShownAt = link.CodesShownAt;
     }
 
     /// <inheritdoc/>
@@ -186,5 +188,6 @@ internal sealed class RecoveryLinkStore(StoreContext context) : IRecoveryLinkSto
                 record.Approver,
                 record.MailboxLost,
                 record.Session,
-                record.SpentAt);
+                record.SpentAt,
+                record.CodesShownAt);
 }

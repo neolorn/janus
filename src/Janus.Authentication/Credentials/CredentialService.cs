@@ -645,16 +645,24 @@ internal sealed class CredentialService(
     /// <inheritdoc/>
     public async ValueTask<Result> MarkRecoveryCodesExportedAsync(
         EnrolmentSessionId enrolment,
-        CancellationToken cancellationToken) =>
-
+        CancellationToken cancellationToken)
+    {
         // Chapter 09 POST /enrol/begin, D-188: the report is one of the operations an
         // enrolment session reaches, for the account it was opened for and no other,
         // and one that has ended is a session that has ended.
-        await enrolments.FindAsync(enrolment, cancellationToken).ConfigureAwait(false)
-            is EnrolmentSession opened
-            ? await ExportReportedAsync(AccessContext.Of(opened.Subject), opened.Subject, cancellationToken)
-                .ConfigureAwait(false)
-            : Result.Failure(Error.From(ErrorCodes.SessionExpired));
+        if (await enrolments.FindAsync(enrolment, cancellationToken).ConfigureAwait(false)
+            is not EnrolmentSession opened)
+        {
+            return Result.Failure(Error.From(ErrorCodes.SessionExpired));
+        }
+
+        // AUTH-RECOV-006, D-189: where the session's second step showed the codes, the
+        // report is what completes the enrolment.
+        return await enrolments.ShowedCodesAsync(enrolment, cancellationToken).ConfigureAwait(false)
+            ? await EnrolmentReportedAsync(opened, cancellationToken).ConfigureAwait(false)
+            : await ExportReportedAsync(AccessContext.Of(opened.Subject), opened.Subject, cancellationToken)
+                .ConfigureAwait(false);
+    }
 
     /// <inheritdoc/>
     public async ValueTask<Result> RemoveAsync(
@@ -1103,9 +1111,10 @@ internal sealed class CredentialService(
     }
 
     // Who is acting in an operation the enrolment session does not reach (chapter 09
-    // POST /enrol/begin, D-188): a session, and no other authority. An enrolment session
-    // that stands is refused as a missing permission is, and one that has ended as a
-    // session that has ended, before anything of the account is read.
+    // POST /enrol/begin): a session, and no other authority. CONV-DESIGN-002, D-189:
+    // a context of an enrolment session's authority is refused as a missing permission
+    // is, first in the gate step and before any load, so the session is not read and
+    // one that has ended is refused the same.
     private async ValueTask<Result<Acting>> HoldingAsync(
         CredentialAuthority authority,
         StepUpAction action,
@@ -1113,15 +1122,9 @@ internal sealed class CredentialService(
     {
         ArgumentNullException.ThrowIfNull(authority);
 
-        if (authority.Enrolment is EnrolmentSessionId opened)
-        {
-            return Result.Failure<Acting>(Error.From(
-                await enrolments.FindAsync(opened, cancellationToken).ConfigureAwait(false) is null
-                    ? ErrorCodes.SessionExpired
-                    : ErrorCodes.Denied));
-        }
-
-        return await SignedInAsync(authority, action, cancellationToken).ConfigureAwait(false);
+        return authority.Enrolment is null
+            ? await SignedInAsync(authority, action, cancellationToken).ConfigureAwait(false)
+            : Result.Failure<Acting>(Error.From(ErrorCodes.Denied));
     }
 
     private async ValueTask<Result<Acting>> SignedInAsync(
@@ -1147,10 +1150,59 @@ internal sealed class CredentialService(
             : Result.Success(new Acting(subject, live, Enrolment: null, held));
     }
 
-    // AUTH-FACT-008, IDN-ACCT-007: the report of an export, whoever made it. It asks no
-    // step-up, and it asks the gate about the restriction under a session and under an
-    // enrolment session alike, since the report is a change to the set's record that
-    // the restriction's exemptions do not name.
+    // AUTH-RECOV-006 AC2 and AC5, D-189: the one report of an enrolment session whose
+    // second step showed the codes. It sets the export and ends the session in one
+    // unit of work, with the session held under its link's lock, so a second report at
+    // once waits and finds the session ended. IDN-ACCT-007: it asks nothing about the
+    // restriction, being admitted for a restricted account as the second step it
+    // completes was.
+    private async ValueTask<Result> EnrolmentReportedAsync(
+        EnrolmentSession opened,
+        CancellationToken cancellationToken)
+    {
+        if (!await codes.IssuedAsync(opened.Subject, cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure(Error.From(ErrorCodes.FactorNotEnrolled));
+        }
+
+        Result<bool> begun = await work.BeginAsync(cancellationToken).ConfigureAwait(false);
+
+        if (begun.Match<Error?>(_ => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        if (!await enrolments.HoldAsync(opened.Id, cancellationToken).ConfigureAwait(false))
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.SessionExpired));
+        }
+
+        Error? failure = null;
+
+        // An export an earlier report set stands as it is, and the session ends all
+        // the same.
+        _ = (await codes.ExportedAsync(opened.Subject, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<bool>(error, ref failure));
+
+        if (failure is not null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(failure);
+        }
+
+        await enrolments.EndAsync(opened.Id, cancellationToken).ConfigureAwait(false);
+
+        return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    // AUTH-FACT-008, IDN-ACCT-007: the report of an export that completes no enrolment
+    // session, whoever made it. It asks no step-up, and it asks the gate about the
+    // restriction under a session and under an enrolment session alike, since the
+    // report is a change to the set's record that the restriction's exemptions do not
+    // name.
     private async ValueTask<Result> ExportReportedAsync(
         AccessContext context,
         SubjectId subject,
@@ -1375,7 +1427,8 @@ internal sealed class CredentialService(
     // What every completed enrolment does in the transaction its caller opened: the
     // codes a second step beside a password brings with it, the record and the event,
     // and the commit; then the notice on every channel, the end of an enrolment session
-    // and the prompt for a credential that would survive the device.
+    // that showed no codes and the prompt for a credential that would survive the
+    // device.
     private async ValueTask<Result<EnrolledCredential>> SettledAsync(
         Acting acting,
         AuthenticatorId credential,
@@ -1435,7 +1488,17 @@ internal sealed class CredentialService(
             return Result.Failure<EnrolledCredential>(unannounced);
         }
 
-        await CompletedAsync(acting, cancellationToken).ConfigureAwait(false);
+        // AUTH-RECOV-006 AC5, D-189: an enrolment session whose second step showed
+        // recovery codes stays open until the report of their export completes the
+        // enrolment; any other enrolment ends it here.
+        if (generated is not null && acting.Enrolment is EnrolmentSessionId showing)
+        {
+            await enrolments.CodesShownAsync(showing, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            await CompletedAsync(acting, cancellationToken).ConfigureAwait(false);
+        }
 
         // AUTH-STEP-007 AC1: every recorded channel hears of it, and the enrolling
         // session is not one of them.
@@ -1463,9 +1526,12 @@ internal sealed class CredentialService(
 
     // D-148: completing the enrolment ends the enrolment session in the transaction
     // that completes it, and what was set is used by signing in with it.
+    // AUTH-RECOV-006 AC5, D-189: a session whose second step showed recovery codes is
+    // ended by the report of their export and by nothing else it does meanwhile.
     private async ValueTask CompletedAsync(Acting acting, CancellationToken cancellationToken)
     {
-        if (acting.Enrolment is EnrolmentSessionId opened)
+        if (acting.Enrolment is EnrolmentSessionId opened
+            && !await enrolments.ShowedCodesAsync(opened, cancellationToken).ConfigureAwait(false))
         {
             await enrolments.EndAsync(opened, cancellationToken).ConfigureAwait(false);
         }

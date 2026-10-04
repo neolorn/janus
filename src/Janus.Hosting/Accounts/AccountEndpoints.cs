@@ -88,7 +88,7 @@ internal static class AccountEndpoints
                     ErrorCodes.IdentifierDomainNotAllowed, ErrorCodes.IdentifierInvalid,
                     ErrorCodes.SmsBalanceFloor, ErrorCodes.RestrictionExceeded))
             .Produces(StatusCodes.Status202Accepted);
-        _ = group.MapPost("/identifiers/{id}/verify", VerifyIdentifierAsync)
+        _ = EnrolmentRoute.On(group.MapPost("/identifiers/{id}/verify", VerifyIdentifierAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.Restricted, ErrorCodes.IdentifierMaximum,
@@ -118,7 +118,7 @@ internal static class AccountEndpoints
                     ErrorCodes.IdentifierMaximum, ErrorCodes.ChangeWindowElapsed)
                 .Binding<IdentifierId>("id"))
             .Produces(StatusCodes.Status204NoContent);
-        _ = group.MapPut("/identifiers/{id}/replace", ReplaceIdentifierAsync)
+        _ = EnrolmentRoute.On(group.MapPut("/identifiers/{id}/replace", ReplaceIdentifierAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
@@ -875,10 +875,10 @@ internal static class AccountEndpoints
         return browser.Asking;
     }
 
-    // D-148: the enrolment session the browser's first contact carries, which reaches
-    // the two operations chapter 09 section 3 names and nothing else here.
+    // D-148, D-189: the enrolment session stage 5 resolved, which it does here on the
+    // two routes chapter 09 section 3 names and on nothing else.
     private static EnrolmentSessionId? Opened(RequestSession browser) =>
-        browser.FirstContact?.Enrolment;
+        browser.Enrolment;
 
     private static IResult Landed(LinkLanding landing)
     {
