@@ -4550,6 +4550,8 @@ the `resources` row because LIB-HOST-002 forbids it the host's table. AUTHZ-MODE
 should list the new startup refusal, and `10` should carry the `subject` column of
 `resources`.
 
+**Superseded by D-166.**
+
 ---
 
 ## 134. The collation is created in the schema the library owns
@@ -5232,6 +5234,8 @@ purposes the document covers". PRIV-CONS-001 AC2 should say that the version res
 to the exact text of the governing document. LIB-HOST-001's purpose declaration should
 carry the governing document. `09` section 7 should say that `noticeVersion` carries the
 version of the document that governs the purpose.
+
+**Superseded by D-166.**
 
 ---
 

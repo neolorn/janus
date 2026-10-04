@@ -27,6 +27,18 @@ public enum Decided
     ConsentRequired,
 
     /// <summary>
+    /// The action is refused until the record's data subject consents again, the consent
+    /// held having been superseded (<c>privacy.consent.superseded</c>).
+    /// </summary>
+    ConsentSuperseded,
+
+    /// <summary>
+    /// The action is refused until the record's data subject gives the written consent
+    /// the purpose asks (<c>privacy.consent.writtenrequired</c>).
+    /// </summary>
+    ConsentWrittenRequired,
+
+    /// <summary>
     /// The action is refused until the caller proves what the gate bound to it costs
     /// (<c>auth.stepup.required</c>).
     /// </summary>

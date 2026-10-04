@@ -43,12 +43,16 @@ internal sealed class PermissionRule
 
     private const string Prefix = "identity_authz_";
 
+    // The kind column of a written consent, as the consent records spell it.
+    private const string WrittenKind = "written";
+
     private readonly IReadOnlyList<RelationshipDeclaration> _derivations;
     private readonly string[] _permissions;
     private readonly ResourceType? _type;
     private readonly OrganizationId _organization;
     private readonly SubjectSet _subjects;
     private readonly DateTimeOffset _at;
+    private readonly RequiredConsent? _consent;
 
     /// <summary>
     /// The rule one principal's evaluation of a set of permissions over one resource
@@ -63,6 +67,10 @@ internal sealed class PermissionRule
     /// The relationships whose derivations confer one of the permissions on records of
     /// the type, each rendered beside the grants (AUTHZ-DERIVE-002).
     /// </param>
+    /// <param name="consent">
+    /// The consent the permission asks of a record's data subject, where it is bound to
+    /// a consent-based purpose (AUTHZ-GATE-002 AC4).
+    /// </param>
     /// <exception cref="ArgumentNullException">The permissions or the subjects are absent.</exception>
     public PermissionRule(
         IReadOnlyList<Permission> permissions,
@@ -70,11 +78,13 @@ internal sealed class PermissionRule
         OrganizationId organization,
         SubjectSet subjects,
         DateTimeOffset at,
-        IReadOnlyList<RelationshipDeclaration>? derivations = null)
+        IReadOnlyList<RelationshipDeclaration>? derivations = null,
+        RequiredConsent? consent = null)
         : this(permissions, organization, subjects, at)
     {
         _type = type;
         _derivations = derivations ?? [];
+        _consent = consent;
     }
 
     /// <summary>
@@ -156,6 +166,17 @@ internal sealed class PermissionRule
         Expression body = Expression.AndAlso(
             reaches,
             Expression.Not(new Substitution(denied.Parameters[0], named).Visit(denied.Body)));
+
+        // AUTHZ-GATE-002 AC4: a permission bound to a consent-based purpose reaches only
+        // the records whose data subject consented to it.
+        if (_consent is RequiredConsent consent)
+        {
+            Expression<Func<string, bool>> consented = Consented(sources.Consented, consent);
+
+            body = Expression.AndAlso(
+                body,
+                new Substitution(consented.Parameters[0], named).Visit(consented.Body));
+        }
 
         return Expression.Lambda<Func<TResource, bool>>(
             new Substitution(named, sources.Identifier.Body).Visit(body),
@@ -378,7 +399,7 @@ internal sealed class PermissionRule
                 FROM identity.effective_grants AS {Prefix}deny
                 WHERE {Prefix}deny.deny = true
                   AND {Matches(Prefix + "deny", row)}
-            ))
+            ){Consented(row)})
             """);
 
         return new SqlFilter(text, FragmentParameters());
@@ -484,6 +505,34 @@ internal sealed class PermissionRule
                     && entry.ResourceId == identifier
                     && entry.AncestorType == grant.ResourceType
                     && entry.AncestorId == grant.ResourceId));
+    }
+
+    // PRIV-SENS-002, PRIV-CONS-007: the record's data subject holds a live consent for
+    // the purpose, recorded against the document the purpose now names, and written
+    // where the purpose requires written consent.
+    private Expression<Func<string, bool>> Consented(
+        IQueryable<ConsentedResource> consented,
+        RequiredConsent consent)
+    {
+        string type = Type.ToString();
+        string purpose = consent.Purpose;
+        string document = consent.Document;
+
+        if (consent.Kind is ConsentKind.Written)
+        {
+            return identifier => consented.Any(row =>
+                row.ResourceType == type
+                && row.ResourceId == identifier
+                && row.Purpose == purpose
+                && row.Document == document
+                && row.Kind == WrittenKind);
+        }
+
+        return identifier => consented.Any(row =>
+            row.ResourceType == type
+            && row.ResourceId == identifier
+            && row.Purpose == purpose
+            && row.Document == document);
     }
 
     // The stored allow term or the stored deny term, asked of one record by its
@@ -663,6 +712,32 @@ internal sealed class PermissionRule
         return text.ToString();
     }
 
+    // The same condition over the library's view, every value a parameter
+    // (AUTHZ-GATE-002 AC3, AC4).
+    private string Consented(string row)
+    {
+        if (_consent is not RequiredConsent consent)
+        {
+            return string.Empty;
+        }
+
+        string written = consent.Kind is ConsentKind.Written
+            ? " AND " + Prefix + "consented.kind = @" + Prefix + "consent_kind"
+            : string.Empty;
+
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"""
+             AND EXISTS (
+                SELECT 1
+                FROM identity.consented_resources AS {Prefix}consented
+                WHERE {Prefix}consented.resource_type = @{Prefix}type
+                  AND {Prefix}consented.resource_id = {row}
+                  AND {Prefix}consented.purpose = @{Prefix}purpose
+                  AND {Prefix}consented.document = @{Prefix}document{written})
+            """);
+    }
+
     private static string Alias(int index) =>
         Prefix + "derived" + index.ToString(CultureInfo.InvariantCulture);
 
@@ -751,6 +826,17 @@ internal sealed class PermissionRule
         for (int index = 0; index < _derivations.Count; index++)
         {
             parameters[Alias(index) + "_on"] = _derivations[index].On.ToString();
+        }
+
+        if (_consent is RequiredConsent consent)
+        {
+            parameters[Prefix + "purpose"] = consent.Purpose;
+            parameters[Prefix + "document"] = consent.Document;
+
+            if (consent.Kind is ConsentKind.Written)
+            {
+                parameters[Prefix + "consent_kind"] = WrittenKind;
+            }
         }
 
         return parameters;

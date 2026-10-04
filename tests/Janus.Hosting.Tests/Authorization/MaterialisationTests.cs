@@ -381,7 +381,7 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
     }
 
     private static FilterSources<HostDocument> Sources(HostContext reading) =>
-        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, document => document.Id)
+        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, reading.Consented, document => document.Id)
             .Relationship("reviewer", reading.Reviewers);
 
     private static TRendering Rendered<TRendering>(Result<TRendering> outcome) =>

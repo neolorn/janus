@@ -386,7 +386,7 @@ public sealed class ReverseLookupTests(HostFixture host) : IClassFixture<HostFix
     }
 
     private static FilterSources<HostDocument> Sources(HostContext reading) =>
-        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, document => document.Id)
+        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, reading.Consented, document => document.Id)
             .Relationship("reviewer", reading.Reviewers);
 
     private Task<Result<ResourceAccess>> LookedUpAsync(

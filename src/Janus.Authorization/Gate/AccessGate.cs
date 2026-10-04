@@ -56,6 +56,10 @@ internal sealed class AccessGate(
     IAdministrativeOrganization administrative,
     TimeProvider time) : IAccessGate
 {
+    // PRIV-CONS-001, PRIV-CONS-007: the document that governs a consent whose purpose
+    // names none.
+    private const string Notice = "privacy-notice";
+
     private static readonly ResourceType OrganizationWide = ResourceType.Parse("organization");
 
     // AUTHZ-CONCEAL-002 AC2, D-166: every organization identifier is a version 7 value,
@@ -144,6 +148,7 @@ internal sealed class AccessGate(
             [permission],
             resource.Type,
             registered?.Organization ?? NoOrganization,
+            consent: null,
             cancellationToken).ConfigureAwait(false);
 
         IReadOnlyList<CandidateRow> rows = await ReadAsync(rule.ToCandidateRows(sources, resource.Id), cancellationToken)
@@ -413,6 +418,7 @@ internal sealed class AccessGate(
             [permission],
             type,
             organization,
+            ConsentOf(permission),
             cancellationToken).ConfigureAwait(false);
 
         return Result.Success(rule.ToExpression(sources));
@@ -449,6 +455,7 @@ internal sealed class AccessGate(
             [permission],
             type,
             organization,
+            ConsentOf(permission),
             cancellationToken).ConfigureAwait(false);
 
         return Result.Success(rule.ToFragment(rowAlias, column));
@@ -644,14 +651,13 @@ internal sealed class AccessGate(
         IReadOnlyList<Permission> permissions,
         CancellationToken cancellationToken)
     {
-        var asked = new Dictionary<Permission, (string Purpose, ConsentKind Required)>();
+        var asked = new Dictionary<Permission, RequiredConsent>();
 
         foreach (Permission permission in permissions)
         {
-            if (model.PurposeOf(permission) is string purpose
-                && model.Processing.Find(purpose) is { Consent: ConsentKind required })
+            if (ConsentOf(permission) is RequiredConsent required)
             {
-                asked[permission] = (purpose, required);
+                asked[permission] = required;
             }
         }
 
@@ -673,7 +679,7 @@ internal sealed class AccessGate(
             outstanding[subject] = new HashSet<Permission>(
                 asked
                     .Where(each => Unconsented(
-                        each.Value.Required,
+                        each.Value,
                         records.FirstOrDefault(record => record.Purpose == each.Value.Purpose)) is not null)
                     .Select(each => each.Key));
         }
@@ -962,8 +968,7 @@ internal sealed class AccessGate(
         Permission permission,
         CancellationToken cancellationToken)
     {
-        if (model.PurposeOf(permission) is not string purpose
-            || model.Processing.Find(purpose) is not { Consent: ConsentKind required })
+        if (ConsentOf(permission) is not RequiredConsent required)
         {
             return null;
         }
@@ -976,20 +981,24 @@ internal sealed class AccessGate(
         }
 
         ConsentRecord? held = await consents
-            .OfAsync(subject, purpose, cancellationToken)
+            .OfAsync(subject, required.Purpose, cancellationToken)
             .ConfigureAwait(false);
 
         return Unconsented(required, held);
     }
 
     // PRIV-SENS-002 AC1, PRIV-CONS-004 AC1, PRIV-CONS-007 AC4: what the subject's record
-    // for the purpose leaves outstanding, if anything.
-    private static ErrorCode? Unconsented(ConsentKind required, ConsentRecord? held) =>
+    // for the purpose leaves outstanding, if anything. A live record against another
+    // document than the one the purpose now names is superseded, stamped or not, as
+    // the lists refuse it (AUTHZ-GATE-002 AC4, D-183).
+    private static ErrorCode? Unconsented(RequiredConsent required, ConsentRecord? held) =>
         held switch
         {
             null or { WithdrawnAt: not null } => ErrorCodes.ConsentRequired,
             { SupersededAt: not null } => ErrorCodes.ConsentSuperseded,
-            { Kind: ConsentKind.Ordinary } when required is ConsentKind.Written =>
+            _ when !string.Equals(held.Document, required.Document, StringComparison.Ordinal) =>
+                ErrorCodes.ConsentSuperseded,
+            { Kind: ConsentKind.Ordinary } when required.Kind is ConsentKind.Written =>
                 ErrorCodes.ConsentWrittenRequired,
             _ => null,
         };
@@ -1326,11 +1335,21 @@ internal sealed class AccessGate(
         !model.IsReading(permission)
         && (await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false)).Restricted;
 
+    // AUTHZ-GATE-002, PRIV-SENS-002: the consent a permission bound to a consent-based
+    // purpose asks, read from the model once and given to the check and to both
+    // renderings alike. A purpose resting on another basis asks none.
+    private RequiredConsent? ConsentOf(Permission permission) =>
+        model.PurposeOf(permission) is string purpose
+        && model.Processing.Find(purpose) is { Consent: ConsentKind required } declared
+            ? new RequiredConsent(purpose, declared.Document ?? Notice, required)
+            : null;
+
     private async ValueTask<PermissionRule> RuleAsync(
         AccessContext context,
         IReadOnlyList<Permission> permissions,
         ResourceType type,
         OrganizationId organization,
+        RequiredConsent? consent,
         CancellationToken cancellationToken)
     {
         Declared(type);
@@ -1341,7 +1360,8 @@ internal sealed class AccessGate(
             organization,
             await subjects.OfAsync(context, cancellationToken).ConfigureAwait(false),
             time.GetUtcNow(),
-            await derived.ReachingAsync(type, organization, permissions, cancellationToken).ConfigureAwait(false));
+            await derived.ReachingAsync(type, organization, permissions, cancellationToken).ConfigureAwait(false),
+            consent);
     }
 
     private async ValueTask<CandidateGrant?> HoldsAsync(

@@ -368,7 +368,8 @@ internal sealed class DeclarationCoverage(
 
             if (scope.GetService(source.Context) is not DbContext context
                 || context.Model.FindEntityType(typeof(AncestryEntry)) is null
-                || context.Model.FindEntityType(typeof(EffectiveGrant)) is null)
+                || context.Model.FindEntityType(typeof(EffectiveGrant)) is null
+                || context.Model.FindEntityType(typeof(ConsentedResource)) is null)
             {
                 return Invalid(declared, "context");
             }

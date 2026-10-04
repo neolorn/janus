@@ -534,6 +534,21 @@ Janus.Core.ConsentChanged.Deconstruct(out System.DateTimeOffset RaisedAt, out st
 Janus.Core.ConsentChanged.Equals(Janus.Core.ConsentChanged? other) -> bool
 Janus.Core.ConsentChanged.Purpose.get -> string!
 Janus.Core.ConsentChanged.Purpose.init -> void
+Janus.Core.ConsentedResource
+Janus.Core.ConsentedResource.<Clone>$() -> Janus.Core.ConsentedResource!
+Janus.Core.ConsentedResource.ConsentedResource(string! ResourceType, string! ResourceId, string! Purpose, string! Document, string! Kind) -> void
+Janus.Core.ConsentedResource.Deconstruct(out string! ResourceType, out string! ResourceId, out string! Purpose, out string! Document, out string! Kind) -> void
+Janus.Core.ConsentedResource.Document.get -> string!
+Janus.Core.ConsentedResource.Document.init -> void
+Janus.Core.ConsentedResource.Equals(Janus.Core.ConsentedResource? other) -> bool
+Janus.Core.ConsentedResource.Kind.get -> string!
+Janus.Core.ConsentedResource.Kind.init -> void
+Janus.Core.ConsentedResource.Purpose.get -> string!
+Janus.Core.ConsentedResource.Purpose.init -> void
+Janus.Core.ConsentedResource.ResourceId.get -> string!
+Janus.Core.ConsentedResource.ResourceId.init -> void
+Janus.Core.ConsentedResource.ResourceType.get -> string!
+Janus.Core.ConsentedResource.ResourceType.init -> void
 Janus.Core.ConsentKind
 Janus.Core.ConsentKind.Ordinary = 0 -> Janus.Core.ConsentKind
 Janus.Core.ConsentKind.Written = 1 -> Janus.Core.ConsentKind
@@ -1034,7 +1049,8 @@ Janus.Core.FactorPresentation.Value.get -> string?
 Janus.Core.FactorPresentation.Value.init -> void
 Janus.Core.FilterSources<TResource>
 Janus.Core.FilterSources<TResource>.Ancestry.get -> System.Linq.IQueryable<Janus.Core.AncestryEntry!>!
-Janus.Core.FilterSources<TResource>.FilterSources(System.Linq.IQueryable<Janus.Core.AncestryEntry!>! ancestry, System.Linq.IQueryable<Janus.Core.EffectiveGrant!>! grants, System.Linq.Expressions.Expression<System.Func<TResource, string!>!>! identifier) -> void
+Janus.Core.FilterSources<TResource>.Consented.get -> System.Linq.IQueryable<Janus.Core.ConsentedResource!>!
+Janus.Core.FilterSources<TResource>.FilterSources(System.Linq.IQueryable<Janus.Core.AncestryEntry!>! ancestry, System.Linq.IQueryable<Janus.Core.EffectiveGrant!>! grants, System.Linq.IQueryable<Janus.Core.ConsentedResource!>! consented, System.Linq.Expressions.Expression<System.Func<TResource, string!>!>! identifier) -> void
 Janus.Core.FilterSources<TResource>.Grants.get -> System.Linq.IQueryable<Janus.Core.EffectiveGrant!>!
 Janus.Core.FilterSources<TResource>.Identifier.get -> System.Linq.Expressions.Expression<System.Func<TResource, string!>!>!
 Janus.Core.FilterSources<TResource>.Relationship<TRelationship>(string! name, System.Linq.IQueryable<TRelationship>! rows) -> Janus.Core.FilterSources<TResource>!
@@ -3024,6 +3040,9 @@ override Janus.Core.ConsentChanged.<Clone>$() -> Janus.Core.ConsentChanged!
 override Janus.Core.ConsentChanged.Equals(object? obj) -> bool
 override Janus.Core.ConsentChanged.GetHashCode() -> int
 override Janus.Core.ConsentChanged.ToString() -> string!
+override Janus.Core.ConsentedResource.Equals(object? obj) -> bool
+override Janus.Core.ConsentedResource.GetHashCode() -> int
+override Janus.Core.ConsentedResource.ToString() -> string!
 override Janus.Core.ConsentRecord.Equals(object? obj) -> bool
 override Janus.Core.ConsentRecord.GetHashCode() -> int
 override Janus.Core.ConsentRecord.ToString() -> string!
@@ -3817,6 +3836,8 @@ static Janus.Core.Configuration.Settings.WebAuthnRelatedOrigins.get -> Janus.Cor
 static Janus.Core.Configuration.Settings.WebAuthnRelyingPartyId.get -> Janus.Core.Configuration.TextSetting!
 static Janus.Core.ConsentChanged.operator !=(Janus.Core.ConsentChanged? left, Janus.Core.ConsentChanged? right) -> bool
 static Janus.Core.ConsentChanged.operator ==(Janus.Core.ConsentChanged? left, Janus.Core.ConsentChanged? right) -> bool
+static Janus.Core.ConsentedResource.operator !=(Janus.Core.ConsentedResource? left, Janus.Core.ConsentedResource? right) -> bool
+static Janus.Core.ConsentedResource.operator ==(Janus.Core.ConsentedResource? left, Janus.Core.ConsentedResource? right) -> bool
 static Janus.Core.ConsentRecord.operator !=(Janus.Core.ConsentRecord? left, Janus.Core.ConsentRecord? right) -> bool
 static Janus.Core.ConsentRecord.operator ==(Janus.Core.ConsentRecord? left, Janus.Core.ConsentRecord? right) -> bool
 static Janus.Core.CredentialAuthority.Of(Janus.Core.AccessContext! context, Janus.Core.SessionId session) -> Janus.Core.CredentialAuthority!

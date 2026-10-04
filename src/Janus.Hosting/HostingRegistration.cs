@@ -354,6 +354,11 @@ public static class HostingRegistration
         // once the model and the schema have been checked, and before the server serves.
         services.Insert(11, ServiceDescriptor.Singleton<IHostedService, LawfulBasisStartService>());
 
+        // PRIV-CONS-007 AC5 (D-183): a consent recorded against a document its purpose no
+        // longer names is stamped superseded once the declaration has been checked, and
+        // before the server serves.
+        services.Insert(12, ServiceDescriptor.Singleton<IHostedService, DocumentSupersessionStartService>());
+
         // INF-BG-001: the scheduled work starts once the checks above have passed.
         services.AddHostedService(provider => new BackgroundWorker(
             provider.GetRequiredService<IServiceScopeFactory>(),

@@ -2673,3 +2673,25 @@ against the public contract of LIB-API-001.
   and a push still with the server then is abandoned as a failed attempt. A pass
   decides on the mailbox as its row stands once claimed and writes the push alone, so
   it never writes back a holder or a state owed it read earlier.
+- The view `identity.consented_resources`, written by the migration
+  `AddConsentedResources`: a row for each registered record whose data subject holds a
+  consent neither withdrawn nor superseded, with the purpose, the document and the kind
+  of that consent. The application role reads it.
+- `ConsentedResource` in `Janus.Core`, the row of `identity.consented_resources`, mapped
+  by `MapAuthorizationTables` beside `AncestryEntry` and `EffectiveGrant`.
+  `FilterSources<TResource>` takes its `IQueryable` as a third required source, so a
+  host passes `context.Set<ConsentedResource>()` beside the other two. For a permission
+  bound to a consent-based purpose, `FilterAsync` and `FragmentAsync` admit only the
+  records whose data subject holds a live consent for that purpose, recorded against
+  the document the purpose now names and written where the purpose requires written
+  consent; the fragment carries the purpose, the document and the kind as parameters. A
+  check and a capability page refuse a live consent recorded against another document
+  with `privacy.consent.superseded`, as the lists leave its record out.
+- Startup refuses a relationship source whose context maps the ancestry and the
+  effective grants and not the consented resources, with
+  `model.startup.declarationinvalid` naming the source and `context`.
+- At start, before the server serves, every live consent of a consent-based purpose
+  recorded against another document than the one the declaration now names for that
+  purpose is stamped superseded, with `ConsentChanged` `superseded` raised for each in
+  the same transaction. The stamp is one conditional statement, so of several processes
+  starting each consent is stamped and announced once.

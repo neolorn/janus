@@ -40,7 +40,7 @@ public static class ConformanceSuite
     /// <returns>
     /// A finding, <c>authz.policy.unregistered</c> naming the entity, for each entity
     /// that is neither a declared resource type, nor the rows of a declared
-    /// relationship, nor one of the two contract tables.
+    /// relationship, nor one of the three contract tables.
     /// </returns>
     /// <exception cref="ArgumentNullException">Either argument is absent.</exception>
     /// <remarks>
@@ -60,6 +60,7 @@ public static class ConformanceSuite
             .. declaration.Relationships.Select(relationship => relationship.Holder.Parameters[0].Type),
             typeof(AncestryEntry),
             typeof(EffectiveGrant),
+            typeof(ConsentedResource),
         ]);
 
         return new ConformanceReport(

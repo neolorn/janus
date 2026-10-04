@@ -7,7 +7,7 @@ namespace Janus.Conformance.Tests;
 
 /// <summary>
 /// The sample host's own context: its three kinds of thing, the three facts it derives
-/// roles from, and the library's two contract tables mapped beside them.
+/// roles from, and the library's three contract tables mapped beside them.
 /// </summary>
 /// <param name="options">How the context reaches the database.</param>
 internal class SampleContext(DbContextOptions options) : DbContext(options)
@@ -51,6 +51,11 @@ internal class SampleContext(DbContextOptions options) : DbContext(options)
     /// The grants in effect.
     /// </summary>
     public DbSet<EffectiveGrant> Grants => Set<EffectiveGrant>();
+
+    /// <summary>
+    /// The records whose data subject holds a live consent, read from the library's schema.
+    /// </summary>
+    public DbSet<ConsentedResource> Consented => Set<ConsentedResource>();
 
     /// <inheritdoc/>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
