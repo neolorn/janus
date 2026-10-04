@@ -308,6 +308,34 @@ public sealed class LossReportsTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTHZ-IMP-001, chapter 10 section 5b: a suspension carries the acting and the
+    /// effective identity of the context that reported it, each as the context gives
+    /// it, whether or not they are one account.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_IMP_001_ASuspensionCarriesBothIdentitiesAsTheContextGivesThemAsync()
+    {
+        SubjectId own = await AccountAsync();
+        AuthenticatorId owned = await EnrolledAsync(own);
+        SubjectId other = await AccountAsync();
+        AuthenticatorId others = await EnrolledAsync(other);
+        var acting = new SubjectId(Guid.NewGuid());
+
+        _ = await Service.ReportAsync(AccessContext.Of(own), owned, Source, TestContext.Current.CancellationToken);
+        _ = await Service.ReportAsync(
+            AccessContext.Of(acting, other),
+            others,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        IReadOnlyList<CredentialSuspended> suspended = _events.Of<CredentialSuspended>();
+
+        Assert.Equal(((SubjectId?)own, (SubjectId?)own), (suspended[0].Actor, suspended[0].Effective));
+        Assert.Equal(((SubjectId?)acting, (SubjectId?)other), (suspended[1].Actor, suspended[1].Effective));
+    }
+
+    /// <summary>
     /// AUTH-RECOV-007: a sweep whose announcement was refused answers with the
     /// refusal, so an invalidation no consumer was told of is not reported as work
     /// the sweep carried (LIB-API-001).

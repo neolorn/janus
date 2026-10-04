@@ -199,6 +199,7 @@ internal sealed class LossReports(
                 {
                     Subject = held.Subject,
                     Actor = context.Acting,
+                    Effective = context.Effective,
                 },
                 cancellationToken)
             .ConfigureAwait(false) is Error unannounced)

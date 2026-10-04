@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `CredentialSuspended` carries the effective identity of the context that reported the
+  loss or asked for the removal as `Effective`, beside its `Actor`, as
+  `CredentialRestored` from a session does. Both are carried as the context gives them.
 - `IUnitOfWork.RollbackAsync` ends an operation with nothing of it saved: the
   transaction, every tracked change and every registration to run after the commit are
   discarded. It takes no cancellation token and answers no result. An operation that

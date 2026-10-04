@@ -5461,6 +5461,8 @@ and reported again, and three reports of one credential are three facts.
 *Chapter text that should change.* None. `10` section 5b already names all four and
 says what each is raised for.
 
+**Superseded by D-166.**
+
 ---
 
 ## 153. Startup verifies the schema, and refuses only a database behind the model
