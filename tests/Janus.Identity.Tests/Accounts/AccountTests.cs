@@ -313,6 +313,46 @@ public sealed class AccountTests
     }
 
     /// <summary>
+    /// IDN-LIFE-003 AC5, PRIV-RIGHT-001 AC4 (D-183): a takedown reversed on an account an
+    /// out-of-band request had taken from a suspension into its deletion returns it to
+    /// that deletion still holding the suspension, so that cancelling the deletion
+    /// returns it suspended with its origin.
+    /// </summary>
+    /// <param name="origin">Who suspended the account.</param>
+    [Theory]
+    [InlineData(SuspensionOrigin.Administrator)]
+    [InlineData(SuspensionOrigin.Self)]
+    public void IDN_LIFE_003_AC5_AReversalToAnOutOfBandDeletionKeepsTheSuspensionItHolds(SuspensionOrigin origin)
+    {
+        DateTimeOffset began = Noon - TimeSpan.FromDays(3);
+        var account = Account.Create(Ahmed, Noon - TimeSpan.FromDays(30));
+
+        if (origin is SuspensionOrigin.Self)
+        {
+            account.Deactivate();
+        }
+        else
+        {
+            account.Suspend();
+        }
+
+        account.RequestDeletion(DeletionOrigin.OutOfBandRequest, began);
+        account.Takedown(Noon);
+
+        account.ReverseTakedown();
+
+        Assert.Equal(
+            (AccountState.Deleting, DeletionOrigin.OutOfBandRequest, began, origin),
+            (account.State, account.DeletingBy, account.DeletingSince, account.SuspensionHeld));
+        Assert.Null(account.DeletionHeld);
+
+        account.CancelDeletion();
+
+        Assert.Equal((AccountState.Suspended, origin), (account.State, account.SuspendedBy));
+        Assert.Null(account.SuspensionHeld);
+    }
+
+    /// <summary>
     /// IDN-LIFE-013: a takedown reversed on an account an administrator suspended leaves
     /// it suspended by the administrator, so only <c>account:manage</c> reactivates it.
     /// </summary>
