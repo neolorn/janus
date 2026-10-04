@@ -634,7 +634,10 @@ internal sealed class SignInLinks(
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
-            return Result.Failure(failure);
+            // AUTH-ABUSE-006: the gateway floor's refusal answers the ask as it would
+            // have been answered, as it does for a number no account holds, so the
+            // floor tells nothing of an account. Nothing else was written.
+            return failure.Code == ErrorCodes.SmsBalanceFloor ? Result.Success() : Result.Failure(failure);
         }
 
         await pending

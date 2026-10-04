@@ -2208,6 +2208,47 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Assert.NotEqual(default, subject);
     }
 
+    /// <summary>
+    /// AUTH-ABUSE-006 AC4: a sign-in link asked for by text that the gateway floor
+    /// refuses is answered as it would have been, for the number's holder and for a
+    /// number no account holds alike; nothing goes out and no sign-in is left in
+    /// flight, so the floor tells nothing of an account.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_006_AC4_ALinkAskTheFloorRefusesIsAnsweredAsItWouldHaveBeenAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneLink);
+
+        var floor = Error.From(ErrorCodes.SmsBalanceFloor);
+        _notifications.Refusal = floor;
+        _restrictions.Refusal = floor;
+
+        int committed = _work.Committed;
+
+        Result held = await Service.SendLinkAsync(
+            Number,
+            Language,
+            Source,
+            browser: null,
+            TestContext.Current.CancellationToken);
+
+        Result nobodys = await Service.SendLinkAsync(
+            "+441632960099",
+            Language,
+            Source,
+            browser: null,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(held.Match(() => true, _ => false));
+        Assert.True(nobodys.Match(() => true, _ => false));
+        Assert.Empty(_notifications.Texts);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneLink, TestContext.Current.CancellationToken));
+        Assert.False(_work.Open);
+        Assert.Equal(committed, _work.Committed);
+    }
+
     // AUTH-FACT-002 AC6: the text code asked for, in the language of the ask.
     private ValueTask<Result<SignInProgress?>> AskedAsync(string challenge, SubjectId? stepping) =>
         Service.AskAsync(challenge, Factor.PhoneCode, stepping, Source, Language, TestContext.Current.CancellationToken);

@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- An ask of a sign-in link, of a recovery link or of a notice to an address no account
+  holds, where the gateway floor refuses its text message, is answered as the ask would
+  have been and nothing is sent. A verification code the floor refuses is refused
+  `integration.sms.balancefloor`, alike whoever holds the number.
 - The gateway floor is judged on the latest balance the `sms-balance` poll recorded,
   however old, and a send never asks the gateway for its balance. Until a first balance
   is recorded the floor refuses nothing. A poll the gateway does not answer records

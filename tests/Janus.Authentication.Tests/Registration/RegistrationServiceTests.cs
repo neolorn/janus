@@ -1265,6 +1265,59 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-006 AC4: below the floor, the code asked for at a number is refused
+    /// with the floor's code, and the ask for a number another account holds or an
+    /// undo reserves is refused exactly as the one for a number no account holds;
+    /// nothing is staged, drawn or committed, so the floor tells nothing of an account.
+    /// </summary>
+    /// <param name="held">Whether an account holds the number.</param>
+    /// <param name="reserved">Whether the number is reserved for an undo.</param>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task AUTH_ABUSE_006_AC4_ACodeTheFloorRefusesIsRefusedAlikeWhoeverHoldsTheNumberAsync(
+        bool held,
+        bool reserved)
+    {
+        RegistrationSessionId session = await AwaitingAsync();
+
+        await VerifiedAsync(session, IdentifierKind.Email);
+
+        if (held)
+        {
+            _directory.Held(IdentifierKind.Phone, Number, SubjectId.New(_randomness));
+        }
+
+        if (reserved)
+        {
+            _directory.Reserved(IdentifierKind.Phone, Number, Noon + TimeSpan.FromDays(7));
+        }
+
+        var floor = Error.From(ErrorCodes.SmsBalanceFloor);
+        _notifications.Refusal = floor;
+        _restrictions.Refusal = floor;
+        _work.Reset();
+
+        Error refused = (await Service.StageAsync(
+                session,
+                IdentifierKind.Phone,
+                Number,
+                Source,
+                TestContext.Current.CancellationToken))
+            .Match(
+                _ => throw new Xunit.Sdk.XunitException("The code was not refused."),
+                error => error);
+
+        Assert.Same(floor, refused);
+        Assert.Empty(_notifications.Texts);
+        Assert.Empty(_restrictions.Drawn);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
     /// REG-IDENT-006 AC2, REG-SESS-005: an address held out of reach for its owner's
     /// undo is answered as a held one, field for field as a fresh one, with no code
     /// drawn, nothing staged that can verify, and nobody told.

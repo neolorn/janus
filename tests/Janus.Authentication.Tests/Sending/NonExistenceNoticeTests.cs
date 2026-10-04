@@ -184,6 +184,32 @@ public sealed class NonExistenceNoticeTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-006 AC4: a number's ask whose text the gateway floor refuses is
+    /// answered as it would have been, whoever holds the number, and leaves nothing
+    /// behind it, so the floor tells nothing of an account.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_006_AC4_AnAskTheFloorRefusesIsAnsweredAsItWouldHaveBeenAsync()
+    {
+        if (!PhoneNumber.TryParse("+441632960011", out PhoneNumber number))
+        {
+            throw new Xunit.Sdk.XunitException("The number does not parse.");
+        }
+
+        _restrictions.Refusal = Error.From(ErrorCodes.SmsBalanceFloor);
+
+        Result nobodys = await AnswerAsync(SendDestination.Of(number), unheld: true);
+        Result unreached = await AnswerAsync(SendDestination.Of(number), unheld: false);
+
+        Assert.True(nobodys.Match(() => true, _ => false));
+        Assert.True(unreached.Match(() => true, _ => false));
+        Assert.Empty(_notifications.Sent);
+        Assert.Empty(_notices.Told);
+        Assert.False(_work.Open);
+        Assert.Equal((0, 2), (_work.Committed, _work.RolledBack));
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-002 AC3: the notice is the message the ask asked for, so it answers
     /// to that message's restrictions and is refused where the message would be.
     /// </summary>
