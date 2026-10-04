@@ -185,7 +185,8 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
 
         Answer early = await browser.SendAsync("PUT", "/register/email", ("value", Flow.Address));
 
-        Assert.Equal(ErrorCodes.AffirmationRequired.ToString(), early.Text("code"));
+        Assert.Equal(StatusCodes.Status409Conflict, early.Status);
+        Assert.Equal(ErrorCodes.RegistrationIncomplete.ToString(), early.Text("code"));
 
         _ = await browser.SendAsync("PUT", "/register/age", ("dateOfBirth", "1990-01-01"));
         _ = await browser.SendAsync("PUT", "/register/email", ("value", Flow.Address));

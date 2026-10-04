@@ -2978,3 +2978,7 @@ against the public contract of LIB-API-001.
 - `GET /register/events` answers a browser that carries no registration session 404
   `authz.resource.notfound`, with the body every refusal carries, where it answered a
   404 with no body.
+- An email or a phone offered to a registration before its age step is answered is
+  refused 409 `identity.registration.incomplete`, as every step asked for before the
+  one it follows is, where it was refused 422 `identity.affirmation.required`, which is
+  the terms step's alone.
