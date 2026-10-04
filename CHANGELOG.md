@@ -2689,3 +2689,8 @@ against the public contract of LIB-API-001.
   after them and after `code.verification.lifetime`, as a wrong code for a fresh value
   is. The ask, and a resend, is counted against the sending restrictions as its
   message would be and refused by them alike.
+- The code that verifies an identifier added to, or replaced on, an account is issued
+  and answered through the same verification-code record, held against the pending
+  verification. A code presented after the attempt cap is now answered
+  `auth.code.expired` where it was answered `auth.code.invalid`. A code outstanding
+  when this version is deployed no longer verifies: a resend replaces it.

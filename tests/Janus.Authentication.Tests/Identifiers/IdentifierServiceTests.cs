@@ -50,6 +50,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private readonly IdentifierDirectoryInMemory _directory = new();
     private readonly SettingsRestrictionInMemory _restriction = new();
     private readonly PendingVerificationStoreInMemory _pending = new();
+    private readonly VerificationCodeStoreInMemory _codes = new();
     private readonly RecoveryLinkStoreInMemory _links = new();
     private readonly NoticeLedgerInMemory _notices = new();
     private readonly SessionStoreInMemory _sessions = new();
@@ -84,6 +85,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
             _directory,
             _restriction,
             _pending,
+            new VerificationCodes(_codes, _configuration, _work, _clock, _randomness),
             _notifications,
             Landing.Links,
             _notices,
@@ -1040,7 +1042,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         Accepted(await Service.VerifyAsync(
             opened,
             email,
-            VerificationCode.Read(Waiting(email).Staged.Code!),
+            Code(email),
             Source,
             TestContext.Current.CancellationToken));
 
@@ -1245,7 +1247,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)));
 
         Assert.False(_work.Open);
-        Assert.Equal(0, _work.Committed);
+        Assert.Equal(0, _work.OutermostCommitted);
         Assert.Equal(1, _work.RolledBack);
     }
 
@@ -1259,7 +1261,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
         await AddedAsync(Second);
         IdentifierId second = Named(await HeldAsync(), Second).Id;
-        string wrong = VerificationCode.Read(Waiting(second).Staged.Code!) == "000000" ? "000001" : "000000";
+        string wrong = Code(second) == "000000" ? "000001" : "000000";
         _work.Reset();
 
         Assert.Equal(
@@ -1273,9 +1275,9 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)));
 
         Assert.False(_work.Open);
-        Assert.Equal(1, _work.Committed);
+        Assert.Equal(1, _work.OutermostCommitted);
         Assert.Equal(0, _work.RolledBack);
-        Assert.Equal(1, Waiting(second).Staged.WrongAttempts);
+        Assert.Equal(1, Outstanding(second).Attempts);
     }
 
     /// <summary>
@@ -1288,7 +1290,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
         await AddedAsync(Second);
         IdentifierId second = Named(await HeldAsync(), Second).Id;
-        string code = VerificationCode.Read(Waiting(second).Staged.Code!);
+        string code = Code(second);
         _clock.Advance(Settings.CodeVerificationLifetime.Default);
         _work.Reset();
 
@@ -1303,9 +1305,84 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)));
 
         Assert.False(_work.Open);
-        Assert.Equal(0, _work.Committed);
+        Assert.Equal(0, _work.OutermostCommitted);
         Assert.Equal(1, _work.RolledBack);
-        Assert.Equal(0, Waiting(second).Staged.WrongAttempts);
+        Assert.DoesNotContain(_codes.All, held => held.Attempts > 0);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-004 AC3, REG-IDENT-004: the code of an added identifier is answered
+    /// from its verification-code record, so the tries are capped there and the right
+    /// code after them verifies nothing.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_004_AC3_TheCapEndsTheCodeOfAnAddedIdentifierAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        await AddedAsync(Second);
+        IdentifierId second = Named(await HeldAsync(), Second).Id;
+        string code = Code(second);
+        string wrong = code == "000000" ? "000001" : "000000";
+        SessionId browser = Stepped();
+
+        for (int tried = 0; tried < Settings.CodeVerificationAttempts.Default; tried++)
+        {
+            Assert.Equal(
+                ErrorCodes.CodeInvalid,
+                Refused(await Service.VerifyAsync(
+                    Acting,
+                    browser,
+                    second,
+                    wrong,
+                    Source,
+                    TestContext.Current.CancellationToken)));
+        }
+
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            Refused(await Service.VerifyAsync(
+                Acting,
+                browser,
+                second,
+                code,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(Named(await HeldAsync(), Second).IsVerified);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-004, REG-IDENT-004: the record is spent by the code that verifies the
+    /// identifier, so the same code presented again is answered as a wrong one.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_004_TheCodeThatVerifiesAnIdentifierIsSpentAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        await AddedAsync(Second);
+        IdentifierId second = Named(await HeldAsync(), Second).Id;
+        string code = Code(second);
+        SessionId browser = Stepped();
+
+        Accepted(await Service.VerifyAsync(
+            Acting,
+            browser,
+            second,
+            code,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(_codes.All);
+        Assert.True(Named(await HeldAsync(), Second).IsVerified);
+        Assert.Equal(
+            ErrorCodes.CodeInvalid,
+            Refused(await Service.VerifyAsync(
+                Acting,
+                browser,
+                second,
+                code,
+                Source,
+                TestContext.Current.CancellationToken)));
     }
 
     /// <summary>
@@ -1433,7 +1510,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)));
 
         Assert.False(_work.Open);
-        Assert.Equal(0, _work.Committed);
+        Assert.Equal(0, _work.OutermostCommitted);
         Assert.Equal(1, _work.RolledBack);
     }
 
@@ -1513,16 +1590,30 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
     private async Task VerifiedAsync(IdentifierId identifier, SessionId session)
     {
-        PendingVerification waiting = _pending.All.Single(pending =>
-            pending.Identifier == identifier);
-
         Accepted(await Service.VerifyAsync(
             Acting,
             session,
             identifier,
-            VerificationCode.Read(waiting.Staged.Code!),
+            Code(identifier),
             Source,
             TestContext.Current.CancellationToken));
+    }
+
+    // The code is in the verification-code record it is answered from, as it is in
+    // the message.
+    private string Code(IdentifierId identifier) => VerificationCode.Read(Outstanding(identifier).Code);
+
+    // The verification-code record held against a pending verification, which is the
+    // fingerprint of the identifier it names (AUTH-FACT-004).
+    private VerificationCode Outstanding(IdentifierId identifier)
+    {
+        byte[] named = new byte[16];
+
+        _ = identifier.Value.TryWriteBytes(named);
+
+        byte[] holder = SHA256.HashData(named);
+
+        return _codes.All.Single(held => held.Holder.AsSpan().SequenceEqual(holder));
     }
 
     // The undo the remaining channels were sent, which is what the removal notice

@@ -152,11 +152,7 @@ internal sealed class PendingVerificationStore(
             staged.Canonical,
             staged.IsLocked,
             staged.IsExtra,
-            staged.Code,
-            staged.CodeExpiresAt,
             staged.Link,
-            staged.WrongAttempts,
-            staged.CodeSpent,
             staged.VerifiedAt);
 
     private static StagedIdentity Read(StagedIdentityDocument staged) =>
@@ -167,11 +163,7 @@ internal sealed class PendingVerificationStore(
             staged.Canonical,
             staged.IsLocked,
             staged.IsExtra,
-            staged.Code,
-            staged.CodeExpiresAt,
             staged.Link,
-            staged.WrongAttempts,
-            staged.CodeSpent,
             staged.VerifiedAt);
 
     private async ValueTask CarryAsync(

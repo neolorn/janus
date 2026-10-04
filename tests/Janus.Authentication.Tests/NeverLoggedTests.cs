@@ -62,7 +62,6 @@ public sealed class NeverLoggedTests
             Member<LossReport>(nameof(LossReport.Cancel)),
             Member<RecoveryLink>(nameof(RecoveryLink.Fingerprint)),
             Member<PendingVerification>(nameof(PendingVerification.OldLink)),
-            Member<StagedIdentity>(nameof(StagedIdentity.Code)),
             Member<StagedIdentity>(nameof(StagedIdentity.Link)),
             Member<PreAuthentication>(nameof(PreAuthentication.Fingerprint)),
             Member<PreAuthentication>(nameof(PreAuthentication.CsrfFingerprint)),

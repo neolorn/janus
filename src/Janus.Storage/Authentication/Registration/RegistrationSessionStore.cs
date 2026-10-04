@@ -206,11 +206,7 @@ internal sealed class RegistrationSessionStore(
             staged.Canonical,
             staged.IsLocked,
             staged.IsExtra,
-            staged.Code,
-            staged.CodeExpiresAt,
             staged.Link,
-            staged.WrongAttempts,
-            staged.CodeSpent,
             staged.VerifiedAt);
 
     private static StagedCredentialDocument Written(StagedCredential staged) =>
@@ -249,11 +245,7 @@ internal sealed class RegistrationSessionStore(
             staged.Canonical,
             staged.IsLocked,
             staged.IsExtra,
-            staged.Code,
-            staged.CodeExpiresAt,
             staged.Link,
-            staged.WrongAttempts,
-            staged.CodeSpent,
             staged.VerifiedAt);
 
     private static StagedCredential Read(StagedCredentialDocument staged) =>

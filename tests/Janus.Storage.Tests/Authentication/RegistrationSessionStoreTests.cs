@@ -92,13 +92,14 @@ public sealed class RegistrationSessionStoreTests(DatabaseFixture database) : IC
     }
 
     /// <summary>
-    /// REG-SESS-003 AC3, CONV-DESIGN-003 AC6: wrong codes presented at once are each
-    /// decided on the session's row under its lock, so every one is counted against
-    /// the staged identifier and none is written over another.
+    /// REG-SESS-003, CONV-DESIGN-003 AC6: an identifier verified by several requests
+    /// at once is decided each time on the session's row under its lock, so the first
+    /// verifies it and every other finds it verified. The wrong tries of its code are
+    /// counted on the verification-code record (AUTH-FACT-004 AC4).
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task REG_SESS_003_AC3_WrongCodesAtOnceAreAllCountedAsync()
+    public async Task REG_SESS_003_AnIdentifierVerifiedAtOnceIsVerifiedOnceAsync()
     {
         RegistrationSession opened = Opened();
         var staged = IdentifierId.New(TimeProvider.System);
@@ -111,13 +112,17 @@ public sealed class RegistrationSessionStoreTests(DatabaseFixture database) : IC
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await Task.WhenAll(MissedAsync(opened.Id, staged), MissedAsync(opened.Id, staged), MissedAsync(opened.Id, staged));
+        bool[] verified = await Task.WhenAll(
+            VerifiedAsync(opened.Id, staged),
+            VerifiedAsync(opened.Id, staged),
+            VerifiedAsync(opened.Id, staged));
 
         await using StoreContext reading = database.Context();
         RegistrationSession read = Assert.IsType<RegistrationSession>(
             await Store(reading).FindAsync(opened.Id, TestContext.Current.CancellationToken));
 
-        Assert.Equal(3, read.Identity(staged)!.WrongAttempts);
+        Assert.Single(verified, by => by);
+        Assert.Equal(Noon, read.Identity(staged)!.VerifiedAt);
     }
 
     /// <summary>
@@ -180,9 +185,9 @@ public sealed class RegistrationSessionStoreTests(DatabaseFixture database) : IC
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
-    // Each wrong code is its own request, deciding on the session as the registration
-    // service does.
-    private async Task MissedAsync(RegistrationSessionId session, IdentifierId staged)
+    // Each verification is its own request, deciding on the session as the
+    // registration service does, and says whether it was the one that verified.
+    private async Task<bool> VerifiedAsync(RegistrationSessionId session, IdentifierId staged)
     {
         await using StoreContext context = database.Context();
         await using var work = new UnitOfWork(context);
@@ -193,11 +198,18 @@ public sealed class RegistrationSessionStoreTests(DatabaseFixture database) : IC
         RegistrationSession held = Assert.IsType<RegistrationSession>(
             await store.FindForUpdateAsync(session, TestContext.Current.CancellationToken));
 
-        held.Identity(staged)!.Missed(cap: 5);
+        bool verifying = !held.Identity(staged)!.IsVerified;
 
-        await store.RecordAsync(held, TestContext.Current.CancellationToken);
+        if (verifying)
+        {
+            held.Identity(staged)!.Verify(Noon);
+
+            await store.RecordAsync(held, TestContext.Current.CancellationToken);
+        }
 
         Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return verifying;
     }
 
     private static RegistrationSession Opened() =>
