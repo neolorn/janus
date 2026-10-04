@@ -814,6 +814,15 @@ against the public contract of LIB-API-001.
   its source and counted toward `alerting.callback.threshold`. Claimed events and issued
   references are kept, as hashes, in the `callback_events` and `callback_references`
   tables, a claim with when it was taken and when it settled.
+- A machine route that refuses a request for carrying the session cookie answers as its
+  protocol refuses a bad request, where it answered 403 `authz.denied`. A callback, the
+  delivery report, the two provider-event routes and the host's own included, is held
+  to `integration.callback.ratelimit` first and then refused 422
+  `integration.callback.rejected` with no `Retry-After`, recorded against its source and
+  counted toward `alerting.callback.threshold`; the Google route answers it so too, not
+  in the RFC 8935 shape. `POST /oidc/par`, `POST /oidc/token` and `GET /oidc/userinfo`
+  answer 400 with `error` `invalid_request` alone, before anything the request presents
+  is read.
 - `ICallbackReferences.IssueAsync` issues the correlation reference an unsigned callback
   carries: 128 random bits in base64url, of which only the hash is kept.
 - `GET /callbacks/sms/dlr` takes the SMS gateway's delivery report on the machine
