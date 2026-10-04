@@ -107,6 +107,28 @@ public sealed class LegalDocumentEndpointTests
     }
 
     /// <summary>
+    /// INT-SMS-003, 09 section 7 (D-183): a read of a name outside the rule a document's
+    /// name is held to is malformed naming <c>document</c>, not a document never
+    /// published.
+    /// </summary>
+    /// <param name="document">The name in the path.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("Terms")]
+    [InlineData("terms__of-service")]
+    [InlineData("terms.")]
+    public async Task INT_SMS_003_AReadOfANameOutsideTheRuleIsMalformedAsync(string document)
+    {
+        await using var deployment = new Deployment();
+
+        Answer answered = await new Browser(deployment).SendAsync("GET", $"/privacy/documents/{document}");
+
+        Assert.Equal(StatusCodes.Status400BadRequest, answered.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), answered.Text("code"));
+        Assert.Equal("document", answered.Json().GetProperty("details").GetProperty("member").GetString());
+    }
+
+    /// <summary>
     /// PRIV-CONS-005: a document the deployment never published is refused rather
     /// than answered with an empty version.
     /// </summary>

@@ -509,7 +509,9 @@ internal static class PrivacyEndpoints
     {
         ArgumentNullException.ThrowIfNull(documents);
 
-        return document is not { Length: > 0 }
+        // 09 section 7, INT-SMS-003 (D-183): a name outside the rule a document's name is
+        // held to names no document, and is refused before anything is read.
+        return !PlaceName.Holds(document)
             ? Answers.Malformed("document")
             : Answers.Of(
                 await documents.ReadAsync(document, version, cancellationToken).ConfigureAwait(false),

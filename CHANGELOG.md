@@ -1508,6 +1508,11 @@ against the public contract of LIB-API-001.
   `null` `detail` records none: `PrivacyRequestEntry.Detail` and
   `PrivacyRequest.Detail` are nullable, the `detail` column of `privacy_requests`
   takes null, and an empty text is never stored for none.
+- `GET /privacy/documents/{document}`, `POST /admin/documents/{document}/versions`
+  and the translation route refuse a `{document}` that is not a document name (1 to
+  64 lower-case letters and digits separated by single `.`, `-` or `_`) with 400
+  `api.request.malformed` naming `document`: nothing is read or published, and no
+  condition is raised under the name.
 - A privacy request entered out of band for a subject no account bears is refused
   422 `api.request.invalid` naming `subject`. The fulfilment of an erasure refuses
   nothing on the account's state or existence: it no longer answers
