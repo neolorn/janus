@@ -615,7 +615,7 @@ CONV-DESIGN-008 criterion 3, "no project's build reports MSB3277": no test decid
 
 What earlier runs left: nine worktrees held uncommitted work whose commits were all in the branch; each is kept as a patch outside the repository and removed with its branch. The reason rule of the configuration route that one of them carried is on the branch at the endpoint and in the service (`ConfigurationEndpointTests.OPS_CFG_005_EveryChangeCarriesAReasonAsync`, `ConfigurationAdministrationTests.OPS_CFG_008_AC2_ATighteningWithNoReasonIsRefusedAsync`). Four stashes are dropped: three held earlier states of the docs, and every file of the fourth is in the history (the changelog describes `MapAuthorizationTables`).
 
-**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The five parts of D-183 the owner's split names are merged (below), and four further parts for what they left: question 30, question 29, the mailbox pushes of question 61, and questions 42 and 31. Questions 68 to 125 park the sites they name. Of the work after the merges, the new codes, the retirement of `NotificationRequested`, question 53 and question 62 are merged; questions 50 and 51 wait on question 119. No part is running.
+**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The five parts of D-183 the owner's split names are merged (below), and four further parts for what they left: question 30, question 29, the mailbox pushes of question 61, and questions 42 and 31. Questions 68 to 126 park what they name. Of the work after the merges, the new codes, the retirement of `NotificationRequested`, question 53 and question 62 are merged; questions 50 and 51 wait on question 119. No part is running; the full gate ran at `261fbfb4` (section 5).
 
 ### The section C sweeps, place by place
 
@@ -1231,44 +1231,20 @@ After the merge: build 0 warnings 0 errors, format clean, 3114 unit tests, 139 c
 | D-166 section G, the ledger lines of the entries not yet applied | Each goes in the commit that applies its entry | Written with each entry and in `d9a8ecb5`, but for the 23 entries below |
 | Truth-table rows for D-166 entries 396 and 265 | They state the D-166 outcomes, so they belong with those fixes | Nothing: written in `cb73c32a` and `ef62ecdc` |
 | The full gate, the pull request for `corrections-4` | The push of `corrections-4` after `d5a7fc0e` was refused in the session's environment | The full gate: section 5. The pull request: the push |
-| The detail of an entered request: absent and blank told apart (D-166 414 under X4); built while parked, in `e747407f` (slips, below) | Open question 21 | Question 21 |
-| 265, the second half: the relationship sources, their start check, the full answer of `GET /admin/access`, the drift-check job and its principal `derivation-driftcheck`, `RefreshAsync`, their AUTHZ-DERIVE-005 and AUTHZ-DERIVE-007 tests; ledger line 265 | Open question 22 | Question 22 |
-| 143, the stream of `GET /register/events` raising the degradation `registration-channel`; ledger line 143 | Open question 23 | Question 23 |
-| The removal of the `photo.enabled` family of 144 and 315, and the photos half of X6; ledger line 144 | Open question 25 | Question 25 |
-| 317 (2), the coded refusal of a retired version's unwrap; ledger line 317 | Open question 26 | Question 26 |
-| 118, the governed send contract; 235; the twenty-sets test of 335; X1 at `SendingService.CarryAsync`; ledger lines 118, 235 and 335 | Open question 27 | Question 27 |
-| 156, the lawful basis table | Open question 28 | Question 28 |
-| 133 and 147 (1) to (3), the consented resources against the document a purpose now names, with `ConsentGateTests.PRIV_CONS_007_APurposeGivenAnotherDocumentAsksItsSubjectsAgainAsync`; ledger lines 133 and 147 | Open question 29 | Question 29 |
-| 133 and 147 (5), a grant or objection while a live record stands | Open question 30 | Question 30 |
-| 115 (2), registration and identifier codes in the verification-code record; 306 whole, which needs that record; ledger lines 115 and 306 | Open question 31 | Question 31 |
-| 419, a registration link token that opens nothing; ledger line 419 | Open question 32 | Question 32 |
-| 318 (3), what retirement forgets; ledger line 318 | Open question 33 | Question 33 |
-| 136 whole: the record, its migration, the explanation's principal and reason, its two tests; ledger line 136 | Open question 34 | Question 34 |
-| `Subject` on `AuditEntry`, its view and its test (303) | Open question 35 | Question 35 |
-| 242 (4), the downgrade and `auth.factor.notpermitted` halves, with `AuthenticationServiceTests.IDN_LIFE_009b_ASessionHeldBeforeTheMembershipIsDowngradedAsync`; ledger line 246 | Open question 36 | Question 36 |
-| 135, the grants of the maintenance role in every schema | Open question 37 | Question 37 |
-| 119 (1) to (4) and what builds on them; 227 and 322; ledger lines 119, 227 and 322 | Open question 38 | Question 38 |
-| 119 (6), the erased value in `send_outbox.wrapped_key`, with `SubjectEraserTests.PRIV_RIGHT_005_AC1_AnOutstandingMessageIsUnreadableAndUncarriedAfterErasureAsync` | Open question 39 | Question 39 |
-| `Effective` on `CredentialSuspended` (152 (3)); ledger line 152 | Open question 40 | Question 40 |
-| 242 (3), an accepting account holding no verified email | Open question 41 | Question 41 |
-| 129 (1) whole: the registration session's credential authority, the key and generator paths, their tests; ledger line 129 | Open question 42 | Question 42 |
-| The truth-table rows of 328; ledger line 328 | Open question 46 | Question 46 |
-| The section of the changelog line of 389 (6) | Open question 47 | Question 47 |
-| 389 whole, with the row `abuse.source.sitelimit` of section F; ledger line 389 | Open question 48 | Question 48 |
-| The exemption rule of CONV-DESIGN-004 criterion 2 and its test; `BrowserProfileLog` and `Concealment` | Open question 49 | Question 49 |
-| 359 and 382 (3), the endpoint lines of (4) and the endpoint and response-member scenarios of (5); ledger line 382 | Open questions 50 and 51 | Questions 50 and 51 |
-| The four routes that bind a string: `RoleEndpoints` `name`, `ConfigurationEndpoints` `key`, `RestrictionEndpoints` `name`, `AppPasswordEndpoints` `id` | Open question 53 | Question 53 |
-| 160, `IOidc.KeysAsync`, its two callers and its `PublicAPI` line; ledger line 160 | Open question 55 | Question 55 |
-| 282, the Google 400 writer of `ProviderEventIntake`, its tests on both routes; E.5, a token without `jti`; ledger line 282 | Open question 56 | Question 56 |
-| E.4, CONV-DESIGN-007, the area registration methods and their test | Open question 57 | Question 57 |
-| X9, every return after `BeginAsync`, and its test | Open question 58 | Question 58 |
-| X1 at `DenialSpikes.WatchAsync`, the transaction its alert is written in | Open question 59 | Question 59 |
-| The purpose of the identifier-change-confirm link (`IdentifierService.AskOldAsync`) | Open question 60 | Question 60 |
-| X3 at V7 (`OutboxPublisher`) and S6 (`SendingService`, retry and settle) | Open question 61 | Question 61 |
-| X3 at C9, the settings restriction decided before the transaction | Open question 62 | Question 62 |
-| X3 at S1, the admission half | Open question 63 | Question 63 |
-| X3 at S5, `AlertDestinationChange` | Open question 64 | Question 64 |
-| X4 at `PUT /admin/compliance/assessments` (`dataOwner`, `organisationalSecurityMeasures`) | Open question 65 | Question 65 |
+| Questions 21 to 65, as D-183 answers them | Each was parked until D-183 | Built (section 1, from "the housekeeping before D-183's items" on), but for the rows below |
+| Questions 50 and 51: the codes and the produced and accepted types as endpoint metadata, `endpoints.txt` and its contract test, the test host's check, the lines of `release.sh` and the two scenarios of D-166 382; ledger line 382 | What "the codes its `09` row gives" covers | Question 119 |
+| Question 61 for the event rows and the erasure outbox | How a row that tracks several deliveries is claimed | Question 114 |
+| Question 31 at an account identifier's add and replace of a held or reserved value; D-166 306 whole, the sweep of pending verifications (REG-IDENT-004 criterion 4, REG-IDENT-007 criterion 4); ledger lines 115 and 306 | Where the staged value is held; what the sweep waits for | Questions 115 and 116 |
+| Question 62 at `AppPasswords.CreateAsync`, `RecoveryService.SendAsync`, `ErasureService.CompleteAsync` and the destination keys | A first write outside the unit of work, or two units of work | Questions 122 to 125 |
+| Question 46: the filter half of the six unmet step-up rows; the seven step-up scenarios of the conformance suite | Criterion 2 against the filter of a bound action; how the suite arranges a provider's report | Questions 92 and 93 |
+| The correction of `52482ed5`, the step-up half | Which gate the answer is computed against | Question 94 |
+| Question 22: the audit record of a grant the drift check writes | No audit action for it | Question 101 |
+| Question 57: nine registrations still in Hosting, the commands' own registrations, two inner compositions; the test of criterion 7's third clause | The registrations that could not move | Questions 82 to 86 |
+| Question 58: the sites the sweep parked | Which refusals keep a write; a send inside a caller's unit; a success that writes nothing | Questions 69 to 81, 87 and 88 |
+| Question 39 for an invitation's erased key | PRIV-RIGHT-005a against the code | Question 113 |
+| Question 24 for a caller in process | The rule is internal to `Janus.Core` | Question 98 |
+| Question 53 for an app password's `{id}`; `POST /account/recoverycodes/exported` | No typed value and no rule; no contract operation | Questions 118 and 117 |
+| The reverse direction of the REF-001 tests | Question 25's "each direction" | Question 89 |
 | 209 (2), the IDNA mapping | The download is approved and made; the parameters of the processing are not stated | Question 68 |
 
 **Slips.** None is rewritten; each commit is green on the fast checks unless said.
@@ -2254,7 +2230,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3114 unit tests, 139 c
      push of that branch, which is not the default one.
   2. Leave both; the pull request's commit-message check stays red.
 - **Parked.** Nothing. The local message check now reads the type list as well.
-- **Answer:** pending.
+- **Answer:** D-183: the owner's, needing no rule. Both messages reworded with the owner's leave (`863883c1`, `c25b633a`; section 1).
 
 **44. Tier 3. D-166 169, 170, 254, 255 and 257 (3) against PRIV-RIGHT-004 and `10` section 5.12b: what a takedown's reversal keeps.**
 
@@ -2422,7 +2398,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3114 unit tests, 139 c
   `disabled`.
 - **What the specification says.** Repository settings are the owner's.
 - **Parked.** Nothing; the variable is not created.
-- **Answer:** pending.
+- **Answer:** D-183: the owner's, needing no rule. The repository variable is created with the value `disabled`, as D-166 378 says.
 
 **55. Tier 2. D-166 160: the access context of `IOidc.KeysAsync`.**
 
@@ -2479,7 +2455,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3114 unit tests, 139 c
      `AddAuthenticationArea` beside `AddStorageArea`, the others as they are, the test over
      two projects.
 - **Parked.** All of E.4.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `part/registration` (merged as `2f4bdeaf`), but for what questions 82 to 86 park.
 
 **58. Tier 2. D-166 X9 and CONV-DESIGN-003 criterion 5: a unit of work left clean.**
 
@@ -2499,7 +2475,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3114 unit tests, 139 c
   2. A public `RollbackAsync` on `IUnitOfWork`, with its `PublicAPI` line and three fakes.
   3. A savepoint per nested `BeginAsync`.
 - **Parked.** All of X9, its sites and its test.
-- **Answer:** pending.
+- **Answer:** D-183. The port in `83819e32`; the sweep in four parts (merged as `738ef362`, `c0c6d6bc`, `699ab691`, `0f4fed1a`), but for what questions 69 to 81, 87 and 88 park.
 
 **59. Tier 3. D-166 321 and AUTHZ-GATE-004 criterion 4 against X1: the transaction of a denial-spike alert.**
 
@@ -3214,6 +3190,14 @@ part of 389 (3) and waits with 389 on question 48.
 - **Parked.** `ConfigurationService.DestinationsAsync` and `AlertDestinationChange.ChangeAsync`, unchanged; the gate step and the ask for a loosening inside the unit of work are as they were.
 - **Answer:** pending.
 
+**126. Tier 3. OPS-DEP-004 and D-167: the scanner's finding in `ConsentStoreTests`.**
+
+- **Item.** The full-history scan of step 3.
+- **The finding.** The pinned scanner, over the 1087 commits of the history at `261fbfb4`, reports one finding under `generic-api-key`: `tests/Janus.Storage.Tests/Privacy/ConsentStoreTests.cs` line 33, in `c3191b69`, the constant `TheKey` whose value is the identifier of the migration `KeepARecordForEachGrant` (a timestamp and the migration's name), which the test of the migration's data move migrates to. It is no credential: the value is a file name of the repository.
+- **Why it is a question.** The working guide lets an allow-list entry be written alone only where the flagged value is text of the specification; a migration's identifier is not, and any other finding is Tier 3. The finding is in the history, so a change of the line at the head does not clear it.
+- **Parked.** The finding stands; no allow-list entry is written and no commit is rewritten. The secret-scanning job will fail on the push until it is settled.
+- **Answer:** pending.
+
 ## 5. Gate result
 
 **`corrections-4`, at the stop at question 20.** Not run. The run stopped at question 20, before step 4 of the work
@@ -3279,3 +3263,31 @@ its commits can be read.
 | Destructive-operation detection report | passed with `DESTRUCTIVE_DDL_GATE` set to `disabled` for the run; the repository variable does not exist yet (question 54) |
 | Dependency vulnerability alerting | passed |
 | Secret scanning | not run locally: it downloads the pinned scanner, which waits on the owner's approval; the last full-history scan, at `814d8901`, found nothing |
+
+**`corrections-4`, after D-183's items.** Full gate at `261fbfb4`, run once and locally, job by job as the gates workflow runs it (range base `b6d14fef`, the merge base with `main`). The branch is unpushed from `d5a7fc0e`, so no pipeline run exists for it and there is no run identifier.
+
+| Job | Result |
+|---|---|
+| Locked restore | passed |
+| Public surface files up to date (`release.sh`) | passed |
+| Format | passed |
+| Unit tests | passed, 3114 |
+| Contract tests | passed, 139 |
+| Unicode tables regenerate without a diff | passed |
+| Integration tests | passed, 972 |
+| Policy coverage test | passed, 3 |
+| Truth-table suite (change check and suite) | passed, 99 |
+| Double migration run | passed (against a `postgres:17-alpine` container whose credential was drawn for the run; no release is tagged, so run two starts from the empty schema) |
+| Janus.Analyzers rules, permitted outcome, forbidden log values | passed, 22 |
+| Dependency allow-list | passed |
+| InternalsVisibleTo allow-list | passed |
+| Forbidden markers and commented-out code | passed |
+| Acceptance-criterion test names | passed |
+| Commit message format | passed |
+| Changelog line present | passed |
+| Destructive-operation detection report | passed with `DESTRUCTIVE_DDL_GATE` set to `disabled` for the run, as the repository variable is (question 54). It lists, of this run's migrations, `KeepARecordForEachGrant` (both primary keys dropped and added, `id` set not null, two unique indexes), `NameBothIdentitiesOnEveryAuditRecord` (a constraint dropped) and `AllowAbsentRequestDetail` |
+| Dependency vulnerability alerting | passed |
+| Secret scanning | failed: the pinned scanner, run locally as the pipeline runs it, over the 1087 commits of the history at `261fbfb4`, reports one finding, which is no credential (question 126) |
+
+- One commit is red on its own: `28c53a12` fails `ProductNameTests.CONV_NAME_001_AC2`, corrected in the merge `88174fd5` (section 1).
+- The pull request is not opened: the branch is not on GitHub from `d5a7fc0e` on, and the push is the owner's.
