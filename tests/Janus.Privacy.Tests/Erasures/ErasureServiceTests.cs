@@ -204,6 +204,9 @@ public sealed class ErasureServiceTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.ErasureNotFailed, refused.Code);
         Assert.Equal(ErasureStatus.Complete, delivery.Status);
         Assert.Empty(_audit.Entries);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>

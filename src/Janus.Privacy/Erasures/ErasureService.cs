@@ -158,8 +158,9 @@ internal sealed class ErasureService(
         if (await outbox.FindForUpdateAsync(delivery.Id, cancellationToken).ConfigureAwait(false)
             is not { Status: ErasureStatus.Failed } held)
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Failure(Error.From(ErrorCodes.ErasureNotFailed)), Result.Failure);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.ErasureNotFailed));
         }
 
         if (delivery.Confirmed.Contains(ErasureLedgerSubscriber.Called))

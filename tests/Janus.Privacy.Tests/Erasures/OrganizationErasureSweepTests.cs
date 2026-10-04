@@ -222,7 +222,33 @@ public sealed class OrganizationErasureSweepTests : IAsyncDisposable
             swept.Match(_ => null, error => (ErrorCode?)error.Code));
         Assert.Equal(1, _work.Opened);
         Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.False(_work.Open);
         Assert.Empty(_events.Published);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: an erasure that ended no membership and whose own event row
+    /// cannot be written is refused after its unit of work began, and rolls it back.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AnErasureThatCannotBeAnnouncedRollsBackAsync()
+    {
+        _organizations.Deletes(Acme, Noon);
+
+        _clock.Advance(Settings.OrganizationDeletionGrace.Default + TimeSpan.FromMinutes(1));
+
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Result<int> swept = await Sweep.SweepAsync(Sweeper, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            swept.Match(_ => null, error => (ErrorCode?)error.Code));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>
