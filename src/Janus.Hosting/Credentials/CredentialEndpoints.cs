@@ -16,9 +16,10 @@ namespace Janus.Hosting.Credentials;
 /// <remarks>
 /// Implements CONV-DESIGN-006, API-CONV-001, LIB-API-005, AUTH-FACT-001,
 /// AUTH-FACT-002b, AUTH-FACT-007, AUTH-FACT-008, AUTH-STEP-007 and AUTH-RECOV-006.
-/// Each of these answers to a session or to the enrolment session the browser
-/// carries, and to nothing else: which of the two it is, is what the session
-/// resolution stage established and never what the request says (D-148).
+/// Each of these answers to a session, and those chapter 09 lists at
+/// <c>POST /enrol/begin</c> to the enrolment session the browser carries too: which
+/// of the two it is, is what the session resolution stage established and never what
+/// the request says (D-148, D-189).
 /// </remarks>
 internal static class CredentialEndpoints
 {
@@ -36,35 +37,34 @@ internal static class CredentialEndpoints
 
         RouteGroupBuilder account = endpoints.MapGroup("/account");
 
-        _ = account.MapPost("/password", SetPasswordAsync)
+        _ = EnrolmentRoute.On(account.MapPost("/password", SetPasswordAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.Denied, ErrorCodes.PasswordBlocklisted, ErrorCodes.PasswordTooShort,
                     ErrorCodes.PasswordTooLong))
             .Produces(StatusCodes.Status204NoContent);
-        _ = account.MapDelete("/credentials/{id}", RemoveAsync)
+        _ = SessionRequired.On(account.MapDelete("/credentials/{id}", RemoveAsync))
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.SessionExpired, ErrorCodes.CredentialLastSecondFactor,
-                    ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied)
+                    ErrorCodes.CredentialLastSecondFactor, ErrorCodes.StepUpRequired,
+                    ErrorCodes.Restricted, ErrorCodes.Denied)
                 .Binding<AuthenticatorId>("id"))
             .Produces(StatusCodes.Status204NoContent);
-        _ = account.MapPost("/credentials/{id}/upgrade", UpgradeAsync)
+        _ = SessionRequired.On(account.MapPost("/credentials/{id}/upgrade", UpgradeAsync))
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
-                    ErrorCodes.Denied, ErrorCodes.CredentialNotFound,
-                    ErrorCodes.CredentialNotUpgradable)
+                    ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied,
+                    ErrorCodes.CredentialNotFound, ErrorCodes.CredentialNotUpgradable)
                 .Binding<AuthenticatorId>("id"))
             .Produces<CredentialCeremonyView>();
-        _ = account.MapPost("/factors/totp/begin", BeginGeneratorAsync)
+        _ = EnrolmentRoute.On(account.MapPost("/factors/totp/begin", BeginGeneratorAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.Denied, ErrorCodes.FactorPasswordRequired))
             .Produces<GeneratorEnrolmentView>();
-        _ = account.MapPost("/factors/totp/confirm", ConfirmGeneratorAsync)
+        _ = EnrolmentRoute.On(account.MapPost("/factors/totp/confirm", ConfirmGeneratorAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
@@ -76,14 +76,14 @@ internal static class CredentialEndpoints
                     ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied,
                     ErrorCodes.FactorPasswordRequired))
             .Produces<RecoveryCodesView>();
-        _ = account.MapPost("/recoverycodes/exported", MarkRecoveryCodesExportedAsync)
+        _ = EnrolmentRoute.On(account.MapPost("/recoverycodes/exported", MarkRecoveryCodesExportedAsync))
             .Declares(EndpointDeclaration
                 .Answering(ErrorCodes.SessionExpired, ErrorCodes.Restricted, ErrorCodes.FactorNotEnrolled))
             .Produces(StatusCodes.Status204NoContent);
 
         RouteGroupBuilder ceremonies = endpoints.MapGroup("/auth/webauthn/register");
 
-        _ = ceremonies.MapPost("/begin", BeginKeyAsync)
+        _ = EnrolmentRoute.On(ceremonies.MapPost("/begin", BeginKeyAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
@@ -91,7 +91,7 @@ internal static class CredentialEndpoints
                     ErrorCodes.WebAuthnAlgorithmNotAllowed, ErrorCodes.WebAuthnUserVerificationRequired,
                     ErrorCodes.CredentialLabelInvalid))
             .Produces<CredentialCeremonyView>();
-        _ = ceremonies.MapPost("/complete", CompleteKeyAsync)
+        _ = EnrolmentRoute.On(ceremonies.MapPost("/complete", CompleteKeyAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
@@ -200,6 +200,8 @@ internal static class CredentialEndpoints
 
     // AUTH-FACT-002b: the ceremony the upgrade opens is completed at the same place
     // any other is, because it is the same ceremony.
+    // BFF-ORDER-001, D-189: the upgrade is not among the routes an enrolment session
+    // is resolved on, so only the holder of a session asks here.
     private static async Task<IResult> UpgradeAsync(
         AuthenticatorId id,
         ICredentials credentials,
@@ -207,8 +209,9 @@ internal static class CredentialEndpoints
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(credentials);
+        ArgumentNullException.ThrowIfNull(browser);
 
-        return Asking(browser) is not CredentialAuthority authority
+        return Holding(browser) is not CredentialAuthority authority
             ? Nobody()
             : Answers.Of(
                 await credentials
@@ -328,7 +331,7 @@ internal static class CredentialEndpoints
                 Nothing);
         }
 
-        return browser.FirstContact?.Enrolment is not EnrolmentSessionId opened
+        return browser.Enrolment is not EnrolmentSessionId opened
             ? Nobody()
             : Answers.Of(
                 await credentials.MarkRecoveryCodesExportedAsync(opened, cancellationToken)
@@ -339,6 +342,8 @@ internal static class CredentialEndpoints
     // AUTH-RECOV-007, D-141: a removal that would lower what the account reaches
     // suspends the credential for the notified window instead, which the contract
     // says with the code that carries when the window ends.
+    // BFF-ORDER-001, D-189: the removal is not among the routes an enrolment session
+    // is resolved on, so only the holder of a session asks here.
     private static async Task<IResult> RemoveAsync(
         AuthenticatorId id,
         ICredentials credentials,
@@ -347,9 +352,10 @@ internal static class CredentialEndpoints
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(credentials);
+        ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(context);
 
-        return Asking(browser) is not CredentialAuthority authority
+        return Holding(browser) is not CredentialAuthority authority
             ? Nobody()
             : Answers.Of(
                 await credentials
@@ -376,14 +382,14 @@ internal static class CredentialEndpoints
             contentType: null,
             StatusCodes.Status200OK);
 
-    // D-148: a session, or the enrolment session the browser's first contact carries,
-    // and never both at once.
+    // D-148, D-189: a session, or the enrolment session stage 5 resolved on this
+    // route, and never both at once.
     private static CredentialAuthority? Asking(RequestSession browser)
     {
         ArgumentNullException.ThrowIfNull(browser);
 
         return Holding(browser)
-            ?? (browser.FirstContact?.Enrolment is EnrolmentSessionId opened
+            ?? (browser.Enrolment is EnrolmentSessionId opened
                 ? CredentialAuthority.Of(opened)
                 : null);
     }

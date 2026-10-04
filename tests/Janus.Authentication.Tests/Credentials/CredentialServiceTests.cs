@@ -919,21 +919,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
         var authority = CredentialAuthority.Of((await OpenedAsync(subject)).Id);
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
-        ErrorCode[] refused =
-        [
-            Refused(await Service.RemoveAsync(authority, generator.Credential, Source, cancellationToken)),
-            Refused(await Service.UpgradeKeyAsync(authority, generator.Credential, cancellationToken)),
-            Refused(await Service.GenerateRecoveryCodesAsync(authority, cancellationToken)),
-            Refused(await Service.LinkableAsync(authority, Factor.Google, cancellationToken)),
-            Refused(await Service.LinkAsync(
-                authority,
-                Factor.Google,
-                "provider-subject",
-                Label("Google"),
-                Source,
-                cancellationToken)),
-            Refused(await Service.UnlinkAsync(authority, Factor.Google, Source, cancellationToken)),
-        ];
+        ErrorCode[] refused = await UnreachedAsync(authority, generator.Credential, cancellationToken);
 
         Assert.All(refused, code => Assert.Equal(ErrorCodes.Denied, code));
         Assert.NotNull(await _authenticators.FindAsync(generator.Credential, cancellationToken));
@@ -942,15 +928,14 @@ public sealed class CredentialServiceTests : IAsyncDisposable
 
     /// <summary>
     /// AUTH-RECOV-002, D-188: an enrolment session that has ended is a session that
-    /// has ended wherever it is presented, at the operations it reached and at those
-    /// it never did.
+    /// has ended at every operation it reached, and nothing of the account changes.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_RECOV_002_AnEndedEnrolmentSessionIsExpiredWhereverPresentedAsync()
+    public async Task AUTH_RECOV_002_AnEndedEnrolmentSessionIsExpiredAtWhatItReachedAsync()
     {
         (SubjectId subject, SessionId session) = await SignedInAsync();
-        EnrolledCredential generator = await ConfirmedAsync(subject, session);
+        _ = await ConfirmedAsync(subject, session);
         EnrolmentSession opened = await OpenedAsync(subject);
         var authority = CredentialAuthority.Of(opened.Id);
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -962,15 +947,37 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             Refused(await Service.BeginKeyAsync(authority, Factor.Passkey, cancellationToken)),
             Refused(await Service.BeginGeneratorAsync(authority, "Phone", cancellationToken)),
             Refused(await Service.MarkRecoveryCodesExportedAsync(opened.Id, cancellationToken)),
-            Refused(await Service.RemoveAsync(authority, generator.Credential, Source, cancellationToken)),
-            Refused(await Service.UpgradeKeyAsync(authority, generator.Credential, cancellationToken)),
-            Refused(await Service.GenerateRecoveryCodesAsync(authority, cancellationToken)),
-            Refused(await Service.LinkableAsync(authority, Factor.Google, cancellationToken)),
-            Refused(await Service.UnlinkAsync(authority, Factor.Google, Source, cancellationToken)),
         ];
 
         Assert.All(refused, code => Assert.Equal(ErrorCodes.SessionExpired, code));
         Assert.Null((await _sets.FindAsync(subject, cancellationToken))!.ExportedAt);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002 AC3, D-189: an operation chapter 09 does not list for the
+    /// enrolment session refuses a context of its authority first, before any load, so
+    /// one that stands and one that has ended are refused alike and the link the
+    /// session stands on is never read.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AC3_AnEnrolmentSessionsAuthorityIsDeniedBeforeAnyLoadAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        EnrolledCredential generator = await ConfirmedAsync(subject, session);
+        var authority = CredentialAuthority.Of((await OpenedAsync(subject)).Id);
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        int read = _links.SessionReads;
+
+        ErrorCode[] standing = await UnreachedAsync(authority, generator.Credential, cancellationToken);
+        _clock.Advance(TimeSpan.FromHours(2));
+        ErrorCode[] ended = await UnreachedAsync(authority, generator.Credential, cancellationToken);
+
+        Assert.All(standing, code => Assert.Equal(ErrorCodes.Denied, code));
+        Assert.All(ended, code => Assert.Equal(ErrorCodes.Denied, code));
+        Assert.Equal(read, _links.SessionReads);
+        Assert.NotNull(await _authenticators.FindAsync(generator.Credential, cancellationToken));
         Assert.False(_work.Open);
     }
 
@@ -1769,6 +1776,27 @@ public sealed class CredentialServiceTests : IAsyncDisposable
 
         await _live.RecordAsync(live, TestContext.Current.CancellationToken);
     }
+
+    // Every credential operation chapter 09 does not list for the enrolment session
+    // (POST /enrol/begin), asked under one authority, and what each answered.
+    private async ValueTask<ErrorCode[]> UnreachedAsync(
+        CredentialAuthority authority,
+        AuthenticatorId credential,
+        CancellationToken cancellationToken) =>
+        [
+            Refused(await Service.RemoveAsync(authority, credential, Source, cancellationToken)),
+            Refused(await Service.UpgradeKeyAsync(authority, credential, cancellationToken)),
+            Refused(await Service.GenerateRecoveryCodesAsync(authority, cancellationToken)),
+            Refused(await Service.LinkableAsync(authority, Factor.Google, cancellationToken)),
+            Refused(await Service.LinkAsync(
+                authority,
+                Factor.Google,
+                "provider-subject",
+                Label("Google"),
+                Source,
+                cancellationToken)),
+            Refused(await Service.UnlinkAsync(authority, Factor.Google, Source, cancellationToken)),
+        ];
 
     private async ValueTask<EnrolmentSession> OpenedAsync(SubjectId subject)
     {

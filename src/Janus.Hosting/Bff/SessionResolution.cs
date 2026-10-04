@@ -21,7 +21,10 @@ namespace Janus.Hosting.Bff;
 /// and the request goes on as the request of a browser that carried nothing: a
 /// person whose session ended has to reach the endpoints that sign them in again.
 /// What resolving it answered is kept for the stage that requires a session, which
-/// is the one place that refuses on account of there being none.
+/// is the one place that refuses on account of there being none. An enrolment session
+/// is resolved only on the routes chapter 09 lists for it at <c>POST /enrol/begin</c>:
+/// elsewhere the request goes on as one that carried none, and the browser keeps what
+/// it carries (D-189).
 /// </remarks>
 internal sealed class SessionResolution(
     SessionService sessions,
@@ -84,9 +87,16 @@ internal sealed class SessionResolution(
             .FindAsync(secret, cancellationToken)
             .ConfigureAwait(false);
 
-        if (contact is not null)
+        if (contact is null)
         {
-            resolved.Resolved(contact, secret);
+            return;
+        }
+
+        resolved.Resolved(contact, secret);
+
+        if (contact.Enrolment is EnrolmentSessionId enrolment && EnrolmentRoute.Is(context.GetEndpoint()))
+        {
+            resolved.Resolved(enrolment);
         }
     }
 }

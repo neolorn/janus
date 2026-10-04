@@ -1103,9 +1103,10 @@ internal sealed class CredentialService(
     }
 
     // Who is acting in an operation the enrolment session does not reach (chapter 09
-    // POST /enrol/begin, D-188): a session, and no other authority. An enrolment session
-    // that stands is refused as a missing permission is, and one that has ended as a
-    // session that has ended, before anything of the account is read.
+    // POST /enrol/begin): a session, and no other authority. CONV-DESIGN-002, D-189:
+    // a context of an enrolment session's authority is refused as a missing permission
+    // is, first in the gate step and before any load, so the session is not read and
+    // one that has ended is refused the same.
     private async ValueTask<Result<Acting>> HoldingAsync(
         CredentialAuthority authority,
         StepUpAction action,
@@ -1113,15 +1114,9 @@ internal sealed class CredentialService(
     {
         ArgumentNullException.ThrowIfNull(authority);
 
-        if (authority.Enrolment is EnrolmentSessionId opened)
-        {
-            return Result.Failure<Acting>(Error.From(
-                await enrolments.FindAsync(opened, cancellationToken).ConfigureAwait(false) is null
-                    ? ErrorCodes.SessionExpired
-                    : ErrorCodes.Denied));
-        }
-
-        return await SignedInAsync(authority, action, cancellationToken).ConfigureAwait(false);
+        return authority.Enrolment is null
+            ? await SignedInAsync(authority, action, cancellationToken).ConfigureAwait(false)
+            : Result.Failure<Acting>(Error.From(ErrorCodes.Denied));
     }
 
     private async ValueTask<Result<Acting>> SignedInAsync(

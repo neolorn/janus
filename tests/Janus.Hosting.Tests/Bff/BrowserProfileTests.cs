@@ -447,7 +447,10 @@ public sealed class BrowserProfileTests : IDisposable
     /// once every stage has run, to answer a path none serves. The fifth is the
     /// declaration of CONV-DESIGN-006, which the stage that answers a request the
     /// framework could not bind reads after the endpoint was reached, to name the value
-    /// that did not parse; it enforces nothing and excuses nothing. The one stage that
+    /// that did not parse; it enforces nothing and excuses nothing. The sixth is the
+    /// mark of a route an enrolment session reaches, which stage 5 reads to resolve
+    /// that session there and nowhere else (BFF-ORDER-001); a route without it is
+    /// given less, and none is taken out of a stage by it. The one stage that
     /// reads a key is the flood limit of stage 4, which reads its two limits and nothing
     /// else (BFF-ORDER-001), runs before the token is checked and either refuses the
     /// request or hands it on to every stage after it.
@@ -459,11 +462,13 @@ public sealed class BrowserProfileTests : IDisposable
             [
                 "EndpointDeclaration.cs",
                 "EndpointDeclarations.cs",
+                "EnrolmentRoute.cs",
                 "ErrorTranslation.cs",
                 "MalformedRequest.cs",
                 "SensitiveBodyLogging.cs",
                 "SessionRequired.cs",
                 "SessionRequirement.cs",
+                "SessionResolution.cs",
             ],
             Reading("GetEndpoint", "Metadata"));
         Assert.DoesNotContain("Metadata", Repository.Source("ErrorTranslation"), StringComparison.Ordinal);
@@ -583,7 +588,9 @@ public sealed class BrowserProfileTests : IDisposable
     /// reads no metadata, only whether an endpoint was found, after every stage. The
     /// declaration of CONV-DESIGN-006 is read by the stage that answers a request the
     /// framework could not bind, after the endpoint was reached, to name the value that
-    /// did not parse; it enforces no token and excuses none.
+    /// did not parse; it enforces no token and excuses none. The mark of a route an
+    /// enrolment session reaches is read by stage 5 to resolve that session there and
+    /// nowhere else (BFF-ORDER-001); the token is checked on it as on any other.
     /// </summary>
     [Fact]
     public void BFF_CSRF_001_AC2_NoEndpointCanBeExcludedByConfigurationOrAttribute()
@@ -592,11 +599,13 @@ public sealed class BrowserProfileTests : IDisposable
             [
                 "EndpointDeclaration.cs",
                 "EndpointDeclarations.cs",
+                "EnrolmentRoute.cs",
                 "ErrorTranslation.cs",
                 "MalformedRequest.cs",
                 "SensitiveBodyLogging.cs",
                 "SessionRequired.cs",
                 "SessionRequirement.cs",
+                "SessionResolution.cs",
             ],
             Reading("GetEndpoint", "Metadata"));
         Assert.DoesNotContain("Metadata", Repository.Source("ErrorTranslation"), StringComparison.Ordinal);

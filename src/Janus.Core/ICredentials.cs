@@ -80,8 +80,8 @@ public interface ICredentials
     /// <returns>
     /// What the browser is asked for, or <c>auth.stepup.required</c>,
     /// <c>auth.factor.rejected</c> where the entry is not a second-factor key, or
-    /// <c>authz.denied</c> for an enrolment session, which reaches no upgrade, and
-    /// <c>auth.session.expired</c> for one that has ended.
+    /// <c>authz.denied</c> for an enrolment session, standing or ended, which reaches
+    /// no upgrade and is refused before anything is read.
     /// </returns>
     ValueTask<Result<CredentialCeremony>> UpgradeKeyAsync(
         CredentialAuthority authority,
@@ -132,8 +132,8 @@ public interface ICredentials
     /// <returns>
     /// The codes, or <c>auth.stepup.required</c>, or
     /// <c>auth.factor.notpermitted</c> where the account holds no password
-    /// (AUTH-RECOV-006), or <c>authz.denied</c> for an enrolment session, which
-    /// generates no set, and <c>auth.session.expired</c> for one that has ended.
+    /// (AUTH-RECOV-006), or <c>authz.denied</c> for an enrolment session, standing or
+    /// ended, which generates no set and is refused before anything is read.
     /// </returns>
     ValueTask<Result<GeneratedRecoveryCodes>> GenerateRecoveryCodesAsync(
         CredentialAuthority authority,
@@ -186,8 +186,8 @@ public interface ICredentials
     /// <c>auth.credential.lastsecondfactor</c> carrying <c>invalidatesAt</c> where the
     /// window was opened instead, or <c>auth.stepup.required</c> or
     /// <c>auth.credential.notfound</c>, or <c>authz.denied</c> for an enrolment
-    /// session, which removes nothing, and <c>auth.session.expired</c> for one that
-    /// has ended.
+    /// session, standing or ended, which removes nothing and is refused before
+    /// anything is read.
     /// </returns>
     ValueTask<Result> RemoveAsync(
         CredentialAuthority authority,

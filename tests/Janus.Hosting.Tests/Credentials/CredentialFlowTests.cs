@@ -13,6 +13,7 @@ using Janus.Authentication.Recovery;
 using Janus.Authentication.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Bff;
 using Microsoft.AspNetCore.Http;
 using OtpNet;
 using Xunit;
@@ -475,26 +476,45 @@ public sealed class CredentialFlowTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-RECOV-002 and chapter 09 section 6: removing a credential and upgrading a
-    /// key are not among the routes the enrolment session reaches, and each refuses it
-    /// as a missing permission is refused.
+    /// BFF-ORDER-001 stages 5 and 8, chapter 09 section 3, D-189: an enrolment session
+    /// is resolved only on the routes the chapter lists for it. On any other route that
+    /// requires a session, the removal of a credential and the upgrade of a key among
+    /// them, the browser that carries it and no session is answered as one holding
+    /// none, with no details, and keeps what it carries: the enrolment still stands on
+    /// its own routes afterwards.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task AUTH_RECOV_002_TheEnrolmentSessionIsDeniedRemovalAndUpgradeAsync()
+    public async Task BFF_ORDER_001_AnEnrolmentSessionIsNoSessionOnARouteItDoesNotReachAsync()
     {
         _ = await SignedInAsync();
         await LinkedAsync(_deployment.Directory.Created[^1].Subject);
         Browser browser = await ArrivedAsync();
         _ = await browser.SendAsync("POST", "/enrol/begin", ("token", Link));
+        string carried = browser.Cookies[BrowserCookies.PreAuthentication];
 
-        Answer removal = await browser.SendAsync("DELETE", "/account/credentials/" + Guid.NewGuid());
-        Answer upgrade = await browser.SendAsync("POST", "/account/credentials/" + Guid.NewGuid() + "/upgrade");
+        Answer[] elsewhere =
+        [
+            await browser.SendAsync("DELETE", "/account/credentials/" + Guid.NewGuid()),
+            await browser.SendAsync("POST", "/account/credentials/" + Guid.NewGuid() + "/upgrade"),
+            await browser.SendAsync("PATCH", "/account/credentials/" + Guid.NewGuid(), ("label", Label)),
+            await browser.SendAsync("POST", "/account/recoverycodes"),
+            await browser.SendAsync("GET", "/account"),
+            await browser.SendAsync("GET", "/account/credentials"),
+            await browser.SendAsync("POST", "/recovery/report-loss", ("credentialId", Guid.NewGuid().ToString())),
+        ];
+        Answer reached = await browser.SendAsync("POST", "/account/password", ("password", Replacement));
 
-        Assert.Equal(StatusCodes.Status403Forbidden, removal.Status);
-        Assert.Equal(ErrorCodes.Denied.ToString(), removal.Text("code"));
-        Assert.Equal(StatusCodes.Status403Forbidden, upgrade.Status);
-        Assert.Equal(ErrorCodes.Denied.ToString(), upgrade.Text("code"));
+        Assert.All(
+            elsewhere,
+            answer =>
+            {
+                Assert.Equal(StatusCodes.Status401Unauthorized, answer.Status);
+                Assert.Equal(ErrorCodes.SessionExpired.ToString(), answer.Text("code"));
+                Assert.Empty(answer.Json().GetProperty("details").EnumerateObject());
+            });
+        Assert.Equal(carried, browser.Cookies[BrowserCookies.PreAuthentication]);
+        Assert.Equal(StatusCodes.Status204NoContent, reached.Status);
     }
 
     /// <summary>
