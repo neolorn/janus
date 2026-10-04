@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Janus.Authentication;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Identifiers;
 using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
@@ -495,6 +496,69 @@ public sealed class AccountApplicationTests : IAsyncDisposable
         Assert.Equal(
             "This laptop",
             Single(await browser.SendAsync("GET", "/account/credentials")).GetProperty("label").GetString());
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the account committed after the gate step
+    /// and before the first write refuses an identifier's addition, verification,
+    /// promotion, backup setting, removal and replacement, and the identifiers stay as
+    /// they stood.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesEachIdentifierChangeAsync()
+    {
+        const string third = "third@example.test";
+
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = Registered();
+        Guid second = _deployment.Identifiers.Verified(subject, IdentifierKind.Email, Second).Value;
+        string held = Emails(await browser.SendAsync("GET", "/account")).GetRawText();
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync("POST", "/account/identifiers", ("kind", "email"), ("value", third)));
+
+        Assert.Equal(held, Emails(await browser.SendAsync("GET", "/account")).GetRawText());
+        Assert.Equal(
+            StatusCodes.Status202Accepted,
+            (await browser.SendAsync("POST", "/account/identifiers", ("kind", "email"), ("value", third))).Status);
+
+        HeldIdentifiers staged = await _deployment.Identifiers.HeldAsync(subject, TestContext.Current.CancellationToken);
+        Guid added = staged.All.Single(each => !each.IsVerified).Id.Value;
+        Guid primary = staged.All.Single(each => each.IsPrimary && each.Kind is IdentifierKind.Email).Id.Value;
+        string code = Flow.Code(_deployment, IdentifierKind.Email);
+
+        held = Emails(await browser.SendAsync("GET", "/account")).GetRawText();
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync("POST", "/account/identifiers/" + added + "/verify", ("code", code)));
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync("POST", "/account/identifiers/" + second + "/primary"));
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync("PUT", "/account/identifiers/backup", ("kind", "email"), ("setting", "primary-only")));
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync("DELETE", "/account/identifiers/" + second));
+
+        _deployment.Configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => browser.SendAsync(
+                "PUT",
+                "/account/identifiers/" + primary + "/replace",
+                ("value", "replaced@example.test")));
+
+        Assert.Equal(held, Emails(await browser.SendAsync("GET", "/account")).GetRawText());
+        Assert.Equal(
+            (await _deployment.Identifiers.HeldAsync(subject, TestContext.Current.CancellationToken))
+                .NoticeSet
+                .Select(each => each.Id),
+            staged.NoticeSet.Select(each => each.Id));
     }
 
     private SubjectId Registered() => _deployment.Directory.Created[^1].Subject;

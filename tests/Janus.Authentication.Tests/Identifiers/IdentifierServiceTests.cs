@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
@@ -35,6 +36,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private const string Primary = "primary@example.test";
     private const string Second = "second@example.test";
     private const string Third = "third@example.test";
+    private const string Fourth = "fourth@example.test";
     private const string Number = "+441632960011";
 
     // IDN-ACCT-005: a Cyrillic a inside an otherwise Latin word.
@@ -780,6 +782,72 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the account committed after the gate step
+    /// and before the first write refuses an addition, a verification, a promotion, a
+    /// backup setting, a removal and a replacement, each inside its unit of work, which
+    /// rolls back and leaves the identifiers as they stood.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesEachIdentifierChangeAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        IdentifierId primary = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+        SessionId asking = Stepped();
+
+        await RestrictedSinceTheGateStepAsync(
+            async () => Refused(await Service.AddAsync(
+                Acting,
+                asking,
+                IdentifierKind.Email,
+                Third,
+                Source,
+                cancellationToken)));
+
+        Assert.Empty(_pending.All);
+        Assert.Equal(2, (await HeldAsync()).Count);
+
+        await AddedAsync(Third);
+
+        IdentifierId third = Named(await HeldAsync(), Third).Id;
+        string code = Code(third);
+        string[] reached = [.. (await NoticeSetAsync()).Select(identifier => identifier.Canonical)];
+
+        await RestrictedSinceTheGateStepAsync(
+            async () => Refused(await Service.VerifyAsync(Acting, asking, third, code, Source, cancellationToken)));
+
+        Assert.False(Named(await HeldAsync(), Third).IsVerified);
+        Assert.Equal(0, Outstanding(third).Attempts);
+
+        await RestrictedSinceTheGateStepAsync(
+            async () => Refused(await Service.MakePrimaryAsync(Acting, second, Source, cancellationToken)));
+        await RestrictedSinceTheGateStepAsync(
+            async () => Refused(await Service.SetBackupAsync(
+                Acting,
+                IdentifierKind.Email,
+                BackupChoice.PrimaryOnly,
+                named: null,
+                Source,
+                cancellationToken)));
+        await RestrictedSinceTheGateStepAsync(
+            async () => Refused(await Service.RemoveAsync(Acting, asking, second, Source, cancellationToken)));
+
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        await RestrictedSinceTheGateStepAsync(
+            async () => Refused(await Service.ReplaceAsync(Acting, asking, primary, Fourth, Source, cancellationToken)));
+
+        IReadOnlyList<HeldIdentifier> held = await HeldAsync();
+
+        Assert.Equal(third, Assert.Single(_pending.All).Identifier);
+        Assert.Equal(3, held.Count);
+        Assert.False(Named(held, Second).IsPrimary);
+        Assert.Equal(reached, (await NoticeSetAsync()).Select(identifier => identifier.Canonical));
+        Assert.DoesNotContain(_notifications.Mail, sent => sent.Message is MessageKind.IdentifierRemoved);
+    }
+
+    /// <summary>
     /// REG-IDENT-001 AC1: the one verified email an account holds is its primary,
     /// and no removal takes it away.
     /// </summary>
@@ -1512,6 +1580,25 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         Assert.False(_work.Open);
         Assert.Equal(0, _work.OutermostCommitted);
         Assert.Equal(1, _work.RolledBack);
+    }
+
+    // AUTHZ-GATE-006 AC3: the change made with the account restricted in the moment
+    // before the next unit of work begins, which is after the change's gate step. It is
+    // refused as the gate refuses, the unit of work it began is rolled back and none is
+    // left open; the restriction is lifted once the change has answered.
+    private async ValueTask RestrictedSinceTheGateStepAsync(Func<ValueTask<ErrorCode>> change)
+    {
+        int rolledBack = _work.RolledBack;
+
+        _restriction.Admitted = admitted => _work.Meanwhile = () => _restriction.Restrict(admitted);
+
+        ErrorCode refused = await change();
+
+        _restriction.Lift(_person);
+
+        Assert.Equal(ErrorCodes.Restricted, refused);
+        Assert.Equal(rolledBack + 1, _work.RolledBack);
+        Assert.False(_work.Open);
     }
 
     private SessionId Stepped(SubjectId subject) => Opened(_clock.GetUtcNow(), subject);
