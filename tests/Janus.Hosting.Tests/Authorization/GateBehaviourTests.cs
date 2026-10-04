@@ -603,6 +603,55 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
+    /// AUTHZ-CONCEAL-004 AC4, CONV-DESIGN-002 AC5, D-183: the refusal that takes its
+    /// actor's count past <c>alerting.denials.threshold</c> inside a transaction the
+    /// caller rolls back raises <c>denial-spike</c>, with its <c>AlertRaised</c> row,
+    /// whatever the caller's outcome.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_004_AC4_ASpikeRaisedInsideATransactionThatRollsBackStandsAsync()
+    {
+        Nested nested = await NestAsync();
+
+        for (int each = 0; each < Settings.AlertingDenialsThreshold.Default; each++)
+        {
+            Assert.False(await ChecksAsync(nested.Account, nested.Record));
+        }
+
+        Assert.Equal((0, 0), (await SpikesAsync(nested.Account), await AnnouncedAsync(nested.Account)));
+
+        _ = await RefusedInRolledBackWorkAsync(nested);
+
+        Assert.Equal((1, 1), (await SpikesAsync(nested.Account), await AnnouncedAsync(nested.Account)));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC6, AUTHZ-CONCEAL-004: two refusals of one actor made at once are
+    /// counted one after the other, the actor's refusals being held while each is
+    /// counted, so the one that passes the threshold raises the spike.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC6_TwoRefusalsAtOnceAreCountedOneAfterTheOtherAsync()
+    {
+        Nested nested = await NestAsync();
+
+        for (int each = 0; each < Settings.AlertingDenialsThreshold.Default - 1; each++)
+        {
+            Assert.False(await ChecksAsync(nested.Account, nested.Record));
+        }
+
+        bool[] admitted = await Task.WhenAll(
+            ChecksAsync(nested.Account, nested.Record),
+            ChecksAsync(nested.Account, nested.Record));
+
+        Assert.Equal([false, false], admitted);
+        Assert.Equal(Settings.AlertingDenialsThreshold.Default + 1, await DenialsRecordedAsync(nested.Account));
+        Assert.Equal(1, await SpikesAsync(nested.Account));
+    }
+
+    /// <summary>
     /// IDN-LIFE-009a, D-166: a grant in the administrative organization confers nothing
     /// on an account holding no current membership of it, and the same grant confers
     /// once the account holds one.
@@ -1827,6 +1876,20 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             WHERE condition = 'denial-spike' AND idempotency_key LIKE @key
             """,
             new { key = Alerts.Key(AlertCondition.DenialSpike, scope: null, actor) + "@%" });
+    }
+
+    // The AlertRaised rows the library announced for one account's spike, as the rows of
+    // its events table (OPS-ALERT-001, CONV-DESIGN-002).
+    private async Task<int> AnnouncedAsync(SubjectId account)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(
+            """
+            SELECT count(*)::int FROM identity.events
+            WHERE kind = 'AlertRaised' AND payload->>'IdempotencyKey' LIKE @key
+            """,
+            new { key = Alerts.Key(AlertCondition.DenialSpike, scope: null, account.ToString()) + "@%" });
     }
 
     // One refusal of background work acting for the deployment's organization under the

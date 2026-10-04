@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using Janus.Authorization.Model;
 using Janus.Authorization.Resources;
 using Janus.Core;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Janus.Authorization.Gate;
 
@@ -20,9 +21,9 @@ namespace Janus.Authorization.Gate;
 /// <param name="model">The host's declared domain, read for containment and concealment.</param>
 /// <param name="records">Where a record's organization is read from.</param>
 /// <param name="evaluator">Where a rendered rule is run.</param>
-/// <param name="audit">Where a refusal is recorded and read back.</param>
+/// <param name="audit">Where a recorded refusal is read back.</param>
 /// <param name="concealed">Where a refusal on a type that conceals is handed to the boundary.</param>
-/// <param name="spikes">Where each recorded refusal is counted against its actor.</param>
+/// <param name="scopes">Where the scope a refusal is recorded and counted in comes from.</param>
 /// <param name="subjects">Who the principal is, resolved once per operation.</param>
 /// <param name="gates">What an action's step-up gate still asks of the session.</param>
 /// <param name="exports">What an export operation asks beyond what the grants allow.</param>
@@ -45,7 +46,7 @@ internal sealed class AccessGate(
     IAccessEvaluator evaluator,
     IAccessAudit audit,
     IConcealedRefusals concealed,
-    DenialSpikes spikes,
+    IServiceScopeFactory scopes,
     SubjectSets subjects,
     StepUpGates gates,
     ExportOperations exports,
@@ -1233,8 +1234,17 @@ internal sealed class AccessGate(
             time.GetUtcNow(),
             grant);
 
-        await audit.RecordAsync(denial, cancellationToken).ConfigureAwait(false);
-        await spikes.WatchAsync(denial, cancellationToken).ConfigureAwait(false);
+        // AUTHZ-CONCEAL-004, D-183: the record is written, counted and, past the
+        // threshold, raised in a scope and a unit of work of its own, so it is committed
+        // before the caller is answered and stands whatever becomes of the caller's work.
+        AsyncServiceScope recording = scopes.CreateAsyncScope();
+
+        await using (recording.ConfigureAwait(false))
+        {
+            await recording.ServiceProvider.GetRequiredService<DenialRecording>()
+                .RecordAsync(denial, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         // AUTHZ-CONCEAL-001, BFF-ERR-003: on a type that conceals, what the caller is
         // answered is the boundary's, under this identifier, so it is the same answer

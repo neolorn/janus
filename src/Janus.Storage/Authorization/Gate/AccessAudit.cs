@@ -9,24 +9,34 @@ using Dapper;
 using Janus.Authorization.Gate;
 using Janus.Core;
 using Janus.Storage.Identity.Audit;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Janus.Storage.Authorization.Gate;
 
 /// <summary>
 /// The refusals and the exports the gate records, over the <c>audit_records</c> table.
 /// </summary>
+/// <param name="context">The scope's context, read for the transaction in progress.</param>
 /// <param name="connections">Where the statements take their connection from.</param>
-/// <param name="scopes">Where the scope a refusal is recorded in comes from.</param>
 /// <remarks>
 /// Implements AUTHZ-CONCEAL-004, AUTHZ-GATE-004, OPS-ALERT-006, CONV-LOG-005, CONV-LOG-006
-/// and CONV-DESIGN-003. A refusal is written in a scope of its own, outside any
-/// transaction the caller holds open, and committed as it is written, so a rollback of
-/// the caller's work leaves it standing (D-166); an export is the action's own record
-/// and stays in its transaction. Nothing here changes or removes a row.
+/// and CONV-DESIGN-003. Every row is written in the transaction of the scope this is
+/// resolved in: a refusal's in the unit of work the gate opens for its record in a scope
+/// of its own, outside any transaction the caller holds open, so a rollback of the
+/// caller's work leaves it standing (D-166, D-183); an export's in the action's own.
+/// Nothing here changes or removes a row.
 /// </remarks>
-internal sealed class AccessAudit(DataConnections connections, IServiceScopeFactory scopes) : IAccessAudit
+internal sealed class AccessAudit(StoreContext context, DataConnections connections) : IAccessAudit
 {
+    // AUTHZ-CONCEAL-004, D-183: a refusal is written and then counted against its actor's
+    // window, so two at once would each count the window without the other. The actor's
+    // refusals are held for the rest of the transaction; no read takes this lock.
+    private const string Hold =
+        """
+        SELECT pg_advisory_xact_lock(hashtextextended(
+            'identity.audit_records/authz.access.denied/' || CAST(@acting AS text) || '/' || COALESCE(CAST(@principal AS text), ''),
+            0));
+        """;
+
     private const string Permission = "permission";
     private const string ResourceType = "resourceType";
     private const string Resource = "resource";
@@ -89,46 +99,56 @@ internal sealed class AccessAudit(DataConnections connections, IServiceScopeFact
         """;
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    public async ValueTask HoldAsync(SubjectId acting, string? principal, CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("An actor's refusals are held only inside the transaction of their record.");
+        }
+
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
+
+        _ = await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                Hold,
+                new { acting = acting.Value, principal },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask RecordAsync(DeniedAccess denial, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(denial);
 
-        // AUTHZ-CONCEAL-004 AC4, D-166: the scope's connection holds no transaction, so
-        // the row is committed by the statement that writes it.
-        AsyncServiceScope recording = scopes.CreateAsyncScope();
+        AmbientConnection ambient = await connections.UseAsync(cancellationToken).ConfigureAwait(false);
 
-        await using (recording.ConfigureAwait(false))
-        {
-            AmbientConnection outside = await recording.ServiceProvider
-                .GetRequiredService<DataConnections>()
-                .UseAsync(cancellationToken)
-                .ConfigureAwait(false);
+        await ambient.Connection
+            .ExecuteAsync(new CommandDefinition(
+                Append,
+                new
+                {
+                    id = denial.Correlation.Value,
+                    category = VocabularyConverter<AuditCategory>.Write(AuditCategory.Security),
+                    at = denial.At.ToUniversalTime(),
+                    action = Denied.ToString(),
 
-            await outside.Connection
-                .ExecuteAsync(new CommandDefinition(
-                    Append,
-                    new
-                    {
-                        id = denial.Correlation.Value,
-                        category = VocabularyConverter<AuditCategory>.Write(AuditCategory.Security),
-                        at = denial.At.ToUniversalTime(),
-                        action = Denied.ToString(),
-
-                        // AUTHZ-CONCEAL-004, IDN-AUD-001: a refusal of background work
-                        // names the nil subject under both identities beside its
-                        // principal, as every row its work leaves does.
-                        acting = (denial.Acting ?? default).Value,
-                        effective = (denial.Effective ?? default).Value,
-                        principal = denial.Principal,
-                        reason = denial.PrincipalReason,
-                        breakGlassReason = denial.BreakGlassReason,
-                        organization = denial.Organization?.Value,
-                        details = Written(denial),
-                    },
-                    outside.Transaction,
-                    cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
-        }
+                    // AUTHZ-CONCEAL-004, IDN-AUD-001: a refusal of background work names
+                    // the nil subject under both identities beside its principal, as
+                    // every row its work leaves does.
+                    acting = (denial.Acting ?? default).Value,
+                    effective = (denial.Effective ?? default).Value,
+                    principal = denial.Principal,
+                    reason = denial.PrincipalReason,
+                    breakGlassReason = denial.BreakGlassReason,
+                    organization = denial.Organization?.Value,
+                    details = Written(denial),
+                },
+                ambient.Transaction,
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

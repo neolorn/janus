@@ -165,6 +165,12 @@ against the public contract of LIB-API-001.
   principal's refusals by its name, so each principal is an actor of its own and the
   alert names it; refusals recording the nil subject and no principal count as one
   actor.
+- The record of a gate refusal, the count of its actor's refusals and the `denial-spike`
+  alert that count raises, with its `AlertRaised` event, are written in one transaction
+  of their own, outside the caller's and committed at once, so a spike reached inside
+  work that rolls back is still raised. The actor's refusals are held while they are
+  counted, so two refusals at once are counted one after the other, and a spike that
+  cannot be written fails the record.
 - `no-emergency-credential` is raised by the hourly `emergency-credential` job for as
   long as no break-glass credential stands, including after one is spent, and stops only
   when one is generated.

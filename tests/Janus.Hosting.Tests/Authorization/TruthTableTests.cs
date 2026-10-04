@@ -91,6 +91,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a grant in the administrative organization, to a member of it", Decided.Allowed),
         ("a grant in the administrative organization, to an account holding no membership of it", Decided.Denied),
         ("a check by background work, which holds no grant", Decided.Denied),
+        ("a check refused inside work the caller rolls back", Decided.Denied),
     ];
 
     /// <summary>
@@ -647,9 +648,46 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                             cancellationToken))
                     .Match(() => Decided.Allowed, Refused);
 
+            case "a check refused inside work the caller rolls back":
+                return await RolledBackAsync(caller, deployment.Organization);
+
             default:
                 throw new ArgumentOutOfRangeException(nameof(scenario), scenario, "No such case.");
         }
+    }
+
+    // AUTHZ-CONCEAL-004 AC4: a check the caller makes inside a unit of work it then rolls
+    // back, decided as any other and resolving afterwards by the identifier it carried.
+    private async Task<Decided> RolledBackAsync(SubjectId caller, OrganizationId organization)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Result outcome;
+
+        await using (AsyncServiceScope working = host.Services.CreateAsyncScope())
+        {
+            IUnitOfWork work = working.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+            _ = await work.BeginAsync(cancellationToken);
+            outcome = await working.ServiceProvider.GetRequiredService<IAccessGate>()
+                .RequireAsync(AccessContext.Of(caller), HostPermissions.Publish, organization, cancellationToken);
+            await work.RollbackAsync();
+        }
+
+        if (outcome.Match<Error?>(() => null, error => error) is not Error refusal)
+        {
+            return Decided.Allowed;
+        }
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        AccessExplanation resolved = (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .ResolveOwnAsync(
+                    AccessContext.Of(caller),
+                    new AuditRecordId(refusal.Details["correlation"].GetGuid()),
+                    cancellationToken))
+            .Match(explained => explained, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        return resolved.Outcome is AccessOutcome.Denied ? Refused(refusal) : Decided.Allowed;
     }
 
     // IDN-LIFE-009a, D-166: the caller's grant in the administrative organization,

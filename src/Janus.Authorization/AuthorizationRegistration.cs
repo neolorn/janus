@@ -58,6 +58,7 @@ internal static class AuthorizationRegistration
         services.AddScoped<Derivations>();
         services.AddScoped<ReverseLookup>();
         services.AddScoped<DenialSpikes>();
+        services.AddScoped<DenialRecording>();
         services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();
 
         // AUTHZ-INHERIT-002: the host says where each of its records sits, and the
