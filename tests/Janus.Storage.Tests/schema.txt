@@ -509,6 +509,14 @@ table key_rotations
   constraint ck_key_rotations_retired CHECK (((retired_at IS NULL) OR (completed_at IS NOT NULL)))
   constraint ck_key_rotations_version CHECK ((version >= 1))
   constraint pk_key_rotations PRIMARY KEY (kind, version)
+table lawful_bases
+  column key text not null
+  column label text not null
+  column is_consent boolean not null
+  column requires_written_consent_for_sensitive boolean not null
+  column requires_assessment boolean not null
+  column is_objectable boolean not null
+  constraint pk_lawful_bases PRIMARY KEY (key)
 table legal_document_translations
   column document text not null
   column version text not null

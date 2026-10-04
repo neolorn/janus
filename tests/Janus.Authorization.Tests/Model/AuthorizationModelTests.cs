@@ -520,7 +520,7 @@ public sealed class AuthorizationModelTests
         new AuthorizationDeclarationBuilder()
             .RetentionFloor("identity", TimeSpan.FromDays(365))
             .LawfulBasis(Contract())
-            .LawfulBasis(new LawfulBasisDeclaration("consent", true, true, false, false))
+            .LawfulBasis(new LawfulBasisDeclaration("consent", "Consent", true, true, false, false))
             .Resource<HostDomain.Article>("article", article => article
                 .BelongsToOrganization()
                 .Purpose(purpose, basis, data: ["identity"])
@@ -554,7 +554,7 @@ public sealed class AuthorizationModelTests
                 .Purpose("collaboration", "contract", data: ["identity"]))
             .Build(),
         3 => new AuthorizationDeclarationBuilder()
-            .LawfulBasis(new LawfulBasisDeclaration("interest", false, false, true, true))
+            .LawfulBasis(new LawfulBasisDeclaration("interest", "Interest", false, false, true, true))
             .Resource<HostDomain.Article>("article", article => article
                 .BelongsToOrganization()
                 .Purpose("fraud-prevention", "interest"))
@@ -569,7 +569,37 @@ public sealed class AuthorizationModelTests
             .Build(),
     };
 
-    private static LawfulBasisDeclaration Contract() => new("contract", false, false, false, false);
+    /// <summary>
+    /// PRIV-BASIS-001 (D-183): a lawful basis list that names one key twice, or a basis
+    /// with an empty key or label, fails startup naming the list and the member.
+    /// </summary>
+    /// <param name="key">The key the second basis is declared under.</param>
+    /// <param name="label">Its label.</param>
+    /// <param name="field">The member the refusal names.</param>
+    [Theory]
+    [InlineData("contract", "Another contract", "key")]
+    [InlineData("", "No key", "key")]
+    [InlineData(" ", "No key", "key")]
+    [InlineData("interest", "", "label")]
+    [InlineData("interest", "  ", "label")]
+    public void PRIV_BASIS_001_AListNamingAKeyTwiceOrAnEmptyKeyOrLabelFailsStartup(
+        string key,
+        string label,
+        string field)
+    {
+        AuthorizationDeclaration declaration = new AuthorizationDeclarationBuilder()
+            .LawfulBasis(Contract())
+            .LawfulBasis(new LawfulBasisDeclaration(key, label, false, false, false, false))
+            .Build();
+
+        Error? refused = Assert.Throws<StartupException>(() => AuthorizationModel.Of(declaration)).Failure;
+
+        Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused?.Code);
+        Assert.Equal("lawfulBases", refused?.Details["declaration"].GetString());
+        Assert.Equal(field, refused?.Details["field"].GetString());
+    }
+
+    private static LawfulBasisDeclaration Contract() => new("contract", "Contract", false, false, false, false);
 
     private static string Source()
     {

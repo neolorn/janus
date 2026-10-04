@@ -92,7 +92,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
             after.Records,
             record => record.Purpose is "analytics");
 
-        Assert.Equal("contract", added.LawfulBasis);
+        Assert.Equal("Contract", added.LawfulBasis);
         Assert.Equal(["identity"], added.DataCategories);
         Assert.Equal(["customers"], added.SubjectCategories);
         Assert.True(added.NonSensitive);
@@ -672,6 +672,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
         AuthorizationDeclaration declared = Declaration.Declared()
             .LawfulBasis(new LawfulBasisDeclaration(
                 "legal-obligation",
+                "Legal obligation",
                 IsConsent: false,
                 RequiresWrittenConsentForSensitive: false,
                 RequiresAssessment: false,
@@ -691,7 +692,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
         ProcessingRegister after = Generated(await Records(declared)
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
-        Assert.Equal("legal-obligation", Row(after, books).LawfulBasis);
+        Assert.Equal("Legal obligation", Row(after, books).LawfulBasis);
         Assert.Equal(["statement P1826D"], Row(before, books).Retention);
         Assert.Equal(Row(before, books).Retention, Row(after, books).Retention);
         Assert.NotEmpty(_events.Of<ConsentChanged>());
@@ -809,8 +810,8 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
 
     /// <summary>
     /// PRIV-BASIS-001 AC2: the lawful basis column is the label the deployment
-    /// declared, so a deployment whose list reads differently emits its own words and
-    /// the library contributes none.
+    /// declared, never the key, so a deployment whose list reads differently emits its
+    /// own words and the library contributes none.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -819,12 +820,12 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
         ProcessingRegister register = Generated(await Records(Declaration.Declared().Build())
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
-        Assert.Equal("contract", Row(register, "performance").LawfulBasis);
-        Assert.Equal("agreement", Row(register, "marketing").LawfulBasis);
+        Assert.Equal("Contract", Row(register, "performance").LawfulBasis);
+        Assert.Equal("Agreement", Row(register, "marketing").LawfulBasis);
 
         AuthorizationDeclaration elsewhere = new AuthorizationDeclarationBuilder()
             .RetentionFloor("identity", TimeSpan.FromDays(365))
-            .LawfulBasis(new LawfulBasisDeclaration("art-6-1-b", false, false, false, false))
+            .LawfulBasis(new LawfulBasisDeclaration("art-6-1-b", "Performance of a contract", false, false, false, false))
             .Resource<Declaration.Mailing>("mailing", mailing => mailing
                 .BelongsToOrganization()
                 .Purpose("marketing", "art-6-1-b", data: ["identity"], subjects: ["customers"]))
@@ -833,7 +834,7 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
         ProcessingRegister other = Generated(await Records(elsewhere)
             .GenerateAsync(AccessContext.Of(Mona), TestContext.Current.CancellationToken));
 
-        Assert.Equal("art-6-1-b", Row(other, "marketing").LawfulBasis);
+        Assert.Equal("Performance of a contract", Row(other, "marketing").LawfulBasis);
     }
 
     /// <summary>

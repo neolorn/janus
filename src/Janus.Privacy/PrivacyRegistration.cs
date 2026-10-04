@@ -2,6 +2,7 @@ using System;
 using System.Security.Cryptography;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Privacy.Bases;
 using Janus.Privacy.Breaches;
 using Janus.Privacy.Consents;
 using Janus.Privacy.Documents;
@@ -69,6 +70,7 @@ internal static class PrivacyRegistration
         services.AddScoped<OrganizationErasureSweep>();
         services.AddScoped<IExports, ExportService>();
         services.AddScoped<IProcessingRecords, ProcessingRecordsService>();
+        services.AddScoped<LawfulBasisSeed>();
         services.AddScoped<IAuditTrail, AuditTrailService>();
         services.AddScoped(provider => new OutboxPublisher(
             provider.GetRequiredService<IOutboxStore>(),

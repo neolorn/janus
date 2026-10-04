@@ -1508,6 +1508,15 @@ against the public contract of LIB-API-001.
   `null` `detail` records none: `PrivacyRequestEntry.Detail` and
   `PrivacyRequest.Detail` are nullable, the `detail` column of `privacy_requests`
   takes null, and an empty text is never stored for none.
+- The declared lawful bases are held in `identity.lawful_bases` (`key`, `label` and
+  the four flags). The start writes the table before the server serves, in one
+  transaction that holds it: each declared basis is inserted or updated by its key and
+  every other row is deleted, so of two starts the later list stands whole.
+  `LawfulBasisDeclaration` gains `Label`, `LawfulBases.Default` carries the labels of
+  chapter 10 section 5.7, and the records of processing emit the label, not the key. A
+  list naming one key twice, or a basis with an empty key or label, fails startup with
+  `model.startup.declarationinvalid`, `details.declaration` `lawfulBases` and
+  `details.field` `key` or `label`.
 - `rotate-fingerprint-key --sealed` waits for everything that lapses on a clock of
   its own: it is refused with `model.rotation.notready` and `pending` while a sign-in
   in progress carries a fingerprint computed under a previous version, as it is for a

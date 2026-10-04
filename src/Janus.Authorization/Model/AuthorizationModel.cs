@@ -499,11 +499,19 @@ internal sealed class AuthorizationModel
     {
         var bases = new Dictionary<string, LawfulBasisDeclaration>(StringComparer.Ordinal);
 
+        // PRIV-BASIS-001 (D-183): the list is written into a table keyed by the key and
+        // read by its label, so a key named twice, and an empty key or label, are
+        // refused naming the member.
         foreach (LawfulBasisDeclaration basis in declaration.LawfulBases)
         {
-            if (!bases.TryAdd(basis.Key, basis))
+            if (string.IsNullOrWhiteSpace(basis.Key) || !bases.TryAdd(basis.Key, basis))
             {
-                throw Malformed("the lawful basis " + basis.Key + " is declared twice");
+                throw Unlisted("key");
+            }
+
+            if (string.IsNullOrWhiteSpace(basis.Label))
+            {
+                throw Unlisted("label");
             }
         }
 
@@ -814,6 +822,17 @@ internal sealed class AuthorizationModel
         new(
             "The authorization model is refused: " + value + ", because " + why + ".",
             Error.From(code, name, JsonSerializer.SerializeToElement(value)));
+
+    private static StartupException Unlisted(string field) =>
+        new(
+            "The authorization model is refused, because the lawful basis list names a key twice or a basis with an empty key or label.",
+            new Error(
+                ErrorCodes.StartupDeclarationInvalid,
+                new Dictionary<string, JsonElement>(capacity: 2, StringComparer.Ordinal)
+                {
+                    ["declaration"] = JsonSerializer.SerializeToElement("lawfulBases"),
+                    ["field"] = JsonSerializer.SerializeToElement(field),
+                }));
 
     private static StartupException Malformed(string why) =>
         new("The authorization model is refused, because " + why + ".");

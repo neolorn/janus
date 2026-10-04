@@ -347,7 +347,7 @@ internal sealed class ProcessingRecordsService(
             purpose.Name,
             purpose.DataCategories,
             purpose.SubjectCategories,
-            purpose.Basis.Key,
+            purpose.Basis.Label,
             Ordinary(purpose),
             purpose.SensitiveCategories.Count > 0,
             purpose.SensitiveCategories.Contains(SensitiveCategories.Children, StringComparer.Ordinal),

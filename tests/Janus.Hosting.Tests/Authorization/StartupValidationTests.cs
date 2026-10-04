@@ -1006,6 +1006,7 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
             typeof(RedirectValidationService),
             typeof(ProviderStartService),
             typeof(RelayValidationService),
+            typeof(LawfulBasisStartService),
         ];
 
         Assert.Equal(leading, provider.GetServices<IHostedService>().Take(leading.Length).Select(service => service.GetType()));

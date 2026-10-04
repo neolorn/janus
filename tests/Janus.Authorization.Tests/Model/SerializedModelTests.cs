@@ -98,8 +98,8 @@ public sealed class SerializedModelTests
             .RetentionFloor("identity", TimeSpan.FromDays(365))
             .Permission("article:edit")
             .Permission("article:read")
-            .LawfulBasis(new LawfulBasisDeclaration("interest", false, false, true, true))
-            .LawfulBasis(new LawfulBasisDeclaration("contract", false, false, false, false))
+            .LawfulBasis(new LawfulBasisDeclaration("interest", "Interest", false, false, true, true))
+            .LawfulBasis(new LawfulBasisDeclaration("contract", "Contract", false, false, false, false))
             .Relationship<HostDomain.Folder>(
                 "reviewer",
                 "folder",
