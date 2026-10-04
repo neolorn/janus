@@ -1,12 +1,14 @@
 using System;
+using System.Security.Cryptography;
 using Janus.Authentication.Registration;
 using Janus.Core;
 
 namespace Janus.Authentication.Identifiers;
 
 /// <summary>
-/// An identifier of a live account waiting to be proved: the one an add staged
-/// unverified, or the value a replace will swap in when it proves.
+/// A value a live account is waiting to prove: the one an add will write as an
+/// identifier when it verifies, or the one a replace will swap in. It holds the value
+/// until then, and the account holds no identifier for it.
 /// </summary>
 /// <remarks>
 /// Implements REG-IDENT-004, REG-IDENT-007 and REG-SESS-003. The verification itself
@@ -17,6 +19,8 @@ namespace Janus.Authentication.Identifiers;
 /// </remarks>
 internal sealed class PendingVerification
 {
+    private const int UuidLength = 16;
+
     private PendingVerification(
         SubjectId subject,
         SessionId? browser,
@@ -32,6 +36,12 @@ internal sealed class PendingVerification
         OldMustConfirm = oldMustConfirm;
         StagedAt = stagedAt;
     }
+
+    /// <summary>
+    /// What follows the UUID's bytes in the holder of a confirmation's record: the name
+    /// of the link that asks for the confirmation, as <c>10</c> spells it.
+    /// </summary>
+    public static ReadOnlySpan<byte> ConfirmationName => "identifier-confirm"u8;
 
     /// <summary>
     /// Whose identifier is waiting.
@@ -91,7 +101,43 @@ internal sealed class PendingVerification
         Staged.IsVerified && (!OldMustConfirm || OldConfirmedAt is not null);
 
     /// <summary>
-    /// Stages the verification of an identifier the account has just taken on.
+    /// The holder of the verification-code record a pending verification's code is
+    /// answered from: the SHA-256 of its UUID's sixteen bytes in the order of RFC 9562,
+    /// which is what the sweep computes in the database (AUTH-FACT-004).
+    /// </summary>
+    /// <param name="identifier">The identifier the pending verification is held under.</param>
+    /// <returns>The holder.</returns>
+    public static byte[] CodeHolder(IdentifierId identifier)
+    {
+        Span<byte> named = stackalloc byte[UuidLength];
+
+        _ = identifier.Value.TryWriteBytes(named, bigEndian: true, out _);
+
+        return SHA256.HashData(named);
+    }
+
+    /// <summary>
+    /// The holder of the record the displaced address's confirmation of a replace is
+    /// held in, which is one of its own beside the new address's code: the SHA-256 of
+    /// the same sixteen bytes followed by the name of the link that asks for it
+    /// (REG-IDENT-007, AUTH-FACT-004).
+    /// </summary>
+    /// <param name="identifier">The identifier the pending verification is held under.</param>
+    /// <returns>The holder.</returns>
+    public static byte[] ConfirmationHolder(IdentifierId identifier)
+    {
+        ReadOnlySpan<byte> confirmation = ConfirmationName;
+        Span<byte> named = stackalloc byte[UuidLength + confirmation.Length];
+
+        _ = identifier.Value.TryWriteBytes(named, bigEndian: true, out _);
+        confirmation.CopyTo(named[UuidLength..]);
+
+        return SHA256.HashData(named);
+    }
+
+    /// <summary>
+    /// Stages the verification of a value the account is adding, under the identifier
+    /// the verified identifier then keeps (REG-IDENT-004).
     /// </summary>
     /// <param name="subject">Whose it is.</param>
     /// <param name="browser">The session it was added from.</param>

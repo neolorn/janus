@@ -3664,6 +3664,8 @@ which D-162 does not reverse.
 `ModelTests.REG_ACCT_001_AC2_NoFieldExistsOutsideTheGroupsTheTableNames`, which carries
 the new table's columns and no longer the challenge's two.
 
+**Superseded by D-166.**
+
 ---
 
 ## 116. The configuration store stands, and the area's services are the container's
@@ -11925,6 +11927,8 @@ runs the sweep over the database; the reach itself is the constant `LongestSessi
 
 *Chapter text that should change.* AUTH-KEY-003 could say how long a consumed refresh
 token is kept, and chapter `20` how long a staged identifier verification stands.
+
+**Superseded by D-166.**
 
 ---
 

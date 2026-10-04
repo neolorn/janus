@@ -169,6 +169,7 @@ internal sealed class Deployment : IAsyncDisposable
 
         Signals = new RegistrationSignalsInMemory(Clock);
         Directory = new RegistrationDirectoryInMemory(Identifiers);
+        Identifiers.Pending = Pending;
         Grants = new OidcAuthorizationStoreInMemory(Tokens);
         Provider = new ProviderInMemory(this);
         Organizations = new Janus.Authentication.Tests.Organizations.OrganizationsInMemory(Memberships);
@@ -858,7 +859,13 @@ internal sealed class Deployment : IAsyncDisposable
 
         _ = services.AddSingleton<IPolicyRaiseStore>(Raises);
         _ = services.AddSingleton<IChallengeStore, ChallengeStoreInMemory>();
-        _ = services.AddSingleton<IVerificationCodeStore, VerificationCodeStoreInMemory>();
+
+        // The sweep of the pending verifications reads the records they are held by.
+        var codes = new VerificationCodeStoreInMemory();
+
+        Pending.Codes = codes;
+
+        _ = services.AddSingleton<IVerificationCodeStore>(codes);
         _ = services.AddSingleton<IPendingSignInStore, PendingSignInStoreInMemory>();
         _ = services.AddSingleton<IAccessGate>(Gate);
         _ = services.AddSingleton<ISettingsRestriction>(Restriction);

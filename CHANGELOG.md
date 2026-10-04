@@ -10,6 +10,33 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The `expiry-sweep` job removes an identifier's add, and a replace whose swap has not
+  applied, once every verification-code record it holds is spent or past
+  `code.verification.lifetime`: the new address's code and, where the old address must
+  confirm, that confirmation. A swept add is no longer listed on the account and no
+  longer counts toward its kind's maximum, a swept replace leaves the identifier as it
+  stood and no longer refuses a new replace with `identity.change.pending`, and the
+  person asks again for a new code.
+- An identifier added to an account is held on its pending verification until it
+  verifies: no identifier is written before then, `GET /account` lists the add as an
+  unverified identifier under the identifier the verified one keeps, and a kind's
+  pending adds count toward `identifiers.email.max` and `identifiers.phone.max`. An add
+  or a replace of a value another account holds, or an undo reserves, is staged as one
+  of a fresh value is, with a record no code answers (422 `auth.code.invalid` up to
+  `code.verification.attempts`, then `auth.code.expired`), where nothing was staged
+  before; a restriction that refuses its ask answers 429 `auth.restriction.exceeded`
+  and stages nothing. The right code, or a press of the link, for a value that has come
+  to be held or reserved since it was staged writes nothing and is answered 422
+  `auth.code.expired`, at an add and at the swap of a replace. `DELETE
+  /account/identifiers/{id}` naming a pending add ends it as the abandon does, with no
+  undo, notice, reservation, ended session or `IdentifierRemoved`. An undo leaves the
+  account's own pending add of the restored value as it stands. An add or a replace of
+  a value the account holds already writes nothing.
+- The old address's confirmation of a replace lives `code.verification.lifetime` from
+  its send: a press after it changes nothing and is answered 422 `auth.code.expired`,
+  where it applied the change for as long as the replace was pending. A code or a
+  confirmation outstanding on an add or a replace when this version is deployed no
+  longer answers: the add is asked again, and the replace is abandoned and made again.
 - `ICredentials.MarkRecoveryCodesExportedAsync` records that the person copied,
   downloaded or printed the recovery-code set the account holds, and
   `POST /account/recoverycodes/exported` maps it. An account holding no set is refused

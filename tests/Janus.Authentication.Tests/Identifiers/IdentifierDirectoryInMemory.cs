@@ -24,6 +24,12 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
     private readonly Dictionary<SubjectId, string> _languages = [];
 
     /// <summary>
+    /// Where the adds an account has pending are read, which it lists as unverified
+    /// identifiers (REG-IDENT-004). A test that stages none names no store.
+    /// </summary>
+    public IPendingVerificationStore? Pending { get; set; }
+
+    /// <summary>
     /// The language the account reads in, where a test has set one.
     /// </summary>
     /// <param name="subject">Whose language.</param>
@@ -160,14 +166,18 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
             _usernames.TryGetValue(canonical, out DateTimeOffset until) && until > now);
 
     /// <inheritdoc/>
-    public ValueTask<HeldIdentifiers> HeldAsync(SubjectId subject, CancellationToken cancellationToken)
+    public async ValueTask<HeldIdentifiers> HeldAsync(SubjectId subject, CancellationToken cancellationToken)
     {
         List<HeldIdentifier> all = Of(subject);
 
-        return ValueTask.FromResult(new HeldIdentifiers(
-            [.. all],
+        IReadOnlyList<PendingVerification> adds = Pending is null
+            ? []
+            : await Pending.AddsOfAsync(subject, cancellationToken);
+
+        return new HeldIdentifiers(
+            [.. all, .. adds.Select(HeldIdentifier.Pending)],
             [.. all.Select(identifier => identifier.Kind).Distinct().Select(kind => Backup(subject, kind))],
-            [.. all.Where(identifier => Admits(subject, identifier))]));
+            [.. all.Where(identifier => Admits(subject, identifier))]);
     }
 
     /// <summary>
@@ -192,14 +202,15 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
         string entered,
         string canonical,
         DateTimeOffset at,
-        int maximum,
         CancellationToken cancellationToken)
     {
         List<HeldIdentifier> all = Of(subject);
 
-        if (all.Count(identifier => identifier.Kind == kind) >= maximum)
+        if (all.Any(identifier =>
+            identifier.Kind == kind
+            && string.Equals(identifier.Canonical, canonical, StringComparison.Ordinal)))
         {
-            throw new InvalidOperationException("The account holds as many of that kind as it may.");
+            throw new InvalidOperationException("The account holds that identifier already.");
         }
 
         all.Add(new HeldIdentifier(
@@ -207,11 +218,14 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
             kind,
             entered,
             canonical,
-            IsVerified: false,
+            IsVerified: true,
             IsPrimary: false,
             IsLocked: false,
             IsPersonal: false,
-            VerifiedAt: null));
+            at));
+
+        Settle(subject, id);
+        EndReservation(subject, kind, canonical);
 
         return ValueTask.CompletedTask;
     }
@@ -344,23 +358,6 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
         }
 
         return ValueTask.FromResult<IdentifierId?>(vouched.Id);
-    }
-
-    /// <inheritdoc/>
-    public ValueTask ProveAsync(
-        SubjectId subject,
-        IdentifierId id,
-        DateTimeOffset at,
-        CancellationToken cancellationToken)
-    {
-        Replace(subject, id, identifier => identifier with { IsVerified = true, VerifiedAt = at });
-        Settle(subject, id);
-
-        HeldIdentifier proved = Required(subject, id);
-
-        EndReservation(subject, proved.Kind, proved.Canonical);
-
-        return ValueTask.CompletedTask;
     }
 
     /// <inheritdoc/>

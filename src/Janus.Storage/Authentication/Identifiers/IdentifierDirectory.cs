@@ -16,6 +16,7 @@ namespace Janus.Storage.Authentication.Identifiers;
 /// </summary>
 /// <param name="identifiers">Where the account's identifiers are read and written.</param>
 /// <param name="preferences">Where the account's language is read.</param>
+/// <param name="pending">Where the adds the account has pending are read.</param>
 /// <remarks>
 /// Implements REG-IDENT-002 to REG-IDENT-009 and CONV-LAYOUT-001. Every rule that
 /// holds across a set lives in the set, so each command here reads the set, tells it
@@ -23,7 +24,8 @@ namespace Janus.Storage.Authentication.Identifiers;
 /// </remarks>
 internal sealed class IdentifierDirectory(
     IIdentifierStore identifiers,
-    IPreferenceStore preferences) : IIdentifierDirectory
+    IPreferenceStore preferences,
+    IPendingVerificationStore pending) : IIdentifierDirectory
 {
     /// <inheritdoc/>
     public ValueTask<SubjectId?> OwnerAsync(
@@ -69,6 +71,14 @@ internal sealed class IdentifierDirectory(
             all.Add(Held(identifier));
         }
 
+        // REG-IDENT-004: an add is no identifier until it verifies, and is listed as an
+        // unverified one meanwhile, so it counts toward its kind's maximum.
+        foreach (PendingVerification add in await pending.AddsOfAsync(subject, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            all.Add(HeldIdentifier.Pending(add));
+        }
+
         var backups = new List<HeldBackup>();
 
         foreach (BackupSetting setting in set.Backups)
@@ -106,7 +116,6 @@ internal sealed class IdentifierDirectory(
         string entered,
         string canonical,
         DateTimeOffset at,
-        int maximum,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(entered);
@@ -115,9 +124,16 @@ internal sealed class IdentifierDirectory(
         IdentifierSet set = await identifiers.FindBySubjectAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        set.Add(Taken(subject, id, kind, entered, canonical, at), maximum);
+        // The add counted toward the maximum while it was pending, so the set is not
+        // asked to judge it again.
+        set.Add(Taken(subject, id, kind, entered, canonical, at), int.MaxValue);
+        set.Verify(id, at);
 
         await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
+
+        await identifiers
+            .EndReservationAsync(subject, kind, canonical, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -216,27 +232,6 @@ internal sealed class IdentifierDirectory(
         await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
 
         return vouched.Id;
-    }
-
-    /// <inheritdoc/>
-    public async ValueTask ProveAsync(
-        SubjectId subject,
-        IdentifierId id,
-        DateTimeOffset at,
-        CancellationToken cancellationToken)
-    {
-        IdentifierSet set = await identifiers.FindBySubjectAsync(subject, cancellationToken)
-            .ConfigureAwait(false);
-
-        set.Verify(id, at);
-
-        await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
-
-        Identifier proved = Required(set, id);
-
-        await identifiers
-            .EndReservationAsync(subject, proved.Kind, proved.Canonical, cancellationToken)
-            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
