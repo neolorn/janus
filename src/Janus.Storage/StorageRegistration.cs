@@ -139,6 +139,7 @@ internal static class StorageRegistration
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddSingleton<IRegistrationSignals>(provider => new RegistrationSignals(
             connectionString,
+            provider.GetRequiredService<IServiceScopeFactory>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<DataConnections>();
 

@@ -47,5 +47,7 @@ internal sealed class RaisedAlertConfiguration : IEntityTypeConfiguration<Raised
         builder.Property(alert => alert.Details)
             .HasColumnName("details")
             .HasColumnType("jsonb");
+
+        builder.Property(alert => alert.ClaimedUntil).HasColumnName("claimed_until");
     }
 }

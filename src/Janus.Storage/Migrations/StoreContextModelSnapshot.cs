@@ -84,6 +84,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("uuid")
                     .HasColumnName("id");
 
+                b.Property<DateTimeOffset?>("ClaimedUntil")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("claimed_until");
+
                 b.Property<string>("Condition")
                     .IsRequired()
                     .HasColumnType("text")
@@ -1889,6 +1893,10 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("integer")
                     .HasColumnName("attempts");
 
+                b.Property<DateTimeOffset?>("ClaimedUntil")
+                    .HasColumnType("timestamp with time zone")
+                    .HasColumnName("claimed_until");
+
                 b.Property<byte[]>("Message")
                     .IsRequired()
                     .HasColumnType("bytea")
@@ -1902,14 +1910,15 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("recorded_at");
 
+                b.Property<byte[]>("Reference")
+                    .IsRequired()
+                    .HasMaxLength(32)
+                    .HasColumnType("bytea")
+                    .HasColumnName("reference");
+
                 b.Property<Guid?>("Subject")
                     .HasColumnType("uuid")
                     .HasColumnName("subject");
-
-                b.Property<string>("TakenLanguages")
-                    .IsRequired()
-                    .HasColumnType("jsonb")
-                    .HasColumnName("taken_languages");
 
                 b.Property<byte[]>("WrappedKey")
                     .IsRequired()
@@ -1997,6 +2006,16 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                 b.Property<DateTimeOffset>("SettlesAt")
                     .HasColumnType("timestamp with time zone")
                     .HasColumnName("settles_at");
+
+                b.PrimitiveCollection<byte[][]>("Spent")
+                    .IsRequired()
+                    .HasColumnType("bytea[]")
+                    .HasColumnName("spent");
+
+                b.PrimitiveCollection<int[]>("SpentVersions")
+                    .IsRequired()
+                    .HasColumnType("integer[]")
+                    .HasColumnName("spent_versions");
 
                 b.HasKey("Reference")
                     .HasName("pk_sends");

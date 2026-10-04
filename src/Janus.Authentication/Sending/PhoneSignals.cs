@@ -103,7 +103,7 @@ internal sealed class PhoneSignals(
     /// <param name="cancellationToken">Abandons the consideration.</param>
     /// <returns>The work of considering it.</returns>
     /// <exception cref="ArgumentNullException">The request is absent.</exception>
-    public async ValueTask ConsiderAsync(SendRequest request, CancellationToken cancellationToken)
+    public async ValueTask ConsiderAsync(OutboundMessage request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -128,7 +128,7 @@ internal sealed class PhoneSignals(
 
     // Which entry a message amounts to follows from the channel it goes out on and
     // whether it carries a link; whether that entry is restricted is the catalogue's.
-    private static Factor? Restricted(SendRequest request) =>
+    private static Factor? Restricted(OutboundMessage request) =>
         request.Kind is SendKind.Sms
         && MessageChannels.Factors.TryGetValue(request.Message, out bool link)
         && FactorCatalogue.Sent.TryGetValue((IdentifierKind.Phone, link), out Factor factor)

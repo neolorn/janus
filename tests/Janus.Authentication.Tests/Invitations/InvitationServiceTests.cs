@@ -79,7 +79,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     private readonly SettingsRestrictionInMemory _restriction = new();
     private readonly MailboxStoreInMemory _mailboxes = new();
     private readonly MailServerInMemory _server = new();
-    private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly GovernedSendInMemory _notifications = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly OrganizationAuditInMemory _audit = new();
     private readonly IdentifierDirectoryInMemory _identifiers = new();
@@ -98,6 +98,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     /// </summary>
     public InvitationServiceTests()
     {
+        _notifications.Work = _work;
         _organizations = new OrganizationsInMemory(_memberships);
         _attachments = new MembershipAttachmentInMemory(_memberships);
         _ending = new MembershipEndingInMemory(_memberships);
@@ -155,7 +156,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     {
         IssuedInvitation bound = Accepted(await IssueAsync(Customer, Request(email: Personal)));
 
-        SendRequest sent = Assert.Single(_notifications.Mail);
+        OutboundMessage sent = Assert.Single(_notifications.Mail);
 
         Assert.Null(bound.Token);
         Assert.Equal(MessageKind.InvitationLink, sent.Message);
@@ -757,7 +758,9 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// IDN-LIFE-009a: a link that could not be sent issues no invitation.
+    /// IDN-LIFE-009a, AUTH-ABUSE-004: the link is undertaken in the transaction that
+    /// issues the invitation, so a link the restrictions refuse rolls it back: nothing is
+    /// issued, reserved or sent.
     /// </summary>
     [Fact]
     public async Task IDN_LIFE_009a_ALinkThatCouldNotBeSentIssuesNothingAsync()
@@ -767,8 +770,46 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Equal(
             ErrorCodes.RestrictionExceeded,
             Failure(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate))).Code);
-        Assert.Empty(_invitations.Held);
-        Assert.Empty(_mailboxes.Held);
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(0, _work.Committed);
+        Assert.Empty(_notifications.Carried);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-009a, AUTH-ABUSE-004 AC8: an issue whose transaction does not commit
+    /// sends nothing: the link it undertook is discarded with it.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_009a_AnIssueThatDoesNotCommitSendsNothingAsync()
+    {
+        _work.RefusesCommit = Error.From(ErrorCodes.SystemFault);
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            Failure(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate))).Code);
+        Assert.Single(_notifications.Sent);
+        Assert.Empty(_notifications.Carried);
+        Assert.Equal(1, _work.Discarded);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-009a, AUTH-ABUSE-004 AC8: the link of an invitation that was issued is
+    /// carried once its transaction has committed and not before, so a transport that
+    /// refuses it later leaves the invitation standing and the link to the publisher.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_009a_TheLinkIsCarriedOnceTheIssueHasCommittedAsync()
+    {
+        _ = Accepted(await IssueAsync(Staff, Request(email: Personal, corporate: Corporate)));
+
+        OutboundMessage link = Assert.Single(_notifications.Carried);
+
+        Assert.Equal(MessageKind.InvitationLink, link.Message);
+        Assert.Equal(RestrictionPurpose.SignIn, link.Purpose);
+        Assert.Null(link.Subject);
+        Assert.Single(_invitations.Held);
+        Assert.Equal(1, _work.OutermostCommitted);
     }
 
     /// <summary>
@@ -1098,7 +1139,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         HeldIdentifier corporate = held.OfKind(IdentifierKind.Email).Single(email => email.Canonical == Corporate);
         HeldIdentifier kept = held.Find(personal)!;
         IdentifierPrimaryChanged promoted = Assert.Single(_events.Of<IdentifierPrimaryChanged>());
-        SendRequest told = Assert.Single(_notifications.Sent);
+        OutboundMessage told = Assert.Single(_notifications.Sent);
 
         Assert.True(corporate is { IsVerified: true, IsPrimary: true, IsLocked: true, IsPersonal: false });
         Assert.True(kept is { IsVerified: true, IsPrimary: false, IsPersonal: true });
@@ -1450,7 +1491,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         EndedMembership ended = Assert.Single(_ending.Ended);
         MembershipChanged announced = _events.Of<MembershipChanged>()[^1];
         IdentifierPrimaryChanged promoted = _events.Of<IdentifierPrimaryChanged>()[^1];
-        SendRequest told = Assert.Single(_notifications.Sent);
+        OutboundMessage told = Assert.Single(_notifications.Sent);
         OrganizationAuditInMemory.OrganizationChange recorded = _audit.Changes[^1];
         DateTimeOffset now = _clock.GetUtcNow();
 

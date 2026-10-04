@@ -34,14 +34,15 @@ internal static class DeliveryRegistration
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // AUTH-ABUSE-004, OPS-ALERT-001: the one path every message takes.
-        services.AddScoped<SendingService>();
-        services.AddScoped<ISendingRestrictions>(provider => provider.GetRequiredService<SendingService>());
+        // AUTH-ABUSE-004, INF-BG-001: what carries the admitted messages, as the one
+        // attempt that follows a commit and as the passes of the publisher.
+        services.AddScoped<SendPublisher>();
+        services.AddScoped<ISendCarrier>(provider => provider.GetRequiredService<SendPublisher>());
 
         // LIB-EXT-001: the shipped handler carries email and SMS; a deployment that
-        // registers its own before this runs keeps it.
-        services.TryAddScoped<INotificationHandler>(
-            provider => provider.GetRequiredService<SendingService>());
+        // registers its own before this runs keeps it, and the messages it is given are
+        // governed all the same.
+        services.TryAddScoped<INotificationHandler, NotificationHandler>();
 
         // LIB-EXT-001: the shipped catalogue words every message in the languages the
         // library carries, and is likewise kept only where the deployment registered

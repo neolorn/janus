@@ -59,7 +59,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
-    private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly GovernedSendInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
     private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
@@ -71,6 +71,7 @@ public sealed class AccountServiceTests : IAsyncDisposable
     /// </summary>
     public AccountServiceTests()
     {
+        _notifications.Work = _work;
         _person = SubjectId.New(_randomness);
         _directory.Stands(_person, AccountState.Active);
         _passwords.Hold(_person, Noon);

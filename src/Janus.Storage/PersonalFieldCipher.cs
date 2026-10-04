@@ -37,6 +37,25 @@ internal static class PersonalFieldCipher
     }
 
     /// <summary>
+    /// The value erasure overwrites a wrapped key with, wherever one is held: 32 zero
+    /// bytes, and no marker byte in them. The subject-key table keeps its marker in a
+    /// column of its own beside them; an outbox row's, an invitation's and a mailbox's
+    /// key is these bytes alone (PRIV-RIGHT-005a).
+    /// </summary>
+    /// <returns>The erased value.</returns>
+    public static byte[] ErasedKey() => new byte[PersonalDataFormat.DataKeyLength];
+
+    /// <summary>
+    /// Whether a wrapped key is the erased value, which every unwrap refuses before it is
+    /// tried and which a restore and the erasure ledger's replay read as erased.
+    /// </summary>
+    /// <param name="wrapped">The wrapped key as it is stored.</param>
+    /// <returns>Whether it is 32 zero bytes.</returns>
+    public static bool IsErased(ReadOnlySpan<byte> wrapped) =>
+        wrapped.Length == PersonalDataFormat.DataKeyLength
+        && CryptographicOperations.FixedTimeEquals(wrapped, stackalloc byte[PersonalDataFormat.DataKeyLength]);
+
+    /// <summary>
     /// Wraps a data key under a key-encryption key, or a value that belongs to no subject
     /// under the deployment's data key.
     /// </summary>
@@ -143,9 +162,17 @@ internal static class PersonalFieldCipher
     /// <param name="wrapped">The wrapped value as it is stored.</param>
     /// <param name="wrappingKey">The deployment's data key.</param>
     /// <returns>The plaintext value, to be cleared after use.</returns>
-    /// <exception cref="CryptographicException">The value does not unwrap under the key.</exception>
+    /// <exception cref="CryptographicException">
+    /// The value is the erased value, which is refused before the unwrap is tried, or it
+    /// does not unwrap under the key.
+    /// </exception>
     public static byte[] Unwrap(ReadOnlySpan<byte> wrapped, ReadOnlySpan<byte> wrappingKey)
     {
+        if (IsErased(wrapped))
+        {
+            throw new CryptographicException("The key has been erased.");
+        }
+
         using var aes = Aes.Create();
         byte[] material = wrappingKey.ToArray();
 

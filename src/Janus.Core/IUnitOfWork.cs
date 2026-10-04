@@ -33,6 +33,23 @@ public interface IUnitOfWork : IAsyncDisposable
     ValueTask<Result> CommitAsync(CancellationToken cancellationToken);
 
     /// <summary>
+    /// Registers work to run once the outermost transaction of the unit of work in
+    /// progress has committed. A rollback discards it, so an operation that leaves
+    /// nothing behind runs none of it.
+    /// </summary>
+    /// <param name="work">
+    /// What runs after the commit, outside any transaction, given the token the commit
+    /// was given.
+    /// </param>
+    /// <returns>Whether it was registered; it names no failure code.</returns>
+    /// <exception cref="InvalidOperationException">No unit of work is in progress.</exception>
+    /// <remarks>
+    /// Implements CONV-DESIGN-002 and AUTH-ABUSE-004: a send's one immediate attempt is
+    /// registered here, so no transport is called while a transaction is open.
+    /// </remarks>
+    Result AfterCommit(Func<CancellationToken, ValueTask> work);
+
+    /// <summary>
     /// Ends the operation with nothing of it saved: the transaction, every change the
     /// scope tracks and every registration to run after the commit are discarded. An
     /// operation that joined a unit of work another opened ends its own level and marks

@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Background;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Tests;
 using Janus.Authentication.Tests.Alerting;
 using Janus.Authentication.Tests.Sending;
@@ -12,6 +14,7 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Alerting;
 using Janus.Hosting.Background;
+using Janus.Hosting.Tests.Sending;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
@@ -35,6 +38,8 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
     private readonly JobRunsInMemory _runs = new();
     private readonly EventsInMemory _alerts = new();
     private readonly NotificationHandlerInMemory _sent = new();
+    private readonly SendOutboxInMemory _outbox = new();
+    private readonly RandomNumberGenerator _randomness = RandomNumberGenerator.Create();
     private readonly LogsInMemory _logs = new();
     private readonly ILoggerFactory _logging;
     private readonly ServiceProvider _services;
@@ -47,13 +52,30 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
     public BackgroundWorkerTests()
     {
         _logging = LoggerFactory.Create(logging => logging.AddProvider(_logs));
+        _configuration.Set<IReadOnlyList<string>>(Settings.NotificationLanguages, ["en"]);
 
         var services = new ServiceCollection();
 
         services.AddSingleton<IConfigurationStore>(_configuration);
         services.AddSingleton<IJobRuns>(_runs);
         services.AddSingleton<IAlertChannels>(_alerts);
-        services.AddSingleton<INotificationHandler>(_sent);
+        services.AddSingleton<ISendOutbox>(_outbox);
+        services.AddScoped(provider => new SendingPath(
+            _configuration,
+            new SendLedgerInMemory(),
+            _outbox,
+            new MessageTemplatesInMemory(),
+            new MailTransportInMemory(),
+            new SmsTransportInMemory(),
+            new SmsBalanceLedgerInMemory(),
+            (UnitOfWorkInMemory)provider.GetRequiredService<IUnitOfWork>(),
+            _alerts,
+            _clock,
+            _randomness)
+        {
+            Replaced = _sent,
+        }.Send);
+        services.AddScoped<IFollowedSend>(provider => provider.GetRequiredService<GovernedSend>());
         services.AddSingleton<IAlertLedger, AlertLedgerInMemory>();
         services.AddSingleton<IAlertLog, AlertLogInMemory>();
         services.AddScoped<AlertRouter>();
@@ -68,6 +90,7 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
         await _services.DisposeAsync();
         _logging.Dispose();
         _logs.Dispose();
+        _randomness.Dispose();
     }
 
     /// <summary>

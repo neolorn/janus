@@ -38,10 +38,14 @@ internal sealed class RaisedAlerts(StoreContext context) : IRaisedAlerts
     }
 
     /// <inheritdoc/>
-    public async ValueTask<IReadOnlyList<RaisedAlert>> OldestAsync(int count, CancellationToken cancellationToken)
+    public async ValueTask<IReadOnlyList<RaisedAlert>> OldestAsync(
+        DateTimeOffset now,
+        int count,
+        CancellationToken cancellationToken)
     {
         List<RaisedAlertRecord> rows = await context.RaisedAlerts
             .AsNoTracking()
+            .Where(alert => alert.ClaimedUntil == null || alert.ClaimedUntil <= now)
             .OrderBy(alert => alert.Id)
             .Take(count)
             .ToListAsync(cancellationToken)
@@ -51,17 +55,45 @@ internal sealed class RaisedAlerts(StoreContext context) : IRaisedAlerts
     }
 
     /// <inheritdoc/>
-    public async ValueTask RemoveAsync(RaisedAlertId alert, CancellationToken cancellationToken)
+    public async ValueTask<DateTimeOffset?> ClaimAsync(
+        RaisedAlertId alert,
+        DateTimeOffset now,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
     {
-        RaisedAlertRecord? record = await context.RaisedAlerts
-            .FindAsync([alert], cancellationToken)
+        DateTimeOffset until = RowClaim.Until(now, timeout);
+
+        int claimed = await context.RaisedAlerts
+            .Where(row => row.Id == alert && (row.ClaimedUntil == null || row.ClaimedUntil <= now))
+            .ExecuteUpdateAsync(
+                row => row.SetProperty(one => one.ClaimedUntil, until),
+                cancellationToken)
             .ConfigureAwait(false);
 
-        if (record is not null)
-        {
-            context.RaisedAlerts.Remove(record);
-        }
+        return claimed == 1 ? until : null;
     }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> RemoveAsync(
+        RaisedAlertId alert,
+        DateTimeOffset claim,
+        CancellationToken cancellationToken) =>
+        await context.RaisedAlerts
+            .Where(row => row.Id == alert && row.ClaimedUntil == claim)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false) == 1;
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> ReleaseAsync(
+        RaisedAlertId alert,
+        DateTimeOffset claim,
+        CancellationToken cancellationToken) =>
+        await context.RaisedAlerts
+            .Where(row => row.Id == alert && row.ClaimedUntil == claim)
+            .ExecuteUpdateAsync(
+                row => row.SetProperty(one => one.ClaimedUntil, (DateTimeOffset?)null),
+                cancellationToken)
+            .ConfigureAwait(false) == 1;
 
     private static RaisedAlert Read(RaisedAlertRecord row) =>
         new(

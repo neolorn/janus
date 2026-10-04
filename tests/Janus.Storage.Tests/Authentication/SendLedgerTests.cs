@@ -103,7 +103,9 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
 
         // The host now declares one hour where it declared a day, and the record
         // written under the day goes with the sweep of the next read.
-        _ = await CountedAsync(destination, Noon + TimeSpan.FromHours(2) - TimeSpan.FromHours(1));
+        _ = await CountedAsync(
+            new RestrictionKey("sms.source", RestrictionKeyKind.Source, "198.51.100.5"),
+            Noon + TimeSpan.FromHours(2) - TimeSpan.FromHours(1));
 
         Assert.Null(await FindAsync(destination));
     }
@@ -182,13 +184,7 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
         Assert.NotNull(await FindAsync(destination));
         Assert.NotNull(await FindKeyAsync(source));
 
-        await using (StoreContext reading = database.Context())
-        {
-            _ = await Ledger(reading).CountersAsync(
-                [source],
-                CounterStaleness.Of(declared, Noon + TimeSpan.FromHours(2)),
-                TestContext.Current.CancellationToken);
-        }
+        _ = await HeldOnceAsync([source], CounterStaleness.Of(declared, Noon + TimeSpan.FromHours(2)), setAside: null);
 
         Assert.Null(await FindAsync(destination));
         Assert.NotNull(await FindKeyAsync(source));
@@ -345,6 +341,104 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
         Assert.Equal([Noon], (await StandingAsync(destination, Noon - Day)).Sends);
     }
 
+    /// <summary>
+    /// AUTH-ABUSE-004 AC16, CONV-DESIGN-003 AC6: each judgement holds the counter of its
+    /// key to the end of its transaction, creating it where none stands, so of several
+    /// sends judged at once while the bucket has room for one, one finds the room and
+    /// the others find it taken.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC16_SendsJudgedAtOnceAreJudgedOneAfterTheOtherAsync()
+    {
+        RestrictionKey destination = Destination("+201001234574");
+
+        bool[] admitted = await Task.WhenAll(Enumerable.Range(0, 6).Select(one =>
+            AdmittedWhereRoomAsync(destination, Reference((byte)(70 + one)), Noon.AddSeconds(one))));
+
+        Assert.Equal(1, admitted.Count(answer => answer));
+        Assert.Single((await StandingAsync(destination, Noon - Day)).Sends);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC16, AC9: a send judged again is judged with its own count set
+    /// aside under the same hold, so the counter it reads holds none of it, the credit
+    /// it spent stands again, and nothing answers to its reference until it counts anew.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC16_ARetriedSendIsJudgedWithItsOwnCountSetAsideAsync()
+    {
+        RestrictionKey destination = Destination("+201001234575");
+        byte[] reference = Reference(80);
+
+        await GrantedOnceAsync(destination, 1);
+        await CountedOnceAsync(Reference(81), [new SendCount(destination, Day)], Noon, []);
+        await CountedOnceAsync(reference, [new SendCount(destination, Day)], Noon.AddMinutes(1), [destination]);
+
+        Assert.Equal(0, (await StandingAsync(destination, Noon - Day)).Credit);
+
+        IReadOnlyDictionary<RestrictionKey, SendCounter> held = await HeldOnceAsync(
+            [destination],
+            new CounterStaleness(Noon - Day, Noon - Day),
+            reference);
+
+        Assert.Equal([Noon], held[destination].Sends);
+        Assert.Equal(1, held[destination].Credit);
+
+        await using StoreContext reading = database.Context();
+
+        Assert.False(await Ledger(reading).HoldsAsync(reference, TestContext.Current.CancellationToken));
+        Assert.True(await Ledger(reading).HoldsAsync(Reference(81), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC16, INT-SMS-005 AC3: a send that fails for good is taken back out
+    /// of its bucket, and the credit it spent is spent no longer.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC16_AReleasedSendGivesBackTheCreditItSpentAsync()
+    {
+        RestrictionKey destination = Destination("+201001234576");
+        byte[] reference = Reference(82);
+
+        await GrantedOnceAsync(destination, 1);
+        await CountedOnceAsync(reference, [new SendCount(destination, Day)], Noon, [destination]);
+
+        Assert.Equal(0, (await StandingAsync(destination, Noon - Day)).Credit);
+
+        Assert.True(await ReleasedOnceAsync(reference));
+
+        SendCounter standing = await StandingAsync(destination, Noon - Day);
+
+        Assert.Equal(1, standing.Credit);
+        Assert.Empty(standing.Sends);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC6, PRIV-RET-005 AC2: a counter created for a judgement that
+    /// counted nothing holds no time, and goes with the next sweep whatever the
+    /// instants, so a refused send leaves no record standing.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC6_ACounterThatCountedNothingGoesWithTheNextSweepAsync()
+    {
+        RestrictionKey destination = Destination("+201001234577");
+        var stale = new CounterStaleness(Noon - Day, Noon - Day);
+
+        Assert.Empty((await HeldOnceAsync([destination], stale, setAside: null))[destination].Sends);
+
+        SendCounterRecord created = await FindAsync(destination)
+            ?? throw new Xunit.Sdk.XunitException("No counter was created for the judgement.");
+
+        Assert.Empty(created.SentAt);
+
+        await using (StoreContext sweeping = database.Context())
+        {
+            await Ledger(sweeping).SweepAsync(stale, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Null(await FindAsync(destination));
+    }
+
     private static RestrictionKey Destination(string number) => new("sms.destination", RestrictionKeyKind.Destination, number);
 
     private static byte[] Reference(byte one) => [.. Enumerable.Repeat(one, Fingerprint.Length)];
@@ -386,6 +480,37 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
         Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
     }
 
+    // One send judged as an admission judges it against a bucket of one: the counter
+    // held, the send counted where the bucket has room, and the transaction ended.
+    private async Task<bool> AdmittedWhereRoomAsync(RestrictionKey key, byte[] reference, DateTimeOffset at)
+    {
+        await using StoreContext writing = database.Context();
+        await using var work = new UnitOfWork(writing);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        SendLedger ledger = Ledger(writing);
+
+        IReadOnlyDictionary<RestrictionKey, SendCounter> held = await ledger.HoldAsync(
+            [key],
+            new CounterStaleness(Noon - Day, Noon - Day),
+            setAside: null,
+            TestContext.Current.CancellationToken);
+
+        if (held[key].Sends.Count > 0)
+        {
+            await work.RollbackAsync();
+
+            return false;
+        }
+
+        await ledger.RecordAsync(reference, [new SendCount(key, Day)], [], at, TestContext.Current.CancellationToken);
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return true;
+    }
+
     private async Task GrantedOnceAsync(RestrictionKey key, int credit)
     {
         await using StoreContext writing = database.Context();
@@ -416,16 +541,29 @@ public sealed class SendLedgerTests(DatabaseFixture database) : IClassFixture<Da
     private async Task<SendCounter> StandingAsync(RestrictionKey key, DateTimeOffset stale) =>
         (await CountedAsync(key, stale))[key];
 
-    private async Task<IReadOnlyDictionary<RestrictionKey, SendCounter>> CountedAsync(
+    private Task<IReadOnlyDictionary<RestrictionKey, SendCounter>> CountedAsync(
         RestrictionKey key,
-        DateTimeOffset stale)
-    {
-        await using StoreContext reading = database.Context();
+        DateTimeOffset stale) =>
+        HeldOnceAsync([key], new CounterStaleness(stale, stale), setAside: null);
 
-        return await Ledger(reading).CountersAsync(
-            [key],
-            new CounterStaleness(stale, stale),
-            TestContext.Current.CancellationToken);
+    // The counters as a judgement takes them, held in a transaction of its own that
+    // commits, as an admitted send's does.
+    private async Task<IReadOnlyDictionary<RestrictionKey, SendCounter>> HeldOnceAsync(
+        IReadOnlyCollection<RestrictionKey> keys,
+        CounterStaleness stale,
+        byte[]? setAside)
+    {
+        await using StoreContext writing = database.Context();
+        await using var work = new UnitOfWork(writing);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        IReadOnlyDictionary<RestrictionKey, SendCounter> held = await Ledger(writing)
+            .HoldAsync(keys, stale, setAside, TestContext.Current.CancellationToken);
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return held;
     }
 
     private static byte[] Hashed(RestrictionKey key) =>

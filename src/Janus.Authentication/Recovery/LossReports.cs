@@ -50,7 +50,7 @@ internal sealed class LossReports(
     IRecoveryCodeStore recoveryCodes,
     IIdentifierDirectory identifiers,
     PolicyResolution policies,
-    INotificationHandler sending,
+    IFollowedSend sending,
     LandingLinks landing,
     ICredentialAudit audit,
     IEvents events,
@@ -560,7 +560,10 @@ internal sealed class LossReports(
     }
 
     // Every recorded channel hears of the report, and each notice carries the link
-    // that ends it (AUTH-RECOV-007).
+    // that ends it (AUTH-RECOV-007). The notices are undertaken in a unit of work of
+    // their own, and the one attempt at each follows its commit, so what is answered is
+    // whether any of them was carried: invalidation waits while none was. A notice a
+    // restriction refuses is not held against the others.
     private async ValueTask<bool> TellAsync(
         LossReport report,
         string? source,
@@ -575,7 +578,10 @@ internal sealed class LossReports(
             ["link"] = landing.Of(LinkKind.LossReport, Encoding.UTF8.GetString(report.Cancel)),
         };
 
-        bool delivered = false;
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        var undertaken = new List<IReadOnlyList<SendDeliveryId>>();
 
         foreach (HeldIdentifier identifier in held.NoticeSet)
         {
@@ -584,9 +590,9 @@ internal sealed class LossReports(
                 continue;
             }
 
-            Result<SendReference> sent = await sending
-                .SendAsync(
-                    new SendRequest(
+            Result<IReadOnlyList<SendDeliveryId>> sent = await sending
+                .AdmitAsync(
+                    new OutboundMessage(
                         destination,
                         MessageKind.CredentialSuspended,
                         RestrictionPurpose.Notification,
@@ -599,7 +605,20 @@ internal sealed class LossReports(
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            delivered = sent.Match(_ => true, _ => false) || delivered;
+            if (sent.Match<IReadOnlyList<SendDeliveryId>?>(admitted => admitted, _ => null) is { } admitted)
+            {
+                undertaken.Add(admitted);
+            }
+        }
+
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        bool delivered = false;
+
+        foreach (IReadOnlyList<SendDeliveryId> admitted in undertaken)
+        {
+            delivered = await sending.CarriedAsync(admitted, cancellationToken).ConfigureAwait(false) || delivered;
         }
 
         return delivered;

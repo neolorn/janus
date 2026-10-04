@@ -49,7 +49,7 @@ internal sealed class SignInLinks(
     IAccountDirectory accounts,
     PolicyResolution policies,
     DomainLock domainLock,
-    INotificationHandler sending,
+    IGovernedSend sending,
     LandingLinks landing,
     NonExistenceNotice nonExistence,
     PhoneSignals signals,
@@ -329,9 +329,15 @@ internal sealed class SignInLinks(
         string? settled = await identifiers.LanguageAsync(subject, cancellationToken).ConfigureAwait(false);
         string code = VerificationCode.Draw(randomness);
 
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<bool>(notBegun);
+        }
+
         _ = (await sending
-                .SendAsync(
-                    new SendRequest(
+                .UndertakeAsync(
+                    new OutboundMessage(
                         SendDestination.Of(texted),
                         MessageKind.SecondStepCode,
                         RestrictionPurpose.SecondFactor,
@@ -350,13 +356,9 @@ internal sealed class SignInLinks(
 
         if (failure is not null)
         {
-            return Result.Failure<bool>(failure);
-        }
+            await work.RollbackAsync().ConfigureAwait(false);
 
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
-        {
-            return Result.Failure<bool>(notBegun);
+            return Result.Failure<bool>(failure);
         }
 
         await pending
@@ -617,9 +619,15 @@ internal sealed class SignInLinks(
             values["link"] = landing.Of(LinkKind.SignIn, token.Value);
         }
 
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
         _ = (await sending
-                .SendAsync(
-                    new SendRequest(
+                .UndertakeAsync(
+                    new OutboundMessage(
                         channel.Destination,
                         ask.Message,
                         RestrictionPurpose.SignIn,
@@ -635,13 +643,9 @@ internal sealed class SignInLinks(
 
         if (failure is not null)
         {
-            return Result.Failure(failure);
-        }
+            await work.RollbackAsync().ConfigureAwait(false);
 
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
-        {
-            return Result.Failure(notBegun);
+            return Result.Failure(failure);
         }
 
         await pending

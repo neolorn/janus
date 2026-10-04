@@ -313,20 +313,21 @@ internal sealed class PrivacyRequestService(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure(notCommitted);
-        }
-
-        // IDN-LIFE-003: the security-notice set hears of a window an out-of-band request
-        // started, after the commit as the receipt is, and the notice carries no cancel
+        // IDN-LIFE-003, AUTH-ABUSE-004: the security-notice set hears of a window an
+        // out-of-band request started, undertaken in this transaction and carried after
+        // its commit as the receipt is, and the notice carries no cancel
         // link; a window already running was announced when it began.
         if (windowStarted)
         {
             _ = await notices
                 .TellAsync(held.Subject, MessageKind.OobDeletionNotice, Source, cancellationToken)
                 .ConfigureAwait(false);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
         }
 
         return Result.Success();
@@ -556,18 +557,19 @@ internal sealed class PrivacyRequestService(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure<PrivacyRequestReceipt>(notCommitted);
-        }
-
-        // PRIV-RIGHT-002: the receipt follows the commit, because a receipt for a
+        // PRIV-RIGHT-002, AUTH-ABUSE-004: the receipt is undertaken in the transaction
+        // that queues the request and carried after its commit, because a receipt for a
         // request that was not queued would be the one thing worse than none, and a
         // channel that will not take it does not unqueue the request or stop the clock.
         _ = await notices
             .TellAsync(request.Subject, MessageKind.PrivacyRequestReceived, Source, cancellationToken)
             .ConfigureAwait(false);
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<PrivacyRequestReceipt>(notCommitted);
+        }
 
         return Result.Success(
             new PrivacyRequestReceipt(request.Id, request.ReceiptSentAt, request.DecisionDue));

@@ -72,7 +72,7 @@ internal sealed class InvitationService(
     MembershipEnd end,
     IMailboxStore mailboxes,
     IMailServerInUse inUse,
-    INotificationHandler sending,
+    IGovernedSend sending,
     LandingLinks landing,
     IConfigurationStore configuration,
     IOrganizationAudit audit,
@@ -217,12 +217,6 @@ internal sealed class InvitationService(
             now,
             lifetime);
 
-        if (bound.Linked is EmailAddress linked
-            && await SentAsync(linked, token, source, cancellationToken).ConfigureAwait(false) is Error unsent)
-        {
-            return Result.Failure<IssuedInvitation>(unsent);
-        }
-
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
@@ -264,6 +258,18 @@ internal sealed class InvitationService(
                 now,
                 cancellationToken)
             .ConfigureAwait(false);
+
+        // AUTH-ABUSE-004, IDN-LIFE-009a: the link is undertaken in the transaction that
+        // issues the invitation, after everything it writes, so a link the restrictions
+        // refuse issues, reserves and sends nothing, and one admitted is carried after
+        // the commit.
+        if (bound.Linked is EmailAddress linked
+            && await SentAsync(linked, token, source, cancellationToken).ConfigureAwait(false) is Error unsent)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<IssuedInvitation>(unsent);
+        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -814,8 +820,8 @@ internal sealed class InvitationService(
         // to the restrictions a sign-in link answers to, and no notification restriction
         // counts it.
         return (await sending
-                .SendAsync(
-                    new SendRequest(
+                .UndertakeAsync(
+                    new OutboundMessage(
                         SendDestination.Of(linked),
                         MessageKind.InvitationLink,
                         RestrictionPurpose.SignIn,

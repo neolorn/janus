@@ -685,6 +685,7 @@ public sealed class ModelTests
 
             // Not an account field: a raised condition waiting for the alert channels,
             // removed once they carry it (OPS-ALERT-001).
+            "raised_alerts.claimed_until",
             "raised_alerts.condition",
             "raised_alerts.details",
             "raised_alerts.id",
@@ -792,12 +793,13 @@ public sealed class ModelTests
             // what is to be sent under a key of the row's own, so that removing the row
             // removes the message with it (IDN-PRIN-003, PRIV-RIGHT-005a).
             "send_outbox.attempts",
+            "send_outbox.claimed_until",
             "send_outbox.enc_message",
             "send_outbox.id",
             "send_outbox.next_attempt_at",
             "send_outbox.recorded_at",
+            "send_outbox.reference",
             "send_outbox.subject",
-            "send_outbox.taken_languages",
             "send_outbox.wrapped_key",
 
             // Not an account field: the message a transport took (AUTH-ABUSE-004,
@@ -808,6 +810,8 @@ public sealed class ModelTests
             "sends.reference",
             "sends.sent_at",
             "sends.settles_at",
+            "sends.spent",
+            "sends.spent_versions",
 
             // Sessions: the spine of AUTH-SESS-001, what it reached (AUTH-SESS-002), the
             // fingerprint of its secret (AUTH-SESS-003), where it was used from with

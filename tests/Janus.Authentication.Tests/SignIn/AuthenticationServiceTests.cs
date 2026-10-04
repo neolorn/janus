@@ -76,7 +76,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     private readonly NoticeLedgerInMemory _notices = new();
     private readonly VerificationCodeStoreInMemory _codes = new();
     private readonly ConfigurationInMemory _configuration = new();
-    private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly GovernedSendInMemory _notifications = new();
     private readonly SendingRestrictionsInMemory _restrictions = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
@@ -93,6 +93,8 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     /// </summary>
     public AuthenticationServiceTests()
     {
+        _notifications.Work = _work;
+        _restrictions.Work = _work;
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, [Language]);
         _configuration.Set(Settings.WebAuthnRelyingPartyId, "example.test");
@@ -864,7 +866,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Assert.All(_restrictions.Drawn, drawn => Assert.Equal(MessageKind.SignInLink, drawn.Message));
         Assert.All(_restrictions.Drawn, drawn => Assert.Equal(RestrictionPurpose.SignIn, drawn.Purpose));
 
-        SendRequest told = Assert.Single(_notifications.Sent);
+        OutboundMessage told = Assert.Single(_notifications.Sent);
 
         Assert.Equal(Elsewhere, told.Destination.Canonical);
         Assert.Equal(MessageKind.NoAccount, told.Message);
@@ -1702,7 +1704,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Assert.Equal([Factor.PhoneCode], Reached(await PresentAsync(began.Challenge, Factor.Password, Secret)).Required);
         Assert.True((await AskedAsync(began.Challenge, stepping: null)).Match(offered => offered is null, _ => false));
 
-        SendRequest texted = Assert.Single(_notifications.Texts);
+        OutboundMessage texted = Assert.Single(_notifications.Texts);
         SignInProgress reached = Reached(await PresentAsync(began.Challenge, Factor.PhoneCode, texted.Values["code"]));
 
         Assert.Equal(MessageKind.SecondStepCode, texted.Message);

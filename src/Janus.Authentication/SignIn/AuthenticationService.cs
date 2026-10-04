@@ -76,7 +76,7 @@ internal sealed class AuthenticationService(
     PolicyResolution policies,
     DomainLock domainLock,
     ThrottleService throttle,
-    INotificationHandler sending,
+    IGovernedSend sending,
     PhoneSignals signals,
     VerificationCodes codes,
     IConfigurationStore configuration,
@@ -1510,18 +1510,28 @@ internal sealed class AuthenticationService(
                 .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
             .Match(read => read, error => throw new InvalidOperationException(error.Code.ToString()));
 
+        // AUTH-ABUSE-004: the code is issued and its message undertaken in one unit of
+        // work, so a send the restrictions refuse leaves no code behind it.
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<SignInOutcome>(notBegun);
+        }
+
         string code = (await codes.IssueAsync(open.Fingerprint, cancellationToken)
                 .ConfigureAwait(false))
             .Match(drawn => drawn, error => Withheld<string>(error, ref failure));
 
         if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<SignInOutcome>(failure);
         }
 
         _ = (await sending
-                .SendAsync(
-                    new SendRequest(
+                .UndertakeAsync(
+                    new OutboundMessage(
                         SendDestination.Of(address),
                         MessageKind.VerificationCode,
                         RestrictionPurpose.Verification,
@@ -1540,7 +1550,15 @@ internal sealed class AuthenticationService(
 
         if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<SignInOutcome>(failure);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<SignInOutcome>(notCommitted);
         }
 
         return Result.Success(new SignInOutcome(

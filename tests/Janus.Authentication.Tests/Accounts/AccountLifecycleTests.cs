@@ -50,7 +50,7 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
-    private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly GovernedSendInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly SettingsRestrictionInMemory _restriction = new();
@@ -65,6 +65,7 @@ public sealed class AccountLifecycleTests : IAsyncDisposable
     /// </summary>
     public AccountLifecycleTests()
     {
+        _notifications.Work = _work;
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, English);
         _person = SubjectId.New(_randomness);

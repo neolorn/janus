@@ -58,7 +58,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private readonly MembershipLookupInMemory _memberships = new();
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
-    private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly GovernedSendInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
@@ -71,6 +71,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     /// </summary>
     public IdentifierServiceTests()
     {
+        _notifications.Work = _work;
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, English);
         _person = SubjectId.New(_randomness);
@@ -195,7 +196,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         await AddedAsync(Third);
 
-        SendRequest sent = _notifications.Mail.Single(one => one.Destination.Canonical == Third);
+        OutboundMessage sent = _notifications.Mail.Single(one => one.Destination.Canonical == Third);
 
         Assert.Equal(MessageKind.VerificationLink, sent.Message);
         Assert.Equal(["code", "link"], sent.Values.Keys.Order(StringComparer.Ordinal));
@@ -488,9 +489,9 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
             Source,
             TestContext.Current.CancellationToken));
 
-        SendRequest left = _notifications.Mail.Single(sent =>
+        OutboundMessage left = _notifications.Mail.Single(sent =>
             string.Equals(sent.Destination.Canonical, Second, StringComparison.Ordinal));
-        SendRequest kept = _notifications.Mail.Single(sent =>
+        OutboundMessage kept = _notifications.Mail.Single(sent =>
             string.Equals(sent.Destination.Canonical, Primary, StringComparison.Ordinal));
 
         Assert.Equal(MessageKind.IdentifierDetached, left.Message);
@@ -680,7 +681,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         Assert.Null((await _sessions.FindAsync(asking, TestContext.Current.CancellationToken))?.EndedAt);
 
-        SendRequest asked = _notifications.Mail.Last(
+        OutboundMessage asked = _notifications.Mail.Last(
             sent => sent.Message is MessageKind.IdentifierChangeConfirm);
 
         Accepted(await Service.LandAsync(
@@ -693,6 +694,35 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         Assert.Equal(Second, Named(await HeldAsync(), Second).Canonical);
         Assert.NotNull((await _sessions.FindAsync(asking, TestContext.Current.CancellationToken))?.EndedAt);
         Assert.NotNull((await _sessions.FindAsync(elsewhere, TestContext.Current.CancellationToken))?.EndedAt);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC5, AUTH-ABUSE-004 AC15: the confirmation asked of the displaced
+    /// address goes under the purpose of the new address's code, since the person
+    /// making the change asked for it and it is no notice.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC5_TheConfirmationIsAskedUnderTheVerificationPurposeAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        await VerifiedAsync(email);
+
+        OutboundMessage asked = _notifications.Mail.Last(
+            sent => sent.Message is MessageKind.IdentifierChangeConfirm);
+
+        Assert.Equal(RestrictionPurpose.Verification, asked.Purpose);
+        Assert.Equal(Primary, asked.Destination.Canonical);
     }
 
     /// <summary>
@@ -926,7 +956,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         Assert.Equal(Primary, Named(await HeldAsync(), Primary).Canonical);
 
-        SendRequest asked = _notifications.Mail.Last(
+        OutboundMessage asked = _notifications.Mail.Last(
             sent => sent.Message is MessageKind.IdentifierChangeConfirm);
 
         Accepted(await Service.LandAsync(
@@ -961,7 +991,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         await VerifiedAsync(email);
 
-        SendRequest asked = _notifications.Mail.Last(
+        OutboundMessage asked = _notifications.Mail.Last(
             sent => sent.Message is MessageKind.IdentifierChangeConfirm);
 
         _pending.Locking = identifier =>

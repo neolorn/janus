@@ -76,6 +76,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using OpenIddict.Abstractions;
 
 namespace Janus.Hosting.Tests;
@@ -309,6 +310,13 @@ internal sealed class Deployment : IAsyncDisposable
     /// What went out by mail.
     /// </summary>
     public MailTransportInMemory Mail { get; } = new();
+
+    /// <summary>
+    /// Whether the publisher's pass over the admitted messages follows each request, as
+    /// the worker's does within seconds. A test of what a request itself carried turns
+    /// it off and runs the pass where it wants it.
+    /// </summary>
+    public bool WorkerCarries { get; set; } = true;
 
     /// <summary>
     /// What went out by SMS.
@@ -737,6 +745,25 @@ internal sealed class Deployment : IAsyncDisposable
     }
 
     /// <summary>
+    /// Runs one pass of the publisher over the admitted messages, in a scope of its own
+    /// as the worker would: what a request left to the publisher is carried here.
+    /// </summary>
+    /// <returns>How many messages the pass carried.</returns>
+    public async Task<int> CarrySendsAsync()
+    {
+        await using AsyncServiceScope scope = _application.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider
+                .GetRequiredService<SendPublisher>()
+                .RetryAsync(
+                    AccessContext.Of(BackgroundJobs.All.Single(job => job.Name == "sends").Principal),
+                    CancellationToken.None))
+            .Match(
+                carried => carried,
+                error => throw new InvalidOperationException("The publisher refused: " + error.Code + "."));
+    }
+
+    /// <summary>
     /// Runs one request through routing, the pipeline and the endpoint, in a scope
     /// of its own as the web server would.
     /// </summary>
@@ -752,6 +779,14 @@ internal sealed class Deployment : IAsyncDisposable
         context.RequestServices = scope.ServiceProvider;
 
         await _pipeline(context);
+
+        // The worker's passes follow every request within seconds, so what a request left
+        // to the publisher is carried before a test reads what was sent, unless the test
+        // is about what the request itself did.
+        if (WorkerCarries)
+        {
+            _ = await CarrySendsAsync();
+        }
     }
 
     // What a host mounts: the two profiles around the library's endpoints, with
@@ -900,11 +935,18 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<ProviderSignIn>();
         _ = services.AddSingleton<ILogger<ProviderSignIn>>(ProviderLog);
         _ = services.AddScoped<RelayRegistration>();
-        _ = services.AddScoped<SendingService>();
-        _ = services.AddScoped<INotificationHandler>(
-            provider => provider.GetRequiredService<SendingService>());
+        _ = services.AddScoped<SendAdmission>();
+        _ = services.AddScoped<GovernedSend>();
+        _ = services.AddScoped<IGovernedSend>(
+            provider => provider.GetRequiredService<GovernedSend>());
         _ = services.AddScoped<ISendingRestrictions>(
-            provider => provider.GetRequiredService<SendingService>());
+            provider => provider.GetRequiredService<GovernedSend>());
+        _ = services.AddScoped<SendPublisher>();
+        _ = services.AddScoped<IFollowedSend>(
+            provider => provider.GetRequiredService<GovernedSend>());
+        _ = services.AddScoped<ISendCarrier>(
+            provider => provider.GetRequiredService<SendPublisher>());
+        _ = services.AddScoped<INotificationHandler, NotificationHandler>();
         _ = services.AddSingleton<IPhoneSignalAudit, PhoneSignalAuditInMemory>();
         _ = services.AddScoped(provider => new PhoneSignals(
             provider.GetService<PhoneSignalProvider>(),

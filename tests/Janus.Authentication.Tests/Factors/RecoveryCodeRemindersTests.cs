@@ -4,6 +4,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Sending;
 using Janus.Authentication.Tests.Identifiers;
 using Janus.Authentication.Tests.Sending;
 using Janus.Core;
@@ -30,7 +31,7 @@ public sealed class RecoveryCodeRemindersTests : IAsyncDisposable
 
     private readonly RecoveryCodeStoreInMemory _sets = new();
     private readonly IdentifierDirectoryInMemory _identifiers = new();
-    private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly GovernedSendInMemory _notifications = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly FixedClock _clock = new(Noon);
@@ -40,8 +41,11 @@ public sealed class RecoveryCodeRemindersTests : IAsyncDisposable
     /// A deployment that names the one language its notices are written in, as every
     /// deployment names at least one.
     /// </summary>
-    public RecoveryCodeRemindersTests() =>
+    public RecoveryCodeRemindersTests()
+    {
+        _notifications.Work = _work;
         _configuration.Set(Settings.NotificationLanguages, ["en"]);
+    }
 
     private RecoveryCodeReminders Reminders =>
         new(_sets, _identifiers, _notifications, _configuration, _work, _clock);
@@ -199,6 +203,65 @@ public sealed class RecoveryCodeRemindersTests : IAsyncDisposable
         Assert.Equal(1, await RemindedAsync());
         Assert.Empty(_notifications.Sent);
         Assert.NotNull((await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.RemindedAt);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-008 AC5, AUTH-ABUSE-004 AC12: a reminder is asked for by no request, so
+    /// it counts under no source, and as a notice to a holder it answers to the
+    /// notification restriction of its own destination alone. Twenty sets due together
+    /// are therefore each reminded under the shipped restrictions, on both channels,
+    /// where one shared source would have refused the eleventh text message.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AC5_TwentySetsDueTogetherAreEachRemindedUnderTheShippedRestrictionsAsync()
+    {
+        var ledger = new SendLedgerInMemory { Work = _work };
+        var outbox = new SendOutboxInMemory { Work = _work };
+        var carrier = new SendCarrierInMemory();
+        var events = new EventsInMemory();
+        var gateway = new SmsTransportInMemory();
+
+        _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
+
+        var send = new GovernedSend(
+            new SendAdmission(
+                _configuration,
+                ledger,
+                RestrictionKeySuppliers.None,
+                new SmsBalance(_configuration, gateway, new SmsBalanceLedgerInMemory(), _work, events, _clock)),
+            outbox,
+            carrier,
+            Considered.Nothing(_work, _clock),
+            _configuration,
+            _work,
+            _clock,
+            _randomness);
+
+        var reminders = new RecoveryCodeReminders(_sets, _identifiers, send, _configuration, _work, _clock);
+
+        for (int holder = 0; holder < 20; holder++)
+        {
+            var subject = SubjectId.New(_randomness);
+
+            _ = _identifiers.Verified(subject, IdentifierKind.Email, $"person{holder}@example.test");
+            _ = _identifiers.Verified(subject, IdentifierKind.Phone, $"+4416329600{holder:D2}");
+
+            await IssuedAsync(subject);
+        }
+
+        _clock.Advance(Year);
+
+        int reminded = (await reminders.RemindAsync(Sweeper, TestContext.Current.CancellationToken))
+            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        Assert.Equal(20, reminded);
+        Assert.Equal(40, outbox.Waiting.Count);
+        Assert.Equal(20, outbox.Waiting.Count(waiting => waiting.Requested.Kind is SendKind.Sms));
+        Assert.All(outbox.Waiting, waiting => Assert.Null(waiting.Requested.Source));
+        Assert.All(ledger.Keys, key => Assert.Equal("notification.destination", key.Restriction));
+        Assert.Equal(40, ledger.Keys.Count);
+        Assert.Equal(40, carrier.Attempted.Count);
     }
 
     private SubjectId Held()

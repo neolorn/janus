@@ -154,6 +154,109 @@ public sealed class UnitOfWorkTests(DatabaseFixture database) : IClassFixture<Da
         Assert.Equal(1, await WrittenAsync(connection, next));
     }
 
+    /// <summary>
+    /// CONV-DESIGN-002 AC5: what an operation registers on its unit of work runs once
+    /// the outermost level has committed and not before, outside any transaction, with
+    /// what the operation wrote already there to read, and it may begin and commit a
+    /// unit of work of its own.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_002_AC5_WhatIsRegisteredRunsAfterTheOutermostCommitAsync()
+    {
+        SubjectId subject = Subjects.New();
+        SubjectId after = Subjects.New();
+        int ran = 0;
+        int written = -1;
+        bool open = true;
+
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+        context.Accounts.Add(Account(subject));
+
+        Assert.True(work
+            .AfterCommit(async cancellationToken =>
+            {
+                ran++;
+                open = context.Database.CurrentTransaction is not null;
+
+                await using NpgsqlConnection reading = await database.OpenAsync();
+
+                written = await WrittenAsync(reading, subject);
+
+                await work.BeginAsync(cancellationToken);
+                context.Accounts.Add(Account(after));
+                await work.CommitAsync(cancellationToken);
+            })
+            .Match(() => true, _ => false));
+
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, ran);
+
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        Assert.Equal(1, ran);
+        Assert.False(open);
+        Assert.Equal(1, written);
+        Assert.Equal(1, await WrittenAsync(connection, after));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002 AC5, CONV-DESIGN-003: a rollback discards what was registered, at
+    /// the outermost level or after a level inside it rolled back, so an operation that
+    /// leaves nothing behind runs none of it, then or at the next commit of the scope.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_002_AC5_ARollbackDiscardsWhatWasRegisteredAsync()
+    {
+        int ran = 0;
+
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+        Assert.True(work.AfterCommit(_ => Ran()).Match(() => true, _ => false));
+        await work.RollbackAsync();
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+        Assert.True(work.AfterCommit(_ => Ran()).Match(() => true, _ => false));
+        await work.RollbackAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await work.CommitAsync(TestContext.Current.CancellationToken));
+
+        await work.BeginAsync(TestContext.Current.CancellationToken);
+        await work.CommitAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, ran);
+
+        ValueTask Ran()
+        {
+            ran++;
+
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002: a registration is made on a unit of work in progress; with none,
+    /// there is no commit for it to follow, and asking is a fault.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_002_ARegistrationOutsideAUnitOfWorkIsAFaultAsync()
+    {
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+
+        Assert.Throws<InvalidOperationException>(() => work.AfterCommit(_ => ValueTask.CompletedTask));
+    }
+
     private static AccountRecord Account(SubjectId subject) =>
         new()
         {

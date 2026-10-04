@@ -16,7 +16,7 @@ using Janus.Authentication.Tests.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Alerting;
-using Janus.Hosting.Sending;
+using Janus.Hosting.Tests.Sending;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Alerting;
@@ -53,6 +53,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
 
     private readonly ConfigurationInMemory _configuration = new();
     private readonly SendLedgerInMemory _ledger = new();
+    private readonly SendOutboxInMemory _outbox = new();
     private readonly AlertLedgerInMemory _alerts = new();
     private readonly AlertLogInMemory _log = new();
     private readonly MessageTemplatesInMemory _templates = new();
@@ -106,21 +107,18 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
                 _clock),
             new AlertRouter(
                 _configuration,
-                new SendingService(
+                new SendingPath(
                     _configuration,
                     _ledger,
-                    new SendOutboxInMemory(),
+                    _outbox,
                     _templates,
                     _mail,
                     _sms,
-                    RestrictionKeySuppliers.None,
-                    Considered.Nothing(_work, _clock),
-                    new SmsBalance(_configuration, _sms, _balances, _work, _events, _clock),
+                    _balances,
                     _work,
                     _events,
-                    _events,
                     _clock,
-                    _randomness),
+                    _randomness).Send,
                 _alerts,
                 _work,
                 _log),
@@ -221,6 +219,39 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
         Assert.Equal("config.value.lastdestination", refusal.Code.ToString());
         Assert.Equal("alerting.sms.destinations", refusal.Details["key"].GetString());
         Assert.Equal(TwoNumbers, await DestinationsAsync(Settings.AlertingSmsDestinations));
+    }
+
+    /// <summary>
+    /// OPS-ALERT-004a AC7: a change whose value in force moved after its previous
+    /// destinations were told is refused as superseded under the row's lock. It writes
+    /// nothing and raises no <c>alert-destination-changed</c>, so the destinations the
+    /// other change put in force are not replaced without having been told.
+    /// </summary>
+    [Fact]
+    public async Task OPS_ALERT_004a_AC7_AChangeOvertakenAfterItsNoticeIsRefusedAsSupersededAsync()
+    {
+        string[] winner = ["winner@example.test"];
+
+        _configuration.Holding = held =>
+        {
+            if (held == Settings.AlertingEmailDestinations.Key)
+            {
+                _configuration.Holding = null;
+                _configuration.Set(Settings.AlertingEmailDestinations, winner);
+            }
+        };
+
+        Error refusal = await RefusedAsync(SendKind.Email, Elsewhere);
+
+        Assert.Equal(ErrorCodes.ConfigurationChangeSuperseded, refusal.Code);
+        Assert.Equal("config.change.superseded", refusal.Code.ToString());
+        Assert.Equal("alerting.email.destinations", refusal.Details["key"].GetString());
+        Assert.Equal(winner, await DestinationsAsync(Settings.AlertingEmailDestinations));
+        Assert.Empty(_changes.Written);
+        Assert.Empty(_events.Published.OfType<AlertRaised>());
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(_work.Opened, _work.Committed + _work.RolledBack);
     }
 
     /// <summary>

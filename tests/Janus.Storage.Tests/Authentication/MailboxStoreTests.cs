@@ -408,7 +408,7 @@ public sealed class MailboxStoreTests(DatabaseFixture database)
             new { id = released.Id.Value });
 
         Assert.True(Janus.Storage.Fingerprint.IsNeutralised(row.Fingerprint));
-        Assert.NotEmpty(row.WrappedKey);
+        Assert.Equal(32, row.WrappedKey.Length);
         Assert.All(row.WrappedKey, value => Assert.Equal(0, value));
 
         await using StoreContext reading = database.Context();

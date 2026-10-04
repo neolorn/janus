@@ -93,7 +93,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     private readonly AdministrativeOrganizationInMemory _administrative = new();
     private readonly LocationResolverInMemory _locations = new();
     private readonly ConfigurationInMemory _configuration = new();
-    private readonly NotificationHandlerInMemory _notifications = new();
+    private readonly GovernedSendInMemory _notifications = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly ThrottleLedgerInMemory _throttle = new();
     private readonly EventsInMemory _events = new();
@@ -106,6 +106,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     /// </summary>
     public RegistrationServiceTests()
     {
+        _notifications.Work = _work;
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, [Language, "ar"]);
     }
@@ -436,7 +437,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     {
         _ = await AwaitingAsync();
 
-        SendRequest sent = Assert.Single(_notifications.Mail);
+        OutboundMessage sent = Assert.Single(_notifications.Mail);
 
         Assert.Equal(MessageKind.VerificationLink, sent.Message);
         Assert.Equal(["code", "link"], sent.Values.Keys.Order(StringComparer.Ordinal));
@@ -1461,7 +1462,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
 
         _ = await AwaitingAsync();
 
-        SendRequest told = Assert.Single(_notifications.Sent);
+        OutboundMessage told = Assert.Single(_notifications.Sent);
 
         Assert.Equal(MessageKind.AccountExists, told.Message);
         Assert.Equal("ar", told.Language);

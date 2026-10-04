@@ -17,7 +17,7 @@ namespace Janus.Hosting.Alerting;
 /// one alert per condition per window rather than one per occurrence.
 /// </summary>
 /// <param name="configuration">Where the destinations and the window come from.</param>
-/// <param name="sending">What carries a message.</param>
+/// <param name="sending">What undertakes a message and says whether its attempt carried it.</param>
 /// <param name="ledger">What remembers which conditions already went out.</param>
 /// <param name="log">Where an unreachable channel is written down.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
@@ -28,7 +28,7 @@ namespace Janus.Hosting.Alerting;
 /// </remarks>
 internal sealed class AlertRouter(
     IConfigurationStore configuration,
-    INotificationHandler sending,
+    IFollowedSend sending,
     IAlertLedger ledger,
     IUnitOfWork work,
     IAlertLog log)
@@ -285,18 +285,25 @@ internal sealed class AlertRouter(
         return reached;
     }
 
+    // An alert is undertaken like any message, in a unit of work of the router's own,
+    // and its one attempt follows that commit, outside any transaction; it is outside
+    // every restriction and the gateway floor (OPS-ALERT-002, OPS-ALERT-003,
+    // AUTH-ABUSE-004). The delivery acts on what the channels answered, so what the
+    // attempt left in the outbox is what it did not carry, and the publisher carries
+    // that. An operator destination belongs to no account, so the language resolves at
+    // step three: every language the deployment declared (IDN-ATTR-001). No request
+    // asked for an alert, so it carries no source.
     private async ValueTask<bool> CarriedAsync(
         AlertRaised raised,
         SendDestination destination,
         CancellationToken cancellationToken)
     {
-        // An operator destination belongs to no account, so the language resolves at
-        // step three: every language the deployment declared, as one send (IDN-ATTR-001).
-        // No request asked for an alert, so it carries no source, and it is outside
-        // every restriction (OPS-ALERT-002, AUTH-ABUSE-004).
-        Result<SendReference> sent = await sending
-            .SendAsync(
-                new SendRequest(
+        (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        Result<IReadOnlyList<SendDeliveryId>> undertaken = await sending
+            .AdmitAsync(
+                new OutboundMessage(
                     destination,
                     MessageKind.Alert,
                     RestrictionPurpose.Notification,
@@ -308,6 +315,16 @@ internal sealed class AlertRouter(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        return sent.Match(_ => true, _ => false);
+        if (undertaken.Match<IReadOnlyList<SendDeliveryId>?>(admitted => admitted, _ => null) is not { } admitted)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return false;
+        }
+
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        return await sending.CarriedAsync(admitted, cancellationToken).ConfigureAwait(false);
     }
 }

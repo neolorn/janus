@@ -72,6 +72,14 @@ internal static class AuthenticationRegistration
         services.AddScoped<RestrictionAdministration>();
         services.AddScoped<SendCounterSweep>();
 
+        // AUTH-ABUSE-004, CONV-LAYOUT-002: the one way every area undertakes a send, and
+        // the draw of an ask that sends nothing, which stays inside this area.
+        services.AddScoped<SendAdmission>();
+        services.AddScoped<GovernedSend>();
+        services.AddScoped<IGovernedSend>(provider => provider.GetRequiredService<GovernedSend>());
+        services.AddScoped<ISendingRestrictions>(provider => provider.GetRequiredService<GovernedSend>());
+        services.AddScoped<IFollowedSend>(provider => provider.GetRequiredService<GovernedSend>());
+
         // API-LAND-001: every link lands on an origin the host declared, and one it did
         // not declare stops the start, so nothing is registered in its place.
         services.AddScoped(provider => new LandingLinks(provider.GetRequiredService<LandingOrigins>()));
@@ -254,7 +262,7 @@ internal static class AuthenticationRegistration
             provider.GetRequiredService<ISettingsRestriction>(),
             provider.GetRequiredService<StepUpGuard>(),
             provider.GetRequiredService<IIdentifierDirectory>(),
-            provider.GetRequiredService<INotificationHandler>(),
+            provider.GetRequiredService<IGovernedSend>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<ICredentialAudit>(),
             provider.GetRequiredService<IUnitOfWork>(),
@@ -281,7 +289,7 @@ internal static class AuthenticationRegistration
             provider.GetRequiredService<MembershipEnd>(),
             provider.GetRequiredService<IMailboxStore>(),
             provider.GetRequiredService<IMailServerInUse>(),
-            provider.GetRequiredService<INotificationHandler>(),
+            provider.GetRequiredService<IGovernedSend>(),
             provider.GetRequiredService<LandingLinks>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IOrganizationAudit>(),

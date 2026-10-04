@@ -25,7 +25,7 @@ internal static class Restrictions
     /// <param name="request">The send.</param>
     /// <returns>Whether its buckets are consulted.</returns>
     /// <exception cref="ArgumentNullException">Either is absent.</exception>
-    public static bool Applies(Restriction restriction, SendRequest request)
+    public static bool Applies(Restriction restriction, OutboundMessage request)
     {
         ArgumentNullException.ThrowIfNull(restriction);
         ArgumentNullException.ThrowIfNull(request);
@@ -63,7 +63,7 @@ internal static class Restrictions
     /// <param name="request">The send.</param>
     /// <returns>Whether it is such a notice.</returns>
     /// <exception cref="ArgumentNullException">The send is absent.</exception>
-    public static bool IsNoticeToHolder(SendRequest request)
+    public static bool IsNoticeToHolder(OutboundMessage request)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -85,19 +85,22 @@ internal static class Restrictions
     }
 
     /// <summary>
-    /// When one bucket lets the next send through.
+    /// When one bucket has room for a send of so many messages.
     /// </summary>
     /// <param name="bucket">The bucket.</param>
     /// <param name="sends">The times counted against the key.</param>
     /// <param name="now">The clock.</param>
+    /// <param name="weight">How many messages the send is, each of which counts.</param>
     /// <returns>
-    /// When the bucket lifts, or nothing where it is not exceeded and the send passes.
+    /// When the bucket lifts, or nothing where it has room for all of them and the send
+    /// passes.
     /// </returns>
     /// <exception cref="ArgumentNullException">The bucket or the times are absent.</exception>
     public static DateTimeOffset? Lift(
         Bucket bucket,
         IReadOnlyList<DateTimeOffset> sends,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        int weight)
     {
         ArgumentNullException.ThrowIfNull(bucket);
         ArgumentNullException.ThrowIfNull(sends);
@@ -105,24 +108,35 @@ internal static class Restrictions
         DateTimeOffset opened = Opened(bucket, now);
         List<DateTimeOffset> counting = [.. sends.Where(sent => sent >= opened).Order()];
 
-        if (counting.Count < bucket.Maximum)
+        int over = counting.Count + weight - bucket.Maximum;
+
+        if (over <= 0)
         {
             return null;
         }
 
-        // A sliding bucket lifts when enough of what it counts has aged out of the
-        // interval; a fixed one lifts when its interval turns over (section 5.16).
-        return bucket.Window is BucketWindow.Sliding
-            ? counting[counting.Count - bucket.Maximum] + bucket.Interval
-            : opened + bucket.Interval;
+        // A fixed bucket lifts when its interval turns over (section 5.16). A sliding
+        // one lifts when as many of the times it counts as the send is over by have
+        // aged out of the interval; a send wider than the bucket waits out the whole
+        // of what is counted.
+        if (bucket.Window is not BucketWindow.Sliding)
+        {
+            return opened + bucket.Interval;
+        }
+
+        return counting.Count == 0
+            ? now + bucket.Interval
+            : counting[Math.Min(over, counting.Count) - 1] + bucket.Interval;
     }
 
     /// <summary>
-    /// When one restriction lets the next send through, over all of its buckets.
+    /// When one restriction has room for a send of so many messages, over all of its
+    /// buckets.
     /// </summary>
     /// <param name="restriction">The restriction.</param>
     /// <param name="sends">The times counted against the key.</param>
     /// <param name="now">The clock.</param>
+    /// <param name="weight">How many messages the send is, each of which counts.</param>
     /// <returns>
     /// The earliest time an exceeded bucket lifts, or nothing where none is exceeded.
     /// </returns>
@@ -130,15 +144,43 @@ internal static class Restrictions
     public static DateTimeOffset? Lift(
         Restriction restriction,
         IReadOnlyList<DateTimeOffset> sends,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        int weight)
     {
         ArgumentNullException.ThrowIfNull(restriction);
 
         return restriction.Buckets
-            .Select(bucket => Lift(bucket, sends, now))
+            .Select(bucket => Lift(bucket, sends, now, weight))
             .Where(lift => lift is not null)
             .Order()
             .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// How many of a send's messages one restriction has no room for, which is the
+    /// credit the send spends where credit carries it through.
+    /// </summary>
+    /// <param name="restriction">The restriction.</param>
+    /// <param name="sends">The times counted against the key.</param>
+    /// <param name="now">The clock.</param>
+    /// <param name="weight">How many messages the send is.</param>
+    /// <returns>The messages beyond the room of its fullest bucket, at most the weight.</returns>
+    /// <exception cref="ArgumentNullException">The restriction or the times are absent.</exception>
+    public static int Over(
+        Restriction restriction,
+        IReadOnlyList<DateTimeOffset> sends,
+        DateTimeOffset now,
+        int weight)
+    {
+        ArgumentNullException.ThrowIfNull(restriction);
+        ArgumentNullException.ThrowIfNull(sends);
+
+        return restriction.Buckets.Max(bucket =>
+        {
+            DateTimeOffset opened = Opened(bucket, now);
+
+            return Math.Clamp(sends.Count(sent => sent >= opened) + weight - bucket.Maximum, 0, weight);
+        });
     }
 
     /// <summary>

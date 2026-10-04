@@ -44,7 +44,7 @@ internal sealed class IdentifierService(
     IIdentifierDirectory directory,
     ISettingsRestriction restriction,
     IPendingVerificationStore pending,
-    INotificationHandler sending,
+    IGovernedSend sending,
     LandingLinks landing,
     INoticeLedger notices,
     ISessionStore sessions,
@@ -1361,8 +1361,8 @@ internal sealed class IdentifierService(
         var link = OpaqueToken.Draw(randomness);
 
         Result<SendReference> sent = await sending
-            .SendAsync(
-                new SendRequest(
+            .UndertakeAsync(
+                new OutboundMessage(
                     Destination(staged.Kind, staged.Canonical),
                     MessageKind.VerificationLink,
                     RestrictionPurpose.Verification,
@@ -1398,11 +1398,11 @@ internal sealed class IdentifierService(
         var link = OpaqueToken.Draw(randomness);
 
         Result<SendReference> sent = await sending
-            .SendAsync(
-                new SendRequest(
+            .UndertakeAsync(
+                new OutboundMessage(
                     Destination(displaced.Kind, displaced.Canonical),
                     MessageKind.IdentifierChangeConfirm,
-                    RestrictionPurpose.Notification,
+                    RestrictionPurpose.Verification,
                     source,
                     await LanguageAsync(waiting.Subject, cancellationToken).ConfigureAwait(false))
                 {
@@ -1456,8 +1456,8 @@ internal sealed class IdentifierService(
         // A refusal to tell the holder is not a refusal of the operation: the caller
         // sees the same outcome either way (REG-SESS-005 AC1).
         Result<SendReference> sent = await sending
-            .SendAsync(
-                new SendRequest(
+            .UndertakeAsync(
+                new OutboundMessage(
                     Destination(kind, canonical),
                     MessageKind.AccountExists,
                     RestrictionPurpose.Notification,
@@ -1490,7 +1490,7 @@ internal sealed class IdentifierService(
 
         foreach (HeldIdentifier identifier in reached)
         {
-            var request = new SendRequest(
+            var request = new OutboundMessage(
                 Destination(identifier.Kind, identifier.Canonical),
                 message,
                 RestrictionPurpose.Notification,
@@ -1509,7 +1509,7 @@ internal sealed class IdentifierService(
             // A security notice one destination refuses still reaches the rest: the
             // set exists so that no one channel can silence it.
             Result<SendReference> sent = await sending
-                .SendAsync(request, cancellationToken)
+                .UndertakeAsync(request, cancellationToken)
                 .ConfigureAwait(false);
 
             told += sent.Match(_ => 1, _ => 0);

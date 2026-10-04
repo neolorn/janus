@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace Janus.Storage.Authentication.Sending;
@@ -10,5 +9,4 @@ namespace Janus.Storage.Authentication.Sending;
 /// <remarks>Implements D-022.</remarks>
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(SendDeliveryDocument))]
-[JsonSerializable(typeof(List<string>))]
 internal sealed partial class SendDeliveryJson : JsonSerializerContext;

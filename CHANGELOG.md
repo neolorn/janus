@@ -2598,3 +2598,71 @@ against the public contract of LIB-API-001.
   latest where none is live. The migration `KeepARecordForEachGrant` gives each record
   held an `id` and deletes none; reverting it is refused where a subject holds a second
   record of one purpose.
+- The link that asks the address a replace displaces to confirm it is sent under the
+  `verification` purpose, as the new address's code is, so no `notification`
+  restriction counts or refuses it.
+- A registration stream whose wait begins while the database channel that wakes it is
+  no longer listened on raises `degradation` with `details.component`
+  `registration-channel`, once per deduplication window, and the channel is opened
+  again; the stream goes on reading the state back on its interval meanwhile.
+- A change of an alert destination list is written only while the list whose
+  destinations it notified is still in force. Where another change of the list
+  committed after the notice went out, the change writes nothing, raises no
+  `alert-destination-changed` and is refused with the new code
+  `config.change.superseded` (409), so no destination is replaced without having been
+  told.
+- `IGovernedSend` in `Janus.Core` is the one way an area undertakes a send:
+  `UndertakeAsync` takes an `OutboundMessage` (the destination, the message, the purpose,
+  the source and the language, with the subject and the values) and answers the
+  `SendReference` the admitted message is carried under, or the refusal. It answers the
+  admission and never the delivery. The send is judged against the named restrictions
+  and the gateway floor inside the caller's unit of work, with the counter of each of
+  its keys held to the end of that transaction, so of several sends judged at once
+  while a bucket has room for one, one is admitted and the others are refused with
+  `retryAt`, and a credit is spent once. A send counts from its admission; its count
+  and the credit it spent are given back where it fails for good: its attempts are
+  spent, a delivery report says it failed, or the restrictions refuse its retry. A
+  refused send writes neither a count nor an outbox row. The caller begins the unit of
+  work: a send undertaken outside one is a fault.
+- `IUnitOfWork.AfterCommit` registers work to run once the outermost transaction has
+  committed; a rollback discards it. An admitted message has one attempt registered
+  this way, so no transport is called while a transaction is open and an operation
+  that rolls back sends nothing. The message of an ask of a sign-in link, an email code
+  or a recovery, and the notice to an address no account holds, has no attempt in the
+  request: the ask is answered first and the outbox publisher carries it.
+- `INotificationHandler.SendAsync` now carries one message the library has already
+  admitted and written to its outbox, and answers whether a transport took it. Its
+  `SendRequest` is the admitted message: the destination, the message, the language,
+  the subject, the values and the `SendReference` it is carried under, with none of the
+  restrictions' inputs. A deployment that registers its own handler is governed as the
+  shipped one is. `SendReference.TryParse` reads a reference back from text.
+- A send in every declared language is judged once. By mail it is one message, composed
+  from each language's template in the order of `notification.languages` with the
+  subject lines joined, and counts once. By text message it is one message for each
+  language, each under a reference of its own, admitted only where every bucket has
+  room for all of them, and each counts.
+- Every admitted message is claimed before its handler is called, by the attempt that
+  follows the commit and by each pass of the publisher, in any number of processes, so
+  each is carried once and each outcome recorded once. The claim stands for
+  `outbox.claim.timeout` (new, `PT2M`, floor `PT30S`, ceiling `PT10M`); an attempt still
+  running then is abandoned as a failed attempt, and the next pass may take the row. A
+  message carried again is judged by the restrictions as they stand then, with its own
+  count set aside, and counts at that instant.
+- An invitation's link, a recovery's link, a sign-in link or code, a second-step code,
+  a new-device code and every notice an operation owes are undertaken in the
+  transaction of that operation. An invitation whose link the restrictions refuse is
+  not issued and reserves nothing.
+- `NotificationRequested` is no longer emitted: every message is carried from the
+  library's send outbox.
+- An erased wrapped key is 32 zero bytes wherever one is held, with no marker byte in
+  them, and every unwrap refuses that value before it is tried. An erasure overwrites
+  with it the key of every message admitted for the subject and not yet carried, in the
+  erasure's own transaction; the publisher and the attempt that follows a commit remove
+  such a row without carrying it, and the count the send held is released. A released
+  mailbox reservation's key is overwritten with the same value. An outbox row keeps the
+  hash of the reference it is counted under beside its encrypted content.
+- A raised alert is claimed before the router carries it, by one conditional update
+  committed on its own, and leaves the table under that claim, so passes of the alert
+  channels in several processes carry each raised condition once. The claim stands for
+  `outbox.claim.timeout`; a condition the router refused gives its claim up and is
+  taken by the next pass.

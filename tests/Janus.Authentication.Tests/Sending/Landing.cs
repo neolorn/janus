@@ -39,7 +39,7 @@ internal static class Landing
     /// </summary>
     /// <param name="sent">The message.</param>
     /// <returns>The token.</returns>
-    public static string Token(this SendRequest sent)
+    public static string Token(this OutboundMessage sent)
     {
         ArgumentNullException.ThrowIfNull(sent);
 

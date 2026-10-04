@@ -3792,6 +3792,8 @@ the outbox publisher and the alert router beside the hosted worker. LIB-EXT-001'
 LIB-API-001 should carry it, `SendRequest`, `SendDestination` and `SendReference` in the
 public surface.
 
+**Superseded by D-166.**
+
 ---
 
 ## 119. Every send is written to the library's own outbox and carried from the row
@@ -3862,6 +3864,8 @@ still holds: a refused delivery counts against no bucket.
 written to, that the row is removed once a transport has taken it (IDN-PRIN-003), and
 that the row's message is encrypted under a key of the row's own because a send may name
 no subject. `10` should carry the `send_outbox` table and its six columns.
+
+**Superseded by D-166.**
 
 ---
 
@@ -4916,6 +4920,8 @@ interval is now the new key rather than a constant.
 *Chapter text that should change.* `10` section 4 should carry
 `registration.events.pollinterval`, from the row below. REG-SESS-003 should say what
 drives the stream and that the interval is the fallback.
+
+**Superseded by D-166.**
 
 ---
 
@@ -8410,6 +8416,8 @@ restrictions a notification answers to judge it, as they judge a recovery link
 
 *Chapter text that should change.* Chapter 10 could list the message kind (row below).
 
+**Superseded by D-166.**
+
 ---
 
 ## 228. The roles an invitation attaches ask what a grant asks
@@ -8697,6 +8705,8 @@ request the recipient made, and that a tag is matched against
 `notification.languages` by RFC 4647 lookup. The `notification.languages` row in
 chapter 10 could say that step 3 is one message per language. AUTH-ABUSE-004 could
 say that such a request is judged once and each language counts as one send.
+
+**Superseded by D-166.**
 
 ---
 
@@ -12845,6 +12855,8 @@ again; chapter 10 section 4 could name send delivery beside IDN-LIFE-003a on the
 `outbox.*` rows and say that a spent send is removed and raises `degradation` per
 channel.
 
+**Superseded by D-166.**
+
 ---
 
 ## 323. The licence and maintenance log endpoints, and who may use them
@@ -13753,6 +13765,8 @@ What is built:
 (the security-notice set), that only an active account is reminded, and the daily pass.
 Chapter 09 could list `remindedAt` in the account's `recoveryCodes` object. Chapter 10
 could carry `recovery-codes-reminder` if it lists message kinds.
+
+**Superseded by D-166.**
 
 ---
 
