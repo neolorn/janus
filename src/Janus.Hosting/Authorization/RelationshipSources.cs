@@ -47,6 +47,32 @@ internal sealed class RelationshipSources(IEnumerable<RelationshipSource> declar
         return HeldAsync(reader.Held);
     }
 
+    /// <inheritdoc/>
+    public IAsyncEnumerable<SubjectId> HeldOn(RelationshipDeclaration relationship, ResourceId resource)
+    {
+        ArgumentNullException.ThrowIfNull(relationship);
+
+        (RelationshipSource source, DbContext context) = Opened(relationship);
+        var reader = new OnReader(relationship, resource);
+
+        source.Read(context, reader);
+
+        return reader.Holders.AsAsyncEnumerable();
+    }
+
+    /// <inheritdoc/>
+    public IAsyncEnumerable<ConferredRecord> Conferred(RelationshipDeclaration relationship, ResourceType type)
+    {
+        ArgumentNullException.ThrowIfNull(relationship);
+
+        (RelationshipSource source, DbContext context) = Opened(relationship);
+        var reader = new ConferredReader(relationship, type, context.Set<AncestryEntry>());
+
+        source.Read(context, reader);
+
+        return ConferredAsync(reader.Conferred);
+    }
+
     private static async IAsyncEnumerable<HeldRelationship> HeldAsync(
         IQueryable<Above> held,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -54,6 +80,19 @@ internal sealed class RelationshipSources(IEnumerable<RelationshipSource> declar
         await foreach (Above each in held.AsAsyncEnumerable().WithCancellation(cancellationToken))
         {
             yield return new HeldRelationship(each.Holder, ResourceId.Parse(each.Resource));
+        }
+    }
+
+    private static async IAsyncEnumerable<ConferredRecord> ConferredAsync(
+        IQueryable<Conferring> conferred,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await foreach (Conferring each in conferred.AsAsyncEnumerable().WithCancellation(cancellationToken))
+        {
+            yield return new ConferredRecord(
+                each.Holder,
+                ResourceId.Parse(each.Record),
+                ResourceId.Parse(each.Named));
         }
     }
 
@@ -128,6 +167,56 @@ internal sealed class RelationshipSources(IEnumerable<RelationshipSource> declar
         }
     }
 
+    // AUTHZ-DERIVE-005: who holds the relationship on one record, which is what a
+    // refresh of that record reads.
+    private sealed class OnReader(RelationshipDeclaration relationship, ResourceId resource)
+        : IRelationshipRowsReader
+    {
+        private IQueryable<SubjectId>? _holders;
+
+        public IQueryable<SubjectId> Holders =>
+            _holders ?? throw new InvalidOperationException("The source handed over no rows.");
+
+        public void Read<TRow>(IQueryable<TRow> rows)
+        {
+            string id = resource.ToString();
+
+            _holders = Rows(rows, relationship)
+                .Where(row => row.Resource == id)
+                .Select(row => row.Holder)
+                .Distinct();
+        }
+    }
+
+    // AUTHZ-DERIVE-005 AC6: what a derivation confers in every organization, as one
+    // statement over the rows and the ancestry of one context instance: each holder with
+    // each record of the derivation's type whose ancestry includes the record the row
+    // names.
+    private sealed class ConferredReader(
+        RelationshipDeclaration relationship,
+        ResourceType type,
+        IQueryable<AncestryEntry> ancestry) : IRelationshipRowsReader
+    {
+        private IQueryable<Conferring>? _conferred;
+
+        public IQueryable<Conferring> Conferred =>
+            _conferred ?? throw new InvalidOperationException("The source handed over no rows.");
+
+        public void Read<TRow>(IQueryable<TRow> rows)
+        {
+            string declaredOn = type.ToString();
+            string on = relationship.On.ToString();
+
+            _conferred = Rows(rows, relationship)
+                .Join(
+                    ancestry.Where(entry => entry.ResourceType == declaredOn && entry.AncestorType == on),
+                    row => row.Resource,
+                    entry => entry.AncestorId,
+                    (row, entry) => new Conferring { Holder = row.Holder, Record = entry.ResourceId, Named = row.Resource })
+                .Distinct();
+        }
+    }
+
     // One row of a relationship as every reading composes over it.
     private sealed class Row
     {
@@ -145,5 +234,16 @@ internal sealed class RelationshipSources(IEnumerable<RelationshipSource> declar
         public string Resource { get; init; } = string.Empty;
 
         public int Depth { get; init; }
+    }
+
+    // One holder with one record the derivation confers on, and the record the row
+    // names.
+    private sealed class Conferring
+    {
+        public SubjectId Holder { get; init; }
+
+        public string Record { get; init; } = string.Empty;
+
+        public string Named { get; init; } = string.Empty;
     }
 }

@@ -8,7 +8,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication.Accounts;
+using Janus.Authorization.Gate;
 using Janus.Core;
+using Janus.Hosting.Background;
 using Janus.Hosting.Bff;
 using Janus.Privacy.Consents;
 using Microsoft.EntityFrameworkCore;
@@ -93,6 +95,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a check by background work, which holds no grant", Decided.Denied),
         ("a check refused inside work the caller rolls back", Decided.Denied),
         ("a lookup of a record a fact in the host's data reaches, by a caller reading grants", Decided.Allowed),
+        ("a fact in the host's data no grant was materialised for, after the drift check", Decided.Allowed),
+        ("a materialised grant the host's data no longer supports, after the drift check", Decided.Denied),
     ];
 
     /// <summary>
@@ -655,6 +659,12 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "a lookup of a record a fact in the host's data reaches, by a caller reading grants":
                 return await ViewedAsync(deployment, caller);
 
+            case "a fact in the host's data no grant was materialised for, after the drift check":
+            case "a materialised grant the host's data no longer supports, after the drift check":
+                return await DriftCheckedAsync(
+                    deployment,
+                    supported: scenario.StartsWith("a fact", StringComparison.Ordinal));
+
             default:
                 throw new ArgumentOutOfRangeException(nameof(scenario), scenario, "No such case.");
         }
@@ -685,6 +695,53 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     ? Decided.Allowed
                     : throw new InvalidOperationException("The view left the derived grant out."),
                 Refused);
+    }
+
+    // AUTHZ-DERIVE-005 AC4: a record under a workspace someone reviews, in the deployment
+    // with the derivation materialised, after the drift check has run over the declared
+    // source; where the case says the rows no longer support the grant, the fact is
+    // taken away after a first check wrote it and the check runs again.
+    private async Task<Decided> DriftCheckedAsync(Deployment deployment, bool supported)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        ResourceReference workspace = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+        SubjectId reviewing = await deployment.AccountAsync(cancellationToken);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(record, workspace, cancellationToken);
+        await deployment.NamedRoleAsync(RoleName.Parse("reviewer"), [HostPermissions.Read], cancellationToken);
+        await deployment.ReviewAsync(workspace, reviewing, cancellationToken);
+
+        await using ServiceProvider materialised = Materialised();
+
+        await DriftCheckedAsync(materialised);
+
+        if (!supported)
+        {
+            await deployment.UnreviewAsync(workspace, reviewing, cancellationToken);
+            await DriftCheckedAsync(materialised);
+        }
+
+        await using AsyncServiceScope scope = materialised.CreateAsyncScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .RequireAsync(AccessContext.Of(reviewing), HostPermissions.Read, record, cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
+    }
+
+    // The drift check as the worker runs it: the job, under its own principal.
+    private static async Task DriftCheckedAsync(IServiceProvider deployment)
+    {
+        BackgroundJob check = BackgroundJobs.All.Single(job => job.Name == DerivationDriftCheck.Job);
+
+        await using AsyncServiceScope scope = deployment.CreateAsyncScope();
+
+        (await check.RunAsync(
+                scope.ServiceProvider,
+                AccessContext.Of(check.Principal),
+                TestContext.Current.CancellationToken))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
     }
 
     // AUTHZ-CONCEAL-004 AC4: a check the caller makes inside a unit of work it then rolls
@@ -1002,6 +1059,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
         services.AddSingleton<TimeProvider>(new FixedTime(Deployment.Noon));
         services.AddSingleton<ISecretSource>(HostFixture.Secrets(host.MaintenanceConnectionString));
+        HostFixture.Sourced(services, host.ConnectionString);
         services.AddJanus(host.ConnectionString, HostFixture.Declaration(materialised: true), ApplicationKind.Public);
 
         return HostFixture.Started(services.BuildServiceProvider());

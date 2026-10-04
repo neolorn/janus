@@ -183,6 +183,12 @@ against the public contract of LIB-API-001.
   `model.startup.declarationinvalid` (`details.declaration`
   `relationshipSource.<relationship>`, `details.field` `relationship`, `rows` or
   `context`).
+- The job `derivation-driftcheck` evaluates every materialised derivation over its
+  relationship source every `derivation.materialised.driftcheck`, in one statement in the
+  host's context, brings the materialised grants that no longer match the host's rows
+  back into step and raises `degradation` naming the derivation (`details.derivation`)
+  in the same run. A grant it writes or takes back records the nil subject and the reason
+  `AUTHZ-DERIVE-005`.
 - `no-emergency-credential` is raised by the hourly `emergency-credential` job for as
   long as no break-glass credential stands, including after one is spent, and stops only
   when one is generated.

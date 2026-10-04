@@ -10023,6 +10023,8 @@ and say how the HTTP view reaches the host's relation, or that it does not and t
 view on a derived type is the host's own call; AUTHZ-DERIVE-007 could say that a grant
 conferring nothing is not reported and that `unevaluated` names relationships.
 
+**Superseded by D-166.**
+
 ---
 
 ## 266. A derivation confers nothing in a suspended organization

@@ -12,8 +12,8 @@ namespace Janus.Authorization.Gate;
 /// D-183). The library queries no host table of its own: the scope gives one instance of
 /// the host's context, and the rows and the ancestry closure that instance maps are
 /// composed into one query the host's context runs. This port is what the "who can
-/// access this?" view reads through; the check and the filter read the rows the host
-/// passes them (AUTHZ-DERIVE-001).
+/// access this?" view and the drift check of materialised derivations read through; the
+/// check and the filter read the rows the host passes them (AUTHZ-DERIVE-001).
 /// </remarks>
 internal interface IRelationshipSources
 {
@@ -38,4 +38,24 @@ internal interface IRelationshipSources
     IAsyncEnumerable<HeldRelationship> HeldAbove(
         RelationshipDeclaration relationship,
         ResourceReference resource);
+
+    /// <summary>
+    /// Who holds a relationship on one record, in one statement.
+    /// </summary>
+    /// <param name="relationship">The relationship.</param>
+    /// <param name="resource">The record the rows are about.</param>
+    /// <returns>The subjects, each one once.</returns>
+    /// <exception cref="System.InvalidOperationException">No source is declared for the relationship.</exception>
+    IAsyncEnumerable<SubjectId> HeldOn(RelationshipDeclaration relationship, ResourceId resource);
+
+    /// <summary>
+    /// What a derivation following from a relationship confers, in every organization
+    /// and in one statement: each holder of a row with each record of the type the
+    /// derivation is declared on whose ancestry includes the record the row names.
+    /// </summary>
+    /// <param name="relationship">The relationship the derivation follows from.</param>
+    /// <param name="type">The type the derivation is declared on.</param>
+    /// <returns>Each holder and record, once.</returns>
+    /// <exception cref="System.InvalidOperationException">No source is declared for the relationship.</exception>
+    IAsyncEnumerable<ConferredRecord> Conferred(RelationshipDeclaration relationship, ResourceType type);
 }

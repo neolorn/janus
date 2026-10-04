@@ -59,7 +59,9 @@ internal static class AuthorizationRegistration
         services.AddScoped<ReverseLookup>();
         services.AddScoped<DenialSpikes>();
         services.AddScoped<DenialRecording>();
-        services.AddScoped<IDerivationMaterialiser, DerivationMaterialiser>();
+        services.AddScoped<DerivationMaterialiser>();
+        services.AddScoped<IDerivationMaterialiser>(provider => provider.GetRequiredService<DerivationMaterialiser>());
+        services.AddScoped<DerivationDriftCheck>();
 
         // AUTHZ-INHERIT-002: the host says where each of its records sits, and the
         // ancestry the gate reads is written from that and nothing else.
