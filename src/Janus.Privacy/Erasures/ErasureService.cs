@@ -25,10 +25,10 @@ namespace Janus.Privacy.Erasures;
 /// <param name="work">The one transaction a completion runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
-/// Implements LIB-API-005, IDN-LIFE-003a, IDN-LIFE-003b and DR-016. An erasure is read
-/// from the delivery its host-side work travels on, which carries its subject, reason,
-/// status, attempts and confirmations, and which the erasures row follows step for
-/// step. The manual path is for permanent failure and is itself recorded, so a delivery
+/// Implements LIB-API-005, IDN-LIFE-003a, IDN-LIFE-003b, AUTHZ-GATE-006 and DR-016. An
+/// erasure is read from the delivery its host-side work travels on, which carries its
+/// subject, reason, status, attempts and confirmations, and which the erasures row
+/// follows step for step. The manual path is for permanent failure and is itself recorded, so a delivery
 /// never closes without a trace of who closed it or what was outstanding. The operator
 /// vouches for the host's subscribers and never for an erasure's ledger line: the path
 /// appends it where it is outstanding, and closes nothing until it is durable (DR-016
@@ -150,6 +150,21 @@ internal sealed class ErasureService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-186: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the completion before anything is written. The ledger line
+        // appended above names an erasure committed before, so it is no effect of the
+        // completion and stands; a line appended again later is one erasure to a replay
+        // (DR-016).
+        if (await scope
+                .RefusedAsync(context, Permissions.PrivacyRequestManage, cancellationToken)
+                .ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
         }
 
         // D-166 X3: the delivery is closed under its row's lock, so a second operator

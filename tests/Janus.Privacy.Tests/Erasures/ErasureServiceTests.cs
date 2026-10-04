@@ -406,6 +406,46 @@ public sealed class ErasureServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTHZ-GATE-006 AC3 and DR-016: a restriction of the operator committed after the
+    /// gate step refuses the completion inside its unit of work, which rolls back with
+    /// nothing closed and nothing recorded. The ledger line appended before the unit of
+    /// work names an erasure committed before and stands; a completion made later closes
+    /// the erasure, and the ledger holds that one line and no other.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ACompletionRefusedAtTheSecondAskLeavesTheLedgerLineStandingAsync()
+    {
+        const string line = "2026-09-24T11:00:00Z 11111111-1111-4111-8111-111111111111 minor-takedown";
+
+        _ledger = new ErasureLedgerInMemory();
+
+        Delivery delivery = await ErasedAsync(Ahmed, Noon.AddHours(-1), ErasureStatus.Failed);
+        var erasure = new ErasureId(delivery.Id.Value);
+
+        _gate.Admitted = () => _work.Meanwhile = () => _gate.Restrict(Mona);
+
+        Error refused = Refused(await CompletedAsync(Mona, erasure));
+
+        Assert.Equal(ErrorCodes.Restricted, refused.Code);
+        Assert.Equal([line], _ledger.Lines);
+        Assert.Equal(ErasureStatus.Failed, delivery.Status);
+        Assert.Equal(ErasureStatus.Failed, Assert.Single(_erasures.Erasures).Status);
+        Assert.Empty(_audit.Entries);
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Opened);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+
+        _gate.Lift(Mona);
+
+        Held(await CompletedAsync(Mona, erasure));
+
+        Assert.Equal(ErasureStatus.Complete, delivery.Status);
+        Assert.Equal([line], _ledger.Lines.Distinct());
+    }
+
+    /// <summary>
     /// DR-016 AC2: a line the worker already made durable is not written again by the
     /// manual path.
     /// </summary>

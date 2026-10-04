@@ -123,6 +123,11 @@ against the public contract of LIB-API-001.
   `integration.sms.balancefloor`; either leaves no approval, no record of it and no
   send, and so does a restriction of the approver's account committed after the first
   ask of the gate, answered `authz.restricted`.
+- The manual completion of an erasure asks the gate again inside its unit of work
+  before the first write. A restriction of the operator's account committed after the
+  first ask refuses the completion `authz.restricted` and closes nothing. A ledger line
+  the completion appended before its unit of work stands, and a replay reads a line
+  appended twice as one erasure.
 - The shipped mail-server adapter lists an account whose `emailAddress` does not read as
   an email address, or that holds none, with no address, where it failed the listing
   for an account holding none. Reconciliation reads such a listing whole: the account
