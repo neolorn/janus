@@ -82,6 +82,7 @@ public sealed class ErrorCodesTests
         "authz.role.notfound",
         "authz.truthtable.disagreement",
         "config.change.reasonrequired",
+        "config.change.superseded",
         "config.key.protected",
         "config.policy.belowsystem",
         "config.value.aboveceiling",

@@ -224,6 +224,39 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// OPS-ALERT-004a AC7: a change whose value in force moved after its previous
+    /// destinations were told is refused as superseded under the row's lock. It writes
+    /// nothing and raises no <c>alert-destination-changed</c>, so the destinations the
+    /// other change put in force are not replaced without having been told.
+    /// </summary>
+    [Fact]
+    public async Task OPS_ALERT_004a_AC7_AChangeOvertakenAfterItsNoticeIsRefusedAsSupersededAsync()
+    {
+        string[] winner = ["winner@example.test"];
+
+        _configuration.Holding = held =>
+        {
+            if (held == Settings.AlertingEmailDestinations.Key)
+            {
+                _configuration.Holding = null;
+                _configuration.Set(Settings.AlertingEmailDestinations, winner);
+            }
+        };
+
+        Error refusal = await RefusedAsync(SendKind.Email, Elsewhere);
+
+        Assert.Equal(ErrorCodes.ConfigurationChangeSuperseded, refusal.Code);
+        Assert.Equal("config.change.superseded", refusal.Code.ToString());
+        Assert.Equal("alerting.email.destinations", refusal.Details["key"].GetString());
+        Assert.Equal(winner, await DestinationsAsync(Settings.AlertingEmailDestinations));
+        Assert.Empty(_changes.Written);
+        Assert.Empty(_events.Published.OfType<AlertRaised>());
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(_work.Opened, _work.Committed + _work.RolledBack);
+    }
+
+    /// <summary>
     /// Changing the numbers tells the numbers being replaced, on their own channel
     /// (OPS-ALERT-004a).
     /// </summary>

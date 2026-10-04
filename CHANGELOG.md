@@ -2436,3 +2436,9 @@ against the public contract of LIB-API-001.
   no longer listened on raises `degradation` with `details.component`
   `registration-channel`, once per deduplication window, and the channel is opened
   again; the stream goes on reading the state back on its interval meanwhile.
+- A change of an alert destination list is written only while the list whose
+  destinations it notified is still in force. Where another change of the list
+  committed after the notice went out, the change writes nothing, raises no
+  `alert-destination-changed` and is refused with the new code
+  `config.change.superseded` (409), so no destination is replaced without having been
+  told.

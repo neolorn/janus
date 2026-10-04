@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -134,6 +135,34 @@ internal sealed class AlertDestinationChange(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // OPS-ALERT-004a AC7: the destinations told above are those the change replaces
+        // only while that value is still in force, so it is read again under the row's
+        // lock, and a change another one overtook writes nothing.
+        await administration.HoldAsync(setting, cancellationToken).ConfigureAwait(false);
+
+        IReadOnlyList<string> standing = (await configuration
+                .ReadAsync(setting, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<IReadOnlyList<string>>(error, ref failure));
+
+        if (failure is not null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(failure);
+        }
+
+        if (!standing.SequenceEqual(previous, StringComparer.Ordinal))
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(
+                Error.From(
+                    ErrorCodes.ConfigurationChangeSuperseded,
+                    "key",
+                    JsonSerializer.SerializeToElement(setting.Key.ToString())));
         }
 
         // OPS-CFG-005: the change is written through the one operation that classifies

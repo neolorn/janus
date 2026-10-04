@@ -55,6 +55,7 @@ authz.role.inuse 409
 authz.role.notfound 404
 authz.truthtable.disagreement 500
 config.change.reasonrequired 422
+config.change.superseded 409
 config.key.protected 422
 config.policy.belowsystem 422
 config.value.aboveceiling 422
