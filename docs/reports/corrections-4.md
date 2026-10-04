@@ -615,7 +615,7 @@ CONV-DESIGN-008 criterion 3, "no project's build reports MSB3277": no test decid
 
 What earlier runs left: nine worktrees held uncommitted work whose commits were all in the branch; each is kept as a patch outside the repository and removed with its branch. The reason rule of the configuration route that one of them carried is on the branch at the endpoint and in the service (`ConfigurationEndpointTests.OPS_CFG_005_EveryChangeCarriesAReasonAsync`, `ConfigurationAdministrationTests.OPS_CFG_008_AC2_ATighteningWithNoReasonIsRefusedAsync`). Four stashes are dropped: three held earlier states of the docs, and every file of the fourth is in the history (the changelog describes `MapAuthorizationTables`).
 
-**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The parts of D-183 the owner's split names run each in a worktree of its own cut from `7bce9374`: gates is merged (below); sending, privacy, sessions and authorization are not. Questions 68 to 91 park the sites they name. The work after the merges is not started.
+**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The parts of D-183 the owner's split names run each in a worktree of its own cut from `7bce9374`: gates and sessions are merged (below), sessions without questions 31 and 42; sending, privacy and authorization are not. Questions 68 to 96 park the sites they name. The work after the merges is not started.
 
 ### The section C sweeps, place by place
 
@@ -1021,6 +1021,27 @@ After the merge: build 0 warnings 0 errors, format clean, 2925 unit tests, 139 c
   - A token whose `nbf` is in the future: question 90.
 - For audit: `OrganizationService` and `ConfigurationService` take the codec as a constructor parameter, registered by a factory that asks the container for it; `Policy` and `PolicyOverride` gain a trailing positional member.
 
+#### D-183, `part/sessions`, merged as `0b598993` (`a4a00c82`, `fdef37a9`, `d52cacfb`, `bd858a96`, `0c3746d8`, `f805640f`, `a2025e00`)
+
+After the merge: build 0 warnings 0 errors, format clean, 2946 unit tests, 139 contract tests; the truth-table check passes over the range. One migration, `RecordWhenASessionWasDowngraded` (one nullable column, no hand-written SQL); the working branch held no other, so the snapshot merged without conflict and nothing was regenerated.
+
+- **Question 40** (`a4a00c82`; AUTHZ-IMP-001, AUTH-RECOV-007). `CredentialSuspended` carries the effective identity of the reporting context, as given. Test: `LossReportsTests.AUTHZ_IMP_001_ASuspensionCarriesBothIdentitiesAsTheContextGivesThemAsync`. Ledger: 152 "Superseded by D-166". The other events that name who acted: question 95.
+- **Question 41** (`fdef37a9`; REG-DOM-001 criterion 10). An account holding no verified email is refused `identity.identifier.domainnotallowed` at acknowledgement where the organization's lock is on, before the unit of work. This brings `2e8174c1` to the answer. Test: `InvitationServiceTests.REG_DOM_001_AC10_AnAccountHoldingNoVerifiedEmailCannotAcknowledgeIntoALockedOrganizationAsync`.
+- **Question 46, and the failure rules of `669bac7b`** (`d52cacfb`; LIB-HOST-004 criterion 4, AUTH-STEP-002, AUTHZ-TEST-001). A report whose instant is after now, or whose level or reachable assurance is not a level of `10` section 5.4, and a provider that fails, are `auth.stepup.required` with `outcome` `present`, empty `options` and a null `pendingUntil`; no provider stays `auth.stepup.unavailable`. Truth table: the table `StepUps`, seven rows, in a second container that registers a provider. Tests: `StepUpGatesTests.LIB_HOST_004_AC4_AReportThatDoesNotReadMeetsNoGateAsync`, `StepUpGatesTests.LIB_HOST_004_AC4_TheActingPersonsOwnSessionIsJudgedInPlaceOfTheProviderAsync`, `TruthTableTests.AUTHZ_TEST_001_AC1_EveryStepUpCaseDecidesTheWayTheTableSaysAsync` (seven cases). Ledger: 328 "Superseded by D-166". Not built: the filter half of the six unmet rows (question 92) and the seven scenarios of the conformance suite (question 93).
+- **Question 36** (`bd858a96`; AUTH-SESS-009, AUTH-SESS-001, AUTH-STEP-002, IDN-LIFE-009b, AUTHZ-GATE-005). `sessions.downgraded_at`; the acknowledgement downgrades every standing session of the account in its transaction; a proof counts only where attained after the last downgrade; a session derived from a downgraded record is downgraded from its first instant; the capability page answers `reauthenticate` where the gate is unmet only for the downgrade; at a step-up a factor outside the policy's `loginFactors` is refused `auth.factor.notpermitted` before it is verified, recorded and counted. Truth table: three rows in the operations table. Tests:
+  - `StepUpTests.AUTH_SESS_009_AC6_ADowngradedSessionIsAskedAPresentationThatLiftsIt`, `StepUpTests.AUTH_STEP_002_AC3_ProofAttainedUpToTheLastDowngradeIsNotCounted`, `StepUpTests.AUTH_SESS_009_AC5_ASessionDerivedFromADowngradedRecordPassesNoGate`
+  - `AuthenticationServiceTests.IDN_LIFE_009b_ASessionHeldBeforeTheMembershipIsDowngradedAsync` (also AUTH-STEP-002 criterion 9)
+  - `InvitationServiceTests.AUTH_SESS_009_AC5_TheAcknowledgementDowngradesEverySessionTheAccountHoldsAsync`
+  - `SessionStoreTests.AUTH_SESS_009_AC5_ADowngradeIsWrittenOnEveryStandingSessionOfTheAccountAsync`
+  - `TruthTableTests.AUTHZ_TEST_001_AC1_EveryOperationCaseDecidesTheWayTheTableSaysAsync` (three new cases)
+  - Ledger: 246 "Superseded by D-166".
+  - For audit: a presentation below the level a session attained before its downgrade lifts the downgrade, and the earlier, higher level then counts again, as it already does for the maximum age.
+- **The correction of `52482ed5`, the sign-in half** (`0c3746d8`; AUTH-FACT-002 criterion 7, AUTH-FACT-002b criterion 6). A `phoneCode` ask after a first factor whose number answers `risk` issues, sends and counts nothing, records the consideration and answers 200 `factorRequired` without the entry, or 422 `auth.factor.rejected` where none is left. Tests: `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtTheAskLeavingNoFactorIsRefusedAsync`, `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtTheAskIsAnsweredWithTheFactorsLeftAsync`, `SignInFlowTests.AUTH_FACT_002_AC7_ATextCodeAskedForAReportedNumberIsAnsweredWithWhatIsLeftAsync`. The step-up half is parked (question 94); there the ask still answers 202.
+- **Questions 47 and 48, D-166 389** (`f805640f`; BFF-ORDER-001 criteria 3, 6, 7, AUTH-ABUSE-001 criterion 13, AUTH-SESS-013 criterion 6, REG-SESS-007 criterion 6). A source is the IPv4 address, an IPv4-mapped address read as IPv4, or the /64 of an IPv6 address; stage 4 counts the source and its /48 under the new key `abuse.source.sitelimit` (3000) and writes one line where a hold begins; a session records the whole address. Tests: `SourceRateLimitingTests.BFF_ORDER_001_AC3_AddressesInOneIpv6SubnetAreOneSourceAsync`, `BFF_ORDER_001_AC3_AnotherSubnetOfTheSiteIsAdmittedUntilTheSiteLimitAsync`, `BFF_ORDER_001_AC3_AnIpv4MappedAddressIsItsIpv4SourceAsync`, `BFF_ORDER_001_AC3_AHeldSourceWritesNoLineForEachRefusalAsync`, `AUTH_SESS_013_TheSessionRecordsTheWholeAddressAsync`; `ThrottlingTests.AUTH_ABUSE_001_TwoAddressesOfOneIpv6SubnetShareTheSourceDelayAsync`; `RegistrationServiceTests.REG_SESS_007_AC6_TheFirstSessionRecordsTheWholeAddressOfTheCompletingRequestAsync`. Ledger: 389 "Superseded by D-166". Not decided by a test: "each instance counts in its own memory"; the counts are fields of a singleton.
+- **Question 32, and the counting half of 48** (`a2025e00`; REG-SESS-003 criterion 6, AUTH-ABUSE-001, REG-SESS-001). A pressed token that opens nothing asks its source's delay, is counted against the source alone and answered `auth.code.expired`; every delay, count and send of a registration uses the source of the request in hand. Tests: `RegistrationServiceTests.REG_SESS_003_AC6_APressedTokenThatOpensNothingIsCountedAgainstItsSourceAsync`, `RegistrationServiceTests.AUTH_ABUSE_001_ARegistrationCountsAgainstTheSourceOfTheRequestInHandAsync`, `RegistrationFlowTests.REG_SESS_003_AC6_APressedTokenThatOpensNothingIsCountedOverTheWireAsync`. Ledger: 419 "Superseded by D-166". The public surface it changed: question 96.
+- **Not built in the part:** question 31 with 306 (the registration and identifier codes through the verification-code record, the record for a held or reserved value, the expiry sweep; ledger lines 115 and 306) and question 42 (the registration session's credential authority, the staged ceremony and unconfirmed generator; ledger line 129). Neither was started. Both are taken up on the working branch after `part/sending` is merged, since each rebuilds code the governed send changes.
+- The integration classes `TruthTableTests`, `GateBehaviourTests`, `SignInFlowTests`, `SourceRateLimitingTests`, `ThrottlingTests`, `RegistrationFlowTests`, `RegistrationWizardTests`, `SessionStoreTests`, `ModelTests` and `SchemaContractTests` passed on the part.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1182,6 +1203,8 @@ After the merge: build 0 warnings 0 errors, format clean, 2925 unit tests, 139 c
 | `tests/Janus.Hosting.Tests/PublicSurfaceTests.cs` (`64b1a154`) | D-166 Tier 1 correction (1) places the scan of CONV-DESIGN-004 criterion 2 in `LibraryStructureTests`, whose project references `Janus.Core` alone, and the exempt members now sit in `Janus.Storage` and `Janus.Hosting` | CONV-TEST-001; the working guide's section 3, test infrastructure | A test that reads the shipped assemblies lives in the test project that references every shipped project; no reference or grant was added |
 | `PublicSurfaceTests.CONV_DESIGN_004_AC2_OnlyAMemberAPackagesInterfaceFixesIsExempt` (`64b1a154`) | Criterion 2 admits "an assembly of a package CONV-DESIGN-008 lists, or names as one a listed package brings"; the provider's store interfaces are declared in `OpenIddict.Abstractions`, which the listed packages bring and the table does not name | D-166 Tier 1 correction (1), which fixes "an assembly named OpenIddict.*" for those members | The test admits an assembly named as a listed or named package, or named `OpenIddict.*` |
 | `DeclarationCoverage.Origin` (`64b1a154`) | The scan reads a text parameter named `address` as an email address taken untyped; this one is a client's return address or the sign-in address, for which no typed value exists | CONV-DESIGN-004 criterion 2, "where a typed identifier or value exists" | The parameter is renamed `location`; behaviour unchanged |
+| 146 (4), an ask with a risk signal (`52482ed5`), the row above | The row was recorded as Tier 1 | D-183, the audit of the Tier 1 records | It was not Tier 1: it decided a step-up's outcome from rules for anonymous asks. The sign-in half is corrected in `0c3746d8`; the step-up half waits on question 94 |
+| `StepUpGates`, the values of 328 (`669bac7b`), the row above | The row was recorded as Tier 1 | D-183, the audit of the Tier 1 records | The main line stands; its failure rules were not Tier 1. They are built as LIB-HOST-004 criterion 4 now states them in `d52cacfb` |
 
 ## 4. Open questions
 
@@ -1841,7 +1864,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2925 unit tests, 139 c
   (`identifier_verifications` holds `CodeExpiresAt` only inside `enc_staged`); the two
   `IdentifierServiceTests` and the storage test of 306; ledger lines 115 and 306. 115 (1)
   and (3) are in `6b79266c`.
-- **Answer:** pending.
+- **Answer:** D-183. Not yet built.
 
 **32. Tier 2. D-166 419 and REG-SESS-003 criterion 6: a registration link token that opens nothing.**
 
@@ -1858,7 +1881,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2925 unit tests, 139 c
   3. Count against the source of the landing browser's session, and nothing where there is
      none. Smallest fix: no surface change.
 - **Parked.** That case alone, and ledger line 419.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `a2025e00` (`part/sessions`); question 96 follows from it.
 
 **33. Tier 3. D-166 318 (3) against OPS-SEC-003: what a fingerprint key's retirement forgets.**
 
@@ -1922,7 +1945,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2925 unit tests, 139 c
 - **Parked.** 242 (4), the downgrade and `auth.factor.notpermitted` halves, with
   `AuthenticationServiceTests.IDN_LIFE_009b_ASessionHeldBeforeTheMembershipIsDowngradedAsync`
   and ledger line 246. The `policyRequirement` half is in `e5b53dbd`.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `bd858a96` (`part/sessions`).
 
 **37. Tier 2. D-166 135 and OPS-MIG-003a criterion 4: the `public` schema.**
 
@@ -1992,7 +2015,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2925 unit tests, 139 c
   3. Compare, and relax the gate. This weakens a gate.
 - **Parked.** `Effective` on `CredentialSuspended`, ledger line 152. The rest of 152 is in
   `50cd2637`.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `a4a00c82` (`part/sessions`); question 95 follows from it.
 
 **41. Tier 3. D-166 242 (3) and REG-DOM-001: an accepting account that holds no verified email.**
 
@@ -2007,7 +2030,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2925 unit tests, 139 c
 - `2e8174c1` admits that case (the loop over no email returns no refusal); no test asserts
   it. A follow-up changes it if the answer is otherwise.
 - **Parked.** That case.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `fdef37a9` (`part/sessions`).
 
 **42. Tier 3. D-166 129 (1), `09` section 4 and REG-SESS-006: where a registration's open ceremony and unconfirmed generator are held.**
 
@@ -2024,7 +2047,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2925 unit tests, 139 c
 - **Parked.** 129 (1) whole: the registration form of `CredentialAuthority`, `Asking`, the
   key and generator paths, the `RegistrationFlowTests` of REG-SESS-006 criteria 1 and 4
   and their counterparts, ledger line 129. 129 (2) is in `6e0c13e8`.
-- **Answer:** pending.
+- **Answer:** D-183. Not yet built.
 
 **43. Process. CONV-VCS-003: two commit messages out of the rule.**
 
@@ -2085,7 +2108,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2925 unit tests, 139 c
      report, StepUpRequired) in a second fixture that registers a provider.
 - **Parked.** Ledger line 328, and the rows under reading 2. The code of 328 is in
   `669bac7b`.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `d52cacfb` (`part/sessions`), but for the filter half of the unmet rows (question 92) and the conformance scenarios (question 93).
 
 **47. Tier 2. D-166 389 (6) against CONV-VCS-005: the section of a changelog line.**
 
@@ -2096,7 +2119,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2925 unit tests, 139 c
   1. A `### Security` heading under `Unreleased`.
   2. The line under `### Added`.
 - **Parked.** The line, with 389 (question 48).
-- **Answer:** pending.
+- **Answer:** D-183. Built in `f805640f` (`part/sessions`).
 
 **48. Tier 2. D-166 389 (2): the address a registration's first session records.**
 
@@ -2114,7 +2137,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2925 unit tests, 139 c
   3. The /64 is accepted for a registration's first session.
 - **Parked.** 389 whole, with the row `abuse.source.sitelimit` and the /48 count of section
   F, ledger line 389.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `f805640f` and `a2025e00` (`part/sessions`).
 
 **49. Tier 2. D-166 Tier 1 correction (1) and CONV-DESIGN-004 criterion 2: what the exemption rule clears.**
 
@@ -2652,6 +2675,58 @@ part of 389 (3) and waits with 389 on question 48.
 - **Readings.**
   1. Absent or not text is none. Built (`893d7258`).
   2. Only text that does not parse is none, and a missing member is an answer that does not read: four lines of `JmapMailServer.MailboxesAsync` and one account of the adapter's test go back.
+- **Parked.** Nothing.
+- **Answer:** pending.
+
+**92. Tier 3. AUTHZ-TEST-001 criterion 2 against D-166 328 and AUTHZ-GATE-005: the filter of an unmet step-up row.**
+
+- **Item.** Question 46.
+- **The contradiction.** Criterion 2 says a step-up case agrees "when the filter lists the record and the check answers the gate's outcome". `IAccessGate.FilterAsync` and `FragmentAsync` ask the bound gate as the check does and are refused with the gate's code where it is unmet (D-166 328, held by `GateBehaviourTests.AUTH_STEP_001_AListUnderABoundActionAsksForStepUpAsync`), so for the six unmet rows no filter is rendered and no record is listed. AUTHZ-GATE-005 says the per-row grant query does not evaluate step-up.
+- **Parked.** The filter assertions of the six unmet step-up rows. The rows assert the check for all seven, and both filter renderings for the met row.
+- **Answer:** pending.
+
+**93. Tier 2. `10` section 5.30 and LIB-TEST-001 criterion 2: the seven step-up scenarios of the conformance suite.**
+
+- **Item.** Question 46.
+- **What the code needs.** The members of `TruthTableScenario` for the met case and the six unmet ones, `details.gate` on a finding, what a `TruthTableCase` states for a step-up case, and a way for a suite run against a host's deployment to produce each outcome (a report that meets, each kind that does not, a provider that fails, no provider).
+- **What the specification says.** The scenario names, and when a step-up scenario agrees. Nothing on how the suite arranges the provider's report in a deployment that registers its own provider or none.
+- **Readings.**
+  1. The suite sets the host's provider aside and builds the gate over one of its own for these cases.
+  2. The suite runs only the scenarios the deployment can produce.
+  3. The host supplies the reports through `IConformanceRows`.
+- **Parked.** The seven members, `details.gate`, their running. It also waits on question 92.
+- **Answer:** pending.
+
+**94. Tier 2. `09` `POST /auth/step-up` and AUTH-FACT-002 criterion 7: the gate of a step-up `phoneCode` ask whose number answers `risk`.**
+
+- **Item.** The correction of `52482ed5`, the step-up half.
+- **What the code needs.** The 403 `auth.stepup.required` "computed without it" needs a gate's three values. The ask carries `challengeId` and `factor`; the challenge names no action.
+- **What the specification says.** Nothing on which gate.
+- **Readings.**
+  1. The strictest of the gates of the policy in force, field by field, as a host-named gate costs: `StepUpGuard` judged with no action.
+  2. The gate of the action the step-up was opened for, which the challenge would carry from `/auth/begin`: a member on the begin request and on the challenge's row.
+- **Parked.** The step-up half; the ask on `risk` at a step-up still answers 202 (`AuthenticationServiceTests.AUTH_FACT_002b_AC6_AReportedChangeWithholdsTheTextCodeFromAStepUpAsync`).
+- **Answer:** pending.
+
+**95. Tier 2. AUTHZ-IMP-001: `Effective` on the other events that name who acted.**
+
+- **Item.** Question 40.
+- **What the specification says.** An event that names who acted carries both identities as the context gives them.
+- **What the code does.** `CredentialSuspended` and `CredentialRestored` carry both. These set `Actor` and no `Effective`: `AccountAdministration` (three events), `AccountLifecycle` (four, two of them from a link, with no context), `CredentialService` (two), `PasswordService` (one), `RestrictionAdministration` (two), `AlertDestinationChange` (one), `TakedownService` (two).
+- **Readings.**
+  1. Question 40's answer is the one event; the others stand.
+  2. Every event that sets `Actor` from a context sets `Effective` from it: one member at each of the thirteen sites that have a context, with a test each.
+- **Parked.** The thirteen sites, unchanged.
+- **Answer:** pending.
+
+**96. Tier 2. D-183 question 32 and LIB-API: the registration operations that take the request's source.**
+
+- **Item.** Question 32.
+- **What the specification says.** D-183 names the new parameter for `IRegistration.LandAsync`. It also says every count and delay of a registration session uses the source of the request in hand, never one stored at its begin.
+- **What the code does.** `StageAsync`, `AddAsync`, `ChangeAsync` and `VerifyAsync` take the source too (`a2025e00`), since a caller in process could not otherwise meet the rule; five lines of `PublicAPI.Unshipped.txt` changed. It is built, and stated here because it changes the public surface beyond the one method the answer names.
+- **Readings.**
+  1. As built.
+  2. Only `LandAsync` takes it, and the four others count against a source the session carries, which the rule forbids for a request arriving from elsewhere.
 - **Parked.** Nothing.
 - **Answer:** pending.
 
