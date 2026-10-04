@@ -275,6 +275,8 @@ internal sealed class MailboxPublisher(
             && (await alerts.RaiseAsync(alert, cancellationToken).ConfigureAwait(false))
                 .Match(() => (Error?)null, error => error) is Error unalerted)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return unalerted;
         }
 

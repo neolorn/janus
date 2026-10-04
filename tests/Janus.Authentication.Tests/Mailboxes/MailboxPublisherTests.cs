@@ -433,6 +433,27 @@ public sealed class MailboxPublisherTests : IAsyncDisposable
         Assert.Equal(2, _server.Received.Count);
     }
 
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a push marked failed whose alert the channels do not take is
+    /// rolled back, so the failure is recorded with its alert or not at all; the attempt
+    /// counted before the push left stays committed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AFailedPushWhoseAlertIsNotRaisedIsRolledBackAsync()
+    {
+        _server.Set(Address, enabled: true, MailboxId.Of(Noon.AddDays(-30)));
+        _ = await ReservedAsync();
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Result<int> passed = await Publisher.PublishAsync(Carrier, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, passed.Match(_ => (Error?)null, error => error)?.Code);
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
     private MailboxPublisher Built(IMailServer? server) =>
         new(_mailboxes, new MailServerInUseInMemory(server), _configuration, _events, _work, _clock, _randomness);
 
