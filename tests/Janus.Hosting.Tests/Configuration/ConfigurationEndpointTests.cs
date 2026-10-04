@@ -540,7 +540,9 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status403Forbidden, shortened.Status);
         Assert.Equal(ErrorCodes.Denied.ToString(), shortened.Text("code"));
-        Assert.Equal(_deployment.Work.Opened, _deployment.Work.Committed);
+        Assert.False(_deployment.Work.Open);
+        Assert.Equal(1, _deployment.Work.RolledBack);
+        Assert.Equal(_deployment.Work.Opened, _deployment.Work.Committed + _deployment.Work.RolledBack);
 
         Answer below = await RetainedAsync(manager, "P1000D");
 
