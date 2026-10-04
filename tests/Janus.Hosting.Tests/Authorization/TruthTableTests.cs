@@ -92,6 +92,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a grant in the administrative organization, to an account holding no membership of it", Decided.Denied),
         ("a check by background work, which holds no grant", Decided.Denied),
         ("a check refused inside work the caller rolls back", Decided.Denied),
+        ("a lookup of a record a fact in the host's data reaches, by a caller reading grants", Decided.Allowed),
     ];
 
     /// <summary>
@@ -651,9 +652,39 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             case "a check refused inside work the caller rolls back":
                 return await RolledBackAsync(caller, deployment.Organization);
 
+            case "a lookup of a record a fact in the host's data reaches, by a caller reading grants":
+                return await ViewedAsync(deployment, caller);
+
             default:
                 throw new ArgumentOutOfRangeException(nameof(scenario), scenario, "No such case.");
         }
+    }
+
+    // AUTHZ-DERIVE-007, LIB-HOST-001: the view of who can access a record a fact in the
+    // host's data reaches, read through the relationship source the host declared. The
+    // case is allowed where the view answers and names the fact's holder as derived.
+    private async Task<Decided> ViewedAsync(Deployment deployment, SubjectId caller)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        ResourceReference workspace = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+        SubjectId reviewing = await deployment.AccountAsync(cancellationToken);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(record, workspace, cancellationToken);
+        await deployment.NamedRoleAsync(RoleName.Parse("reviewer"), [HostPermissions.Read], cancellationToken);
+        await deployment.ReviewAsync(workspace, reviewing, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .WhoCanAccessAsync(AccessContext.Of(caller), record, cancellationToken))
+            .Match(
+                access => access.Grants.Any(grant =>
+                    grant.Kind is GrantKind.Derived && grant.SubjectId == reviewing.Value)
+                    ? Decided.Allowed
+                    : throw new InvalidOperationException("The view left the derived grant out."),
+                Refused);
     }
 
     // AUTHZ-CONCEAL-004 AC4: a check the caller makes inside a unit of work it then rolls

@@ -242,10 +242,12 @@ public static class HostingRegistration
             provider.GetService<ImageCodec>(),
             provider.GetService<IDnsResolver>(),
             provider.GetServices<SocialProvider>(),
+            provider.GetServices<RelationshipSource>(),
             provider.GetRequiredService<AuthorizationDeclaration>(),
             provider.GetServices<ISubjectEventSubscriber>(),
             provider.GetRequiredService<IOidcClientStore>(),
-            provider.GetRequiredService<IConfigurationStore>()));
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider));
 
         services.ConfigureHttpJsonOptions(ReadThroughContexts);
         services.AddOidc();
@@ -264,6 +266,13 @@ public static class HostingRegistration
             provider.GetRequiredService<AuthorizationModel>().Processing);
 
         services.AddScoped<IAccessAlerts, AccessAlerts>();
+
+        // LIB-HOST-001, AUTHZ-DERIVE-005: the rows of a relationship are read through the
+        // source the host declared for it, from the one instance of the host context
+        // the reading scope gives.
+        services.AddScoped<IRelationshipSources>(provider => new RelationshipSources(
+            provider.GetServices<RelationshipSource>(),
+            provider));
 
         // BFF-ERR-003: what the gate concealed is answered by stage 11 of the same
         // request, so the two share one holder.

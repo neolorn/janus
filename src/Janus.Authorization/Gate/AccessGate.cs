@@ -1000,9 +1000,11 @@ internal sealed class AccessGate(
     // permission's in the organization the record sits in, read from the record, and
     // nothing is concealed from a caller without it. A record the registry does not hold
     // belongs to no organization, so no grant reaches it, and it is refused exactly as a
-    // caller without grant:read is refused where it is (D-166). Without the host's rows,
-    // a type a derivation reaches is refused as every other path refuses it, since the
-    // stored grants alone are not who can access it (D-161, D-162).
+    // caller without grant:read is refused where it is (D-166). Without rows handed in,
+    // the derivations are evaluated over the sources the host declared (D-183); a
+    // deployment that declared none for a relationship reaching the type is refused as
+    // every other path refuses it, since the stored grants alone are not who can access
+    // it (D-161, D-162).
     private async ValueTask<Result<ResourceAccess>> LookedUpAsync(
         AccessContext context,
         ResourceReference resource,
@@ -1051,7 +1053,7 @@ internal sealed class AccessGate(
             return Result.Failure<ResourceAccess>(refused);
         }
 
-        if (relationships is null && !organizationWide && derived.Reaches(resource.Type))
+        if (relationships is null && !organizationWide && !lookup.Sourced(resource.Type))
         {
             return Result.Failure<ResourceAccess>(Error.From(ErrorCodes.DerivationSourcesMissing));
         }

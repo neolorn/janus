@@ -9,6 +9,7 @@ using Janus.Authentication.Oidc;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Credentials;
+using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Hosting;
 
@@ -45,15 +46,18 @@ namespace Janus.Hosting;
 /// registered no resolver.
 /// </param>
 /// <param name="providers">The social providers whose security events the deployment takes.</param>
+/// <param name="sources">The relationship sources the host registered.</param>
 /// <param name="declaration">What the host declared about its own domain.</param>
 /// <param name="subscribers">The subject-event subscribers the host registered.</param>
 /// <param name="clients">The clients registered with the provider.</param>
 /// <param name="configuration">
 /// Where the organizations that show photos, and the domains each lists, are read.
 /// </param>
+/// <param name="scope">The scope the check runs in, which gives a host context as a request does.</param>
 /// <remarks>
 /// Implements LIB-HOST-001, REG-PM-001, AUTH-SESS-012, BFF-SESS-006, IDN-ATTR-002,
-/// INT-MAIL-010, IDN-LIFE-012a, REG-DOM-001, INT-SMS-003 and API-LAND-001.
+/// INT-MAIL-010, IDN-LIFE-012a, REG-DOM-001, INT-SMS-003, API-LAND-001, AUTHZ-DERIVE-005
+/// and AUTHZ-DERIVE-007.
 /// The library knows no route of the frontend, so it has none to fall back on: a
 /// deployment that declares none of these is stopped here rather than answering a
 /// password manager as a site that offers neither page, meeting an interactive
@@ -73,7 +77,11 @@ namespace Janus.Hosting;
 /// refused here rather than carried into a text longer than the width it was measured
 /// at. A landing origin is an application of this deployment, so one that no registered
 /// browser client returns to, or an authentication origin that is not where the sign-in
-/// address is, would send every link somewhere the deployment does not serve.
+/// address is, would send every link somewhere the deployment does not serve. A
+/// relationship a derivation follows from is read by the view of who can access a record
+/// and by the drift check through the source the host declares for it, so one with no
+/// source, or a source that does not fit its relationship or names a context the
+/// library cannot read through, stops the deployment here (D-166, D-183).
 /// </remarks>
 internal sealed class DeclarationCoverage(
     PasskeyAddresses? addresses,
@@ -85,10 +93,12 @@ internal sealed class DeclarationCoverage(
     ImageCodec? codec,
     IDnsResolver? dns,
     IEnumerable<SocialProvider> providers,
+    IEnumerable<RelationshipSource> sources,
     AuthorizationDeclaration declaration,
     IEnumerable<ISubjectEventSubscriber> subscribers,
     IOidcClientStore clients,
-    IConfigurationStore configuration)
+    IConfigurationStore configuration,
+    IServiceProvider scope)
 {
     private const string Passkeys = "passkeyAddresses";
 
@@ -107,6 +117,8 @@ internal sealed class DeclarationCoverage(
     private const string MailClient = "mailServerClient.clientId";
 
     private const string Social = "socialProvider";
+
+    private const string Source = "relationshipSource";
 
     /// <summary>
     /// Reads what LIB-HOST-001 requires against what is registered.
@@ -178,6 +190,11 @@ internal sealed class DeclarationCoverage(
         if (Unruled() is (string named, string member))
         {
             return Invalid(named, member);
+        }
+
+        if (Sourced().Match<Error?>(() => null, error => error) is Error unsourced)
+        {
+            return Result.Failure(unsourced);
         }
 
         if (await UnlandedAsync(landing, authentication.SignIn, cancellationToken).ConfigureAwait(false)
@@ -320,6 +337,53 @@ internal sealed class DeclarationCoverage(
         }
 
         return null;
+    }
+
+    // LIB-HOST-001, AUTHZ-DERIVE-005 AC5: a source is given once, for a relationship the
+    // model declares, answers the row type that relationship's selectors are declared
+    // over, and names a context the container gives in a scope and whose model maps the
+    // contract tables; and every relationship a derivation follows from, materialised or
+    // not, has one. The context's model is built and no query is run.
+    private Result Sourced()
+    {
+        var given = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (RelationshipSource source in sources)
+        {
+            string declared = Source + "." + source.Relationship;
+
+            if (!given.Add(source.Relationship)
+                || declaration.Relationships.FirstOrDefault(each =>
+                        string.Equals(each.Name, source.Relationship, StringComparison.Ordinal))
+                    is not RelationshipDeclaration relationship)
+            {
+                return Invalid(declared, "relationship");
+            }
+
+            if (relationship.Holder.Parameters[0].Type != source.Row)
+            {
+                return Invalid(declared, "rows");
+            }
+
+            if (scope.GetService(source.Context) is not DbContext context
+                || context.Model.FindEntityType(typeof(AncestryEntry)) is null
+                || context.Model.FindEntityType(typeof(EffectiveGrant)) is null)
+            {
+                return Invalid(declared, "context");
+            }
+        }
+
+        foreach (string followed in declaration.ResourceTypes
+            .SelectMany(type => type.Derivations)
+            .Select(derivation => derivation.Relationship))
+        {
+            if (!given.Contains(followed))
+            {
+                return Missing(followed);
+            }
+        }
+
+        return Result.Success();
     }
 
     // IDN-ATTR-002: a photo is available where an organization's policy says so, and
