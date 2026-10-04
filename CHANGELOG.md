@@ -93,6 +93,21 @@ against the public contract of LIB-API-001.
   answered 403 `auth.stepup.required` with `details` computed without the entry against
   the strictest of the gates of the policy in force, field by field, the step-up naming
   no action; `outcome` is `report-loss` or `enrol` where no combination is left.
+- A sign-in code presented right whose sign-in a domain lock then refuses is spent in the
+  one transaction that refuses it: the refusal `identity.identifier.domainnotallowed`
+  counts no failure and records no failed authentication, where it used to be counted
+  and recorded in a second transaction. A right code sent to an address the account has
+  given up since commits its spend with the refusal's record and counts.
+- A fault of the library's own while a factor, a sign-in code or a new-device code is
+  being judged (a setting that does not read, the database failing) is no longer counted
+  against the delay or recorded as a failed authentication, at a sign-in and at a
+  step-up alike: the request answers `system.fault` and the person is not held for it.
+- A `phoneCode` code asked for at `POST /auth/step-up`, where the number's signal answers
+  `risk`, is answered as `POST /auth/factor` answers it: 200 `factorRequired` with
+  `required` naming the factors of the combinations left without the entry, judged
+  against the strictest of the policy's gates; 200 with `required` empty where the
+  session already meets that gate, which used to be 202; and 403 `auth.stepup.required`
+  only where no combination is left, with `outcome` `report-loss`, `enrol` or `pending`.
 - Every event raised with the access context of a person who acted now carries
   `Effective` beside `Actor`, each as the context gives it: `AccountSuspended`,
   `AccountReactivated`, `AccountDeletionRequested` and `AccountDeletionCancelled` raised

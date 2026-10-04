@@ -27,6 +27,12 @@ internal sealed class ConfigurationInMemory : IConfigurationStore, IConfiguratio
     public ConfigurationKey? Unreachable { get; set; }
 
     /// <summary>
+    /// The key whose every read answers a failure, as a setting that does not read
+    /// does; nothing while every key reads.
+    /// </summary>
+    public ConfigurationKey? Unread { get; set; }
+
+    /// <summary>
     /// The keys whose rows an operation held, in the order it took them.
     /// </summary>
     public List<ConfigurationKey> Held { get; } = [];
@@ -75,9 +81,15 @@ internal sealed class ConfigurationInMemory : IConfigurationStore, IConfiguratio
         string parameter,
         CancellationToken cancellationToken)
     {
-        if (_values.TryGetValue(
-            ConfigurationKey.Parse(family.Prefix + "." + parameter),
-            out object? written))
+        var key = ConfigurationKey.Parse(family.Prefix + "." + parameter);
+
+        if (key.Equals(Unread))
+        {
+            return ValueTask.FromResult(
+                Result.Failure<TValue>(new Error(ErrorCodes.StartupDeclarationMissing, Nothing)));
+        }
+
+        if (_values.TryGetValue(key, out object? written))
         {
             return ValueTask.FromResult(Result.Success((TValue)written));
         }
@@ -180,6 +192,11 @@ internal sealed class ConfigurationInMemory : IConfigurationStore, IConfiguratio
     // wrote down; the store answers it the same way (LIB-HOST-001).
     private Result<TValue> Read<TValue>(Setting<TValue> setting)
     {
+        if (setting.Key.Equals(Unread))
+        {
+            return Result.Failure<TValue>(new Error(ErrorCodes.StartupDeclarationMissing, Nothing));
+        }
+
         if (_values.TryGetValue(setting.Key, out object? written))
         {
             return Result.Success((TValue)written);
