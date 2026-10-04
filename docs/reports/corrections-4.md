@@ -615,7 +615,7 @@ CONV-DESIGN-008 criterion 3, "no project's build reports MSB3277": no test decid
 
 What earlier runs left: nine worktrees held uncommitted work whose commits were all in the branch; each is kept as a patch outside the repository and removed with its branch. The reason rule of the configuration route that one of them carried is on the branch at the endpoint and in the service (`ConfigurationEndpointTests.OPS_CFG_005_EveryChangeCarriesAReasonAsync`, `ConfigurationAdministrationTests.OPS_CFG_008_AC2_ATighteningWithNoReasonIsRefusedAsync`). Four stashes are dropped: three held earlier states of the docs, and every file of the fourth is in the history (the changelog describes `MapAuthorizationTables`).
 
-**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The five parts of D-183 the owner's split names are merged (below), and four further parts for what they left: question 30, question 29, the mailbox pushes of question 61, and questions 42 and 31. Questions 68 to 116 park the sites they name. The work after the merges runs in two parts, not yet merged: questions 50, 51 and 53 with the new codes and the retirement of `NotificationRequested`; question 62.
+**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The five parts of D-183 the owner's split names are merged (below), and four further parts for what they left: question 30, question 29, the mailbox pushes of question 61, and questions 42 and 31. Questions 68 to 121 park the sites they name. Of the work after the merges, the new codes, the retirement of `NotificationRequested` and question 53 are merged; questions 50 and 51 wait on question 119; question 62 runs in a part not yet merged.
 
 ### The section C sweeps, place by place
 
@@ -1167,6 +1167,21 @@ After the merge: build 0 warnings 0 errors, format clean, 3075 unit tests, 139 c
   - **Not built:** the record for a held or reserved value at an account identifier's add and replace (question 115); the whole of D-166 306, the sweep of pending verifications, its schedule and its three tests (question 116), so REG-IDENT-004 criterion 4 and REG-IDENT-007 criterion 4 are not met. No ledger line for 115 or 306.
 - Parked sites: question 73 (`VerificationCodes.PresentAsync`) is unchanged and is now also called, nested, from the registration's and the identifier's verification; question 81 keeps its shape, the try's count now on the code record; questions 78 and 79 are untouched.
 
+#### D-183, `part/endpoints`, merged as `88174fd5` (`d88c1c72`, `0c20ff61`, `28c53a12`)
+
+After the merge: build 0 warnings 0 errors, format clean, 3085 unit tests, 139 contract tests. No migration. No permission logic changed.
+
+`28c53a12` fails `ProductNameTests.CONV_NAME_001_AC2_TheProductNameAppearsOnlyInNamespacesIdentifiersAndTheEntryPoint` on its own: one line of `EndpointDeclarationTests` wrote the product name as text. The part was built in a worktree, where that test fails for another reason, and the failure was not seen. The merge commit corrects the line (the name is read from a namespace, as `KeyMaterialTests` reads it), so the merge is green and that one commit is not.
+
+- **The codes** (`d88c1c72`; AUTH-FACT-002b, AUTH-FACT-008). `auth.factor.passwordrequired` and `auth.factor.notenrolled`, each 409. A second step, a code generator and a recovery-code set asked for without a password answer the first, where they answered `auth.factor.notpermitted`; the record of a shown set with no set answers the second, where it answered `auth.factor.rejected`. Tests: `CredentialServiceTests.AUTH_RECOV_006_AC4_APasskeyOnlyAccountIsOfferedNoCodesAsync`, `CredentialServiceTests.AUTH_FACT_002b_ASecondStepIsRefusedWithoutAPasswordAsync`, `TotpServiceTests.AUTH_FACT_002b_AC2_ACodeGeneratorIsRefusedWithoutAPasswordAsync`, `WebAuthnServiceTests.AUTH_FACT_002b_AC2_ASecondStepIsRefusedWithoutAPasswordAsync`, `RecoveryCodeServiceTests.ShownAsync_AnAccountHoldingNoSet_IsRefusedAsNotEnrolledAsync`, `ErrorCodesTests.CONV_NAME_003_AC2_ChangingACodeFailsTheContractTest`, `ErrorCodesTests.LIB_API_001_AC2_TheStatusesAreTheContract`.
+  - The named throttle codes: `auth.throttled` and `auth.restriction.exceeded` exist and every such refusal already carries one; no bare 429 was found, and nothing was added.
+  - The route `POST /account/recoverycodes/exported` is not mounted (question 117).
+- **The retirement of `NotificationRequested`** (`0c20ff61`; LIB-API-001). The type, its 15 lines of `PublicAPI.Unshipped.txt` (it was never shipped), and its entries in `EventConsumers`, `EventJson` and `PendingEvents` are removed. `PendingEventsTests` and `EventPublisherTests` pass.
+- **Question 53** (`28c53a12`; CONV-DESIGN-006 criterion 5, API-CONV-003). An endpoint declares its typed route and query values (`Declares`), and the error translation names the first declared value, in declared order, that does not parse, then the body's member. `RoleName`, `ResourceType`, `ResourceId` and `ConfigurationKey` read themselves from the text of a route. 55 declarations. Beyond the four routes the question names, the handlers of `/admin/access`, `/admin/grants`, `/admin/groups` and `/admin/audit` bind typed values, and every `:guid` route constraint (41) is removed, so an identifier that does not read is 400 naming it where it was 404 (question 120). The four `/admin/restrictions/{name}` handlers refuse a name outside the rule as their first check (question 118).
+  - Tests: `EndpointDeclarationTests.CONV_DESIGN_006_AC5_EachHandlersTypedValuesAreTheOnesItsEndpointDeclares`, `EndpointDeclarationTests.CONV_DESIGN_006_AC5_AValueThatDoesNotParseIsRefusedNamingItAsync`, `EndpointDeclarationTests.CONV_DESIGN_006_TheFirstDeclaredValueThatDoesNotParseIsTheOneNamedAsync`, `EndpointDeclarationTests.CONV_DESIGN_006_ABodyIsNamedWhereEveryDeclaredValueReadsAsync`, `RestrictionEndpointTests.AUTH_ABUSE_004_ANameOutsideItsRuleIsMalformedOnEveryRouteAsync`, `RoleNameTests.CONV_DESIGN_006_TheValueIsReadFromTheTextOfARoute`, `ResourceTypeTests.CONV_DESIGN_006_TheValueIsReadFromTheTextOfARoute`, `ResourceIdTests.CONV_DESIGN_006_TheValueIsReadFromTheTextOfARoute`, `ConfigurationKeyTests.CONV_DESIGN_006_TheValueIsReadFromTheTextOfARoute`.
+  - Changed tests: `SessionRequirementTests.BFF_STEP_001_TheEndpointsThatNeedASessionAreTheOnesListed` (route patterns without the constraint); `BrowserProfileTests.AUTH_SESS_007_AC2_NoEndpointCanOptOut` and `BrowserProfileTests.BFF_CSRF_001_AC2_NoEndpointCanBeExcludedByConfigurationOrAttribute` (question 121).
+- **Not built: questions 50 and 51, the whole of them** (CONV-DESIGN-006 criteria 3 and 4; D-166 359 and 382 (3)), parked on question 119. Left: the codes declared on the 154 endpoints (99 hold no declaration); the produced and accepted types as metadata; `endpoints.txt` with its `pipeline` heading and `EndpointContractTests.LIB_API_001_AC2_TheEndpointsAreTheContract`; the test host's check; the lines of `release.sh` and the two scenarios of D-166 382; ledger line 382.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1345,6 +1360,9 @@ After the merge: build 0 warnings 0 errors, format clean, 3075 unit tests, 139 c
 | `AccessGate`, the private constant `privacy-notice` (`e20b2543`) | The rule passes "the document the purpose now names", and a purpose naming none is governed by the privacy notice, whose name no type the authorization area can reach carries | PRIV-CONS-007, "the privacy notice where it names none"; D-166 147 (4), which spells it | The gate names the default document by the private constant the three other readers hold; no public type. For audit: the name is now written in four places |
 | The columns of `identity.consented_resources` (`ffa77d18`) | D-166 147 (1) lists the view without the document | AUTHZ-GATE-002 as D-183 question 29 leaves it | The view carries `document`, as the chapter reads |
 | The place of a ledger line (`b5fd0791` and the lines before it) | The working guide puts the line "under the heading"; every line the ledger holds sits at the end of its entry | D-166 section G | The lines follow the form the ledger has |
+| `RoleName`, `ResourceType`, `ResourceId`, `ConfigurationKey` (`28c53a12`) | A public `Parse(string, IFormatProvider)` beside `Parse(string)` makes every existing call an analyser error | CONV-DESIGN-006, "binds through `IParsable<T>`" | The four implement the interface explicitly, which the framework binds and which adds no line to the public surface |
+| `BrowserProfileLog.BodyUnreadable`, its message (`28c53a12`) | It said "request body" where the stage now also answers a route or query value | CONV-DESIGN-006 | The message reads "A request could not be bound at {Member}"; the event's identifier and level are unchanged |
+| `EndpointDeclarationTests` (the merge of `part/endpoints`) | One line wrote the product name as text, which CONV-NAME-001 criterion 2 refuses | CONV-NAME-001 | The name is read from a namespace, as `KeyMaterialTests` reads it; test only |
 
 ## 4. Open questions
 
@@ -2319,7 +2337,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3075 unit tests, 139 c
      bodies, 404 `authz.resource.notfound` for a method the path does not take, 500
      `system.fault`), derived from each endpoint's markers in the generator.
 - **Parked.** With question 51.
-- **Answer:** pending.
+- **Answer:** D-183. Not built: parked on question 119.
 
 **51. Tier 2. D-166 359 and 382 (3): where the statuses and codes come from, and what carries them.**
 
@@ -2333,7 +2351,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3075 unit tests, 139 c
   2. The owner names another source or carrier.
 - **Parked.** 359 and 382 (3), the endpoint lines of (4), the endpoint and response-member
   scenarios of (5), ledger line 382.
-- **Answer:** pending.
+- **Answer:** D-183. Not built: parked on question 119.
 
 **52. Tier 2. D-166 Tier 1 correction (1): `HostedMailbox.Address`.**
 
@@ -2360,7 +2378,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3075 unit tests, 139 c
   2. Keep the string binding where the refusal names its member; `08` is out of step.
   3. Bind through `IParsable<T>`, with a refusal of the path that names its member.
 - **Parked.** Those four routes.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `28c53a12` (`part/endpoints`); questions 118, 120 and 121 follow from it.
 
 **54. Owner action. D-166 378 and OPS-DEP-002: the repository variable `DESTRUCTIVE_DDL_GATE`.**
 
@@ -3076,6 +3094,62 @@ part of 389 (3) and waits with 389 on question 48.
   3. The sweep takes every verification with no live code record, which sweeps a replace the old address has not answered.
 - **Also to settle with it.** The holder of an identifier's code is the SHA-256 of the identifier's bytes in the layout `Guid.TryWriteBytes` gives; a sweep that joins in SQL on `sha256(uuid_send(...))` needs the other byte order, one line of `IdentifierService` to change before any deployment holds records.
 - **Parked.** The whole of 306: the sweep's rule, its schedule and its three tests.
+- **Answer:** pending.
+
+**117. Tier 2. AUTH-FACT-008 criterion 4 and `09` section 6: `POST /account/recoverycodes/exported` is not mounted.**
+
+- **Item.** The codes D-183 adds.
+- **What the code needs.** An endpoint and a contract operation that records the export. `RecoveryCodeService.ShownAsync` has no caller outside tests, so neither `viewedAt` nor `exportedAt` is set.
+- **What the specification says.** `09` gives the route and its 409 `auth.factor.notenrolled`; no chapter names the operation of `ICredentials` it maps to.
+- **Readings.**
+  1. A new public operation on `ICredentials`, its name the owner's to give, and the mapping.
+  2. The endpoint maps to the internal service as one of the exceptions of LIB-API-005, which then names it.
+- **Parked.** The endpoint. The code's row and the service's refusal exist.
+- **Answer:** pending.
+
+**118. Tier 2. CONV-DESIGN-006 and CONV-DESIGN-004 criterion 2: a restriction's `{name}` and an app password's `{id}` have no typed value.**
+
+- **Item.** Question 53.
+- **What the specification says.** D-183 question 53: a restriction's name in the path is named because it binds through `IParsable<T>`. `09`: `{id}` is 400 where it "does not read as an app-password identifier". No type exists for either, and no chapter gives the rule of an app-password identifier.
+- **Readings.**
+  1. Public value types in `Janus.Core`, changing the text parameters of `IRestrictionSet` and `IAppPasswords`.
+  2. Internal types in `Janus.Hosting` alone, the contracts keeping text, which CONV-DESIGN-004 criterion 2 reads against.
+  3. Text, checked in the handler.
+- **What the code does.** Reading 3 for the restriction's name alone, whose rule and answer are fixed. A request with an unreadable body and a name outside the rule names the body's member, not `name`.
+- **Parked.** The refusal of an app password's `{id}`, whole; the type of a restriction's name.
+- **Answer:** pending.
+
+**119. Tier 2. CONV-DESIGN-006 criteria 3 and 4: what "the codes its `09` row gives" covers.**
+
+- **Item.** Questions 50 and 51.
+- **What the code needs.** One list of codes for each endpoint, such that no response a test receives carries a code outside it.
+- **What the specification says.** An endpoint declares "the error codes its `09` row gives". The preamble of `09` section 6 gives `authz.restricted` and `authz.denied` for many account routes and says the routes below do not each list it; the preamble of section 8 and section 1 do the same for the administrative routes; section 8a is tables for a permission, not for a route.
+- **Readings.**
+  1. An endpoint declares its row and every preamble that governs it.
+  2. The row alone, the preambles' answers derived as the mounting's are: a sentence of the `09` preambles names them as derived.
+- **Measured.** The unit tests of `Janus.Hosting.Tests` receive 338 distinct answers (endpoint, status, code). Beyond the preambles' codes, these are answered and not in their rows: `POST /account/recoverycodes` 422 `auth.enrolment.tokeninvalid`; `POST /recovery/begin` 429 `auth.restriction.exceeded` (its row says 202 always); `POST /auth/webauthn/register/begin` and `/complete` 403 `authz.denied` (section 4, outside section 6's preamble). `GET /register/events` and a path outside the mount answer 404 with no code; the `/oidc/*` routes and the Google provider-event route answer bodies with no `code`. The cause of each was not traced.
+- **Parked.** Questions 50 and 51, whole.
+- **Answer:** pending.
+
+**120. Tier 2. CONV-DESIGN-006 and API-CONV-003: the routes beyond the four question 53 names.**
+
+- **Item.** Question 53.
+- **What the code does.** `28c53a12` binds typed values on `/admin/access` (`resourceType`, `resourceId`), `/admin/grants` and `/admin/groups` (`organization`) and `/admin/audit` (`subject`), which bound text, and removes every `:guid` route constraint (41). An identifier that does not read is now 400 `api.request.malformed` naming it, where the route did not match and the answer was 404. It was handed back as resolved by rule; it changes an answer, so it is stated here.
+- **What the specification says.** Every route or query value with a typed value binds through `IParsable<T>`, and one that does not read is 400 naming it. Question 53 lists four routes.
+- **Readings.**
+  1. The rule covers every such route. Built.
+  2. The four routes alone: the constraints and the four other bindings go back.
+- **Parked.** Nothing.
+- **Answer:** pending.
+
+**121. Tier 2. BFF-CSRF-001 criterion 2 and AUTH-SESS-007 criterion 2 against CONV-DESIGN-006: the files that may read endpoint metadata.**
+
+- **Item.** Question 53.
+- **What the code does.** `BrowserProfileTests.AUTH_SESS_007_AC2_NoEndpointCanOptOut` and `BrowserProfileTests.BFF_CSRF_001_AC2_NoEndpointCanBeExcludedByConfigurationOrAttribute` hold a fixed list of the files that read endpoint metadata. The error translation now reads an endpoint's declared values, so `EndpointDeclaration.cs`, `EndpointDeclarations.cs` and `MalformedRequest.cs` joined the list (`28c53a12`). The reader runs after the endpoint was reached and enforces no token. The tests guard the exclusion of an endpoint from the token's check, so the change is stated here and not as resolved by rule.
+- **Readings.**
+  1. The three files join the list. Built.
+  2. The declared values reach the stage another way, and the list stands.
+- **Parked.** Nothing.
 - **Answer:** pending.
 
 ## 5. Gate result
