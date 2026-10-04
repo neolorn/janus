@@ -224,6 +224,15 @@ public sealed class ErrorCodesTests
     }
 
     /// <summary>
+    /// REF-001 AC1: a live row of chapter 10 section 1 naming a code the catalogue does
+    /// not hold fails here. A struck row, and one whose cell after the code opens
+    /// "Retired" or "Withdrawn", is not live and names nothing the source owes.
+    /// </summary>
+    [Fact]
+    public void REF_001_AC1_EveryLiveRowOfTheReferenceIsACodeInTheSource() =>
+        Assert.Empty(ReferenceRows.ChapterCodes.Except(Codes().Values, StringComparer.Ordinal));
+
+    /// <summary>
     /// BFF-ERR-001 AC3: every code the boundary can answer with is a row of chapter 10.
     /// A code is made only through
     /// <see cref="ErrorCode.Parse"/>, since no other constructor is reachable, so the
