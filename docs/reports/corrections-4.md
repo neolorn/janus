@@ -1499,6 +1499,23 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - Public surface: the one overload, with a changelog line for each commit.
 - Parked: questions 176 to 179.
 
+### `part/identifiers` (D-188), merged as `00f54c52`: questions 143, 152, 151 and 153
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 143: a removal deletes a lapsed removal row of the same kind and value before it writes its own, under the value's lock its callers hold | `e044b9fb` | REG-IDENT-006 | `IdentifierStoreTests.REG_IDENT_006_ARemovalReplacesALapsedRemovalOfTheSameValueAsync`, `IdentifierStoreTests.REG_IDENT_006_ARemovalLeavesALapsedRemovalOfAnotherValueToTheSweepAsync` |
+| Question 152: an undo counts verified identifiers alone and is refused 409 `identity.identifier.maximum` only where they fill the kind, never by a fault; a pending add's verification judges the maximum again under the value's lock; the undo and verify routes declare the code | `f2816759` | REG-IDENT-004, REG-IDENT-006 | `IdentifierServiceTests.REG_IDENT_006_AC9_AnUndoIsAdmittedBesideAPendingAddWhoseVerificationIsThenRefusedAsync`, `IdentifierServiceTests.REG_IDENT_006_AC9_AnUndoIsRefusedWhereVerifiedIdentifiersFillTheKindAsync`, `IdentifierServiceTests.REG_IDENT_006_AnUndoRefusedTheMaximumUnderTheLockIsRolledBackAsync`, `IdentifierServiceTests.REG_IDENT_006_AnUndoCountsVerifiedIdentifiersAloneAsync`, `IdentifierServiceTests.REG_IDENT_006_TheUndoOfAReplaceIsNotRefusedTheMaximumAsync`, `IdentifierServiceTests.REG_IDENT_004_APressForAnAddWhereVerifiedIdentifiersFillTheKindIsRefusedTheMaximumAsync`, `IdentifierServiceTests.REG_IDENT_004_TwoPendingAddsDoNotRefuseEachOthersVerificationAsync`, `AccountApplicationTests.REG_IDENT_006_AC9_TheUndoIsAdmittedAndThePendingAddIsThenRefusedTheMaximumAsync`, `AccountApplicationTests.REG_IDENT_006_AC9_TheUndoIsRefusedTheMaximumWhereVerifiedEmailsFillTheKindAsync` |
+| Question 151: on `POST /account/identifiers/{id}/verify` a refused code is counted against the source and the identifier and held to their delay; every press is held to its source's delay, and a pressed token that opens nothing is counted against the source and answered 422 `auth.code.expired` | `bde2d2c0` | REG-SESS-003, REG-IDENT-007, AUTH-ABUSE-001 | `IdentifierServiceTests.REG_SESS_003_AC6_ARefusedCodeOfAnIdentifierIsCountedAgainstTheSourceAndTheIdentifierAsync`, `IdentifierServiceTests.REG_SESS_003_AC6_ACodeThatNamesNoVerificationOfTheAccountCountsNothingAsync`, `IdentifierServiceTests.REG_IDENT_007_AC6_APressedTokenThatOpensNothingIsCountedAgainstItsSourceAsync`, `IdentifierServiceTests.REG_IDENT_007_AC6_APressAfterTheSweepIsAnsweredExpiredAndCountedAsync`, `IdentifierServiceTests.REG_SESS_003_APressThatWouldVerifyIsHeldToItsSourcesDelayAsync`, `AccountApplicationTests.REG_IDENT_007_AC6_APressedTokenThatOpensNothingAnswersExpiredThenThrottledAsync`, `IdentifierServiceTests.CONV_DESIGN_003_AC5_AnExpiredCodeCommitsItsCountAloneAsync`, `IdentifierServiceTests.CONV_DESIGN_003_AC5_APressOnAVerificationGoneMeanwhileCommitsItsCountAloneAsync`, `IdentifierServiceTests.REG_IDENT_007_AC2_AChangeAbandonedMeanwhileIsNotAppliedAsync` |
+| Question 153: the sweep of pending verifications runs only inside a transaction, locks its candidates `FOR UPDATE ... SKIP LOCKED` and deletes them in a second statement that judges again; the job runs it in a unit of work of its own | `7db4c023` | REG-IDENT-004, OPS-OBS-003 | `PendingVerificationStoreTests.REG_IDENT_004_TheSweepPassesOverAVerificationAResendHoldsAsync`, `PendingVerificationStoreTests.REG_IDENT_004_TheSweepRunsOnlyInsideATransactionAsync`, `PendingVerificationStoreTests.REG_IDENT_004_AVerificationWhoseCodeStillStandsSurvivesTheSweepAsync`, `IdentifierServiceTests.REG_IDENT_004_AResendOfAnAddsCodeHoldsItsRowBeforeItWritesAsync`, `BackgroundJobsTests.OPS_OBS_003_AC1_AnAddPastItsCodesLifetimeIsClearedWithNobodyAskingAsync` |
+
+- Question 151 changes two earlier answers: an expired code's refusal now commits its count; a press that finds its verification gone under the lock answers `auth.code.expired`, not `auth.code.invalid`, and commits its count.
+- Three tests of the code's attempt cap (`REG_SESS_005_AC5_ACodeForAHeldValueAtAnAddIsAnsweredAsAWrongOneAsync`, its replace twin and `AUTH_FACT_004_AC3_TheCapEndsTheCodeOfAnAddedIdentifierAsync`) wait 30 seconds between tries, since the throttle's threshold is below the cap; no assertion changed.
+- Question 153, "judges each again before it deletes": no test produces the window without a hook in the store. Verified by reading: the delete is a separate statement under READ COMMITTED and repeats the predicate over the locked rows.
+- The resend of an add's code already held its row `FOR UPDATE`; one test pins it. The replace half is question 180.
+- Question 142: nothing built.
+- No migration, no public surface change.
+- Parked: questions 180 to 185.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -4033,6 +4050,63 @@ part of 389 (3) and waits with 389 on question 48.
   2. The terms step's instant.
   3. Unset, which fails criterion 4 for such an account.
 - **Parked.** The registration's set, left as it is.
+- **Answer:** pending.
+
+**180. Tier 2. REG-IDENT-007 and question 153: there is no resend of a replace's code.**
+
+- **Item.** Question 153.
+- **What the code does.** A second replace of an identifier that has a pending verification is refused `identity.change.pending`, and no other route sends a replace's code again, so no site holds the staged replace's row for a resend.
+- **What the specification says.** REG-IDENT-007: a resend of the new address's code holds the staged replace's row.
+- **Readings.**
+  1. No resend of a replace exists and the sentence binds a later route: nothing to build.
+  2. A repeated replace with the same value sends the code again, as a repeated add does.
+- **Parked.** The replace half of question 153.
+- **Answer:** pending.
+
+**181. Tier 2. REG-IDENT-004: a repeated add whose pending verification the sweep takes between the set's read and the row's lock.**
+
+- **Item.** Question 153.
+- **What the code does.** The add finds the value listed as pending, then finds no row under the lock: it answers success having staged and sent nothing.
+- **What the specification says.** "the person adds the identifier again" (D-187); nothing on this interleaving.
+- **Readings.**
+  1. As built: the person asks again.
+  2. The request stages afresh.
+- **Parked.** That fall-through.
+- **Answer:** pending.
+
+**182. Tier 3. REG-SESS-003 against `09` `POST /account/identifiers/{id}/verify`: which presses are held to the source's delay.**
+
+- **Item.** Question 151.
+- **The contradiction.** The row says every code and press is counted and throttled as at `POST /register/verify/{id}`. REG-SESS-003 says every press is first held to the throttle's delay. `RegistrationService.LandAsync` asks the delay only for a pressed token that opens nothing; a press that opens a verification is held to none.
+- **What the code does.** `IdentifierService.LandAsync` holds every press to its source's delay first, as REG-SESS-003 reads; the registration route is untouched, so the two differ.
+- **Parked.** The registration route's presses.
+- **Answer:** pending.
+
+**183. Tier 3. `09` `POST /account/identifiers/{id}/verify`: "every code ... is counted", for a code that names no pending verification of the account.**
+
+- **Item.** Question 151.
+- **The gap.** A typed code whose `{id}` names no pending verification of the account, or one found before the lock and gone under it, has no identifier to count against, and the scope of a count by the source alone is not stated.
+- **What the code does.** `auth.code.invalid`, uncounted and not delayed, as the registration route refuses a code for an identifier its session does not hold.
+- **Parked.** Nothing further.
+- **Answer:** pending.
+
+**184. Tier 3. REG-IDENT-007: a displaced address's confirmation pressed past its lifetime while its pending verification still exists.**
+
+- **Item.** Question 151.
+- **The gap.** The press opens a verification, so it is no "pressed token that opens nothing"; whether "every press here is counted" reaches it is not stated.
+- **What the code does.** 422 `auth.code.expired`, rolled back, not counted, as before.
+- **Parked.** Nothing further.
+- **Answer:** pending.
+
+**185. Tier 2. REG-IDENT-006: a second removal row for one identifier.**
+
+- **Item.** Question 143.
+- **What the code does.** `identity.identifier_removals` has the identifier's id as its primary key. Question 143 replaces a lapsed row of the same kind and value. A second replace of one identifier to a third value, while the first replace's removal row is unswept, would write a second row under the same id. Read from the schema; no test confirms it.
+- **What the specification says.** REG-IDENT-006 keeps a removal for its window; D-188 question 143 speaks of the same kind and value.
+- **Readings.**
+  1. The second removal replaces the identifier's standing row.
+  2. The key becomes one that admits both rows.
+- **Parked.** That case, left as it is.
 - **Answer:** pending.
 
 ## 5. Gate result
