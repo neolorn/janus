@@ -615,7 +615,7 @@ CONV-DESIGN-008 criterion 3, "no project's build reports MSB3277": no test decid
 
 What earlier runs left: nine worktrees held uncommitted work whose commits were all in the branch; each is kept as a patch outside the repository and removed with its branch. The reason rule of the configuration route that one of them carried is on the branch at the endpoint and in the service (`ConfigurationEndpointTests.OPS_CFG_005_EveryChangeCarriesAReasonAsync`, `ConfigurationAdministrationTests.OPS_CFG_008_AC2_ATighteningWithNoReasonIsRefusedAsync`). Four stashes are dropped: three held earlier states of the docs, and every file of the fourth is in the history (the changelog describes `MapAuthorizationTables`).
 
-**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The five parts of D-183 the owner's split names are merged (below), and four further parts for what they left: question 30, question 29, the mailbox pushes of question 61, and questions 42 and 31. Questions 68 to 125 park the sites they name. Of the work after the merges, the new codes, the retirement of `NotificationRequested`, question 53 and question 62 are merged; questions 50 and 51 wait on question 119; the sites of question 62 in the identifiers and the registration run in a part not yet merged.
+**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The five parts of D-183 the owner's split names are merged (below), and four further parts for what they left: question 30, question 29, the mailbox pushes of question 61, and questions 42 and 31. Questions 68 to 125 park the sites they name. Of the work after the merges, the new codes, the retirement of `NotificationRequested`, question 53 and question 62 are merged; questions 50 and 51 wait on question 119. No part is running.
 
 ### The section C sweeps, place by place
 
@@ -1196,12 +1196,24 @@ After the merge: build 0 warnings 0 errors, format clean, 3112 unit tests, 139 c
 - **Place by place.**
   - Changed: `GrantService` (the grant, the revocation); `GroupService` (create, remove, add and remove a member); `RoleService` (define, remove); `AccountAdministration` (suspend, reactivate, lift a restriction, cancel a deletion; the acting account's own row first where it is the target); `BreakGlassService.GenerateAsync`; `MaintenanceRecords` (the licences, the record); `OrganizationService` (create, request and cancel a deletion, replace the policy); `OrganizationDomainService` (add, remove, verify); `InvitationService` (issue, revoke); `MembershipEnd.EndAsync`; `SessionService.RevokeAccountAsync`, which now begins a unit of work of its own, and `RevokeEveryAsync`; `RecoveryService`, the approval's first unit of work; `RestrictionAdministration` (edit, grant); `AccountLifecycle.DeactivateAsync`; `AccountService` (the profile, the preferences, a credential's label, the preferred second step); `ProfilePhotos` (set, remove); `InvitationAcknowledgement.AcknowledgeAsync`; `CredentialService` (set a password, remove, unlink, begin and upgrade a key, complete a key, confirm a generator, link; begin a generator and generate recovery codes inside a unit of work begun for the ask); `LegalDocumentService` (publish, translate); `ProcessingRecordsService.DeclareAsync`; `PrivacyRequestService` (fulfil, refuse, the entry on a subject's behalf); `TakedownService` (execute, reverse; `IAccountStates.HoldAsync` is new); `ConfigurationService.ChangeAsync` (the retention of a category; a plain key, which now begins an outer unit of work that the change joins).
   - Parked: `AppPasswords.CreateAsync` (question 122), `RecoveryService.SendAsync` (question 123), `ErasureService.CompleteAsync` (question 124), the destination keys through `AlertDestinationChange.ChangeAsync` (question 125).
-  - Not yet done: `IdentifierService` (add, verify, make primary, set the backup, remove, replace), `RegistrationService` and `VerificationCodes`, which another part held while this one ran; any endpoint that asks the gate itself and then writes was not reviewed. A further part takes them.
+  - Left to a further part, which is merged (below): `IdentifierService`, `RegistrationService`, `VerificationCodes` and the endpoints.
   - Reviewed, left: `ConfigurationAdministration.ChangeAsync` and `ChangeMemberAsync` (an internal seam; its own ask for a loosening is already inside the unit of work); `AccountLifecycle` reactivate, delete and cancel a deletion (borne by a link, or kept available under restriction by IDN-ACCT-007); `SessionService`'s ends of one's own sessions, `LossReports`, `DeviceService` (no ask of the gate); `ConsentService`, `PrivacyRequestService.SubmitAsync`, `ExportService` (no permission asked); reads; the background sweeps, callbacks, intakes, publishers, the alert router and dispatch (a system principal, no account row); `ExportOperations`, `DerivationMaterialiser`, `ResourceService`.
   - Parked sites of questions 69 to 88: none settled. `GroupService.AddMemberAsync` and `RemoveMemberAsync` (77), `AccountLifecycle.DeactivateAsync`, `InvitationAcknowledgement` and `MembershipEnd` (80) gained the ask before what they do.
 - For audit:
   - `InvitationAcknowledgement` asks the gate for the inviter inside the unit of work, so the inviter's row is held shared after other locks, not before; the same holds for the asks for a loosening inside `ConfigurationAdministration` on a path the outer ask has not held.
   - Two administrators who restrict or suspend each other at once each hold their own row shared and want the other's exclusively; PostgreSQL ends one as a deadlock. No chapter speaks to it.
+
+#### D-183, `part/held-gate-identifiers`, merged as `851eebf8` (`6138d8ad`)
+
+After the merge: build 0 warnings 0 errors, format clean, 3114 unit tests, 139 contract tests. No migration, no counted file changed.
+
+- **Question 62, the sites the first part left** (`6138d8ad`; AUTHZ-GATE-006 criterion 3, IDN-ACCT-007, CONV-DESIGN-002, CONV-DESIGN-003). Tests: `IdentifierServiceTests.AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesEachIdentifierChangeAsync` (the six sites), `AccountApplicationTests.AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesEachIdentifierChangeAsync` (the six routes). The order of the locks was read, as for the other sites.
+  - Changed, `IdentifierService`: add, make primary, set the backup and remove take the account's row first, as they did, and ask directly after it; verify and replace (the session's overloads) ask as the first statement after the beginning, under the gate's shared hold. An enrolment session is not asked, there as at its gate step.
+  - Reviewed, left: the enrolment session's overloads of verify and replace; the landing, the abandonment and the undo, borne by a link. `RegistrationService` and `VerificationCodes`: no operation asks the gate or the restriction for an acting account. The 29 endpoint files: no handler asks the gate and then writes; three handlers take the gate and each is one read.
+  - Parked sites touched, none settled: 73 (the presentation follows the ask), 80 and 115 (the ask precedes what each site does).
+- For audit:
+  - The verification and the replacement hold the acting account's row shared, through the gate, and change the account's identifier set without the set's own lock, as before; the other four take it.
+  - `InvitationOpening.OpenAsync` attaches an invitation to a signed-in account inside a unit of work and asks neither the gate nor the restriction at any point; it is no site of question 62, and whether a restricted account may attach an invitation was not settled or changed.
 
 ## 2. Items not implemented
 
@@ -2544,7 +2556,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3112 unit tests, 139 c
   window. `AccessGate` resolves `SubjectSets` once per operation, and `GatedSettings`
   enforces the restriction in no second place.
 - **Parked.** C9.
-- **Answer:** D-183. Built in `c269fb1a`, `ca559838`, `be484f95`, `804b666e` and `94e4ad4e` (`part/held-gate`), but for the four sites questions 122 to 125 park and the sites of the identifiers and the registration, not yet done.
+- **Answer:** D-183. Built in `c269fb1a`, `ca559838`, `be484f95`, `804b666e`, `94e4ad4e` (`part/held-gate`) and `6138d8ad` (`part/held-gate-identifiers`), but for the four sites questions 122 to 125 park.
 
 **63. Tier 3. D-166 X3 at S1, AUTH-ABUSE-004 criterion 1 against CONV-DESIGN-003 criterion 6: the admission of a send.**
 
