@@ -67,7 +67,7 @@ public sealed class MailServerInUseTests
 
         public ValueTask<Result> RevokeAppPasswordAsync(
             string accessToken,
-            string id,
+            AppPasswordId id,
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException("The mail server is not called here.");
     }

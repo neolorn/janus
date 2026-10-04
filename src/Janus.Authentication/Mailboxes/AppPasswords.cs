@@ -159,12 +159,11 @@ internal sealed class AppPasswords(
     public async ValueTask<Result> RevokeAsync(
         AccessContext context,
         SessionId session,
-        string id,
+        AppPasswordId id,
         string source,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(id);
         ArgumentNullException.ThrowIfNull(source);
 
         Error? failure = null;
@@ -175,12 +174,6 @@ internal sealed class AppPasswords(
         if (failure is not null)
         {
             return Result.Failure(failure);
-        }
-
-        // An identifier that names nothing names no app password of the person's.
-        if (string.IsNullOrWhiteSpace(id))
-        {
-            return Result.Failure(Error.From(ErrorCodes.CredentialNotFound));
         }
 
         if (await stepUp
@@ -259,7 +252,7 @@ internal sealed class AppPasswords(
     private async ValueTask RecordAsync(
         AuditAction action,
         SubjectId subject,
-        string credential,
+        AppPasswordId credential,
         string source,
         CancellationToken cancellationToken)
     {

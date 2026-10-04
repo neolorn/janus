@@ -38,7 +38,8 @@ internal static class AppPasswordEndpoints
 
         _ = SessionRequired.On(group.MapGet("/", ListAsync));
         _ = SessionRequired.On(group.MapPost("/", CreateAsync));
-        _ = SessionRequired.On(group.MapDelete("/{id}", RevokeAsync));
+        _ = SessionRequired.On(group.MapDelete("/{id}", RevokeAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<AppPasswordId>("id"));
 
         return endpoints;
     }
@@ -91,14 +92,14 @@ internal static class AppPasswordEndpoints
                         cancellationToken)
                     .ConfigureAwait(false),
                 issued => TypedResults.Json(
-                    new IssuedAppPasswordView(issued.Id, issued.Secret),
+                    new IssuedAppPasswordView(issued.Id.ToString(), issued.Secret),
                     AccountJson.Default.IssuedAppPasswordView,
                     contentType: null,
                     StatusCodes.Status200OK));
     }
 
     private static async Task<IResult> RevokeAsync(
-        string id,
+        AppPasswordId id,
         IAppPasswords passwords,
         RequestSession browser,
         HttpContext context,

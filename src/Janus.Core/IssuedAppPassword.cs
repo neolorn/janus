@@ -8,4 +8,4 @@ namespace Janus.Core;
 /// <param name="Secret">The secret, returned once and never read back.</param>
 /// <remarks>Implements REG-MAIL-002 and INT-MAIL-010.</remarks>
 [NeverLogged]
-public sealed record IssuedAppPassword(string Id, [property: NeverLogged] string Secret);
+public sealed record IssuedAppPassword(AppPasswordId Id, [property: NeverLogged] string Secret);

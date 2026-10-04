@@ -10,6 +10,15 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `AppPasswordId` is a mail app password's identifier in the mail server's own form,
+  the JMAP `Id` of RFC 8620 section 1.2: 1 to 255 letters, digits, `-` and `_`.
+  `IAppPasswords.RevokeAsync` and `IMailServer.RevokeAppPasswordAsync` take it, and
+  `AppPassword.Id` and `IssuedAppPassword.Id` carry it, where each was text; a host's
+  own `IMailServer` answers its identifiers as this type. `DELETE
+  /account/mail/apppasswords/{id}` binds it from the path, so an `{id}` outside the form
+  is refused 400 `api.request.malformed` naming `id` and the mail server is not asked.
+  The shipped adapter reads an app password the server names outside the form as an
+  answer that does not read.
 - `RestrictionName` names a sending restriction under the same rule as a document's
   name, read by `Parse`, `TryParse` and `IParsable<T>`. `IRestrictionSet.ReadAsync`,
   `DeleteAsync` and `GrantAsync` take it, where each took text, and the
