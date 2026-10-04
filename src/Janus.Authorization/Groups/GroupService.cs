@@ -112,6 +112,17 @@ internal sealed class GroupService(
             return Result.Failure<GroupId>(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await ManagingRefusedAsync(context, organization, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<GroupId>(since);
+        }
+
         await groups.CreateAsync(group, cancellationToken).ConfigureAwait(false);
         await audit
             .CreatedAsync(group, stated, acting, context.BreakGlassReason, time.GetUtcNow(), cancellationToken)
@@ -159,6 +170,16 @@ internal sealed class GroupService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await GroupRefusedAsync(context, group, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
         }
 
         // D-166 X3: what names the group is read with the organization's groups held,
@@ -250,6 +271,16 @@ internal sealed class GroupService(
             return Result.Failure(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await GroupRefusedAsync(context, group, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
         // D-166 X3: the nesting is judged with the organization's groups held, so a
         // change of members at the same moment cannot close a cycle or confer through a
         // group that came to administer, and the group and its member still stand.
@@ -326,6 +357,16 @@ internal sealed class GroupService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await GroupRefusedAsync(context, group, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
         }
 
         // D-166 X3: what the group and the groups above it hold is judged with the

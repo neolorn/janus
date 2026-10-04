@@ -457,6 +457,46 @@ public sealed class RoleEndpointTests : IAsyncLifetime
         Assert.Empty(_deployment.RoleChanges.Changes);
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction committed after the gate step and before the
+    /// first write refuses a role's definition and its removal inside their unit of
+    /// work, which rolls back and leaves nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesARoleChangeAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Permissions.RoleManage);
+
+        Assert.Equal(StatusCodes.Status201Created, (await DefinedAsync(administrator, Reading, "reader")).Status);
+
+        int recorded = _deployment.RoleChanges.Changes.Count;
+
+        foreach (Func<Task<Answer>> change in new Func<Task<Answer>>[]
+        {
+            () => DefinedAsync(administrator, Editing),
+            () => RemovedAsync(administrator, "reader"),
+        })
+        {
+            int rolledBack = _deployment.Work.RolledBack;
+
+            _deployment.Gate.Admitted = () => _deployment.Work.Meanwhile = () => _deployment.Gate.Restrict(actor);
+
+            Answer refused = await change();
+
+            _deployment.Gate.Lift(actor);
+
+            Assert.Equal(StatusCodes.Status403Forbidden, refused.Status);
+            Assert.Equal(ErrorCodes.Restricted.ToString(), refused.Text("code"));
+            Assert.Equal(rolledBack + 1, _deployment.Work.RolledBack);
+            Assert.False(_deployment.Work.Open);
+        }
+
+        Assert.Null(await _deployment.Roles.FindAsync(Editor, CancellationToken.None));
+        Assert.NotNull(await _deployment.Roles.FindAsync(RoleName.Parse("reader"), CancellationToken.None));
+        Assert.Equal(recorded, _deployment.RoleChanges.Changes.Count);
+    }
+
     private static string Member(Answer answer)
     {
         Assert.Equal(StatusCodes.Status400BadRequest, answer.Status);

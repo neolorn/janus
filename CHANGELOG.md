@@ -15,6 +15,10 @@ against the public contract of LIB-API-001.
   row is locked `FOR SHARE` to the end of that transaction and the state is read under
   the lock, so a restriction commits before the action, which is then refused
   `authz.restricted`, or after it. A reading action holds nothing.
+- Granting and revoking a grant, defining and removing a role, and creating, removing
+  and changing the members of a group ask the gate again inside their unit of work
+  before the first write. A restriction of the acting account committed after the first
+  ask refuses the change `authz.restricted` and leaves nothing written.
 - The shipped mail-server adapter lists an account whose `emailAddress` does not read as
   an email address, or that holds none, with no address, where it failed the listing
   for an account holding none. Reconciliation reads such a listing whole: the account

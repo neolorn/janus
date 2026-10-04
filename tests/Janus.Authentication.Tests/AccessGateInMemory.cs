@@ -18,6 +18,7 @@ namespace Janus.Authentication.Tests;
 internal sealed class AccessGateInMemory : IAccessGate
 {
     private readonly HashSet<(SubjectId Subject, OrganizationId Organization, Permission Permission)> _granted = [];
+    private readonly HashSet<SubjectId> _restricted = [];
     private readonly HashSet<(OrganizationId Organization, Permission Permission)> _everyone = [];
     private readonly List<(AuditRecordId Correlation, AccessExplanation Explanation)> _refusals = [];
     private readonly Dictionary<ResourceReference, (OrganizationId Organization, ResourceAccess Access)> _registered = [];
@@ -40,6 +41,26 @@ internal sealed class AccessGateInMemory : IAccessGate
     /// <param name="permission">The permission.</param>
     public void Grant(SubjectId subject, OrganizationId organization, Permission permission) =>
         _granted.Add((subject, organization, permission));
+
+    /// <summary>
+    /// Gets or sets what happens once the gate next admits a modifying action, where a
+    /// test sets it: what follows an operation's gate step. It happens once.
+    /// </summary>
+    public Action? Admitted { get; set; }
+
+    /// <summary>
+    /// Restricts a principal's processing, as a restriction that committed does: every
+    /// modifying permission is refused it from then on, and a reading one is not
+    /// (AUTHZ-GATE-006).
+    /// </summary>
+    /// <param name="subject">The principal.</param>
+    public void Restrict(SubjectId subject) => _restricted.Add(subject);
+
+    /// <summary>
+    /// Lifts the restriction on a principal's processing.
+    /// </summary>
+    /// <param name="subject">The principal.</param>
+    public void Lift(SubjectId subject) => _restricted.Remove(subject);
 
     /// <summary>
     /// Takes back a permission granted to a principal within an organization.
@@ -81,10 +102,15 @@ internal sealed class AccessGateInMemory : IAccessGate
     {
         ArgumentNullException.ThrowIfNull(context);
 
+        if (Restricted(context, permission))
+        {
+            return ValueTask.FromResult(Result.Failure(Error.From(ErrorCodes.Restricted)));
+        }
+
         if (context.Effective is SubjectId subject
             && (_granted.Contains((subject, organization, permission)) || _everyone.Contains((organization, permission))))
         {
-            return ValueTask.FromResult(Result.Success());
+            return ValueTask.FromResult(Admit(permission));
         }
 
         _refusals.Add((
@@ -262,6 +288,25 @@ internal sealed class AccessGateInMemory : IAccessGate
         CapabilitiesAsync(context, type, resources, permissions, cancellationToken);
 
     private static Result Refused() => Result.Failure(Error.From(ErrorCodes.Denied));
+
+    // What a test set to follow the gate step runs once, after a modifying action is
+    // admitted and before the caller is answered.
+    private Result Admit(Permission permission)
+    {
+        if (permission.Action is not ("read" or "list" or "export") && Admitted is Action admitted)
+        {
+            Admitted = null;
+            admitted();
+        }
+
+        return Result.Success();
+    }
+
+    // AUTHZ-GATE-006: an action named read, list or export reads; every other modifies.
+    private bool Restricted(AccessContext context, Permission permission) =>
+        context.Effective is SubjectId subject
+        && _restricted.Contains(subject)
+        && permission.Action is not ("read" or "list" or "export");
 
     private Result<AccessExplanation> Recorded(AuditRecordId correlation, Func<AccessExplanation, bool> resolves) =>
         _refusals.Find(refusal => refusal.Correlation == correlation) is { Explanation: { } explanation }
