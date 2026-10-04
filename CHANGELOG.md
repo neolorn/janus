@@ -98,6 +98,10 @@ against the public contract of LIB-API-001.
   counts no failure and records no failed authentication, where it used to be counted
   and recorded in a second transaction. A right code sent to an address the account has
   given up since commits its spend with the refusal's record and counts.
+- A fault of the library's own while a factor, a sign-in code or a new-device code is
+  being judged (a setting that does not read, the database failing) is no longer counted
+  against the delay or recorded as a failed authentication, at a sign-in and at a
+  step-up alike: the request answers `system.fault` and the person is not held for it.
 - Every event raised with the access context of a person who acted now carries
   `Effective` beside `Actor`, each as the context gives it: `AccountSuspended`,
   `AccountReactivated`, `AccountDeletionRequested` and `AccountDeletionCancelled` raised

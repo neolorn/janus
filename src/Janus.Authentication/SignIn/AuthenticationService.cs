@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
@@ -86,6 +87,21 @@ internal sealed class AuthenticationService(
     TimeProvider time,
     RandomNumberGenerator randomness) : IAuthentication
 {
+    // AUTH-ABUSE-001: every code a factor refuses what was presented to it with. A
+    // failure under any other code is no judgement of what was presented.
+    private static readonly FrozenSet<ErrorCode> Refusals = new[]
+    {
+        ErrorCodes.FactorRejected,
+        ErrorCodes.FactorNotPermitted,
+        ErrorCodes.CodeInvalid,
+        ErrorCodes.CodeExpired,
+        ErrorCodes.CodeReplayed,
+        ErrorCodes.WebAuthnAlgorithmNotAllowed,
+        ErrorCodes.WebAuthnCounterMismatch,
+        ErrorCodes.WebAuthnRelyingPartyChanged,
+        ErrorCodes.WebAuthnUserVerificationRequired,
+    }.ToFrozenSet();
+
     /// <summary>
     /// Opens a sign-in for an identifier, with the tokens only the browser boundary
     /// can read.
@@ -1131,7 +1147,8 @@ internal sealed class AuthenticationService(
     // A refusal comes back counted and recorded already, by the count its caller hands
     // in: a factor whose refusal keeps a write of its own (a code's wrong try, a
     // counter that did not advance) commits that write with the count, in one unit of
-    // work (CONV-DESIGN-003).
+    // work (CONV-DESIGN-003). A fault of the library's own comes back as it is, neither
+    // counted nor recorded (AUTH-ABUSE-001).
     private async ValueTask<Result<bool>> AcceptsAsync(
         Challenge open,
         SubjectId subject,
@@ -1160,9 +1177,15 @@ internal sealed class AuthenticationService(
         bool changeRequired = (await JudgedAsync(open, subject, presented, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Withheld<bool>(error, ref refusal));
 
-        return refusal is null
-            ? Result.Success(changeRequired)
-            : Result.Failure<bool>(await counted(cancellationToken).ConfigureAwait(false) ?? refusal);
+        if (refusal is null)
+        {
+            return Result.Success(changeRequired);
+        }
+
+        return Result.Failure<bool>(
+            Refuses(refusal)
+                ? await counted(cancellationToken).ConfigureAwait(false) ?? refusal
+                : refusal);
     }
 
     // The factors whose services end their own unit of work, a refusal of theirs
@@ -1428,11 +1451,18 @@ internal sealed class AuthenticationService(
     private static bool Answered(Error refusal) =>
         refusal.Code == ErrorCodes.CodeInvalid || refusal.Code == ErrorCodes.CodeExpired;
 
+    // AUTH-ABUSE-001, CONV-LOG-005: whether a failure is a factor's refusal of what was
+    // presented, which is a failed attempt, as against a fault of the library's own (a
+    // setting that does not read, the database failing), which is none: nothing is
+    // counted or recorded for it and the request answers system.fault.
+    private static bool Refuses(Error failure) => Refusals.Contains(failure.Code);
+
     // CONV-DESIGN-003: ends the unit of work a refusal was decided in. A refusal that
     // keeps a write is counted inside it, the count joining it, and the whole is
     // committed together; any other is rolled back and then counted, as a refusal
-    // that never began one is. A count that fails is what the caller is told, with
-    // nothing committed.
+    // that never began one is, save a fault of the library's own, which is rolled back
+    // and counted nowhere. A count that fails is what the caller is told, with nothing
+    // committed.
     private async ValueTask<Error> RefusedAsync(
         Error refusal,
         bool kept,
@@ -1443,7 +1473,9 @@ internal sealed class AuthenticationService(
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
-            return await counted(cancellationToken).ConfigureAwait(false) ?? refusal;
+            return Refuses(refusal)
+                ? await counted(cancellationToken).ConfigureAwait(false) ?? refusal
+                : refusal;
         }
 
         if (await counted(cancellationToken).ConfigureAwait(false) is Error uncounted)

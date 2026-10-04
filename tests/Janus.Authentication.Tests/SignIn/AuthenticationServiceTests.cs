@@ -903,6 +903,171 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-001, CONV-LOG-005: a fault of the library's own inside a sign-in (a
+    /// setting that does not read once the password has verified) is no failed attempt:
+    /// the failure comes back as it is, nothing is counted and nothing is recorded,
+    /// while a wrong password under the same fault is refused, recorded and counted.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AFaultInsideASignInIsNeitherCountedNorRecordedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _configuration.Unread = Settings.PasswordArgon2Parallelism.Key;
+        _work.Reset();
+
+        Result<SignInProgress> faulted = await PresentAsync(began.Challenge, Factor.Password, Secret);
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, Refused(faulted));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+
+        Result<SignInProgress> wrong = await PresentAsync(began.Challenge, Factor.Password, "not the password at all");
+
+        Assert.Equal(ErrorCodes.FactorRejected, Refused(wrong));
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.Password)], _audit.Failed);
+        Assert.NotEmpty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001, CONV-LOG-005, CONV-DESIGN-003 AC10: a fault of the library's own
+    /// inside a step-up's presentation is no refused step-up factor: nothing is counted
+    /// and nothing is recorded.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AFaultInsideAStepUpIsNeitherCountedNorRecordedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Remembered(subject);
+
+        SignInProgress signedIn = await SignedInAsync(subject, Factor.Password, Secret);
+        SignInChallenge began = await BeganAsync(Address);
+
+        _configuration.Unread = Settings.PasswordArgon2Parallelism.Key;
+
+        Result<SignInProgress> faulted = await Service.StepUpAsync(
+            AccessContext.Of(subject),
+            Assert.IsType<SessionId>(signedIn.Session),
+            began.Challenge,
+            new FactorPresentation(Factor.Password) { Value = Secret },
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, Refused(faulted));
+        Assert.False(_work.Open);
+        Assert.Empty(_audit.StepUpsFailed);
+        Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001, CONV-DESIGN-003 AC10: a fault of the library's own on a sign-in
+    /// code's path (the attempt cap does not read) leaves the unit of work rolled back,
+    /// the code as it stood, nothing counted and no failed authentication recorded.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AFaultOnASignInCodesPathIsRolledBackAndCountedNowhereAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailCode);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await Service.SendCodeAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+
+        string right = Code();
+
+        _configuration.Unread = Settings.CodeSigninAttempts.Key;
+        _work.Reset();
+
+        Result<SignInProgress> faulted = await PresentAsync(began.Challenge, Factor.EmailCode, right);
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, Refused(faulted));
+        Assert.False(_work.Open);
+        Assert.Equal((1, 0, 1), (_work.Opened, _work.Committed, _work.RolledBack));
+        Assert.Equal(
+            0,
+            (await _pending.FindAsync(subject, Factor.EmailCode, TestContext.Current.CancellationToken))?.WrongAttempts);
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001, CONV-DESIGN-003 AC10: a fault of the library's own judging the
+    /// domain lock after a right sign-in code leaves the unit of work rolled back, the
+    /// code unspent, nothing counted and no failed authentication recorded.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AFaultJudgingTheLockAfterARightSignInCodeIsRolledBackAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailCode);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await Service.SendCodeAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+
+        string right = Code();
+
+        _memberships.Place(subject, Locked);
+        _configuration.Unread = Settings.OrganizationPolicy.For(Locked.ToString());
+        _work.Reset();
+
+        Result<SignInProgress> faulted = await PresentAsync(began.Challenge, Factor.EmailCode, right);
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, Refused(faulted));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001, CONV-LOG-005, CONV-DESIGN-003 AC10: a fault of the library's own
+    /// on the new-device check's path (the attempt cap does not read) leaves the unit of
+    /// work rolled back, the code as it stood, nothing counted and no refused
+    /// verification recorded.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AFaultOnADeviceChecksPathIsRolledBackAndCountedNowhereAsync()
+    {
+        await AccountAsync();
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await PresentAsync(began.Challenge, Factor.Password, Secret);
+
+        string right = Code();
+
+        _configuration.Unread = Settings.CodeVerificationAttempts.Key;
+        _work.Reset();
+
+        Result<SignInProgress> faulted = await Service.VerifyDeviceAsync(
+            began.Challenge,
+            right,
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, Refused(faulted));
+        Assert.False(_work.Open);
+        Assert.Equal((1, 0, 1), (_work.Opened, _work.Committed, _work.RolledBack));
+        Assert.Equal(0, Assert.Single(_codes.All).Attempts);
+        Assert.Empty(_audit.DeviceVerificationsFailed);
+        Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC10, AUTH-FACT-004: a wrong code of the new-device check commits
     /// its count on the code's record, the refusal's record and the failure's counts in
     /// one unit of work.
