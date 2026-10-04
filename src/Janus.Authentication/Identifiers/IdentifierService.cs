@@ -904,6 +904,14 @@ internal sealed class IdentifierService(
             return Result.Failure(failure);
         }
 
+        if (Overfull(
+                await directory.HeldAsync(given.Subject, cancellationToken).ConfigureAwait(false),
+                given,
+                maximum))
+        {
+            return Result.Failure(Error.From(ErrorCodes.IdentifierMaximum));
+        }
+
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
@@ -928,10 +936,23 @@ internal sealed class IdentifierService(
             return Result.Failure(Error.From(ErrorCodes.ChangeWindowElapsed));
         }
 
+        // REG-IDENT-006 (D-188): the maximum is judged again on the set under its lock,
+        // against the verified identifiers alone, so an add verified since refuses the
+        // undo and a pending add never does.
+        if (Overfull(
+                await directory.HeldAsync(given.Subject, cancellationToken).ConfigureAwait(false),
+                given,
+                maximum))
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.IdentifierMaximum));
+        }
+
         // REG-IDENT-004: an add of the value the account staged meanwhile is left as it
         // stands. The undo's write is what its verification then finds, so it writes
         // nothing and the add is the sweep's.
-        await directory.TakeBackAsync(given.Id, maximum, cancellationToken).ConfigureAwait(false);
+        await directory.TakeBackAsync(given.Id, cancellationToken).ConfigureAwait(false);
 
         HeldIdentifiers held = await directory.HeldAsync(given.Subject, cancellationToken)
             .ConfigureAwait(false);
@@ -1198,6 +1219,13 @@ internal sealed class IdentifierService(
     private static string Key(IdentifierId identifier, DateTimeOffset at) =>
         string.Create(CultureInfo.InvariantCulture, $"{identifier.Value}@{at.UtcTicks}");
 
+    // REG-IDENT-006 (D-188): an undo counts the account's verified identifiers of the
+    // kind alone, so a pending add or an unverified identifier never refuses it. The
+    // undo of a replace moves the value back onto the identifier that stands and adds
+    // none to the kind, so the maximum does not judge it.
+    private static bool Overfull(HeldIdentifiers held, GivenUpIdentifier given, int maximum) =>
+        held.Find(given.Id) is null && held.Verified(given.Kind) >= maximum;
+
     private static bool Displaced(PendingVerification waiting, byte[] fingerprint) =>
         waiting.OldLink is byte[] link
         && CryptographicOperations.FixedTimeEquals(link, fingerprint);
@@ -1420,6 +1448,32 @@ internal sealed class IdentifierService(
         || (await directory.ReservedToAsync(kind, canonical, now, cancellationToken).ConfigureAwait(false)
                 is SubjectId reserved
             && reserved != subject);
+
+    // REG-IDENT-004 (D-188): the maximum judged again where an add's verified value
+    // would be written, against the account's verified identifiers of the kind alone:
+    // pending adds are not counted, so two of them do not refuse each other. The caller
+    // holds the set's lock and the value's.
+    private async ValueTask<Error?> FullAsync(
+        SubjectId subject,
+        IdentifierKind kind,
+        CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        int maximum = (await configuration
+                .ReadAsync(Maximum(kind), cancellationToken).ConfigureAwait(false))
+            .Match(read => read, error => Withheld<int>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return failure;
+        }
+
+        HeldIdentifiers held = await directory.HeldAsync(subject, cancellationToken)
+            .ConfigureAwait(false);
+
+        return held.Verified(kind) >= maximum ? Error.From(ErrorCodes.IdentifierMaximum) : null;
+    }
 
     // REG-IDENT-004 (D-187): every add is staged as a pending verification that holds
     // the value, a held or reserved value as a fresh one, and no identifier is written
@@ -1819,8 +1873,10 @@ internal sealed class IdentifierService(
     // verified, under the pending verification's identifier; a replace swaps the value
     // of the one it named, keeps the session it completed under and holds the displaced
     // value for the undo. Either writes nothing and is answered auth.code.expired where
-    // the value has come to be held or reserved since it was staged, and its caller
-    // then rolls the presentation back (REG-IDENT-004, REG-IDENT-007).
+    // the value has come to be held or reserved since it was staged, and an add writes
+    // nothing and is answered identity.identifier.maximum where the account's verified
+    // identifiers already fill the kind; its caller then rolls the presentation back
+    // (REG-IDENT-004, REG-IDENT-007).
     private async ValueTask<Result> SettleAsync(
         PendingVerification waiting,
         SessionId? completing,
@@ -1855,6 +1911,12 @@ internal sealed class IdentifierService(
                 .ConfigureAwait(false))
             {
                 return Result.Failure(Error.From(ErrorCodes.CodeExpired));
+            }
+
+            if (await FullAsync(waiting.Subject, staged.Kind, cancellationToken).ConfigureAwait(false)
+                is Error full)
+            {
+                return Result.Failure(full);
             }
 
             await directory

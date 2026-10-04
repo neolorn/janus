@@ -227,6 +227,7 @@ POST /account/identifiers/{id}/undo
   204
   400 api.request.malformed
   403 auth.session.csrfinvalid
+  409 identity.identifier.maximum
   422 identity.change.windowelapsed
 POST /account/identifiers/{id}/verify
   request application/json
@@ -241,6 +242,7 @@ POST /account/identifiers/{id}/verify
   400 api.request.malformed
   401 auth.session.expired
   403 auth.session.csrfinvalid authz.restricted
+  409 identity.identifier.maximum
   422 auth.code.expired auth.code.invalid
   429 auth.throttled
 GET /account/invitation

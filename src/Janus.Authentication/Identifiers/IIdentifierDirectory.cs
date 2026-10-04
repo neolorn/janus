@@ -106,9 +106,9 @@ internal interface IIdentifierDirectory
     /// Writes to the account the identifier an add verified, verified from the instant
     /// it was proved and under the identifier its pending verification was held under.
     /// The first verified of its kind becomes the primary. A reservation of its value
-    /// to the account ends with the write (REG-IDENT-004, REG-IDENT-006). The add
-    /// counted toward its kind's maximum while it was pending, so the maximum is not
-    /// judged again here.
+    /// to the account ends with the write (REG-IDENT-004, REG-IDENT-006). What asks
+    /// has judged the kind's maximum against the account's verified identifiers, so it
+    /// is not judged again here.
     /// </summary>
     /// <param name="subject">Whose it is.</param>
     /// <param name="id">The identifier the pending verification was held under.</param>
@@ -316,11 +316,12 @@ internal interface IIdentifierDirectory
     ValueTask<GivenUpIdentifier?> GivenUpAsync(byte[] undo, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Puts a removed identifier back, verified exactly as it was.
+    /// Puts a removed identifier back, verified exactly as it was. What asks has judged
+    /// the kind's maximum against the account's verified identifiers, so it is not
+    /// judged again here (REG-IDENT-006).
     /// </summary>
     /// <param name="id">Which identifier.</param>
-    /// <param name="maximum">How many of its kind the account may hold.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of putting it back.</returns>
-    ValueTask TakeBackAsync(IdentifierId id, int maximum, CancellationToken cancellationToken);
+    ValueTask TakeBackAsync(IdentifierId id, CancellationToken cancellationToken);
 }

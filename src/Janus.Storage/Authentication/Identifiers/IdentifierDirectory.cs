@@ -124,8 +124,8 @@ internal sealed class IdentifierDirectory(
         IdentifierSet set = await identifiers.FindBySubjectAsync(subject, cancellationToken)
             .ConfigureAwait(false);
 
-        // The add counted toward the maximum while it was pending, so the set is not
-        // asked to judge it again.
+        // The identifier service judged the maximum against the verified identifiers of
+        // the kind, so the set is not asked to judge it again.
         set.Add(Taken(subject, id, kind, entered, canonical, at), int.MaxValue);
         set.Verify(id, at);
 
@@ -412,7 +412,6 @@ internal sealed class IdentifierDirectory(
     /// <inheritdoc/>
     public async ValueTask TakeBackAsync(
         IdentifierId id,
-        int maximum,
         CancellationToken cancellationToken)
     {
         IdentifierRemoval removal = await identifiers.FindRemovalAsync(id, cancellationToken)
@@ -431,7 +430,9 @@ internal sealed class IdentifierDirectory(
         }
         else
         {
-            set.Add(removal.Restored(), maximum);
+            // The identifier service judged the maximum against the verified identifiers
+            // of the kind, so the set is not asked to judge it again.
+            set.Add(removal.Restored(), int.MaxValue);
         }
 
         await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);

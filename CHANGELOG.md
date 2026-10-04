@@ -41,6 +41,14 @@ against the public contract of LIB-API-001.
   the same kind and value whose undo window has run out and that the `expiry-sweep` job
   has not yet taken, where the second removal of such a value was a fault until the
   sweep ran.
+- `POST /account/identifiers/{id}/undo` counts the account's verified identifiers of
+  the kind alone: it answers 409 `identity.identifier.maximum` only where they fill
+  `identifiers.<kind>.max`, and a pending add or an unverified identifier never refuses
+  it, where an undo into a full kind was a fault. The right code or a press of the
+  link of a pending add, at `POST /account/identifiers/{id}/verify`, answers 409
+  `identity.identifier.maximum` and writes nothing where the account's verified
+  identifiers already fill the kind; the add stays listed until it is swept or
+  abandoned.
 - `ICredentials.MarkRecoveryCodesExportedAsync` records that the person copied,
   downloaded or printed the recovery-code set the account holds, and
   `POST /account/recoverycodes/exported` maps it. An account holding no set is refused

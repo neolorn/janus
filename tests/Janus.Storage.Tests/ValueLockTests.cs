@@ -177,7 +177,7 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
 
             Assert.NotNull(await directory.GivenUpAsync(undo, TestContext.Current.CancellationToken));
 
-            await directory.TakeBackAsync(given, maximum: 5, TestContext.Current.CancellationToken);
+            await directory.TakeBackAsync(given, TestContext.Current.CancellationToken);
             await restoring.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 

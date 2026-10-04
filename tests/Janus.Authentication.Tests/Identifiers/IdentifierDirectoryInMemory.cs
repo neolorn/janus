@@ -497,7 +497,7 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
     }
 
     /// <inheritdoc/>
-    public ValueTask TakeBackAsync(IdentifierId id, int maximum, CancellationToken cancellationToken)
+    public ValueTask TakeBackAsync(IdentifierId id, CancellationToken cancellationToken)
     {
         GivenUpIdentifier given = _givenUp[id];
         List<HeldIdentifier> all = Of(given.Subject);
@@ -516,11 +516,6 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
         }
         else
         {
-            if (all.Count(identifier => identifier.Kind == given.Kind) >= maximum)
-            {
-                throw new InvalidOperationException("The account holds as many of that kind as it may.");
-            }
-
             all.Add(new HeldIdentifier(
                 id,
                 given.Kind,

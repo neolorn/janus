@@ -1333,6 +1333,277 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-006 AC9: an account at its kind's maximum that removes an email and
+    /// stages a pending add is admitted its undo, since an undo counts verified
+    /// identifiers alone. The pending add's right code then finds the verified emails
+    /// filling the kind and is refused <c>identity.identifier.maximum</c>: nothing is
+    /// written, its unit of work is rolled back, and the add stays listed for the sweep
+    /// or an abandon.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AC9_AnUndoIsAdmittedBesideAPendingAddWhoseVerificationIsThenRefusedAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 2);
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+
+        Accepted(await Service.RemoveAsync(
+            Acting,
+            Stepped(),
+            second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        string undo = Undo();
+
+        await AddedAsync(Third);
+
+        IdentifierId third = Assert.Single(_pending.All).Identifier;
+        string code = Code(third);
+
+        Accepted(await Service.UndoAsync(undo, Source, TestContext.Current.CancellationToken));
+
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.IdentifierMaximum,
+            Refused(await Service.VerifyAsync(
+                Acting,
+                Stepped(),
+                third,
+                code,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(2, (await HeldAsync()).Count(identifier => identifier.IsVerified));
+        Assert.Null(await _directory.OwnerAsync(IdentifierKind.Email, Third, TestContext.Current.CancellationToken));
+        Assert.Equal(third, Assert.Single(_pending.All).Identifier);
+        Assert.True(Outstanding(third).IsAnswerable());
+    }
+
+    /// <summary>
+    /// REG-IDENT-004: a press of a pending add's link is judged against the maximum as
+    /// its code is: where the account's verified identifiers already fill the kind it
+    /// writes nothing and is refused <c>identity.identifier.maximum</c>.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_004_APressForAnAddWhereVerifiedIdentifiersFillTheKindIsRefusedTheMaximumAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 2);
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+        SessionId browser = Stepped();
+
+        Accepted(await Service.RemoveAsync(Acting, browser, second, Source, TestContext.Current.CancellationToken));
+
+        string undo = Undo();
+
+        Accepted(await Service.AddAsync(
+            Acting,
+            browser,
+            IdentifierKind.Email,
+            Third,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        string link = _notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Token();
+
+        Accepted(await Service.UndoAsync(undo, Source, TestContext.Current.CancellationToken));
+
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.IdentifierMaximum,
+            Refused(await Service.LandAsync(browser, link, press: true, Source, TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Null(await _directory.OwnerAsync(IdentifierKind.Email, Third, TestContext.Current.CancellationToken));
+        Assert.Equal(Third, Assert.Single(_pending.All).Staged.Canonical);
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 AC9: an undo is refused <c>identity.identifier.maximum</c> where
+    /// the account's verified identifiers of the kind already fill it. Nothing is put
+    /// back and the removal stands, so the same link restores the value once the
+    /// account holds one fewer.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AC9_AnUndoIsRefusedWhereVerifiedIdentifiersFillTheKindAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 2);
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+
+        Accepted(await Service.RemoveAsync(
+            Acting,
+            Stepped(),
+            second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        string undo = Undo();
+
+        await AddedAsync(Third);
+
+        IdentifierId third = Assert.Single(_pending.All).Identifier;
+
+        await VerifiedAsync(third);
+
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.IdentifierMaximum,
+            Refused(await Service.UndoAsync(undo, Source, TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Null(await _directory.OwnerAsync(IdentifierKind.Email, Second, TestContext.Current.CancellationToken));
+
+        Accepted(await Service.RemoveAsync(
+            Acting,
+            Stepped(),
+            third,
+            Source,
+            TestContext.Current.CancellationToken));
+        Accepted(await Service.UndoAsync(undo, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            _person,
+            await _directory.OwnerAsync(IdentifierKind.Email, Second, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-IDENT-006: an undo judged under the set's lock is refused the maximum where
+    /// an add verified while it waited, and its unit of work is rolled back.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AnUndoRefusedTheMaximumUnderTheLockIsRolledBackAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 2);
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+
+        Accepted(await Service.RemoveAsync(
+            Acting,
+            Stepped(),
+            second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        string undo = Undo();
+
+        _directory.Holding = locked =>
+        {
+            _ = _directory.Verified(locked, IdentifierKind.Email, Third);
+
+            return ValueTask.CompletedTask;
+        };
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.IdentifierMaximum,
+            Refused(await Service.UndoAsync(undo, Source, TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Null(await _directory.OwnerAsync(IdentifierKind.Email, Second, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-IDENT-006: pending adds never refuse an undo, and neither does an identifier
+    /// the account holds unverified: with the kind's verified identifiers one under the
+    /// maximum, the undo restores the value beside both.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AnUndoCountsVerifiedIdentifiersAloneAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 2);
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+
+        Accepted(await Service.RemoveAsync(
+            Acting,
+            Stepped(),
+            second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        string undo = Undo();
+
+        await AddedAsync(Third);
+        _ = _directory.Verified(_person, IdentifierKind.Email, Fourth);
+        _ = await _directory.UnverifyAsync(_person, Fourth, TestContext.Current.CancellationToken);
+
+        Accepted(await Service.UndoAsync(undo, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            _person,
+            await _directory.OwnerAsync(IdentifierKind.Email, Second, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-IDENT-004: pending adds are not counted at an add's verification, so two
+    /// pending adds that together fill the kind each verify.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_004_TwoPendingAddsDoNotRefuseEachOthersVerificationAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 3);
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        await AddedAsync(Second);
+        await AddedAsync(Third);
+
+        await VerifiedAsync(Named(await HeldAsync(), Second).Id);
+        await VerifiedAsync(Named(await HeldAsync(), Third).Id);
+
+        Assert.Equal(3, (await HeldAsync()).Count(identifier => identifier.IsVerified));
+        Assert.Empty(_pending.All);
+    }
+
+    /// <summary>
+    /// REG-IDENT-006, REG-IDENT-007: the undo of a replace moves the displaced value
+    /// back onto the identifier that stands, which adds none to the kind, so the
+    /// maximum of one does not refuse it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_TheUndoOfAReplaceIsNotRefusedTheMaximumAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        await VerifiedAsync(email);
+
+        string undo = _notifications.Texts.Last(sent => sent.Message is MessageKind.IdentifierRemoved).Token();
+
+        Accepted(await Service.UndoAsync(undo, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(Primary, Assert.Single(await HeldAsync(), identifier => identifier.Kind is IdentifierKind.Email).Canonical);
+    }
+
+    /// <summary>
     /// REG-IDENT-006 AC4: the sessions the account holds elsewhere end with the
     /// identifier, and the one that asked is left alone.
     /// </summary>
@@ -2936,7 +3207,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
         Accepted(await Service.RemoveAsync(Acting, Stepped(), second, Source, TestContext.Current.CancellationToken));
         _directory.Holding = _ =>
-            _directory.TakeBackAsync(second, maximum: 5, TestContext.Current.CancellationToken);
+            _directory.TakeBackAsync(second, TestContext.Current.CancellationToken);
         _work.Reset();
 
         Assert.Equal(

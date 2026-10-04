@@ -91,8 +91,8 @@ internal static class AccountEndpoints
         _ = group.MapPost("/identifiers/{id}/verify", VerifyIdentifierAsync)
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.SessionExpired, ErrorCodes.Restricted, ErrorCodes.CodeInvalid,
-                    ErrorCodes.CodeExpired, ErrorCodes.Throttled)
+                    ErrorCodes.SessionExpired, ErrorCodes.Restricted, ErrorCodes.IdentifierMaximum,
+                    ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired, ErrorCodes.Throttled)
                 .Binding<IdentifierId>("id"))
             .Produces<IdentifierLandingView>()
             .Produces(StatusCodes.Status204NoContent);
@@ -115,7 +115,7 @@ internal static class AccountEndpoints
         _ = group.MapPost("/identifiers/{id}/undo", UndoIdentifierAsync)
             .Declares(EndpointDeclaration
                 .Answering(
-                    ErrorCodes.ChangeWindowElapsed)
+                    ErrorCodes.IdentifierMaximum, ErrorCodes.ChangeWindowElapsed)
                 .Binding<IdentifierId>("id"))
             .Produces(StatusCodes.Status204NoContent);
         _ = group.MapPut("/identifiers/{id}/replace", ReplaceIdentifierAsync)
