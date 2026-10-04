@@ -153,6 +153,9 @@ against the public contract of LIB-API-001.
   identity or as `subject`, with the principal and the reason of background work
   (`AuditEntry.Principal`, `AuditEntry.PrincipalReason`). A record written before names
   the account as its effective identity and no `subject`.
+- An entry of the audit trail read by subject carries the data subject its record
+  concerns (`AuditEntry.Subject`, `subject` on `GET /admin/audit`), null where the record
+  concerns none.
 - `no-emergency-credential` is raised by the hourly `emergency-credential` job for as
   long as no break-glass credential stands, including after one is spent, and stops only
   when one is generated.

@@ -34,7 +34,7 @@ internal sealed class AuditTrailStoreInMemory : IAuditTrailStore
         ValueTask.FromResult<IReadOnlyList<AuditEntry>>(
         [
             .. _entries
-                .Where(entry => entry.Acting == subject)
+                .Where(entry => entry.Acting == subject || entry.Subject == subject)
                 .OrderByDescending(entry => entry.OccurredAt),
         ]);
 }

@@ -221,12 +221,12 @@ Janus.Core.AuditEntry.Acting.get -> Janus.Core.SubjectId
 Janus.Core.AuditEntry.Acting.init -> void
 Janus.Core.AuditEntry.Action.get -> Janus.Core.AuditAction
 Janus.Core.AuditEntry.Action.init -> void
-Janus.Core.AuditEntry.AuditEntry(Janus.Core.AuditRecordId Id, Janus.Core.AuditCategory Category, Janus.Core.AuditAction Action, System.DateTimeOffset OccurredAt, Janus.Core.SubjectId Acting, Janus.Core.SubjectId Effective, Janus.Core.OrganizationId? Organization, System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>! Details, string? BreakGlassReason, string? Principal, string? PrincipalReason) -> void
+Janus.Core.AuditEntry.AuditEntry(Janus.Core.AuditRecordId Id, Janus.Core.AuditCategory Category, Janus.Core.AuditAction Action, System.DateTimeOffset OccurredAt, Janus.Core.SubjectId Acting, Janus.Core.SubjectId Effective, Janus.Core.OrganizationId? Organization, System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>! Details, string? BreakGlassReason, string? Principal, string? PrincipalReason, Janus.Core.SubjectId? Subject) -> void
 Janus.Core.AuditEntry.BreakGlassReason.get -> string?
 Janus.Core.AuditEntry.BreakGlassReason.init -> void
 Janus.Core.AuditEntry.Category.get -> Janus.Core.AuditCategory
 Janus.Core.AuditEntry.Category.init -> void
-Janus.Core.AuditEntry.Deconstruct(out Janus.Core.AuditRecordId Id, out Janus.Core.AuditCategory Category, out Janus.Core.AuditAction Action, out System.DateTimeOffset OccurredAt, out Janus.Core.SubjectId Acting, out Janus.Core.SubjectId Effective, out Janus.Core.OrganizationId? Organization, out System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>! Details, out string? BreakGlassReason, out string? Principal, out string? PrincipalReason) -> void
+Janus.Core.AuditEntry.Deconstruct(out Janus.Core.AuditRecordId Id, out Janus.Core.AuditCategory Category, out Janus.Core.AuditAction Action, out System.DateTimeOffset OccurredAt, out Janus.Core.SubjectId Acting, out Janus.Core.SubjectId Effective, out Janus.Core.OrganizationId? Organization, out System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>! Details, out string? BreakGlassReason, out string? Principal, out string? PrincipalReason, out Janus.Core.SubjectId? Subject) -> void
 Janus.Core.AuditEntry.Details.get -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>!
 Janus.Core.AuditEntry.Details.init -> void
 Janus.Core.AuditEntry.Effective.get -> Janus.Core.SubjectId
@@ -242,6 +242,8 @@ Janus.Core.AuditEntry.Principal.get -> string?
 Janus.Core.AuditEntry.Principal.init -> void
 Janus.Core.AuditEntry.PrincipalReason.get -> string?
 Janus.Core.AuditEntry.PrincipalReason.init -> void
+Janus.Core.AuditEntry.Subject.get -> Janus.Core.SubjectId?
+Janus.Core.AuditEntry.Subject.init -> void
 Janus.Core.AuditRecordId
 Janus.Core.AuditRecordId.AuditRecordId() -> void
 Janus.Core.AuditRecordId.AuditRecordId(System.Guid Value) -> void

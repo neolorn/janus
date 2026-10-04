@@ -37,6 +37,7 @@ internal sealed class AuditTrailStore(IAuditStore records) : IAuditTrailStore
                     record.Details,
                     record.BreakGlassReason,
                     record.Principal,
-                    record.Reason)),
+                    record.Reason,
+                    record.Subject)),
         ];
 }

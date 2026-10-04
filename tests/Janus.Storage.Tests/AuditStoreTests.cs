@@ -744,6 +744,48 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
     }
 
     /// <summary>
+    /// IDN-AUD-001 AC4, PRIV-BREACH-002: an administrator's suspension of another account
+    /// is returned by the trail of either, each entry naming the account suspended as its
+    /// subject, and a record that concerns no one reads back with none.
+    /// </summary>
+    [Fact]
+    public async Task IDN_AUD_001_AC4_TheTrailOfEitherReturnsTheSuspensionWithItsSubjectAsync()
+    {
+        SubjectId administrator = await _deployment.AccountAsync(Now());
+        SubjectId suspended = await _deployment.AccountAsync(Now());
+        AuditRecordId suspension = NewId();
+        AuditRecordId own = NewId();
+
+        await AppendAsync(AuditRecord.Of(
+            suspension,
+            AuditCategory.Security,
+            Suspended,
+            Now(),
+            administrator,
+            suspended,
+            breakGlassReason: null,
+            organization: null));
+        await AppendAsync(AuditRecord.Of(
+            own,
+            AuditCategory.Security,
+            AuditActions.RoleDefined,
+            Now(),
+            administrator,
+            subject: null,
+            breakGlassReason: null,
+            organization: null));
+
+        IReadOnlyList<AuditEntry> acted = await TrailAsync(administrator);
+        AuditEntry concerned = Assert.Single(await TrailAsync(suspended));
+
+        Assert.Equal(
+            (suspension, administrator, administrator, suspended),
+            (concerned.Id, concerned.Acting, concerned.Effective, concerned.Subject));
+        Assert.Equal(suspended, Assert.Single(acted, entry => entry.Id == suspension).Subject);
+        Assert.Null(Assert.Single(acted, entry => entry.Id == own).Subject);
+    }
+
+    /// <summary>
     /// IDN-PRIN-001 AC4: a principal is never recorded without its reason, and never
     /// beside an acting identity, which the database refuses rather than the code
     /// remembering.
