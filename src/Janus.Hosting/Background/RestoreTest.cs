@@ -311,6 +311,8 @@ internal sealed class RestoreTest(
                     .ConfigureAwait(false))
                 .Match(() => (Error?)null, error => error) is Error unraised)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unraised);
         }
 

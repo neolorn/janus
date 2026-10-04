@@ -38,6 +38,8 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
     private readonly LogsInMemory _logs = new();
     private readonly ILoggerFactory _logging;
     private readonly ServiceProvider _services;
+    private readonly Lock _gate = new();
+    private readonly List<UnitOfWorkInMemory> _units = [];
 
     /// <summary>
     /// A deployment's container, with the ports the worker reads over fakes.
@@ -55,7 +57,7 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
         services.AddSingleton<IAlertLedger, AlertLedgerInMemory>();
         services.AddSingleton<IAlertLog, AlertLogInMemory>();
         services.AddScoped<AlertRouter>();
-        services.AddScoped<IUnitOfWork, UnitOfWorkInMemory>();
+        services.AddScoped<IUnitOfWork>(_ => Begun());
 
         _services = services.BuildServiceProvider();
     }
@@ -207,6 +209,34 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC5: a lapse whose alert cannot be raised is refused after its
+    /// unit of work began, and rolls it back, so the claim on the lapse is not kept; a
+    /// turn that finds no lapse ends its unit of work too.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ALapseThatCannotBeRaisedRollsBackAsync()
+    {
+        _alerts.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        using BackgroundWorker worker = Worker(Failing("failing"));
+
+        await TurnsAsync(worker, 4);
+
+        UnitOfWorkInMemory[] units;
+
+        lock (_gate)
+        {
+            units = [.. _units];
+        }
+
+        Assert.Empty(_alerts.Of<AlertRaised>());
+        Assert.All(units, unit => Assert.False(unit.Open));
+        Assert.Equal(1, units.Sum(unit => unit.RolledBack));
+        Assert.Equal(units.Sum(unit => unit.Opened) - 1, units.Sum(unit => unit.Committed));
+    }
+
+    /// <summary>
     /// OPS-ALERT-001 AC4 and INF-BG-001 AC2: with <c>alert-dispatch</c> stalled, its
     /// lapse is still raised through the channels and is also delivered by the router
     /// straight from the worker, so it reaches the destinations; the lapse of any other
@@ -344,6 +374,19 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
             Assert.Single(job.Principal.Operations);
             Assert.Matches("^[A-Z]+(-[A-Z]+)*-[0-9]{3}[a-z]?$", job.Principal.Reason);
         });
+    }
+
+    // Each scope's unit of work, kept so a test reads how every one of them ended.
+    private UnitOfWorkInMemory Begun()
+    {
+        var unit = new UnitOfWorkInMemory();
+
+        lock (_gate)
+        {
+            _units.Add(unit);
+        }
+
+        return unit;
     }
 
     private BackgroundWorker Worker(params IReadOnlyList<BackgroundJob> jobs) =>
