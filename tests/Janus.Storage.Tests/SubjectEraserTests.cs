@@ -1038,8 +1038,7 @@ public sealed class SubjectEraserTests(DatabaseFixture database) : IClassFixture
                 Subject = subject,
             },
             SendReference.Draw(_deployment.Randomness),
-            Noon,
-            TimeSpan.FromSeconds(30));
+            Noon);
 
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();

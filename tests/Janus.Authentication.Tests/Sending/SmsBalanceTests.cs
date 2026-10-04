@@ -115,13 +115,15 @@ public sealed class SmsBalanceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-006 AC2 and INT-SMS-004 AC2: at the floor, the hard stop is in
-    /// force and the condition is reported.
+    /// AUTH-ABUSE-006 AC2 and INT-SMS-004 AC2: once a poll has recorded a balance at
+    /// the floor, the hard stop is in force and the condition is reported.
     /// </summary>
     [Fact]
     public async Task AUTH_ABUSE_006_AC2_AtTheFloorTheHardStopIsInForceAsync()
     {
         _sms.Balance = 100m;
+
+        await PolledAsync();
 
         Assert.True(await BelowAsync());
         Assert.Equal(AlertCondition.SmsBalance, Assert.Single(_events.Of<AlertRaised>()).Condition);
@@ -129,7 +131,43 @@ public sealed class SmsBalanceTests : IAsyncDisposable
         _sms.Balance = 101m;
         _clock.Advance(TimeSpan.FromHours(1));
 
+        await PolledAsync();
+
         Assert.False(await BelowAsync());
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-006 AC3, AUTH-ABUSE-004 AC17: the floor is judged on the latest
+    /// balance a poll recorded, however old, and the gateway is not asked: a send is
+    /// judged inside its transaction, and no transport is called there.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_006_AC3_TheFloorIsJudgedOnTheLatestRecordedBalanceAsync()
+    {
+        _readings.Given(
+            new BalanceReading(Noon - TimeSpan.FromDays(3), 500m),
+            new BalanceReading(Noon - TimeSpan.FromDays(2), 40m));
+        _sms.Balance = 1000m;
+
+        Assert.True(await BelowAsync());
+        Assert.Equal(0, _sms.Reads);
+        Assert.Equal(0, _work.Opened);
+        Assert.Equal(2, _readings.Readings.Count);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-006 AC3, AUTH-ABUSE-004 AC17: until a first balance is recorded the
+    /// floor refuses nothing, whatever the gateway would say, and the gateway is not
+    /// asked.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_006_AC3_WithNoBalanceRecordedTheFloorRefusesNothingAsync()
+    {
+        _sms.Balance = 0m;
+
+        Assert.False(await BelowAsync());
+        Assert.Equal(0, _sms.Reads);
+        Assert.Empty(_readings.Readings);
     }
 
     /// <summary>
@@ -154,16 +192,19 @@ public sealed class SmsBalanceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// A reading inside the poll interval answers the hard stop without asking the
-    /// gateway again, so the question costs one call an interval.
+    /// INT-SMS-004: a poll the gateway does not answer fails and records nothing, so
+    /// no poll succeeds without a balance read and the job's lapse reports it.
     /// </summary>
     [Fact]
-    public async Task BelowFloorAsync_AReadingInsideTheInterval_DoesNotAskTheGatewayAsync()
+    public async Task INT_SMS_004_APollThatCannotReadTheBalanceFailsAndRecordsNothingAsync()
     {
-        _readings.Given(new BalanceReading(Noon - TimeSpan.FromMinutes(5), 500m));
+        _sms.Unread = Error.From(ErrorCodes.SystemFault);
 
-        Assert.False(await BelowAsync());
-        Assert.Equal(0, _sms.Reads);
+        Result<decimal> polled = await Balance.PollAsync(Watcher, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, polled.Match(_ => (ErrorCode?)null, error => error.Code));
+        Assert.Empty(_readings.Readings);
+        Assert.Equal(0, _work.Opened);
     }
 
     private async Task<decimal> PolledAsync() =>

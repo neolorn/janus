@@ -89,7 +89,9 @@ internal sealed class SendDeliveryStore(
         DateTimeOffset until = RowClaim.Until(now, timeout);
 
         int claimed = await context.SendOutbox
-            .Where(row => row.Id == delivery && (row.ClaimedUntil == null || row.ClaimedUntil <= now))
+            .Where(row => row.Id == delivery
+                && row.NextAttemptAt <= now
+                && (row.ClaimedUntil == null || row.ClaimedUntil <= now))
             .ExecuteUpdateAsync(
                 row => row.SetProperty(one => one.ClaimedUntil, until),
                 cancellationToken)

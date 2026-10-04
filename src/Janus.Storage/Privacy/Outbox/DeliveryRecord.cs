@@ -61,6 +61,12 @@ internal sealed class DeliveryRecord
     public DateTimeOffset NextAttemptAt { get; set; }
 
     /// <summary>
+    /// The <c>claimed_until</c> column: when the claim of the pass that holds the row
+    /// times out, or nothing where no pass holds it (CONV-DESIGN-003).
+    /// </summary>
+    public DateTimeOffset? ClaimedUntil { get; set; }
+
+    /// <summary>
     /// The confirmations this delivery has collected.
     /// </summary>
     public ICollection<DeliveryConfirmationRecord> Confirmations { get; } = [];

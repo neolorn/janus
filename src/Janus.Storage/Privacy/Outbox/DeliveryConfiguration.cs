@@ -70,6 +70,8 @@ internal sealed class DeliveryConfiguration : IEntityTypeConfiguration<DeliveryR
 
         builder.Property(delivery => delivery.NextAttemptAt).HasColumnName("next_attempt_at");
 
+        builder.Property(delivery => delivery.ClaimedUntil).HasColumnName("claimed_until");
+
         builder.HasOne<AccountRecord>()
             .WithMany()
             .HasForeignKey(delivery => delivery.Subject)

@@ -32,6 +32,12 @@ internal sealed class SmsTransportInMemory : ISmsTransport
     public int Takes { get; set; } = int.MaxValue;
 
     /// <summary>
+    /// What the gateway answers a balance read with where it cannot be read, or
+    /// nothing where it answers the balance.
+    /// </summary>
+    public Error? Unread { get; set; }
+
+    /// <summary>
     /// How many times the balance was read.
     /// </summary>
     public int Reads { get; private set; }
@@ -54,7 +60,7 @@ internal sealed class SmsTransportInMemory : ISmsTransport
     {
         Reads++;
 
-        return ValueTask.FromResult(Result.Success(Balance));
+        return ValueTask.FromResult(Unread is null ? Result.Success(Balance) : Result.Failure<decimal>(Unread));
     }
 
     /// <inheritdoc/>

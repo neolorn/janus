@@ -158,7 +158,10 @@ internal sealed class NonExistenceNotice(
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
-            return Result.Failure(refused);
+            // AUTH-ABUSE-006: the gateway floor's refusal of the message an ask stands
+            // for answers the ask as it would have been answered, whoever holds the
+            // number, so the floor tells nothing of an account.
+            return refused.Code == ErrorCodes.SmsBalanceFloor ? Result.Success() : Result.Failure(refused);
         }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))

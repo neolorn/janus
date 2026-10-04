@@ -972,6 +972,35 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         Assert.Same(refusal, nobodys.Match(() => (Error?)null, error => error));
     }
 
+    /// <summary>
+    /// AUTH-ABUSE-006 AC4: a recovery asked for at a number whose link the gateway
+    /// floor refuses is answered as it would have been, for the number's holder and
+    /// for a number no account holds alike, and leaves no link behind it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_006_AC4_ARecoveryTheFloorRefusesIsAnsweredAsItWouldHaveBeenAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        var floor = Error.From(ErrorCodes.SmsBalanceFloor);
+        _notifications.Refusal = floor;
+        _restrictions.Refusal = floor;
+
+        int committed = _work.Committed;
+
+        Result held = await AskedAsync(Number);
+        Result nobodys = await AskedAsync("+441632960099");
+
+        Assert.True(Succeeded(held));
+        Assert.True(Succeeded(nobodys));
+        Assert.Empty(_notifications.Texts);
+        Assert.Empty(_links.Held);
+        Assert.NotEqual(default, subject);
+        Assert.False(_work.Open);
+        Assert.Equal(committed, _work.Committed);
+    }
+
     private RecoveryService Service =>
         new(
             _links,

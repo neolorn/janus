@@ -210,6 +210,64 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC9, INF-BG-001: the worker carries a due outbox row under a claim
+    /// and writes its outcome under it, which releases the claim; a row another pass
+    /// holds is left as it stands.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_TheWorkerCarriesAnOutboxRowUnderItsClaimAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await ForgetEarlierRunsAsync();
+
+        DateTimeOffset noon = Authorization.Deployment.Noon;
+        SubjectId subject = await new Authorization.Deployment(host).AccountAsync(cancellationToken);
+        var due = Guid.CreateVersion7(noon);
+        var held = Guid.CreateVersion7(noon.AddSeconds(1));
+
+        await using (NpgsqlConnection seeding = await host.OpenAsync())
+        {
+            await seeding.ExecuteAsync(
+                """
+                INSERT INTO identity.outbox
+                    (id, subject, kind, raised_at, restricted, reason, status, attempts, next_attempt_at, claimed_until)
+                VALUES (@due, @subject, 'restriction-changed', @noon, true, 'erasure-request', 'awaiting-subscribers', 0, @noon, NULL),
+                       (@held, @subject, 'restriction-changed', @noon, true, 'erasure-request', 'awaiting-subscribers', 0, @noon, @later);
+                """,
+                new
+                {
+                    due,
+                    held,
+                    subject = subject.Value,
+                    noon = noon.UtcDateTime,
+                    later = noon.AddMinutes(1).UtcDateTime,
+                });
+        }
+
+        await using ServiceProvider services = Deployed(host, noon);
+
+        BackgroundWorker worker = services.GetServices<IHostedService>().OfType<BackgroundWorker>().Single();
+
+        _ = await worker.RunDueAsync(cancellationToken);
+        await worker.SettledAsync(TestContext.Current.CancellationToken);
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        Assert.Equal(
+            [("complete", 1, false), ("awaiting-subscribers", 0, true)],
+            (await connection.QueryAsync<(string Status, int Attempts, bool Claimed)>(
+                """
+                SELECT status, attempts, claimed_until IS NOT NULL
+                  FROM identity.outbox
+                 WHERE id = ANY(@ids)
+                 ORDER BY id
+                """,
+                new { ids = new[] { due, held } })).ToList());
+    }
+
+    /// <summary>
     /// IDN-PRIN-001 AC3 (D-166, 304): every job hands the context it is run as to the
     /// method its work runs, and that method refuses a principal whose operation is not
     /// the job's before it reads or changes anything.

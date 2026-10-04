@@ -497,10 +497,14 @@ public sealed class AccountStatesTests(DatabaseFixture database)
 
         await using StoreContext reading = database.Context();
 
-        IReadOnlyList<PendingEvent> due = await new PendingEvents(reading).DueAsync(
-            Noon.AddDays(1),
-            100,
-            TestContext.Current.CancellationToken);
+        var events = new PendingEvents(reading);
+        var due = new List<PendingEvent>();
+
+        foreach (PendingEventId waiting in await events.DueAsync(Noon.AddDays(1), 100, TestContext.Current.CancellationToken))
+        {
+            due.Add(await events.FindAsync(waiting, TestContext.Current.CancellationToken)
+                ?? throw new Xunit.Sdk.XunitException("The event was not written."));
+        }
 
         Assert.Equal(committed, Assert.Single(due, pending => pending.Raised is AccountSuspended).Raised.Subject);
         Assert.Equal(AccountState.Active, (await StandingAsync(abandoned)).State);

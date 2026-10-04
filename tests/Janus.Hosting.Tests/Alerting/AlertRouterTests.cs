@@ -168,7 +168,7 @@ public sealed class AlertRouterTests : IAsyncDisposable
     [Fact]
     public async Task OPS_ALERT_003_AC2_ABalanceFloorBreachIsReportedDespiteTheStopAsync()
     {
-        _sms.Balance = 0m;
+        _balances.Given(new BalanceReading(Noon, 0m));
 
         AlertDelivery delivered = await RaisedAsync(
             Alerts.Of(AlertCondition.SmsBalance, null, Noon));

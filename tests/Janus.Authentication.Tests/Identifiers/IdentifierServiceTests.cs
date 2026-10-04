@@ -1534,6 +1534,34 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-006 AC4: a number added below the gateway floor is refused with the
+    /// floor's code, as a restriction's refusal of its code would refuse it: nothing is
+    /// staged and nothing committed.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_006_AC4_AnAdditionWhoseCodeTheFloorRefusesIsRefusedAndRolledBackAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _notifications.Refusal = Error.From(ErrorCodes.SmsBalanceFloor);
+        _notifications.RefusedChannel = SendKind.Sms;
+
+        Assert.Equal(
+            ErrorCodes.SmsBalanceFloor,
+            Refused(await Service.AddAsync(
+                Acting,
+                Stepped(),
+                IdentifierKind.Phone,
+                Number,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_notifications.Carried);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC5, AUTH-FACT-004: a wrong code is counted on the verification
     /// and that count is committed alone, with no rollback.
     /// </summary>

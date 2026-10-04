@@ -101,6 +101,42 @@ against the public contract of LIB-API-001.
   `ProcessingRegister.OrganizationalSecurityMeasures`; and a migration renames the
   column to `compliance_records.organizational_measures`, keeping the statement it
   holds.
+- An outbox row is claimed whole before any subscriber is called, the erasure ledger's
+  line among them, by one conditional update that succeeds only where the row is due
+  and unclaimed or its claim has timed out, so one pass of the `outbox` job carries a
+  row at a time whatever the number of processes. The pass renews its claim before each
+  subscriber and stops where another pass has taken the row over; each confirmation is
+  written as it happens and the row's attempts, schedule and status once, each only
+  under the claim, and one pass counts one attempt. A completed erasure waiting for its
+  ledger line is claimed the same way, so two passes do not append it twice. A
+  subscriber still running when `outbox.claim.timeout` has passed is abandoned as one
+  that did not confirm. The `outbox` table gains `claimed_until` (migration
+  `ClaimAnOutboxRowBeforeItIsDelivered`).
+- An emitted event's row is claimed whole before any consumer is called, by one
+  conditional update that succeeds only where the row is due and unclaimed or its claim
+  has timed out, so one pass of the `events` job carries a row at a time whatever the
+  number of processes. The pass renews its claim before each consumer and stops where
+  another pass has taken the row over; each consumer's take is written as it happens
+  and the row's outcome once, each only under the claim. A consumer still running when
+  `outbox.claim.timeout` has passed is abandoned as one that did not take the event.
+  The `events` table gains `claimed_until` (migration `ClaimAnEventBeforeItIsOffered`).
+- A message's row is claimed only where its next attempt is due, by the attempt that
+  follows the commit as by the `sends` job, so a row one attempt released and
+  rescheduled is not carried early by another. A message is due from its admission: it
+  is no longer held back from the job for `outbox.retry.initial`, and where the job
+  reaches a row before the attempt that follows the commit, the claim decides which of
+  them carries it.
+- A message carried again that the restrictions or the gateway floor refuse fails for
+  good: its row is removed without being carried, its count and the credit it spent are
+  given back, and no alert is raised. It no longer waits as a failed attempt does.
+- An ask of a sign-in link, of a recovery link or of a notice to an address no account
+  holds, where the gateway floor refuses its text message, is answered as the ask would
+  have been and nothing is sent. A verification code the floor refuses is refused
+  `integration.sms.balancefloor`, alike whoever holds the number.
+- The gateway floor is judged on the latest balance the `sms-balance` poll recorded,
+  however old, and a send never asks the gateway for its balance. Until a first balance
+  is recorded the floor refuses nothing. A poll the gateway does not answer records
+  nothing and fails, so its lapse raises `background-job-failed`.
 - A domain of an organization's lock, and the domain of an address judged against it,
   takes its ASCII form from the library's own UTS #46 processing and no longer from the
   machine's ICU, so one domain is listed and compared in one form on every machine. A

@@ -171,13 +171,13 @@ public sealed class SendOutboxTests(DatabaseFixture database)
 
     /// <summary>
     /// D-022, INF-BG-001: the publisher reads a message once its next attempt is due
-    /// and not before, so the attempt that follows the commit is left to carry it first.
+    /// and not before.
     /// </summary>
     [Fact]
     public async Task D_022_OnlyAMessageWhoseAttemptIsDueIsReadAsync()
     {
-        SendDelivery due = Delivery("fifth@example.test", subject: null, held: TimeSpan.Zero);
-        SendDelivery waiting = Delivery("sixth@example.test", subject: null);
+        SendDelivery due = Delivery("fifth@example.test", subject: null);
+        SendDelivery waiting = Delivery("sixth@example.test", subject: null, held: Held);
 
         await WrittenAsync(due);
         await WrittenAsync(waiting);
@@ -192,6 +192,33 @@ public sealed class SendOutboxTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC9: a claim succeeds only where the row's next attempt is due, as
+    /// well as unclaimed or timed out, so a row another pass released and rescheduled is
+    /// not taken early, and is taken once its instant has come.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_ARowReleasedAndRescheduledIsNotClaimedBeforeItIsDueAsync()
+    {
+        SendDelivery undertaken = Delivery("eleventh@example.test", subject: null);
+
+        await WrittenAsync(undertaken);
+
+        SendClaim claim = await ClaimedAsync(undertaken.Id, Noon)
+            ?? throw new Xunit.Sdk.XunitException("The message was not claimed.");
+
+        SendDelivery refused = undertaken.Refused(Noon, TimeSpan.FromMinutes(10), 2.0m, jitter: 1.0);
+
+        await using (StoreContext recording = database.Context())
+        {
+            Assert.True(await Outbox(recording).RecordAsync(refused, claim, TestContext.Current.CancellationToken));
+        }
+
+        Assert.Equal(Noon.AddMinutes(10), refused.NextAttemptAt);
+        Assert.Null(await ClaimedAsync(undertaken.Id, Noon.AddMinutes(10) - TimeSpan.FromSeconds(1)));
+        Assert.NotNull(await ClaimedAsync(undertaken.Id, Noon.AddMinutes(10)));
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC9, INF-BG-001 AC4: a row is claimed by one conditional update,
     /// so of two attempts that reach it at once one takes it; while the claim stands no
     /// pass reads the row as due and no other attempt takes it; and once the claim has
@@ -200,7 +227,7 @@ public sealed class SendOutboxTests(DatabaseFixture database)
     [Fact]
     public async Task CONV_DESIGN_003_AC9_ARowIsClaimedByOneAttemptUntilItsClaimTimesOutAsync()
     {
-        SendDelivery undertaken = Delivery("seventh@example.test", subject: null, held: TimeSpan.Zero);
+        SendDelivery undertaken = Delivery("seventh@example.test", subject: null);
 
         await WrittenAsync(undertaken);
 
@@ -232,7 +259,7 @@ public sealed class SendOutboxTests(DatabaseFixture database)
     [Fact]
     public async Task CONV_DESIGN_003_AC9_AnOutcomeWhoseClaimWasTakenOverChangesNothingAsync()
     {
-        SendDelivery undertaken = Delivery("eighth@example.test", subject: null, held: TimeSpan.Zero);
+        SendDelivery undertaken = Delivery("eighth@example.test", subject: null);
 
         await WrittenAsync(undertaken);
 
@@ -389,8 +416,10 @@ public sealed class SendOutboxTests(DatabaseFixture database)
                 Values = new Dictionary<string, string>(StringComparer.Ordinal) { ["code"] = "482913" },
             },
             SendReference.Draw(_deployment.Randomness),
-            Noon,
-            held ?? Held);
+            Noon) with
+        {
+            NextAttemptAt = Noon + (held ?? TimeSpan.Zero),
+        };
     }
 
     private async Task WrittenAsync(SendDelivery delivery)

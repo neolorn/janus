@@ -20,7 +20,9 @@ namespace Janus.Storage.Authentication.Events;
 /// <remarks>
 /// Implements LIB-API-001, CONV-DESIGN-002 and CONV-DESIGN-003. The kind a row carries
 /// is the event's name in chapter 10 section 5b, and the payload is the event itself,
-/// so a retry days later offers what the transaction raised.
+/// so a retry days later offers what the transaction raised. A row is claimed whole by
+/// one conditional update, and a renewal, a take and the outcome are each one update
+/// conditional on that claim.
 /// </remarks>
 internal sealed class PendingEvents(StoreContext context) : IPendingEvents
 {
@@ -68,46 +70,122 @@ internal sealed class PendingEvents(StoreContext context) : IPendingEvents
             Kind = kind,
             RaisedAt = pending.Raised.RaisedAt,
             Payload = JsonSerializer.Serialize(pending.Raised, Info(kind)),
+            Attempts = pending.Attempts,
+            NextAttemptAt = pending.NextAttemptAt,
+            TakenBy = TakenBy(pending),
+            PublishedAt = pending.PublishedAt,
+            FailedAt = pending.FailedAt,
         };
-
-        Written(record, pending);
 
         await context.Events.AddAsync(record, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public async ValueTask<IReadOnlyList<PendingEvent>> DueAsync(
+    public async ValueTask<IReadOnlyList<PendingEventId>> DueAsync(
         DateTimeOffset now,
         int count,
-        CancellationToken cancellationToken)
-    {
-        List<PendingEventRecord> rows = await context.Events
+        CancellationToken cancellationToken) =>
+        await context.Events
             .AsNoTracking()
             .Where(pending => pending.PublishedAt == null
                 && pending.FailedAt == null
-                && pending.NextAttemptAt <= now)
+                && pending.NextAttemptAt <= now
+                && (pending.ClaimedUntil == null || pending.ClaimedUntil <= now))
             .OrderBy(pending => pending.Id)
+            .Select(pending => pending.Id)
             .Take(count)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return [.. rows.Select(Read)];
+    /// <inheritdoc/>
+    public async ValueTask<EventClaim?> ClaimAsync(
+        PendingEventId pending,
+        DateTimeOffset now,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        DateTimeOffset until = RowClaim.Until(now, timeout);
+
+        int claimed = await context.Events
+            .Where(row => row.Id == pending
+                && row.PublishedAt == null
+                && row.FailedAt == null
+                && row.NextAttemptAt <= now
+                && (row.ClaimedUntil == null || row.ClaimedUntil <= now))
+            .ExecuteUpdateAsync(
+                row => row.SetProperty(one => one.ClaimedUntil, until),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return claimed == 1 ? new EventClaim(pending, until) : null;
     }
 
     /// <inheritdoc/>
-    /// <exception cref="InvalidOperationException">No row holds the event.</exception>
-    public async ValueTask RecordAsync(PendingEvent pending, CancellationToken cancellationToken)
+    public async ValueTask<EventClaim?> RenewAsync(
+        EventClaim claim,
+        DateTimeOffset now,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        DateTimeOffset until = RowClaim.Until(now, timeout);
+
+        int renewed = await context.Events
+            .Where(row => row.Id == claim.Event && row.ClaimedUntil == claim.Until)
+            .ExecuteUpdateAsync(
+                row => row.SetProperty(one => one.ClaimedUntil, until),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return renewed == 1 ? claim with { Until = until } : null;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<PendingEvent?> FindAsync(PendingEventId pending, CancellationToken cancellationToken) =>
+        await context.Events
+            .AsNoTracking()
+            .SingleOrDefaultAsync(row => row.Id == pending, cancellationToken)
+            .ConfigureAwait(false) is PendingEventRecord row
+            ? Read(row)
+            : null;
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> TakeAsync(PendingEvent pending, EventClaim claim, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pending);
 
-        PendingEventRecord record = await context.Events
-            .FindAsync([pending.Id], cancellationToken)
-            .ConfigureAwait(false)
-            ?? throw new InvalidOperationException(string.Create(
-                CultureInfo.InvariantCulture,
-                $"No row holds the event '{pending.Id}'."));
+        string taken = TakenBy(pending);
 
-        Written(record, pending);
+        return await context.Events
+            .Where(row => row.Id == claim.Event && row.ClaimedUntil == claim.Until)
+            .ExecuteUpdateAsync(
+                row => row.SetProperty(one => one.TakenBy, taken),
+                cancellationToken)
+            .ConfigureAwait(false) == 1;
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<bool> RecordAsync(PendingEvent pending, EventClaim claim, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(pending);
+
+        int attempts = pending.Attempts;
+        DateTimeOffset next = pending.NextAttemptAt;
+        string taken = TakenBy(pending);
+        DateTimeOffset? published = pending.PublishedAt;
+        DateTimeOffset? failed = pending.FailedAt;
+
+        return await context.Events
+            .Where(row => row.Id == claim.Event && row.ClaimedUntil == claim.Until)
+            .ExecuteUpdateAsync(
+                row => row
+                    .SetProperty(one => one.Attempts, attempts)
+                    .SetProperty(one => one.NextAttemptAt, next)
+                    .SetProperty(one => one.TakenBy, taken)
+                    .SetProperty(one => one.PublishedAt, published)
+                    .SetProperty(one => one.FailedAt, failed)
+                    .SetProperty(one => one.ClaimedUntil, (DateTimeOffset?)null),
+                cancellationToken)
+            .ConfigureAwait(false) == 1;
     }
 
     /// <inheritdoc/>
@@ -122,16 +200,10 @@ internal sealed class PendingEvents(StoreContext context) : IPendingEvents
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
 
-    private static void Written(PendingEventRecord record, PendingEvent pending)
-    {
-        record.Attempts = pending.Attempts;
-        record.NextAttemptAt = pending.NextAttemptAt;
-        record.TakenBy = JsonSerializer.Serialize(
+    private static string TakenBy(PendingEvent pending) =>
+        JsonSerializer.Serialize(
             pending.Taken.Order(StringComparer.Ordinal).ToList(),
             EventJson.Default.ListString);
-        record.PublishedAt = pending.PublishedAt;
-        record.FailedAt = pending.FailedAt;
-    }
 
     private static PendingEvent Read(PendingEventRecord row) =>
         PendingEvent.Existing(

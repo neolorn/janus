@@ -27,6 +27,11 @@ internal sealed class RecoveryLinkStoreInMemory : IRecoveryLinkStore
     /// </summary>
     public int Count => _links.Count;
 
+    /// <summary>
+    /// Every link the store holds.
+    /// </summary>
+    public IReadOnlyList<RecoveryLink> Held => [.. _links.Values];
+
     /// <inheritdoc/>
     public ValueTask<RecoveryLink?> FindAsync(
         byte[] fingerprint,

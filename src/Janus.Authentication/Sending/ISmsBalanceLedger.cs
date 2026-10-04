@@ -30,4 +30,11 @@ internal interface ISmsBalanceLedger
     ValueTask<IReadOnlyList<BalanceReading>> SinceAsync(
         DateTimeOffset from,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The latest reading a poll recorded, however old.
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>The reading, or nothing where no balance has been recorded yet.</returns>
+    ValueTask<BalanceReading?> LatestAsync(CancellationToken cancellationToken);
 }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,18 +17,34 @@ internal sealed class RecordingConsumer : IEventConsumer<AccountRegistered>, IEv
     /// </summary>
     public List<DomainEvent> Received { get; } = [];
 
+    /// <summary>
+    /// What a test does while the consumer holds an event.
+    /// </summary>
+    public Action? Meanwhile { get; set; }
+
+    /// <summary>
+    /// Whether it never answers, until whoever offered the event gives up on it.
+    /// </summary>
+    public bool Stalls { get; set; }
+
     /// <inheritdoc/>
     public ValueTask<Result> HandleAsync(AccountRegistered raised, CancellationToken cancellationToken) =>
-        Taken(raised);
+        TakenAsync(raised, cancellationToken);
 
     /// <inheritdoc/>
     public ValueTask<Result> HandleAsync(AccountSuspended raised, CancellationToken cancellationToken) =>
-        Taken(raised);
+        TakenAsync(raised, cancellationToken);
 
-    private ValueTask<Result> Taken(DomainEvent raised)
+    private async ValueTask<Result> TakenAsync(DomainEvent raised, CancellationToken cancellationToken)
     {
         Received.Add(raised);
+        Meanwhile?.Invoke();
 
-        return ValueTask.FromResult(Result.Success());
+        if (Stalls)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+        }
+
+        return Result.Success();
     }
 }
