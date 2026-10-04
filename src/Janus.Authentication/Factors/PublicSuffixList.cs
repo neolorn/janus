@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
+using Janus.Core;
 
 namespace Janus.Authentication.Factors;
 
@@ -14,7 +14,10 @@ namespace Janus.Authentication.Factors;
 /// Implements AUTH-FACT-010 and AUTH-FACT-012. The list travels unmodified, header and
 /// date included, and both its ICANN and its private sections apply, as browsers apply
 /// them. It judges only the deployment's own configured origins: a browser applies its
-/// own current list to every ceremony, so an aged copy cannot weaken one.
+/// own current list to every ceremony, so an aged copy cannot weaken one. Every name it
+/// compares, a rule's and a host's alike, is in the ASCII form the library's own
+/// conversion gives it under the checks of REG-DOM-001, never the machine's, so a
+/// registrable domain is the same on every machine.
 /// </remarks>
 internal sealed class PublicSuffixList
 {
@@ -32,11 +35,13 @@ internal sealed class PublicSuffixList
     private PublicSuffixList(
         FrozenSet<string> rules,
         FrozenSet<string> wildcards,
-        FrozenSet<string> exceptions)
+        FrozenSet<string> exceptions,
+        int setAside)
     {
         _rules = rules;
         _wildcards = wildcards;
         _exceptions = exceptions;
+        SetAside = setAside;
     }
 
     /// <summary>
@@ -45,6 +50,12 @@ internal sealed class PublicSuffixList
     public static PublicSuffixList Shipped { get; } = Read(
         typeof(PublicSuffixList).Assembly.GetManifestResourceStream(Resource)
         ?? throw new InvalidOperationException("The package carries no Public Suffix List."));
+
+    /// <summary>
+    /// How many rules were set aside when the list was read, the conversion having
+    /// refused a label of each.
+    /// </summary>
+    public int SetAside { get; }
 
     /// <summary>
     /// Reads a list in the form the Public Suffix List is published in.
@@ -58,6 +69,7 @@ internal sealed class PublicSuffixList
         HashSet<string> rules = new(StringComparer.Ordinal);
         HashSet<string> wildcards = new(StringComparer.Ordinal);
         HashSet<string> exceptions = new(StringComparer.Ordinal);
+        int setAside = 0;
 
         using StreamReader reading = new(list);
 
@@ -71,24 +83,40 @@ internal sealed class PublicSuffixList
                 continue;
             }
 
-            if (rule[0] is Excepted)
+            (HashSet<string> kind, string name) = rule[0] is Excepted
+                ? (exceptions, rule[1..])
+                : rule.StartsWith(Wildcard, StringComparison.Ordinal)
+                    ? (wildcards, rule[Wildcard.Length..])
+                    : (rules, rule);
+
+            if (TryAscii(name, out string ascii))
             {
-                _ = exceptions.Add(Normal(rule[1..]));
-            }
-            else if (rule.StartsWith(Wildcard, StringComparison.Ordinal))
-            {
-                _ = wildcards.Add(Normal(rule[Wildcard.Length..]));
+                _ = kind.Add(ascii);
             }
             else
             {
-                _ = rules.Add(Normal(rule));
+                setAside++;
             }
         }
 
         return new PublicSuffixList(
             rules.ToFrozenSet(StringComparer.Ordinal),
             wildcards.ToFrozenSet(StringComparer.Ordinal),
-            exceptions.ToFrozenSet(StringComparer.Ordinal));
+            exceptions.ToFrozenSet(StringComparer.Ordinal),
+            setAside);
+    }
+
+    /// <summary>
+    /// Whether a host has an ASCII form the list can judge it by. One with none has no
+    /// registrable domain, and the list answers nothing about it.
+    /// </summary>
+    /// <param name="host">The host.</param>
+    /// <returns>Whether the conversion gives it an ASCII form.</returns>
+    public static bool Reads(string host)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+
+        return TryAscii(host, out _);
     }
 
     /// <summary>
@@ -96,29 +124,31 @@ internal sealed class PublicSuffixList
     /// </summary>
     /// <param name="host">The host.</param>
     /// <returns>Whether it is one.</returns>
+    /// <exception cref="ArgumentException">The host has no ASCII form.</exception>
     public bool IsSuffix(string host)
     {
         ArgumentNullException.ThrowIfNull(host);
 
-        string[] labels = Normal(host).Split('.');
+        string[] labels = Labels(host);
 
         return Suffix(labels) == labels.Length;
     }
 
     /// <summary>
     /// The label immediately before a host's public suffix, which is the name a browser
-    /// counts a related-origins allowlist by.
+    /// counts a related-origins allowlist by, in its ASCII form.
     /// </summary>
     /// <param name="host">The host.</param>
-    /// <returns>The label, or the host itself where it is a public suffix.</returns>
+    /// <returns>The label, or the host's ASCII form where it is a public suffix.</returns>
+    /// <exception cref="ArgumentException">The host has no ASCII form.</exception>
     public string Label(string host)
     {
         ArgumentNullException.ThrowIfNull(host);
 
-        string[] written = host.TrimEnd('.').Split('.');
-        int suffix = Suffix(Normal(host).Split('.'));
+        string[] labels = Labels(host);
+        int suffix = Suffix(labels);
 
-        return suffix < written.Length ? written[written.Length - suffix - 1] : host;
+        return suffix < labels.Length ? labels[labels.Length - suffix - 1] : string.Join('.', labels);
     }
 
     // How many labels from the right the prevailing rule takes as the public suffix:
@@ -146,8 +176,14 @@ internal sealed class PublicSuffixList
         return 1;
     }
 
-    // Rules and hosts are compared in the ASCII form a browser resolves a name in, and
-    // without regard to case. The mapping carries settings of its own, so none is held.
-    private static string Normal(string name) =>
-        new IdnMapping().GetAscii(name.TrimEnd('.')).ToUpperInvariant();
+    private static string[] Labels(string host) =>
+        TryAscii(host, out string ascii)
+            ? ascii.Split('.')
+            : throw new ArgumentException("The host has no ASCII form to judge it by.", nameof(host));
+
+    // The conversion lowers what it reads, so the forms compare as they stand. A name
+    // is taken as it is written, without the canonical form a domain lock compares
+    // under, so that a deviation character keeps the label a browser resolves it to.
+    private static bool TryAscii(string name, out string ascii) =>
+        CanonicalForm.TryDomainToAscii(name.TrimEnd('.'), out ascii);
 }
