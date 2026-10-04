@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Dapper;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Janus.Hosting.Bff;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit;
@@ -31,18 +32,24 @@ public sealed class ReverseLookupTests(HostFixture host) : IClassFixture<HostFix
     /// reported distinctly. A stored grant carries its identifier and the container it
     /// sits on; a derived grant carries no identifier, says it is derived, and names the
     /// role the derivation confers and the container the relationship is declared on.
-    /// The grant on the whole organization is reported after those on containers.
+    /// The grant on the whole organization is reported after those on containers. The
+    /// answer is the same whether the derivation is read through the relationship
+    /// source the host declared, as the view's endpoint reads it, or over rows a caller
+    /// of the library hands in (LIB-HOST-001, D-183).
     /// </summary>
+    /// <param name="withRows">Whether the caller hands the rows in.</param>
     /// <returns>The work of running it.</returns>
-    [Fact]
-    public async Task AUTHZ_DERIVE_007_AC1_StoredAndDerivedGrantsAreReportedDistinctlyAsync()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AUTHZ_DERIVE_007_AC1_StoredAndDerivedGrantsAreReportedDistinctlyAsync(bool withRows)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         Deployed deployed = await DeployAsync();
 
         await deployed.Deployment.ReviewAsync(deployed.Container, deployed.Reviewing, cancellationToken);
 
-        ResourceAccess access = Answered(await LookedUpAsync(deployed, deployed.Note, withRows: true));
+        ResourceAccess access = Answered(await LookedUpAsync(deployed, deployed.Note, withRows));
 
         Assert.Equal(deployed.Note, access.Resource);
         Assert.False(access.Partial);
@@ -77,11 +84,15 @@ public sealed class ReverseLookupTests(HostFixture host) : IClassFixture<HostFix
     /// <summary>
     /// AUTHZ-DERIVE-007 AC2: where evaluation runs past
     /// <c>authz.reverselookup.budget</c>, the answer carries <c>partial</c> and names the
-    /// derivation not evaluated, and the stored grants are still reported.
+    /// derivation not evaluated, and the stored grants are still reported, through the
+    /// declared source as over rows handed in.
     /// </summary>
+    /// <param name="withRows">Whether the caller hands the rows in.</param>
     /// <returns>The work of running it.</returns>
-    [Fact]
-    public async Task AUTHZ_DERIVE_007_AC2_PastTheBudgetTheAnswerIsPartialAndNamesWhatWentUnevaluatedAsync()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AUTHZ_DERIVE_007_AC2_PastTheBudgetTheAnswerIsPartialAndNamesWhatWentUnevaluatedAsync(bool withRows)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         Deployed deployed = await DeployAsync();
@@ -91,7 +102,7 @@ public sealed class ReverseLookupTests(HostFixture host) : IClassFixture<HostFix
 
         try
         {
-            ResourceAccess access = Answered(await LookedUpAsync(deployed, deployed.Note, withRows: true));
+            ResourceAccess access = Answered(await LookedUpAsync(deployed, deployed.Note, withRows));
 
             Assert.True(access.Partial);
             Assert.Equal(["reviewer"], access.Unevaluated);
@@ -105,27 +116,91 @@ public sealed class ReverseLookupTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
-    /// AUTHZ-DERIVE-007, D-162: without the host's rows, a record a derivation reaches
-    /// is refused as a fault rather than answered from the stored grants alone, and the
-    /// whole of the organization, which no derivation reaches, is answered.
+    /// AUTHZ-DERIVE-007, D-162: where no source is declared for the relationship and no
+    /// rows are handed in, a record a derivation reaches is refused as a fault rather
+    /// than answered from the stored grants alone, and the whole of the organization,
+    /// which no derivation reaches, is answered.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
     public async Task AUTHZ_DERIVE_007_WithoutTheHostsRowsARecordADerivationReachesIsRefusedAsync()
     {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         Deployed deployed = await DeployAsync();
+        var administrator = AccessContext.Of(deployed.Administrator);
 
-        Result<ResourceAccess> record = await LookedUpAsync(deployed, deployed.Note, withRows: false);
-        ResourceAccess organization = Answered(await LookedUpAsync(
-            deployed,
+        await using ServiceProvider undeclared = Undeclared();
+        await using AsyncServiceScope scope = undeclared.CreateAsyncScope();
+        IAccessGate gate = scope.ServiceProvider.GetRequiredService<IAccessGate>();
+
+        Result<ResourceAccess> record = await gate.WhoCanAccessAsync(administrator, deployed.Note, cancellationToken);
+        ResourceAccess organization = Answered(await gate.WhoCanAccessAsync(
+            administrator,
             new ResourceReference(OrganizationWide, ResourceId.Parse(deployed.Deployment.Organization.Value.ToString())),
-            withRows: false));
+            cancellationToken));
 
         Assert.Equal(
             ErrorCodes.DerivationSourcesMissing,
             record.Match(_ => throw new InvalidOperationException("It was answered."), error => error.Code));
         Assert.Contains(organization.Grants, grant => grant.Id == deployed.Reading);
         Assert.DoesNotContain(organization.Grants, grant => grant.Id == deployed.Stored);
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-005 AC6, LIB-HOST-001: the view evaluates a derivation in one
+    /// statement in the host's context, over the relationship's rows and the ancestry of
+    /// one context instance.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_005_AC6_TheViewEvaluatesADerivationInOneStatementAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Deployed deployed = await DeployAsync();
+
+        await deployed.Deployment.ReviewAsync(deployed.Container, deployed.Reviewing, cancellationToken);
+
+        using var traced = new TracedStatements();
+
+        ResourceAccess access = Answered(await LookedUpAsync(deployed, deployed.Note, withRows: false));
+
+        string evaluated = Assert.Single(
+            traced.Texts,
+            text => text.Contains("host.reviewers", StringComparison.Ordinal));
+
+        Assert.Contains("identity.ancestry", evaluated, StringComparison.Ordinal);
+        Assert.Contains(access.Grants, grant => grant.Kind == GrantKind.Derived);
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-007: a derived grant whose role allows nothing confers nothing and is
+    /// not reported, as a stored grant of such a role is not.
+    /// </summary>
+    /// <param name="withRows">Whether the caller hands the rows in.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AUTHZ_DERIVE_007_ADerivedGrantWhoseRoleAllowsNothingIsNotReportedAsync(bool withRows)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Deployed deployed = await DeployAsync();
+
+        await deployed.Deployment.ReviewAsync(deployed.Container, deployed.Reviewing, cancellationToken);
+        await AllowingNothingAsync(Reviewer);
+
+        try
+        {
+            ResourceAccess access = Answered(await LookedUpAsync(deployed, deployed.Note, withRows));
+
+            Assert.False(access.Partial);
+            Assert.DoesNotContain(access.Grants, grant => grant.Kind == GrantKind.Derived);
+            Assert.Contains(access.Grants, grant => grant.Id == deployed.Stored);
+        }
+        finally
+        {
+            await deployed.Deployment.NamedRoleAsync(Reviewer, [HostPermissions.ReadNote], cancellationToken);
+        }
     }
 
     /// <summary>
@@ -285,6 +360,30 @@ public sealed class ReverseLookupTests(HostFixture host) : IClassFixture<HostFix
 
     private static ResourceReference Reference(ResourceType type) =>
         new(type, ResourceId.Parse(Guid.NewGuid().ToString()));
+
+    // The same deployment as a host that declared no relationship source composes it,
+    // which the startup check refuses and a container built by hand does not.
+    private ServiceProvider Undeclared()
+    {
+        var services = new ServiceCollection();
+
+        services.AddSingleton<TimeProvider>(new FixedTime(Deployment.Noon));
+        services.AddSingleton<ISecretSource>(HostFixture.Secrets(host.MaintenanceConnectionString));
+        services.AddJanus(host.ConnectionString, HostFixture.Declaration(), ApplicationKind.Public);
+
+        return HostFixture.Started(services.BuildServiceProvider());
+    }
+
+    // A role the deployment holds, emptied of what it allows.
+    private async Task AllowingNothingAsync(RoleName role)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DELETE FROM identity.role_permissions WHERE role = @role;",
+            new { role = role.ToString() },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
 
     private static FilterSources<HostDocument> Sources(HostContext reading) =>
         new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, document => document.Id)

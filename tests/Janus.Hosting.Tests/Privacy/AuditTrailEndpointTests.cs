@@ -49,7 +49,8 @@ public sealed class AuditTrailEndpointTests : IAsyncDisposable
             },
             BreakGlassReason: null,
             Principal: null,
-            PrincipalReason: null));
+            PrincipalReason: null,
+            Subject: Ahmed));
         _deployment.Trail.Hold(new AuditEntry(
             new AuditRecordId(Guid.CreateVersion7()),
             AuditCategory.Security,
@@ -61,7 +62,8 @@ public sealed class AuditTrailEndpointTests : IAsyncDisposable
             new Dictionary<string, JsonElement>(StringComparer.Ordinal),
             "The operator cannot be reached.",
             Principal: null,
-            PrincipalReason: null));
+            PrincipalReason: null,
+            Subject: null));
     }
 
     /// <inheritdoc/>
@@ -109,6 +111,25 @@ public sealed class AuditTrailEndpointTests : IAsyncDisposable
 
         Assert.Equal("The operator cannot be reached.", emergency.GetProperty("breakGlassReason").GetString());
         Assert.Equal(JsonValueKind.Null, ordinary.GetProperty("breakGlassReason").ValueKind);
+    }
+
+    /// <summary>
+    /// PRIV-BREACH-002, AUTHZ-IMP-001: each entry carries the data subject its record
+    /// concerns as <c>subject</c>, and null where it concerns none.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_BREACH_002_AnEntryCarriesTheDataSubjectItConcernsAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+
+        JsonElement concerning = Assert.Single(
+            (await browser.SendAsync("GET", $"/admin/audit?subject={Ahmed.Value}")).Json().EnumerateArray());
+        JsonElement unconcerned = Assert.Single(
+            (await browser.SendAsync("GET", $"/admin/audit?subject={Emergency.Value}")).Json().EnumerateArray());
+
+        Assert.Equal(Ahmed.Value, concerning.GetProperty("subject").GetGuid());
+        Assert.Equal(JsonValueKind.Null, unconcerned.GetProperty("subject").ValueKind);
     }
 
     /// <summary>

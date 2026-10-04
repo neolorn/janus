@@ -220,6 +220,15 @@ internal static class BackgroundJobs
                     .ReconcileAsync(context, cancellationToken)
                     .ConfigureAwait(false))),
         BackgroundJob.Every(
+            DerivationDriftCheck.Job,
+            "AUTHZ-DERIVE-005",
+            SystemOperation.Reconciliation,
+            Settings.DerivationMaterialisedDriftCheck,
+            async (services, context, cancellationToken) => Done(
+                await services.GetRequiredService<DerivationDriftCheck>()
+                    .CheckAsync(context, cancellationToken)
+                    .ConfigureAwait(false))),
+        BackgroundJob.Every(
             "location-database",
             "INT-GEN-006",
             SystemOperation.Monitoring,

@@ -64,8 +64,8 @@ table audit_records partitioned by LIST (category)
   column category text not null
   column occurred_at timestamp with time zone not null
   column action text not null
-  column acting_subject uuid
-  column effective_subject uuid
+  column acting_subject uuid not null
+  column effective_subject uuid not null
   column organization uuid
   column details jsonb not null
   column enc_details bytea
@@ -76,7 +76,6 @@ table audit_records partitioned by LIST (category)
   constraint ck_audit_records_acting_subject_not_max_uuid CHECK ((acting_subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_audit_records_breakglass_reason CHECK (((breakglass_reason IS NULL) OR ((principal IS NULL) AND ((length(btrim(breakglass_reason)) >= 1) AND (length(btrim(breakglass_reason)) <= 1024)))))
   constraint ck_audit_records_effective_subject_not_max_uuid CHECK ((effective_subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
-  constraint ck_audit_records_identities CHECK (((action = 'authz.access.denied'::text) OR ((acting_subject IS NOT NULL) AND (effective_subject IS NOT NULL))))
   constraint ck_audit_records_principal CHECK ((((principal IS NULL) AND (principal_reason IS NULL)) OR ((principal IS NOT NULL) AND (principal_reason IS NOT NULL) AND (acting_subject = '00000000-0000-0000-0000-000000000000'::uuid))))
   constraint ck_audit_records_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint pk_audit_records PRIMARY KEY (category, occurred_at, id)
@@ -89,8 +88,8 @@ table audit_records_routine partition of audit_records FOR VALUES IN ('routine')
   column category text not null
   column occurred_at timestamp with time zone not null
   column action text not null
-  column acting_subject uuid
-  column effective_subject uuid
+  column acting_subject uuid not null
+  column effective_subject uuid not null
   column organization uuid
   column details jsonb not null
   column enc_details bytea
@@ -102,7 +101,6 @@ table audit_records_routine partition of audit_records FOR VALUES IN ('routine')
   constraint ck_audit_records_acting_subject_not_max_uuid CHECK ((acting_subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_audit_records_breakglass_reason CHECK (((breakglass_reason IS NULL) OR ((principal IS NULL) AND ((length(btrim(breakglass_reason)) >= 1) AND (length(btrim(breakglass_reason)) <= 1024)))))
   constraint ck_audit_records_effective_subject_not_max_uuid CHECK ((effective_subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
-  constraint ck_audit_records_identities CHECK (((action = 'authz.access.denied'::text) OR ((acting_subject IS NOT NULL) AND (effective_subject IS NOT NULL))))
   constraint ck_audit_records_principal CHECK ((((principal IS NULL) AND (principal_reason IS NULL)) OR ((principal IS NOT NULL) AND (principal_reason IS NOT NULL) AND (acting_subject = '00000000-0000-0000-0000-000000000000'::uuid))))
   constraint ck_audit_records_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   index audit_records_routine_acting_subject_occurred_at_idx using btree (acting_subject, occurred_at)
@@ -114,8 +112,8 @@ table audit_records_security partition of audit_records FOR VALUES IN ('security
   column category text not null
   column occurred_at timestamp with time zone not null
   column action text not null
-  column acting_subject uuid
-  column effective_subject uuid
+  column acting_subject uuid not null
+  column effective_subject uuid not null
   column organization uuid
   column details jsonb not null
   column enc_details bytea
@@ -127,7 +125,6 @@ table audit_records_security partition of audit_records FOR VALUES IN ('security
   constraint ck_audit_records_acting_subject_not_max_uuid CHECK ((acting_subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint ck_audit_records_breakglass_reason CHECK (((breakglass_reason IS NULL) OR ((principal IS NULL) AND ((length(btrim(breakglass_reason)) >= 1) AND (length(btrim(breakglass_reason)) <= 1024)))))
   constraint ck_audit_records_effective_subject_not_max_uuid CHECK ((effective_subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
-  constraint ck_audit_records_identities CHECK (((action = 'authz.access.denied'::text) OR ((acting_subject IS NOT NULL) AND (effective_subject IS NOT NULL))))
   constraint ck_audit_records_principal CHECK ((((principal IS NULL) AND (principal_reason IS NULL)) OR ((principal IS NOT NULL) AND (principal_reason IS NOT NULL) AND (acting_subject = '00000000-0000-0000-0000-000000000000'::uuid))))
   constraint ck_audit_records_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   index audit_records_security_acting_subject_occurred_at_idx using btree (acting_subject, occurred_at)

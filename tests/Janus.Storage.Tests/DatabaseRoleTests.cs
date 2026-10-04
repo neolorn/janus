@@ -31,6 +31,65 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
 
     private const string InsufficientPrivilege = "42501";
 
+    // OPS-MIG-003a AC5 (D-166, 135): every privilege two roles can hold on a schema, on
+    // a table, view, materialised view or sequence, on a column the role does not hold
+    // through its table, and on a function, in every schema of the database, with
+    // whether each role holds it, privileges held through PUBLIC counted, and whether
+    // the object is in the library's schema. Each line names the object, its kind
+    // first, and the right, as the serialized model lists them (AUTHZ-MODEL-005).
+    private const string Privileges =
+        """
+        SELECT 'SCHEMA ' || nspname || ' ' || right_held AS held,
+               nspname = 'identity' AS library,
+               has_schema_privilege(@maintenance, pg_namespace.oid, right_held) AS maintenance,
+               has_schema_privilege(@control, pg_namespace.oid, right_held) AS control
+        FROM pg_namespace,
+             unnest(ARRAY['USAGE', 'CREATE']) AS right_held
+        UNION ALL
+        SELECT CASE relkind
+                   WHEN 'v' THEN 'VIEW '
+                   WHEN 'm' THEN 'MATERIALIZED VIEW '
+                   WHEN 'S' THEN 'SEQUENCE '
+                   ELSE 'TABLE ' END
+               || nspname || '.' || relname || ' ' || right_held,
+               nspname = 'identity',
+               CASE relkind
+                   WHEN 'S' THEN has_sequence_privilege(@maintenance, pg_class.oid, right_held)
+                   ELSE has_table_privilege(@maintenance, pg_class.oid, right_held) END,
+               CASE relkind
+                   WHEN 'S' THEN has_sequence_privilege(@control, pg_class.oid, right_held)
+                   ELSE has_table_privilege(@control, pg_class.oid, right_held) END
+        FROM pg_class
+        JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace,
+             unnest(CASE relkind
+                 WHEN 'S' THEN ARRAY['USAGE', 'SELECT', 'UPDATE']
+                 ELSE ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'] END)
+                 AS right_held
+        WHERE relkind IN ('r', 'p', 'v', 'm', 'S')
+        UNION ALL
+        SELECT 'COLUMN ' || nspname || '.' || relname || '.' || attname || ' ' || right_held,
+               nspname = 'identity',
+               has_column_privilege(@maintenance, pg_class.oid, attnum, right_held)
+                   AND NOT has_table_privilege(@maintenance, pg_class.oid, right_held),
+               has_column_privilege(@control, pg_class.oid, attnum, right_held)
+                   AND NOT has_table_privilege(@control, pg_class.oid, right_held)
+        FROM pg_attribute
+        JOIN pg_class ON pg_class.oid = pg_attribute.attrelid
+        JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace,
+             unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'REFERENCES']) AS right_held
+        WHERE relkind IN ('r', 'p', 'v', 'm')
+          AND attnum > 0
+          AND NOT attisdropped
+        UNION ALL
+        SELECT 'FUNCTION ' || nspname || '.' || proname || '('
+               || pg_get_function_identity_arguments(pg_proc.oid) || ') EXECUTE',
+               nspname = 'identity',
+               has_function_privilege(@maintenance, pg_proc.oid, 'EXECUTE'),
+               has_function_privilege(@control, pg_proc.oid, 'EXECUTE')
+        FROM pg_proc
+        JOIN pg_namespace ON pg_namespace.oid = pg_proc.pronamespace
+        """;
+
     /// <summary>
     /// PRIV-RET-002 AC1: an update or a delete of an audit row issued by the
     /// application is refused, and the insert and the read it does need are not.
@@ -294,52 +353,65 @@ public sealed class DatabaseRoleTests(DatabaseFixture database) : IClassFixture<
     }
 
     /// <summary>
-    /// OPS-MIG-003a AC2, AC4: what the serialized model lists for the maintenance
-    /// credential is what the database grants it, so the listing a reviewer reads
-    /// cannot drift from the migration that writes the grants.
+    /// OPS-MIG-003a AC2, AC4 and AC5, AUTHZ-MODEL-005 AC3: in the library's schema the
+    /// maintenance credential holds exactly what the serialized model lists, whether
+    /// granted to it or held through <c>PUBLIC</c>: on the schema, on every table, view,
+    /// materialised view and sequence and their columns, and on every function. The
+    /// listing a reviewer reads cannot drift from the migration that writes the grants.
     /// </summary>
     [Fact]
-    public async Task OPS_MIG_003a_AC4_TheListedGrantsAreTheOnesTheDatabaseHoldsAsync()
+    public async Task OPS_MIG_003a_AC5_TheLibrarysSchemaHoldsExactlyTheListedGrantsAsync()
     {
         await using NpgsqlConnection connection = await database.OpenAsync();
 
         IEnumerable<string> held = await connection.QueryAsync<string>(
-            """
-            SELECT 'SCHEMA ' || nspname || ' ' || right_held
-            FROM pg_namespace,
-                 unnest(ARRAY['USAGE', 'CREATE']) AS right_held
-            WHERE nspname = 'identity'
-              AND has_schema_privilege('identity_maintenance', oid, right_held)
-            UNION ALL
-            SELECT 'TABLE identity.' || relname || ' ' || right_held
-            FROM pg_class
-            JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace,
-                 unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE']) AS right_held
-            WHERE nspname = 'identity'
-              AND relkind IN ('r', 'p')
-              AND has_table_privilege('identity_maintenance', pg_class.oid, right_held)
-            UNION ALL
-            SELECT 'COLUMN identity.' || relname || '.' || attname || ' ' || right_held
-            FROM pg_attribute
-            JOIN pg_class ON pg_class.oid = pg_attribute.attrelid
-            JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace,
-                 unnest(ARRAY['SELECT', 'INSERT', 'UPDATE']) AS right_held
-            WHERE nspname = 'identity'
-              AND relkind IN ('r', 'p')
-              AND attnum > 0
-              AND NOT attisdropped
-              AND has_column_privilege('identity_maintenance', pg_class.oid, attnum, right_held)
-              AND NOT has_table_privilege('identity_maintenance', pg_class.oid, right_held)
-            UNION ALL
-            SELECT 'FUNCTION identity.' || proname || '('
-                   || pg_get_function_identity_arguments(pg_proc.oid) || ') EXECUTE'
-            FROM pg_proc
-            JOIN pg_namespace ON pg_namespace.oid = pg_proc.pronamespace
-            WHERE nspname = 'identity'
-              AND has_function_privilege('identity_maintenance', pg_proc.oid, 'EXECUTE')
-            """);
+            "SELECT held FROM (" + Privileges + ") AS privileges WHERE library AND maintenance",
+            new { maintenance = "identity_maintenance", control = "identity_maintenance" });
 
         Assert.Equal(Listed().Order(StringComparer.Ordinal), held.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// OPS-MIG-003a AC5, D-183: in every other schema of the database the maintenance
+    /// credential holds exactly what a role granted nothing holds, <c>USAGE</c> on
+    /// <c>public</c> among it, which is the database's and the host's and which the
+    /// library's migrations neither list nor revoke. A host's own schema is among them.
+    /// </summary>
+    [Fact]
+    public async Task OPS_MIG_003a_AC5_OutsideTheLibrarysSchemaTheRoleHoldsWhatARoleGrantedNothingHoldsAsync()
+    {
+        string control = "identity_control_" + Guid.NewGuid().ToString("n")[..12];
+        string host = "host_" + Guid.NewGuid().ToString("n")[..12];
+
+        await using NpgsqlConnection connection = await database.OpenAsync();
+
+        await connection.ExecuteAsync(
+            $"""
+            CREATE ROLE {control};
+            CREATE SCHEMA {host};
+            CREATE TABLE {host}.orders (id uuid PRIMARY KEY, placed_at timestamptz NOT NULL);
+            CREATE SEQUENCE {host}.order_numbers;
+            CREATE VIEW {host}.recent_orders AS SELECT id FROM {host}.orders;
+            CREATE FUNCTION {host}.order_count() RETURNS bigint LANGUAGE sql AS 'SELECT 0::bigint';
+            """);
+
+        try
+        {
+            IEnumerable<string> differing = await connection.QueryAsync<string>(
+                "SELECT held FROM (" + Privileges + ") AS privileges WHERE NOT library AND maintenance <> control",
+                new { maintenance = "identity_maintenance", control });
+            IEnumerable<string> everyRole = await connection.QueryAsync<string>(
+                "SELECT held FROM (" + Privileges + ") AS privileges WHERE NOT library AND control",
+                new { maintenance = "identity_maintenance", control });
+
+            Assert.Empty(differing);
+            Assert.Contains("SCHEMA public USAGE", everyRole);
+            Assert.Contains("FUNCTION " + host + ".order_count() EXECUTE", everyRole);
+        }
+        finally
+        {
+            await connection.ExecuteAsync($"DROP SCHEMA {host} CASCADE; DROP ROLE {control};");
+        }
     }
 
     /// <summary>

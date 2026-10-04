@@ -4657,6 +4657,8 @@ lifecycle events and that an authorization refusal made under no account names n
 identity, the absence being the recorded fact. AUTHZ-CONCEAL-004 should say the
 identifier is carried whoever asked.
 
+**Superseded by D-166.**
+
 ---
 
 ## 137. The audit actions are a catalogue, and the closed vocabularies are listed
@@ -10026,6 +10028,8 @@ above, the permission and the organization it is asked in, the 400 and 500 refus
 and say how the HTTP view reaches the host's relation, or that it does not and the
 view on a derived type is the host's own call; AUTHZ-DERIVE-007 could say that a grant
 conferring nothing is not reported and that `unevaluated` names relationships.
+
+**Superseded by D-166.**
 
 ---
 

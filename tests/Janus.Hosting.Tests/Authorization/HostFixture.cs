@@ -170,6 +170,7 @@ public sealed class HostFixture : IAsyncLifetime
         // LIB-HOST-001, API-LAND-001: and a link it sends lands where the deployment
         // declares its applications are.
         services.AddSingleton(new LandingOrigins("https://identity.example.test", "https://accounts.example.test"));
+        Sourced(services, ConnectionString);
         services.AddJanus(ConnectionString, Declaration(), ApplicationKind.Public);
 
         // PRIV-RIGHT-005b: the deployment declares its documents sensitive, so it
@@ -206,6 +207,22 @@ public sealed class HostFixture : IAsyncLifetime
         ring.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
 
         return deployed;
+    }
+
+    /// <summary>
+    /// Registers what LIB-HOST-001 asks of a host whose model declares a derivation: its
+    /// own context, given in a scope, and the source of the one relationship its
+    /// derivation is over, answering that relationship's rows from the context.
+    /// </summary>
+    /// <param name="services">The host's collection.</param>
+    /// <param name="connection">How the host's context reaches its database.</param>
+    /// <returns>The collection, for chaining.</returns>
+    internal static IServiceCollection Sourced(IServiceCollection services, string connection)
+    {
+        services.AddDbContext<HostContext>(options => options.UseNpgsql(connection));
+
+        return services.AddSingleton(
+            RelationshipSource.Of<HostContext, HostReviewer>("reviewer", context => context.Reviewers));
     }
 
     /// <summary>

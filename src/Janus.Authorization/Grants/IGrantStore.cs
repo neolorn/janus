@@ -142,6 +142,22 @@ internal interface IGrantStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// The live grants a materialised derivation wrote for one role on records of one
+    /// type, in every organization and whoever holds them, which is what the drift
+    /// check holds against the host's rows (AUTHZ-DERIVE-005).
+    /// </summary>
+    /// <param name="role">The role the derivation confers.</param>
+    /// <param name="type">The type the derivation is declared on.</param>
+    /// <param name="at">The instant liveness is read at.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The grants, revoked and expired ones left out.</returns>
+    ValueTask<IReadOnlyList<Grant>> MaterialisedAsync(
+        RoleName role,
+        ResourceType type,
+        DateTimeOffset at,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// The live grants on one record, on anything containing it, or on the whole
     /// organization, whoever holds them, as the effective grants view confers them: none
     /// while the organization's deletion is requested, and none of a role that allows

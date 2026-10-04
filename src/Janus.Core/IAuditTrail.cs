@@ -14,8 +14,8 @@ namespace Janus.Core;
 public interface IAuditTrail
 {
     /// <summary>
-    /// Every audit record naming one subject, as the acting or the effective identity,
-    /// most recent first.
+    /// Every audit record naming one subject, as the acting identity or as the data
+    /// subject the record concerns, most recent first.
     /// </summary>
     /// <param name="context">Who is asking.</param>
     /// <param name="subject">Whose records.</param>

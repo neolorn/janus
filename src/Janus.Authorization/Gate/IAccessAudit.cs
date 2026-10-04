@@ -16,7 +16,22 @@ namespace Janus.Authorization.Gate;
 internal interface IAccessAudit
 {
     /// <summary>
-    /// Records one refusal.
+    /// Holds one actor's refusals against every other record of a refusal of that actor
+    /// until the transaction ends, so the window is counted on what is committed and two
+    /// refusals at once are counted one after the other (CONV-DESIGN-003).
+    /// </summary>
+    /// <param name="acting">
+    /// The acting subject the refusals record, which is the nil subject for background
+    /// work.
+    /// </param>
+    /// <param name="principal">The system principal's name, where one acts.</param>
+    /// <param name="cancellationToken">Abandons the wait.</param>
+    /// <returns>The work of holding them.</returns>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
+    ValueTask HoldAsync(SubjectId acting, string? principal, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Records one refusal, in the transaction in progress.
     /// </summary>
     /// <param name="denial">What was refused, and to whom.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
@@ -42,15 +57,25 @@ internal interface IAccessAudit
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Counts the refusals recorded against one actor inside a window.
+    /// Counts the refusals recorded against one actor inside a window: a system
+    /// principal's by its name, anyone else's by the acting subject recorded, those
+    /// recording the nil subject and no principal together.
     /// </summary>
-    /// <param name="acting">The actor, or nothing for the refusals that name no one.</param>
+    /// <param name="acting">
+    /// The acting subject the refusals record, which is the nil subject for background
+    /// work.
+    /// </param>
+    /// <param name="principal">
+    /// The name of the system principal the refusals record, or nothing to count those
+    /// that record none.
+    /// </param>
     /// <param name="from">Where the window opens.</param>
     /// <param name="until">Where the window closes, itself outside it.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>How many refusals the window holds.</returns>
     ValueTask<int> CountAsync(
-        SubjectId? acting,
+        SubjectId acting,
+        string? principal,
         DateTimeOffset from,
         DateTimeOffset until,
         CancellationToken cancellationToken);

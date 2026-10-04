@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using Janus.Authorization.Model;
 using Janus.Authorization.Resources;
 using Janus.Core;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Janus.Authorization.Gate;
 
@@ -20,9 +21,9 @@ namespace Janus.Authorization.Gate;
 /// <param name="model">The host's declared domain, read for containment and concealment.</param>
 /// <param name="records">Where a record's organization is read from.</param>
 /// <param name="evaluator">Where a rendered rule is run.</param>
-/// <param name="audit">Where a refusal is recorded and read back.</param>
+/// <param name="audit">Where a recorded refusal is read back.</param>
 /// <param name="concealed">Where a refusal on a type that conceals is handed to the boundary.</param>
-/// <param name="spikes">Where each recorded refusal is counted against its actor.</param>
+/// <param name="scopes">Where the scope a refusal is recorded and counted in comes from.</param>
 /// <param name="subjects">Who the principal is, resolved once per operation.</param>
 /// <param name="gates">What an action's step-up gate still asks of the session.</param>
 /// <param name="exports">What an export operation asks beyond what the grants allow.</param>
@@ -45,7 +46,7 @@ internal sealed class AccessGate(
     IAccessEvaluator evaluator,
     IAccessAudit audit,
     IConcealedRefusals concealed,
-    DenialSpikes spikes,
+    IServiceScopeFactory scopes,
     SubjectSets subjects,
     StepUpGates gates,
     ExportOperations exports,
@@ -248,7 +249,7 @@ internal sealed class AccessGate(
             .ConfigureAwait(false);
 
         return Result.Success(Explanation(
-            new ExplainedPrincipal(context.Acting, context.Effective),
+            Asking(context),
             permission,
             Deciding(decided, resource)));
     }
@@ -284,7 +285,7 @@ internal sealed class AccessGate(
             : null;
 
         return Result.Success(Explanation(
-            new ExplainedPrincipal(context.Acting, context.Effective),
+            Asking(context),
             permission,
             Deciding(decided, resource) ?? derivedGrant));
     }
@@ -362,7 +363,7 @@ internal sealed class AccessGate(
         return recorded is not null
             && Discloses(recorded.Type)
             && Resolved(recorded) is { } explained
-            && explained.Principal == new ExplainedPrincipal(context.Acting, context.Effective)
+            && explained.Principal == Asking(context)
                 ? Result.Success(explained)
                 : Result.Failure<AccessExplanation>(Error.From(ErrorCodes.Denied));
     }
@@ -370,7 +371,7 @@ internal sealed class AccessGate(
     // CONV-LOG-006: a recorded refusal is explained by the path that explains a live
     // decision, from the grant that decided it as the refusal recorded it.
     private static AccessExplanation Resolved(DeniedAccess recorded) => Explanation(
-        new ExplainedPrincipal(recorded.Acting, recorded.Effective),
+        new ExplainedPrincipal(recorded.Acting, recorded.Effective, recorded.Principal, recorded.PrincipalReason),
         recorded.Permission,
         recorded.Grant);
 
@@ -1004,9 +1005,11 @@ internal sealed class AccessGate(
     // permission's in the organization the record sits in, read from the record, and
     // nothing is concealed from a caller without it. A record the registry does not hold
     // belongs to no organization, so no grant reaches it, and it is refused exactly as a
-    // caller without grant:read is refused where it is (D-166). Without the host's rows,
-    // a type a derivation reaches is refused as every other path refuses it, since the
-    // stored grants alone are not who can access it (D-161, D-162).
+    // caller without grant:read is refused where it is (D-166). Without rows handed in,
+    // the derivations are evaluated over the sources the host declared (D-183); a
+    // deployment that declared none for a relationship reaching the type is refused as
+    // every other path refuses it, since the stored grants alone are not who can access
+    // it (D-161, D-162).
     private async ValueTask<Result<ResourceAccess>> LookedUpAsync(
         AccessContext context,
         ResourceReference resource,
@@ -1055,7 +1058,7 @@ internal sealed class AccessGate(
             return Result.Failure<ResourceAccess>(refused);
         }
 
-        if (relationships is null && !organizationWide && derived.Reaches(resource.Type))
+        if (relationships is null && !organizationWide && !lookup.Sourced(resource.Type))
         {
             return Result.Failure<ResourceAccess>(Error.From(ErrorCodes.DerivationSourcesMissing));
         }
@@ -1064,6 +1067,11 @@ internal sealed class AccessGate(
             .LookedUpAsync(resource, organization, relationships, cancellationToken)
             .ConfigureAwait(false));
     }
+
+    // AUTHZ-GATE-004, D-166: who an explanation is made for, the name and the reason
+    // present only where background work asks.
+    private static ExplainedPrincipal Asking(AccessContext context) =>
+        new(context.Acting, context.Effective, context.Principal?.Name, context.Principal?.Reason);
 
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
@@ -1195,9 +1203,9 @@ internal sealed class AccessGate(
 
     // AUTHZ-CONCEAL-004, CONV-LOG-005: one path answers every refusal, and the
     // identifier it hands back is the row the refusal was recorded as. The same path
-    // counts it towards its actor's denial spike (AUTHZ-GATE-004, OPS-ALERT-001). A request made
-    // under no account is refused with an identifier like any other; the row names
-    // nobody, and that absence is the recorded fact.
+    // counts it towards its actor's denial spike (AUTHZ-GATE-004, OPS-ALERT-001). A
+    // request of background work is refused with an identifier like any other, and the
+    // row names its principal and the reason it stated.
     private async ValueTask<Result> RefusedAsync(
         AccessContext context,
         Permission permission,
@@ -1224,6 +1232,8 @@ internal sealed class AccessGate(
             correlation,
             context.Acting,
             context.Effective,
+            context.Principal?.Name,
+            context.Principal?.Reason,
             context.BreakGlassReason,
             organization,
             permission,
@@ -1231,8 +1241,17 @@ internal sealed class AccessGate(
             time.GetUtcNow(),
             grant);
 
-        await audit.RecordAsync(denial, cancellationToken).ConfigureAwait(false);
-        await spikes.WatchAsync(denial, cancellationToken).ConfigureAwait(false);
+        // AUTHZ-CONCEAL-004, D-183: the record is written, counted and, past the
+        // threshold, raised in a scope and a unit of work of its own, so it is committed
+        // before the caller is answered and stands whatever becomes of the caller's work.
+        AsyncServiceScope recording = scopes.CreateAsyncScope();
+
+        await using (recording.ConfigureAwait(false))
+        {
+            await recording.ServiceProvider.GetRequiredService<DenialRecording>()
+                .RecordAsync(denial, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         // AUTHZ-CONCEAL-001, BFF-ERR-003: on a type that conceals, what the caller is
         // answered is the boundary's, under this identifier, so it is the same answer

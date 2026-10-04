@@ -221,12 +221,12 @@ Janus.Core.AuditEntry.Acting.get -> Janus.Core.SubjectId
 Janus.Core.AuditEntry.Acting.init -> void
 Janus.Core.AuditEntry.Action.get -> Janus.Core.AuditAction
 Janus.Core.AuditEntry.Action.init -> void
-Janus.Core.AuditEntry.AuditEntry(Janus.Core.AuditRecordId Id, Janus.Core.AuditCategory Category, Janus.Core.AuditAction Action, System.DateTimeOffset OccurredAt, Janus.Core.SubjectId Acting, Janus.Core.SubjectId Effective, Janus.Core.OrganizationId? Organization, System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>! Details, string? BreakGlassReason, string? Principal, string? PrincipalReason) -> void
+Janus.Core.AuditEntry.AuditEntry(Janus.Core.AuditRecordId Id, Janus.Core.AuditCategory Category, Janus.Core.AuditAction Action, System.DateTimeOffset OccurredAt, Janus.Core.SubjectId Acting, Janus.Core.SubjectId Effective, Janus.Core.OrganizationId? Organization, System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>! Details, string? BreakGlassReason, string? Principal, string? PrincipalReason, Janus.Core.SubjectId? Subject) -> void
 Janus.Core.AuditEntry.BreakGlassReason.get -> string?
 Janus.Core.AuditEntry.BreakGlassReason.init -> void
 Janus.Core.AuditEntry.Category.get -> Janus.Core.AuditCategory
 Janus.Core.AuditEntry.Category.init -> void
-Janus.Core.AuditEntry.Deconstruct(out Janus.Core.AuditRecordId Id, out Janus.Core.AuditCategory Category, out Janus.Core.AuditAction Action, out System.DateTimeOffset OccurredAt, out Janus.Core.SubjectId Acting, out Janus.Core.SubjectId Effective, out Janus.Core.OrganizationId? Organization, out System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>! Details, out string? BreakGlassReason, out string? Principal, out string? PrincipalReason) -> void
+Janus.Core.AuditEntry.Deconstruct(out Janus.Core.AuditRecordId Id, out Janus.Core.AuditCategory Category, out Janus.Core.AuditAction Action, out System.DateTimeOffset OccurredAt, out Janus.Core.SubjectId Acting, out Janus.Core.SubjectId Effective, out Janus.Core.OrganizationId? Organization, out System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>! Details, out string? BreakGlassReason, out string? Principal, out string? PrincipalReason, out Janus.Core.SubjectId? Subject) -> void
 Janus.Core.AuditEntry.Details.get -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.JsonElement>!
 Janus.Core.AuditEntry.Details.init -> void
 Janus.Core.AuditEntry.Effective.get -> Janus.Core.SubjectId
@@ -242,6 +242,8 @@ Janus.Core.AuditEntry.Principal.get -> string?
 Janus.Core.AuditEntry.Principal.init -> void
 Janus.Core.AuditEntry.PrincipalReason.get -> string?
 Janus.Core.AuditEntry.PrincipalReason.init -> void
+Janus.Core.AuditEntry.Subject.get -> Janus.Core.SubjectId?
+Janus.Core.AuditEntry.Subject.init -> void
 Janus.Core.AuditRecordId
 Janus.Core.AuditRecordId.AuditRecordId() -> void
 Janus.Core.AuditRecordId.AuditRecordId(System.Guid Value) -> void
@@ -973,12 +975,16 @@ Janus.Core.ExplainedGrant.SubjectType.init -> void
 Janus.Core.ExplainedPrincipal
 Janus.Core.ExplainedPrincipal.Acting.get -> Janus.Core.SubjectId?
 Janus.Core.ExplainedPrincipal.Acting.init -> void
-Janus.Core.ExplainedPrincipal.Deconstruct(out Janus.Core.SubjectId? Acting, out Janus.Core.SubjectId? Effective) -> void
+Janus.Core.ExplainedPrincipal.Deconstruct(out Janus.Core.SubjectId? Acting, out Janus.Core.SubjectId? Effective, out string? Name, out string? Reason) -> void
 Janus.Core.ExplainedPrincipal.Effective.get -> Janus.Core.SubjectId?
 Janus.Core.ExplainedPrincipal.Effective.init -> void
 Janus.Core.ExplainedPrincipal.Equals(Janus.Core.ExplainedPrincipal other) -> bool
 Janus.Core.ExplainedPrincipal.ExplainedPrincipal() -> void
-Janus.Core.ExplainedPrincipal.ExplainedPrincipal(Janus.Core.SubjectId? Acting, Janus.Core.SubjectId? Effective) -> void
+Janus.Core.ExplainedPrincipal.ExplainedPrincipal(Janus.Core.SubjectId? Acting, Janus.Core.SubjectId? Effective, string? Name, string? Reason) -> void
+Janus.Core.ExplainedPrincipal.Name.get -> string?
+Janus.Core.ExplainedPrincipal.Name.init -> void
+Janus.Core.ExplainedPrincipal.Reason.get -> string?
+Janus.Core.ExplainedPrincipal.Reason.init -> void
 Janus.Core.ExportRecord
 Janus.Core.ExportRecord.<Clone>$() -> Janus.Core.ExportRecord!
 Janus.Core.ExportRecord.Deconstruct(out System.Collections.Generic.IReadOnlyDictionary<string!, string!>! Values) -> void
@@ -2338,6 +2344,7 @@ Janus.Core.RelationshipDeclaration.ResourceColumn.init -> void
 Janus.Core.RelationshipRows
 Janus.Core.RelationshipRows.Any(System.Linq.Expressions.LambdaExpression! predicate) -> System.Linq.Expressions.Expression!
 Janus.Core.RelationshipRows.HeldBy(System.Linq.Expressions.LambdaExpression! predicate, System.Linq.Expressions.LambdaExpression! holder) -> System.Collections.Generic.IAsyncEnumerable<Janus.Core.SubjectId>!
+Janus.Core.RelationshipSource
 Janus.Core.ReservedUsernames
 Janus.Core.ReservedUsernames.All.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
 Janus.Core.ReservedUsernames.Holds(Janus.Core.Username username) -> bool
@@ -4254,6 +4261,7 @@ static Janus.Core.RegistrationState.operator !=(Janus.Core.RegistrationState? le
 static Janus.Core.RegistrationState.operator ==(Janus.Core.RegistrationState? left, Janus.Core.RegistrationState? right) -> bool
 static Janus.Core.RelationshipDeclaration.operator !=(Janus.Core.RelationshipDeclaration? left, Janus.Core.RelationshipDeclaration? right) -> bool
 static Janus.Core.RelationshipDeclaration.operator ==(Janus.Core.RelationshipDeclaration? left, Janus.Core.RelationshipDeclaration? right) -> bool
+static Janus.Core.RelationshipSource.Of<TContext, TRow>(string! relationship, System.Func<TContext!, System.Linq.IQueryable<TRow>!>! rows) -> Janus.Core.RelationshipSource!
 static Janus.Core.ReservedUsernames.Default.get -> Janus.Core.ReservedUsernames!
 static Janus.Core.ReservedUsernames.Of(System.Collections.Generic.IEnumerable<string!>! added) -> Janus.Core.ReservedUsernames!
 static Janus.Core.ResourceAccess.operator !=(Janus.Core.ResourceAccess? left, Janus.Core.ResourceAccess? right) -> bool

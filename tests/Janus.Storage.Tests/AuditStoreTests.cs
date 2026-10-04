@@ -63,18 +63,20 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
     }
 
     /// <summary>
-    /// IDN-AUD-001 AC1: an event that is not an authorization refusal is refused by
-    /// the database without both identities, so the one action that may name nobody
-    /// is the only one that can (AUTHZ-CONCEAL-004).
+    /// IDN-AUD-001 AC1, AUTHZ-CONCEAL-004: a record without both identities is refused
+    /// by the database, an authorization refusal like every other event, so no row
+    /// names nobody.
     /// </summary>
     [Fact]
-    public async Task IDN_AUD_001_AC1_AnEventNamingNobodyIsRefusedByTheDatabaseAsync()
+    public async Task IDN_AUD_001_AC1_ARefusalNamingNobodyIsRefusedByTheDatabaseAsync()
     {
-        PostgresException refused = await Assert.ThrowsAsync<PostgresException>(
+        PostgresException anEvent = await Assert.ThrowsAsync<PostgresException>(
             async () => await WriteAsync(Suspended.ToString()));
+        PostgresException aRefusal = await Assert.ThrowsAsync<PostgresException>(
+            async () => await WriteAsync("authz.access.denied"));
 
-        Assert.Equal("23514", refused.SqlState);
-        Assert.Equal(1, await WriteAsync("authz.access.denied"));
+        Assert.Equal(PostgresErrorCodes.NotNullViolation, anEvent.SqlState);
+        Assert.Equal(PostgresErrorCodes.NotNullViolation, aRefusal.SqlState);
     }
 
     /// <summary>
@@ -741,6 +743,48 @@ public sealed class AuditStoreTests(DatabaseFixture database) : IClassFixture<Da
         Assert.Equal((emergency, emergency, other), (read.ActingSubject, read.EffectiveSubject, read.Subject));
         Assert.Equal(id, Assert.Single(await TrailAsync(emergency)).Id);
         Assert.Equal(id, Assert.Single(await TrailAsync(other)).Id);
+    }
+
+    /// <summary>
+    /// IDN-AUD-001 AC4, PRIV-BREACH-002: an administrator's suspension of another account
+    /// is returned by the trail of either, each entry naming the account suspended as its
+    /// subject, and a record that concerns no one reads back with none.
+    /// </summary>
+    [Fact]
+    public async Task IDN_AUD_001_AC4_TheTrailOfEitherReturnsTheSuspensionWithItsSubjectAsync()
+    {
+        SubjectId administrator = await _deployment.AccountAsync(Now());
+        SubjectId suspended = await _deployment.AccountAsync(Now());
+        AuditRecordId suspension = NewId();
+        AuditRecordId own = NewId();
+
+        await AppendAsync(AuditRecord.Of(
+            suspension,
+            AuditCategory.Security,
+            Suspended,
+            Now(),
+            administrator,
+            suspended,
+            breakGlassReason: null,
+            organization: null));
+        await AppendAsync(AuditRecord.Of(
+            own,
+            AuditCategory.Security,
+            AuditActions.RoleDefined,
+            Now(),
+            administrator,
+            subject: null,
+            breakGlassReason: null,
+            organization: null));
+
+        IReadOnlyList<AuditEntry> acted = await TrailAsync(administrator);
+        AuditEntry concerned = Assert.Single(await TrailAsync(suspended));
+
+        Assert.Equal(
+            (suspension, administrator, administrator, suspended),
+            (concerned.Id, concerned.Acting, concerned.Effective, concerned.Subject));
+        Assert.Equal(suspended, Assert.Single(acted, entry => entry.Id == suspension).Subject);
+        Assert.Null(Assert.Single(acted, entry => entry.Id == own).Subject);
     }
 
     /// <summary>

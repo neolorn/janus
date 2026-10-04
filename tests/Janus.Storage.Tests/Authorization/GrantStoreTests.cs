@@ -97,6 +97,83 @@ public sealed class GrantStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// AUTHZ-DERIVE-005 AC4, AUTHZ-GRANT-003 AC4: the live grants a derivation was
+    /// precomputed into are read for one role and one type across every organization,
+    /// which is what the drift check holds against the host's rows; a grant somebody
+    /// wrote and one taken back are not among them, and one the drift check wrote reads
+    /// back naming the nil subject as its granter.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_005_AC4_TheLiveMaterialisedGrantsAreReadInEveryOrganizationAsync()
+    {
+        string type = "binder" + Guid.NewGuid().ToString("n")[..8];
+        OrganizationId one = await _deployment.OrganizationAsync(Noon);
+        OrganizationId other = await _deployment.OrganizationAsync(Noon);
+        SubjectId account = await _deployment.AccountAsync(Noon);
+
+        await RoleAsync();
+
+        Grant Written(OrganizationId organization, GrantKind kind) =>
+            Grant.Create(
+                GrantId.New(TimeProvider.System),
+                GrantSubject.Of(account),
+                RoleName.Parse("editor"),
+                organization,
+                Reference(type),
+                deny: false,
+                kind,
+                expiresAt: null,
+                grantedBy: default,
+                Noon,
+                "AUTHZ-DERIVE-005")
+                .Match(grant => grant, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        Grant first = Written(one, GrantKind.Materialised);
+        Grant second = Written(other, GrantKind.Materialised);
+        Grant takenBack = Written(other, GrantKind.Materialised);
+        Grant written = Written(one, GrantKind.Stored);
+
+        await using (StoreContext writing = database.Context())
+        {
+            await using var transaction = new UnitOfWork(writing);
+            await transaction.BeginAsync(TestContext.Current.CancellationToken);
+
+            foreach (Grant grant in new[] { first, second, takenBack, written })
+            {
+                await Store(writing).CreateAsync(grant, TestContext.Current.CancellationToken);
+            }
+
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (StoreContext revoking = database.Context())
+        {
+            await using var transaction = new UnitOfWork(revoking);
+            await transaction.BeginAsync(TestContext.Current.CancellationToken);
+
+            takenBack.Revoke(default, Noon, "AUTHZ-DERIVE-005")
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+
+            await Store(revoking).RecordAsync(takenBack, TestContext.Current.CancellationToken);
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+
+        IReadOnlyList<Grant> live = await Store(reading).MaterialisedAsync(
+            RoleName.Parse("editor"),
+            ResourceType.Parse(type),
+            Noon,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            new[] { first.Id, second.Id }.OrderBy(id => id.Value),
+            live.Select(grant => grant.Id).OrderBy(id => id.Value));
+        Assert.All(live, grant => Assert.Equal(default, grant.GrantedBy));
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-001 AC2: a grant with no resource is on the whole organization, and
     /// is read for every record in it.
     /// </summary>

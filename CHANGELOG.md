@@ -206,6 +206,42 @@ against the public contract of LIB-API-001.
   identity or as `subject`, with the principal and the reason of background work
   (`AuditEntry.Principal`, `AuditEntry.PrincipalReason`). A record written before names
   the account as its effective identity and no `subject`.
+- An entry of the audit trail read by subject carries the data subject its record
+  concerns (`AuditEntry.Subject`, `subject` on `GET /admin/audit`), null where the record
+  concerns none.
+- A refusal of background work is recorded as its other actions are: the nil subject
+  under both identities, with the principal's name and stated reason. Its correlation
+  identifier resolves to them (`ExplainedPrincipal.Name`, `ExplainedPrincipal.Reason`;
+  `principal.name` and `principal.reason` on the explanation routes, present only for a
+  system principal). A migration makes both identities required on every audit record
+  and stops where the trail holds a record naming none. `denial-spike` counts a system
+  principal's refusals by its name, so each principal is an actor of its own and the
+  alert names it; refusals recording the nil subject and no principal count as one
+  actor.
+- The record of a gate refusal, the count of its actor's refusals and the `denial-spike`
+  alert that count raises, with its `AlertRaised` event, are written in one transaction
+  of their own, outside the caller's and committed at once, so a spike reached inside
+  work that rolls back is still raised. The actor's refusals are held while they are
+  counted, so two refusals at once are counted one after the other, and a spike that
+  cannot be written fails the record.
+- A host declares a relationship source for every relationship a declared derivation is
+  over, materialised or not: `RelationshipSource.Of<TContext, TRow>(relationship, rows)`,
+  registered once per relationship, naming the host's own context, which maps the
+  contract tables and which the container gives in a scope, and answering the
+  relationship's rows from it. A derivation whose relationship has no source stops
+  startup with `model.startup.declarationmissing` naming the relationship. A source given
+  twice, naming no declared relationship, answering another row type than the
+  derivation's, or naming a context the container does not give in a scope or whose
+  model does not map the contract tables stops it with
+  `model.startup.declarationinvalid` (`details.declaration`
+  `relationshipSource.<relationship>`, `details.field` `relationship`, `rows` or
+  `context`).
+- The job `derivation-driftcheck` evaluates every materialised derivation over its
+  relationship source every `derivation.materialised.driftcheck`, in one statement in the
+  host's context, brings the materialised grants that no longer match the host's rows
+  back into step and raises `degradation` naming the derivation (`details.derivation`)
+  in the same run. A grant it writes or takes back records the nil subject and the reason
+  `AUTHZ-DERIVE-005`.
 - `no-emergency-credential` is raised by the hourly `emergency-credential` job for as
   long as no break-glass credential stands, including after one is spent, and stops only
   when one is generated.
@@ -631,12 +667,15 @@ against the public contract of LIB-API-001.
   every live grant on it, on what contains it and on the whole organization, nearest
   first, each with its kind, holder, role, whether it denies and the container it sits
   on. It needs `grant:read` in the record's organization; `resourceType` `organization`
-  asks for the whole of one. `IAccessGate.WhoCanAccessAsync` is the same in process, and
-  given the host's `FilterSources` it also reports each holder a derivation confers the
-  record on as a derived grant; where `authz.reverselookup.budget` runs out first the
-  answer carries `partial: true` and the relationships left unevaluated. Without those
-  rows, a record a derivation reaches is refused with `authz.derivation.sourcesmissing`,
-  over HTTP included, once `grant:read` is held. A type the model does not declare is
+  asks for the whole of one. It also reports each holder a derivation confers the record
+  on as a derived grant, with no `id`, evaluated over the rows of the relationship source
+  the host declared, in one statement in the host's context; a derivation whose role
+  allows nothing is not reported, and where `authz.reverselookup.budget` runs out first
+  the answer carries `partial: true` and the relationships left unevaluated.
+  `IAccessGate.WhoCanAccessAsync` is the same in process; given the host's
+  `FilterSources` it evaluates the derivations over the rows handed in, and where no
+  rows are handed in and no source is declared for a relationship reaching the record's
+  type it refuses with `authz.derivation.sourcesmissing`. A type the model does not declare is
   refused 400 naming `resourceType`, and an organization identifier that is not a UUID
   400 naming `resourceId`; a record the deployment holds no registration for is refused
   403 `authz.denied`, recorded against no organization and counted, exactly as a caller

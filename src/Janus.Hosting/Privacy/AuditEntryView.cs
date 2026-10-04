@@ -22,6 +22,7 @@ namespace Janus.Hosting.Privacy;
 /// </param>
 /// <param name="Principal">The system principal that took the action, where one did.</param>
 /// <param name="PrincipalReason">The reason that principal stated, where one did.</param>
+/// <param name="Subject">The data subject the record concerns, where it concerns one.</param>
 /// <remarks>
 /// Implements PRIV-BREACH-002, IDN-AUD-001, OPS-BOOT-002 and chapter 09 section 8a.
 /// </remarks>
@@ -36,7 +37,8 @@ internal sealed record AuditEntryView(
     IReadOnlyDictionary<string, JsonElement> Details,
     string? BreakGlassReason,
     string? Principal,
-    string? PrincipalReason)
+    string? PrincipalReason,
+    Guid? Subject)
 {
     /// <summary>
     /// The view of an audit record.
@@ -59,6 +61,7 @@ internal sealed record AuditEntryView(
             entry.Details,
             entry.BreakGlassReason,
             entry.Principal,
-            entry.PrincipalReason);
+            entry.PrincipalReason,
+            entry.Subject?.Value);
     }
 }

@@ -4,9 +4,13 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
+using Janus.Authorization.Gate;
 using Janus.Core;
+using Janus.Hosting.Background;
 using Janus.Hosting.Bff;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Authorization;
@@ -24,6 +28,9 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
     private static readonly ResourceType Document = ResourceType.Parse("document");
     private static readonly ResourceType Note = ResourceType.Parse("note");
     private static readonly RoleName Reviewer = RoleName.Parse("reviewer");
+
+    private static readonly BackgroundJob DriftCheck =
+        BackgroundJobs.All.Single(job => job.Name == DerivationDriftCheck.Job);
 
     /// <summary>
     /// AUTHZ-DERIVE-005 AC3: the refresh runs in the caller's own transaction, so a
@@ -249,6 +256,130 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
 
     // What the host supplies from its own context, the same object every path on a type
     // with a derivation takes (D-161).
+    /// <summary>
+    /// AUTHZ-DERIVE-005 AC3 and AC4, AUTHZ-GRANT-003 AC4: where the host's write and its
+    /// refresh did not both commit, the drift check, run over the relationship source
+    /// the host declared, takes back the materialised grant the rows no longer support
+    /// and writes the one they do, each naming the nil subject and the reason
+    /// <c>AUTHZ-DERIVE-005</c>, and raises <c>degradation</c> naming the derivation, with
+    /// its <c>AlertRaised</c> row, in the same run.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_005_AC4_TheDriftCheckCorrectsWhatTheHostsRowsNoLongerSupportAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Reviewed unsupported = await ReviewedAsync();
+        Reviewed unwritten = await ReviewedAsync();
+
+        await using ServiceProvider deployment = Materialised();
+
+        _ = await RefreshAsync(deployment, unsupported);
+        await unsupported.Deployment.UnreviewAsync(unsupported.Workspace, unsupported.Account, cancellationToken);
+
+        (int alerts, int announced) before = await DriftsRaisedAsync();
+
+        Assert.True(await AdmitsAsync(deployment, unsupported));
+        Assert.False(await AdmitsAsync(deployment, unwritten));
+
+        await DriftCheckedAsync(deployment);
+
+        Assert.False(await AdmitsAsync(deployment, unsupported));
+        Assert.True(await AdmitsAsync(deployment, unwritten));
+        Assert.Equal(
+            new Written(unsupported.Deployment.Granter.Value, "derivation:reviewer", Guid.Empty, "AUTHZ-DERIVE-005"),
+            await WrittenAsync(unsupported));
+        Assert.Equal(
+            new Written(Guid.Empty, "AUTHZ-DERIVE-005", RevokedBy: null, RevocationReason: null),
+            await WrittenAsync(unwritten));
+        Assert.Equal((before.alerts + 1, before.announced + 1), await DriftsRaisedAsync());
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-005 AC4: a drift check that finds every materialised grant matching
+    /// the host's rows writes nothing and raises nothing.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_005_AC4_ADriftCheckThatFindsNoDifferenceRaisesNothingAsync()
+    {
+        Reviewed reviewed = await ReviewedAsync();
+
+        await using ServiceProvider deployment = Materialised();
+
+        await DriftCheckedAsync(deployment);
+
+        (int alerts, int announced) settled = await DriftsRaisedAsync();
+        Written written = await WrittenAsync(reviewed);
+
+        await DriftCheckedAsync(deployment);
+
+        Assert.True(await AdmitsAsync(deployment, reviewed));
+        Assert.Equal(written, await WrittenAsync(reviewed));
+        Assert.Equal(settled, await DriftsRaisedAsync());
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-005 AC6: the drift check evaluates a materialised derivation in one
+    /// statement in the host's context, over the relationship's rows and the ancestry of
+    /// one context instance.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_005_AC6_TheDriftCheckEvaluatesADerivationInOneStatementAsync()
+    {
+        _ = await ReviewedAsync();
+
+        await using ServiceProvider deployment = Materialised();
+
+        await DriftCheckedAsync(deployment);
+
+        using var traced = new TracedStatements();
+
+        await DriftCheckedAsync(deployment);
+
+        string evaluated = Assert.Single(
+            traced.Texts,
+            text => text.Contains("host.reviewers", StringComparison.Ordinal));
+
+        Assert.Contains("identity.ancestry", evaluated, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-005, CONV-DESIGN-002 AC3: the refresh takes the drift check's
+    /// principal and no other context that names no subject, and reads the rows through
+    /// the source the host declared.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_DERIVE_005_TheRefreshTakesTheDriftChecksPrincipalAndNoOtherAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Reviewed reviewed = await ReviewedAsync();
+
+        await using ServiceProvider deployment = Materialised();
+        await using AsyncServiceScope scope = deployment.CreateAsyncScope();
+
+        DerivationMaterialiser materialiser = scope.ServiceProvider.GetRequiredService<DerivationMaterialiser>();
+
+        await Assert.ThrowsAsync<ArgumentException>(async () => await materialiser.RefreshAsync(
+            AccessContext.Of(SystemPrincipal.ForDeployment("mail-reconciliation", "INT-MAIL-007", SystemOperation.Reconciliation)),
+            "reviewer",
+            reviewed.Workspace.Id,
+            cancellationToken));
+
+        DerivationRefresh refreshed = Rendered(await materialiser.RefreshAsync(
+            AccessContext.Of(DriftCheck.Principal),
+            "reviewer",
+            reviewed.Workspace.Id,
+            cancellationToken));
+
+        Assert.Equal(new DerivationRefresh(1, 0), refreshed);
+        Assert.Equal(
+            new Written(Guid.Empty, "AUTHZ-DERIVE-005", RevokedBy: null, RevocationReason: null),
+            await WrittenAsync(reviewed));
+    }
+
     private static FilterSources<HostDocument> Sources(HostContext reading) =>
         new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, document => document.Id)
             .Relationship("reviewer", reading.Reviewers);
@@ -268,6 +399,7 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
 
         services.AddSingleton<TimeProvider>(new FixedTime(Deployment.Noon));
         services.AddSingleton<ISecretSource>(HostFixture.Secrets(host.MaintenanceConnectionString));
+        HostFixture.Sourced(services, host.ConnectionString);
         services.AddJanus(host.ConnectionString, HostFixture.Declaration(materialised: true), ApplicationKind.Public);
 
         return HostFixture.Started(services.BuildServiceProvider());
@@ -340,6 +472,59 @@ public sealed class MaterialisationTests(HostFixture host) : IClassFixture<HostF
 
         return new Reviewed(deployment, account, role, workspace, record, note);
     }
+
+    // The drift check as the worker runs it: the job, under its own principal, in a
+    // scope of its own (INF-BG-001, IDN-PRIN-001).
+    private static async Task DriftCheckedAsync(IServiceProvider deployment)
+    {
+        await using AsyncServiceScope scope = deployment.CreateAsyncScope();
+
+        (await DriftCheck.RunAsync(
+                scope.ServiceProvider,
+                AccessContext.Of(DriftCheck.Principal),
+                TestContext.Current.CancellationToken))
+            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+    }
+
+    // The degradation alerts raised for the derivation's drift, and the AlertRaised rows
+    // announced with them (OPS-ALERT-001).
+    private async Task<(int Alerts, int Announced)> DriftsRaisedAsync()
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return (
+            await connection.ExecuteScalarAsync<int>(
+                """
+                SELECT count(*)::int FROM identity.raised_alerts
+                WHERE condition = 'degradation' AND details->>'derivation' = 'reviewer'
+                """),
+            await connection.ExecuteScalarAsync<int>(
+                """
+                SELECT count(*)::int FROM identity.events
+                WHERE kind = 'AlertRaised'
+                  AND payload->>'Condition' = 'degradation'
+                  AND payload->'Details'->>'derivation' = 'reviewer'
+                """));
+    }
+
+    // The one materialised grant written for the reviewing account on its workspace, as
+    // the row holds who granted it and why, and who took it back and why.
+    private async Task<Written> WrittenAsync(Reviewed reviewed)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.QuerySingleAsync<Written>(new CommandDefinition(
+            """
+            SELECT granted_by AS "GrantedBy", reason AS "Reason",
+                   revoked_by AS "RevokedBy", revocation_reason AS "RevocationReason"
+            FROM identity.grants
+            WHERE kind = 'materialised' AND subject_id = @account AND resource_id = @workspace;
+            """,
+            new { account = reviewed.Account.Value, workspace = reviewed.Workspace.Id.ToString() },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    private sealed record Written(Guid GrantedBy, string Reason, Guid? RevokedBy, string? RevocationReason);
 
     private sealed record Reviewed(
         Deployment Deployment,

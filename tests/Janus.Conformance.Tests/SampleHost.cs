@@ -384,6 +384,16 @@ public sealed class SampleHost : IAsyncLifetime
 
         builder.Services.AddJanus(_database.ConnectionString, Declaration(), ApplicationKind.Public);
 
+        // LIB-HOST-001: the host's own context, given in a scope, and the source of each
+        // relationship its derivations are over, answered from that context.
+        builder.Services.AddScoped(_ => Context());
+        builder.Services.AddSingleton(
+            RelationshipSource.Of<SampleContext, ShelfKeeper>(Keeper, context => context.Keepers));
+        builder.Services.AddSingleton(
+            RelationshipSource.Of<SampleContext, BinderSteward>(Steward, context => context.Stewards));
+        builder.Services.AddSingleton(
+            RelationshipSource.Of<SampleContext, BinderBorrower>(Borrower, context => context.Borrowers));
+
         // BFF-SESS-006: the back channel is configured as any other client of the
         // framework's factory is.
         _ = builder.Services.AddHttpClient(SignOnChannel).ConfigurePrimaryHttpMessageHandler(channel);

@@ -223,6 +223,25 @@ internal sealed class GrantStore(StoreContext context, DataConnections connectio
     }
 
     /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<Grant>> MaterialisedAsync(
+        RoleName role,
+        ResourceType type,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        List<GrantRecord> rows = await context.Grants
+            .Where(row => row.Kind == GrantKind.Materialised
+                && row.Role == role
+                && row.RevokedAt == null
+                && (row.ExpiresAt == null || row.ExpiresAt > at)
+                && row.ResourceType == type)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. rows.Select(Read)];
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<Grant>> OnAsync(
         ResourceReference reference,
         OrganizationId organization,

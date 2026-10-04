@@ -603,6 +603,55 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
+    /// AUTHZ-CONCEAL-004 AC4, CONV-DESIGN-002 AC5, D-183: the refusal that takes its
+    /// actor's count past <c>alerting.denials.threshold</c> inside a transaction the
+    /// caller rolls back raises <c>denial-spike</c>, with its <c>AlertRaised</c> row,
+    /// whatever the caller's outcome.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task AUTHZ_CONCEAL_004_AC4_ASpikeRaisedInsideATransactionThatRollsBackStandsAsync()
+    {
+        Nested nested = await NestAsync();
+
+        for (int each = 0; each < Settings.AlertingDenialsThreshold.Default; each++)
+        {
+            Assert.False(await ChecksAsync(nested.Account, nested.Record));
+        }
+
+        Assert.Equal((0, 0), (await SpikesAsync(nested.Account), await AnnouncedAsync(nested.Account)));
+
+        _ = await RefusedInRolledBackWorkAsync(nested);
+
+        Assert.Equal((1, 1), (await SpikesAsync(nested.Account), await AnnouncedAsync(nested.Account)));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC6, AUTHZ-CONCEAL-004: two refusals of one actor made at once are
+    /// counted one after the other, the actor's refusals being held while each is
+    /// counted, so the one that passes the threshold raises the spike.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC6_TwoRefusalsAtOnceAreCountedOneAfterTheOtherAsync()
+    {
+        Nested nested = await NestAsync();
+
+        for (int each = 0; each < Settings.AlertingDenialsThreshold.Default - 1; each++)
+        {
+            Assert.False(await ChecksAsync(nested.Account, nested.Record));
+        }
+
+        bool[] admitted = await Task.WhenAll(
+            ChecksAsync(nested.Account, nested.Record),
+            ChecksAsync(nested.Account, nested.Record));
+
+        Assert.Equal([false, false], admitted);
+        Assert.Equal(Settings.AlertingDenialsThreshold.Default + 1, await DenialsRecordedAsync(nested.Account));
+        Assert.Equal(1, await SpikesAsync(nested.Account));
+    }
+
+    /// <summary>
     /// IDN-LIFE-009a, D-166: a grant in the administrative organization confers nothing
     /// on an account holding no current membership of it, and the same grant confers
     /// once the account holds one.
@@ -635,35 +684,50 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     }
 
     /// <summary>
-    /// AUTHZ-GATE-004, OPS-ALERT-001 AC1: the refusals that name no acting subject are
-    /// counted together, so a run of them raises <c>denial-spike</c> with no scope.
+    /// AUTHZ-GATE-004, OPS-ALERT-001 AC1: the refusals recording the nil subject and no
+    /// principal are counted as one actor, so a run of them raises <c>denial-spike</c>
+    /// naming that subject.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
     public async Task OPS_ALERT_001_AC1_ARunOfRefusalsNamingNoOneIsRaisedAsync()
     {
         Nested nested = await NestAsync();
+        int before = await SpikesAsync(default(SubjectId).ToString());
 
         for (int each = 0; each <= Settings.AlertingDenialsThreshold.Default; each++)
         {
-            await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
-            await using HostContext reading = host.Context();
-
-            Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
-                .RequireAsync(
-                    AccessContext.Of(SystemPrincipal.ForOrganization(
-                        "import",
-                        "the nightly import",
-                        nested.Deployment.Organization)),
-                    HostPermissions.Read,
-                    nested.Record,
-                    Sources(reading),
-                    TestContext.Current.CancellationToken);
-
-            Assert.Equal(ErrorCodes.Denied, outcome.Match(() => ErrorCodes.SystemFault, error => error.Code));
+            Assert.False(await ChecksAsync(default, nested.Record));
         }
 
-        Assert.NotEqual(0, await SpikesAsync(null));
+        Assert.Equal(before + 1, await SpikesAsync(default(SubjectId).ToString()));
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-004, OPS-ALERT-001 AC1, D-183: a system principal's refusals are counted
+    /// by its name, so each principal is an actor of its own: one job's refusals neither
+    /// raise another's spike nor hide in it, and the alert names the job.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task OPS_ALERT_001_AC1_APrincipalsRefusalsAreCountedByItsNameAsync()
+    {
+        Nested nested = await NestAsync();
+        string runaway = "import-" + Guid.NewGuid().ToString("n")[..8];
+        string other = "export-" + Guid.NewGuid().ToString("n")[..8];
+
+        for (int each = 0; each < Settings.AlertingDenialsThreshold.Default; each++)
+        {
+            await RefusedAsWorkAsync(runaway, nested);
+        }
+
+        await RefusedAsWorkAsync(other, nested);
+
+        Assert.Equal((0, 0), (await SpikesAsync(runaway), await SpikesAsync(other)));
+
+        await RefusedAsWorkAsync(runaway, nested);
+
+        Assert.Equal((1, 0), (await SpikesAsync(runaway), await SpikesAsync(other)));
     }
 
     /// <summary>
@@ -1798,7 +1862,11 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             new { account = account.Value });
     }
 
-    private async Task<int> SpikesAsync(SubjectId? account)
+    private async Task<int> SpikesAsync(SubjectId account) => await SpikesAsync(account.ToString());
+
+    // The spikes raised for one actor: an account by its identifier, background work by
+    // its principal's name.
+    private async Task<int> SpikesAsync(string actor)
     {
         await using NpgsqlConnection connection = await host.OpenAsync();
 
@@ -1807,7 +1875,42 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             SELECT count(*)::int FROM identity.raised_alerts
             WHERE condition = 'denial-spike' AND idempotency_key LIKE @key
             """,
-            new { key = Alerts.Key(AlertCondition.DenialSpike, scope: null, account?.ToString()) + "@%" });
+            new { key = Alerts.Key(AlertCondition.DenialSpike, scope: null, actor) + "@%" });
+    }
+
+    // The AlertRaised rows the library announced for one account's spike, as the rows of
+    // its events table (OPS-ALERT-001, CONV-DESIGN-002).
+    private async Task<int> AnnouncedAsync(SubjectId account)
+    {
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(
+            """
+            SELECT count(*)::int FROM identity.events
+            WHERE kind = 'AlertRaised' AND payload->>'IdempotencyKey' LIKE @key
+            """,
+            new { key = Alerts.Key(AlertCondition.DenialSpike, scope: null, account.ToString()) + "@%" });
+    }
+
+    // One refusal of background work acting for the deployment's organization under the
+    // name given.
+    private async Task RefusedAsWorkAsync(string principal, Nested nested)
+    {
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+            .RequireAsync(
+                AccessContext.Of(SystemPrincipal.ForOrganization(
+                    principal,
+                    "the nightly import",
+                    nested.Deployment.Organization)),
+                HostPermissions.Read,
+                nested.Record,
+                Sources(reading),
+                TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.Denied, outcome.Match(() => ErrorCodes.SystemFault, error => error.Code));
     }
 
     // The statements of every connection that read the grants or the ancestry, which

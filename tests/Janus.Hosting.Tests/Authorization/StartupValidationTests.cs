@@ -15,6 +15,7 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Janus.Hosting.Sending;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
@@ -1271,6 +1272,67 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         }
     }
 
+    /// <summary>
+    /// AUTHZ-DERIVE-005 AC5, LIB-HOST-001 AC2: a model declaring a derivation, materialised
+    /// or not, whose relationship has no declared source does not start, and the refusal
+    /// names the relationship.
+    /// </summary>
+    /// <param name="materialised">Whether the derivation is materialised.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AUTHZ_DERIVE_005_AC5_ADerivationWithoutItsRelationshipSourceIsRefusedAsync(bool materialised)
+    {
+        using IHost deployment = Deployed(source: "none", materialised: materialised);
+
+        StartupException refused = await Assert.ThrowsAsync<StartupException>(
+            async () => await deployment.StartAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.StartupDeclarationMissing, refused.Failure?.Code);
+        Assert.Equal("reviewer", refused.Failure?.Details["key"].GetString());
+    }
+
+    /// <summary>
+    /// AUTHZ-DERIVE-005 AC5, LIB-HOST-001 AC2: a relationship source given twice, naming
+    /// no declared relationship, answering rows of another type than the derivation's,
+    /// or naming a context the container does not give in a scope or whose model does
+    /// not map the contract tables stops the deployment as it starts, naming the source
+    /// and the member at fault; one declared whole starts.
+    /// </summary>
+    /// <param name="fault">What is wrong with the declaration.</param>
+    /// <param name="declaration">The declaration the refusal names.</param>
+    /// <param name="field">The member the refusal names.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [InlineData("twice", "relationshipSource.reviewer", "relationship")]
+    [InlineData("undeclared", "relationshipSource.auditor", "relationship")]
+    [InlineData("rows", "relationshipSource.reviewer", "rows")]
+    [InlineData("ungiven", "relationshipSource.reviewer", "context")]
+    [InlineData("unmapped", "relationshipSource.reviewer", "context")]
+    public async Task AUTHZ_DERIVE_005_AC5_AMalformedRelationshipSourceIsRefusedNamingItAsync(
+        string fault,
+        string declaration,
+        string field)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        using (IHost refusedHost = Deployed(source: fault))
+        {
+            StartupException refused = await Assert.ThrowsAsync<StartupException>(
+                async () => await refusedHost.StartAsync(cancellationToken));
+
+            Assert.Equal(ErrorCodes.StartupDeclarationInvalid, refused.Failure?.Code);
+            Assert.Equal(declaration, refused.Failure?.Details["declaration"].GetString());
+            Assert.Equal(field, refused.Failure?.Details["field"].GetString());
+        }
+
+        using IHost started = Deployed();
+
+        await started.StartAsync(cancellationToken);
+        await started.StopAsync(cancellationToken);
+    }
+
     private async Task<StartupException> RefusedWithoutAsync(ConfigurationKey key, string value)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -1323,7 +1385,9 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool resolver = false,
         string? document = null,
         LandingOrigins? landing = null,
-        bool landed = true) =>
+        bool landed = true,
+        string source = "whole",
+        bool materialised = false) =>
         new HostBuilder()
             .ConfigureServices(services => Declared(
                 services,
@@ -1343,7 +1407,9 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
                 resolver: resolver,
                 document: document,
                 landing: landing,
-                landed: landed))
+                landed: landed,
+                source: source,
+                materialised: materialised))
             .Build();
 
     // The library registered over this deployment, as the host's own code registers
@@ -1367,8 +1433,12 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
         bool resolver = false,
         string? document = null,
         LandingOrigins? landing = null,
-        bool landed = true)
+        bool landed = true,
+        string source = "whole",
+        bool materialised = false)
     {
+        Sourced(services, connection ?? host.ConnectionString, source);
+
         if (mailTransport)
         {
             services.AddSingleton<IMailTransport>(new MailTransportInMemory());
@@ -1444,7 +1514,46 @@ public sealed class StartupValidationTests(HostFixture host) : IClassFixture<Hos
             services.AddSingleton<ISecretSource>(secrets ?? HostFixture.Secrets(host.MaintenanceConnectionString));
         }
 
-        return services.AddJanus(connection ?? host.ConnectionString, HostFixture.Declaration(document: document), ApplicationKind.Public);
+        return services.AddJanus(
+            connection ?? host.ConnectionString,
+            HostFixture.Declaration(materialised, document),
+            ApplicationKind.Public);
+    }
+
+    // LIB-HOST-001: the source of the one relationship the declaration's derivation is
+    // over, declared whole or in one of the ways a declaration can fail to hold.
+    private static void Sourced(IServiceCollection services, string connection, string source)
+    {
+        switch (source)
+        {
+            case "none":
+                break;
+            case "twice":
+                HostFixture.Sourced(services, connection)
+                    .AddSingleton(RelationshipSource.Of<HostContext, HostReviewer>("reviewer", context => context.Reviewers));
+                break;
+            case "undeclared":
+                HostFixture.Sourced(services, connection)
+                    .AddSingleton(RelationshipSource.Of<HostContext, HostReviewer>("auditor", context => context.Reviewers));
+                break;
+            case "rows":
+                services.AddDbContext<HostContext>(options => options.UseNpgsql(connection))
+                    .AddSingleton(RelationshipSource.Of<HostContext, HostDocument>("reviewer", context => context.Documents));
+                break;
+            case "ungiven":
+                services.AddSingleton(
+                    RelationshipSource.Of<HostContext, HostReviewer>("reviewer", context => context.Reviewers));
+                break;
+            case "unmapped":
+                services
+                    .AddScoped(_ => new UnmappedHostContext(
+                        new DbContextOptionsBuilder<UnmappedHostContext>().UseNpgsql(connection).Options))
+                    .AddSingleton(RelationshipSource.Of<UnmappedHostContext, HostReviewer>("reviewer", context => context.Reviewers));
+                break;
+            default:
+                HostFixture.Sourced(services, connection);
+                break;
+        }
     }
 
     // IDN-ATTR-002: an organization shows photos by its key, which is a settings row

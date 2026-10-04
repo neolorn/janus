@@ -32,7 +32,9 @@ internal sealed record ExplanationView(
             explanation.Permission.ToString(),
             new ExplainedPrincipalView(
                 explanation.Principal.Acting?.Value,
-                explanation.Principal.Effective?.Value),
+                explanation.Principal.Effective?.Value,
+                explanation.Principal.Name,
+                explanation.Principal.Reason),
             explanation.Grant is ExplainedGrant grant ? ExplainedGrantView.Of(grant) : null);
     }
 }
