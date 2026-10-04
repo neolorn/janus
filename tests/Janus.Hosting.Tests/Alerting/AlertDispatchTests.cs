@@ -98,6 +98,36 @@ public sealed class AlertDispatchTests : IAsyncDisposable
         Assert.Empty(_deployment.Raised.Waiting);
     }
 
+    /// <summary>
+    /// CONV-DESIGN-003 AC9, INF-BG-001 AC4: a raised condition another pass holds is
+    /// that pass's: this one carries nothing of it and leaves the row as it stands, and
+    /// once that claim has timed out the next pass carries it. A condition the router
+    /// refused gives its claim up, so the next pass takes it without waiting.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_AConditionAnotherPassHoldsIsNotCarriedAsync()
+    {
+        Owned();
+
+        await RaisedAsync(AlertCondition.RestrictionGranted, "first");
+
+        RaisedAlert held = Assert.Single(_deployment.Raised.Waiting);
+        TimeSpan timeout = Settings.OutboxClaimTimeout.Default;
+
+        _deployment.Raised.TakeOver(held.Id, _deployment.Clock.GetUtcNow() + timeout);
+
+        Assert.Equal(0, await _deployment.CarryAlertsAsync());
+        Assert.Empty(_deployment.Mail.Taken);
+        Assert.Single(_deployment.Raised.Waiting);
+
+        _deployment.Clock.Advance(timeout);
+
+        Assert.Equal(1, await _deployment.CarryAlertsAsync());
+        Assert.Single(_deployment.Mail.Taken);
+        Assert.Empty(_deployment.Raised.Waiting);
+    }
+
     private void Owned()
     {
         _deployment.Configuration.Set(Settings.AlertingOwnerEmail, "owner@example.test");

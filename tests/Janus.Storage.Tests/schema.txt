@@ -863,6 +863,7 @@ table raised_alerts
   column condition text not null
   column details jsonb not null
   column scope character varying(320)
+  column claimed_until timestamp with time zone
   constraint pk_raised_alerts PRIMARY KEY (id)
 table read_baselines
   column actor uuid not null

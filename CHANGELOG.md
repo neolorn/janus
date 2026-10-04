@@ -2492,3 +2492,8 @@ against the public contract of LIB-API-001.
   such a row without carrying it, and the count the send held is released. A released
   mailbox reservation's key is overwritten with the same value. An outbox row keeps the
   hash of the reference it is counted under beside its encrypted content.
+- A raised alert is claimed before the router carries it, by one conditional update
+  committed on its own, and leaves the table under that claim, so passes of the alert
+  channels in several processes carry each raised condition once. The claim stands for
+  `outbox.claim.timeout`; a condition the router refused gives its claim up and is
+  taken by the next pass.
