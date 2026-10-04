@@ -253,6 +253,84 @@ public sealed class ProviderEventTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-012a AC9, 09 section 10: on the Google route a token whose <c>nbf</c> is
+    /// later than now is answered 400 <c>invalid_request</c>, by a second as by an hour
+    /// since the instant gets no leeway, after the audience and the <c>exp</c> are
+    /// judged, and changes nothing.
+    /// </summary>
+    /// <param name="ahead">How far after now the token says it holds from, in seconds.</param>
+    /// <param name="departure">What else is wrong with the token.</param>
+    /// <param name="err">The code the failure is answered with.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(1, "nothing", "invalid_request")]
+    [InlineData(3600, "nothing", "invalid_request")]
+    [InlineData(3600, "expired", "invalid_request")]
+    [InlineData(3600, "another audience", "invalid_audience")]
+    public async Task IDN_LIFE_012a_AC9_AnEventNotYetValidOnTheGoogleRouteIsAnsweredInvalidRequestAsync(
+        int ahead,
+        string departure,
+        string err)
+    {
+        (SubjectId subject, Authenticator linked) = await LinkedAsync(Factor.Google, GoogleSubject);
+        int live = Live(subject).Count;
+        DateTimeOffset now = _deployment.Clock.GetUtcNow();
+
+        Answer answered = await DeliveredAsync(
+            Google,
+            _deployment.SocialProviders.Departing(
+                Factor.Google,
+                "evt-1",
+                GoogleEvent(Risc + "sessions-revoked", GoogleSubject),
+                audience: departure is "another audience" ? "another-client.apps.google.test" : null,
+                expires: departure is "expired" ? now.AddHours(-1).ToUnixTimeSeconds() : null,
+                notBefore: now.AddSeconds(ahead).ToUnixTimeSeconds()));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, answered.Status);
+        Assert.Equal("application/json", answered.Header(HeaderNames.ContentType));
+        Assert.Equal("en", answered.Header(HeaderNames.ContentLanguage));
+        Assert.Equal(err, answered.Text("err"));
+        Assert.Equal(err, answered.Text("description"));
+        Assert.Equal(2, answered.Json().EnumerateObject().Count());
+        Assert.Equal(live, Live(subject).Count);
+        Assert.Equal(AuthenticatorState.Active, Held(linked).State);
+        Assert.DoesNotContain(
+            _deployment.CredentialAudit.ProviderEvents,
+            recorded => recorded.Action == AuditActions.ProviderEventTaken);
+    }
+
+    /// <summary>
+    /// IDN-LIFE-012a AC9, 09 section 10: an event whose <c>nbf</c> is now or earlier is
+    /// carried, and so is one carrying no <c>nbf</c>, which is not refused for it.
+    /// </summary>
+    /// <param name="behind">
+    /// How far before now the token says it holds from, in seconds, or nothing for a
+    /// token carrying no <c>nbf</c>.
+    /// </param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(3600)]
+    public async Task IDN_LIFE_012a_AC9_AnEventValidNowOrStatingNoNbfIsCarriedAsync(int? behind)
+    {
+        (SubjectId subject, _) = await LinkedAsync(Factor.Google, GoogleSubject);
+        DateTimeOffset now = _deployment.Clock.GetUtcNow();
+
+        Answer answered = await DeliveredAsync(
+            Google,
+            _deployment.SocialProviders.Departing(
+                Factor.Google,
+                "evt-1",
+                GoogleEvent(Risc + "sessions-revoked", GoogleSubject),
+                notBefore: behind is int seconds ? now.AddSeconds(-seconds).ToUnixTimeSeconds() : null));
+
+        Assert.Equal(StatusCodes.Status202Accepted, answered.Status);
+        Assert.Empty(Live(subject));
+    }
+
+    /// <summary>
     /// IDN-LIFE-012a AC8, 09 section 10: an event on the Google route of a deployment
     /// that declared no such provider is answered <c>invalid_issuer</c>, and one that
     /// cannot be read is answered <c>invalid_request</c> before the provider is looked
