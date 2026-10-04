@@ -615,7 +615,7 @@ CONV-DESIGN-008 criterion 3, "no project's build reports MSB3277": no test decid
 
 What earlier runs left: nine worktrees held uncommitted work whose commits were all in the branch; each is kept as a patch outside the repository and removed with its branch. The reason rule of the configuration route that one of them carried is on the branch at the endpoint and in the service (`ConfigurationEndpointTests.OPS_CFG_005_EveryChangeCarriesAReasonAsync`, `ConfigurationAdministrationTests.OPS_CFG_008_AC2_ATighteningWithNoReasonIsRefusedAsync`). Four stashes are dropped: three held earlier states of the docs, and every file of the fourth is in the history (the changelog describes `MapAuthorizationTables`).
 
-**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The five parts of D-183 the owner's split names are merged (below), with a sixth for question 30. Left unbuilt by them and taken up in further parts: questions 31 and 42 (sessions, not yet merged), question 29 (privacy, merged), and the carriers of question 61 that sending left (the mailbox pushes are merged; two wait on question 114). Questions 68 to 114 park the sites they name. The work after the merges (50, 51, 53, the new codes, the retirement of `NotificationRequested`, 62) is not started.
+**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The five parts of D-183 the owner's split names are merged (below), and four further parts for what they left: question 30, question 29, the mailbox pushes of question 61, and questions 42 and 31. Questions 68 to 116 park the sites they name. The work after the merges runs in two parts, not yet merged: questions 50, 51 and 53 with the new codes and the retirement of `NotificationRequested`; question 62.
 
 ### The section C sweeps, place by place
 
@@ -1145,6 +1145,27 @@ After the merge: build 0 warnings 0 errors, format clean, 3054 unit tests, 139 c
   - Ledger: 133 and 147 "Superseded by D-166".
   - Question 77's matter: the start's stamping commits where it stamped nothing, every start after the first.
   - For audit: the start stamps by document alone; a live ordinary consent where the purpose now asks a written one is refused by the gate and the lists with `privacy.consent.writtenrequired` and is not stamped.
+
+#### D-183, `part/registration-codes`, merged as `3e59cdeb` (`7a64685a`, `bae7b728`, `02ff4f0e`)
+
+After the merge: build 0 warnings 0 errors, format clean, 3075 unit tests, 139 contract tests; `RegistrationFlowTests`, `RegistrationWizardTests`, `CredentialFlowTests` and `AccountFlowTests` passed on the merged tree. One conflict, the changelog, both sides kept. No migration.
+
+- **Question 42, whole** (`7a64685a`; D-166 129 (1); REG-SESS-006, REG-SESS-001 criterion 5). `CredentialAuthority.Of(RegistrationSessionId)`; the open ceremony and the unconfirmed generator are held in the session's encrypted document; the four enrolment operations go to the registration where the authority is a registration session; the terms step writes a confirmed generator alone; the four enrolment endpoints resolve the authority from the registration cookie where no session asks.
+  - `RegistrationServiceTests`: `REG_SESS_006_AC1_APasskeyCreatedAgainstTheSessionCompletesTheStepAsync`, `REG_SESS_006_AC4_AGeneratorConfirmedBesideAPasswordShowsRecoveryCodesAsync`, `REG_SESS_006_TheSessionEnrolsOnlyAtTheSecurityStepAsync`, `REG_SESS_001_AC5_ACeremonyAndAGeneratorBegunAreHeldOnTheSessionAloneAsync`, `REG_SESS_001_AC5_TheTermsStepWritesOnlyAConfirmedGeneratorAsync`, `REG_SESS_001_AC5_AnAbandonedOrExpiredSessionLeavesNeitherBehindAsync`, `REG_SESS_001_ACeremonyIsSpentOrReplacedUnderTheSessionAsync`, `REG_SESS_001_AGeneratorIsSpentByTheCodeThatConfirmsItAsync`.
+  - `RegistrationFlowTests`: `REG_SESS_006_AC1_APasskeyAloneCompletesTheSecurityStepOverTheWireAsync`, `REG_SESS_006_AC4_AGeneratorBesideAPasswordShowsRecoveryCodesOverTheWireAsync`, `REG_SESS_006_TheRegistrationSessionEnrolsAtNoEarlierStepAsync`.
+  - `RegistrationSessionStoreTests.REG_SESS_001_AC5_AnOpenCeremonyAndABegunGeneratorAreKeptEncryptedOnTheSessionAsync`.
+  - Not decided by a test: criterion 5, "under the new account's subject key" (read: the terms step writes through the authenticator store as before; the unit test asserts the subject).
+  - Ledger: 129 "Superseded by D-166".
+  - For audit: D-166 129 has the authority "resolved in Asking ... while the session's step is security or terms"; a credential endpoint may not call `IRegistration` (LIB-API-005), so the endpoint resolves it from the cookie and the step is judged in the service, which answers `auth.session.expired` outside those steps. The staged generator carries an identifier beside its label and secret, which the confirming endpoint names. The ceremony's lifetime is `code.verification.lifetime`, as the account's is; the key's display name is empty.
+- **Question 31, in part** (`bae7b728`, `02ff4f0e`; D-166 115 (2); AUTH-FACT-004, REG-SESS-005, AUTH-ABUSE-004, REG-SESS-003, REG-IDENT-004, REG-IDENT-007).
+  - Registration: the codes are issued, presented and ended through the verification-code record; a held or reserved value takes a record no code answers, and its ask and resend are counted against the restrictions as the message would be and refused alike.
+  - Account identifiers: the code of an add or a replace is issued, presented, shown and ended through the record; the staged identity carries no code of its own. A code outstanding at deployment stops verifying and a resend replaces it.
+  - Changed answer: after the attempt cap, and where no code is outstanding, `auth.code.expired` where it was `auth.code.invalid`.
+  - Tests: `RegistrationServiceTests.REG_SESS_005_AC5_ACodeForAHeldOrReservedAddressIsAnsweredAsAWrongOneForAFreshAddressAsync`, `RegistrationServiceTests.REG_SESS_005_AC5_NoCodeVerifiesAHeldAddressAndItsRecordRunsOutAsACodeDoesAsync`, `RegistrationServiceTests.AUTH_ABUSE_004_AC14_AnAskForAHeldOrReservedAddressIsCountedAsItsMessageWouldBeAsync`, `RegistrationServiceTests.AUTH_ABUSE_004_AC14_AnAskForAHeldAddressIsRefusedByTheRestrictionsAlikeAsync`, `VerificationCodesTests.AUTH_FACT_004_ARecordNoCodeMatchesIsAnsweredAndSweptAsACodeIsAsync`, `RegistrationFlowTests.REG_SESS_005_AC5_ACodeForAHeldAddressIsAnsweredInTheBytesOfAWrongOneAsync`, `IdentifierServiceTests.AUTH_FACT_004_AC3_TheCapEndsTheCodeOfAnAddedIdentifierAsync`, `IdentifierServiceTests.AUTH_FACT_004_TheCodeThatVerifiesAnIdentifierIsSpentAsync`.
+  - Existing tests changed, for audit: the two cap tests expect five invalid answers and then expired; the wrong-code tests read the count from the code record; seven tests of a refused send assert no outermost commit where they asserted no commit, since the code's issue and presentation commit a nested level inside the unit that rolls back; `ProviderSignInTests.REG_IDENT_008_AC4_AnAddressAnotherAccountHoldsAnswersAsAFreshOneAsync` advances the clock before the second ask, which now draws on the restrictions; two storage tests of wrong tries counted at once on the session's and the verification's rows, whose counter is gone, are renamed and keep the row's lock (`PendingVerificationStoreTests.REG_IDENT_004_AValueProvedAtOnceIsProvedOnceAsync`, `RegistrationSessionStoreTests.REG_SESS_003_AnIdentifierVerifiedAtOnceIsVerifiedOnceAsync`); the count at once is held by `VerificationCodesTests.AUTH_FACT_004_AC3_ConcurrentWrongTriesAreAllCountedAsync`.
+  - Not decided by a test: REG-SESS-005 criterion 1's timing (one path through the presentation, a fixed-time comparison; the wire test asserts identical bytes).
+  - **Not built:** the record for a held or reserved value at an account identifier's add and replace (question 115); the whole of D-166 306, the sweep of pending verifications, its schedule and its three tests (question 116), so REG-IDENT-004 criterion 4 and REG-IDENT-007 criterion 4 are not met. No ledger line for 115 or 306.
+- Parked sites: question 73 (`VerificationCodes.PresentAsync`) is unchanged and is now also called, nested, from the registration's and the identifier's verification; question 81 keeps its shape, the try's count now on the code record; questions 78 and 79 are untouched.
 
 ## 2. Items not implemented
 
@@ -1983,7 +2004,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3054 unit tests, 139 c
   (`identifier_verifications` holds `CodeExpiresAt` only inside `enc_staged`); the two
   `IdentifierServiceTests` and the storage test of 306; ledger lines 115 and 306. 115 (1)
   and (3) are in `6b79266c`.
-- **Answer:** D-183. Not yet built.
+- **Answer:** D-183. Built in `bae7b728` and `02ff4f0e` (`part/registration-codes`), but for what questions 115 and 116 park.
 
 **32. Tier 2. D-166 419 and REG-SESS-003 criterion 6: a registration link token that opens nothing.**
 
@@ -2166,7 +2187,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3054 unit tests, 139 c
 - **Parked.** 129 (1) whole: the registration form of `CredentialAuthority`, `Asking`, the
   key and generator paths, the `RegistrationFlowTests` of REG-SESS-006 criteria 1 and 4
   and their counterparts, ledger line 129. 129 (2) is in `6e0c13e8`.
-- **Answer:** D-183. Not yet built.
+- **Answer:** D-183. Built in `7a64685a` (`part/registration-codes`).
 
 **43. Process. CONV-VCS-003: two commit messages out of the rule.**
 
@@ -3030,6 +3051,31 @@ part of 389 (3) and waits with 389 on question 48.
   3. Both: a claim of the row for its outcome and a claim of each delivery for each call.
 - **Also open.** Whether a claim is conditional on the row still being due. The mailbox publisher decides on the row as read under the claim; the send publisher does not, and can skip one interval of the backoff after another pass released the row.
 - **Parked.** The event rows and the erasure outbox, unclaimed.
+- **Answer:** pending.
+
+**115. Tier 2. REG-SESS-005, AUTH-FACT-004, REG-IDENT-004, REG-IDENT-007 and AUTH-ABUSE-004 criterion 14: a held or reserved value at an account identifier's add or replace.**
+
+- **Item.** Question 31.
+- **What the code needs.** Somewhere to hold the staged value, so that a code record can be held against it, the list and the verifying endpoint can name it, and the sweep can remove it when one of a fresh value would be.
+- **What the specification says.** D-183 question 31 gives such a value "a verification-code record like any other", swept on the same expiry. `IdentifierService` stages nothing for a held or reserved value today. `ux_identifiers_fingerprint` is unique on kind and fingerprint for every identifier row, verified or not, so an unverified row carrying a held value cannot be written; no chapter says how the staged value is stored or whether the list shows it.
+- **Readings.**
+  1. An unverified identifier row with the neutralised fingerprint, outside the index, with a pending verification and a record no code answers: no change of schema; the row's fingerprint no longer names its value.
+  2. A pending verification with no identifier row: the list and the verifying endpoint need a way to name it.
+  3. The index over verified rows alone: a migration, and a change to who may stage a value another holds.
+- **Parked.** The record for a held or reserved value at add and replace, and its ask counted there. The registration's side is built.
+- **Answer:** pending.
+
+**116. Tier 2. D-166 306, REG-IDENT-007 criterion 4 and REG-IDENT-004 criterion 4: what the sweep of pending verifications waits for.**
+
+- **Item.** Question 31.
+- **What the code needs.** A rule the store can evaluate for "every code it sent is past its expiry".
+- **What the specification says.** 306: every code it sent, "the new address's and, for a replace whose old address must confirm, that one as well", as the verification-code record holds them. The displaced address is sent a link alone, with no code record and no expiry anywhere; a replace whose new address has verified and waits on the old one has no live code record.
+- **Readings.**
+  1. The old address's confirmation takes a lifetime (which setting is unstated), held as a record or a column, and a press past it is refused; the sweep waits for both.
+  2. The sweep takes only verifications whose new value is unverified and whose code record is gone or expired; a verified replace waiting on the old address stands until confirmed or abandoned, and still blocks a later replace.
+  3. The sweep takes every verification with no live code record, which sweeps a replace the old address has not answered.
+- **Also to settle with it.** The holder of an identifier's code is the SHA-256 of the identifier's bytes in the layout `Guid.TryWriteBytes` gives; a sweep that joins in SQL on `sha256(uuid_send(...))` needs the other byte order, one line of `IdentifierService` to change before any deployment holds records.
+- **Parked.** The whole of 306: the sweep's rule, its schedule and its three tests.
 - **Answer:** pending.
 
 ## 5. Gate result
