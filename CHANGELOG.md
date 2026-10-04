@@ -263,6 +263,11 @@ against the public contract of LIB-API-001.
   machine's mapping admitted some of them. The labels a related-origins allowlist is
   counted by are compared in their ASCII form, so one name written in Unicode and in
   its ASCII form counts once.
+- The identifier of `webauthn.rpid` is judged against the hosts of `webauthn.origins`
+  with both in that ASCII form, so an identifier written in ASCII form sits over an
+  origin whose host is written in Unicode, and the reverse, where before the two were
+  compared as written and the start refused. The relying party identifier in force,
+  configured or derived, is the ASCII form.
 - A refused factor's record, the delay's counts and a trusted device's failure are
   committed in one transaction, and none stands where one cannot be written. A wrong
   sign-in code or new-device code commits its count on the code, or the code's removal

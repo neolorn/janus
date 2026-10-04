@@ -106,16 +106,18 @@ public sealed class PublicSuffixListTests
 
     /// <summary>
     /// AUTH-FACT-010: a host the conversion refuses under the checks of REG-DOM-001 has
-    /// no ASCII form to compare, and the list says so before it is asked about it.
+    /// no ASCII form to compare, and the list says so before it is asked about it; one it
+    /// admits is given in the form the list compares.
     /// </summary>
     [Fact]
     public void AUTH_FACT_010_AHostTheConversionRefusesDoesNotRead()
     {
-        Assert.True(PublicSuffixList.Reads("shop.example.com"));
-        Assert.False(PublicSuffixList.Reads("my_shop.example.com"));
-        Assert.False(PublicSuffixList.Reads("ab--c.example.com"));
-        Assert.False(PublicSuffixList.Reads("-shop.example.com"));
-        Assert.False(PublicSuffixList.Reads("shop..example.com"));
+        Assert.True(PublicSuffixList.TryAscii("Shop.BÜCHER.example.", out string ascii));
+        Assert.Equal("shop.xn--bcher-kva.example", ascii);
+        Assert.False(PublicSuffixList.TryAscii("my_shop.example.com", out _));
+        Assert.False(PublicSuffixList.TryAscii("ab--c.example.com", out _));
+        Assert.False(PublicSuffixList.TryAscii("-shop.example.com", out _));
+        Assert.False(PublicSuffixList.TryAscii("shop..example.com", out _));
         Assert.Throws<ArgumentException>(() => PublicSuffixList.Shipped.IsSuffix("my_shop.example.com"));
         Assert.Throws<ArgumentException>(() => PublicSuffixList.Shipped.Label("my_shop.example.com"));
     }

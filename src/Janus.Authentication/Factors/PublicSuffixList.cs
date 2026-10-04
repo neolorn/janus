@@ -107,16 +107,23 @@ internal sealed class PublicSuffixList
     }
 
     /// <summary>
-    /// Whether a host has an ASCII form the list can judge it by. One with none has no
-    /// registrable domain, and the list answers nothing about it.
+    /// The ASCII form the list judges a name by, which is the form every name it
+    /// compares is in. A name with none has no registrable domain, and the list answers
+    /// nothing about it.
     /// </summary>
-    /// <param name="host">The host.</param>
+    /// <param name="name">The name, a host or an identifier, as it is written.</param>
+    /// <param name="ascii">Its ASCII form, or empty.</param>
     /// <returns>Whether the conversion gives it an ASCII form.</returns>
-    public static bool Reads(string host)
+    /// <exception cref="ArgumentNullException">The name is absent.</exception>
+    public static bool TryAscii(string name, out string ascii)
     {
-        ArgumentNullException.ThrowIfNull(host);
+        ArgumentNullException.ThrowIfNull(name);
 
-        return TryAscii(host, out _);
+        // The conversion lowers what it reads, so the forms compare as they stand. A
+        // name is taken as it is written, without the canonical form a domain lock
+        // compares under, so that a deviation character keeps the label a browser
+        // resolves it to.
+        return CanonicalForm.TryDomainToAscii(name.TrimEnd('.'), out ascii);
     }
 
     /// <summary>
@@ -180,10 +187,4 @@ internal sealed class PublicSuffixList
         TryAscii(host, out string ascii)
             ? ascii.Split('.')
             : throw new ArgumentException("The host has no ASCII form to judge it by.", nameof(host));
-
-    // The conversion lowers what it reads, so the forms compare as they stand. A name
-    // is taken as it is written, without the canonical form a domain lock compares
-    // under, so that a deviation character keeps the label a browser resolves it to.
-    private static bool TryAscii(string name, out string ascii) =>
-        CanonicalForm.TryDomainToAscii(name.TrimEnd('.'), out ascii);
 }
