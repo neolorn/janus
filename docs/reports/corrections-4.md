@@ -1289,6 +1289,82 @@ Every site questions 75, 80 and 88 name already undertook its send through `IGov
 - No public surface change, no migration, no ledger line.
 - Parked: questions 131 to 136.
 
+### `part/contracts`, merged as `ed4f7dbe`: questions 90, 97, 98, 117 and 118
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Questions 97 and 98: `DocumentName`, public in `Janus.Core`; `ILegalDocuments.ReadAsync` and `TranslateAsync` take it and `DocumentPublication.DocumentName` carries it; the three document routes bind it typed, so the stage names `document` before a body is read | `32edda5c` | INT-SMS-003, CONV-DESIGN-004, CONV-DESIGN-006, API-CONV-003 | `DocumentNameTests.INT_SMS_003_AC3_ADocumentNameInsideTheRuleIsRead`, `DocumentNameTests.INT_SMS_003_AC3_ADocumentNameOutsideTheRuleIsNotRead`, `DocumentNameTests.CONV_DESIGN_006_TheValueIsReadFromTheTextOfARoute`, `DocumentNameTests.CONV_DESIGN_004_AC3_AnUnsetDocumentNameGivesNoText`, `LegalDocumentTests.CONV_DESIGN_004_AC3_ADocumentNameNeverReadPublishesNothingAsync`, `PublicationEndpointTests.INT_SMS_003_AC3_ANameOutsideTheRuleIsAnsweredBeforeTheBodyIsReadAsync`, `InvitationServiceTests.REG_INV_001_AnUnpublishedDocumentIsRefusedAsync` |
+| Question 118: `RestrictionName`, public in `Janus.Core`; `IRestrictionSet.ReadAsync`, `DeleteAsync` and `GrantAsync` take it; the four `{name}` routes bind it | `8f8dae91` | INT-SMS-003, CONV-DESIGN-004, CONV-DESIGN-006, AUTH-ABUSE-004 | `RestrictionNameTests.INT_SMS_003_AC3_ARestrictionNameInsideTheRuleIsRead`, `RestrictionNameTests.INT_SMS_003_AC3_ARestrictionNameOutsideTheRuleIsNotRead`, `RestrictionNameTests.CONV_DESIGN_006_TheValueIsReadFromTheTextOfARoute`, `RestrictionNameTests.CONV_DESIGN_004_AC3_AnUnsetRestrictionNameGivesNoText`, `RestrictionEndpointTests.INT_SMS_003_AC3_ANameOutsideItsRuleIsAnsweredBeforeTheBodyIsReadAsync` |
+| Question 118: `AppPasswordId`, public in `Janus.Core` (1 to 255 of `A-Z a-z 0-9 - _`); `IAppPasswords.RevokeAsync` takes it; the `{id}` route binds it; `AppPassword.Id`, `IssuedAppPassword.Id` and `IMailServer.RevokeAppPasswordAsync` carry it (question 137) | `df9ec136` | CONV-DESIGN-004, CONV-DESIGN-006, INT-MAIL-010, INT-MAIL-001 | `AppPasswordIdTests.CONV_DESIGN_004_AnIdentifierInsideItsFormIsRead`, `AppPasswordIdTests.CONV_DESIGN_004_AC3_TextOutsideTheFormMakesNoIdentifier`, `AppPasswordIdTests.CONV_DESIGN_006_TheValueIsReadFromTheTextOfARoute`, `AppPasswordIdTests.CONV_DESIGN_004_AC3_AnUnsetIdentifierGivesNoText`, `AppPasswordFlowTests.CONV_DESIGN_006_AC5_AnIdentifierOutsideItsFormIsMalformedAsync`, `JmapMailServerTests.INT_MAIL_001_AnAppPasswordNamedOutsideTheFormOfAnIdentifierDoesNotReadAsync` |
+| Question 117: `ICredentials.MarkRecoveryCodesExportedAsync`; `POST /account/recoverycodes/exported` maps it (204; 409 `auth.factor.notenrolled`; 401 with no session) | `a1530875` | AUTH-FACT-008, AUTH-RECOV-006, LIB-API-005 | `CredentialServiceTests.AUTH_FACT_008_AC4_AReportedExportIsRecordedOnTheSetAsync`, `CredentialServiceTests.AUTH_FACT_008_AnExportReportedWithNoSetIsRefusedAsNotEnrolledAsync`, `CredentialServiceTests.CONV_DESIGN_002_AC3_AnExportReportedByNoAccountIsDeniedAsync`, `CredentialFlowTests.AUTH_FACT_008_AC4_AReportedExportIsReadFromTheAccountAsync`, `CredentialFlowTests.AUTH_FACT_008_AnExportReportedWithNoSetIsAConflictAsync`, `CredentialFlowTests.AUTH_FACT_008_AnExportReportedWithNoSessionIsAnsweredNobodyAsync` |
+| Question 90: no runtime change; the lifetime validator of `ProviderKeys.VerifiedAsync` refuses an `nbf` later than now with no leeway already | `ccc3032c` | IDN-LIFE-012a | `ProviderEventTests.IDN_LIFE_012a_AC9_AnEventNotYetValidOnTheGoogleRouteIsAnsweredInvalidRequestAsync`, `ProviderEventTests.IDN_LIFE_012a_AC9_AnEventValidNowOrStatingNoNbfIsCarriedAsync` |
+
+- IDN-LIFE-012a criterion 9, "after the `exp` check": no test decides it, since both failures answer one code. One validator judges both, after issuer and audience.
+- Analyser suppressions, each justified on the attribute: `CA1065` on `ToString()` of `DocumentName`, `RestrictionName` and `AppPasswordId` (CONV-DESIGN-004 criterion 3), as the existing value types carry it.
+- The assertion that `AppPasswords.RevokeAsync(" ")` is refused is removed: a blank identifier cannot be constructed. `AppPasswordIdTests` and `AppPasswordFlowTests` hold the blank case.
+- The new and retyped routes declare their bound values only; their codes come with questions 50 and 51.
+- Parked: questions 137 to 141.
+
+### `part/gate-sites`, merged as `b2d1ab22`: questions 122 to 125
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 122: `AppPasswords.CreateAsync` asks the gate before the mail server's call and again inside the unit of work that records the creation; a refusal there rolls back and revokes the password at the server before it is answered; a revocation the server does not take is logged (`IAppPasswordLog`, an internal port implemented in Hosting) and the refusal still answered | `55c53ff1` | AUTHZ-GATE-006, INT-MAIL-010, REG-MAIL-002 | `AppPasswordsTests.AUTHZ_GATE_006_AC4_ACreationRefusedAtTheSecondAskIsRevokedAtTheServerAsync`, `AppPasswordsTests.AUTHZ_GATE_006_AC4_ARevocationTheServerDoesNotTakeLeavesThePasswordListedAsync`, `AppPasswordFlowTests.AUTHZ_GATE_006_AC4_ACreationRefusedAtTheSecondAskLeavesNoPasswordAtTheServerAsync`, `AppPasswordFlowTests.AUTHZ_GATE_006_AC4_ARevocationTheServerDoesNotTakeIsLoggedAndStillRefusedAsync` |
+| Question 123: an approval, its audit record and the link's send are one unit of work, the send undertaken in it; a refused send leaves no approval (429 `auth.restriction.exceeded`, 422 `integration.sms.balancefloor`). The service counts the approver in hand and writes the completing approval already spent | `5352e650` | AUTH-RECOV-002, AUTHZ-GATE-006, CONV-DESIGN-003 | `RecoveryServiceTests.AUTHZ_GATE_006_AC4_AnApprovalRefusedAtTheSecondAskLeavesNeitherItNorItsLinksSendAsync`, `RecoveryServiceTests.AUTH_RECOV_002_AC7_AnApprovalWhoseLinkIsRefusedLeavesNoApprovalAsync`, `RecoveryServiceTests.AUTH_RECOV_002_TheApprovalThatCompletesTheCountSpendsEveryOneWithItsLinkAsync`, `RecoveryApprovalStoreTests.AUTH_RECOV_002_TheCompletingApprovalIsSpentInTheUnitOfWorkThatWritesItAsync`, `RecoveryFlowTests.AUTH_RECOV_002_AC7_AnApprovalWhoseLinkARestrictionRefusesIsAnsweredAndLeavesNothingAsync`, `RecoveryFlowTests.AUTHZ_GATE_006_AC4_AnApprovalRefusedAtTheSecondAskApprovesAndSendsNothingAsync` |
+| Question 124: `ErasureService.CompleteAsync` asks the gate again inside its unit of work; the ledger line stands at a refusal, and a replay reads a repeated line as one erasure | `ea1b79e2` | AUTHZ-GATE-006, DR-016 | `ErasureServiceTests.AUTHZ_GATE_006_AC3_ACompletionRefusedAtTheSecondAskLeavesTheLedgerLineStandingAsync`, `ErasureEndpointTests.AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesACompletionAsync`, `ErasureReplayTests.DR_016_ALineAppendedTwiceIsOneErasureToAReplayAsync` |
+| Question 125: `AlertDestinationChange` asks the gate again inside its unit of work, before the setting's row is held; a refusal writes nothing and the notice stands | `1f852a25` | AUTHZ-GATE-006, OPS-ALERT-004a | `AlertDestinationChangeTests.OPS_ALERT_004a_AC8_AChangeRefusedAtTheSecondAskWritesNothingAndItsNoticeStandsAsync`, `ConfigurationEndpointTests.OPS_ALERT_004a_AC8_ADestinationChangeRefusedAtTheSecondAskLeavesItsNoticeStandingAsync` |
+
+- AUTHZ-GATE-006 criterion 3, a restriction begun while an admitted action holds the row waits for its commit, and the acting account's row held before any other lock: no test of these four sites decides it. At each the second ask is the first statement after `BeginAsync`.
+- The 422 of the floor at the approval route is held at the service; no route test asserts the status.
+- `ea1b79e2` was amended once before the merge for a format failure in a test (a local constant's name).
+- The truth-table change check over the part reports no change to permission logic. No ledger line, no migration.
+
+### `part/value-lock`, merged as `42fded79`: the lock on a value (D-187, question 115) and OPS-SEC-003 criterion 7
+
+One commit, `de9b4d24`: the lock, the lookups in one statement and the reservation's end change the same port methods and fakes, and no split left each step green. Implements CONV-DESIGN-003, REG-SESS-005, REG-IDENT-006, REG-IDENT-009, PRIV-RIGHT-005, PRIV-RIGHT-005c, OPS-SEC-003.
+
+- `ValueLock` (`Janus.Storage`, internal): `pg_advisory_xact_lock` for each fingerprint key version held; the key is the first eight bytes, signed and big-endian, of SHA-256 over the name (`identifier` or `username`), a zero byte and the fingerprint; one call's keys taken ascending.
+- Taken, after the row locks and before any send's counters, by: the terms step; an add and its verification; a replace at staging and at the swap (the new value and the displaced one); a removal; an undo; a corporate address at an acknowledgement (held, or reserved to another account: `identity.invitation.identifiermismatch`); the bootstrap (lock only, question 142); a username's choice; an erasure's hold of a username, which now runs before the subject key is destroyed.
+- The owner or holder of a value, a reservation and a username's hold are each read under every fingerprint key version in one statement.
+- A write of a value to the account it is reserved to ends the reservation; the undo then answers 422 `identity.change.windowelapsed`.
+- OPS-SEC-003 criterion 7 needed no source change beside the lock's keys.
+
+Tests: `ValueLockTests.REG_SESS_005_AC6_ATermsStepAndAnotherAccountsAddAtOnceLeaveOneHolderAsync`, `ValueLockTests.REG_IDENT_006_AC7_AnAddJudgedWhileTheRemovalCommitsFindsTheValueReservedAsync`, `ValueLockTests.REG_IDENT_006_AC8_AValueAddedAgainAndVerifiedEndsItsReservationAsync`, `ValueLockTests.REG_IDENT_006_AC8_AReplaceBackToAReplacedValueEndsItsReservationAsync`, `ValueLockTests.REG_IDENT_009_AC5_AChoiceMadeWhileTheErasureCommitsFindsTheNameHeldAsync`, `ValueLockTests.REG_IDENT_009_AC5_TwoChoicesOfOneFreeNameAtOnceLeaveItOnOneAccountAsync`, `ValueLockTests.OPS_SEC_003_AC7_AVersionHeldAndNotCurrentIsMatchedAndNeverWrittenUnderAsync`, `ValueLockTests.OPS_SEC_003_AC7_ProcessesOnEitherSideOfARotationMeetOnOneLockAsync`; `ValueLockKeyTests.CONV_DESIGN_003_TheKeyIsTheLeadingBytesOfTheDigestOfTheNameAndTheFingerprint`, `ValueLockKeyTests.CONV_DESIGN_003_AUsernameIsLockedUnderItsOwnName`, `ValueLockKeyTests.CONV_DESIGN_003_AValueIsLockedUnderEveryFingerprintKeyVersionHeld`, `ValueLockKeyTests.TakeAsync_OutsideATransaction_ThrowsAsync`; `IdentifierServiceTests.REG_SESS_005_AnAdditionAndItsVerificationLockTheValueAsync`, `IdentifierServiceTests.REG_SESS_005_AValueTakenWhileTheAdditionWaitedForItsLockIsJudgedHeldAsync`, `IdentifierServiceTests.REG_IDENT_006_ARemovalAndItsUndoLockTheValueAsync`, `IdentifierServiceTests.REG_IDENT_007_TheSwapLocksTheNewValueAndTheDisplacedOneAsync`, `IdentifierServiceTests.REG_IDENT_006_AC8_AValueAddedAgainAndVerifiedLeavesItsUndoPastItsWindowAsync`, `IdentifierServiceTests.REG_IDENT_006_AC8_AReplaceBackLeavesTheFirstUndoPastItsWindowAsync`, `IdentifierServiceTests.REG_IDENT_006_AnUndoWhileTheValueWaitsUnverifiedAgainRestoresItOnceAsync`; `AccountServiceTests.REG_IDENT_009_AC5_ANameChosenWhileTheChoiceWaitedForItsLockIsAnsweredTakenAsync`, `AccountServiceTests.REG_IDENT_009_AC5_ANameHeldWhileTheChoiceWaitedForItsLockIsAnsweredTakenAsync`; `RegistrationServiceTests.REG_SESS_005_AC6_AnAddressTakenWhileTheTermsStepWaitedForItsLockEndsTheSessionAsync`; `InvitationServiceTests.REG_SESS_005_ACorporateAddressTakenWhileTheAcknowledgementWaitedForItsLockIsRefusedAsync`, `InvitationServiceTests.REG_IDENT_006_ACorporateAddressReservedToTheAccountIsTakenOnAndItsReservationEndsAsync`; `DeploymentBootstrapTests.REG_SESS_005_TheBootstrapLocksEveryValueItWritesAsync`.
+
+- No test decides: the ascending order of the keys (by construction, `Distinct().Order()` over one call's values); that a unique constraint met under the lock is a fault (nothing catches the violation).
+- The 422 `auth.code.expired` of REG-SESS-005 criterion 6 and REG-IDENT-006 criterion 7 at a verification and a swap is `part/identifiers`'s; until it merges a replace whose new value another account takes between staging and the swap meets the constraint as a fault.
+- The fast checks, `ValueLockTests` and `IdentifierStoreTests` (29) passed after the merge. No migration, no public surface change, no ledger line.
+- Parked: questions 142 and 143.
+
+### `part/authorization`, merged as `23b3068f`: questions 92, 94, 95, 101 and 102
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 101: `authz.grant.materialised` and `authz.grant.retracted`; the materialiser records each grant it writes or revokes for the drift check's principal, inside the unit of work that corrects the drift. The record is filed under the grant's organization and carries no subject | `5cb28471` | AUTHZ-GRANT-003, AUTHZ-DERIVE-005 | `MaterialisationTests.AUTHZ_GRANT_003_AC5_TheDriftCheckRecordsEachGrantItWritesOrTakesBackAsync`, `MaterialisationTests.AUTHZ_GRANT_003_AC5_ACorrectionThatDoesNotCommitLeavesNoRecordAsync`, `AuditActionsTests` |
+| Question 102: the two standing-consent rows | `d44deb32` | AUTHZ-GATE-002, AUTHZ-TEST-001 | `TruthTableTests.AUTHZ_GATE_002_AC4_EveryConsentCaseDecidesTheSameWayThroughBothPathsAsync` (12 cases) |
+| Question 92: no logic change, the gate refused before rendering already; the step-up cases hold the check, the expression and the fragment to the table for all seven rows | `5dc2537e` | AUTHZ-TEST-001, AUTHZ-GATE-005 | `TruthTableTests.AUTHZ_TEST_001_AC2_EveryStepUpCaseDecidesTheSameWayThroughBothPathsAsync`, which replaces `TruthTableTests.AUTHZ_TEST_001_AC1_EveryStepUpCaseDecidesTheWayTheTableSaysAsync` |
+| Question 95: `Effective` set from the context at the thirteen sites; the two link sites of `AccountLifecycle` carry neither identity | `e81ee0f2` | AUTHZ-IMP-001 | `AccountAdministrationTests.AUTHZ_IMP_001_AC5_ASuspensionCarriesBothIdentitiesOfItsContextAsync`, `AccountAdministrationTests.AUTHZ_IMP_001_AC5_AReactivationCarriesBothIdentitiesOfItsContextAsync`, `AccountAdministrationTests.AUTHZ_IMP_001_AC5_ACancelledDeletionCarriesBothIdentitiesOfItsContextAsync`, `AccountLifecycleTests.AUTHZ_IMP_001_AC5_ADeactivationCarriesBothIdentitiesAndItsLinkNeitherAsync`, `AccountLifecycleTests.AUTHZ_IMP_001_AC5_ARequestedDeletionCarriesBothIdentitiesAndItsLinkNeitherAsync`, `CredentialServiceTests.AUTHZ_IMP_001_AC5_AConfirmedEnrolmentCarriesBothIdentitiesOfItsContextAsync`, `CredentialServiceTests.AUTHZ_IMP_001_AC5_ALinkedProviderCarriesBothIdentitiesOfItsContextAsync`, `PasswordServiceTests.AUTHZ_IMP_001_AC5_ASetPasswordCarriesBothIdentitiesOfItsContextAsync`, `RestrictionAdministrationTests.AUTHZ_IMP_001_AC5_AnEditCarriesBothIdentitiesOfItsContextAsync`, `RestrictionAdministrationTests.AUTHZ_IMP_001_AC5_AGrantCarriesBothIdentitiesOfItsContextAsync`, `AlertDestinationChangeTests.AUTHZ_IMP_001_AC5_ADestinationChangeCarriesBothIdentitiesOfItsContextAsync`, `TakedownServiceTests.AUTHZ_IMP_001_AC5_ATakedownsSuspensionCarriesBothIdentitiesOfItsContextAsync`, `TakedownServiceTests.AUTHZ_IMP_001_AC5_AReversalCarriesBothIdentitiesOfItsContextAsync` |
+| Question 94, and the step-up half of the correction of `52482ed5`: a step-up `phoneCode` ask on `risk` is answered 403 `auth.stepup.required` judged against the strictest of the policy's gates, field by field; one consideration is recorded | `dee734ac` | AUTH-FACT-002, AUTH-FACT-002b, AUTH-STEP-002 | `AuthenticationServiceTests.AUTH_FACT_002b_AC6_AReportedChangeWithholdsTheTextCodeFromAStepUpAsync`, `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtAStepUpLeavingNoCombinationAsksForALossReportAsync`, `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtAStepUpThatNeverReachedTheGateOffersEnrolmentAsync`, `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtAStepUpWithNoSessionOfTheAccountJudgesNoGateAsync`, `SignInFlowTests.AUTH_FACT_002_AC7_ATextCodeAskedAtAStepUpForAReportedNumberIsAnsweredWithTheGateAsync` |
+
+- The second consent of the two new rows is granted two hours after the first: at one instant "the latest" fell to the identifiers.
+- On the enrolment-session path of `CredentialService` both identities are the enrolment's subject, as `Actor` was.
+- Question 94 carries no truth-table row (question 146). The truth-table change check passes over the part.
+- Ledger: 146, 152, 265 and 328 hold their lines already.
+- Parked: question 93 (question 144), one case of question 94 (question 145).
+
+### `part/privacy`, merged as `382cdcec`: questions 99 and 113, and the receipt of PRIV-RIGHT-002
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 99: `organizational` in the response member, `ComplianceRecord.OrganizationalSecurityMeasures`, `ProcessingRegister.OrganizationalSecurityMeasures` and the column, renamed by `SpellTheMeasuresOrganizational`; the template's labels keep "Organisational" | `39db4e11` | PRIV-ROPA-001 | `ComplianceStoreTests.PRIV_ROPA_001_AStatementMadeBeforeTheColumnWasRenamedIsReadBackAsync`, `ComplianceStoreTests.PRIV_ROPA_001_AC2_TheSuppliedFieldsAreReadBackAndASecondStatementReplacesThemAsync`, `ProcessingRecordsEndpointTests.PRIV_ROPA_001_AC1_TheGeneratedOutputMatchesTheTemplatesFieldSetAndOrderingAsync`, `ProcessingRecordsEndpointTests.PRIV_ROPA_001_AC2_TheThreeSuppliedFieldsAreStatedOverTheEndpointAsync` |
+| Question 113: an invitation's wrapped key is the erased key and its encrypted value null at revocation, acknowledgement, expiry and erasure; migration `HoldAnInvitationsErasedKey` (question 147) | `9e3615f1` | PRIV-RIGHT-005a | `InvitationStoreTests.PRIV_RIGHT_005a_AC14_AnInvitationRevokedAcknowledgedOrSweptHoldsNoIdentifierAndTheErasedKeyAsync`, `InvitationStoreTests.PRIV_RIGHT_005a_AC14_AnInvitationForgottenBeforeTheErasedKeyHoldsItOnceMigratedAsync`, `SubjectEraserTests.PRIV_RIGHT_005a_AC14_WhatAnAttachedInvitationBindsGoesWithTheSubjectAsync`, `InvitationStoreTests.REG_INV_001_ARevokedInvitationForgetsWhatItBoundAsync`, `InvitationStoreTests.REG_INV_001_AnExpiredInvitationForgetsWhatItBoundWhenSweptAsync` |
+| The receipt: undertaken in the request's unit of work; `receiptSentAt` is the creation instant where a channel admitted it and null where none did; migration `KeepWhetherARequestsReceiptWasSent` (question 147) | `16a2e00e` | PRIV-RIGHT-002 | `PrivacyRequestTests.PRIV_RIGHT_002_AC1_ASubmittedRequestWhoseReceiptIsRefusedStandsWithNoReceiptAsync`, `PrivacyRequestTests.PRIV_RIGHT_002_AC1_AnEnteredRequestWhoseReceiptIsRefusedStandsWithNoReceiptAsync`, `PrivacyRequestEndpointTests.PRIV_RIGHT_002_AC1_AReceiptARestrictionRefusesIsAnsweredNullAndTheRequestStandsAsync`, `SubjectNoticesTests.PRIV_RIGHT_002_AC1_AReceiptTheGovernedSendAdmitsIsCountedAsync`, `SubjectNoticesTests.PRIV_RIGHT_002_AC1_AReceiptARestrictionRefusesIsCountedOnNoChannelAsync`, `PrivacyRequestStoreTests.PRIV_RIGHT_002_AC1_ARequestWhoseReceiptWasRefusedReadsBackWithNoneAsync`, `PrivacyRequestStoreTests.PRIV_RIGHT_002_AC1_ARequestQueuedBeforeTheReceiptWasKeptReadsBackItsReceiptAsync`, `PrivacyRequestStoreTests.PRIV_RIGHT_002_AC1_ARequestReadsBackEveryFieldItWasWrittenWithAsync` |
+
+- Three migrations. The snapshot merged without conflict and nothing was regenerated; `has-pending-model-changes` reports none. Hand-written SQL: in `HoldAnInvitationsErasedKey`, the update that gives the erased key to rows already forgotten (and its reverse in `Down`); in `KeepWhetherARequestsReceiptWasSent`, the update that sets `receipt_sent_at` to `created_at`.
+- The destructive-operations report lists, for `HoldAnInvitationsErasedKey`, `wrapped_key` set not null and the check constraint added (both stops) and the constraint dropped; nothing for the other two.
+- `SubjectEraserTests.PRIV_RIGHT_005a_WhatAnAttachedInvitationBindsGoesWithTheSubjectAsync` is renamed with criterion 14; earlier reports cite the old name.
+- After the merge: the fast checks, and `InvitationStoreTests`, `SubjectEraserTests`, `PrivacyRequestStoreTests`, `SchemaContractTests`, `ModelTests` and `MigrationRunTests` (70) passed. No ledger line is owed.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1309,15 +1385,15 @@ Every site questions 75, 80 and 88 name already undertook its send through `IGov
 | Questions 50 and 51: the codes and the produced and accepted types as endpoint metadata, `endpoints.txt` and its contract test, the test host's check, the lines of `release.sh` and the two scenarios of D-166 382; ledger line 382 | What "the codes its `09` row gives" covers | Nothing: D-187 answers question 119; not yet built |
 | Question 61 for the event rows and the erasure outbox | How a row that tracks several deliveries is claimed | Nothing: D-186 answers question 114; not yet built |
 | Question 31 at an account identifier's add and replace of a held or reserved value; D-166 306 whole, the sweep of pending verifications (REG-IDENT-004 criterion 4, REG-IDENT-007 criterion 4); ledger lines 115 and 306 | Where the staged value is held; what the sweep waits for | Nothing: D-187 answers questions 115 and 116; not yet built |
-| Question 62 at `AppPasswords.CreateAsync`, `RecoveryService.SendAsync`, `ErasureService.CompleteAsync` and the destination keys | A first write outside the unit of work, or two units of work | Nothing: D-186 answers questions 122 to 125; not yet built |
-| Question 46: the filter half of the six unmet step-up rows; the seven step-up scenarios of the conformance suite | Criterion 2 against the filter of a bound action; how the suite arranges a provider's report | Nothing: D-187 answers questions 92 and 93; not yet built |
-| The correction of `52482ed5`, the step-up half | Which gate the answer is computed against | Nothing: D-187 answers question 94; not yet built |
-| Question 22: the audit record of a grant the drift check writes | No audit action for it | Nothing: D-187 answers question 101; not yet built |
+| Question 62 at `AppPasswords.CreateAsync`, `RecoveryService.SendAsync`, `ErasureService.CompleteAsync` and the destination keys | A first write outside the unit of work, or two units of work | Nothing: built (`part/gate-sites`) |
+| Question 46: the filter half of the six unmet step-up rows; the seven step-up scenarios of the conformance suite | Criterion 2 against the filter of a bound action; how the suite arranges a provider's report | The filter half: built (`part/authorization`). The seven scenarios: question 144 |
+| The correction of `52482ed5`, the step-up half | Which gate the answer is computed against | Built (`part/authorization`), but for the case of question 145 |
+| Question 22: the audit record of a grant the drift check writes | No audit action for it | Nothing: built (`part/authorization`) |
 | Question 57: nine registrations still in Hosting, the commands' own registrations, two inner compositions; the test of criterion 7's third clause | The registrations that could not move | Questions 82 and 84 to 86: built (`part/registrations`). Question 83 and the test of the third clause: question 128 |
 | Question 58: the sites the sweep parked | Which refusals keep a write; a send inside a caller's unit; a success that writes nothing | Built (`part/unit-sends`, `part/units-of-work`), but for questions 127 and 131 to 136 |
-| Question 39 for an invitation's erased key | PRIV-RIGHT-005a against the code | Nothing: D-187 answers question 113; not yet built |
-| Question 24 for a caller in process | The rule is internal to `Janus.Core` | Nothing: D-187 answers question 98; not yet built |
-| Question 53 for an app password's `{id}`; `POST /account/recoverycodes/exported` | No typed value and no rule; no contract operation | Nothing: D-187 answers questions 118 and 117; not yet built |
+| Question 39 for an invitation's erased key | PRIV-RIGHT-005a against the code | Nothing: built (`part/privacy`) |
+| Question 24 for a caller in process | The rule is internal to `Janus.Core` | Nothing: built (`part/contracts`) |
+| Question 53 for an app password's `{id}`; `POST /account/recoverycodes/exported` | No typed value and no rule; no contract operation | Nothing: built (`part/contracts`) |
 | The reverse direction of the REF-001 tests | Question 25's "each direction" | Nothing: D-187 answers question 89; not yet built |
 | 209 (2), the IDNA mapping | The download is approved and made; the parameters of the processing are not stated | Nothing: built (`part/idna`) |
 
@@ -3375,6 +3451,120 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** `BotDefence` is registered and nothing under `src` calls `CheckAsync`, so no signal is recorded and no verifier asked on any route.
 - **What the specification says.** AUTH-ABUSE-008: every signal is recorded, a verifier declared or not, and the routes it names may answer `auth.challenge.required`.
 - **Parked.** The call sites of the check. `BotDefence` itself is as question 70 leaves it.
+- **Answer:** pending.
+
+**137. Tier 2. CONV-DESIGN-004 criterion 2 and D-187 questions 97, 98 and 118: how far the three value types reach.**
+
+- **Item.** Questions 97, 98 and 118.
+- **What the code does.** The operations D-187 names take the types. For documents and restrictions the records keep text: `InvitationRequest.Documents`, `DocumentVersion.DocumentName`, `ConsentRecord.Document`, `InvitationDocument.Document`, `Restriction.Name`. For an app password the type goes further: `AppPassword.Id`, `IssuedAppPassword.Id`, `IMailServer.RevokeAppPasswordAsync` and the internal audit port carry `AppPasswordId`, since the identifier a listing returns is the one a revocation takes.
+- **What the specification says.** D-187 names `ILegalDocuments`, `IRestrictionSet` and `IAppPasswords` as taking the types. CONV-DESIGN-004 criterion 2 speaks of the identifiers contracts take and return.
+- **Readings.**
+  1. Only the named operations take the type; the four app-password members go back to text.
+  2. Every public member that carries the name is typed; the five record members change.
+- **Parked.** Nothing of the named operations. The two halves are built on different readings.
+- **Answer:** pending.
+
+**138. Tier 3. INT-MAIL-001: an identifier the mail server writes outside the JMAP `Id` form.**
+
+- **Item.** Question 118.
+- **What the code does.** `JmapMailServer` answers `system.fault` for a listing or a creation whose identifier from the server is outside the form, read as an answer that does not read.
+- **What the specification says.** INT-MAIL-001 speaks of an answer that does not read; no chapter states what an identifier outside the form is.
+- **Parked.** Nothing: it stands as built, and falls with reading 1 of question 137.
+- **Answer:** pending.
+
+**139. Tier 3. `09` `POST /account/recoverycodes/exported` and IDN-ACCT-007: a restricted account recording an export.**
+
+- **Item.** Question 117.
+- **The contradiction.** The route's row says "No body. No gate", with 204 and 409 only. The preamble of `09` section 6 and IDN-ACCT-007 refuse a restricted account's changes to credentials with `authz.restricted`.
+- **What the code does.** As the row states: no restriction is checked.
+- **Parked.** Nothing built beyond the row.
+- **Answer:** pending.
+
+**140. Tier 2. AUTH-FACT-008 criterion 4: `viewedAt` is not set when the codes are returned.**
+
+- **Item.** Observed with question 117.
+- **What the code does.** `GenerateRecoveryCodesAsync` and the confirmation that returns codes do not set `viewedAt`; `ShownAsync` is its only writer, so a set's `viewedAt` first appears at the export's report.
+- **What the specification says.** `09` and AUTH-FACT-008: `viewedAt` is set when the 200 that returns the codes is produced.
+- **Readings.**
+  1. It is set inside the unit of work of the generation and of the confirmation.
+  2. It is a second write after the response.
+- **Parked.** `viewedAt` at generation.
+- **Answer:** pending.
+
+**141. Tier 2. API-CONV-003: an invitation naming a document outside the rule.**
+
+- **Item.** Questions 97 and 98.
+- **What the code does.** `InvitationService.DocumentsAsync` answers 400 `api.request.malformed` naming `documents` for a name outside the rule; it answered 422 `api.request.invalid` before, a blank alone being malformed.
+- **What the specification says.** API-CONV-003's 400 row now lists a document's name as a value that does not read as its type, in a route, a query or a body.
+- **Readings.**
+  1. A name in a body member that does not read is malformed: as built.
+  2. The invitation's list is text judged by the service, and keeps 422.
+- **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
+
+**142. Tier 2. REG-SESS-005 and OPS-BOOT-001: what the bootstrap answers where a value it writes is held or reserved.**
+
+- **Item.** The value lock at `DeploymentBootstrap`.
+- **What the code does.** The bootstrap takes the lock on the administrator's email and phone, the canary's address and the mailbox, and judges nothing; the unique constraint stays the guard.
+- **What the specification says.** REG-SESS-005: an operation that writes a value to an account judges under the lock whether an account holds it or it is reserved to another. No chapter names the bootstrap's answer.
+- **Readings.**
+  1. The bootstrap runs only where no system administrator exists and is outside the judgement: a breach is a fault.
+  2. It judges and refuses, with a code a chapter names.
+- **Parked.** The bootstrap's judgement.
+- **Answer:** pending.
+
+**143. Tier 2. REG-IDENT-006: a removal past its window and not yet swept.**
+
+- **Item.** Observed with the value lock; it stood before it.
+- **What the code does.** A removal row past its window is no reservation to the judgement, and still occupies the unique index on kind and fingerprint of `identifier_removals` until the sweep. Another account that takes the value and removes it before the sweep meets that constraint, which is now a fault. `EndReservationAsync` clears the asking account's rows alone.
+- **What the specification says.** REG-IDENT-006 gives the window and the sweep; it does not say what a second removal of the value does to a lapsed row.
+- **Readings.**
+  1. A removal replaces a lapsed row of the same value.
+  2. The index is over rows inside their window alone.
+- **Parked.** That case, left as it is.
+- **Answer:** pending.
+
+**144. Tier 2. LIB-TEST-001 criterion 2, `10` section 5.30 and LIB-API-001: how the conformance suite sets its assurance provider.**
+
+- **Item.** Question 93.
+- **What the code needs.** `Janus.Conformance` is public and sees no internals. `StepUpGates` receives `IAssuranceProvider?` from the host's built container; nothing public lets a caller replace or unset it for one case.
+- **What the specification says.** The provider is the suite's, set in the deployment's place for the step-up cases alone and left unset for the scenario with no provider. LIB-API-001 names no type for doing so; CONV-LAYOUT-002 allows public types in Core, Hosting's mounting types and Conformance.
+- **Readings.**
+  1. A scoped public contract in `Janus.Core` that the suite sets and `StepUpGates` reads before the registered provider.
+  2. A public provider type in `Janus.Conformance` that the host registers; it cannot be unset for the scenario with no provider.
+  3. `ConformanceSuite.TruthTableAsync` takes a factory that builds the deployment with a given provider or none.
+- **Also unsettled.** What `Allowed` means for a step-up `TruthTableCase`, whose members are booleans while the unmet outcome is a code; the expected outcome under the host's own policy, since the suite's account holds no membership and the system policy applies; whether a step-up scenario on a permission bound to no gate is refused as unwritable.
+- **Parked.** The seven step-up scenarios, `details.gate` on a finding, and their running.
+- **Answer:** pending.
+
+**145. Tier 3. AUTH-FACT-002 criterion 7 and `09` `POST /auth/step-up` against `10` `auth.stepup.required`: the ask from a session that meets the strictest gate.**
+
+- **Item.** Question 94.
+- **The contradiction.** The ask on `risk` is answered 403 `auth.stepup.required` with details computed against the strictest gate. `10` defines the code as the gate not met, with an `outcome` of `present`, `enrol`, `report-loss` or `pending`. Where the session meets that gate already the judgement is satisfied, for which the refusal has no outcome.
+- **What the code does.** That case is unchanged: nothing is issued, sent or counted, the consideration is recorded, and the ask answers 202. Every unmet case answers the 403.
+- **Parked.** The answer of that case.
+- **Answer:** pending.
+
+**146. Tier 2. CONV-VCS-004: question 94 carries no truth-table row.**
+
+- **Item.** Question 94.
+- **What the code does.** The change is in `src/Janus.Authentication` and one line of an endpoint, outside the paths the truth-table change check names, and the table's fixture has no sign-in, phone signal or step-up challenge to drive a row.
+- **What the specification says.** CONV-VCS-004 binds a change to permission logic by its definition of the paths. The owner's order of work names 94 among the changes that carry a truth-table change.
+- **Readings.**
+  1. The change is outside permission logic as CONV-VCS-004 defines it: no row.
+  2. The table gains a row for it, and its fixture the sign-in it needs.
+- **Parked.** The row.
+- **Answer:** pending.
+
+**147. Tier 2. PRIV-RIGHT-005a criterion 14 and PRIV-RIGHT-002: schema the answers do not spell out.**
+
+- **Item.** Question 113 and the receipt.
+- **What the code does.** `invitations.wrapped_key` is not null, `ck_invitations_key` reads "the encrypted value is null exactly where the key is the 32 zero bytes", and the migration gives the erased key to rows already forgotten. `privacy_requests.receipt_sent_at` is a new nullable column, set to `created_at` for existing rows; `receiptSentAt` is the creation instant where at least one channel admitted the receipt.
+- **What the specification says.** Criterion 14 states the erased key and the null value. PRIV-RIGHT-002 states `receiptSentAt` null where the receipt is refused. Neither names the constraint, the nullability or the column.
+- **Readings.**
+  1. As built.
+  2. A nullable key column or another constraint; `receiptSentAt` as the instant of the send's admission.
+- **Parked.** Nothing: reading 1 is built.
 - **Answer:** pending.
 
 ## 5. Gate result
