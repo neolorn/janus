@@ -974,6 +974,10 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddScoped<IConsents, ConsentService>();
         _ = services.AddSingleton<IPrivacyRequestStore>(Requests);
         _ = services.AddSingleton<IAccountStates>(AccountStates);
+        _ = services.AddSingleton<Janus.Privacy.Bases.ILawfulBasisStore>(
+            new Janus.Privacy.Tests.Bases.LawfulBasisStoreInMemory());
+        _ = services.AddSingleton<Janus.Privacy.SubjectKeys.ISubjectKeyStore>(
+            new Janus.Privacy.Tests.SubjectKeys.SubjectKeyStoreInMemory());
         _ = services.AddSingleton<Janus.Privacy.Outbox.IOutboxStore>(Outbox);
         _ = services.AddSingleton<ISubjectNotices>(Notices);
         _ = services.AddScoped<WorkingCalendar>();

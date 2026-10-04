@@ -62,6 +62,14 @@ internal static class PublicationEndpoints
         ArgumentNullException.ThrowIfNull(documents);
         ArgumentNullException.ThrowIfNull(browser);
 
+        // 09 section 8a, INT-SMS-003 (D-183): a name outside the rule is refused before
+        // anything of the body is judged, so nothing is published and no condition is
+        // raised under it.
+        if (!PlaceName.Holds(document))
+        {
+            return Answers.Malformed("document");
+        }
+
         if (body.Material is not bool material)
         {
             return Answers.Malformed("material");
@@ -101,6 +109,11 @@ internal static class PublicationEndpoints
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(documents);
         ArgumentNullException.ThrowIfNull(browser);
+
+        if (!PlaceName.Holds(document))
+        {
+            return Answers.Malformed("document");
+        }
 
         if (body.Text is not { } text || string.IsNullOrWhiteSpace(text))
         {

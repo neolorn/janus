@@ -1560,7 +1560,7 @@ Janus.Core.LandingOrigins.LandingOrigins(string! Authentication, string! Account
 Janus.Core.LawfulBases
 Janus.Core.LawfulBasisDeclaration
 Janus.Core.LawfulBasisDeclaration.<Clone>$() -> Janus.Core.LawfulBasisDeclaration!
-Janus.Core.LawfulBasisDeclaration.Deconstruct(out string! Key, out bool IsConsent, out bool RequiresWrittenConsentForSensitive, out bool RequiresAssessment, out bool IsObjectable) -> void
+Janus.Core.LawfulBasisDeclaration.Deconstruct(out string! Key, out string! Label, out bool IsConsent, out bool RequiresWrittenConsentForSensitive, out bool RequiresAssessment, out bool IsObjectable) -> void
 Janus.Core.LawfulBasisDeclaration.Equals(Janus.Core.LawfulBasisDeclaration? other) -> bool
 Janus.Core.LawfulBasisDeclaration.IsConsent.get -> bool
 Janus.Core.LawfulBasisDeclaration.IsConsent.init -> void
@@ -1568,7 +1568,9 @@ Janus.Core.LawfulBasisDeclaration.IsObjectable.get -> bool
 Janus.Core.LawfulBasisDeclaration.IsObjectable.init -> void
 Janus.Core.LawfulBasisDeclaration.Key.get -> string!
 Janus.Core.LawfulBasisDeclaration.Key.init -> void
-Janus.Core.LawfulBasisDeclaration.LawfulBasisDeclaration(string! Key, bool IsConsent, bool RequiresWrittenConsentForSensitive, bool RequiresAssessment, bool IsObjectable) -> void
+Janus.Core.LawfulBasisDeclaration.Label.get -> string!
+Janus.Core.LawfulBasisDeclaration.Label.init -> void
+Janus.Core.LawfulBasisDeclaration.LawfulBasisDeclaration(string! Key, string! Label, bool IsConsent, bool RequiresWrittenConsentForSensitive, bool RequiresAssessment, bool IsObjectable) -> void
 Janus.Core.LawfulBasisDeclaration.RequiresAssessment.get -> bool
 Janus.Core.LawfulBasisDeclaration.RequiresAssessment.init -> void
 Janus.Core.LawfulBasisDeclaration.RequiresWrittenConsentForSensitive.get -> bool
@@ -1999,8 +2001,8 @@ Janus.Core.PrivacyRequest.DecisionDue.get -> System.DateTimeOffset
 Janus.Core.PrivacyRequest.DecisionDue.init -> void
 Janus.Core.PrivacyRequest.DecisionReason.get -> string?
 Janus.Core.PrivacyRequest.DecisionReason.init -> void
-Janus.Core.PrivacyRequest.Deconstruct(out Janus.Core.PrivacyRequestId Id, out Janus.Core.SubjectId Subject, out Janus.Core.PrivacyRequestType Type, out string! Detail, out System.DateOnly ReceivedAt, out System.DateTimeOffset CreatedAt, out System.DateTimeOffset ReceiptSentAt, out System.DateTimeOffset DecisionDue, out Janus.Core.PrivacyRequestStatus Status, out System.DateTimeOffset? DecidedAt, out string? DecisionReason, out string? Channel, out string? IdentityConfirmation) -> void
-Janus.Core.PrivacyRequest.Detail.get -> string!
+Janus.Core.PrivacyRequest.Deconstruct(out Janus.Core.PrivacyRequestId Id, out Janus.Core.SubjectId Subject, out Janus.Core.PrivacyRequestType Type, out string? Detail, out System.DateOnly ReceivedAt, out System.DateTimeOffset CreatedAt, out System.DateTimeOffset ReceiptSentAt, out System.DateTimeOffset DecisionDue, out Janus.Core.PrivacyRequestStatus Status, out System.DateTimeOffset? DecidedAt, out string? DecisionReason, out string? Channel, out string? IdentityConfirmation) -> void
+Janus.Core.PrivacyRequest.Detail.get -> string?
 Janus.Core.PrivacyRequest.Detail.init -> void
 Janus.Core.PrivacyRequest.Equals(Janus.Core.PrivacyRequest? other) -> bool
 Janus.Core.PrivacyRequest.Id.get -> Janus.Core.PrivacyRequestId
@@ -2008,7 +2010,7 @@ Janus.Core.PrivacyRequest.Id.init -> void
 Janus.Core.PrivacyRequest.IdentityConfirmation.get -> string?
 Janus.Core.PrivacyRequest.IdentityConfirmation.init -> void
 Janus.Core.PrivacyRequest.Open.get -> bool
-Janus.Core.PrivacyRequest.PrivacyRequest(Janus.Core.PrivacyRequestId Id, Janus.Core.SubjectId Subject, Janus.Core.PrivacyRequestType Type, string! Detail, System.DateOnly ReceivedAt, System.DateTimeOffset CreatedAt, System.DateTimeOffset ReceiptSentAt, System.DateTimeOffset DecisionDue, Janus.Core.PrivacyRequestStatus Status, System.DateTimeOffset? DecidedAt, string? DecisionReason, string? Channel, string? IdentityConfirmation) -> void
+Janus.Core.PrivacyRequest.PrivacyRequest(Janus.Core.PrivacyRequestId Id, Janus.Core.SubjectId Subject, Janus.Core.PrivacyRequestType Type, string? Detail, System.DateOnly ReceivedAt, System.DateTimeOffset CreatedAt, System.DateTimeOffset ReceiptSentAt, System.DateTimeOffset DecisionDue, Janus.Core.PrivacyRequestStatus Status, System.DateTimeOffset? DecidedAt, string? DecisionReason, string? Channel, string? IdentityConfirmation) -> void
 Janus.Core.PrivacyRequest.ReceiptSentAt.get -> System.DateTimeOffset
 Janus.Core.PrivacyRequest.ReceiptSentAt.init -> void
 Janus.Core.PrivacyRequest.ReceivedAt.get -> System.DateOnly
@@ -2023,13 +2025,13 @@ Janus.Core.PrivacyRequestEntry
 Janus.Core.PrivacyRequestEntry.<Clone>$() -> Janus.Core.PrivacyRequestEntry!
 Janus.Core.PrivacyRequestEntry.Channel.get -> string!
 Janus.Core.PrivacyRequestEntry.Channel.init -> void
-Janus.Core.PrivacyRequestEntry.Deconstruct(out Janus.Core.SubjectId Subject, out Janus.Core.PrivacyRequestType Type, out string! Detail, out System.DateOnly ReceivedAt, out string! Channel, out string! IdentityConfirmation) -> void
-Janus.Core.PrivacyRequestEntry.Detail.get -> string!
+Janus.Core.PrivacyRequestEntry.Deconstruct(out Janus.Core.SubjectId Subject, out Janus.Core.PrivacyRequestType Type, out string? Detail, out System.DateOnly ReceivedAt, out string! Channel, out string! IdentityConfirmation) -> void
+Janus.Core.PrivacyRequestEntry.Detail.get -> string?
 Janus.Core.PrivacyRequestEntry.Detail.init -> void
 Janus.Core.PrivacyRequestEntry.Equals(Janus.Core.PrivacyRequestEntry? other) -> bool
 Janus.Core.PrivacyRequestEntry.IdentityConfirmation.get -> string!
 Janus.Core.PrivacyRequestEntry.IdentityConfirmation.init -> void
-Janus.Core.PrivacyRequestEntry.PrivacyRequestEntry(Janus.Core.SubjectId Subject, Janus.Core.PrivacyRequestType Type, string! Detail, System.DateOnly ReceivedAt, string! Channel, string! IdentityConfirmation) -> void
+Janus.Core.PrivacyRequestEntry.PrivacyRequestEntry(Janus.Core.SubjectId Subject, Janus.Core.PrivacyRequestType Type, string? Detail, System.DateOnly ReceivedAt, string! Channel, string! IdentityConfirmation) -> void
 Janus.Core.PrivacyRequestEntry.ReceivedAt.get -> System.DateOnly
 Janus.Core.PrivacyRequestEntry.ReceivedAt.init -> void
 Janus.Core.PrivacyRequestEntry.Subject.get -> Janus.Core.SubjectId

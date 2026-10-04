@@ -19,6 +19,7 @@ internal sealed class AccountStatesInMemory : IAccountStates
     private readonly Dictionary<SubjectId, (AccountState State, PendingDeletion? Deletion)> _found = [];
     private readonly Dictionary<SubjectId, DateTimeOffset> _sessionsEnded = [];
     private readonly HashSet<SubjectId> _held = [];
+    private readonly HashSet<SubjectId> _reserved = [];
 
     /// <summary>
     /// Puts an account in a state, as a deployment has one.
@@ -26,6 +27,12 @@ internal sealed class AccountStatesInMemory : IAccountStates
     /// <param name="subject">Whose.</param>
     /// <param name="state">Which state.</param>
     public void Hold(SubjectId subject, AccountState state) => _states[subject] = state;
+
+    /// <summary>
+    /// Marks an account as the reserved emergency account.
+    /// </summary>
+    /// <param name="subject">Whose.</param>
+    public void Reserve(SubjectId subject) => _ = _reserved.Add(subject);
 
     /// <summary>
     /// Holds no account for the subject, as where none was ever created.
@@ -179,7 +186,12 @@ internal sealed class AccountStatesInMemory : IAccountStates
         PendingDeletion? deletion = _deletions.GetValueOrDefault(subject);
 
         return ValueTask.FromResult<AccountStanding?>(
-            new AccountStanding(state, deletion?.By, deletion?.Since, deletion?.HeldSince));
+            new AccountStanding(
+                state,
+                deletion?.By,
+                deletion?.Since,
+                deletion?.HeldSince,
+                _reserved.Contains(subject)));
     }
 
     /// <inheritdoc/>

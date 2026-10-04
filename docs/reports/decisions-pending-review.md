@@ -12424,6 +12424,8 @@ and that retirement is the operator's removal once the command records it; chapt
 could list the four `ops.keyrotation` actions and the `key-rotation` operation; the
 runbook's section 9 could give the order above.
 
+**Superseded by D-166.**
+
 ---
 
 ## 318. What the fingerprint key's rotation computes again, and what it keeps until the previous version retires
@@ -12536,6 +12538,8 @@ retirement and that retirement waits for held usernames and unlapsed reservation
 IDN-LIFE-012a could say the provider's subject is held encrypted beside its
 fingerprint; AUTH-ABUSE-004 AC6 could admit the version; OPS-MIG-003a AC4 could list
 the rights above; the runbook's "printed but not rotated" could point at the command.
+
+**Superseded by D-166.**
 
 ---
 

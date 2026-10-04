@@ -136,6 +136,54 @@ public sealed class PublicationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// INT-SMS-003, 09 section 8a (D-183): a publication under a name outside the rule a
+    /// document's name is held to is malformed naming <c>document</c>, whatever its body
+    /// carries, and publishes nothing.
+    /// </summary>
+    /// <param name="document">The name in the path.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("Terms")]
+    [InlineData("terms..of-service")]
+    [InlineData("-terms")]
+    [InlineData("terms%20of%20service")]
+    [InlineData("a123456789a123456789a123456789a123456789a123456789a123456789a1234")]
+    public async Task INT_SMS_003_APublicationUnderANameOutsideTheRuleIsMalformedAsync(string document)
+    {
+        Browser browser = await AuthorisedAsync();
+
+        Answer refused = await browser.SendAsync(
+            "POST",
+            $"/admin/documents/{document}/versions",
+            """{ "governingLanguage": "ar", "material": true }""");
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), refused.Text("code"));
+        Assert.Equal("document", refused.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Empty(_deployment.Documents.Versions);
+    }
+
+    /// <summary>
+    /// INT-SMS-003, 09 section 8a (D-183): a translation attached under a name outside
+    /// the rule is malformed naming <c>document</c>, not a document that was not found.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_SMS_003_ATranslationUnderANameOutsideTheRuleIsMalformedAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+
+        Answer refused = await browser.SendAsync(
+            "PUT",
+            "/admin/documents/Terms/versions/1/translations/en",
+            """{ "text": "The translation." }""");
+
+        Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), refused.Text("code"));
+        Assert.Equal("document", refused.Json().GetProperty("details").GetProperty("member").GetString());
+    }
+
+    /// <summary>
     /// AUTHZ-CONCEAL-005 AC1: without <c>notice:publish</c> each is refused forbidden.
     /// </summary>
     /// <returns>The work of the test.</returns>

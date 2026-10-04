@@ -1575,7 +1575,51 @@ against the public contract of LIB-API-001.
   recorded fulfilled against that window, as one found already deleting is, rather
   than refused `identity.account.stateconflict`.
 - A privacy request entered out of band refuses a `detail` given blank or past 1024
-  characters after trimming, and keeps one within the bound trimmed.
+  characters after trimming, and keeps one within the bound trimmed. An absent or
+  `null` `detail` records none: `PrivacyRequestEntry.Detail` and
+  `PrivacyRequest.Detail` are nullable, the `detail` column of `privacy_requests`
+  takes null, and an empty text is never stored for none.
+- The declared lawful bases are held in `identity.lawful_bases` (`key`, `label` and
+  the four flags). The start writes the table before the server serves, in one
+  transaction that holds it: each declared basis is inserted or updated by its key and
+  every other row is deleted, so of two starts the later list stands whole.
+  `LawfulBasisDeclaration` gains `Label`, `LawfulBases.Default` carries the labels of
+  chapter 10 section 5.7, and the records of processing emit the label, not the key. A
+  list naming one key twice, or a basis with an empty key or label, fails startup with
+  `model.startup.declarationinvalid`, `details.declaration` `lawfulBases` and
+  `details.field` `key` or `label`.
+- `rotate-fingerprint-key --sealed` waits for everything that lapses on a clock of
+  its own: it is refused with `model.rotation.notready` and `pending` while a sign-in
+  in progress carries a fingerprint computed under a previous version, as it is for a
+  held username, an unlapsed reservation and an abuse count that still counts. At
+  retirement it deletes unspent restriction credit and released username holds under a
+  previous version, and nothing else: a migration revokes the maintenance role's
+  `DELETE` on the abuse ledgers and on the sign-ins in progress, whose versions it
+  still reads.
+- A value wrapped under a key-encryption key version the application does not hold
+  fails to unwrap as a fault carrying `model.startup.secretunavailable`,
+  `details.key` `keyEncryptionKeys` and `details.version`: a request is answered
+  `system.fault` and the log names the code, the key and the version; a job fails its
+  run; a command exits 1 with the code. The erased value is read first, so an erased
+  key is no fault. The start is refused with the same code, naming the lowest such
+  version, where a subject key that is not erased stands under a version the secret
+  source does not supply.
+- `PUT /admin/compliance/assessments` reads the measures as
+  `organizationalSecurityMeasures`, and holds `dataOwner` and it to the bound of free
+  text: each is trimmed, refused 400 `api.request.malformed` naming the member where
+  blank or past 1024 characters, at the endpoint and by `IProcessingRecords` for a
+  caller in process, and cleared where the statement omits it.
+- `GET /privacy/documents/{document}`, `POST /admin/documents/{document}/versions`
+  and the translation route refuse a `{document}` that is not a document name (1 to
+  64 lower-case letters and digits separated by single `.`, `-` or `_`) with 400
+  `api.request.malformed` naming `document`: nothing is read or published, and no
+  condition is raised under the name.
+- A privacy request entered out of band for a subject no account bears is refused
+  422 `api.request.invalid` naming `subject`. The fulfilment of an erasure refuses
+  nothing on the account's state or existence: it no longer answers
+  `identity.account.notfound`, and a deletion that will not begin is a fault. An
+  erasure of the reserved `emergency` account is refused 403 `authz.denied` once the
+  account is read, before the step-up.
 - A maintenance log entry's `note`, where one is given, is 1 to 1024 characters after
   trimming, refused `api.request.malformed` otherwise, and kept trimmed.
 - A recovery approval refuses a reason or a `channelUsed` past 1024 characters after

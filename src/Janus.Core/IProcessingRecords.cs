@@ -31,7 +31,11 @@ public interface IProcessingRecords
     /// <param name="context">Who is asking.</param>
     /// <param name="record">What they supplied.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Nothing, or the refusal.</returns>
+    /// <returns>
+    /// Nothing, or the refusal: <c>api.request.malformed</c> naming <c>dataOwner</c> or
+    /// <c>organizationalSecurityMeasures</c> where the statement is given blank or
+    /// longer than 1024 characters after trimming. One omitted is cleared.
+    /// </returns>
     ValueTask<Result> DeclareAsync(
         AccessContext context,
         ComplianceRecord record,

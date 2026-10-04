@@ -341,6 +341,10 @@ public static class HostingRegistration
         services.Insert(9, ServiceDescriptor.Singleton<IHostedService, ProviderStartService>());
         services.Insert(10, ServiceDescriptor.Singleton<IHostedService, RelayValidationService>());
 
+        // PRIV-BASIS-001 (D-183): the declared lawful bases are written into their table
+        // once the model and the schema have been checked, and before the server serves.
+        services.Insert(11, ServiceDescriptor.Singleton<IHostedService, LawfulBasisStartService>());
+
         // INF-BG-001: the scheduled work starts once the checks above have passed.
         services.AddHostedService(provider => new BackgroundWorker(
             provider.GetRequiredService<IServiceScopeFactory>(),

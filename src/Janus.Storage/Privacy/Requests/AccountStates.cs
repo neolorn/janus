@@ -119,7 +119,8 @@ internal sealed class AccountStates(IAccountStore accounts, ISessionStore sessio
                 account.State,
                 account.DeletingBy,
                 account.DeletingSince,
-                account.DeletionHeldSince)
+                account.DeletionHeldSince,
+                account.IsEmergency)
             : null;
 
     /// <inheritdoc/>

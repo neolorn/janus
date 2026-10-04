@@ -1,9 +1,12 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
 using Janus.Privacy.SubjectKeys;
+using Microsoft.EntityFrameworkCore;
 
 namespace Janus.Storage.Privacy.SubjectKeys;
 
@@ -32,6 +35,16 @@ internal sealed class SubjectKeyStore(
             record.KeyVersion,
             record.WrappedKey);
     }
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlySet<int>> WrappingVersionsAsync(CancellationToken cancellationToken) =>
+        (await context.SubjectKeys
+            .Where(key => key.FormatMarker != PersonalDataFormat.ErasedMarker)
+            .Select(key => key.KeyVersion)
+            .Distinct()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false))
+        .ToHashSet();
 
     /// <inheritdoc/>
     public async ValueTask AddAsync(SubjectKey key, CancellationToken cancellationToken)

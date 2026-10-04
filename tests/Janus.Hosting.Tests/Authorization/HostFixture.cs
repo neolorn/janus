@@ -239,18 +239,21 @@ public sealed class HostFixture : IAsyncLifetime
             .RetentionFloor("history", TimeSpan.FromDays(365))
             .LawfulBasis(new LawfulBasisDeclaration(
                 "contract",
+                "Contract",
                 IsConsent: false,
                 RequiresWrittenConsentForSensitive: false,
                 RequiresAssessment: false,
                 IsObjectable: false))
             .LawfulBasis(new LawfulBasisDeclaration(
                 "agreement",
+                "Agreement",
                 IsConsent: true,
                 RequiresWrittenConsentForSensitive: true,
                 RequiresAssessment: false,
                 IsObjectable: false))
             .LawfulBasis(new LawfulBasisDeclaration(
                 "legal-obligation",
+                "Legal obligation",
                 IsConsent: false,
                 RequiresWrittenConsentForSensitive: false,
                 RequiresAssessment: false,

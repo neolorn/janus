@@ -295,6 +295,22 @@ internal static class PrivacyEndpoints
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(records);
 
+        // 09 section 8a, API-CONV-002 (D-183): the two statements are free text, so one
+        // given is trimmed and refused blank or past the bound; one omitted is cleared.
+        string? dataOwner = request.DataOwner?.Trim();
+
+        if (dataOwner is { Length: 0 or > 1024 })
+        {
+            return Answers.Malformed("dataOwner");
+        }
+
+        string? measures = request.OrganizationalSecurityMeasures?.Trim();
+
+        if (measures is { Length: 0 or > 1024 })
+        {
+            return Answers.Malformed("organizationalSecurityMeasures");
+        }
+
         AccessContext holder = Asking(browser);
 
         return Answers.Of(
@@ -302,8 +318,8 @@ internal static class PrivacyEndpoints
                 .DeclareAsync(
                     holder,
                     new ComplianceRecord(
-                        request.DataOwner,
-                        request.OrganisationalSecurityMeasures,
+                        dataOwner,
+                        measures,
                         request.AssessmentLinks ?? []),
                     cancellationToken)
                 .ConfigureAwait(false),
@@ -362,8 +378,9 @@ internal static class PrivacyEndpoints
             return Answers.Malformed("receivedAt");
         }
 
-        // 09 section 8a: the detail is optional, and one given is 1 to 1024 characters
-        // after trimming, as the channel and the confirmation are (API-CONV-002).
+        // 09 section 8a: the detail is optional, absent or null recording none, and one
+        // given is 1 to 1024 characters after trimming, as the channel and the
+        // confirmation are (API-CONV-002).
         string? detail = body.Detail?.Trim();
 
         if (detail is { Length: 0 or > 1024 })
@@ -390,7 +407,7 @@ internal static class PrivacyEndpoints
                     new PrivacyRequestEntry(
                         new SubjectId(subject),
                         type,
-                        detail ?? string.Empty,
+                        detail,
                         receivedAt,
                         channel,
                         confirmation),
@@ -508,7 +525,9 @@ internal static class PrivacyEndpoints
     {
         ArgumentNullException.ThrowIfNull(documents);
 
-        return document is not { Length: > 0 }
+        // 09 section 7, INT-SMS-003 (D-183): a name outside the rule a document's name is
+        // held to names no document, and is refused before anything is read.
+        return !PlaceName.Holds(document)
             ? Answers.Malformed("document")
             : Answers.Of(
                 await documents.ReadAsync(document, version, cancellationToken).ConfigureAwait(false),

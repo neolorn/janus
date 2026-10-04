@@ -30,7 +30,7 @@ internal sealed record HeldRequest(
     PrivacyRequestId Id,
     SubjectId Subject,
     PrivacyRequestType Type,
-    string Detail,
+    string? Detail,
     DateOnly ReceivedAt,
     DateTimeOffset CreatedAt,
     DateTimeOffset DecisionDue,

@@ -3397,6 +3397,39 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     });
             });
 
+        modelBuilder.Entity("Janus.Storage.Privacy.Bases.LawfulBasisRow", b =>
+            {
+                b.Property<string>("Key")
+                    .HasColumnType("text")
+                    .HasColumnName("key");
+
+                b.Property<bool>("IsConsent")
+                    .HasColumnType("boolean")
+                    .HasColumnName("is_consent");
+
+                b.Property<bool>("IsObjectable")
+                    .HasColumnType("boolean")
+                    .HasColumnName("is_objectable");
+
+                b.Property<string>("Label")
+                    .IsRequired()
+                    .HasColumnType("text")
+                    .HasColumnName("label");
+
+                b.Property<bool>("RequiresAssessment")
+                    .HasColumnType("boolean")
+                    .HasColumnName("requires_assessment");
+
+                b.Property<bool>("RequiresWrittenConsentForSensitive")
+                    .HasColumnType("boolean")
+                    .HasColumnName("requires_written_consent_for_sensitive");
+
+                b.HasKey("Key")
+                    .HasName("pk_lawful_bases");
+
+                b.ToTable("lawful_bases", "identity");
+            });
+
         modelBuilder.Entity("Janus.Storage.Privacy.Consents.ConsentRecordRow", b =>
             {
                 b.Property<Guid>("Subject")
@@ -3787,7 +3820,6 @@ partial class StoreContextModelSnapshot : ModelSnapshot
                     .HasColumnName("decision_reason");
 
                 b.Property<string>("Detail")
-                    .IsRequired()
                     .HasColumnType("text")
                     .HasColumnName("detail");
 

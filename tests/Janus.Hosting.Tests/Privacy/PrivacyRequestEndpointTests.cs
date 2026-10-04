@@ -109,7 +109,7 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
     public async Task PRIV_RIGHT_001_AC2_AnAuthorisedHumanEntersAnOutOfBandRequestAsync()
     {
         Browser browser = await AuthorisedAsync();
-        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        SubjectId subject = Borne();
 
         Answer entered = await browser.SendAsync(
             "POST",
@@ -141,7 +141,7 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
     public async Task PRIV_RIGHT_002_AC1_ADateLaterThanTodayIsRefusedAsync()
     {
         Browser browser = await AuthorisedAsync();
-        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        SubjectId subject = Borne();
 
         Answer entered = await browser.SendAsync(
             "POST",
@@ -244,7 +244,7 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
     public async Task API_CONV_002_AnEntryWithABlankChannelOrConfirmationIsRefusedAsync(string member)
     {
         Browser browser = await AuthorisedAsync();
-        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        SubjectId subject = Borne();
 
         Answer entered = await browser.SendAsync(
             "POST",
@@ -262,6 +262,58 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// PRIV-RIGHT-001, 09 section 8a (D-183): an entry naming a subject no account bears
+    /// is refused 422 naming the member, and the queue takes nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task PRIV_RIGHT_001_AnEntryForASubjectNoAccountBearsIsRefusedAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+
+        Answer entered = await browser.SendAsync(
+            "POST",
+            "/admin/privacy/requests/",
+            ("subject", Guid.NewGuid().ToString()),
+            ("type", "erasure"),
+            ("receivedAt", "2026-02-27"),
+            ("channel", "letter"),
+            ("identityConfirmation", "national identity card seen"));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, entered.Status);
+        Assert.Equal(ErrorCodes.RequestInvalid.ToString(), entered.Text("code"));
+        Assert.Equal("subject", entered.Json().GetProperty("details").GetProperty("member").GetString());
+        Assert.Empty(_deployment.Requests.Queue);
+    }
+
+    /// <summary>
+    /// API-CONV-002 AC3, 09 section 8a: an entry whose body carries no detail is taken,
+    /// records none, and reads back from the queue with none.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_CONV_002_AnEntryWithNoDetailIsTakenAndRecordsNoneAsync()
+    {
+        Browser browser = await AuthorisedAsync();
+        SubjectId subject = Borne();
+
+        Answer entered = await browser.SendAsync(
+            "POST",
+            "/admin/privacy/requests/",
+            ("subject", subject.Value.ToString()),
+            ("type", "erasure"),
+            ("receivedAt", "2026-02-27"),
+            ("channel", "letter"),
+            ("identityConfirmation", "national identity card seen"));
+
+        JsonElement held = Single(await browser.SendAsync("GET", "/admin/privacy/requests/"));
+
+        Assert.Equal(StatusCodes.Status202Accepted, entered.Status);
+        Assert.Null(Assert.Single(_deployment.Requests.Queue).Detail);
+        Assert.Equal(JsonValueKind.Null, held.GetProperty("detail").ValueKind);
+    }
+
+    /// <summary>
     /// API-CONV-002 AC3, CONV-CODE-006 AC3: an entry's detail given blank, or longer
     /// than 1024 characters after trimming, is refused naming it before the service is
     /// reached, so a caller without the permission is answered for the body.
@@ -270,6 +322,7 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
     /// <param name="length">How many of it.</param>
     /// <returns>The work of the test.</returns>
     [Theory]
+    [InlineData('d', 0)]
     [InlineData(' ', 3)]
     [InlineData('d', 1025)]
     public async Task API_CONV_002_AnEntryWithADetailOutsideTheBoundIsRefusedBeforeTheServiceAsync(
@@ -277,7 +330,7 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
         int length)
     {
         Browser browser = await Flow.SignedInAsync(_deployment);
-        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        SubjectId subject = Borne();
 
         Answer entered = await browser.SendAsync(
             "POST",
@@ -366,10 +419,20 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
         return Assert.Single(answer.Json().EnumerateArray());
     }
 
+    // The signed-in account, as the accounts table of a deployment bears it.
+    private SubjectId Borne()
+    {
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+
+        _deployment.AccountStates.Hold(subject, AccountState.Active);
+
+        return subject;
+    }
+
     private async Task<Browser> AuthorisedAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);
-        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        SubjectId subject = Borne();
 
         _deployment.Administers(Company);
         _deployment.Gate.Grant(subject, Company, Permissions.PrivacyRequestManage);

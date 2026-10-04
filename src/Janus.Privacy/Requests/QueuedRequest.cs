@@ -19,7 +19,7 @@ internal sealed class QueuedRequest
         PrivacyRequestId id,
         SubjectId subject,
         PrivacyRequestType type,
-        string detail,
+        string? detail,
         DateOnly receivedAt,
         DateTimeOffset createdAt,
         Deadline deadline,
@@ -50,8 +50,8 @@ internal sealed class QueuedRequest
     /// <summary>What it asks for.</summary>
     public PrivacyRequestType Type { get; }
 
-    /// <summary>What the subject, or the human entering it, wrote.</summary>
-    public string Detail { get; }
+    /// <summary>What the subject, or the human entering it, wrote, where either wrote any.</summary>
+    public string? Detail { get; }
 
     /// <summary>The calendar date it reached the company.</summary>
     public DateOnly ReceivedAt { get; }

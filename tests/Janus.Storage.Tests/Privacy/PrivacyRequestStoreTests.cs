@@ -7,6 +7,7 @@ using Janus.Identity.Accounts;
 using Janus.Privacy.Requests;
 using Janus.Storage.Identity.Accounts;
 using Janus.Storage.Privacy.Requests;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace Janus.Storage.Tests.Privacy;
@@ -49,6 +50,7 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
 
         Assert.Equal(subject, held.Subject);
         Assert.Equal(PrivacyRequestType.Erasure, held.Type);
+        Assert.Equal("please act on this", held.Detail);
         Assert.Equal(new DateOnly(2026, 9, 18), held.ReceivedAt);
         Assert.Equal(Noon, held.CreatedAt);
         Assert.Equal(Noon, held.ReceiptSentAt);
@@ -58,6 +60,34 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
         Assert.Equal("letter", held.Channel);
         Assert.Equal("national identity card seen", held.IdentityConfirmation);
         Assert.True(held.Open);
+    }
+
+    /// <summary>
+    /// API-CONV-002 AC3: a request entered with no detail holds none in its row, not an
+    /// empty text, and reads back with none.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task API_CONV_002_AnEntryWithNoDetailIsStoredAsNoneAsync()
+    {
+        SubjectId subject = await RegisteredAsync();
+        QueuedRequest written = Entered(subject, PrivacyRequestType.Erasure, detail: null);
+
+        await WritingAsync(async store => await store.AddAsync(
+            written,
+            TestContext.Current.CancellationToken));
+
+        await using StoreContext reading = database.Context();
+
+        QueuedRequest held = Assert.IsType<QueuedRequest>(
+            await new PrivacyRequestStore(reading, new DataConnections(reading))
+                .FindAsync(written.Id, TestContext.Current.CancellationToken));
+
+        Assert.Null(held.Detail);
+        Assert.Null(await reading.PrivacyRequests
+            .Where(row => row.Id == written.Id)
+            .Select(row => row.Detail)
+            .SingleAsync(TestContext.Current.CancellationToken));
     }
 
     /// <summary>
@@ -211,12 +241,15 @@ public sealed class PrivacyRequestStoreTests(DatabaseFixture database) : IClassF
                 .Count(request => request.Subject == subject));
     }
 
-    private static QueuedRequest Entered(SubjectId subject, PrivacyRequestType type) =>
+    private static QueuedRequest Entered(
+        SubjectId subject,
+        PrivacyRequestType type,
+        string? detail = "please act on this") =>
         QueuedRequest.Entered(
             new PrivacyRequestEntry(
                 subject,
                 type,
-                "please act on this",
+                detail,
                 new DateOnly(2026, 9, 18),
                 "letter",
                 "national identity card seen"),

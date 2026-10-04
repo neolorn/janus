@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -17,6 +18,13 @@ internal interface ISubjectKeyStore
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The key, or nothing where the subject has none.</returns>
     ValueTask<SubjectKey?> FindBySubjectAsync(SubjectId subject, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The key-encryption key versions the keys that are not erased stand under.
+    /// </summary>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The versions; none where every key is erased or none is held.</returns>
+    ValueTask<IReadOnlySet<int>> WrappingVersionsAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Records a subject's key. It is written in the transaction that creates the

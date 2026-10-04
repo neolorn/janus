@@ -413,6 +413,16 @@ public sealed class ModelTests
             "key_rotations.started_at",
             "key_rotations.version",
 
+            // Not an account field: the lawful bases the host declared, each with the
+            // properties the library branches on, written whole at every start
+            // (PRIV-BASIS-001).
+            "lawful_bases.is_consent",
+            "lawful_bases.is_objectable",
+            "lawful_bases.key",
+            "lawful_bases.label",
+            "lawful_bases.requires_assessment",
+            "lawful_bases.requires_written_consent_for_sensitive",
+
             // Not an account field: the legal documents the deployment publishes, each
             // version binding in the one language it names (PRIV-CONS-005,
             // PRIV-CONS-006).
