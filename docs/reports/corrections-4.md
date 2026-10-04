@@ -1384,6 +1384,21 @@ Tests: `ValueLockTests.REG_SESS_005_AC6_ATermsStepAndAnotherAccountsAddAtOnceLea
 - No public surface change, no change to permission logic, no ledger line.
 - Parked: nothing unbuilt; questions 148 to 150.
 
+### `part/identifiers`, merged as `4e94d18c`: questions 115 and 116, question 31 at an add and a replace, D-166 306
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 116: the old address's confirmation is a verification-code record of its own, living `code.verification.lifetime` from its send; the press spends it; a press past its lifetime writes nothing and answers 422 `auth.code.expired`; an abandon and a removal end both records | `c57df044` | REG-IDENT-007, AUTH-FACT-004 | `IdentifierServiceTests.REG_IDENT_007_TheConfirmationIsHeldInARecordOfItsOwnAsync`, `IdentifierServiceTests.REG_IDENT_007_AC2_TheConfirmingPressSpendsItsRecordAsync`, `IdentifierServiceTests.REG_IDENT_007_AC6_AConfirmationPressedPastItsLifetimeChangesNothingAsync`, `IdentifierServiceTests.REG_IDENT_007_AnAbandonedReplaceLeavesNoRecordAsync`, `IdentifierServiceTests.AUTH_FACT_004_TheHolderTakesTheUuidInTheOrderOfRfc9562` |
+| Question 115: every add is a pending verification, listed as an unverified identifier under its identifier and counted toward the maximum; the identifier is written at verification; at the right code or a press the value is judged again under its lock, and held or reserved to another answers 422 `auth.code.expired` with nothing written, at an add and at a replace's swap; a pending add made primary or named as backup is `identity.identifier.unverified`; its removal ends it as an abandon does; a code send a restriction refuses stages nothing (429), alike for a held value; a held or reserved value stages a record no code answers. Ledger line 115 | `221398ae` | REG-IDENT-004, REG-IDENT-006, REG-IDENT-007, REG-SESS-005 | `IdentifierServiceTests.REG_IDENT_004_AC5_AnAddWritesNoIdentifierUntilItVerifiesAsync`, `IdentifierServiceTests.REG_IDENT_004_AC5_AnAddOfAHeldValueIsStagedAndListedAlikeAsync`, `IdentifierServiceTests.REG_IDENT_004_AC6_APendingAddCountsTowardTheMaximumUntilItIsAbandonedAsync`, `IdentifierServiceTests.REG_IDENT_004_AC7_TheSecondOfTwoAccountsToVerifyOneValueIsAnsweredExpiredAsync`, `IdentifierServiceTests.REG_IDENT_004_APressForAValueHeldSinceTheAddWritesNothingAsync`, `IdentifierServiceTests.REG_IDENT_004_AnAddOfAValueTheAccountHoldsIsRolledBackAsync`, `IdentifierServiceTests.REG_SESS_005_AC5_ACodeForAHeldValueAtAnAddIsAnsweredAsAWrongOneAsync`, `IdentifierServiceTests.REG_SESS_005_AC5_ACodeForAHeldValueAtAReplaceIsAnsweredAsAWrongOneAsync`, `IdentifierServiceTests.REG_SESS_005_AValueTakenWhileTheAdditionWaitedForItsLockIsJudgedHeldAsync`, `IdentifierServiceTests.REG_IDENT_001_AC2_ANumberOnOneAccountDoesNotVerifyOnAnotherAsync`, `IdentifierServiceTests.AUTH_ABUSE_004_AC14_AnAddOfAHeldValueTheRestrictionsRefuseStagesNothingAsync`, `IdentifierServiceTests.AUTH_ABUSE_004_AC14_AResendForAHeldValueIsCountedAgainOnTheSameAddAsync`, `IdentifierServiceTests.AUTH_ABUSE_004_AC14_AReplaceByAHeldValueTheRestrictionsRefuseStagesNothingAsync`, `IdentifierServiceTests.AUTH_ABUSE_004_AC18_AnAdditionOfAHeldValueWhoseNoticeIsRefusedIsAnsweredAlikeAsync`, `IdentifierServiceTests.REG_IDENT_006_ARemovalNamingAPendingAddEndsItAsAnAbandonDoesAsync`, `IdentifierServiceTests.REG_IDENT_006_AC7_AnAddVerifiedOnceTheValueIsReservedWritesNothingAsync`, `IdentifierServiceTests.REG_IDENT_006_AC5_AnAddOfAReservedValueStagesAVerificationNoCodeAnswersAsync`, `IdentifierServiceTests.REG_IDENT_006_AC5_AfterTheWindowTheSameAddIsSentACodeThatAnswersAsync`, `IdentifierServiceTests.REG_IDENT_006_AnUndoWhileTheValueIsAddedAgainLeavesTheAddToTheSweepAsync`, `IdentifierServiceTests.REG_IDENT_007_AC7_AReplaceWhoseNewValueIsHeldSinceAppliesNoSwapAsync`, `IdentifierServiceTests.REG_IDENT_007_AC7_AReplaceWhoseNewValueIsReservedSinceAppliesNoSwapAsync`, `IdentifierServiceTests.REG_IDENT_007_AReplaceByTheValueTheAccountHoldsIsRolledBackAsync`, `AccountApplicationTests.REG_IDENT_004_AC5_AnAddIsListedUnverifiedUnderTheIdentifierItKeepsAsync`, `AccountApplicationTests.API_CONV_005_AC1_AnAddOfAHeldValueIsAnsweredAndListedAsAFreshOneIsAsync`, `AccountApplicationTests.REG_IDENT_004_AC7_TheCodeOfAnAddWhoseValueIsHeldSinceIsAnsweredExpiredAsync`, `AccountApplicationTests.REG_IDENT_006_ARemovalNamingAPendingAddEndsItsPendingVerificationAsync`, `ValueLockTests.REG_IDENT_004_AC7_TwoAccountsVerifyingOneValueAtOnceLeaveItOnTheFirstAsync`, `PendingVerificationStoreTests.REG_IDENT_004_AC5_APendingAddIsListedUnverifiedAndWritesNoIdentifierAsync`, `PendingVerificationStoreTests.REG_IDENT_004_AC5_AVerifiedAddIsWrittenUnderItsPendingVerificationsIdentifierAsync` |
+| D-166 306: `IPendingVerificationStore.SweepAsync` removes every pending verification no live verification-code record holds, the holders computed in SQL; it runs in the `expiry-sweep` job after the verification-code sweep. Ledger line 306 | `32d83830` | REG-IDENT-004, REG-IDENT-007, REG-SESS-005, OPS-OBS-003 | `IdentifierServiceTests.REG_IDENT_007_AnAbandonedReplaceIsSweptAndANewOneIsTakenAsync`, `IdentifierServiceTests.REG_IDENT_004_AnAbandonedAddLeavesNoIdentifierAsync`, `PendingVerificationStoreTests.REG_IDENT_004_AVerificationWhoseCodeStillStandsSurvivesTheSweepAsync`, `IdentifierServiceTests.REG_IDENT_007_AC6_AReplaceTheOldAddressLeftUnconfirmedIsSweptAsItStoodAsync`, `IdentifierServiceTests.REG_IDENT_004_AC6_ASweptAddCountsTowardTheMaximumNoLongerAsync`, `IdentifierServiceTests.REG_SESS_005_AC5_AnAddOfAHeldValueIsSweptWhenAFreshOneIsAsync`, `BackgroundJobsTests.OPS_OBS_003_AC1_AnAddPastItsCodesLifetimeIsClearedWithNobodyAskingAsync` |
+
+- Tests replaced: `IdentifierServiceTests.REG_IDENT_006_AC2_AReservedAddressIsAnsweredAsAHeldOneIsAsync` (by the criterion 5 test above) and `IdentifierServiceTests.REG_IDENT_006_AnUndoWhileTheValueWaitsUnverifiedAgainRestoresItOnceAsync` (the interim block of the value lock is gone with the unverified row).
+- REG-SESS-005 criterion 1, the timing of an add of a held value: no test decides it; one code path stages, writes the record and draws the restrictions alike, and `API_CONV_005_AC1` holds the bytes.
+- Choices inside the rule: the confirmation's holder is SHA-256 over the UUID's sixteen bytes followed by the bytes of `identifier-confirm`; an add or replace of a value the asking account holds writes nothing and rolls back with the sent answer; a held or reserved add tells the account's notice set `IdentifierAdded` as a fresh one does; a verification does not judge the maximum again.
+- Observed and unchanged: `ix_identifier_verifications_staged_at` is no longer read by the sweep; `DELETE /account/identifiers/{id}` of a pending add still rotates the asking session at the endpoint; the verify route ignores `{id}` for link tokens; `SwapAsync` publishes `IdentifierAdded` where the displaced identifier is already gone; no integration test runs `IdentifierService` over real storage end to end.
+- No migration (the sweep is hand-written SQL in the store), no public surface change. After the merge: the fast checks, and `PendingVerificationStoreTests`, `ValueLockTests`, `IdentifierStoreTests` (34), `BackgroundJobsTests` and `ExpirySweepTests` (10) passed.
+- Parked: questions 151 to 153.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1403,7 +1418,7 @@ Tests: `ValueLockTests.REG_SESS_005_AC6_ATermsStepAndAnotherAccountsAddAtOnceLea
 | Questions 21 to 65, as D-183 answers them | Each was parked until D-183 | Built (section 1, from "the housekeeping before D-183's items" on), but for the rows below |
 | Questions 50 and 51: the codes and the produced and accepted types as endpoint metadata, `endpoints.txt` and its contract test, the test host's check, the lines of `release.sh` and the two scenarios of D-166 382; ledger line 382 | What "the codes its `09` row gives" covers | Nothing: D-187 answers question 119; not yet built |
 | Question 61 for the event rows and the erasure outbox | How a row that tracks several deliveries is claimed | Nothing: built (`part/sending`) |
-| Question 31 at an account identifier's add and replace of a held or reserved value; D-166 306 whole, the sweep of pending verifications (REG-IDENT-004 criterion 4, REG-IDENT-007 criterion 4); ledger lines 115 and 306 | Where the staged value is held; what the sweep waits for | Nothing: D-187 answers questions 115 and 116; not yet built |
+| Question 31 at an account identifier's add and replace of a held or reserved value; D-166 306 whole, the sweep of pending verifications (REG-IDENT-004 criterion 4, REG-IDENT-007 criterion 4); ledger lines 115 and 306 | Where the staged value is held; what the sweep waits for | Built (`part/identifiers`), but for questions 151 to 153 |
 | Question 62 at `AppPasswords.CreateAsync`, `RecoveryService.SendAsync`, `ErasureService.CompleteAsync` and the destination keys | A first write outside the unit of work, or two units of work | Nothing: built (`part/gate-sites`) |
 | Question 46: the filter half of the six unmet step-up rows; the seven step-up scenarios of the conformance suite | Criterion 2 against the filter of a bound action; how the suite arranges a provider's report | The filter half: built (`part/authorization`). The seven scenarios: question 144 |
 | The correction of `52482ed5`, the step-up half | Which gate the answer is computed against | Built (`part/authorization`), but for the case of question 145 |
@@ -3619,6 +3634,37 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built: the answer is the immediate attempt's own outcome, as question 111 says.
   2. The hold-back stays and the immediate attempt is exempt from the due condition.
 - **Parked.** Nothing: reading 1 is built. It changes when a row is due, so it is raised here and not recorded as resolved by rule.
+- **Answer:** pending.
+
+**151. Tier 3. REG-IDENT-007 criterion 6, REG-SESS-003 and AUTH-ABUSE-001: a pressed token whose pending verification is gone, and the throttle on the account's verify route.**
+
+- **Item.** Question 116.
+- **What the code does.** `IdentifierService.LandAsync` answers `auth.code.invalid` for a pressed `identifier` or `identifier-confirm` token that finds no pending verification (after the sweep, an abandon, or never issued). `IdentifierService` applies no AUTH-ABUSE-001 throttle on a code or a press: no count, no `auth.throttled`. A press between the lifetime's end and the sweep answers 422 `auth.code.expired`.
+- **What the specification says.** REG-IDENT-007 criterion 6: the replace is swept, and a press of the confirmation after that changes nothing and is answered 422 `auth.code.expired`. `09`: the account route has the same request, responses and browser binding as `POST /register/verify/{id}`, where a pressed link token that opens nothing is `auth.code.expired` and is counted against the source, and whose 429 row lists `auth.throttled`. The `10` row of `auth.code.expired` names a registration link token alone.
+- **Parked.** The answer once the row is gone, and the throttle on the account's verify route.
+- **Answer:** pending.
+
+**152. Tier 2. REG-IDENT-006 and REG-IDENT-004: an undo while pending adds fill the kind.**
+
+- **Item.** Question 115.
+- **What the code does.** `TakeBackAsync` counts identifier rows alone, so an undo followed by a pending add's verification can leave the kind one over its maximum. A verification does not judge the maximum again.
+- **What the specification says.** Pending adds and identifiers together count toward the maximum at an add (REG-IDENT-004 criterion 6). No chapter says what an undo judges.
+- **Readings.**
+  1. The undo counts pending adds and is refused as it is where identifiers fill the kind.
+  2. The undo is never refused by pending adds, and the add's verification judges the maximum again, with an answer a chapter names.
+  3. It stays, the excess accepted.
+- **Parked.** That case, left as it is.
+- **Answer:** pending.
+
+**153. Tier 2. D-166 306: the sweep against a resend that commits meanwhile.**
+
+- **Item.** D-166 306.
+- **What the code does.** The sweep is one statement under READ COMMITTED with no transaction, as the other sweeps of the job are. A resend that commits a new code for an add whose old code has just lapsed, while the statement runs, can lose its pending verification to the sweep; the new code then answers as for an unknown add, and the orphan record lapses and is swept.
+- **What the specification says.** D-166 306 and D-187 question 116 state what the sweep removes, and no locking.
+- **Readings.**
+  1. It stays: the person adds again.
+  2. The sweep locks its candidates and judges again inside a transaction.
+- **Parked.** Nothing built beyond reading 1.
 - **Answer:** pending.
 
 ## 5. Gate result
