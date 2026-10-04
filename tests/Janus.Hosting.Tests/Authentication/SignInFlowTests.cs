@@ -474,6 +474,76 @@ public sealed class SignInFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-002 AC7, `09` `POST /auth/step-up`: a text code asked for at a step-up,
+    /// where the number's signal answers <c>risk</c> and the account's other second step
+    /// is under a loss report in flight, sends nothing and is answered 403
+    /// <c>auth.stepup.required</c> with the outcome <c>pending</c> and the instant the
+    /// report completes.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AC7_ATextCodeAskedAtAStepUpWithALossReportInFlightIsAnsweredPendingAsync()
+    {
+        await using var reporting = new Deployment(
+            signals: new PhoneSignalProvider((_, _) => ValueTask.FromResult(PhoneSignal.Risk)));
+
+        Flow.Prepare(reporting);
+
+        reporting.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+        reporting.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
+            });
+
+        Browser owner = await Flow.SignedInAsync(reporting);
+
+        reporting.Clock.Advance(TimeSpan.FromMinutes(5));
+
+        SubjectId subject = reporting.Directory.Created[^1].Subject;
+        DateTimeOffset completes = reporting.Clock.GetUtcNow() + TimeSpan.FromDays(7);
+        Authenticator generator = Held(Factor.Totp, "Generator");
+
+        generator.Suspend(completes);
+        reporting.Authenticators.Hold(Held(Factor.PhoneCode, "Phone"));
+        reporting.Authenticators.Hold(generator);
+
+        Answer began = await owner.SendAsync("POST", "/auth/begin", ("identifier", Flow.Address));
+        int sent = reporting.Sms.Taken.Count;
+
+        Answer pending = await owner.SendAsync(
+            "POST",
+            "/auth/step-up",
+            ("challengeId", began.Text("challengeId")),
+            ("factor", "phoneCode"));
+
+        Assert.Equal(StatusCodes.Status403Forbidden, pending.Status);
+        Assert.Equal("auth.stepup.required", pending.Text("code"));
+        Assert.Equal("pending", pending.Json().GetProperty("details").GetProperty("outcome").GetString());
+        Assert.Equal(completes, pending.Json().GetProperty("details").GetProperty("pendingUntil").GetDateTimeOffset());
+        Assert.Empty(pending.Json().GetProperty("details").GetProperty("options").EnumerateArray());
+        Assert.Equal(sent, reporting.Sms.Taken.Count);
+
+        Authenticator Held(Factor factor, string named) =>
+            Authenticator.Existing(
+                AuthenticatorId.New(reporting.Clock),
+                subject,
+                factor,
+                CredentialLabel.TryParse(named, out CredentialLabel label)
+                    ? label
+                    : throw new InvalidOperationException("The label does not read."),
+                AuthenticatorState.Active,
+                reporting.Clock.GetUtcNow(),
+                null,
+                null,
+                confirmed: true,
+                factor is Factor.Totp ? new TotpMaterial(new byte[20], null) : null,
+                null,
+                isPreferred: false);
+    }
+
+    /// <summary>
     /// AUTH-FACT-002b AC6 and AUTH-ABUSE-003 AC1: a sign-in link asked for by text to a
     /// number the carrier reports a recent change for is not sent, and the ask is
     /// answered 202 in the bytes an ask for a number no account holds is answered in.

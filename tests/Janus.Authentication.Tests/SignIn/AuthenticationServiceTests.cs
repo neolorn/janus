@@ -2442,6 +2442,51 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-002 AC7, AUTH-STEP-002: a step-up left with no combination once the text
+    /// code is withheld, on an account with a loss report in flight, is refused
+    /// <c>auth.stepup.required</c> with the outcome <c>pending</c> and the instant the
+    /// report completes. The ask presents no factor, so nothing is counted and no refused
+    /// step-up factor is recorded.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC7_AReportedChangeAtAStepUpWithALossReportInFlightIsAnsweredPendingAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        DateTimeOffset completes = _clock.GetUtcNow() + TimeSpan.FromDays(7);
+
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        _authenticators.Hold(Authenticator.Existing(
+            AuthenticatorId.New(_clock),
+            subject,
+            Factor.Totp,
+            Label(Factor.Totp),
+            AuthenticatorState.Suspended,
+            _clock.GetUtcNow(),
+            null,
+            completes,
+            confirmed: true,
+            new TotpMaterial(new byte[20], null),
+            null));
+        Answers(PhoneSignal.Risk);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        Error refused = Refusal(await AskedAsync(began.Challenge, subject, Opened(subject)));
+
+        Assert.Equal(ErrorCodes.StepUpRequired, refused.Code);
+        Assert.Equal("pending", refused.Details["outcome"].GetString());
+        Assert.Equal(completes, refused.Details["pendingUntil"].GetDateTimeOffset());
+        Assert.Equal("aal2", refused.Details["required"].GetProperty("level").GetString());
+        Assert.Empty(refused.Details["options"].Deserialize<string[][]>()!);
+        Assert.Empty(_notifications.Texts);
+        Assert.Equal([(Factor.PhoneCode, (PhoneSignal?)PhoneSignal.Risk, (SubjectId?)subject)], _considered.Records);
+        Assert.Empty(_audit.StepUpsFailed);
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
     /// `09` `POST /auth/step-up`: a step-up ask whose number answers <c>risk</c>, made
     /// with no session of the asking account, judges no gate and is refused with no
     /// details.
