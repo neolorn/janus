@@ -1426,6 +1426,18 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - No migration, no public surface change.
 - Parked: questions 154 to 160.
 
+### `part/suffix-list`, merged as `db88cd19`: question 130
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| `PublicSuffixList` takes every rule's and every host's ASCII form from `CanonicalForm.TryDomainToAscii`; a rule the conversion refuses is set aside and counted (`SetAside`); `IdnMapping` is called nowhere in `src/` | `100f3221` | AUTH-FACT-010 | `PublicSuffixListTests.AUTH_FACT_010_ARuleIsReadInItsAsciiForm`, `PublicSuffixListTests.AUTH_FACT_010_AHostIsReadInTheLibrarysOwnAsciiForm`, `PublicSuffixListTests.AUTH_FACT_010_AHostTheConversionRefusesDoesNotRead`, `PublicSuffixListTests.AUTH_FACT_010_ARuleTheConversionRefusesIsSetAsideAndCounted`, `PublicSuffixListTests.AUTH_FACT_010_NoSourceTakesAnAsciiFormFromTheMachine`, `RelyingPartyTests.AUTH_FACT_010_AC1_ANameWithNoAsciiFormIsRefused`, `RelyingPartyTests.AUTH_FACT_012_AC2_ALabelWrittenInTwoFormsCountsOnce` |
+
+- The shipped list has no rule set aside under the conversion.
+- A name is converted as written, not from its canonical form.
+- Not built: the startup log of the number set aside (question 161).
+- No migration, no public surface change.
+- Parked: questions 161 to 163.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -3764,6 +3776,39 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the specification says.** The row of `10` section 4.5a is live, and AUTHZ-DERIVE-005 uses the key.
 - **Parked.** Nothing: the chapter plainly uses the key. It changes behaviour, so it is raised here and not recorded as resolved by rule.
 - **Answer:** D-188.
+
+**161. Tier 2. AUTH-FACT-010 and CONV-LOG-001: how and where the number of rules set aside is logged.**
+
+- **Item.** Question 130.
+- **What the code does.** `PublicSuffixList.SetAside` holds the number. Nothing logs it: no step of the start reads the list (it is read at the first ceremony, by `configure` or by the bootstrap), and `Janus.Authentication` holds no logger.
+- **What the specification says.** AUTH-FACT-010: "the number set aside is logged at startup". CONV-LOG-001 requires a `LoggerMessage` method and gives no level; CONV-LOG-002 requires a correlation identifier on every entry, and a startup entry has none. No chapter gives a startup entry's level, event or fields, or says whether a count of zero is logged.
+- **Readings.**
+  1. Always logged, at Information, with the count as its one field, by a start step of `Janus.Hosting`.
+  2. Logged at Warning, and only where the count is above zero.
+- **Parked.** The log line, its start step and its test.
+- **Answer:** pending.
+
+**162. Tier 2. AUTH-FACT-010: a configured origin's host, or the identifier, that has no ASCII form.**
+
+- **Item.** Question 130.
+- **What the code does.** `RelyingParty` refuses the start with `model.startup.rpid` where the conversion refuses a configured origin's host, a related origin's host or the identifier of `webauthn.rpid`. Before the change `IdnMapping` threw for the names it refused and admitted others the conversion now refuses (an underscore, a hyphen first, last or in the third and fourth places, an empty label).
+- **What the specification says.** AUTH-FACT-010 says what becomes of a refused rule, not of a refused host. Criterion 1 gives `model.startup.rpid` to an identifier that is no registrable suffix of an origin.
+- **Readings.**
+  1. Refused with `model.startup.rpid`: as built.
+  2. An uncoded fault, as before.
+- **Parked.** Nothing: reading 1 is built. It changes what stops a start, so it is raised here.
+- **Answer:** pending.
+
+**163. Tier 2. AUTH-FACT-010: the comparison of the identifier with an origin's host.**
+
+- **Item.** Question 130.
+- **What the code does.** `RelyingParty.Common` and `RelyingParty.Over` compare hosts and the identifier as written, ignoring case, not in their ASCII form: an identifier given in ASCII form does not sit over an origin written in Unicode.
+- **What the specification says.** D-188 question 130 names `PublicSuffixList` and a configured origin's host; AUTH-FACT-010 says the host takes its ASCII form from the conversion.
+- **Readings.**
+  1. The comparison is over ASCII forms as well.
+  2. It stays: the answer names the list alone.
+- **Parked.** That comparison, left as it is.
+- **Answer:** pending.
 
 ## 5. Gate result
 
