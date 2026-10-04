@@ -24,7 +24,7 @@ namespace Janus.Hosting.Privacy;
 /// </remarks>
 internal static class PrivacyEndpoints
 {
-    private const string Notice = "privacy-notice";
+    private static readonly DocumentName Notice = DocumentName.Parse("privacy-notice");
 
     private static readonly IResult Nothing = TypedResults.NoContent();
 
@@ -41,7 +41,8 @@ internal static class PrivacyEndpoints
         RouteGroupBuilder group = endpoints.MapGroup("/privacy");
 
         _ = group.MapGet("/notice", NoticeAsync);
-        _ = group.MapGet("/documents/{document}", DocumentAsync);
+        _ = group.MapGet("/documents/{document}", DocumentAsync)
+            .Declares(EndpointDeclaration.Answering().Binding<DocumentName>("document"));
 
         _ = SessionRequired.On(group.MapGet("/consents", ConsentsAsync));
         _ = SessionRequired.On(group.MapPost("/consents/{purpose}/grant", GrantAsync));
@@ -514,26 +515,22 @@ internal static class PrivacyEndpoints
 
     private static Task<IResult> DocumentAsync(
         ILegalDocuments documents,
-        string document,
+        DocumentName document,
         string? version,
         CancellationToken cancellationToken) =>
         ReadAsync(documents, document, version, cancellationToken);
 
     private static async Task<IResult> ReadAsync(
         ILegalDocuments documents,
-        string document,
+        DocumentName document,
         string? version,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(documents);
 
-        // 09 section 7, INT-SMS-003 (D-183): a name outside the rule a document's name is
-        // held to names no document, and is refused before anything is read.
-        return !PlaceName.Holds(document)
-            ? Answers.Malformed("document")
-            : Answers.Of(
-                await documents.ReadAsync(document, version, cancellationToken).ConfigureAwait(false),
-                Published);
+        return Answers.Of(
+            await documents.ReadAsync(document, version, cancellationToken).ConfigureAwait(false),
+            Published);
     }
 
     private static IResult Published(DocumentVersion version) =>

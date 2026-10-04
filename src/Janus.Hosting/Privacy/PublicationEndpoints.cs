@@ -17,11 +17,13 @@ namespace Janus.Hosting.Privacy;
 /// <remarks>
 /// Implements PRIV-CONS-005, PRIV-CONS-006, PRIV-CONS-007, LIB-API-005 and
 /// CONV-DESIGN-006. Each is one line to <see cref="ILegalDocuments"/>, which judges the
-/// permission and refuses a version without its governing text.
+/// permission and refuses a version without its governing text. A document is named by
+/// <see cref="DocumentName"/>, bound from the route, so a name outside its rule is
+/// answered before the body is read (INT-SMS-003, chapter 09 section 8a).
 /// </remarks>
 internal static class PublicationEndpoints
 {
-    private const string Notice = "privacy-notice";
+    private static readonly DocumentName Notice = DocumentName.Parse("privacy-notice");
 
     private static readonly IResult Nothing = TypedResults.NoContent();
 
@@ -36,10 +38,12 @@ internal static class PublicationEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
 
         _ = SessionRequired.On(endpoints.MapPost("/admin/notices", PublishNoticeAsync));
-        _ = SessionRequired.On(endpoints.MapPost("/admin/documents/{document}/versions", PublishAsync));
+        _ = SessionRequired.On(endpoints.MapPost("/admin/documents/{document}/versions", PublishAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<DocumentName>("document"));
         _ = SessionRequired.On(endpoints.MapPut(
             "/admin/documents/{document}/versions/{version}/translations/{language}",
-            TranslateAsync));
+            TranslateAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<DocumentName>("document"));
 
         return endpoints;
     }
@@ -55,20 +59,12 @@ internal static class PublicationEndpoints
         PublicationBody body,
         ILegalDocuments documents,
         RequestSession browser,
-        string document,
+        DocumentName document,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(documents);
         ArgumentNullException.ThrowIfNull(browser);
-
-        // 09 section 8a, INT-SMS-003 (D-183): a name outside the rule is refused before
-        // anything of the body is judged, so nothing is published and no condition is
-        // raised under it.
-        if (!PlaceName.Holds(document))
-        {
-            return Answers.Malformed("document");
-        }
 
         if (body.Material is not bool material)
         {
@@ -101,7 +97,7 @@ internal static class PublicationEndpoints
         TranslationBody body,
         ILegalDocuments documents,
         RequestSession browser,
-        string document,
+        DocumentName document,
         string version,
         string language,
         CancellationToken cancellationToken)
@@ -109,11 +105,6 @@ internal static class PublicationEndpoints
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(documents);
         ArgumentNullException.ThrowIfNull(browser);
-
-        if (!PlaceName.Holds(document))
-        {
-            return Answers.Malformed("document");
-        }
 
         if (body.Text is not { } text || string.IsNullOrWhiteSpace(text))
         {

@@ -184,6 +184,38 @@ public sealed class PublicationEndpointTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// INT-SMS-003 AC3, 09 section 8a (D-187): the name is bound from the route as a
+    /// document name, so a publication or a translation under a name outside the rule is
+    /// answered naming <c>document</c> before its body is read: a body that is no JSON,
+    /// and one whose member does not read, are never named.
+    /// </summary>
+    /// <param name="body">A body the endpoint cannot read.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("{")]
+    [InlineData("""{ "material": "yes", "text": 7 }""")]
+    public async Task INT_SMS_003_AC3_ANameOutsideTheRuleIsAnsweredBeforeTheBodyIsReadAsync(string body)
+    {
+        Browser browser = await AuthorisedAsync();
+
+        Answer publication = await browser.SendAsync("POST", "/admin/documents/Terms/versions", body);
+        Answer translation = await browser.SendAsync(
+            "PUT",
+            "/admin/documents/Terms/versions/1/translations/en",
+            body);
+
+        foreach (Answer refused in new[] { publication, translation })
+        {
+            Assert.Equal(StatusCodes.Status400BadRequest, refused.Status);
+            Assert.Equal(ErrorCodes.RequestMalformed.ToString(), refused.Text("code"));
+            Assert.Equal("document", refused.Json().GetProperty("details").GetProperty("member").GetString());
+        }
+
+        Assert.Empty(_deployment.Documents.Versions);
+        Assert.Empty(_deployment.Raised.Waiting);
+    }
+
+    /// <summary>
     /// AUTHZ-CONCEAL-005 AC1: without <c>notice:publish</c> each is refused forbidden.
     /// </summary>
     /// <returns>The work of the test.</returns>
