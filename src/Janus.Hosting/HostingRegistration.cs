@@ -301,7 +301,7 @@ public static class HostingRegistration
         services.AddScoped<IMailServerTokens>(provider => new MailServerTokens(
             provider.GetRequiredService<OpenIddict.Server.IOpenIddictServerFactory>(),
             provider.GetRequiredService<OpenIddict.Server.IOpenIddictServerDispatcher>(),
-            provider.GetRequiredService<OidcService>(),
+            provider.GetRequiredService<ITokenMinting>(),
             provider.GetRequiredService<IOidcClientStore>(),
             provider.GetService<MailServerClient>(),
             provider.GetRequiredService<AuthenticationAddresses>(),

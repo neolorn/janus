@@ -656,6 +656,59 @@ public sealed class PublicSurfaceTests
     }
 
     /// <summary>
+    /// CONV-DESIGN-007 (D-188): a type of the hosting project that bridges two areas is
+    /// that project's own, which the entry point registers itself, and it reaches a
+    /// member no public contract declares through an internal contract of exactly that
+    /// member, which the implementation's own project declares, implements and registers
+    /// by its method: the settings restriction over the settings-change gate, and the
+    /// mail server's token over the token minting. Neither takes a class of another
+    /// project that stands behind a contract.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_007_ABridgingTypeAsksTheContractTheImplementationsProjectDeclares()
+    {
+        (Type Bridge, Type Contract, string Member, string Project)[] bridges =
+        [
+            (
+                typeof(Janus.Hosting.Authorization.GatedSettings),
+                typeof(Janus.Authorization.Gate.ISettingsChangeGate),
+                nameof(Janus.Authorization.Gate.ISettingsChangeGate.RequireSettingsChangeAsync),
+                "Janus.Authorization"),
+            (
+                typeof(Janus.Hosting.Oidc.MailServerTokens),
+                typeof(Janus.Authentication.Oidc.ITokenMinting),
+                nameof(Janus.Authentication.Oidc.ITokenMinting.MintAsync),
+                "Janus.Authentication"),
+        ];
+        Type?[] own = [.. Beyond().Select(Built)];
+
+        Assert.All(bridges, bridge =>
+        {
+            Type[] taken =
+            [
+                .. bridge.Bridge
+                    .GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                    .SelectMany(constructor => constructor.GetParameters())
+                    .Select(parameter => parameter.ParameterType),
+            ];
+
+            Assert.Contains(bridge.Bridge, own);
+            Assert.Contains(bridge.Contract, taken);
+            Assert.DoesNotContain(taken, type => Ships(type)
+                && type.Assembly != bridge.Bridge.Assembly
+                && type.IsClass
+                && type.GetInterfaces().Any(Ships));
+            Assert.True(bridge.Contract is { IsInterface: true, IsVisible: false });
+            Assert.Equal([bridge.Member], bridge.Contract.GetMethods().Select(method => method.Name));
+            Assert.Equal(bridge.Project, bridge.Contract.Assembly.GetName().Name);
+            Assert.Equal(bridge.Project, Assert.Single(Implementations(), bridge.Contract.IsAssignableFrom).Assembly.GetName().Name);
+            Assert.Contains(
+                Alone(bridge.Project, RegistrationMethods[bridge.Project]),
+                service => service.ServiceType == bridge.Contract);
+        });
+    }
+
+    /// <summary>
     /// CONV-DESIGN-007, CONV-CODE-007: a composition a job builds inside the application
     /// over another credential registers the key ring the start filled, as it stands,
     /// and calls the storage's method and never the core's, whose ring would be a

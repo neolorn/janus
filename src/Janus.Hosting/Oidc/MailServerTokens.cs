@@ -18,7 +18,7 @@ namespace Janus.Hosting.Oidc;
 /// </summary>
 /// <param name="factory">Where the provider's transaction comes from.</param>
 /// <param name="dispatcher">What runs the provider's token generation.</param>
-/// <param name="oidc">Where the session record the token stands on is read.</param>
+/// <param name="minting">Where the session record the token stands on is read.</param>
 /// <param name="clients">Where the mail server's client is looked up.</param>
 /// <param name="client">
 /// Which client the mail server is, or nothing where the deployment hosts no mailbox.
@@ -34,7 +34,7 @@ namespace Janus.Hosting.Oidc;
 internal sealed class MailServerTokens(
     IOpenIddictServerFactory factory,
     IOpenIddictServerDispatcher dispatcher,
-    OidcService oidc,
+    ITokenMinting minting,
     IOidcClientStore clients,
     MailServerClient? client,
     AuthenticationAddresses addresses,
@@ -48,7 +48,7 @@ internal sealed class MailServerTokens(
     {
         Error? failure = null;
 
-        MintedSession minted = (await oidc.MintAsync(session, cancellationToken).ConfigureAwait(false))
+        MintedSession minted = (await minting.MintAsync(session, cancellationToken).ConfigureAwait(false))
             .Match(record => record, error => Withheld(error, ref failure));
 
         if (failure is not null)
