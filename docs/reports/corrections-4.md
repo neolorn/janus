@@ -615,7 +615,7 @@ CONV-DESIGN-008 criterion 3, "no project's build reports MSB3277": no test decid
 
 What earlier runs left: nine worktrees held uncommitted work whose commits were all in the branch; each is kept as a patch outside the repository and removed with its branch. The reason rule of the configuration route that one of them carried is on the branch at the endpoint and in the service (`ConfigurationEndpointTests.OPS_CFG_005_EveryChangeCarriesAReasonAsync`, `ConfigurationAdministrationTests.OPS_CFG_008_AC2_ATighteningWithNoReasonIsRefusedAsync`). Four stashes are dropped: three held earlier states of the docs, and every file of the fourth is in the history (the changelog describes `MapAuthorizationTables`).
 
-**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The parts of D-183 the owner's split names run each in a worktree of its own cut from `7bce9374`: gates, sessions, privacy and authorization are merged (below), sessions without questions 31 and 42 and privacy without questions 29 and 30; the further part for question 30 is merged; sending is not. Questions 68 to 106 park the sites they name. The work after the merges is not started.
+**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The five parts of D-183 the owner's split names are merged (below), with a sixth for question 30. Left unbuilt by them and taken up in further parts: questions 31 and 42 (sessions), question 29 (privacy), and three of the five carriers of question 61 (sending). Questions 68 to 113 park the sites they name. The work after the merges (50, 51, 53, the new codes, the retirement of `NotificationRequested`, 62) is not started.
 
 ### The section C sweeps, place by place
 
@@ -1090,6 +1090,34 @@ After the merge: build 0 warnings 0 errors, format clean, 3012 unit tests, 139 c
   - Two more sites of questions 77 and 88, left committing: `ConsentService.GrantAsync` where it finds an admitted live record written meanwhile, and `ConsentService.ObjectAsync` where it meets an objection recorded meanwhile.
   - The integration classes `ConsentStoreTests`, `MigrationRunTests`, `SchemaContractTests`, `ModelTests`, `ConsentGateTests` and `TruthTableTests` passed on the part.
 
+#### D-183, `part/sending`, merged as `9be2801f` (`c43b3c2c`, `1874f506`, `79dfdb2a`, `af618c88`, `c813a1b4`, `e8f32416`)
+
+After the merge: build 0 warnings 0 errors, format clean, 3035 unit tests, 139 contract tests; `SchemaContractTests`, `MigrationRunTests`, `ModelTests`, `SubjectEraserTests`, `SignInFlowTests`, `RegistrationFlowTests`, `RegistrationWizardTests`, `ThrottlingTests`, `InvitationServiceTests` and `BackgroundJobsTests` passed on the merged tree. Three conflicts: the changelog (both sides kept), the constructor of `InvitationAcknowledgement` (the session store of question 36 beside the governed send) and `SignInLinks.SendSecondStepAsync` (the answer of the `52482ed5` correction with the send inside the unit of work). Three migrations: `GovernSendsFromAdmission`, `KeepTheReferenceHashOfAnOutboxRow` (hand-written: the reference hash of the rows that stand), `ClaimARaisedAlertBeforeItIsCarried`. The snapshot merged without conflict and the model has no change a migration does not carry, so nothing was regenerated.
+
+- **Question 60** (`c43b3c2c`; REG-IDENT-007, AUTH-ABUSE-004). The confirmation asked of the displaced address goes under `verification`. Tests: `IdentifierServiceTests.REG_IDENT_007_AC5_TheConfirmationIsAskedUnderTheVerificationPurposeAsync`, `SendingGovernanceTests.AUTH_ABUSE_004_AC15_ALinkAPersonAskedForAnswersToNoNotificationRestrictionAsync`.
+- **Question 23** (`1874f506`; OPS-OBS-002, REG-SESS-003). `RegistrationSignals` raises `degradation` naming `registration-channel` where a wait begins on a channel it had opened and no longer listens on, and reopens it. Test: `RegistrationSignalsTests.OPS_OBS_002_ALostChannelIsRaisedAsADegradationAsync`. Ledger: 143 "Superseded by D-166".
+- **Question 64** (`79dfdb2a`; OPS-ALERT-004a). A destination change holds the setting's row after its notice, reads the value in force again and refuses `config.change.superseded` (409) where another change overtook it, rolling back. Test: `AlertDestinationChangeTests.OPS_ALERT_004a_AC7_AChangeOvertakenAfterItsNoticeIsRefusedAsSupersededAsync`. Criterion 7, "two changes at once", is held by a hook that changes the value at the hold, not by two transactions.
+- **Questions 27, 38 and 63, with D-166 118, 119 (1) to (4), 227, 322, 235 and 335** (`af618c88`; AUTH-ABUSE-004, AUTH-ABUSE-003, CONV-DESIGN-002, CONV-DESIGN-003, CONV-LAYOUT-002, LIB-API-001, LIB-EXT-001, IDN-ATTR-001, IDN-LIFE-009a, AUTH-FACT-008, INF-BG-001).
+  - `IGovernedSend.UndertakeAsync` judges and admits a message inside the caller's unit of work and begins none; a send outside one is a fault. The attempt is registered on the unit of work and runs after the outermost commit (`IUnitOfWork.AfterCommit`); the handler is called outside any transaction, under a claim, and bounded by the claim's timeout. `INotificationHandler` takes the admitted message. `SendingService` is removed.
+  - The ledger holds every candidate counter in one order for the judgement; a retried send is judged with its own count set aside; a send that fails for good gives its count and its credit back.
+  - A text owed in every declared language is one row and one reference per language, admitted all or none.
+  - The invitation's issue, the recovery links and notices, the sign-in link and codes, the credential notices, the no-account draw and the privacy notices send inside their unit of work. `NotificationRequested` is emitted by nothing.
+  - `SendingGovernanceTests`: `AUTH_ABUSE_004_AReplacedHandlerIsStillGovernedAsync`, `AUTH_ABUSE_004_AC8_AMessageUndertakenInARolledBackOperationIsNeverCarriedAsync`, `AUTH_ABUSE_004_AC8_AMessageIsCarriedOnlyAfterTheOutermostCommitAsync`, `AUTH_ABUSE_004_AC16_ASendCountsFromItsAdmissionAndIsReleasedWhereItFailsForGoodAsync`, `AUTH_ABUSE_004_AC1_ASendInEveryDeclaredLanguageIsJudgedOnceAsync`, `AUTH_ABUSE_004_AC15_ALinkAPersonAskedForAnswersToNoNotificationRestrictionAsync`, `AUTH_ABUSE_003_AC7_AnAskIsAnsweredBeforeAnyTransportIsCalledAsync`, `AUTH_ABUSE_004_AC9_ARetryIsJudgedByTheRestrictionsAgainAsync`, `AUTH_ABUSE_002_AC3_ADrawCountsAsTheMessageWouldAndCarriesNothingAsync`, `D_022_TheMessageIsWrittenToTheOutboxAndRemovedOnceTakenAsync`, `D_022_ATransportRefusalLeavesTheMessageRecordedAsync`, `D_022_ARefusedMessageIsCarriedOnceItsRetryIsDueAsync`, `D_022_AMessageWhoseBudgetIsSpentIsRemovedAndRaisesDegradationAsync`, `CONV_DESIGN_003_AC5_ASpentBudgetWhoseAlertCannotBeRaisedRollsBackAsync`, `IDN_ATTR_001_AC3_NoKnownLanguageGoesOutInEveryDeclaredOneAsync`, `IDN_ATTR_001_ALanguageTheTransportRefusedLeavesTheMessageRecordedAsync`, `IDN_ATTR_001_ARetryCarriesOnlyTheLanguagesStillOwedAsync`.
+  - `SendLedgerTests`: `AUTH_ABUSE_004_AC16_SendsJudgedAtOnceAreJudgedOneAfterTheOtherAsync`, `AUTH_ABUSE_004_AC16_ARetriedSendIsJudgedWithItsOwnCountSetAsideAsync`, `AUTH_ABUSE_004_AC16_AReleasedSendGivesBackTheCreditItSpentAsync`, `AUTH_ABUSE_004_AC6_ACounterThatCountedNothingGoesWithTheNextSweepAsync`.
+  - `SendOutboxTests`: `IDN_PRIN_003_AMessageTakenLeavesNoRowAsync`, `D_022_AnAttemptReadsBackAsItWasRecordedAsync`, `D_022_OnlyAMessageWhoseAttemptIsDueIsReadAsync`.
+  - `UnitOfWorkTests`: `CONV_DESIGN_002_AC5_WhatIsRegisteredRunsAfterTheOutermostCommitAsync`, `CONV_DESIGN_002_AC5_ARollbackDiscardsWhatWasRegisteredAsync`, `CONV_DESIGN_002_ARegistrationOutsideAUnitOfWorkIsAFaultAsync`.
+  - `InvitationServiceTests`: `IDN_LIFE_009a_ALinkThatCouldNotBeSentIssuesNothingAsync`, `IDN_LIFE_009a_AnIssueThatDoesNotCommitSendsNothingAsync`, `IDN_LIFE_009a_TheLinkIsCarriedOnceTheIssueHasCommittedAsync`.
+  - `RecoveryCodeRemindersTests.AUTH_FACT_008_AC5_TwentySetsDueTogetherAreEachRemindedUnderTheShippedRestrictionsAsync`, `RecoveryCodeRemindersTests.AUTH_FACT_008_AC5_ASetWhoseEveryNoticeIsRefusedStaysOwedAsync`; `ThrottlingTests.AUTH_ABUSE_003_AC7_AnAskIsAnsweredBeforeTheTransportIsCalledAsync`.
+  - Names D-166 gives that differ: the `SendingServiceTests.D_022_AMessage...` names are the two `AUTH_ABUSE_004_AC8` tests; `ThrottlingTests.AUTH_ABUSE_003_AC2_ALinkAskIs...` is the `AC7` test; `IDN_LIFE_009a_ALinkTheTransportRefusesIsCarriedLaterAsync` is `IDN_LIFE_009a_TheLinkIsCarriedOnceTheIssueHasCommittedAsync` with `D_022_ARefusedMessageIsCarriedOnceItsRetryIsDueAsync`.
+  - Not decided as written: AUTH-ABUSE-004 criterion 16, "several sends judged at once", is held against PostgreSQL at the ledger's hold and over fakes above it; no test runs the whole governed send concurrently over a database. CONV-DESIGN-003 criterion 9, "two processes", is held by concurrent claims on one database.
+  - Ledger: 118, 119, 227, 235, 322 and 335 "Superseded by D-166".
+  - Questions 107 to 112 follow from it.
+- **Question 39, with D-166 119 (6)** (`c813a1b4`; PRIV-RIGHT-005a, PRIV-RIGHT-005, AUTH-ABUSE-004). The erased value is 32 zero bytes, refused before the unwrap; the mailbox's release writes it; the erasure overwrites the wrapped key of the subject's outbox rows in its transaction; the publisher removes an erased row uncarried and releases its count. Tests: `SubjectEraserTests.PRIV_RIGHT_005_AC1_AnOutstandingMessageIsUnreadableAndUncarriedAfterErasureAsync`, `PersonalFieldCipherTests.PRIV_RIGHT_005a_TheErasedValueIsThirtyTwoZeroBytesAndIsRefusedBeforeTheUnwrap`, `SendingGovernanceTests.PRIV_RIGHT_005a_AMessageWhoseKeyWasErasedIsRemovedUncarriedAndItsCountReleasedAsync`, `SendingGovernanceTests.AUTH_ABUSE_004_AC9_ASendThatHoldsNoCountIsJudgedBeforeItIsCarriedAsync`, `SendOutboxTests.AUTH_ABUSE_004_ARowWrittenBeforeItCarriedAReferenceReadsWithOneOfItsOwnAsync`. The invitation's erased key: question 113.
+- **Question 61** (`af618c88`, `e8f32416`; CONV-DESIGN-003, INF-BG-001, OPS-ALERT-001). `outbox.claim.timeout` (PT2M, floor PT30S, ceiling PT10M). Built for two carriers of five: the send outbox and the raised alerts, each claimed by one conditional update, its outcome written under the claim. Tests: `SendOutboxTests.CONV_DESIGN_003_AC9_ARowIsClaimedByOneAttemptUntilItsClaimTimesOutAsync`, `SendOutboxTests.CONV_DESIGN_003_AC9_AnOutcomeWhoseClaimWasTakenOverChangesNothingAsync`, `SendingGovernanceTests.CONV_DESIGN_003_AC9_AnAttemptThatDoesNotHoldTheClaimRecordsAndCarriesNothingAsync`, `RaisedAlertsTests.CONV_DESIGN_003_AC9_ARaisedConditionIsClaimedByOnePassAsync`, `RaisedAlertsTests.OPS_ALERT_001_AC1_ACarriedConditionIsRemovedAsync`, `AlertDispatchTests.CONV_DESIGN_003_AC9_AConditionAnotherPassHoldsIsNotCarriedAsync`.
+  - **Not built in the part:** the claim of the event rows (`EventPublisher`), of the erasure outbox's deliveries (`OutboxPublisher`) and of the mailbox pushes (`MailboxPublisher`). CONV-DESIGN-003 criterion 9 and INF-BG-001 criterion 4 hold for messages and raised alerts alone until a further part builds them.
+- Parked sites touched: question 75 (`RecoveryCodeReminders`), question 80 (`AccountLifecycle`, `IdentifierService`, `InvitationAcknowledgement`, `MembershipEnd`, `AppPasswords`) and question 88 (`ProviderEvents`): the send's type alone. The send begins no unit of work now, so it marks no caller's; what each caller does with a refused send is as it was. `RecoveryCodeReminders.RemindedAsync`, where every channel refuses, commits having written counters alone (question 77's matter). `PhoneSignals.ConsiderAsync` still begins a level of its own inside the caller's unit and throws on failure.
+- For audit: `Deployment`, the fixture of `Janus.Hosting.Tests`, runs the publisher's pass after each request by default, as the worker does, so that the flow tests find the mail of an ask; a test of what the request itself did turns it off. A caller of the governed send outside a unit of work on a path no test reaches would fault at run time; the full gate has not run yet.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1261,6 +1289,10 @@ After the merge: build 0 warnings 0 errors, format clean, 3012 unit tests, 139 c
 | `DeclarationCoverage`, `details.key` of a missing relationship source (`10e7acb6`) | D-183 question 22 names the code and not the key's form | `10` section 1.5, "a relationship source is named by its relationship" | The key is the relationship's name, with no prefix |
 | Fixtures and fakes for questions 22, 34 and 59 (`be757f8d`, `e467284d`, `10e7acb6`) | The test host and the conformance sample declared no relationship source and no longer started; no fake held the alerts of the gate or the order the audit is asked in | The working guide's section 3, test infrastructure | The fixtures register the test host's context and its sources; fakes alone, no runtime code |
 | `ConsentStoreTests.PRIV_CONS_001_AC4_AGrantAfterAWithdrawalKeepsTheWithdrawnRecordAsync` (`c3191b69`) | D-166 names this test with criterion 3; the criterion that states it is PRIV-CONS-001 criterion 4 | `04` PRIV-CONS-001; CONV-TEST-007 | The test carries the number of the criterion the chapter states |
+| `IntegrationBoundaryTests`, the list `Mapping` (`af618c88`) | It named `SendingService.cs` as the one file that builds an outbound payload | INT-GEN-005 criterion 2 | The payload is built in `NotificationHandler.cs` now, and the list names that file |
+| `SendReference` (`af618c88`) | A default instance gave no failure when read, which the contract test requires of every type that reads itself from text | CONV-DESIGN-004 criterion 3 | `Value` and `ToString` of a default instance throw |
+| Fakes and fixtures for the governed send (`1874f506`, `af618c88`) | No fake held the alert channels in `Janus.Storage.Tests`; the fakes of the unit of work lacked the registration after a commit; the Hosting fixture carried nothing after a request | The working guide's section 3, test infrastructure | The fakes implement the new member and run what is registered at the outermost commit; the fixture runs the publisher's pass after each request unless a test turns it off; no runtime code |
+| `StoreContextModelSnapshot.cs`, the product version (`af618c88` and the migrations of the other parts) | The file said 10.0.4 | D-184 | The tool at the version of EF Core writes 10.0.12 |
 
 ## 4. Open questions
 
@@ -1797,7 +1829,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3012 unit tests, 139 c
      list.
 - **Parked.** 143 and its ledger line, with the `registration-channel` member of section F.
   The patch is held aside.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `1874f506` (`part/sending`).
 
 **24. Tier 2. D-166 120 (2), INT-SMS-003 and `10` section 5.26: a document name on the publish route.**
 
@@ -1862,7 +1894,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3012 unit tests, 139 c
      step.
 - **Parked.** 118, 235, the twenty-sets test of 335, X1 at `SendingService.CarryAsync`,
   ledger lines 118, 235 and 335.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `af618c88` (`part/sending`); questions 107, 108 and 111 follow from it.
 
 **28. Tier 2. D-166 156, PRIV-BASIS-001 and CONV-ENUM-001: the lawful basis table.**
 
@@ -2036,7 +2068,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3012 unit tests, 139 c
   3. Park all of (1) with 118.
 - **Parked.** 119 (1) and what builds on it, (2) to (4); 227 and 322 with 119; ledger lines
   119, 227 and 322.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `af618c88` (`part/sending`); question 112 follows from it.
 
 **39. Tier 3. D-166 119 (6) and PRIV-RIGHT-005a: the erased value in `send_outbox.wrapped_key`.**
 
@@ -2050,7 +2082,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3012 unit tests, 139 c
   zeros) or 32 zeros with the marker implied is not settled.
 - **Parked.** 119 (6) and
   `SubjectEraserTests.PRIV_RIGHT_005_AC1_AnOutstandingMessageIsUnreadableAndUncarriedAfterErasureAsync`.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `c813a1b4` (`part/sending`); question 113 follows from it.
 
 **40. Tier 2. D-166 152 (3) against AUTHZ-IMP-001 criterion 3: `Effective` on `CredentialSuspended`.**
 
@@ -2389,7 +2421,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3012 unit tests, 139 c
   as a notice to an existing holder it answers to `notification` alone.
 - **Parked.** Its purpose alone. The enrolment link of an assisted recovery goes under
   `signin` (`049f31a6`).
-- **Answer:** pending.
+- **Answer:** D-183. Built in `c43b3c2c` (`part/sending`).
 
 **61. Tier 2. D-166 X3, CONV-DESIGN-003 criterion 6 and INF-BG-001: passes that overlap across processes.**
 
@@ -2407,7 +2439,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3012 unit tests, 139 c
   3. The overlap accepted under at-least-once delivery: the lost update fixed (an increment
      in SQL), `ON CONFLICT DO NOTHING`, an idempotent ledger append.
 - **Parked.** V7 (`OutboxPublisher`) and S6 (the retry and settle of `SendingService`).
-- **Answer:** pending.
+- **Answer:** D-183. Built for the send outbox and the raised alerts in `af618c88` and `e8f32416` (`part/sending`); the three other carriers are not yet built.
 
 **62. Tier 3. D-166 X3 at C9, IDN-ACCT-007 criterion 2 and AUTHZ-GATE-006 criterion 2 against CONV-DESIGN-003 criterion 6: a restriction committed after the gate reads.**
 
@@ -2434,7 +2466,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3012 unit tests, 139 c
   without the after-commit carrying of 119 (1) (questions 27 and 38).
 - **Parked.** The admission half of S1. The lost updates, which every way of settling it
   needs, are in `2835ce2f` and `e664d897`.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `af618c88` (`part/sending`); questions 109 and 110 follow from it.
 
 **64. Tier 3. D-166 X3 at S5, OPS-ALERT-004a against CONV-DESIGN-003 criterion 6 and X7: whom a destination change notifies.**
 
@@ -2448,7 +2480,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3012 unit tests, 139 c
   inside the transaction (a send in the caller's transaction, which X7 and the parked
   119 (1) move after the commit) or refusing a change whose value in force moved.
 - **Parked.** S5.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `79dfdb2a` (`part/sending`).
 
 **65. Tier 2. D-166 X4, API-CONV-002 criterion 3 and CONV-CODE-006 criterion 3: the free text of `PUT /admin/compliance/assessments`.**
 
@@ -2890,6 +2922,70 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. The record is inserted through the model, which cannot be conditional on the partial index: a second grant at once then fails on the index and is read again.
 - **Parked.** Nothing.
+- **Answer:** pending.
+
+**107. Tier 2. AUTH-ABUSE-004, CONV-DESIGN-002 and LIB-API-001: the public members of the governed send.**
+
+- **Item.** Questions 27 and 38.
+- **What the specification says.** The attempt is "registered on the unit of work to run after that commit" (D-166 119 (1): "Give `IUnitOfWork` an after-commit registration"); the admitted message is "kind, destination, subject, language, values and its reference"; every contract method answers a result (CONV-DESIGN-005 criterion 1). The chapters name no member.
+- **What the code does.** `Result IUnitOfWork.AfterCommit(Func<CancellationToken, ValueTask> work)`, a fault with no unit of work in progress; `OutboundMessage` (destination, message, purpose, source, language; subject, values, kind, whether it is an alert, context) and `SendRequest` as the admitted message (destination, message, language, reference; subject, values, kind); `INotificationHandler.SendAsync` answering `Result`; `SendReference.TryParse`, since `Janus.Storage` reads the reference back from the row.
+- **Readings.**
+  1. As built.
+  2. The registration is an internal port the unit of work implements, with no public member.
+- **Parked.** Nothing.
+- **Answer:** pending.
+
+**108. Tier 2. IDN-ATTR-001 and AUTH-ABUSE-004: what stands between the languages of one mail.**
+
+- **Item.** Question 27.
+- **What the specification says.** "the subject lines joined", and the mail "composes it from each language's rendered template"; no separator is named.
+- **What the code does.** " | " between the subject lines, one blank line between the texts.
+- **Parked.** Nothing.
+- **Answer:** pending.
+
+**109. Tier 2. AUTH-ABUSE-004: a retry the restrictions refuse.**
+
+- **Item.** Question 63.
+- **What the specification says.** "refused, it holds none", against "released where it fails for good: ... or the restrictions refuse its retry".
+- **Readings.**
+  1. A retry the restrictions or the floor refuse releases the count and waits as a failed attempt (the attempt counted, rescheduled, `degradation` where the attempts are spent). Built; it is what the code did before.
+  2. It fails for good at that refusal and its row is removed: one branch of `SendPublisher`.
+- **Parked.** Nothing.
+- **Answer:** pending.
+
+**110. Tier 3. AUTH-ABUSE-006 against CONV-DESIGN-002: the gateway's balance asked inside the caller's transaction.**
+
+- **Item.** Question 63.
+- **The contradiction.** No transport is called while a transaction is open. The floor is judged inside the caller's transaction now, and `SmsBalance.BelowFloorAsync`, where no reading stands inside `abuse.sms.pollinterval`, asks the gateway and records the reading in a unit of work of its own.
+- **Parked.** That call, as it is.
+- **Answer:** pending.
+
+**111. Tier 2. AUTH-RECOV-007 and OPS-ALERT-003 against the governed send's answer.**
+
+- **Item.** Question 27.
+- **What the specification says.** The governed send answers "the admission or the refusal, never the delivery". AUTH-RECOV-007: a loss report "SHALL NOT complete if none of the notifications delivered". OPS-ALERT-003: mail that carries nothing falls to the text message, and the gateway that carries nothing is recorded.
+- **What the code does.** An internal port of the area, `IFollowedSend`: the caller undertakes in a unit of work of its own, commits, the attempt runs, and the caller asks whether its rows are gone. `AlertRouter` and `LossReports` use it; both counted the first attempt before.
+- **Readings.**
+  1. As built.
+  2. Both count the admission alone, which changes OPS-ALERT-003 criteria 1 and 4 and AUTH-RECOV-007 criterion 3.
+- **Parked.** Nothing.
+- **Answer:** pending.
+
+**112. Tier 2. CONV-DESIGN-002 against CONV-ERR-003 criterion 2: a fault of the library's own in the attempt after the commit.**
+
+- **Item.** Question 38.
+- **What the code does.** A handler that refuses or throws is a failed attempt and stays with the publisher. A fault of the library's own inside the attempt (a setting that does not read, the database failing at the claim or at the outcome) leaves `CommitAsync` as an exception, so the operation answers `system.fault` although it committed. A catch that logs and carries on is what CONV-ERR-003 criterion 2 forbids.
+- **Readings.**
+  1. No catch, as built.
+  2. The attempt's own faults are held and left to the publisher's pass, with the exemption stated in CONV-ERR-003.
+- **Parked.** Nothing.
+- **Answer:** pending.
+
+**113. Tier 3. PRIV-RIGHT-005a: the erased key of an invitation.**
+
+- **Item.** Question 39.
+- **The contradiction.** PRIV-RIGHT-005a: "a wrapped key held with no marker (an outbox row's, an invitation's, a mailbox's) is the 32 zero bytes alone". `SubjectEraser` sets an attached invitation's wrapped key and its encrypted document to null, and `InvitationStore` nulls both at use and at expiry. D-183 question 39 names the mailbox's release and the subject key as what is brought to the value, and not the invitation.
+- **Parked.** The invitation's erased key, as it is.
 - **Answer:** pending.
 
 ## 5. Gate result
