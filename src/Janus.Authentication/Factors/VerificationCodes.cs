@@ -84,6 +84,49 @@ internal sealed class VerificationCodes(
     }
 
     /// <summary>
+    /// Holds against something the record of a held or reserved value, replacing
+    /// whatever that thing had outstanding: it lives and is counted as an issued code
+    /// is, and no code presented against it is the right one (AUTH-FACT-004).
+    /// </summary>
+    /// <param name="holder">What the record stands against.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>Nothing, or the failure the configuration produced.</returns>
+    /// <exception cref="ArgumentNullException">The holder is absent.</exception>
+    public async ValueTask<Result> WithholdAsync(
+        byte[] holder,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(holder);
+
+        Error? failure = null;
+
+        TimeSpan lifetime = (await configuration
+                .ReadAsync(Settings.CodeVerificationLifetime, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Withheld<TimeSpan>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        await codes.RemoveAsync(holder, cancellationToken).ConfigureAwait(false);
+        await codes
+            .AddAsync(
+                VerificationCode.Unanswerable(holder, time.GetUtcNow(), lifetime),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Answers a code.
     /// </summary>
     /// <param name="holder">What the code was issued against.</param>
@@ -170,7 +213,7 @@ internal sealed class VerificationCodes(
         VerificationCode? outstanding = await codes.FindAsync(holder, cancellationToken)
             .ConfigureAwait(false);
 
-        return outstanding is not null && outstanding.IsLive(time.GetUtcNow())
+        return outstanding is not null && outstanding.IsLive(time.GetUtcNow()) && outstanding.IsAnswerable()
             ? VerificationCode.Read(outstanding.Code)
             : null;
     }

@@ -2676,3 +2676,16 @@ against the public contract of LIB-API-001.
   in the session's encrypted document and nowhere else, one of each, spent or replaced
   under the session's lock; the terms step writes only a credential that was created or
   confirmed, and an abandoned or expired session leaves nothing of either.
+- A registration's verification codes are issued and answered through the
+  verification-code record every channel verification code uses, held against the
+  session and the staged identifier, so a wrong try is counted and the right code
+  spent under that record's lock. A code presented after the attempt cap, and one
+  presented for an identifier with no code outstanding, is now answered
+  `auth.code.expired` where it was answered `auth.code.invalid`.
+- An address or number another account holds, or one reserved for an undo, is given at
+  registration a verification-code record with the lifetime and attempt cap of a sent
+  code and no code that any presentation matches: a code presented for it is answered
+  `auth.code.invalid` up to `code.verification.attempts` tries and `auth.code.expired`
+  after them and after `code.verification.lifetime`, as a wrong code for a fresh value
+  is. The ask, and a resend, is counted against the sending restrictions as its
+  message would be and refused by them alike.

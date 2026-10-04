@@ -410,6 +410,54 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-SESS-005 AC5: over the wire, a code presented for an address an account
+    /// holds is answered in the same bytes as a wrong code for a fresh address:
+    /// <c>auth.code.invalid</c> for each try up to the cap, then
+    /// <c>auth.code.expired</c>.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_SESS_005_AC5_ACodeForAHeldAddressIsAnsweredInTheBytesOfAWrongOneAsync()
+    {
+        const string trace = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
+        _ = await Flow.SignedInAsync(_deployment);
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(2));
+        Browser fresh = await Flow.BegunAsync(_deployment);
+        Browser duplicate = await Flow.BegunAsync(_deployment);
+        _ = await fresh.SendAsync("PUT", "/register/age", ("dateOfBirth", "1990-01-01"));
+        _ = await duplicate.SendAsync("PUT", "/register/age", ("dateOfBirth", "1990-01-01"));
+        Answer staged = await fresh.SendAsync("PUT", "/register/email", ("value", "fresh@example.test"));
+        Answer taken = await duplicate.SendAsync("PUT", "/register/email", ("value", Flow.Address));
+        string wrong = string.Equals(Flow.Code(_deployment, IdentifierKind.Email), "000000", StringComparison.Ordinal)
+            ? "111111"
+            : "000000";
+        string one = Flow.Waiting(await fresh.SendAsync("GET", "/register"), IdentifierKind.Email);
+        string other = Flow.Waiting(await duplicate.SendAsync("GET", "/register"), IdentifierKind.Email);
+        var answers = new List<(Answer Fresh, Answer Duplicate)>();
+
+        for (int attempt = 0; attempt < Settings.CodeVerificationAttempts.Default + 1; attempt++)
+        {
+            _deployment.Clock.Advance(TimeSpan.FromSeconds(30));
+
+            answers.Add((
+                await fresh.SendAsync(IPAddress.Parse("198.51.100.7"), trace, "POST", "/register/verify/" + one, ("code", wrong)),
+                await duplicate.SendAsync(IPAddress.Parse("203.0.113.9"), trace, "POST", "/register/verify/" + other, ("code", wrong))));
+        }
+
+        Assert.Equal(StatusCodes.Status202Accepted, staged.Status);
+        Assert.Equal(staged.Status, taken.Status);
+        Assert.All(answers, answer =>
+        {
+            Assert.Equal(answer.Fresh.Status, answer.Duplicate.Status);
+            Assert.Equal(answer.Fresh.Body, answer.Duplicate.Body);
+        });
+        Assert.All(
+            answers.Take(Settings.CodeVerificationAttempts.Default),
+            answer => Assert.Equal("auth.code.invalid", answer.Duplicate.Text("code")));
+        Assert.Equal("auth.code.expired", answers[^1].Duplicate.Text("code"));
+    }
+
+    /// <summary>
     /// BFF-CSRF-005a AC3: the session the registration ends with takes the place of
     /// the first contact, which is cleared in the same answer.
     /// </summary>

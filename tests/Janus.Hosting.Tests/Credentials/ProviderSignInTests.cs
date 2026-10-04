@@ -617,6 +617,10 @@ public sealed class ProviderSignInTests : IAsyncDisposable
         _deployment.Directory.Held(IdentifierKind.Email, Flow.Address, SubjectId.New(_randomness));
         int sent = _deployment.Mail.Taken.Count;
 
+        // AUTH-ABUSE-004 AC14: the ask for a held address is counted as its message would
+        // be, so the second ask waits out the restriction a second message would meet.
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(2));
+
         Browser duplicate = await AgedAsync();
         Answer duplicateLanded = await ProvidedAsync(duplicate, "apple", new ProviderPerson("another-subject", Flow.Address, "true"));
         Answer duplicateState = await duplicate.SendAsync("GET", "/register");

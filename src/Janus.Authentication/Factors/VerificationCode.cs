@@ -86,6 +86,28 @@ internal sealed class VerificationCode
     }
 
     /// <summary>
+    /// The record of a value that is held or reserved: one that lives and counts as an
+    /// issued code does and holds no code any presentation matches (AUTH-FACT-004,
+    /// REG-SESS-005).
+    /// </summary>
+    /// <param name="holder">What it stands against.</param>
+    /// <param name="at">Now.</param>
+    /// <param name="lifetime">How long it answers for.</param>
+    /// <returns>The record.</returns>
+    /// <exception cref="ArgumentNullException">The holder is absent.</exception>
+    /// <remarks>
+    /// What is presented is compared as its digits and nothing else, so a value of the
+    /// length of a code that holds no digit is compared in the same fixed time and is
+    /// never equal to it.
+    /// </remarks>
+    public static VerificationCode Unanswerable(byte[] holder, DateTimeOffset at, TimeSpan lifetime)
+    {
+        ArgumentNullException.ThrowIfNull(holder);
+
+        return new VerificationCode(holder, new byte[Digits], at, at + lifetime, attempts: 0);
+    }
+
+    /// <summary>
     /// The code as the store holds it.
     /// </summary>
     /// <param name="holder">What it was issued against.</param>
@@ -199,6 +221,24 @@ internal sealed class VerificationCode
     /// <returns>Whether they match.</returns>
     /// <exception cref="ArgumentNullException">The code is absent.</exception>
     public bool Is([NeverLogged] string entered) => Matches(Code, entered);
+
+    /// <summary>
+    /// Whether it holds digits somebody was sent, as against the record of a held or
+    /// reserved value, which holds none.
+    /// </summary>
+    /// <returns>Whether it does.</returns>
+    public bool IsAnswerable()
+    {
+        foreach (byte held in Code)
+        {
+            if (!char.IsAsciiDigit((char)held))
+            {
+                return false;
+            }
+        }
+
+        return Code.Length > 0;
+    }
 
     /// <summary>
     /// A wrong code was entered against it.

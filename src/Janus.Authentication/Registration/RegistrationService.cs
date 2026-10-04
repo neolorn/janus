@@ -43,6 +43,8 @@ namespace Janus.Authentication.Registration;
 /// <param name="issuing">What issues the session the person is signed in on.</param>
 /// <param name="devices">What remembers the registering browser.</param>
 /// <param name="throttle">The progressive delay a registration's asks and tries are held to.</param>
+/// <param name="codes">Where the code that verifies a staged identifier is issued and answered.</param>
+/// <param name="restrictions">What an ask that sends nothing draws on.</param>
 /// <param name="capture">Where the consent controls the person ticked are recorded.</param>
 /// <param name="configuration">Where the registration settings are read.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
@@ -78,6 +80,8 @@ internal sealed class RegistrationService(
     SessionService issuing,
     DeviceService devices,
     ThrottleService throttle,
+    VerificationCodes codes,
+    ISendingRestrictions restrictions,
     IConsents capture,
     IConfigurationStore configuration,
     IUnitOfWork work,
@@ -668,31 +672,24 @@ internal sealed class RegistrationService(
             return (Result.Failure<RegistrationState>(delayed), false);
         }
 
-        Error? failure = null;
-
-        int cap = (await configuration
-                .ReadAsync(Settings.CodeVerificationAttempts, cancellationToken).ConfigureAwait(false))
-            .Match(value => value, error => Held<int>(error, ref failure));
-
-        if (failure is not null)
-        {
-            return (Result.Failure<RegistrationState>(failure), false);
-        }
-
-        // A code invalidated by wrong tries refuses the right one too (REG-SESS-003
-        // AC3), which is the answer a code that was never outstanding also gets.
-        if (staged.IsVerified || staged.Code is not byte[] held || staged.CodeSpent)
+        if (staged.IsVerified)
         {
             return await CountedAsync(attempt, Error.From(ErrorCodes.CodeInvalid), cancellationToken)
                 .ConfigureAwait(false);
         }
 
-        DateTimeOffset now = time.GetUtcNow();
+        // AUTH-FACT-004: the try is read, compared and counted on the verification-code
+        // record under its lock, the same for a code that was sent and for the record
+        // of a held or reserved value, which no code matches (REG-SESS-005 AC5).
+        Result presented = await codes
+            .PresentAsync(Holder(live.Id, staged.Id), code, cancellationToken)
+            .ConfigureAwait(false);
 
-        if (staged.CodeExpiresAt <= now)
+        if (presented.Match(() => (Error?)null, error => error) is Error refused)
         {
-            return await CountedAsync(attempt, Error.From(ErrorCodes.CodeExpired), cancellationToken)
-                .ConfigureAwait(false);
+            return refused.Code == ErrorCodes.CodeInvalid || refused.Code == ErrorCodes.CodeExpired
+                ? await CountedAsync(attempt, refused, cancellationToken).ConfigureAwait(false)
+                : (Result.Failure<RegistrationState>(refused), false);
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -701,23 +698,7 @@ internal sealed class RegistrationService(
             return (Result.Failure<RegistrationState>(notBegun), false);
         }
 
-        if (!VerificationCode.Matches(held, code))
-        {
-            staged.Missed(cap);
-
-            await sessions.RecordAsync(live, cancellationToken).ConfigureAwait(false);
-
-            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
-            {
-                return (Result.Failure<RegistrationState>(notCommittedAgain), true);
-            }
-
-            return await CountedAsync(attempt, Error.From(ErrorCodes.CodeInvalid), cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        staged.Verify(now);
+        staged.Verify(time.GetUtcNow());
 
         await sessions.RecordAsync(live, cancellationToken).ConfigureAwait(false);
 
@@ -770,7 +751,9 @@ internal sealed class RegistrationService(
             return Result.Success(new LinkLanding(
                 Verified: false,
                 sameBrowser,
-                sameBrowser || staged.Code is null ? null : VerificationCode.Read(staged.Code)));
+                sameBrowser
+                    ? null
+                    : await codes.ShownAsync(Holder(sender.Id, staged.Id), cancellationToken).ConfigureAwait(false)));
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -778,6 +761,9 @@ internal sealed class RegistrationService(
         {
             return Result.Failure<LinkLanding>(notBegun);
         }
+
+        // The press proved the address, so the code that would have is ended with it.
+        await codes.EndAsync(Holder(sender.Id, staged.Id), cancellationToken).ConfigureAwait(false);
 
         staged.Verify(now);
 
@@ -1144,6 +1130,7 @@ internal sealed class RegistrationService(
 
         // Nothing of the session survives it: an account exists now, and a staged
         // copy of what made it would be a second place the same facts live.
+        await EndCodesAsync(live, cancellationToken).ConfigureAwait(false);
         await sessions.RemoveAsync(live.Id, cancellationToken).ConfigureAwait(false);
 
         Result published = await events
@@ -1235,6 +1222,7 @@ internal sealed class RegistrationService(
             return Result.Failure(notBegun);
         }
 
+        await EndCodesAsync(live, cancellationToken).ConfigureAwait(false);
         await sessions.RemoveAsync(live.Id, cancellationToken).ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
@@ -2402,17 +2390,83 @@ internal sealed class RegistrationService(
 
         if (owner is SubjectId holder)
         {
-            return await TellHolderAsync(session, staged, holder, source, cancellationToken).ConfigureAwait(false);
+            return await WithheldAsync(session, staged, source, cancellationToken).ConfigureAwait(false)
+                ?? await TellHolderAsync(session, staged, holder, source, cancellationToken).ConfigureAwait(false);
         }
 
         if (await directory
                 .IsReservedAsync(staged.Kind, staged.Canonical, time.GetUtcNow(), cancellationToken)
                 .ConfigureAwait(false))
         {
-            return null;
+            return await WithheldAsync(session, staged, source, cancellationToken).ConfigureAwait(false);
         }
 
         return await SendCodeAsync(session, staged, source, cancellationToken).ConfigureAwait(false);
+    }
+
+    // AUTH-FACT-004, AUTH-ABUSE-004: an ask of a code for a held or reserved value is
+    // judged and counted against the restrictions as its message would be, and refused
+    // by them alike; admitted, the value is given a verification-code record that
+    // lives and counts as a sent code's does and that no code matches. Nothing is
+    // sent, and no link stands for a press to prove.
+    private async ValueTask<Error?> WithheldAsync(
+        RegistrationSession session,
+        StagedIdentity staged,
+        string source,
+        CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        IReadOnlyList<string> languages = (await configuration
+                .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<IReadOnlyList<string>>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return failure;
+        }
+
+        Result drawn = await restrictions
+            .DrawAsync(
+                new OutboundMessage(
+                    Destination(staged),
+                    MessageKind.VerificationLink,
+                    RestrictionPurpose.Verification,
+                    source,
+                    RecipientLanguage.Found(session.Language, languages)),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (drawn.Match(() => (Error?)null, error => error) is Error refused)
+        {
+            return refused;
+        }
+
+        staged.Unlinked();
+
+        return (await codes.WithholdAsync(Holder(session.Id, staged.Id), cancellationToken).ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error);
+    }
+
+    // AUTH-FACT-004 (D-166, 115): the verification-code record of a staged identifier
+    // is held against a fingerprint of the registration session and the identifier.
+    private static byte[] Holder(RegistrationSessionId session, IdentifierId staged)
+    {
+        Span<byte> named = stackalloc byte[32];
+
+        _ = session.Value.TryWriteBytes(named);
+        _ = staged.Value.TryWriteBytes(named[16..]);
+
+        return SHA256.HashData(named);
+    }
+
+    // The codes a session's staged identifiers had outstanding go with the session.
+    private async ValueTask EndCodesAsync(RegistrationSession session, CancellationToken cancellationToken)
+    {
+        foreach (StagedIdentity staged in session.Identifiers)
+        {
+            await codes.EndAsync(Holder(session.Id, staged.Id), cancellationToken).ConfigureAwait(false);
+        }
     }
 
     // Whether a value belongs to an account or is held out of reach for an undo, which
@@ -2434,10 +2488,6 @@ internal sealed class RegistrationService(
     {
         Error? failure = null;
 
-        TimeSpan lifetime = (await configuration
-                .ReadAsync(Settings.CodeVerificationLifetime, cancellationToken).ConfigureAwait(false))
-            .Match(value => value, error => Held<TimeSpan>(error, ref failure));
-
         IReadOnlyList<string> languages = (await configuration
                 .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Held<IReadOnlyList<string>>(error, ref failure));
@@ -2447,7 +2497,17 @@ internal sealed class RegistrationService(
             return failure;
         }
 
-        string code = VerificationCode.Draw(randomness);
+        // AUTH-ABUSE-004: the code is issued and its message undertaken in the caller's
+        // unit of work, so a send the restrictions refuse leaves no code behind it.
+        string code = (await codes.IssueAsync(Holder(session.Id, staged.Id), cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<string>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return failure;
+        }
+
         var link = OpaqueToken.Draw(randomness);
 
         Result<SendReference> sent = await sending
@@ -2473,7 +2533,7 @@ internal sealed class RegistrationService(
             return refused;
         }
 
-        staged.Sent(VerificationCode.Held(code), link.Fingerprint(), time.GetUtcNow() + lifetime);
+        staged.Linked(link.Fingerprint());
 
         return null;
     }

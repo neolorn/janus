@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
@@ -155,6 +156,44 @@ public sealed class VerificationCodesTests : IAsyncDisposable
     {
         Assert.Equal(ErrorCodes.CodeExpired, await RefusalAsync("000000"));
         Assert.False(await Service.OutstandingAsync(Holder, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-004: the record of a held or reserved value lives the lifetime a code
+    /// does, answers each of the first tries up to the cap as wrong whatever is
+    /// presented and every one after as expired, shows no digits, and is swept as a
+    /// code past its lifetime is.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_004_ARecordNoCodeMatchesIsAnsweredAndSweptAsACodeIsAsync()
+    {
+        _configuration.Set(Settings.CodeVerificationAttempts, 5);
+        string[] presented = ["000000", string.Empty, "no digits", "123456", "0"];
+        var answers = new List<ErrorCode?>();
+        Assert.True((await Service.WithholdAsync(Holder, TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        DateTimeOffset expiry = Assert.Single(_codes.All).ExpiresAt;
+        string? shown = await Service.ShownAsync(Holder, TestContext.Current.CancellationToken);
+
+        foreach (string entered in presented)
+        {
+            answers.Add(await RefusalAsync(entered));
+        }
+
+        ErrorCode? afterTheCap = await RefusalAsync("000000");
+        _ = await Service.WithholdAsync(Holder, TestContext.Current.CancellationToken);
+        _clock.Advance(Settings.CodeVerificationLifetime.Default);
+        ErrorCode? afterTheLifetime = await RefusalAsync("000000");
+        _ = await Service.WithholdAsync(Holder, TestContext.Current.CancellationToken);
+        _clock.Advance(Settings.CodeVerificationLifetime.Default);
+        int swept = await _codes.SweepAsync(_clock.GetUtcNow(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(Noon + Settings.CodeVerificationLifetime.Default, expiry);
+        Assert.Null(shown);
+        Assert.All(answers, answer => Assert.Equal(ErrorCodes.CodeInvalid, answer));
+        Assert.Equal(ErrorCodes.CodeExpired, afterTheCap);
+        Assert.Equal(ErrorCodes.CodeExpired, afterTheLifetime);
+        Assert.Equal(1, swept);
+        Assert.Empty(_codes.All);
     }
 
     /// <summary>

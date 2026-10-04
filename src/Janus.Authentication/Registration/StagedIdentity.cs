@@ -196,6 +196,27 @@ internal sealed class StagedIdentity
     }
 
     /// <summary>
+    /// Records the link a registration's message carried, in place of any before it.
+    /// The code the same message carried is held by its verification-code record
+    /// (AUTH-FACT-004).
+    /// </summary>
+    /// <param name="link">The fingerprint of the link token.</param>
+    /// <exception cref="ArgumentNullException">The link is absent.</exception>
+    public void Linked([NeverLogged] byte[] link)
+    {
+        ArgumentNullException.ThrowIfNull(link);
+
+        Forget();
+
+        Link = link;
+    }
+
+    /// <summary>
+    /// Leaves no link standing: nothing was sent for the value as it now is.
+    /// </summary>
+    public void Unlinked() => Forget();
+
+    /// <summary>
     /// Records a wrong code, which invalidates the code once the cap is reached.
     /// </summary>
     /// <param name="cap">How many wrong tries the code survives.</param>

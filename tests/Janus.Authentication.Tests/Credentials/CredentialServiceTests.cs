@@ -1109,6 +1109,8 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             Sessions,
             new DeviceService(new DeviceStoreInMemory(), _configuration, _work, _events, _clock, _randomness),
             Throttle,
+            new VerificationCodes(new VerificationCodeStoreInMemory(), _configuration, _work, _clock, _randomness),
+            _restrictions,
             new ConsentsInMemory(),
             _configuration,
             _work,

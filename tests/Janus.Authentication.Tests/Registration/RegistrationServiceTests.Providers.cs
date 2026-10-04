@@ -71,7 +71,7 @@ public sealed partial class RegistrationServiceTests
 
         Assert.True(Identity(asserted, IdentifierKind.Email).IsVerified);
         Assert.False(Identity(unasserted, IdentifierKind.Email).IsVerified);
-        Assert.NotNull(Identity(unasserted, IdentifierKind.Email).Code);
+        Assert.True(Outstanding(unasserted, IdentifierKind.Email).IsAnswerable());
     }
 
     /// <summary>
@@ -190,8 +190,8 @@ public sealed partial class RegistrationServiceTests
         Assert.Equal(
             Assert.Single(first.Identifiers) with { Id = Assert.Single(second.Identifiers).Id },
             Assert.Single(second.Identifiers));
-        Assert.Null(Identity(duplicate, IdentifierKind.Email).Code);
-        Assert.Null(Identity(again, IdentifierKind.Email).Code);
+        Assert.False(Outstanding(duplicate, IdentifierKind.Email).IsAnswerable());
+        Assert.False(Outstanding(again, IdentifierKind.Email).IsAnswerable());
         Assert.Equal(1, _notifications.Mail.Count(sent => sent.Message is MessageKind.AccountExists));
     }
 
@@ -210,7 +210,7 @@ public sealed partial class RegistrationServiceTests
         _ = Ok(await ProvidedAsync(session, Factor.Google, GoogleSubject, Gmail, verified: true));
 
         Assert.False(Identity(session, IdentifierKind.Email).IsVerified);
-        Assert.Null(Identity(session, IdentifierKind.Email).Code);
+        Assert.False(Outstanding(session, IdentifierKind.Email).IsAnswerable());
         Assert.Equal(MessageKind.AccountExists, Assert.Single(_notifications.Mail).Message);
     }
 
@@ -228,7 +228,7 @@ public sealed partial class RegistrationServiceTests
         _ = Ok(await ProvidedAsync(session, Factor.Google, GoogleSubject, Gmail, verified: true));
 
         Assert.False(Identity(session, IdentifierKind.Email).IsVerified);
-        Assert.Null(Identity(session, IdentifierKind.Email).Code);
+        Assert.False(Outstanding(session, IdentifierKind.Email).IsAnswerable());
         Assert.Empty(_notifications.Mail);
     }
 
