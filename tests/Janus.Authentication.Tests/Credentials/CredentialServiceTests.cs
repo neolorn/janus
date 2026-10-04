@@ -433,6 +433,62 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-008 AC4 and AUTH-RECOV-006 AC2: the report of a copy, download or
+    /// print is recorded on the set the account holds, at the instant it is made.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AC4_AReportedExportIsRecordedOnTheSetAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+
+        _ = await ConfirmedAsync(subject, session);
+
+        _clock.Advance(TimeSpan.FromMinutes(2));
+
+        Accepted(await Service.MarkRecoveryCodesExportedAsync(
+            AccessContext.Of(subject),
+            TestContext.Current.CancellationToken));
+
+        RecoveryCodeSet? held = await _sets.FindAsync(subject, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(held);
+        Assert.Equal(_clock.GetUtcNow(), held.ExportedAt);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-008 and chapter 09 section 4: an account holding no set has nothing an
+    /// export could be recorded on, which is the service's refusal.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AnExportReportedWithNoSetIsRefusedAsNotEnrolledAsync()
+    {
+        (SubjectId subject, _) = await SignedInAsync();
+
+        Assert.Equal(
+            ErrorCodes.FactorNotEnrolled,
+            Refused(await Service.MarkRecoveryCodesExportedAsync(
+                AccessContext.Of(subject),
+                TestContext.Current.CancellationToken)));
+
+        Assert.Null(await _sets.FindAsync(subject, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002 AC3: the operation is over the caller's own set, so a context
+    /// that names no account is denied and no set is read for it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_002_AC3_AnExportReportedByNoAccountIsDeniedAsync() =>
+        Assert.Equal(
+            ErrorCodes.Denied,
+            Refused(await Service.MarkRecoveryCodesExportedAsync(
+                Sweeper,
+                TestContext.Current.CancellationToken)));
+
+    /// <summary>
     /// AUTH-FACT-002b: a second step is second to a password, so an account holding
     /// none is refused one.
     /// </summary>

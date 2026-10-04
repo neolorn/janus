@@ -12,7 +12,7 @@ namespace Janus.Core;
 /// <param name="ExpiresAt">When it stops working, where one was set.</param>
 /// <remarks>Implements REG-MAIL-002 and INT-MAIL-010 AC2.</remarks>
 public sealed record AppPassword(
-    string Id,
+    AppPasswordId Id,
     string Label,
     DateTimeOffset CreatedAt,
     DateTimeOffset? ExpiresAt);

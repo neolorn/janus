@@ -154,17 +154,20 @@ Janus.Core.AncestryEntry.ResourceType.get -> string!
 Janus.Core.AncestryEntry.ResourceType.init -> void
 Janus.Core.AppPassword
 Janus.Core.AppPassword.<Clone>$() -> Janus.Core.AppPassword!
-Janus.Core.AppPassword.AppPassword(string! Id, string! Label, System.DateTimeOffset CreatedAt, System.DateTimeOffset? ExpiresAt) -> void
+Janus.Core.AppPassword.AppPassword(Janus.Core.AppPasswordId Id, string! Label, System.DateTimeOffset CreatedAt, System.DateTimeOffset? ExpiresAt) -> void
 Janus.Core.AppPassword.CreatedAt.get -> System.DateTimeOffset
 Janus.Core.AppPassword.CreatedAt.init -> void
-Janus.Core.AppPassword.Deconstruct(out string! Id, out string! Label, out System.DateTimeOffset CreatedAt, out System.DateTimeOffset? ExpiresAt) -> void
+Janus.Core.AppPassword.Deconstruct(out Janus.Core.AppPasswordId Id, out string! Label, out System.DateTimeOffset CreatedAt, out System.DateTimeOffset? ExpiresAt) -> void
 Janus.Core.AppPassword.Equals(Janus.Core.AppPassword? other) -> bool
 Janus.Core.AppPassword.ExpiresAt.get -> System.DateTimeOffset?
 Janus.Core.AppPassword.ExpiresAt.init -> void
-Janus.Core.AppPassword.Id.get -> string!
+Janus.Core.AppPassword.Id.get -> Janus.Core.AppPasswordId
 Janus.Core.AppPassword.Id.init -> void
 Janus.Core.AppPassword.Label.get -> string!
 Janus.Core.AppPassword.Label.init -> void
+Janus.Core.AppPasswordId
+Janus.Core.AppPasswordId.AppPasswordId() -> void
+Janus.Core.AppPasswordId.Equals(Janus.Core.AppPasswordId other) -> bool
 Janus.Core.ApprovedRecovery
 Janus.Core.ApprovedRecovery.<Clone>$() -> Janus.Core.ApprovedRecovery!
 Janus.Core.ApprovedRecovery.ApprovedRecovery(System.DateTimeOffset? EnrolmentLinkExpiresAt) -> void
@@ -784,12 +787,15 @@ Janus.Core.DisplayName
 Janus.Core.DisplayName.DisplayName() -> void
 Janus.Core.DisplayName.Equals(Janus.Core.DisplayName other) -> bool
 Janus.Core.DisplayName.Value.get -> string!
+Janus.Core.DocumentName
+Janus.Core.DocumentName.DocumentName() -> void
+Janus.Core.DocumentName.Equals(Janus.Core.DocumentName other) -> bool
 Janus.Core.DocumentPublication
 Janus.Core.DocumentPublication.<Clone>$() -> Janus.Core.DocumentPublication!
-Janus.Core.DocumentPublication.Deconstruct(out string! DocumentName, out string! Text, out string? GoverningLanguage, out System.Collections.Generic.IReadOnlyList<Janus.Core.DocumentTranslation!>! Translations, out bool Material) -> void
-Janus.Core.DocumentPublication.DocumentName.get -> string!
+Janus.Core.DocumentPublication.Deconstruct(out Janus.Core.DocumentName DocumentName, out string! Text, out string? GoverningLanguage, out System.Collections.Generic.IReadOnlyList<Janus.Core.DocumentTranslation!>! Translations, out bool Material) -> void
+Janus.Core.DocumentPublication.DocumentName.get -> Janus.Core.DocumentName
 Janus.Core.DocumentPublication.DocumentName.init -> void
-Janus.Core.DocumentPublication.DocumentPublication(string! DocumentName, string! Text, string? GoverningLanguage, System.Collections.Generic.IReadOnlyList<Janus.Core.DocumentTranslation!>! Translations, bool Material) -> void
+Janus.Core.DocumentPublication.DocumentPublication(Janus.Core.DocumentName DocumentName, string! Text, string? GoverningLanguage, System.Collections.Generic.IReadOnlyList<Janus.Core.DocumentTranslation!>! Translations, bool Material) -> void
 Janus.Core.DocumentPublication.Equals(Janus.Core.DocumentPublication? other) -> bool
 Janus.Core.DocumentPublication.GoverningLanguage.get -> string?
 Janus.Core.DocumentPublication.GoverningLanguage.init -> void
@@ -1230,7 +1236,7 @@ Janus.Core.IAccounts.SuspendAsync(Janus.Core.AccessContext! context, Janus.Core.
 Janus.Core.IAppPasswords
 Janus.Core.IAppPasswords.CreateAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, string! label, System.DateTimeOffset? expiresAt, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.IssuedAppPassword!>>
 Janus.Core.IAppPasswords.ListAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.AppPassword!>!>>
-Janus.Core.IAppPasswords.RevokeAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, string! id, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IAppPasswords.RevokeAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.AppPasswordId id, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IAssuranceProvider
 Janus.Core.IAssuranceProvider.AttainedAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.AttainedAssurance!>>
 Janus.Core.IAuditTrail
@@ -1268,6 +1274,7 @@ Janus.Core.ICredentials.BeginKeyAsync(Janus.Core.CredentialAuthority! authority,
 Janus.Core.ICredentials.CompleteKeyAsync(Janus.Core.CredentialAuthority! authority, Janus.Core.AuthenticatorAttestation! attestation, string! label, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.EnrolledCredential!>>
 Janus.Core.ICredentials.ConfirmGeneratorAsync(Janus.Core.CredentialAuthority! authority, Janus.Core.AuthenticatorId credential, string! code, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.EnrolledCredential!>>
 Janus.Core.ICredentials.GenerateRecoveryCodesAsync(Janus.Core.CredentialAuthority! authority, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.GeneratedRecoveryCodes!>>
+Janus.Core.ICredentials.MarkRecoveryCodesExportedAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.ICredentials.LinkableAsync(Janus.Core.CredentialAuthority! authority, Janus.Core.Factor provider, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.ICredentials.RemoveAsync(Janus.Core.CredentialAuthority! authority, Janus.Core.AuthenticatorId credential, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.ICredentials.SetPasswordAsync(Janus.Core.CredentialAuthority! authority, string! password, string! source, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
@@ -1327,8 +1334,8 @@ Janus.Core.IKeyRing.BorrowMaintenanceCredential<TValue>(System.Func<System.ReadO
 Janus.Core.IKeyRing.BorrowProviderCredential<TValue>(string! provider, System.Func<Janus.Core.ProviderCredential!, TValue>! use) -> Janus.Core.Result<TValue>
 Janus.Core.ILegalDocuments
 Janus.Core.ILegalDocuments.PublishAsync(Janus.Core.AccessContext! context, Janus.Core.DocumentPublication! publication, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.DocumentVersion!>>
-Janus.Core.ILegalDocuments.ReadAsync(string! document, string? version, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.DocumentVersion!>>
-Janus.Core.ILegalDocuments.TranslateAsync(Janus.Core.AccessContext! context, string! document, string! version, Janus.Core.DocumentTranslation! translation, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.ILegalDocuments.ReadAsync(Janus.Core.DocumentName document, string? version, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.DocumentVersion!>>
+Janus.Core.ILegalDocuments.TranslateAsync(Janus.Core.AccessContext! context, Janus.Core.DocumentName document, string! version, Janus.Core.DocumentTranslation! translation, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.ILocationSource
 Janus.Core.ILocationSource.OpenAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.IO.Stream!>>
 Janus.Core.IMailServer
@@ -1336,7 +1343,7 @@ Janus.Core.IMailServer.AppPasswordsAsync(string! accessToken, System.Threading.C
 Janus.Core.IMailServer.CreateAppPasswordAsync(string! accessToken, string! label, System.DateTimeOffset? expiresAt, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.IssuedAppPassword!>>
 Janus.Core.IMailServer.MailboxesAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.HostedMailbox!>!>>
 Janus.Core.IMailServer.ProvisionAsync(Janus.Core.MailboxPush! push, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
-Janus.Core.IMailServer.RevokeAppPasswordAsync(string! accessToken, string! id, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IMailServer.RevokeAppPasswordAsync(string! accessToken, Janus.Core.AppPasswordId id, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IMailServerInUse
 Janus.Core.IMailServerInUse.Chosen() -> Janus.Core.Result<Janus.Core.IMailServer!>
 Janus.Core.IMailTransport
@@ -1410,10 +1417,10 @@ Janus.Core.IRestoreTestInstance.RestoreAsync(System.Threading.CancellationToken 
 Janus.Core.IRestoreTestInstance.TearDownAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IRestrictionSet
 Janus.Core.IRestrictionSet.AllAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.Restriction!>!>>
-Janus.Core.IRestrictionSet.DeleteAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, string! name, string? reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IRestrictionSet.DeleteAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.RestrictionName name, string? reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
 Janus.Core.IRestrictionSet.EditAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.Restriction! replacement, string? reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
-Janus.Core.IRestrictionSet.GrantAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, string! name, string! keyValue, int credit, string? reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
-Janus.Core.IRestrictionSet.ReadAsync(Janus.Core.AccessContext! context, string! name, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.Restriction!>>
+Janus.Core.IRestrictionSet.GrantAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.RestrictionName name, string! keyValue, int credit, string? reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result>
+Janus.Core.IRestrictionSet.ReadAsync(Janus.Core.AccessContext! context, Janus.Core.RestrictionName name, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<Janus.Core.Restriction!>>
 Janus.Core.IRoles
 Janus.Core.IRoles.AllAsync(Janus.Core.AccessContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<System.Collections.Generic.IReadOnlyList<Janus.Core.DefinedRole!>!>>
 Janus.Core.IRoles.DefineAsync(Janus.Core.AccessContext! context, Janus.Core.SessionId session, Janus.Core.DefinedRole! role, string! reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Janus.Core.Result<bool>>
@@ -1546,11 +1553,11 @@ Janus.Core.InvitationRequest.Roles.get -> System.Collections.Generic.IReadOnlyLi
 Janus.Core.InvitationRequest.Roles.init -> void
 Janus.Core.IssuedAppPassword
 Janus.Core.IssuedAppPassword.<Clone>$() -> Janus.Core.IssuedAppPassword!
-Janus.Core.IssuedAppPassword.Deconstruct(out string! Id, out string! Secret) -> void
+Janus.Core.IssuedAppPassword.Deconstruct(out Janus.Core.AppPasswordId Id, out string! Secret) -> void
 Janus.Core.IssuedAppPassword.Equals(Janus.Core.IssuedAppPassword? other) -> bool
-Janus.Core.IssuedAppPassword.Id.get -> string!
+Janus.Core.IssuedAppPassword.Id.get -> Janus.Core.AppPasswordId
 Janus.Core.IssuedAppPassword.Id.init -> void
-Janus.Core.IssuedAppPassword.IssuedAppPassword(string! Id, string! Secret) -> void
+Janus.Core.IssuedAppPassword.IssuedAppPassword(Janus.Core.AppPasswordId Id, string! Secret) -> void
 Janus.Core.IssuedAppPassword.Secret.get -> string!
 Janus.Core.IssuedAppPassword.Secret.init -> void
 Janus.Core.IssuedInvitation
@@ -2499,6 +2506,9 @@ Janus.Core.RestrictionChannel
 Janus.Core.RestrictionChannel.Any = 0 -> Janus.Core.RestrictionChannel
 Janus.Core.RestrictionChannel.Email = 2 -> Janus.Core.RestrictionChannel
 Janus.Core.RestrictionChannel.Sms = 1 -> Janus.Core.RestrictionChannel
+Janus.Core.RestrictionName
+Janus.Core.RestrictionName.RestrictionName() -> void
+Janus.Core.RestrictionName.Equals(Janus.Core.RestrictionName other) -> bool
 Janus.Core.RestrictionPurpose
 Janus.Core.RestrictionPurpose.Any = 0 -> Janus.Core.RestrictionPurpose
 Janus.Core.RestrictionPurpose.Notification = 4 -> Janus.Core.RestrictionPurpose
@@ -2960,6 +2970,8 @@ override Janus.Core.AncestryEntry.ToString() -> string!
 override Janus.Core.AppPassword.Equals(object? obj) -> bool
 override Janus.Core.AppPassword.GetHashCode() -> int
 override Janus.Core.AppPassword.ToString() -> string!
+override Janus.Core.AppPasswordId.GetHashCode() -> int
+override Janus.Core.AppPasswordId.ToString() -> string!
 override Janus.Core.ApprovedRecovery.Equals(object? obj) -> bool
 override Janus.Core.ApprovedRecovery.GetHashCode() -> int
 override Janus.Core.ApprovedRecovery.ToString() -> string!
@@ -3095,6 +3107,8 @@ override Janus.Core.DeviceVerified.GetHashCode() -> int
 override Janus.Core.DeviceVerified.ToString() -> string!
 override Janus.Core.DisplayName.GetHashCode() -> int
 override Janus.Core.DisplayName.ToString() -> string!
+override Janus.Core.DocumentName.GetHashCode() -> int
+override Janus.Core.DocumentName.ToString() -> string!
 override Janus.Core.DocumentPublication.Equals(object? obj) -> bool
 override Janus.Core.DocumentPublication.GetHashCode() -> int
 override Janus.Core.DocumentPublication.ToString() -> string!
@@ -3402,6 +3416,8 @@ override Janus.Core.RestrictionKeySupplier.GetHashCode() -> int
 override Janus.Core.RestrictionKeySupplier.ToString() -> string!
 override Janus.Core.Result.GetHashCode() -> int
 override Janus.Core.Result<TValue>.GetHashCode() -> int
+override Janus.Core.RestrictionName.GetHashCode() -> int
+override Janus.Core.RestrictionName.ToString() -> string!
 override Janus.Core.RoleName.GetHashCode() -> int
 override Janus.Core.RoleName.ToString() -> string!
 override Janus.Core.SendContext.Equals(object? obj) -> bool
@@ -3544,6 +3560,10 @@ static Janus.Core.AncestryEntry.operator !=(Janus.Core.AncestryEntry? left, Janu
 static Janus.Core.AncestryEntry.operator ==(Janus.Core.AncestryEntry? left, Janus.Core.AncestryEntry? right) -> bool
 static Janus.Core.AppPassword.operator !=(Janus.Core.AppPassword? left, Janus.Core.AppPassword? right) -> bool
 static Janus.Core.AppPassword.operator ==(Janus.Core.AppPassword? left, Janus.Core.AppPassword? right) -> bool
+static Janus.Core.AppPasswordId.Parse(string! value) -> Janus.Core.AppPasswordId
+static Janus.Core.AppPasswordId.TryParse(string? value, out Janus.Core.AppPasswordId id) -> bool
+static Janus.Core.AppPasswordId.operator !=(Janus.Core.AppPasswordId left, Janus.Core.AppPasswordId right) -> bool
+static Janus.Core.AppPasswordId.operator ==(Janus.Core.AppPasswordId left, Janus.Core.AppPasswordId right) -> bool
 static Janus.Core.ApprovedRecovery.operator !=(Janus.Core.ApprovedRecovery? left, Janus.Core.ApprovedRecovery? right) -> bool
 static Janus.Core.ApprovedRecovery.operator ==(Janus.Core.ApprovedRecovery? left, Janus.Core.ApprovedRecovery? right) -> bool
 static Janus.Core.AttachedInvitation.operator !=(Janus.Core.AttachedInvitation? left, Janus.Core.AttachedInvitation? right) -> bool
@@ -3877,6 +3897,10 @@ static Janus.Core.DictionaryWords.Of(System.Collections.Generic.IEnumerable<stri
 static Janus.Core.DisplayName.TryParse(string! entered, out Janus.Core.DisplayName name) -> bool
 static Janus.Core.DisplayName.operator !=(Janus.Core.DisplayName left, Janus.Core.DisplayName right) -> bool
 static Janus.Core.DisplayName.operator ==(Janus.Core.DisplayName left, Janus.Core.DisplayName right) -> bool
+static Janus.Core.DocumentName.Parse(string! value) -> Janus.Core.DocumentName
+static Janus.Core.DocumentName.TryParse(string? value, out Janus.Core.DocumentName name) -> bool
+static Janus.Core.DocumentName.operator !=(Janus.Core.DocumentName left, Janus.Core.DocumentName right) -> bool
+static Janus.Core.DocumentName.operator ==(Janus.Core.DocumentName left, Janus.Core.DocumentName right) -> bool
 static Janus.Core.DocumentPublication.operator !=(Janus.Core.DocumentPublication? left, Janus.Core.DocumentPublication? right) -> bool
 static Janus.Core.DocumentPublication.operator ==(Janus.Core.DocumentPublication? left, Janus.Core.DocumentPublication? right) -> bool
 static Janus.Core.DocumentTranslation.operator !=(Janus.Core.DocumentTranslation? left, Janus.Core.DocumentTranslation? right) -> bool
@@ -4334,6 +4358,10 @@ static Janus.Core.Result.operator !=(Janus.Core.Result left, Janus.Core.Result r
 static Janus.Core.Result.operator ==(Janus.Core.Result left, Janus.Core.Result right) -> bool
 static Janus.Core.Result<TValue>.operator !=(Janus.Core.Result<TValue> left, Janus.Core.Result<TValue> right) -> bool
 static Janus.Core.Result<TValue>.operator ==(Janus.Core.Result<TValue> left, Janus.Core.Result<TValue> right) -> bool
+static Janus.Core.RestrictionName.Parse(string! value) -> Janus.Core.RestrictionName
+static Janus.Core.RestrictionName.TryParse(string? value, out Janus.Core.RestrictionName name) -> bool
+static Janus.Core.RestrictionName.operator !=(Janus.Core.RestrictionName left, Janus.Core.RestrictionName right) -> bool
+static Janus.Core.RestrictionName.operator ==(Janus.Core.RestrictionName left, Janus.Core.RestrictionName right) -> bool
 static Janus.Core.RoleName.Parse(string! value) -> Janus.Core.RoleName
 static Janus.Core.RoleName.TryParse(string? value, out Janus.Core.RoleName name) -> bool
 static Janus.Core.RoleName.operator !=(Janus.Core.RoleName left, Janus.Core.RoleName right) -> bool
@@ -4452,6 +4480,9 @@ virtual Janus.Core.SubjectEvent.Equals(Janus.Core.SubjectEvent? other) -> bool
 ~override Janus.Core.Result.ToString() -> string
 ~override Janus.Core.Result<TValue>.Equals(object obj) -> bool
 ~override Janus.Core.Result<TValue>.ToString() -> string
+~override Janus.Core.AppPasswordId.Equals(object obj) -> bool
+~override Janus.Core.DocumentName.Equals(object obj) -> bool
+~override Janus.Core.RestrictionName.Equals(object obj) -> bool
 ~override Janus.Core.RoleName.Equals(object obj) -> bool
 ~override Janus.Core.SendReference.Equals(object obj) -> bool
 ~override Janus.Core.SessionId.Equals(object obj) -> bool

@@ -79,7 +79,7 @@ public interface IAppPasswords
     ValueTask<Result> RevokeAsync(
         AccessContext context,
         SessionId session,
-        string id,
+        AppPasswordId id,
         string source,
         CancellationToken cancellationToken);
 }

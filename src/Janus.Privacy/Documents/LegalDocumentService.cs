@@ -45,15 +45,15 @@ internal sealed class LegalDocumentService(
 
     /// <inheritdoc/>
     public async ValueTask<Result<DocumentVersion>> ReadAsync(
-        string document,
+        DocumentName document,
         string? version,
         CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(document);
+        string named = document.ToString();
 
-        DocumentVersion? found = version is { Length: > 0 } named
-            ? await store.FindAsync(document, named, cancellationToken).ConfigureAwait(false)
-            : await store.CurrentAsync(document, cancellationToken).ConfigureAwait(false);
+        DocumentVersion? found = version is { Length: > 0 } asked
+            ? await store.FindAsync(named, asked, cancellationToken).ConfigureAwait(false)
+            : await store.CurrentAsync(named, cancellationToken).ConfigureAwait(false);
 
         return found is null
             ? Result.Failure<DocumentVersion>(Error.From(ErrorCodes.DocumentNotFound))
@@ -76,6 +76,8 @@ internal sealed class LegalDocumentService(
             return Result.Failure<DocumentVersion>(refused);
         }
 
+        string named = publication.DocumentName.ToString();
+
         // A translation is an aid to the reader and never governs, so a submission
         // carrying only translations publishes nothing (PRIV-CONS-006).
         if (string.IsNullOrWhiteSpace(publication.Text))
@@ -83,8 +85,8 @@ internal sealed class LegalDocumentService(
             Result raised = await alerts
                 .RaiseAsync(
                     AlertCondition.GoverningTextMissing,
-                    publication.DocumentName,
-                    Named(publication.DocumentName),
+                    named,
+                    Named(named),
                     cancellationToken)
                 .ConfigureAwait(false);
 
@@ -96,7 +98,7 @@ internal sealed class LegalDocumentService(
             return Result.Failure<DocumentVersion>(Error.From(
                 ErrorCodes.NoticeGoverningTextMissing,
                 "document",
-                JsonSerializer.SerializeToElement(publication.DocumentName)));
+                JsonSerializer.SerializeToElement(named)));
         }
 
         Result<string> governing = publication.GoverningLanguage is { Length: > 0 } declared
@@ -115,13 +117,12 @@ internal sealed class LegalDocumentService(
     /// <inheritdoc/>
     public async ValueTask<Result> TranslateAsync(
         AccessContext context,
-        string document,
+        DocumentName document,
         string version,
         DocumentTranslation translation,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        ArgumentException.ThrowIfNullOrWhiteSpace(document);
         ArgumentException.ThrowIfNullOrWhiteSpace(version);
         ArgumentNullException.ThrowIfNull(translation);
 
@@ -132,7 +133,9 @@ internal sealed class LegalDocumentService(
             return Result.Failure(refused);
         }
 
-        if (await store.FindAsync(document, version, cancellationToken).ConfigureAwait(false) is null)
+        string named = document.ToString();
+
+        if (await store.FindAsync(named, version, cancellationToken).ConfigureAwait(false) is null)
         {
             return Result.Failure(Error.From(ErrorCodes.DocumentNotFound));
         }
@@ -154,7 +157,7 @@ internal sealed class LegalDocumentService(
             return Result.Failure(since);
         }
 
-        await store.TranslateAsync(document, version, translation, cancellationToken).ConfigureAwait(false);
+        await store.TranslateAsync(named, version, translation, cancellationToken).ConfigureAwait(false);
         await audit
             .RecordedAsync(
                 Translated,
@@ -162,7 +165,7 @@ internal sealed class LegalDocumentService(
                 context.BreakGlassReason,
                 subject: null,
                 time.GetUtcNow(),
-                Named(document, version, translation.Language),
+                Named(named, version, translation.Language),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -213,12 +216,14 @@ internal sealed class LegalDocumentService(
         string governing,
         CancellationToken cancellationToken)
     {
+        string named = publication.DocumentName.ToString();
+
         int published = await store
-            .CountAsync(publication.DocumentName, cancellationToken)
+            .CountAsync(named, cancellationToken)
             .ConfigureAwait(false);
 
         var version = new DocumentVersion(
-            publication.DocumentName,
+            named,
             (published + 1).ToString(CultureInfo.InvariantCulture),
             governing,
             publication.Text,

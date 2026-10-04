@@ -432,6 +432,57 @@ public sealed class JmapMailServerTests : IDisposable
     }
 
     /// <summary>
+    /// INT-MAIL-001, CONV-DESIGN-004: an app password the server names outside the form
+    /// of a JMAP identifier (RFC 8620 section 1.2) is an answer that does not read, at
+    /// the listing and at the creation, and is never handed on as an identifier.
+    /// </summary>
+    /// <param name="id">What the server calls the app password.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("")]
+    [InlineData("p=0001")]
+    [InlineData("p 0001")]
+    public async Task INT_MAIL_001_AnAppPasswordNamedOutsideTheFormOfAnIdentifierDoesNotReadAsync(string id)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using Started started = await StartedAsync();
+
+        _server.Answer = () => Answered(
+            "x:AppPassword/get",
+            new JsonObject
+            {
+                ["list"] = new JsonArray(new JsonObject
+                {
+                    ["id"] = id,
+                    ["description"] = "Phone",
+                    ["createdAt"] = "2026-09-30T12:00:00Z",
+                    ["expiresAt"] = null,
+                }),
+            });
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            (await started.Server.AppPasswordsAsync(PersonToken, cancellationToken))
+                .Match<ErrorCode?>(_ => null, error => error.Code));
+
+        _server.Answer = () => Answered(
+            "x:AppPassword/set",
+            new JsonObject
+            {
+                ["created"] = new JsonObject
+                {
+                    ["password"] = new JsonObject { ["id"] = id, ["secret"] = "generated" },
+                },
+            });
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            (await started.Server.CreateAppPasswordAsync(PersonToken, "Phone", expiresAt: null, cancellationToken))
+                .Match<ErrorCode?>(_ => null, error => error.Code));
+    }
+
+    /// <summary>
     /// INT-MAIL-001: an answer that is not 2xx, that does not read, that is a method
     /// error, or that the server cannot give in time is a failure, never a success.
     /// </summary>
@@ -473,7 +524,7 @@ public sealed class JmapMailServerTests : IDisposable
             (await started.Server.MailboxesAsync(cancellationToken)).Match<ErrorCode?>(_ => null, error => error.Code));
         Assert.Equal(
             ErrorCodes.SystemFault,
-            Refusal(await started.Server.RevokeAppPasswordAsync(PersonToken, "p0001", cancellationToken)));
+            Refusal(await started.Server.RevokeAppPasswordAsync(PersonToken, AppPasswordId.Parse("p0001"), cancellationToken)));
     }
 
     /// <summary>
@@ -613,6 +664,20 @@ public sealed class JmapMailServerTests : IDisposable
 
     private static ErrorCode? Refusal(Result result) => result.Match<ErrorCode?>(() => null, error => error.Code);
 
+    // One method's answer as the server writes it, to the one call a request makes.
+    private static HttpResponseMessage Answered(string method, JsonObject arguments) =>
+        new(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                new JsonObject
+                {
+                    ["methodResponses"] = new JsonArray(new JsonArray(method, arguments, "0")),
+                    ["sessionState"] = "0",
+                }.ToJsonString(),
+                Encoding.UTF8,
+                "application/json"),
+        };
+
     private static TValue Value<TValue>(Result<TValue> result) =>
         result.Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
@@ -690,7 +755,7 @@ public sealed class JmapMailServerTests : IDisposable
 
         public ValueTask<Result> RevokeAppPasswordAsync(
             string accessToken,
-            string id,
+            AppPasswordId id,
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException("The host's mail server is not called here.");
     }

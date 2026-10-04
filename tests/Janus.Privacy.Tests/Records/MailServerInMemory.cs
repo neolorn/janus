@@ -37,7 +37,7 @@ internal sealed class MailServerInMemory : IMailServer
     /// <inheritdoc/>
     public ValueTask<Result> RevokeAppPasswordAsync(
         string accessToken,
-        string id,
+        AppPasswordId id,
         CancellationToken cancellationToken) =>
         ValueTask.FromResult(Result.Failure(Error.From(ErrorCodes.CredentialNotFound)));
 }

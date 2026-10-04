@@ -671,7 +671,8 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
     /// <summary>
     /// REG-INV-001 and API-CONV-003: a document the deployment never published cannot be
-    /// shown, which is a request refused on its meaning; a blank name is one that does
+    /// shown, which is a request refused on its meaning; a blank name, and one outside the
+    /// rule a document's name is held to (INT-SMS-003), is one that does
     /// not read. Nothing is issued.
     /// </summary>
     [Fact]
@@ -679,9 +680,11 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     {
         Error refused = Failure(await IssueAsync(Customer, Request(email: Personal, documents: ["unwritten"])));
         Error blank = Failure(await IssueAsync(Customer, Request(email: Personal, documents: [" "])));
+        Error unruled = Failure(await IssueAsync(Customer, Request(email: Personal, documents: ["Staff Handbook"])));
 
         Assert.Equal((ErrorCodes.RequestInvalid, "documents"), (refused.Code, Member(refused)));
         Assert.Equal((ErrorCodes.RequestMalformed, "documents"), (blank.Code, Member(blank)));
+        Assert.Equal((ErrorCodes.RequestMalformed, "documents"), (unruled.Code, Member(unruled)));
         Assert.Empty(_invitations.Held);
     }
 

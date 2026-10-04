@@ -64,7 +64,7 @@ internal interface ICredentialAudit
     ValueTask MailCredentialAsync(
         AuditAction action,
         SubjectId subject,
-        string credential,
+        AppPasswordId credential,
         DateTimeOffset at,
         CancellationToken cancellationToken);
 

@@ -44,6 +44,7 @@ internal static class CredentialEndpoints
         _ = account.MapPost("/factors/totp/begin", BeginGeneratorAsync);
         _ = account.MapPost("/factors/totp/confirm", ConfirmGeneratorAsync);
         _ = account.MapPost("/recoverycodes", GenerateRecoveryCodesAsync);
+        _ = account.MapPost("/recoverycodes/exported", MarkRecoveryCodesExportedAsync);
 
         RouteGroupBuilder ceremonies = endpoints.MapGroup("/auth/webauthn/register");
 
@@ -254,6 +255,24 @@ internal static class CredentialEndpoints
                     CredentialsJson.Default.RecoveryCodesView,
                     contentType: null,
                     StatusCodes.Status200OK));
+    }
+
+    // AUTH-FACT-008: the report is about the set of the account whose session the
+    // browser holds, and an enrolment session reports none.
+    private static async Task<IResult> MarkRecoveryCodesExportedAsync(
+        ICredentials credentials,
+        RequestSession browser,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(credentials);
+        ArgumentNullException.ThrowIfNull(browser);
+
+        return browser.Context is not AccessContext holder
+            ? Nobody()
+            : Answers.Of(
+                await credentials.MarkRecoveryCodesExportedAsync(holder, cancellationToken)
+                    .ConfigureAwait(false),
+                Nothing);
     }
 
     // AUTH-RECOV-007, D-141: a removal that would lower what the account reaches

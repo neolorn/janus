@@ -206,7 +206,9 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
 
         foreach (JsonElement entry in list.EnumerateArray())
         {
-            if (Text(entry, "id") is not string id
+            // RFC 8620 section 1.2, INT-MAIL-001: an identifier outside the form of an Id
+            // is an answer that does not read, as an absent one is.
+            if (!AppPasswordId.TryParse(Text(entry, "id"), out AppPasswordId id)
                 || Text(entry, "description") is not string label
                 || Instant(entry, "createdAt") is not DateTimeOffset createdAt
                 || !Expiry(entry, out DateTimeOffset? expiresAt))
@@ -263,7 +265,7 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
         return answered[0].TryGetProperty("created", out JsonElement created)
             && created.ValueKind is JsonValueKind.Object
             && created.TryGetProperty("password", out JsonElement issued)
-            && Text(issued, "id") is string id
+            && AppPasswordId.TryParse(Text(issued, "id"), out AppPasswordId id)
             && Text(issued, "secret") is string secret
             && secret.Length is not 0
                 ? Result.Success(new IssuedAppPassword(id, secret))
@@ -273,17 +275,17 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
     /// <inheritdoc/>
     public async ValueTask<Result> RevokeAppPasswordAsync(
         string accessToken,
-        string id,
+        AppPasswordId id,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accessToken);
-        ArgumentNullException.ThrowIfNull(id);
 
+        string named = id.ToString();
         Error? failure = null;
 
         IReadOnlyList<JsonElement> answered = (await CalledAsync(
                     accessToken,
-                    [new Call("x:AppPassword/set", new JsonObject { ["destroy"] = new JsonArray(id) })],
+                    [new Call("x:AppPassword/set", new JsonObject { ["destroy"] = new JsonArray(named) })],
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<IReadOnlyList<JsonElement>>(error, ref failure));
@@ -293,14 +295,14 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
             return Result.Failure(failure);
         }
 
-        if (Destroyed(answered[0], id))
+        if (Destroyed(answered[0], named))
         {
             return Result.Success();
         }
 
         // INT-MAIL-010: an app password the server holds no more, or never held, for the
         // person is not found.
-        return Result.Failure(Error.From(NotFound(answered[0], "notDestroyed", id)
+        return Result.Failure(Error.From(NotFound(answered[0], "notDestroyed", named)
             ? ErrorCodes.CredentialNotFound
             : ErrorCodes.SystemFault));
     }

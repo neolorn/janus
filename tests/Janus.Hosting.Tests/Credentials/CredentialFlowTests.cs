@@ -145,6 +145,67 @@ public sealed class CredentialFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-008 AC4, AUTH-RECOV-006 AC2 and LIB-API-005: the frontend's report of a
+    /// copy, download or print is answered with nothing, and the account reads when it
+    /// was made.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AC4_AReportedExportIsReadFromTheAccountAsync()
+    {
+        Browser browser = await SignedInAsync();
+
+        Assert.Equal(
+            StatusCodes.Status200OK,
+            (await browser.SendAsync("POST", "/account/recoverycodes")).Status);
+
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(1));
+
+        Answer reported = await browser.SendAsync("POST", "/account/recoverycodes/exported");
+
+        Assert.Equal(StatusCodes.Status204NoContent, reported.Status);
+
+        Answer account = await browser.SendAsync("GET", "/account");
+
+        Assert.Equal(StatusCodes.Status200OK, account.Status);
+        Assert.Equal(
+            _deployment.Clock.GetUtcNow(),
+            account.Json().GetProperty("recoveryCodes").GetProperty("exportedAt").GetDateTimeOffset());
+    }
+
+    /// <summary>
+    /// AUTH-FACT-008 and chapter 09 section 4: an account holding no set is answered
+    /// with the service's refusal.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AnExportReportedWithNoSetIsAConflictAsync()
+    {
+        Browser browser = await SignedInAsync();
+
+        Answer refused = await browser.SendAsync("POST", "/account/recoverycodes/exported");
+
+        Assert.Equal(StatusCodes.Status409Conflict, refused.Status);
+        Assert.Equal(ErrorCodes.FactorNotEnrolled.ToString(), refused.Text("code"));
+    }
+
+    /// <summary>
+    /// API-CONV-003: a browser holding no session reports no export, since there is no
+    /// account for the report to be about.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_008_AnExportReportedWithNoSessionIsAnsweredNobodyAsync()
+    {
+        Browser browser = await ArrivedAsync();
+
+        Answer refused = await browser.SendAsync("POST", "/account/recoverycodes/exported");
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, refused.Status);
+        Assert.Equal(ErrorCodes.SessionExpired.ToString(), refused.Text("code"));
+    }
+
+    /// <summary>
     /// AUTH-FACT-007 and AUTH-RECOV-006 AC1: the enrolment answers with the address an
     /// authenticator app is pointed at, and the confirmation brings the codes a second
     /// step beside a password always brings.

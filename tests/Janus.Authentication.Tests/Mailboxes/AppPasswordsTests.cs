@@ -130,7 +130,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
         SessionId stale = Opened(_person, Stale);
 
         Assert.Equal(ErrorCodes.StepUpRequired, Refused(await CreateAsync("Phone", stale)));
-        Assert.Equal(ErrorCodes.StepUpRequired, Refused(await RevokeAsync("app-password-1", stale)));
+        Assert.Equal(ErrorCodes.StepUpRequired, Refused(await RevokeAsync(AppPasswordId.Parse("app-password-1"), stale)));
         Assert.Empty(_server.Tokens);
         Assert.Empty(_notifications.Sent);
         Assert.Empty(_audit.MailCredentials);
@@ -154,7 +154,6 @@ public sealed class AppPasswordsTests : IAsyncDisposable
             _audit.MailCredentials[^1]);
         Assert.Equal(2, _notifications.Sent.Count);
         Assert.Equal(ErrorCodes.CredentialNotFound, Refused(await RevokeAsync(issued.Id, _session)));
-        Assert.Equal(ErrorCodes.CredentialNotFound, Refused(await RevokeAsync(" ", _session)));
         Assert.Equal(2, _audit.MailCredentials.Count);
     }
 
@@ -249,7 +248,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
         _accounts.Stands(_person, AccountState.Active);
         Assert.Single(_mailboxes.Held).Retire(Noon);
 
-        Assert.Equal(ErrorCodes.MailboxNotFound, Refused(await RevokeAsync("app-password-1", _session)));
+        Assert.Equal(ErrorCodes.MailboxNotFound, Refused(await RevokeAsync(AppPasswordId.Parse("app-password-1"), _session)));
         Assert.Equal(ErrorCodes.MailboxNotFound, Refused(await CreateAsync("Phone", _session)));
         Assert.Empty(_server.Tokens);
     }
@@ -356,7 +355,7 @@ public sealed class AppPasswordsTests : IAsyncDisposable
     private async Task<Result<IssuedAppPassword>> CreateAsync(string label, SessionId session) =>
         await Passwords.CreateAsync(Asking, session, label, expiresAt: null, Source, TestContext.Current.CancellationToken);
 
-    private async Task<Result> RevokeAsync(string id, SessionId session) =>
+    private async Task<Result> RevokeAsync(AppPasswordId id, SessionId session) =>
         await Passwords.RevokeAsync(Asking, session, id, Source, TestContext.Current.CancellationToken);
 
     private async Task<Result<IReadOnlyList<AppPassword>>> ListAsync(SessionId session) =>

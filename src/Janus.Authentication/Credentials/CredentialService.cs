@@ -629,6 +629,23 @@ internal sealed class CredentialService(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<Result> MarkRecoveryCodesExportedAsync(
+        AccessContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        // CONV-DESIGN-002: the set is the caller's own, so the gate step is that the
+        // context names an account, and the set is read for that account alone.
+        if (context.Effective is not SubjectId subject)
+        {
+            return Result.Failure(Error.From(ErrorCodes.Denied));
+        }
+
+        return await codes.ShownAsync(subject, exported: true, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<Result> RemoveAsync(
         CredentialAuthority authority,
         AuthenticatorId credential,

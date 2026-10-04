@@ -172,7 +172,8 @@ internal sealed class SocialProvidersInMemory(TimeProvider clock) : HttpMessageH
     /// <summary>
     /// An event the provider signed that departs from what it sends in the ways named:
     /// one carrying no identifier, issued by another issuer, addressed to another
-    /// client, naming a key the provider does not publish, or stating a lifetime.
+    /// client, naming a key the provider does not publish, or stating a lifetime or an
+    /// instant before which it does not hold.
     /// </summary>
     /// <param name="provider">Which provider.</param>
     /// <param name="eventId">The event's identifier, or nothing for a token carrying none.</param>
@@ -181,6 +182,7 @@ internal sealed class SocialProvidersInMemory(TimeProvider clock) : HttpMessageH
     /// <param name="audience">Whom it is addressed to, where not the deployment's client.</param>
     /// <param name="keyId">The key it names, where not the provider's.</param>
     /// <param name="expires">When it says it expires, in seconds of the epoch, where it says so.</param>
+    /// <param name="notBefore">The instant it says it holds from, in seconds of the epoch, where it says so.</param>
     /// <returns>The token.</returns>
     public string Departing(
         Factor provider,
@@ -189,8 +191,9 @@ internal sealed class SocialProvidersInMemory(TimeProvider clock) : HttpMessageH
         string? issuer = null,
         string? audience = null,
         string? keyId = null,
-        long? expires = null) =>
-        Token(provider, eventId, events, provider is Factor.Google ? _google : _apple, issuer, audience, keyId, expires);
+        long? expires = null,
+        long? notBefore = null) =>
+        Token(provider, eventId, events, provider is Factor.Google ? _google : _apple, issuer, audience, keyId, expires, notBefore);
 
     /// <summary>
     /// Issues a code, as the provider does once the person has signed in there, for the
@@ -357,8 +360,8 @@ internal sealed class SocialProvidersInMemory(TimeProvider clock) : HttpMessageH
         });
     }
 
-    // A security event states no lifetime, so the token carries none unless it is told
-    // to.
+    // A security event states no lifetime and no instant it holds from, so the token
+    // carries neither unless it is told to.
     private static string Token(
         Factor provider,
         string? eventId,
@@ -367,7 +370,8 @@ internal sealed class SocialProvidersInMemory(TimeProvider clock) : HttpMessageH
         string? issuer = null,
         string? audience = null,
         string? keyId = null,
-        long? expires = null)
+        long? expires = null,
+        long? notBefore = null)
     {
         bool google = provider is Factor.Google;
         var claims = new Dictionary<string, object>(StringComparer.Ordinal)
@@ -384,6 +388,11 @@ internal sealed class SocialProvidersInMemory(TimeProvider clock) : HttpMessageH
         if (expires is long lapses)
         {
             claims["exp"] = lapses;
+        }
+
+        if (notBefore is long holds)
+        {
+            claims["nbf"] = holds;
         }
 
         return new JsonWebTokenHandler { SetDefaultTimesOnTokenCreation = false }.CreateToken(

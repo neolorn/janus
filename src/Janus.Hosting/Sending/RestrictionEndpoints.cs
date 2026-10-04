@@ -20,8 +20,10 @@ namespace Janus.Hosting.Sending;
 /// Implements AUTH-ABUSE-004, OPS-CFG-002, LIB-API-005, CONV-CODE-006 and
 /// CONV-DESIGN-006. Each is one line to <see cref="IRestrictionSet"/>, which judges the
 /// permission, the step-up and what the reason says; a body missing a member it
-/// requires is refused before it is called. A name outside the rule of a restriction's
-/// name is refused the same way on every route that takes one (chapter 09 section 8).
+/// requires is refused before it is called. A restriction is named by
+/// <see cref="RestrictionName"/>, bound from the route, so a name outside its rule is
+/// answered before any body is read on every route that takes one (INT-SMS-003,
+/// chapter 09 section 8).
 /// </remarks>
 internal static class RestrictionEndpoints
 {
@@ -40,10 +42,14 @@ internal static class RestrictionEndpoints
         RouteGroupBuilder group = endpoints.MapGroup("/admin/restrictions");
 
         _ = SessionRequired.On(group.MapGet("/", AllAsync));
-        _ = SessionRequired.On(group.MapGet("/{name}", ReadAsync));
-        _ = SessionRequired.On(group.MapPut("/{name}", EditAsync));
-        _ = SessionRequired.On(group.MapDelete("/{name}", DeleteAsync));
-        _ = SessionRequired.On(group.MapPost("/{name}/grant", GrantAsync));
+        _ = SessionRequired.On(group.MapGet("/{name}", ReadAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<RestrictionName>("name"));
+        _ = SessionRequired.On(group.MapPut("/{name}", EditAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<RestrictionName>("name"));
+        _ = SessionRequired.On(group.MapDelete("/{name}", DeleteAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<RestrictionName>("name"));
+        _ = SessionRequired.On(group.MapPost("/{name}/grant", GrantAsync))
+            .Declares(EndpointDeclaration.Answering().Binding<RestrictionName>("name"));
 
         return endpoints;
     }
@@ -70,16 +76,11 @@ internal static class RestrictionEndpoints
     private static async Task<IResult> ReadAsync(
         IRestrictionSet restrictions,
         RequestSession browser,
-        string name,
+        RestrictionName name,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(restrictions);
         ArgumentNullException.ThrowIfNull(browser);
-
-        if (!PlaceName.Holds(name))
-        {
-            return Answers.Malformed("name");
-        }
 
         return Answers.Of(
             await restrictions
@@ -96,17 +97,12 @@ internal static class RestrictionEndpoints
         RestrictionBody body,
         IRestrictionSet restrictions,
         RequestSession browser,
-        string name,
+        RestrictionName name,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(restrictions);
         ArgumentNullException.ThrowIfNull(browser);
-
-        if (!PlaceName.Holds(name))
-        {
-            return Answers.Malformed("name");
-        }
 
         (Restriction? replacement, string member) = body.Read(name);
 
@@ -138,17 +134,12 @@ internal static class RestrictionEndpoints
         [FromBody] RestrictionDeletionBody body,
         IRestrictionSet restrictions,
         RequestSession browser,
-        string name,
+        RestrictionName name,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(restrictions);
         ArgumentNullException.ThrowIfNull(browser);
-
-        if (!PlaceName.Holds(name))
-        {
-            return Answers.Malformed("name");
-        }
 
         if (Overlong(body.Reason))
         {
@@ -171,17 +162,12 @@ internal static class RestrictionEndpoints
         RestrictionGrantBody body,
         IRestrictionSet restrictions,
         RequestSession browser,
-        string name,
+        RestrictionName name,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(restrictions);
         ArgumentNullException.ThrowIfNull(browser);
-
-        if (!PlaceName.Holds(name))
-        {
-            return Answers.Malformed("name");
-        }
 
         if (string.IsNullOrWhiteSpace(body.KeyValue))
         {

@@ -10,6 +10,35 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `ICredentials.MarkRecoveryCodesExportedAsync` records that the person copied,
+  downloaded or printed the recovery-code set the account holds, and
+  `POST /account/recoverycodes/exported` maps it. An account holding no set is refused
+  `auth.factor.notenrolled`. The instant is read as `exportedAt` in `GET /account`.
+- `AppPasswordId` is a mail app password's identifier in the mail server's own form,
+  the JMAP `Id` of RFC 8620 section 1.2: 1 to 255 letters, digits, `-` and `_`.
+  `IAppPasswords.RevokeAsync` and `IMailServer.RevokeAppPasswordAsync` take it, and
+  `AppPassword.Id` and `IssuedAppPassword.Id` carry it, where each was text; a host's
+  own `IMailServer` answers its identifiers as this type. `DELETE
+  /account/mail/apppasswords/{id}` binds it from the path, so an `{id}` outside the form
+  is refused 400 `api.request.malformed` naming `id` and the mail server is not asked.
+  The shipped adapter reads an app password the server names outside the form as an
+  answer that does not read.
+- `RestrictionName` names a sending restriction under the same rule as a document's
+  name, read by `Parse`, `TryParse` and `IParsable<T>`. `IRestrictionSet.ReadAsync`,
+  `DeleteAsync` and `GrantAsync` take it, where each took text, and the
+  `/admin/restrictions/{name}` routes bind it from the path, so a name outside the rule
+  is refused 400 `api.request.malformed` naming `name` before the body is read, where a
+  body that did not read was named first.
+- `DocumentName` names a legal document: 1 to 64 lower-case letters and digits
+  separated by single `.`, `-` or `_`, read by `Parse`, `TryParse` and `IParsable<T>`.
+  `ILegalDocuments.ReadAsync` and `TranslateAsync` take it and `DocumentPublication`
+  carries it, where each took text, so a caller in process cannot read or publish under
+  a name the routes refuse. `/privacy/documents/{document}`,
+  `/admin/documents/{document}/versions` and its translation route bind it from the
+  path: a name outside the rule is refused 400 `api.request.malformed` naming
+  `document` before the body is read, whatever the body holds. An invitation whose
+  `documents` names one outside the rule is refused 400 `api.request.malformed` naming
+  `documents`, where it answered 422 `api.request.invalid`.
 - A domain of an organization's lock, and the domain of an address judged against it,
   takes its ASCII form from the library's own UTS #46 processing and no longer from the
   machine's ICU, so one domain is listed and compared in one form on every machine. A

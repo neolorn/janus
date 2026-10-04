@@ -203,7 +203,7 @@ internal sealed class MailServerInMemory : IMailServer
 
         _generated++;
 
-        string id = "app-password-" + _generated.ToString(CultureInfo.InvariantCulture);
+        var id = AppPasswordId.Parse("app-password-" + _generated.ToString(CultureInfo.InvariantCulture));
         string secret = "generated-secret-" + _generated.ToString(CultureInfo.InvariantCulture);
 
         if (!_passwords.TryGetValue(holder, out List<AppPassword>? held))
@@ -221,7 +221,7 @@ internal sealed class MailServerInMemory : IMailServer
     /// <inheritdoc/>
     public ValueTask<Result> RevokeAppPasswordAsync(
         string accessToken,
-        string id,
+        AppPasswordId id,
         CancellationToken cancellationToken)
     {
         Tokens.Add(accessToken);
@@ -238,7 +238,7 @@ internal sealed class MailServerInMemory : IMailServer
 
         return ValueTask.FromResult(
             _passwords.TryGetValue(holder, out List<AppPassword>? held)
-            && held.RemoveAll(password => string.Equals(password.Id, id, StringComparison.Ordinal)) > 0
+            && held.RemoveAll(password => password.Id == id) > 0
                 ? Result.Success()
                 : Result.Failure(Error.From(ErrorCodes.CredentialNotFound)));
     }

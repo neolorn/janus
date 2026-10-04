@@ -608,9 +608,11 @@ internal sealed class InvitationService(
 
         var shown = new List<InvitationDocument>(named.Count);
 
-        foreach (string document in named.Distinct(StringComparer.Ordinal))
+        foreach (string written in named.Distinct(StringComparer.Ordinal))
         {
-            if (string.IsNullOrWhiteSpace(document))
+            // API-CONV-003, INT-SMS-003: a name outside the rule of a document's name does
+            // not read as one, and no document is published under it.
+            if (!DocumentName.TryParse(written, out DocumentName document))
             {
                 return Result.Failure<IReadOnlyList<InvitationDocument>>(Malformed("documents"));
             }

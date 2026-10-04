@@ -221,7 +221,7 @@ public sealed class SupersessionTests : IAsyncDisposable
 
         _ = await Documents.PublishAsync(
             AccessContext.Of(Officer),
-            new DocumentPublication("terms-of-service", "The terms", "en", [], Material: true),
+            new DocumentPublication(DocumentName.Parse("terms-of-service"), "The terms", "en", [], Material: true),
             CancellationToken.None);
 
         Assert.True(Assert.Single(await HeldAsync(Ahmed)).Live);
@@ -363,7 +363,7 @@ public sealed class SupersessionTests : IAsyncDisposable
     private async Task PublishAsync(string document, bool material) =>
         _ = await Documents.PublishAsync(
             AccessContext.Of(Officer),
-            new DocumentPublication(document, "النص الجديد", "ar", [], material),
+            new DocumentPublication(DocumentName.Parse(document), "النص الجديد", "ar", [], material),
             CancellationToken.None);
 
     private async Task GrantAsync(SubjectId subject, string purpose) =>
@@ -376,7 +376,7 @@ public sealed class SupersessionTests : IAsyncDisposable
     private async Task PublishAsync(bool material) =>
         _ = await Documents.PublishAsync(
             AccessContext.Of(Officer),
-            new DocumentPublication(ConsentService.Notice, "النص الجديد", "ar", [], material),
+            new DocumentPublication(DocumentName.Parse(ConsentService.Notice), "النص الجديد", "ar", [], material),
             CancellationToken.None);
 
     private async Task<IReadOnlyList<ConsentRecord>> HeldAsync(SubjectId subject) =>
