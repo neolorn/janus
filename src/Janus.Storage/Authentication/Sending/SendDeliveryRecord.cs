@@ -49,6 +49,13 @@ internal sealed class SendDeliveryRecord
     public byte[] WrappedKey { get; set; } = [];
 
     /// <summary>
+    /// The <c>reference</c> column: the hash of the correlation reference the message is
+    /// counted under, as the ledger keeps it, so that a row whose key erasure has
+    /// overwritten still names the count its removal releases.
+    /// </summary>
+    public byte[] Reference { get; set; } = [];
+
+    /// <summary>
     /// The <c>enc_message</c> column: the whole of what is to be sent, the reference it
     /// is carried under included.
     /// </summary>

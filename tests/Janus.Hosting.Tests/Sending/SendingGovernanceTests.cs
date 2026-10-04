@@ -1379,6 +1379,62 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         Assert.Single(_outbox.Claimed);
     }
 
+    /// <summary>
+    /// PRIV-RIGHT-005a, AUTH-ABUSE-004 AC16: a message whose row's key erasure has
+    /// overwritten is never read and never handed to the handler. The pass that meets it
+    /// removes the row, and the count the send held from its admission is released.
+    /// </summary>
+    [Fact]
+    public async Task PRIV_RIGHT_005a_AMessageWhoseKeyWasErasedIsRemovedUncarriedAndItsCountReleasedAsync()
+    {
+        var key = new RestrictionKey("email.destination", RestrictionKeyKind.Destination, Mailbox.Value);
+
+        _mail.Accepts = false;
+
+        _ = await SentAsync(Mailed());
+
+        Assert.Single(_ledger.Sends(key));
+
+        _outbox.Erase(Assert.Single(_outbox.Waiting).Id);
+        _mail.Accepts = true;
+        _clock.Advance(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(0, await RetriedAsync());
+        Assert.Empty(_mail.Taken);
+        Assert.Empty(_outbox.Waiting);
+        Assert.Empty(_ledger.Sends(key));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC9, AC16: a send that holds no count is judged before it is
+    /// carried, whatever its attempts: one whose count a refused retry released, or one
+    /// written before a send counted from its admission, counts at the instant the
+    /// restrictions admit it and is refused where they do not.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC9_ASendThatHoldsNoCountIsJudgedBeforeItIsCarriedAsync()
+    {
+        var key = new RestrictionKey("email.destination", RestrictionKeyKind.Destination, Mailbox.Value);
+
+        _ = await SentAsync(Mailed() with { Message = MessageKind.SignInCode });
+
+        SendDelivery waiting = Assert.Single(_outbox.Waiting);
+
+        Assert.True(await _ledger.ReleaseAsync(SendReferences.Of(waiting.Reference), TestContext.Current.CancellationToken));
+        _ledger.Given(key, Noon);
+
+        Assert.Equal(0, await RetriedAsync());
+        Assert.Empty(_mail.Taken);
+        Assert.Equal(1, Assert.Single(_outbox.Waiting).Attempts);
+        Assert.Equal([Noon], _ledger.Sends(key));
+
+        _clock.Advance(TimeSpan.FromMinutes(2));
+
+        Assert.Equal(1, await RetriedAsync());
+        Assert.Single(_mail.Taken);
+        Assert.Equal([Noon, Noon + TimeSpan.FromMinutes(2)], _ledger.Sends(key));
+    }
+
     private static IEnumerable<Type> Carried(MemberInfo member) =>
         member switch
         {

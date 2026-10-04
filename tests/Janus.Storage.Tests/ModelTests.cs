@@ -785,6 +785,7 @@ public sealed class ModelTests
             "send_outbox.id",
             "send_outbox.next_attempt_at",
             "send_outbox.recorded_at",
+            "send_outbox.reference",
             "send_outbox.subject",
             "send_outbox.wrapped_key",
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Sending;
@@ -16,6 +17,7 @@ internal sealed class SendOutboxInMemory : ISendOutbox
 {
     private readonly Dictionary<SendDeliveryId, SendDelivery> _held = [];
     private readonly Dictionary<SendDeliveryId, DateTimeOffset> _claims = [];
+    private readonly HashSet<SendDeliveryId> _erased = [];
 
     /// <summary>
     /// The unit of work the operations under test run in. Where a test names it, what
@@ -53,6 +55,13 @@ internal sealed class SendOutboxInMemory : ISendOutbox
     /// <param name="delivery">The row.</param>
     /// <param name="until">When the other attempt's claim times out.</param>
     public void TakeOver(SendDeliveryId delivery, DateTimeOffset until) => _claims[delivery] = until;
+
+    /// <summary>
+    /// Stands in for an erasure that overwrote the key of one row, which then reads as
+    /// nothing but the hash of its reference.
+    /// </summary>
+    /// <param name="delivery">The row.</param>
+    public void Erase(SendDeliveryId delivery) => _ = _erased.Add(delivery);
 
     /// <inheritdoc/>
     public ValueTask AddAsync(SendDelivery delivery, CancellationToken cancellationToken)
@@ -107,11 +116,20 @@ internal sealed class SendOutboxInMemory : ISendOutbox
     public ValueTask<SendDelivery?> FindAsync(
         SendDeliveryId delivery,
         CancellationToken cancellationToken) =>
-        ValueTask.FromResult(_held.TryGetValue(delivery, out SendDelivery? held) ? held : null);
+        _erased.Contains(delivery)
+            ? throw new CryptographicException("The key has been erased.")
+            : ValueTask.FromResult(_held.TryGetValue(delivery, out SendDelivery? held) ? held : null);
 
     /// <inheritdoc/>
     public ValueTask<bool> WaitsAsync(SendDeliveryId delivery, CancellationToken cancellationToken) =>
         ValueTask.FromResult(_held.ContainsKey(delivery));
+
+    /// <inheritdoc/>
+    public ValueTask<byte[]?> ErasedAsync(SendDeliveryId delivery, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(
+            _erased.Contains(delivery) && _held.TryGetValue(delivery, out SendDelivery? held)
+                ? SendReferences.Of(held.Reference)
+                : null);
 
     /// <inheritdoc/>
     public ValueTask<bool> RemoveAsync(SendClaim claim, CancellationToken cancellationToken)

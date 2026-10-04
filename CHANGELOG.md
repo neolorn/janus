@@ -2485,3 +2485,10 @@ against the public contract of LIB-API-001.
   not issued and reserves nothing.
 - `NotificationRequested` is no longer emitted: every message is carried from the
   library's send outbox.
+- An erased wrapped key is 32 zero bytes wherever one is held, with no marker byte in
+  them, and every unwrap refuses that value before it is tried. An erasure overwrites
+  with it the key of every message admitted for the subject and not yet carried, in the
+  erasure's own transaction; the publisher and the attempt that follows a commit remove
+  such a row without carrying it, and the count the send held is released. A released
+  mailbox reservation's key is overwritten with the same value. An outbox row keeps the
+  hash of the reference it is counted under beside its encrypted content.

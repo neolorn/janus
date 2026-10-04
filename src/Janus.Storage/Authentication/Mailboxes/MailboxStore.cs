@@ -209,7 +209,7 @@ internal sealed class MailboxStore(
         // led nowhere, so the address of a released reservation goes with its removal.
         if (mailbox is { IsReleased: true, Pushed: MailboxState.Removed, Pending: null })
         {
-            record.WrappedKey = new byte[record.WrappedKey?.Length ?? 0];
+            record.WrappedKey = PersonalFieldCipher.ErasedKey();
             record.Fingerprint = Janus.Storage.Fingerprint.Neutralised();
         }
     }

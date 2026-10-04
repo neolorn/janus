@@ -78,6 +78,18 @@ internal interface ISendOutbox
     ValueTask<bool> WaitsAsync(SendDeliveryId delivery, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Whether erasure has overwritten the key of one admitted message, which is then
+    /// unreadable and is removed without being carried (PRIV-RIGHT-005a).
+    /// </summary>
+    /// <param name="delivery">What it is held under.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>
+    /// The hash of the reference the message was counted under, which its removal
+    /// releases, or nothing where the row is readable or gone.
+    /// </returns>
+    ValueTask<byte[]?> ErasedAsync(SendDeliveryId delivery, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Removes a message the handler has taken, or one that failed for good, by one
     /// statement that changes nothing where the claim has been taken over.
     /// </summary>

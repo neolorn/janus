@@ -170,17 +170,43 @@ internal sealed class SendPublisher(
             return Result.Failure<bool>(failure);
         }
 
-        if (claimed is not SendClaim claim
-            || await outbox.FindAsync(id, cancellationToken).ConfigureAwait(false) is not SendDelivery delivery)
+        if (claimed is not SendClaim claim)
         {
             // Another attempt holds the row, or it is gone: it is that attempt's.
+            return Result.Success(false);
+        }
+
+        // PRIV-RIGHT-005a, AUTH-ABUSE-004: a row whose key erasure has overwritten is
+        // unreadable. It is removed without being carried, and the count it held is
+        // released.
+        if (await outbox.ErasedAsync(id, cancellationToken).ConfigureAwait(false) is byte[] erased)
+        {
+            return (await InUnitAsync(
+                    async () =>
+                    {
+                        if (await outbox.RemoveAsync(claim, cancellationToken).ConfigureAwait(false))
+                        {
+                            await admission.ReleaseAsync(erased, cancellationToken).ConfigureAwait(false);
+                        }
+
+                        return Result.Success(false);
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false));
+        }
+
+        if (await outbox.FindAsync(id, cancellationToken).ConfigureAwait(false) is not SendDelivery delivery)
+        {
             return Result.Success(false);
         }
 
         // AUTH-ABUSE-004 AC9: a send carried again is judged by the restrictions as
         // they stand now, with its own count set aside, and counts at this instant where
         // they admit it. One they refuse holds no count and waits as any failed attempt.
-        if (delivery.Attempts > 0)
+        // A send that holds no count, one refused at an earlier retry among them, is
+        // judged before it is carried whatever its attempts.
+        if (delivery.Attempts > 0
+            || !await admission.HoldsAsync(delivery.Reference, cancellationToken).ConfigureAwait(false))
         {
             bool admitted = (await InUnitAsync(
                     () => RetriedAsync(delivery, claim, schedule, now, cancellationToken),

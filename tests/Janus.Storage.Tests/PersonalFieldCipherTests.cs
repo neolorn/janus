@@ -162,6 +162,34 @@ public sealed class PersonalFieldCipherTests
     }
 
     /// <summary>
+    /// PRIV-RIGHT-005a: the erased value is 32 zero bytes with no marker byte in them,
+    /// wherever a wrapped key is held, and an unwrap under the deployment's data key
+    /// refuses it before it is tried; a value of another length, or one that is not all
+    /// zero, is not the erased value.
+    /// </summary>
+    [Fact]
+    public void PRIV_RIGHT_005a_TheErasedValueIsThirtyTwoZeroBytesAndIsRefusedBeforeTheUnwrap()
+    {
+        using var randomness = RandomNumberGenerator.Create();
+        byte[] deploymentKey = PersonalFieldCipher.NewDataKey(randomness);
+        byte[] wrapped = PersonalFieldCipher.Wrap(PersonalFieldCipher.NewDataKey(randomness), deploymentKey);
+
+        byte[] erased = PersonalFieldCipher.ErasedKey();
+
+        Assert.Equal(new byte[32], erased);
+        Assert.True(PersonalFieldCipher.IsErased(erased));
+        Assert.False(PersonalFieldCipher.IsErased(new byte[33]));
+        Assert.False(PersonalFieldCipher.IsErased(new byte[wrapped.Length]));
+        Assert.False(PersonalFieldCipher.IsErased(wrapped));
+
+        CryptographicException refused = Assert.Throws<CryptographicException>(() =>
+            PersonalFieldCipher.Unwrap(erased, deploymentKey));
+
+        Assert.Equal("The key has been erased.", refused.Message);
+        Assert.Equal(32, PersonalFieldCipher.Unwrap(wrapped, deploymentKey).Length);
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-005a AC10: a value moved to another column, another table or another
     /// subject fails its authentication tag.
     /// </summary>

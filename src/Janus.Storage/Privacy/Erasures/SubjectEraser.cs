@@ -84,6 +84,7 @@ internal sealed class SubjectEraser(
         await MarkErasedAsync(subject, erased, cancellationToken).ConfigureAwait(false);
         await RevokeGrantsAsync(subject, at, cancellationToken).ConfigureAwait(false);
         await DestroyKeyAsync(subject, cancellationToken).ConfigureAwait(false);
+        await EraseOutstandingMessagesAsync(subject, cancellationToken).ConfigureAwait(false);
         await HoldUsernameAsync(subject, at, cancellationToken).ConfigureAwait(false);
         await NeutraliseFingerprintsAsync(subject, cancellationToken).ConfigureAwait(false);
 
@@ -191,6 +192,23 @@ internal sealed class SubjectEraser(
         record.FormatMarker = key.FormatMarker;
         record.KeyVersion = key.KeyVersion;
         record.WrappedKey = key.WrappedKey.ToArray();
+    }
+
+    // PRIV-RIGHT-005a, AUTH-ABUSE-004: a message admitted for the subject and not yet
+    // carried holds their destination under a key of its row's own, so that key is
+    // overwritten with the erased value in the erasure's transaction. The publisher and
+    // the send path then remove the row without carrying it.
+    private async ValueTask EraseOutstandingMessagesAsync(SubjectId subject, CancellationToken cancellationToken)
+    {
+        // The erased value of a wrapped key held with no marker: 32 zero bytes alone.
+        byte[] erased = new byte[PersonalDataFormat.DataKeyLength];
+
+        _ = await context.SendOutbox
+            .Where(delivery => delivery.Subject == subject)
+            .ExecuteUpdateAsync(
+                delivery => delivery.SetProperty(one => one.WrappedKey, erased),
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     // REG-IDENT-009: the name stays out of reach for the evidential period, and the

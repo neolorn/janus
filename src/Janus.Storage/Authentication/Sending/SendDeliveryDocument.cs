@@ -17,7 +17,10 @@ namespace Janus.Storage.Authentication.Sending;
 /// <param name="Language">The language it goes out in, or nothing for a mail in every declared one.</param>
 /// <param name="Subject">Whose account the destination belongs to, where it belongs to one.</param>
 /// <param name="Values">What the library puts in the template's places.</param>
-/// <param name="Reference">The correlation reference it is counted and carried under.</param>
+/// <param name="Reference">
+/// The correlation reference it is counted and carried under, or nothing in a row
+/// written before a send carried one, whose reference is made from the row's identifier.
+/// </param>
 /// <remarks>
 /// Implements D-022, AUTH-ABUSE-004 and PRIV-RIGHT-005a. Where the message goes, what
 /// was asked for from, what the template is given and the reference a gateway would
@@ -33,4 +36,4 @@ internal sealed record SendDeliveryDocument(
     string? Language,
     Guid? Subject,
     IReadOnlyDictionary<string, string> Values,
-    string Reference);
+    string? Reference = null);

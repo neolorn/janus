@@ -1,4 +1,5 @@
 using System;
+using System.Buffers.Text;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
@@ -50,6 +51,7 @@ internal sealed class SendDeliveryStore(
                 NextAttemptAt = delivery.NextAttemptAt,
                 Subject = delivery.Requested.Subject,
                 WrappedKey = PersonalFieldCipher.Wrap(dataKey, deploymentKey),
+                Reference = SendReferences.Of(delivery.Reference),
                 Message = Written(dataKey, delivery),
             };
 
@@ -131,6 +133,19 @@ internal sealed class SendDeliveryStore(
             .ConfigureAwait(false);
 
     /// <inheritdoc/>
+    public async ValueTask<byte[]?> ErasedAsync(SendDeliveryId delivery, CancellationToken cancellationToken)
+    {
+        var held = await context.SendOutbox
+            .AsNoTracking()
+            .Where(row => row.Id == delivery)
+            .Select(row => new { row.WrappedKey, row.Reference })
+            .SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return held is not null && PersonalFieldCipher.IsErased(held.WrappedKey) ? held.Reference : null;
+    }
+
+    /// <inheritdoc/>
     public async ValueTask<bool> RecordAsync(
         SendDelivery delivery,
         SendClaim claim,
@@ -155,6 +170,15 @@ internal sealed class SendDeliveryStore(
             .Where(row => row.Id == claim.Delivery && row.ClaimedUntil == claim.Until)
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false) == 1;
+
+    /// <summary>
+    /// The reference of a row written before a send carried one: the row's identifier,
+    /// as the 128 bits it is, in base64url.
+    /// </summary>
+    /// <param name="delivery">What the row is held under.</param>
+    /// <returns>The reference as text.</returns>
+    public static string Unreferenced(SendDeliveryId delivery) =>
+        Base64Url.EncodeToString(delivery.Value.ToByteArray(bigEndian: true));
 
     // A message concerning an account is bound to its subject, and one concerning no
     // account to its own row (PRIV-RIGHT-005a, D-173); the data key is the row's own
@@ -213,7 +237,14 @@ internal sealed class SendDeliveryStore(
             Values = new Dictionary<string, string>(document.Values, StringComparer.Ordinal),
         };
 
-        SendReference reference = SendReference.TryParse(document.Reference, out SendReference drawn)
+        // A row written before a send carried its reference holds none in its content.
+        // Its reference is made from the row's own identifier, the same at every read,
+        // and the row's reference column holds that reference's hash, as the migration
+        // that added the column wrote it. Nothing was counted under it, so the publisher
+        // judges such a send before it is carried.
+        string kept = document.Reference ?? Unreferenced(record.Id);
+
+        SendReference reference = SendReference.TryParse(kept, out SendReference drawn)
             ? drawn
             : throw new InvalidOperationException("The stored reference is not a reference.");
 

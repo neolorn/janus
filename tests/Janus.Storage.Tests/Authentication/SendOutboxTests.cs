@@ -265,6 +265,71 @@ public sealed class SendOutboxTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// AUTH-ABUSE-004, OPS-MIG-005: a row written before a send carried its reference
+    /// holds none in its content. It reads with the reference made from its own
+    /// identifier, the same at every read, and the statement the migration runs over
+    /// such rows writes that reference's hash, as the ledger keeps one.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_ARowWrittenBeforeItCarriedAReferenceReadsWithOneOfItsOwnAsync()
+    {
+        var id = SendDeliveryId.Of(Noon);
+
+        await using (StoreContext writing = database.Context())
+        {
+            byte[] deploymentKey = await _deployment.DataKey(writing)
+                .UnwrappedAsync(TestContext.Current.CancellationToken);
+            byte[] dataKey = PersonalFieldCipher.NewDataKey(_deployment.Randomness);
+
+            writing.SendOutbox.Add(new SendDeliveryRecord
+            {
+                Id = id,
+                RecordedAt = Noon,
+                NextAttemptAt = Noon,
+                WrappedKey = PersonalFieldCipher.Wrap(dataKey, deploymentKey),
+                Message = PersonalFieldCipher.Encrypt(
+                    dataKey,
+                    new PersonalFieldLocation(new SubjectId(id.Value), "send_outbox", "enc_message"),
+                    Encoding.UTF8.GetBytes(
+                        """
+                        {"kind":"email","destination":"before@example.test","message":"security-notice",
+                         "purpose":"notification","source":null,"language":"en","subject":null,"values":{}}
+                        """),
+                    _deployment.Randomness),
+            });
+
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (NpgsqlConnection connection = await database.OpenAsync())
+        {
+            await connection.ExecuteAsync(
+                """
+                UPDATE identity.send_outbox
+                SET reference = sha256(convert_to(translate(encode(uuid_send(id), 'base64'), '+/=', '-_'), 'UTF8'))
+                WHERE id = @id;
+                """,
+                new { id = id.Value });
+        }
+
+        await using StoreContext reading = database.Context();
+
+        SendDelivery first = await Outbox(reading).FindAsync(id, TestContext.Current.CancellationToken)
+            ?? throw new Xunit.Sdk.XunitException("The row was not read.");
+        SendDelivery again = await Outbox(reading).FindAsync(id, TestContext.Current.CancellationToken)
+            ?? throw new Xunit.Sdk.XunitException("The row was not read.");
+
+        SendDeliveryRecord stored = await reading.SendOutbox
+            .AsNoTracking()
+            .SingleAsync(row => row.Id == id, TestContext.Current.CancellationToken);
+
+        Assert.Equal("before@example.test", first.Requested.Destination.Canonical);
+        Assert.Equal(SendDeliveryStore.Unreferenced(id), first.Reference.Value);
+        Assert.Equal(first.Reference.Value, again.Reference.Value);
+        Assert.Equal(SendReferences.Of(first.Reference), stored.Reference);
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-005a AC18: a message that names no subject is bound to its own row, so
     /// its value and wrapped key moved onto another such row do not open there.
     /// </summary>

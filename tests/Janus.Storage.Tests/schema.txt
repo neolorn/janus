@@ -998,6 +998,7 @@ table send_outbox
   column attempts integer not null default 0
   column next_attempt_at timestamp with time zone not null default '-infinity'::timestamp with time zone
   column claimed_until timestamp with time zone
+  column reference bytea not null default '\x'::bytea
   constraint ck_send_outbox_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint pk_send_outbox PRIMARY KEY (id)
   index ix_send_outbox_due using btree (next_attempt_at)

@@ -195,6 +195,26 @@ internal sealed class SendAdmission(
     public async ValueTask ReleaseAsync(SendReference reference, CancellationToken cancellationToken) =>
         _ = await ledger.ReleaseAsync(SendReferences.Of(reference), cancellationToken).ConfigureAwait(false);
 
+    /// <summary>
+    /// Releases the count and the credit of a send whose row is removed uncarried after
+    /// erasure, which names the send only by the hash of its reference.
+    /// </summary>
+    /// <param name="reference">The hash of the reference it was counted under.</param>
+    /// <param name="cancellationToken">Abandons the write.</param>
+    /// <returns>The work of releasing it.</returns>
+    public async ValueTask ReleaseAsync(byte[] reference, CancellationToken cancellationToken) =>
+        _ = await ledger.ReleaseAsync(reference, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>
+    /// Whether a send still holds the count of an admission, which is what lets its
+    /// first attempt carry it without judging it again.
+    /// </summary>
+    /// <param name="reference">The reference it was counted under.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>Whether a count answers to the reference.</returns>
+    public ValueTask<bool> HoldsAsync(SendReference reference, CancellationToken cancellationToken) =>
+        ledger.HoldsAsync(SendReferences.Of(reference), cancellationToken);
+
     private static TValue Held<TValue>(Error error, ref Error? failure)
     {
         failure = error;
