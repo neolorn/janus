@@ -29,12 +29,16 @@ namespace Janus.Hosting.Credentials;
 /// <param name="work">The one transaction the event runs in.</param>
 /// <param name="log">Where a refusal is recorded.</param>
 /// <remarks>
-/// Implements IDN-LIFE-012a, INT-GEN-003, BFF-MACH-001 and BFF-MACH-003. Google delivers
-/// the event as the request's body (RFC 8935) and is answered 202; Apple wraps it in a
-/// JSON object under <c>payload</c> and is answered 200. The providers publish no ranges
-/// their deliveries come from, so no source is refused for where it is. Nothing an
-/// event says is believed before its signature holds; what an unverified one names is
-/// used only to record the refusal against the account it names.
+/// Implements IDN-LIFE-012a, INT-GEN-003, LIB-API-003, BFF-MACH-001 and BFF-MACH-003.
+/// Google delivers the event as the request's body (RFC 8935) and is answered 202, and
+/// a token that fails validation 400 with the code RFC 8935 section 2.4 gives the first
+/// failure; Apple wraps it in a JSON object under <c>payload</c>, is answered 200, and
+/// is refused as every rejected callback is. A provider document that cannot be read
+/// refuses nothing on either route: the delivery is answered as a fault, with nothing
+/// claimed, recorded or changed, so the provider may deliver it again. The providers
+/// publish no ranges their deliveries come from, so no source is refused for where it
+/// is. Nothing an event says is believed before its signature holds; what an unverified
+/// one names is used only to record the refusal against the account it names.
 /// </remarks>
 internal sealed class ProviderEventIntake(
     ProviderKeys keys,
@@ -43,13 +47,25 @@ internal sealed class ProviderEventIntake(
     IUnitOfWork work,
     ILogger<ProviderEventIntake> log)
 {
+    // RFC 8935 section 2.4: the codes a refused Security Event Token is answered with.
+    private const string InvalidRequest = "invalid_request";
+
+    private const string InvalidKey = "invalid_key";
+
+    private const string InvalidIssuer = "invalid_issuer";
+
+    private const string InvalidAudience = "invalid_audience";
+
+    // RFC 8935 section 2.3: the language the refusal's description is declared in.
+    private const string DescriptionLanguage = "en";
+
     private static readonly IReadOnlyCollection<IPNetwork> Anywhere = [];
 
     // How each provider delivers its events and expects to be answered.
     private static readonly FrozenDictionary<Factor, Delivery> Deliveries = new Dictionary<Factor, Delivery>
     {
-        [Factor.Google] = new(Enveloped: false, StatusCodes.Status202Accepted, Google),
-        [Factor.Apple] = new(Enveloped: true, StatusCodes.Status200OK, Apple),
+        [Factor.Google] = new(Enveloped: false, Pushed: true, StatusCodes.Status202Accepted, Google),
+        [Factor.Apple] = new(Enveloped: true, Pushed: false, StatusCodes.Status200OK, Apple),
     }.ToFrozenDictionary();
 
     /// <summary>
@@ -81,33 +97,64 @@ internal sealed class ProviderEventIntake(
 
         if (Token(delivered, delivery.Body.Span) is not string token)
         {
-            await CallbackIntake
-                .RefusedAsync(context, callback, CallbackCheck.Signature, admission, work, log, cancellationToken)
+            await RefusedAsync(context, delivered, callback, CallbackCheck.Signature, InvalidRequest, cancellationToken)
                 .ConfigureAwait(false);
 
             return;
         }
 
-        if (!await keys.VerifiesAsync(provider, token, cancellationToken).ConfigureAwait(false))
+        // IDN-LIFE-012a AC7, chapter 09 section 10: a token that cannot be read as a
+        // Security Event Token, or carries no jti, is the first failure, refused
+        // before the provider is looked for and before anything is claimed.
+        if (Notice(delivered, token) is not { EventId.Length: > 0 } notice)
+        {
+            await RefusedAsync(context, delivered, callback, CallbackCheck.Event, InvalidRequest, cancellationToken)
+                .ConfigureAwait(false);
+
+            return;
+        }
+
+        ProviderEventVerification verification = await keys
+            .VerifiedAsync(provider, token, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (verification is ProviderEventVerification.Unreadable)
+        {
+            // IDN-LIFE-012a AC8: a document that cannot be read refuses nothing. The
+            // delivery is a fault, nothing of it is kept, and the provider may deliver
+            // it again.
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            await Refusal
+                .WriteAsync(
+                    context,
+                    Error.From(ErrorCodes.SystemFault, "callback", JsonSerializer.SerializeToElement(callback)),
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            return;
+        }
+
+        if (verification is not ProviderEventVerification.Verified)
         {
             // IDN-LIFE-012a AC1: an unsigned event changes nothing and is audited as
             // rejected against the account it names, where it names one.
-            ProviderNotice? named = Notice(delivered, token);
-
             await events
-                .RejectedAsync(provider, named?.Subject, named?.Type, cancellationToken)
+                .RejectedAsync(provider, notice.Subject, notice.Type, cancellationToken)
                 .ConfigureAwait(false);
-            await CallbackIntake
-                .RefusedAsync(context, callback, CallbackCheck.Verification, admission, work, log, cancellationToken)
-                .ConfigureAwait(false);
-
-            return;
-        }
-
-        if (Notice(delivered, token) is not { EventId.Length: > 0 } notice)
-        {
-            await CallbackIntake
-                .RefusedAsync(context, callback, CallbackCheck.Event, admission, work, log, cancellationToken)
+            await RefusedAsync(
+                    context,
+                    delivered,
+                    callback,
+                    CallbackCheck.Verification,
+                    verification switch
+                    {
+                        ProviderEventVerification.Key => InvalidKey,
+                        ProviderEventVerification.Audience => InvalidAudience,
+                        ProviderEventVerification.Lifetime => InvalidRequest,
+                        _ => InvalidIssuer,
+                    },
+                    cancellationToken)
                 .ConfigureAwait(false);
 
             return;
@@ -154,8 +201,9 @@ internal sealed class ProviderEventIntake(
     }
 
     // What an event says, read from its claims: its identifier, its one event, and the
-    // identity and address that event concerns. It judges nothing; the caller has
-    // either verified the token or uses what it names only to record the refusal.
+    // identity and address that event concerns, or nothing where the token does not
+    // read as a Security Event Token. It judges nothing; the caller either verifies the
+    // token before it acts on it or uses what it names only to record the refusal.
     private static ProviderNotice? Notice(Delivery delivered, [NeverLogged] string token)
     {
         string[] parts = token.Split('.');
@@ -257,10 +305,49 @@ internal sealed class ProviderEventIntake(
             ? text
             : null;
 
+    // Counts and records one refusal as every callback's is, and answers it the way the
+    // provider expects: in the shape RFC 8935 section 2.3 fixes on the route of a
+    // provider that delivers as that standard does, the description carrying the code
+    // again and never a sentence (LIB-API-003), and as a rejected callback otherwise. A
+    // failure that kept the refusal from being counted is answered as itself.
+    private async ValueTask RefusedAsync(
+        HttpContext context,
+        Delivery delivered,
+        string callback,
+        CallbackCheck check,
+        string err,
+        CancellationToken cancellationToken)
+    {
+        Error refused = await CallbackIntake
+            .CountedAsync(context, callback, check, admission, work, log, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!delivered.Pushed || refused.Code != ErrorCodes.CallbackRejected)
+        {
+            await Refusal.WriteAsync(context, refused, cancellationToken).ConfigureAwait(false);
+
+            return;
+        }
+
+        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+        context.Response.Headers.ContentLanguage = DescriptionLanguage;
+
+        await context.Response
+            .WriteAsJsonAsync(
+                new SecurityEventError(err, err),
+                CredentialsJson.Default.SecurityEventError,
+                "application/json",
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     // Whether the token arrives inside a JSON object under `payload` or as the whole
-    // body, the status a carried event is answered with, and what reads its one event.
+    // body, whether the provider delivers as RFC 8935 does and is refused in that
+    // standard's shape, the status a carried event is answered with, and what reads its
+    // one event.
     private sealed record Delivery(
         bool Enveloped,
+        bool Pushed,
         int Answer,
         Func<string, JsonElement, ProviderNotice?> Read);
 }

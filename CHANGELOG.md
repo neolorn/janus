@@ -394,9 +394,20 @@ against the public contract of LIB-API-001.
   signs in by another factor, which restores it under `auth.credential.restored`;
   withdrawn consent or a deleted provider account unlinks the credential, or suspends
   the account with a security notice where no other usable credential, the password
-  included, may begin a sign-in; a disabled relay address drops to unverified. An event of an undeclared provider, or one the keys do
-  not verify, is refused as every rejected callback is. The client the documents are
-  read with is `identity-providers`.
+  included, may begin a sign-in; a disabled relay address drops to unverified. A carried
+  or repeated event is answered 202 on the Google route and 200 on the Apple route. A
+  token that fails validation on the Google route is answered as RFC 8935 section 2.3
+  fixes: 400 with `Content-Language: en` and a body of `err`, the code of the first
+  failure in a fixed order, and `description`, which carries the same code: a token
+  that cannot be read or carries no `jti`, `invalid_request`; a provider not declared,
+  `invalid_issuer`; a key the published set does not hold or a signature it does not
+  verify, `invalid_key`; another issuer, `invalid_issuer`; an audience naming no
+  declared client, `invalid_audience`; a lifetime that has passed, `invalid_request`.
+  On the Apple route each of these is refused as every rejected callback is, 422
+  `integration.callback.rejected`. On either route a provider document that cannot be
+  read refuses nothing: the delivery is answered 500 `system.fault`, nothing is
+  claimed, recorded or counted, and the provider may deliver the event again. The
+  client the documents are read with is `identity-providers`.
 - `UseCallback` mounts one of the host's own providers' callbacks on the machine
   profile, at a path the host chooses and ahead of the browser profile. A signed
   callback (`ISignedCallback`) names its provider's keyed hash, where the signature and
