@@ -615,7 +615,7 @@ CONV-DESIGN-008 criterion 3, "no project's build reports MSB3277": no test decid
 
 What earlier runs left: nine worktrees held uncommitted work whose commits were all in the branch; each is kept as a patch outside the repository and removed with its branch. The reason rule of the configuration route that one of them carried is on the branch at the endpoint and in the service (`ConfigurationEndpointTests.OPS_CFG_005_EveryChangeCarriesAReasonAsync`, `ConfigurationAdministrationTests.OPS_CFG_008_AC2_ATighteningWithNoReasonIsRefusedAsync`). Four stashes are dropped: three held earlier states of the docs, and every file of the fourth is in the history (the changelog describes `MapAuthorizationTables`).
 
-**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The parts of D-183 the owner's split names run each in a worktree of its own cut from `7bce9374`: gates, sessions and privacy are merged (below), sessions without questions 31 and 42 and privacy without questions 29 and 30; sending and authorization are not. Questions 68 to 100 park the sites they name. The work after the merges is not started.
+**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The parts of D-183 the owner's split names run each in a worktree of its own cut from `7bce9374`: gates, sessions, privacy and authorization are merged (below), sessions without questions 31 and 42 and privacy without questions 29 and 30; sending is not, and a further part builds question 30. Questions 68 to 101 park the sites they name. The work after the merges is not started.
 
 ### The section C sweeps, place by place
 
@@ -1058,6 +1058,25 @@ After the merge: build 0 warnings 0 errors, format clean, 2991 unit tests, 139 c
 - `ea174da9` and `c972731e` change `AuthorizationModel.cs` and no truth-table case (question 100). The check passes over the branch's range.
 - The integration classes `PrivacyRequestStoreTests`, `SchemaContractTests`, `AccountStatesTests`, `SubjectKeyStoreTests`, `FingerprintRotationTests`, `DatabaseRoleTests`, `LawfulBasisStoreTests`, `MigrationRunTests`, `RegisterClientTests`, `KeyRotationTests`, `FingerprintKeyRotationTests`, `StartupValidationTests` and `BackgroundJobsTests` passed on the part. No parked site of questions 69 to 88 was touched.
 
+#### D-183, `part/authorization`, merged as `330cb853` (`6cd14e2f`, `be757f8d`, `e467284d`, `1d80d9d1`, `10e7acb6`, `6e496a64`)
+
+After the merge: build 0 warnings 0 errors, format clean, 3000 unit tests, 139 contract tests; `TruthTableTests` (84), `StartupValidationTests` (67), `SchemaContractTests` and `MigrationRunTests` passed on the merged tree. Two conflicts, each keeping both sides: `DeclarationCoverage.cs` (the relationship sources beside the photo check) and the usings of `TruthTableTests.cs`. One migration, `NameBothIdentitiesOnEveryAuditRecord`, hand-written throughout since `audit_records` is outside the model: it fails where a row holds a null identity, drops `ck_audit_records_identities` and sets both identity columns not null; the model has no change a migration does not carry, so nothing was regenerated.
+
+- **Question 35** (`6cd14e2f`; AUTHZ-IMP-001, IDN-AUD-001, PRIV-BREACH-002). `AuditEntry` gains `Subject`, carried as `subject` by `GET /admin/audit`. Tests: `AuditStoreTests.IDN_AUD_001_AC4_TheTrailOfEitherReturnsTheSuspensionWithItsSubjectAsync`, `AuditTrailEndpointTests.PRIV_BREACH_002_AnEntryCarriesTheDataSubjectItConcernsAsync`.
+- **Question 34** (`be757f8d`; AUTHZ-CONCEAL-004, AUTHZ-GATE-004, IDN-AUD-001, OPS-ALERT-001). A refusal of background work is recorded under the nil subject in both identities with the principal's name and reason; both identity columns are not null; refusals are counted by the principal's name where one acted; `ExplainedPrincipal` gains `Name` and `Reason`, carried on both explanation routes. Truth table: one row (a check by background work, which holds no grant). Tests: `ExplanationTests.AUTHZ_CONCEAL_004_AC1_ARefusalOfBackgroundWorkNamesThePrincipalAndItsReasonAsync`, `AuditStoreTests.IDN_AUD_001_AC1_ARefusalNamingNobodyIsRefusedByTheDatabaseAsync`, `ExplanationEndpointTests.AUTHZ_CONCEAL_004_AC3_ARefusalOfBackgroundWorkResolvesToItsNameAndReasonAsync`, `ExplanationEndpointTests.AUTHZ_GATE_004_AC3_TheCallerResolvesTheirOwnRefusalOverTheEndpointAsync`, `GateBehaviourTests.OPS_ALERT_001_AC1_APrincipalsRefusalsAreCountedByItsNameAsync`, `GateBehaviourTests.OPS_ALERT_001_AC1_ARunOfRefusalsNamingNoOneIsRaisedAsync`, `SchemaContractTests.LIB_API_001_AC2_TheLibraryOwnedSchemaIsTheContractAsync`. Ledger: 136 "Superseded by D-166".
+  - For audit: the explanation of a principal's refusal shows null acting and effective identities, as `ExplainedPrincipal` documented before, while the trail's row holds the nil subject. The version before this one writes null identities for a principal's refusal, which the migrated table refuses (OPS-MIG-005 reads against that); D-166 136 orders the migration.
+- **Question 59** (`e467284d`; AUTHZ-CONCEAL-004, CONV-DESIGN-002, CONV-DESIGN-003, OPS-ALERT-001). The refusal's record, its count and the denial-spike alert are one unit of work in a scope of the gate's own, under a hold on the actor's refusals; a raise that fails rolls back and is a fault. Truth table: one row (a check refused inside work the caller rolls back). Tests: `DenialRecordingTests.AUTHZ_CONCEAL_004_ARefusalIsRecordedCountedAndRaisedInOneUnitOfWorkAsync`, `DenialRecordingTests.AUTHZ_CONCEAL_004_ASpikeThatCannotBeRaisedFailsTheRecordAsync`, `DenialRecordingTests.CONV_DESIGN_003_AC7_AUnitOfWorkThatFailsIsAFaultNamingItsCodeAsync`, `GateBehaviourTests.AUTHZ_CONCEAL_004_AC4_ASpikeRaisedInsideATransactionThatRollsBackStandsAsync`, `GateBehaviourTests.CONV_DESIGN_003_AC6_TwoRefusalsAtOnceAreCountedOneAfterTheOtherAsync`.
+- **Question 37** (`1d80d9d1`; OPS-MIG-003a, AUTHZ-MODEL-005). Tests alone; the migrations and the listing held as they stand. Tests: `DatabaseRoleTests.OPS_MIG_003a_AC5_TheLibrarysSchemaHoldsExactlyTheListedGrantsAsync`, `DatabaseRoleTests.OPS_MIG_003a_AC5_OutsideTheLibrarysSchemaTheRoleHoldsWhatARoleGrantedNothingHoldsAsync`.
+- **Question 22, the second half of 265** (`10e7acb6`, `6e496a64`; LIB-HOST-001, AUTHZ-DERIVE-005, AUTHZ-DERIVE-007, AUTHZ-GRANT-003, INF-BG-001).
+  - `RelationshipSource` and `RelationshipSource.Of<TContext, TRow>` are public; the start refuses a derivation without its source (`model.startup.declarationmissing`) and a malformed source (`model.startup.declarationinvalid`), building the context's model and running no query; `GET /admin/access` answers derived grants through the declared sources inside the budget.
+  - The job `derivation-driftcheck` evaluates each materialised derivation in one statement, refreshes each record that differs under its principal in one unit of work, and raises the degradation there where a refresh changed something.
+  - Truth table: three rows (a lookup of a record a fact in the host's data reaches; a fact no grant was materialised for, after the drift check; a materialised grant the data no longer supports, after it).
+  - Tests: `RelationshipSourceTests.LIB_HOST_001_ASourceHandsTheRowsOfOneContextInstanceToItsReader`, `RelationshipSourceTests.LIB_HOST_001_ASourceNamingNoRelationshipOrNoRowsIsNotMade`, `StartupValidationTests.AUTHZ_DERIVE_005_AC5_ADerivationWithoutItsRelationshipSourceIsRefusedAsync`, `StartupValidationTests.AUTHZ_DERIVE_005_AC5_AMalformedRelationshipSourceIsRefusedNamingItAsync`, `ReverseLookupTests.AUTHZ_DERIVE_007_AC1_StoredAndDerivedGrantsAreReportedDistinctlyAsync`, `ReverseLookupTests.AUTHZ_DERIVE_007_AC2_PastTheBudgetTheAnswerIsPartialAndNamesWhatWentUnevaluatedAsync`, `ReverseLookupTests.AUTHZ_DERIVE_005_AC6_TheViewEvaluatesADerivationInOneStatementAsync`, `ReverseLookupTests.AUTHZ_DERIVE_007_ADerivedGrantWhoseRoleAllowsNothingIsNotReportedAsync`, `ReverseLookupTests.AUTHZ_DERIVE_007_WithoutTheHostsRowsARecordADerivationReachesIsRefusedAsync`, `AccessEndpointTests.AUTHZ_DERIVE_007_AC1_ADerivedGrantIsAnsweredWithNoIdentifierAsync`, `MaterialisationTests.AUTHZ_DERIVE_005_AC4_TheDriftCheckCorrectsWhatTheHostsRowsNoLongerSupportAsync`, `MaterialisationTests.AUTHZ_DERIVE_005_AC4_ADriftCheckThatFindsNoDifferenceRaisesNothingAsync`, `MaterialisationTests.AUTHZ_DERIVE_005_AC6_TheDriftCheckEvaluatesADerivationInOneStatementAsync`, `MaterialisationTests.AUTHZ_DERIVE_005_TheRefreshTakesTheDriftChecksPrincipalAndNoOtherAsync`, `GrantStoreTests.AUTHZ_DERIVE_005_AC4_TheLiveMaterialisedGrantsAreReadInEveryOrganizationAsync`.
+  - Ledger: 265 "Superseded by D-166".
+  - Not built: the audit record of a grant the drift check writes (question 101); the consented resources in the source's start check, which arrive with question 29.
+  - Observed: `IAccessGate.WhoCanAccessAsync` with the rows handed in still stands beside the declared-source path; no chapter says whether it stays.
+- No parked site of questions 69 to 88 was touched; `AccessGate`'s registration (question 83) is where it was.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1224,6 +1243,10 @@ After the merge: build 0 warnings 0 errors, format clean, 2991 unit tests, 139 c
 | `AssessmentsRequest`, the body of `PUT /admin/compliance/assessments` (`f2ef4d42`) | The member was read from the wire as `organisationalSecurityMeasures` | `09` section 8a, the route's row; D-183 question 65 | The request member is spelled `organizationalSecurityMeasures` as `09` spells it. For audit: the response of `GET /admin/ropa`, two public members and the column keep the other spelling (question 99) |
 | Fakes of the unit tests (`46968c21`, `c972731e`) | The unit compositions start every hosted service with no database, and the start now reads the subject keys' versions and writes the lawful bases | CONV-TEST-007; the working guide's section 3, test infrastructure | A fake of the subject-key store and one of the lawful-basis store are registered in the fixtures; no runtime code |
 | `BreakGlassEndpointTests` and `PrivacyRequestEndpointTests` (`67b5c544`) | Two fixtures entered a request for a subject the account-states fake did not hold, which the entry now refuses | `09` section 8a; D-183 question 45; the working guide's section 3, test infrastructure | The fixture holds the subject's account, one line in each place |
+| `IAuditTrail.OfSubjectAsync`, its summary, and the fake of the trail's store (`6cd14e2f`) | The summary said the trail names the subject "as the acting or the effective identity", and the fake filtered on the acting identity alone | `09` `GET /admin/audit`; IDN-AUD-001; PRIV-BREACH-002 | The trail of a subject is the records it acted in or is the data subject of; documentation and a test fake |
+| `DerivationMaterialiser`, the fault for rows not supplied (`10e7acb6`) | It was thrown after the unit of work began | CONV-DESIGN-003 | What needs no write is judged before the beginning; same exception, same condition |
+| `DeclarationCoverage`, `details.key` of a missing relationship source (`10e7acb6`) | D-183 question 22 names the code and not the key's form | `10` section 1.5, "a relationship source is named by its relationship" | The key is the relationship's name, with no prefix |
+| Fixtures and fakes for questions 22, 34 and 59 (`be757f8d`, `e467284d`, `10e7acb6`) | The test host and the conformance sample declared no relationship source and no longer started; no fake held the alerts of the gate or the order the audit is asked in | The working guide's section 3, test infrastructure | The fixtures register the test host's context and its sources; fakes alone, no runtime code |
 
 ## 4. Open questions
 
@@ -1742,7 +1765,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2991 unit tests, 139 c
 - **Parked.** The declaration, its start check, the full answer of `GET /admin/access`, the
   drift-check job and its principal `derivation-driftcheck`, `RefreshAsync`, the
   AUTHZ-DERIVE-005 and AUTHZ-DERIVE-007 tests, ledger line 265.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `10e7acb6` and `6e496a64` (`part/authorization`), but for the audit record of question 101.
 
 **23. Tier 2. D-166 143 and OPS-OBS-002 against LIB-API-005: who raises the loss of the registration channel.**
 
@@ -1931,7 +1954,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2991 unit tests, 139 c
   reason, `ExplanationTests.AUTHZ_CONCEAL_004_AC1_ARefusalOfBackgroundWorkNamesThePrincipalAndItsReasonAsync`,
   the audit store's test of IDN-AUD-001 criterion 1, ledger line 136.
   `OPS_ALERT_001_AC1_ARunOfRefusalsNamingNoOneIsRaisedAsync` turns on the answer.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `be757f8d` (`part/authorization`).
 
 **35. Tier 2. D-166 303 (1) against `09` `GET /admin/audit`: the subject of an audit entry.**
 
@@ -1947,7 +1970,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2991 unit tests, 139 c
   2. D-166's shape stands, and `09` changes.
 - **Parked.** `Subject` on `AuditEntry`, the view, its test. The rest of 303 is in
   `9cfccf3a`.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `6cd14e2f` (`part/authorization`).
 
 **36. Tier 3. D-166 242 (4), AUTH-SESS-009 and IDN-LIFE-009b: a downgraded session, and where `auth.factor.notpermitted` is judged.**
 
@@ -1980,7 +2003,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2991 unit tests, 139 c
   3. A migration revokes `USAGE` on `public` from `PUBLIC`. Smallest fix: one migration,
      which changes the host's database.
 - **Parked.** 135.
-- **Answer:** pending.
+- **Answer:** D-183. Held by tests in `1d80d9d1` (`part/authorization`); nothing else changed.
 
 **38. Tier 2. D-166 119 (1): an immediate attempt after the caller's commit.**
 
@@ -2340,7 +2363,7 @@ After the merge: build 0 warnings 0 errors, format clean, 2991 unit tests, 139 c
 - **What the specification says.** 321 names "no record, no count and no alert" as the
   defect; its fix and its test cover the record and the count.
 - **Parked.** The transaction of the raise of `DenialSpikes`. Related: question 34.
-- **Answer:** pending.
+- **Answer:** D-183. Built in `e467284d` (`part/authorization`).
 
 **60. Tier 3. D-166 119 (7), AUTH-ABUSE-004, `10` section 5.15, REG-IDENT-002 and REG-IDENT-007, `10` section 5.25: the purpose of the identifier-change-confirm link.**
 
@@ -2791,6 +2814,18 @@ part of 389 (3) and waits with 389 on question 48.
   1. They are not changes of permission logic; they stand.
   2. Every change under the area's paths carries a table change: the two changes move to files outside the paths, or each gains a case.
 - **Parked.** Nothing.
+- **Answer:** pending.
+
+**101. Tier 2. AUTHZ-GRANT-003 and AUTHZ-DERIVE-005: the audit record of a grant the drift check writes.**
+
+- **Item.** Question 22.
+- **What the code needs.** An audit action under which a record naming the principal `derivation-driftcheck` is written where the drift check writes or takes back a materialised grant.
+- **What the specification says.** AUTHZ-GRANT-003: "a materialised grant the drift check writes carries the reason AUTHZ-DERIVE-005, its audit record naming the system principal `derivation-driftcheck`". AUTHZ-DERIVE-005: "and its audit record names the principal". `10` section 5.24 lists no action for a grant written or revoked by anyone, the grants table has no principal column, and neither item's criteria mention the record.
+- **Readings.**
+  1. A new audit action, written in the correcting transaction with the principal and the reason: one or two rows of `10` section 5.24 and the write in `DerivationMaterialiser`.
+  2. The grant's own row is the record (nil granter, the reason), and the job names the principal: the two sentences of `03` change.
+  3. A principal column on grants: a migration.
+- **Parked.** That audit record alone.
 - **Answer:** pending.
 
 ## 5. Gate result
