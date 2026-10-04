@@ -1215,6 +1215,16 @@ After the merge: build 0 warnings 0 errors, format clean, 3114 unit tests, 139 c
   - The verification and the replacement hold the acting account's row shared, through the gate, and change the account's identifier set without the set's own lock, as before; the other four take it.
   - `InvitationOpening.OpenAsync` attaches an invitation to a signed-in account inside a unit of work and asks neither the gate nor the restriction at any point; it is no site of question 62, and whether a restricted account may attach an invitation was not settled or changed.
 
+### On `corrections-4`: the housekeeping before the items of D-186 and D-187
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| The documents of D-185, D-186 and D-187: every file of the owner's list hashed to the value given before the commit | `88672d1c` | | `git hash-object` over the 25 files |
+| Question 126: one allow-list entry, the file `tests/Janus.Storage.Tests/Privacy/ConsentStoreTests.cs` and the value `20261004022141_KeepARecordForEachGrant`, both required to match, reason "a migration's identifier in a test, not a credential". The value is the name of the migration's file in `c3191b69`. No commit is rewritten | `5b8ae475` | OPS-DEP-004 | The full-history scan (section 5) |
+| Question 126: the test's constants are named `AddLawfulBases` and `KeepARecordForEachGrant` | `602ab667` | OPS-DEP-004 | The build of the test project and the formatter |
+
+`IdnaTestV2.txt` of Unicode 17.0.0 is downloaded from `https://www.unicode.org/Public/17.0.0/idna/`, the directory of `IdnaMappingTable.txt`. Its header names version 17.0.0 (dated 2025-05-01). SHA-256 `beb5d0be20e896189b03209a82fdc34f06351502bbd4b8e2523583fc2954d9cf`. Both files stay outside the repository until question 68 is built.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1232,20 +1242,20 @@ After the merge: build 0 warnings 0 errors, format clean, 3114 unit tests, 139 c
 | Truth-table rows for D-166 entries 396 and 265 | They state the D-166 outcomes, so they belong with those fixes | Nothing: written in `cb73c32a` and `ef62ecdc` |
 | The full gate, the pull request for `corrections-4` | The push of `corrections-4` after `d5a7fc0e` was refused in the session's environment | The full gate: section 5. The pull request: the push |
 | Questions 21 to 65, as D-183 answers them | Each was parked until D-183 | Built (section 1, from "the housekeeping before D-183's items" on), but for the rows below |
-| Questions 50 and 51: the codes and the produced and accepted types as endpoint metadata, `endpoints.txt` and its contract test, the test host's check, the lines of `release.sh` and the two scenarios of D-166 382; ledger line 382 | What "the codes its `09` row gives" covers | Question 119 |
-| Question 61 for the event rows and the erasure outbox | How a row that tracks several deliveries is claimed | Question 114 |
-| Question 31 at an account identifier's add and replace of a held or reserved value; D-166 306 whole, the sweep of pending verifications (REG-IDENT-004 criterion 4, REG-IDENT-007 criterion 4); ledger lines 115 and 306 | Where the staged value is held; what the sweep waits for | Questions 115 and 116 |
-| Question 62 at `AppPasswords.CreateAsync`, `RecoveryService.SendAsync`, `ErasureService.CompleteAsync` and the destination keys | A first write outside the unit of work, or two units of work | Questions 122 to 125 |
-| Question 46: the filter half of the six unmet step-up rows; the seven step-up scenarios of the conformance suite | Criterion 2 against the filter of a bound action; how the suite arranges a provider's report | Questions 92 and 93 |
-| The correction of `52482ed5`, the step-up half | Which gate the answer is computed against | Question 94 |
-| Question 22: the audit record of a grant the drift check writes | No audit action for it | Question 101 |
-| Question 57: nine registrations still in Hosting, the commands' own registrations, two inner compositions; the test of criterion 7's third clause | The registrations that could not move | Questions 82 to 86 |
-| Question 58: the sites the sweep parked | Which refusals keep a write; a send inside a caller's unit; a success that writes nothing | Questions 69 to 81, 87 and 88 |
-| Question 39 for an invitation's erased key | PRIV-RIGHT-005a against the code | Question 113 |
-| Question 24 for a caller in process | The rule is internal to `Janus.Core` | Question 98 |
-| Question 53 for an app password's `{id}`; `POST /account/recoverycodes/exported` | No typed value and no rule; no contract operation | Questions 118 and 117 |
-| The reverse direction of the REF-001 tests | Question 25's "each direction" | Question 89 |
-| 209 (2), the IDNA mapping | The download is approved and made; the parameters of the processing are not stated | Question 68 |
+| Questions 50 and 51: the codes and the produced and accepted types as endpoint metadata, `endpoints.txt` and its contract test, the test host's check, the lines of `release.sh` and the two scenarios of D-166 382; ledger line 382 | What "the codes its `09` row gives" covers | Nothing: D-187 answers question 119; not yet built |
+| Question 61 for the event rows and the erasure outbox | How a row that tracks several deliveries is claimed | Nothing: D-186 answers question 114; not yet built |
+| Question 31 at an account identifier's add and replace of a held or reserved value; D-166 306 whole, the sweep of pending verifications (REG-IDENT-004 criterion 4, REG-IDENT-007 criterion 4); ledger lines 115 and 306 | Where the staged value is held; what the sweep waits for | Nothing: D-187 answers questions 115 and 116; not yet built |
+| Question 62 at `AppPasswords.CreateAsync`, `RecoveryService.SendAsync`, `ErasureService.CompleteAsync` and the destination keys | A first write outside the unit of work, or two units of work | Nothing: D-186 answers questions 122 to 125; not yet built |
+| Question 46: the filter half of the six unmet step-up rows; the seven step-up scenarios of the conformance suite | Criterion 2 against the filter of a bound action; how the suite arranges a provider's report | Nothing: D-187 answers questions 92 and 93; not yet built |
+| The correction of `52482ed5`, the step-up half | Which gate the answer is computed against | Nothing: D-187 answers question 94; not yet built |
+| Question 22: the audit record of a grant the drift check writes | No audit action for it | Nothing: D-187 answers question 101; not yet built |
+| Question 57: nine registrations still in Hosting, the commands' own registrations, two inner compositions; the test of criterion 7's third clause | The registrations that could not move | Nothing: D-187 answers questions 82 to 86; not yet built |
+| Question 58: the sites the sweep parked | Which refusals keep a write; a send inside a caller's unit; a success that writes nothing | Nothing: D-186 answers questions 69 to 81, 87 and 88; not yet built |
+| Question 39 for an invitation's erased key | PRIV-RIGHT-005a against the code | Nothing: D-187 answers question 113; not yet built |
+| Question 24 for a caller in process | The rule is internal to `Janus.Core` | Nothing: D-187 answers question 98; not yet built |
+| Question 53 for an app password's `{id}`; `POST /account/recoverycodes/exported` | No typed value and no rule; no contract operation | Nothing: D-187 answers questions 118 and 117; not yet built |
+| The reverse direction of the REF-001 tests | Question 25's "each direction" | Nothing: D-187 answers question 89; not yet built |
+| 209 (2), the IDNA mapping | The download is approved and made; the parameters of the processing are not stated | Nothing: D-187 answers question 68; not yet built |
 
 **Slips.** None is rewritten; each commit is green on the fast checks unless said.
 - `30b1c4bc` carries only the changelog line of 323; its code and tests are in `5db004f4`. The two are one change split in two commits.
@@ -2626,7 +2636,7 @@ part of 389 (3) and waits with 389 on question 48.
   Unicode 17.0.0 is downloaded (SHA-256
   `87f05505dc026fdb2bff16132bdc68a8014675836882a9a2b1844540ad3be382`) and kept outside
   the repository until the item is built.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **69. Tier 3. CONV-DESIGN-003 and INT-GEN-003: whether the counts of a rejected callback stand.**
 
@@ -2634,7 +2644,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** It begins, then `CallbackAdmission` counts the callback and, on a rejection, counts the rejection and past the threshold writes the alert's event row, all in that unit of work. On `integration.callback.rejected` it commits; on any other failure it returns with the unit open.
 - **What the specification says.** CONV-DESIGN-003 lists the refusals whose count or record stands (AUTH-FACT-004, AUTH-ABUSE-001, AUTH-STEP-002, OPS-BOOT-004, CONV-LOG-005). The callback counts of INT-GEN-003 are not among them, and a rejection past the threshold writes more than a count.
 - **Parked.** The whole of `DeliveryReports.ReportAsync`, its other-failure return included.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **70. Tier 2. CONV-DESIGN-003: a refusal returned after the commit of a record the list does not name (`BotDefence`).**
 
@@ -2645,7 +2655,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The record is the operation's own success and the challenge is a later answer: nothing changes.
   2. The record is written only where the verifier's answer is known, in one unit of work after it.
 - **Parked.** `BotDefence`.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **71. Tier 3. AUTH-FACT-004 and CONV-DESIGN-003: the wrong try that reaches `code.signin.attempts`.**
 
@@ -2653,7 +2663,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** A wrong try below the limit writes its count and commits. The wrong try that reaches the limit writes no count: it removes the pending sign-in, and commits.
 - **What the specification says.** CONV-DESIGN-003: such a refusal commits "that count or record and nothing else". AUTH-FACT-004: the code is invalidated after that many wrong tries.
 - **Parked.** The limit path of `SpendCodeAsync`, left committing as it was. The expired path of the same method is rolled back (`e3f97ab2`).
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **72. Tier 2. CONV-DESIGN-003: a lost race that commits nothing (`RegisteredSecrets.RotatedAsync`).**
 
@@ -2664,7 +2674,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. Where nothing was replaced the unit of work is rolled back, then the standing secret is read: as `SigningKeys.ChangeAsync`.
   2. The commit of nothing stays, since the operation succeeds.
 - **Parked.** `RegisteredSecrets.RotatedAsync`.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **73. Tier 3. AUTH-FACT-004 and CONV-DESIGN-003: what a refused verification code may write (`VerificationCodes.PresentAsync`).**
 
@@ -2672,7 +2682,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** Four refusals: nothing outstanding (`auth.code.expired`, nothing written); a code past its life (`auth.code.expired`, the row removed); a wrong try (the count written); the wrong try that reaches the limit (the row removed).
 - **What the specification says.** Such a refusal commits "that count or record and nothing else". The removal of a lapsed row and the removal at the limit are not a count; the first refusal writes nothing and by the letter rolls back. This is the same matter as question 71.
 - **Parked.** The whole of `PresentAsync`, left as it was. `VerificationCodesTests.CONV_DESIGN_003_AC5_AWrongTryCommitsItsCountAsync` holds the wrong try.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **74. Tier 3. AUTH-FACT-014 criterion 3 and CONV-DESIGN-003: the audit record of a counter mismatch.**
 
@@ -2680,7 +2690,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** `auth.webauthn.countermismatch` writes the audit record `auth.credential.countermismatch`, and nothing else, and commits. The operation begins the outermost unit of work.
 - **What the specification says.** AUTH-FACT-014 criterion 3 requires the event audited. CONV-DESIGN-003's list of refusals that commit does not name it, and a rollback discards the record.
 - **Parked.** That return, left committing.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **75. Tier 2. CONV-DESIGN-003: sends inside a unit of work that goes on after one is refused (`RecoveryCodeReminders.RemindedAsync`).**
 
@@ -2691,7 +2701,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. It waits for the governed send, where the admission decides in the caller's unit of work.
   2. The reminder's sends move outside its unit of work.
 - **Parked.** `RemindedAsync`.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **76. Tier 3. OPS-BOOT-004, CONV-LOG-005 and CONV-DESIGN-003: the units of a refused break-glass credential.**
 
@@ -2699,7 +2709,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** (1) For a wrong or used code, the unit that takes the hold and compares commits having written nothing beyond the attempt, and the failed authentication's record is written in a second unit, with the throttle's failure after it: the refusal is not decided and recorded in one unit. (2) `auth.breakglass.consumed`, answered where the conditional record of the use finds it taken, now rolls back, and writes no record of a failed authentication and counts no failure.
 - **What the specification says.** CONV-DESIGN-003: a break-glass attempt and its alert stand, committed alone. CONV-LOG-005 names a refused break-glass credential a failed authentication.
 - **Parked.** Both paths, as they are after `853d036b`.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **77. Tier 2. CONV-DESIGN-003: an answer that is not a failure and writes nothing.**
 
@@ -2710,7 +2720,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. Each is the operation's success and commits.
   2. An answer that changed nothing rolls back.
 - **Parked.** Those two returns, left committing.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **78. Tier 3. REG-PROF-002 and CONV-DESIGN-003: the lock an under-age answer writes.**
 
@@ -2718,7 +2728,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** An under-age date locks the age screen on the registration session, commits, and answers the refusal.
 - **What the specification says.** A refusal rolls back but where it keeps one of the counts or records CONV-DESIGN-003 lists; the locked screen of REG-PROF-002 is not among them, and a rollback loses the lock.
 - **Parked.** That return, left committing.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **79. Tier 3. REG-SESS-005 criterion 4 and CONV-DESIGN-003: the session removed where a staged identifier was taken since.**
 
@@ -2726,7 +2736,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** Where a staged identifier is taken or reserved since it was staged, the registration session is removed, the unit of work committed, and the session answered expired.
 - **What the specification says.** As for question 78: the removal is a write the list does not name, and a rollback leaves the session alive.
 - **Parked.** That return, left committing.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **80. Tier 2. CONV-DESIGN-003: operations that discard a send's refusal inside their unit of work and commit.**
 
@@ -2737,7 +2747,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. These sites wait for the governed send.
   2. Each discards nothing: a refused send fails the operation.
 - **Parked.** Nothing is changed at these sites.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **81. Tier 3. AUTH-ABUSE-001 and CONV-DESIGN-003: the throttle's count inside the registration's verification.**
 
@@ -2745,7 +2755,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** A refused code is counted through `ThrottleService.FailedAsync`, which begins a level of its own inside the verification's outermost unit of work. The verification commits where the count succeeded and rolls back where it failed. The unit also holds the wrong try on the code's record.
 - **What the specification says.** "An operation whose refusal keeps such a count begins the outermost unit of work and is never called inside another's."
 - **Parked.** The site is left as `fe7a5cdc` made it.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **82. Tier 2. CONV-DESIGN-007 criterion 7 and D-183 question 57: the types of `Janus.Core` that `AddJanus` registers beside the ring and the mail server in use.**
 
@@ -2756,14 +2766,14 @@ part of 389 (3) and waits with 389 on question 48.
   1. These are the host's declarations and their defaults, outside the rule; they stay in Hosting.
   2. The four defaults move to `AddCoreArea`, the commands then registering them too; the declaration and `DeclaredProcessing` take a parameter or stay.
 - **Parked.** Those six registrations, left in Hosting, and with them the test of criterion 7's third clause.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **83. Tier 3. CONV-DESIGN-007 criterion 7 and LIB-SEAM-001 criterion 1: where `AccessGate` is registered.**
 
 - **Item.** Question 57.
 - **The contradiction.** Criterion 7 puts `AccessGate` and its `IAccessGate` forward in `AddAuthorizationArea`. `AccessSeamTests.LIB_SEAM_001_AC1_ReplacingWhatEvaluatesIsOneChange` holds `AccessGate` to two files, its own and `HostingRegistration.cs`. Hosting keeps naming it for the factories of `GatedSettings` and `GatedUnscopedRefusal`, which are Hosting's types, so the move makes three.
 - **Parked.** The two registrations, left in Hosting.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **84. Tier 2. CONV-DESIGN-007 criterion 7 and CONV-LAYOUT-001: the factory of `SendingValidation`.**
 
@@ -2774,7 +2784,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. It stays in Hosting, the one project that sees both.
   2. The placeholders reach the type another way, and the factory moves; this changes a class.
 - **Parked.** That registration, left in Hosting.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **85. Tier 2. CONV-DESIGN-007: the types only a command registers.**
 
@@ -2785,7 +2795,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. A type only a command resolves is registered by that command; nothing changes.
   2. They move into the area methods, and the three criteria's file lists change with them.
 - **Parked.** Those registrations, left in the commands.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **86. Tier 2. CONV-DESIGN-007: the inner compositions of `AuditRetention` and `RestoreTest`.**
 
@@ -2796,7 +2806,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. An inner composition over the filled ring registers that instance, as a command does after `AddCoreArea`; nothing changes.
   2. Each calls `AddCoreArea` and then registers the instance.
 - **Parked.** Both, left as they are.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **87. Tier 3. CONV-DESIGN-003, INT-GEN-003, BFF-MACH-002, BFF-MACH-003 and IDN-LIFE-012a: what a rejected callback keeps (`CallbackIntake`).**
 
@@ -2804,7 +2814,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** A refused callback (rate limit, source range, signature, window, reference, confirmation, event) commits. The commit keeps the admission count of the source, the rejection count, the alert once the threshold is passed and, for an unsigned provider event, the audit record of its rejection (IDN-LIFE-012a criterion 1).
 - **What the specification says.** CONV-DESIGN-003's list does not name these counts, and the refusal writes more than one thing.
 - **Parked.** The rejected answer, left committing. The other failures of the intake roll back (`c5514735`, `79a480c3`).
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **88. Tier 2. CONV-DESIGN-003: a send joined to its caller's unit of work now marks it.**
 
@@ -2815,7 +2825,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. These sites wait for the governed send (questions 27, 38 and 63), where nothing is carried inside the caller's transaction.
   2. The callers roll back and fail where the send fails.
 - **Parked.** Both callers, unchanged. The same reading decides the further sites the sweep counted under question 77: `ConsentService` (a withdrawal made meanwhile, twice), `OrganizationErasureSweep` (cancelled meanwhile), `DeadlineSweep` (decided meanwhile), the rotations' re-read at completion and their passes with nothing left, `GroupService.AddMemberAsync` (already a member), `GroupService.RemoveMemberAsync` and the worker's lapse check, each answering success with nothing written and committing.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **89. Tier 2. REF-001 criterion 1 and D-183 question 25: the directions the reference tests read.**
 
@@ -2826,7 +2836,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. One direction, as the criterion states. Built.
   2. Both: one assertion more in each of the two tests. It can hold only on the working branch after every part is merged and questions 50 and 51 are built, since rows such as `abuse.source.sitelimit`, `outbox.claim.timeout`, `auth.factor.notenrolled`, `auth.factor.passwordrequired` and `config.change.superseded` are built elsewhere.
 - **Parked.** The reverse assertion.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **90. Tier 3. IDN-LIFE-012a criterion 8 and `09` section 10: a Security Event Token whose `nbf` is in the future.**
 
@@ -2834,7 +2844,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** A token not yet valid is refused, as before the change, and on the Google route it is answered with the lifetime's code, `invalid_request`.
 - **What the specification says.** `09` section 10 fixes the failures and their order and names `exp` alone for the lifetime; it says nothing of `nbf`.
 - **Parked.** Nothing further. The refusal is left standing.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **91. Tier 2. INT-MAIL-001: an account whose `emailAddress` member is absent or not text.**
 
@@ -2844,14 +2854,14 @@ part of 389 (3) and waits with 389 on question 48.
   1. Absent or not text is none. Built (`893d7258`).
   2. Only text that does not parse is none, and a missing member is an answer that does not read: four lines of `JmapMailServer.MailboxesAsync` and one account of the adapter's test go back.
 - **Parked.** Nothing.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **92. Tier 3. AUTHZ-TEST-001 criterion 2 against D-166 328 and AUTHZ-GATE-005: the filter of an unmet step-up row.**
 
 - **Item.** Question 46.
 - **The contradiction.** Criterion 2 says a step-up case agrees "when the filter lists the record and the check answers the gate's outcome". `IAccessGate.FilterAsync` and `FragmentAsync` ask the bound gate as the check does and are refused with the gate's code where it is unmet (D-166 328, held by `GateBehaviourTests.AUTH_STEP_001_AListUnderABoundActionAsksForStepUpAsync`), so for the six unmet rows no filter is rendered and no record is listed. AUTHZ-GATE-005 says the per-row grant query does not evaluate step-up.
 - **Parked.** The filter assertions of the six unmet step-up rows. The rows assert the check for all seven, and both filter renderings for the met row.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **93. Tier 2. `10` section 5.30 and LIB-TEST-001 criterion 2: the seven step-up scenarios of the conformance suite.**
 
@@ -2863,7 +2873,7 @@ part of 389 (3) and waits with 389 on question 48.
   2. The suite runs only the scenarios the deployment can produce.
   3. The host supplies the reports through `IConformanceRows`.
 - **Parked.** The seven members, `details.gate`, their running. It also waits on question 92.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **94. Tier 2. `09` `POST /auth/step-up` and AUTH-FACT-002 criterion 7: the gate of a step-up `phoneCode` ask whose number answers `risk`.**
 
@@ -2874,7 +2884,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The strictest of the gates of the policy in force, field by field, as a host-named gate costs: `StepUpGuard` judged with no action.
   2. The gate of the action the step-up was opened for, which the challenge would carry from `/auth/begin`: a member on the begin request and on the challenge's row.
 - **Parked.** The step-up half; the ask on `risk` at a step-up still answers 202 (`AuthenticationServiceTests.AUTH_FACT_002b_AC6_AReportedChangeWithholdsTheTextCodeFromAStepUpAsync`).
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **95. Tier 2. AUTHZ-IMP-001: `Effective` on the other events that name who acted.**
 
@@ -2885,7 +2895,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. Question 40's answer is the one event; the others stand.
   2. Every event that sets `Actor` from a context sets `Effective` from it: one member at each of the thirteen sites that have a context, with a test each.
 - **Parked.** The thirteen sites, unchanged.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **96. Tier 2. D-183 question 32 and LIB-API: the registration operations that take the request's source.**
 
@@ -2896,7 +2906,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. Only `LandAsync` takes it, and the four others count against a source the session carries, which the rule forbids for a request arriving from elsewhere.
 - **Parked.** Nothing.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **97. Tier 2. `09` section 8a and question 24: a document name refused "before the body is read".**
 
@@ -2907,7 +2917,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The handler's first check, as built: every readable body is answered naming `document`.
   2. The document name becomes a typed value declared with question 53's metadata, so the stage names it whatever the body: a public value type in `Janus.Core` and the three handlers.
 - **Parked.** Nothing; reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **98. Tier 2. INT-SMS-003 and question 24: a document name outside the rule from a caller in process.**
 
@@ -2918,7 +2928,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The routes alone, as built.
   2. The service refuses too: the rule made public in `Janus.Core`, a change of the public surface.
 - **Parked.** The refusal in process.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **99. Tier 2. `09` section 8a and PRIV-ROPA-001: the spelling of the organizational measures outside the request.**
 
@@ -2929,7 +2939,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. Only the request member follows `09`, as built.
   2. The response member, the two public members and the column follow: a rename of each, the `PublicAPI` lines and a migration.
 - **Parked.** Nothing.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **100. Tier 2. CONV-VCS-004: two commits that change `AuthorizationModel.cs` and no truth-table case.**
 
@@ -2940,7 +2950,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. They are not changes of permission logic; they stand.
   2. Every change under the area's paths carries a table change: the two changes move to files outside the paths, or each gains a case.
 - **Parked.** Nothing.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **101. Tier 2. AUTHZ-GRANT-003 and AUTHZ-DERIVE-005: the audit record of a grant the drift check writes.**
 
@@ -2952,7 +2962,7 @@ part of 389 (3) and waits with 389 on question 48.
   2. The grant's own row is the record (nil granter, the reason), and the job names the principal: the two sentences of `03` change.
   3. A principal column on grants: a migration.
 - **Parked.** That audit record alone.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **102. Tier 2. CONV-VCS-004: the gate's read of the standing consent and the truth table.**
 
@@ -2962,7 +2972,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. That suffices.
   2. The table gains two rows (a live record beside an ended one; no live record, the latest decides), which `ConsentGateTests` hold today.
 - **Parked.** Nothing.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **103. Tier 2. CONV-DESIGN-004 and PRIV-CONS-001: the identifiers the migration gives the existing records.**
 
@@ -2972,7 +2982,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The store's rule applied in SQL, as built.
   2. The identifiers are minted in code, in a data step outside the migration.
 - **Parked.** Nothing.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **104. Tier 2. PRIV-CONS-001 and OPS-DEP-002: the `Down` of `KeepARecordForEachGrant`.**
 
@@ -2982,7 +2992,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. A revert removes no evidence, as built.
   2. `Down` keeps the latest record and deletes the rest.
 - **Parked.** Nothing.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **105. Tier 2. PRIV-CONS-008: a withdrawal where no record is live.**
 
@@ -2992,7 +3002,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. A withdrawal touches a live record alone: one statement of the store and one test.
 - **Parked.** Nothing.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **106. Tier 2. CONV-DESIGN-003 and PRIV-CONS-002: the store saves tracked changes before its conditional insert.**
 
@@ -3002,7 +3012,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. The record is inserted through the model, which cannot be conditional on the partial index: a second grant at once then fails on the index and is read again.
 - **Parked.** Nothing.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **107. Tier 2. AUTH-ABUSE-004, CONV-DESIGN-002 and LIB-API-001: the public members of the governed send.**
 
@@ -3013,7 +3023,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. The registration is an internal port the unit of work implements, with no public member.
 - **Parked.** Nothing.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **108. Tier 2. IDN-ATTR-001 and AUTH-ABUSE-004: what stands between the languages of one mail.**
 
@@ -3021,7 +3031,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the specification says.** "the subject lines joined", and the mail "composes it from each language's rendered template"; no separator is named.
 - **What the code does.** " | " between the subject lines, one blank line between the texts.
 - **Parked.** Nothing.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **109. Tier 2. AUTH-ABUSE-004: a retry the restrictions refuse.**
 
@@ -3031,14 +3041,14 @@ part of 389 (3) and waits with 389 on question 48.
   1. A retry the restrictions or the floor refuse releases the count and waits as a failed attempt (the attempt counted, rescheduled, `degradation` where the attempts are spent). Built; it is what the code did before.
   2. It fails for good at that refusal and its row is removed: one branch of `SendPublisher`.
 - **Parked.** Nothing.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **110. Tier 3. AUTH-ABUSE-006 against CONV-DESIGN-002: the gateway's balance asked inside the caller's transaction.**
 
 - **Item.** Question 63.
 - **The contradiction.** No transport is called while a transaction is open. The floor is judged inside the caller's transaction now, and `SmsBalance.BelowFloorAsync`, where no reading stands inside `abuse.sms.pollinterval`, asks the gateway and records the reading in a unit of work of its own.
 - **Parked.** That call, as it is.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **111. Tier 2. AUTH-RECOV-007 and OPS-ALERT-003 against the governed send's answer.**
 
@@ -3049,7 +3059,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. Both count the admission alone, which changes OPS-ALERT-003 criteria 1 and 4 and AUTH-RECOV-007 criterion 3.
 - **Parked.** Nothing.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **112. Tier 2. CONV-DESIGN-002 against CONV-ERR-003 criterion 2: a fault of the library's own in the attempt after the commit.**
 
@@ -3059,14 +3069,14 @@ part of 389 (3) and waits with 389 on question 48.
   1. No catch, as built.
   2. The attempt's own faults are held and left to the publisher's pass, with the exemption stated in CONV-ERR-003.
 - **Parked.** Nothing.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **113. Tier 3. PRIV-RIGHT-005a: the erased key of an invitation.**
 
 - **Item.** Question 39.
 - **The contradiction.** PRIV-RIGHT-005a: "a wrapped key held with no marker (an outbox row's, an invitation's, a mailbox's) is the 32 zero bytes alone". `SubjectEraser` sets an attached invitation's wrapped key and its encrypted document to null, and `InvitationStore` nulls both at use and at expiry. D-183 question 39 names the mailbox's release and the subject key as what is brought to the value, and not the invitation.
 - **Parked.** The invitation's erased key, as it is.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **114. Tier 2. CONV-DESIGN-003 (the rule and criterion 9) and INF-BG-001 criterion 4: how a row that tracks several deliveries is claimed "each delivery apart".**
 
@@ -3079,7 +3089,7 @@ part of 389 (3) and waits with 389 on question 48.
   3. Both: a claim of the row for its outcome and a claim of each delivery for each call.
 - **Also open.** Whether a claim is conditional on the row still being due. The mailbox publisher decides on the row as read under the claim; the send publisher does not, and can skip one interval of the backoff after another pass released the row.
 - **Parked.** The event rows and the erasure outbox, unclaimed.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **115. Tier 2. REG-SESS-005, AUTH-FACT-004, REG-IDENT-004, REG-IDENT-007 and AUTH-ABUSE-004 criterion 14: a held or reserved value at an account identifier's add or replace.**
 
@@ -3091,7 +3101,7 @@ part of 389 (3) and waits with 389 on question 48.
   2. A pending verification with no identifier row: the list and the verifying endpoint need a way to name it.
   3. The index over verified rows alone: a migration, and a change to who may stage a value another holds.
 - **Parked.** The record for a held or reserved value at add and replace, and its ask counted there. The registration's side is built.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **116. Tier 2. D-166 306, REG-IDENT-007 criterion 4 and REG-IDENT-004 criterion 4: what the sweep of pending verifications waits for.**
 
@@ -3104,7 +3114,7 @@ part of 389 (3) and waits with 389 on question 48.
   3. The sweep takes every verification with no live code record, which sweeps a replace the old address has not answered.
 - **Also to settle with it.** The holder of an identifier's code is the SHA-256 of the identifier's bytes in the layout `Guid.TryWriteBytes` gives; a sweep that joins in SQL on `sha256(uuid_send(...))` needs the other byte order, one line of `IdentifierService` to change before any deployment holds records.
 - **Parked.** The whole of 306: the sweep's rule, its schedule and its three tests.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **117. Tier 2. AUTH-FACT-008 criterion 4 and `09` section 6: `POST /account/recoverycodes/exported` is not mounted.**
 
@@ -3115,7 +3125,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. A new public operation on `ICredentials`, its name the owner's to give, and the mapping.
   2. The endpoint maps to the internal service as one of the exceptions of LIB-API-005, which then names it.
 - **Parked.** The endpoint. The code's row and the service's refusal exist.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **118. Tier 2. CONV-DESIGN-006 and CONV-DESIGN-004 criterion 2: a restriction's `{name}` and an app password's `{id}` have no typed value.**
 
@@ -3127,7 +3137,7 @@ part of 389 (3) and waits with 389 on question 48.
   3. Text, checked in the handler.
 - **What the code does.** Reading 3 for the restriction's name alone, whose rule and answer are fixed. A request with an unreadable body and a name outside the rule names the body's member, not `name`.
 - **Parked.** The refusal of an app password's `{id}`, whole; the type of a restriction's name.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **119. Tier 2. CONV-DESIGN-006 criteria 3 and 4: what "the codes its `09` row gives" covers.**
 
@@ -3139,7 +3149,7 @@ part of 389 (3) and waits with 389 on question 48.
   2. The row alone, the preambles' answers derived as the mounting's are: a sentence of the `09` preambles names them as derived.
 - **Measured.** The unit tests of `Janus.Hosting.Tests` receive 338 distinct answers (endpoint, status, code). Beyond the preambles' codes, these are answered and not in their rows: `POST /account/recoverycodes` 422 `auth.enrolment.tokeninvalid`; `POST /recovery/begin` 429 `auth.restriction.exceeded` (its row says 202 always); `POST /auth/webauthn/register/begin` and `/complete` 403 `authz.denied` (section 4, outside section 6's preamble). `GET /register/events` and a path outside the mount answer 404 with no code; the `/oidc/*` routes and the Google provider-event route answer bodies with no `code`. The cause of each was not traced.
 - **Parked.** Questions 50 and 51, whole.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **120. Tier 2. CONV-DESIGN-006 and API-CONV-003: the routes beyond the four question 53 names.**
 
@@ -3150,7 +3160,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The rule covers every such route. Built.
   2. The four routes alone: the constraints and the four other bindings go back.
 - **Parked.** Nothing.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **121. Tier 2. BFF-CSRF-001 criterion 2 and AUTH-SESS-007 criterion 2 against CONV-DESIGN-006: the files that may read endpoint metadata.**
 
@@ -3160,35 +3170,35 @@ part of 389 (3) and waits with 389 on question 48.
   1. The three files join the list. Built.
   2. The declared values reach the stage another way, and the list stands.
 - **Parked.** Nothing.
-- **Answer:** pending.
+- **Answer:** D-187.
 
 **122. Tier 3. AUTHZ-GATE-006: `AppPasswords.CreateAsync`, whose first write is outside any unit of work.**
 
 - **Item.** Question 62.
 - **The matter.** The gate is asked again "inside its unit of work before its first write". The operation's first write is the mail server's creation of the password, outside any unit of work; the unit of work that follows records the audit entry and the notice of what the server already did. The chapters do not state how such a site is built.
 - **Parked.** The site, unchanged.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **123. Tier 3. AUTHZ-GATE-006: `RecoveryService.SendAsync`, the approval's second unit of work.**
 
 - **Item.** Question 62.
 - **The matter.** The approval is two units of work: the first commits the approval and asks the gate again; the second writes the send. The chapters do not state whether the second asks again, nor what a restriction committed between the two leaves (an approval standing with nothing sent).
 - **Parked.** `SendAsync`, unchanged.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **124. Tier 3. AUTHZ-GATE-006: `ErasureService.CompleteAsync`, whose ledger line precedes its unit of work.**
 
 - **Item.** Question 62.
 - **The matter.** The ledger line is appended before the unit of work begins, so the first write precedes it.
 - **Parked.** The site, unchanged.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **125. Tier 3. AUTHZ-GATE-006 against OPS-ALERT-004a: the destination keys.**
 
 - **Item.** Question 62.
 - **The matter.** OPS-ALERT-004a sends the notice to the destinations being replaced before the change's unit of work begins; that delivery is the first effect and a rollback does not undo it. A refusal found by asking again inside the unit of work would follow the notice of a change that then did not happen.
 - **Parked.** `ConfigurationService.DestinationsAsync` and `AlertDestinationChange.ChangeAsync`, unchanged; the gate step and the ask for a loosening inside the unit of work are as they were.
-- **Answer:** pending.
+- **Answer:** D-186.
 
 **126. Tier 3. OPS-DEP-004 and D-167: the scanner's finding in `ConsentStoreTests`.**
 
@@ -3196,7 +3206,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The finding.** The pinned scanner, over the 1087 commits of the history at `261fbfb4`, reports one finding under `generic-api-key`: `tests/Janus.Storage.Tests/Privacy/ConsentStoreTests.cs` line 33, in `c3191b69`, the constant `TheKey` whose value is the identifier of the migration `KeepARecordForEachGrant` (a timestamp and the migration's name), which the test of the migration's data move migrates to. It is no credential: the value is a file name of the repository.
 - **Why it is a question.** The working guide lets an allow-list entry be written alone only where the flagged value is text of the specification; a migration's identifier is not, and any other finding is Tier 3. The finding is in the history, so a change of the line at the head does not clear it.
 - **Parked.** The finding stands; no allow-list entry is written and no commit is rewritten. The secret-scanning job will fail on the push until it is settled.
-- **Answer:** pending.
+- **Answer:** D-185. The entry is written in `5b8ae475` and the constants are renamed in `602ab667`; no commit is rewritten.
 
 ## 5. Gate result
 
