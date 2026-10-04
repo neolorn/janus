@@ -75,7 +75,7 @@ internal sealed class PhoneSignals(
         _ = _answered.Remove(number);
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await audit
             .ConsideredAsync(factor, answered, subject, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
@@ -140,7 +140,7 @@ internal sealed class PhoneSignals(
         }
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
         await audit
             .ConsideredAsync(factor, answered, request.Subject, time.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);

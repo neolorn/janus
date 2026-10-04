@@ -1758,6 +1758,11 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
             () => { },
             error => throw new Xunit.Sdk.XunitException($"The unit of work refused: {error.Code}."));
 
+    private static void Begun(Result<bool> result) =>
+        result.Switch(
+            _ => { },
+            error => throw new Xunit.Sdk.XunitException($"The unit of work refused: {error.Code}."));
+
     private async Task<SendReference> SentAsync(OutboundMessage request) =>
         (await SendAsync(request, TestContext.Current.CancellationToken)).Match(
             reference => reference,

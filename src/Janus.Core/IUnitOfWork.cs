@@ -19,11 +19,16 @@ namespace Janus.Core;
 public interface IUnitOfWork : IAsyncDisposable
 {
     /// <summary>
-    /// Opens the transaction the operation runs in.
+    /// Opens the transaction the operation runs in, or joins the one an operation that
+    /// called this one opened.
     /// </summary>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Whether it opened.</returns>
-    ValueTask<Result> BeginAsync(CancellationToken cancellationToken);
+    /// <returns>
+    /// Whether the level it opened is the outermost: a success that wrote nothing rolls
+    /// back only there, and a level that joined another's commits (D-188). A failure to
+    /// open names no failure code.
+    /// </returns>
+    ValueTask<Result<bool>> BeginAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Commits everything the operation wrote.

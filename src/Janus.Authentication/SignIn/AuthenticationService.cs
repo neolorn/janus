@@ -154,7 +154,7 @@ internal sealed class AuthenticationService(
         var ceremony = OpaqueToken.Draw(randomness);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<SignInChallenge>(notBegun);
         }
@@ -605,7 +605,7 @@ internal sealed class AuthenticationService(
         await throttle.SucceededAsync(attempt, cancellationToken).ConfigureAwait(false);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<SignInOutcome>(notBegun);
         }
@@ -674,7 +674,7 @@ internal sealed class AuthenticationService(
         // this unit of work, so a refused one commits its count on the code's record
         // with the refusal's record and the delay's counts (CONV-DESIGN-003).
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<SignInOutcome>(notBegun);
         }
@@ -829,7 +829,7 @@ internal sealed class AuthenticationService(
         await throttle.SucceededAsync(attempt, cancellationToken).ConfigureAwait(false);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<SignInOutcome>(notBegun);
         }
@@ -977,7 +977,7 @@ internal sealed class AuthenticationService(
         await throttle.SucceededAsync(attempt, cancellationToken).ConfigureAwait(false);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<LandedSignIn>(notBegun);
         }
@@ -1298,7 +1298,7 @@ internal sealed class AuthenticationService(
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<bool>(notBegun);
         }
@@ -1363,7 +1363,7 @@ internal sealed class AuthenticationService(
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<bool>(notBegun);
         }
@@ -1680,7 +1680,7 @@ internal sealed class AuthenticationService(
         // AUTH-ABUSE-004: the code is issued and its message undertaken in one unit of
         // work, so a send the restrictions refuse leaves no code behind it.
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<SignInOutcome>(notBegun);
         }
@@ -1754,7 +1754,7 @@ internal sealed class AuthenticationService(
         CancellationToken cancellationToken)
     {
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<SignInOutcome>(notBegun);
         }
@@ -1966,7 +1966,7 @@ internal sealed class AuthenticationService(
         CancellationToken cancellationToken)
     {
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return notBegun;
         }
@@ -2024,7 +2024,7 @@ internal sealed class AuthenticationService(
         CancellationToken cancellationToken)
     {
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return notBegun;
         }

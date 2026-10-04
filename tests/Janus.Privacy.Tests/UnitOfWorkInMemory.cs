@@ -56,13 +56,13 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
     private List<Func<CancellationToken, ValueTask>> _afterCommit = [];
 
     /// <inheritdoc/>
-    public ValueTask<Result> BeginAsync(CancellationToken cancellationToken)
+    public ValueTask<Result<bool>> BeginAsync(CancellationToken cancellationToken)
     {
         if (RefusesBegin is Error refused)
         {
             RefusesBegin = null;
 
-            return ValueTask.FromResult(Result.Failure(refused));
+            return ValueTask.FromResult(Result.Failure<bool>(refused));
         }
 
         if (Meanwhile is Action meanwhile)
@@ -71,9 +71,11 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
             meanwhile();
         }
 
+        bool outermost = !Open;
+
         Opened++;
 
-        return ValueTask.FromResult(Result.Success());
+        return ValueTask.FromResult(Result.Success(outermost));
     }
 
     /// <inheritdoc/>

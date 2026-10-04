@@ -51,7 +51,7 @@ public sealed class ThrottleLedgerTests(DatabaseFixture database) : IClassFixtur
         await using var work = new UnitOfWork(writing);
         ThrottleLedger ledger = Ledger(writing);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         await ledger.HoldAsync(ThrottleScope.Source, source, TestContext.Current.CancellationToken);
 

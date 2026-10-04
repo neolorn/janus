@@ -322,7 +322,7 @@ internal sealed class BackgroundWorker(
                     // The lapse is claimed and raised in one transaction, so a raise that
                     // fails leaves the lapse to be claimed again rather than marked as told.
                     if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                        .Match<Error?>(() => null, error => error) is Error notBegun)
+                        .Match<Error?>(_ => null, error => error) is Error notBegun)
                     {
                         return Result.Failure(notBegun);
                     }

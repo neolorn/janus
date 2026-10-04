@@ -231,7 +231,7 @@ internal sealed class OrganizationDomainService(
         listed.Checked(passed: true, now);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<OrganizationDomain>(notBegun);
         }
@@ -453,7 +453,7 @@ internal sealed class OrganizationDomainService(
         if (holding)
         {
             (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+                .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
             // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with
             // the acting account's row held before any other lock, so a restriction

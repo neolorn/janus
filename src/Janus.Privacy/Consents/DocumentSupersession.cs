@@ -63,7 +63,7 @@ internal sealed class DocumentSupersession(
         DateTimeOffset at = time.GetUtcNow();
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         IReadOnlyList<EndedConsent> ended = await consents
             .SupersedeAgainstAnotherAsync(documents, at, cancellationToken)

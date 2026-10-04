@@ -112,7 +112,7 @@ public sealed class RecoveryApprovalStoreTests(DatabaseFixture database)
             await using var work = new UnitOfWork(context);
             RecoveryApprovalStore store = Store(context);
 
-            Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+            Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
             await store.HoldAsync(TestContext.Current.CancellationToken);
 
@@ -148,7 +148,7 @@ public sealed class RecoveryApprovalStoreTests(DatabaseFixture database)
         await using var work = new UnitOfWork(context);
         RecoveryApprovalStore store = Store(context);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         await store.HoldAsync(TestContext.Current.CancellationToken);
 

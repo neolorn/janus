@@ -44,7 +44,7 @@ public sealed class NoticeLedgerTests(DatabaseFixture database) : IClassFixture<
         await using var work = new UnitOfWork(writing);
         var ledger = new NoticeLedger(writing, new DataConnections(writing), Deployment.Fingerprints);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         await ledger.HoldAsync(destination, TestContext.Current.CancellationToken);
 

@@ -113,7 +113,7 @@ internal sealed class BreakGlassService(
         // the limit, the source's failure and the failed authentication) and nothing
         // else; every other failure rolls back.
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<IssuedSession>(notBegun);
         }
@@ -260,7 +260,7 @@ internal sealed class BreakGlassService(
         var issued = BreakGlassCredential.Issue(hash, acting, now);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<GeneratedBreakGlass>(notBegun);
         }

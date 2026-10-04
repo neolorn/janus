@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- `IUnitOfWork.BeginAsync` answers `Result<bool>`: whether the level it opened is the
+  outermost, or one that joined a unit of work another operation opened. A caller that
+  only passed its failure up reads it as before.
 - The `expiry-sweep` job removes an identifier's add, and a replace whose swap has not
   applied, once every verification-code record it holds is spent or past
   `code.verification.lifetime`: the new address's code and, where the old address must

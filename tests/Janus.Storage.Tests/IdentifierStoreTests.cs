@@ -712,7 +712,7 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
 
         _ = await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         await store.HoldAsync(subject, TestContext.Current.CancellationToken);
 

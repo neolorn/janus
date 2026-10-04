@@ -82,7 +82,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
         await using (StoreContext writing = database.Context())
         await using (var work = new UnitOfWork(writing))
         {
-            Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+            Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
             await new AccountStore(writing)
                 .AddAsync(Account.Create(subject, Noon), TestContext.Current.CancellationToken);
@@ -638,7 +638,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
         await using var work = new UnitOfWork(writing);
         var store = new ConsentStore(writing, new DataConnections(writing));
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         IReadOnlyList<EndedConsent> ended = await store.SupersedeAgainstAnotherAsync(
             new Dictionary<string, string>(StringComparer.Ordinal) { [purpose] = document },
@@ -658,7 +658,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
         await using var work = new UnitOfWork(writing);
         var store = new ConsentStore(writing, new DataConnections(writing));
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         bool added = await store.AddAsync(
             subject,
@@ -682,7 +682,7 @@ public sealed class ConsentStoreTests(DatabaseFixture database) : IClassFixture<
 
         _ = await store.ConsentsAsync(subject, TestContext.Current.CancellationToken);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         await store.HoldAsync(subject, TestContext.Current.CancellationToken);
 

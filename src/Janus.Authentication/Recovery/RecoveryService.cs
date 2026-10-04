@@ -174,7 +174,7 @@ internal sealed class RecoveryService(
         DateTimeOffset now = time.GetUtcNow();
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -340,7 +340,7 @@ internal sealed class RecoveryService(
         var opened = EnrolmentSessionId.New(time);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<EnrolmentSession>(notBegun);
         }
@@ -542,7 +542,7 @@ internal sealed class RecoveryService(
         // AUTH-ABUSE-004: a link a person asked for answers to the restrictions a
         // sign-in link answers to, and no notification restriction counts it.
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -777,7 +777,7 @@ internal sealed class RecoveryService(
         DateTimeOffset since = now - Day;
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<ApprovedRecovery>(notBegun);
         }

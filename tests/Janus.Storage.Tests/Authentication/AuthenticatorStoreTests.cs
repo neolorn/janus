@@ -460,7 +460,7 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
         await using var work = new UnitOfWork(context);
         AuthenticatorStore store = Store(context);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         _ = await new AccountStore(context).HoldAsync(subject, TestContext.Current.CancellationToken);
 
@@ -488,7 +488,7 @@ public sealed class AuthenticatorStoreTests(DatabaseFixture database)
         await using var work = new UnitOfWork(context);
         AuthenticatorStore store = Store(context);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         IReadOnlyList<Authenticator> standing = await store.OfForUpdateAsync(subject, TestContext.Current.CancellationToken);
         bool kept = standing.Any(credential => credential.Id == going) && standing.Count > 1;

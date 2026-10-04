@@ -319,7 +319,7 @@ internal sealed class SignInLinks(
         string code = VerificationCode.Draw(randomness);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<bool>(notBegun);
         }
@@ -401,7 +401,7 @@ internal sealed class SignInLinks(
         if (linkToken is { Length: > 0 })
         {
             if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notBegun)
+                .Match<Error?>(_ => null, error => error) is Error notBegun)
             {
                 return Result.Failure(notBegun);
             }
@@ -609,7 +609,7 @@ internal sealed class SignInLinks(
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }

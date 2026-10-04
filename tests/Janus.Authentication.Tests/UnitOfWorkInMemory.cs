@@ -72,13 +72,13 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
     public Error? RefusesCommit { get; set; }
 
     /// <inheritdoc/>
-    public ValueTask<Result> BeginAsync(CancellationToken cancellationToken)
+    public ValueTask<Result<bool>> BeginAsync(CancellationToken cancellationToken)
     {
         if (RefusesBegin is Error refused)
         {
             RefusesBegin = null;
 
-            return ValueTask.FromResult(Result.Failure(refused));
+            return ValueTask.FromResult(Result.Failure<bool>(refused));
         }
 
         if (Meanwhile is Action meanwhile)
@@ -90,7 +90,7 @@ internal sealed class UnitOfWorkInMemory : IUnitOfWork
         Opened++;
         _depth++;
 
-        return ValueTask.FromResult(Result.Success());
+        return ValueTask.FromResult(Result.Success(_depth is 1));
     }
 
     /// <inheritdoc/>

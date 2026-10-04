@@ -141,7 +141,7 @@ internal sealed class RegisteredSecrets(
         byte[] fresh = Draw(randomness);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<byte[]>(notBegun);
         }

@@ -73,7 +73,7 @@ internal sealed class FingerprintKeyRotation(
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<KeyRotationProgress>(notBegun);
         }
@@ -136,7 +136,7 @@ internal sealed class FingerprintKeyRotation(
         if (progress.CompletedAt is null)
         {
             if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notBegunAgain)
+                .Match<Error?>(_ => null, error => error) is Error notBegunAgain)
             {
                 return Result.Failure<KeyRotationProgress>(notBegunAgain);
             }
@@ -194,7 +194,7 @@ internal sealed class FingerprintKeyRotation(
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<KeyRetirement>(notBegun);
         }
@@ -224,7 +224,7 @@ internal sealed class FingerprintKeyRotation(
         int swept = (await SweepAsync(latest, cancellationToken).ConfigureAwait(false)).Swept;
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegunAgain)
+            .Match<Error?>(_ => null, error => error) is Error notBegunAgain)
         {
             return Result.Failure<KeyRetirement>(notBegunAgain);
         }
@@ -285,7 +285,7 @@ internal sealed class FingerprintKeyRotation(
         while (true)
         {
             (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+                .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
             // D-166 X3: each batch starts from the point committed, with the progress
             // held, so two runs at once take each batch once and count it once.
@@ -333,7 +333,7 @@ internal sealed class FingerprintKeyRotation(
         do
         {
             (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+                .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
             // D-166 X3: counted on the progress as committed, with it held.
             if (await CommittedAsync(progress, cancellationToken).ConfigureAwait(false)

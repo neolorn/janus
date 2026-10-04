@@ -193,7 +193,7 @@ public sealed class RegistrationSessionStoreTests(DatabaseFixture database) : IC
         await using var work = new UnitOfWork(context);
         RegistrationSessionStore store = Store(context);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         RegistrationSession held = Assert.IsType<RegistrationSession>(
             await store.FindForUpdateAsync(session, TestContext.Current.CancellationToken));

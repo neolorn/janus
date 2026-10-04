@@ -144,7 +144,7 @@ public sealed class MembershipEndingTests(DatabaseFixture database)
         // The end is read before the transaction and ended inside it, as the operation does.
         _ = await ending.FindAsync(subject, organization, TestContext.Current.CancellationToken);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         MembershipId? ended = await ending.EndAsync(subject, organization, at, TestContext.Current.CancellationToken);
 

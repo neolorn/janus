@@ -131,7 +131,7 @@ public sealed class SigningKeyConcurrencyTests(HostFixture host) : IClassFixture
             IConfigurationStore configuration = request.ServiceProvider.GetRequiredService<IConfigurationStore>();
             SigningCredentialSource source = process.GetRequiredService<SigningCredentialSource>();
 
-            Assert.True((await work.BeginAsync(cancellationToken)).Match(() => true, _ => false));
+            Assert.True((await work.BeginAsync(cancellationToken)).Match(_ => true, _ => false));
 
             _ = await source.ReadAsync(configuration, cancellationToken);
             _ = await source.SigningAsync(configuration, accessToken: true, cancellationToken);

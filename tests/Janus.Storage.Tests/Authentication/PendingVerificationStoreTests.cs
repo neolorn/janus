@@ -157,7 +157,7 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
             PendingVerificationStore store = Store(verifying);
             IdentifierDirectory directory = Directory(verifying);
 
-            Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+            Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
             await directory.HoldAsync(subject, TestContext.Current.CancellationToken);
 
@@ -299,7 +299,7 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
 
         _ = await store.FindAsync(staged, TestContext.Current.CancellationToken);
 
-        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
 
         PendingVerification held = Assert.IsType<PendingVerification>(
             await store.FindForUpdateAsync(staged, TestContext.Current.CancellationToken));

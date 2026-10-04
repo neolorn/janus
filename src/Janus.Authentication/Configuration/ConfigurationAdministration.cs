@@ -81,7 +81,7 @@ internal sealed class ConfigurationAdministration(
         // row's lock, so a concurrent change waits and cannot turn a tightening into a
         // loosening.
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -242,7 +242,7 @@ internal sealed class ConfigurationAdministration(
         ArgumentNullException.ThrowIfNull(family);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }

@@ -53,7 +53,7 @@ internal sealed class SignedCallbackGuard(ISignedCallback callback) : IMiddlewar
         ILogger log = context.RequestServices.GetRequiredService<ILogger<SignedCallbackGuard>>();
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         if (!await CallbackIntake
                 .AdmittedAsync(context, callback.Name, callback.Sources, admission, work, log, cancellationToken)
@@ -198,7 +198,7 @@ internal sealed class SignedCallbackGuard(ISignedCallback callback) : IMiddlewar
         CallbackAdmission admission = scope.ServiceProvider.GetRequiredService<CallbackAdmission>();
 
         (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
         if (carried)
         {

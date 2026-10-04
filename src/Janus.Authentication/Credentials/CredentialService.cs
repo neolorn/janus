@@ -123,7 +123,7 @@ internal sealed class CredentialService(
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -326,7 +326,7 @@ internal sealed class CredentialService(
         // CONV-DESIGN-002: the key, the ceremony's end and everything the enrolment
         // settles are one transaction, which the key's own write joins.
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<EnrolledCredential>(notBegun);
         }
@@ -434,7 +434,7 @@ internal sealed class CredentialService(
         // any other lock, so one committed since the gate step refuses the enrolment
         // before anything is written.
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<GeneratorEnrolment>(notBegun);
         }
@@ -513,7 +513,7 @@ internal sealed class CredentialService(
         // CONV-DESIGN-002: as for a key, the confirmation joins the one transaction the
         // enrolment settles in.
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<EnrolledCredential>(notBegun);
         }
@@ -596,7 +596,7 @@ internal sealed class CredentialService(
         // other lock, so one committed since the gate step refuses the codes before
         // anything is written.
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<GeneratedRecoveryCodes>(notBegun);
         }
@@ -674,7 +674,7 @@ internal sealed class CredentialService(
         DateTimeOffset now = time.GetUtcNow();
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -814,7 +814,7 @@ internal sealed class CredentialService(
         var linked = Authenticator.Linked(AuthenticatorId.New(time), acting.Subject, provider, label, now);
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -932,7 +932,7 @@ internal sealed class CredentialService(
         DateTimeOffset now = time.GetUtcNow();
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
@@ -1209,7 +1209,7 @@ internal sealed class CredentialService(
         DateTimeOffset now = time.GetUtcNow();
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+            .Match<Error?>(_ => null, error => error) is Error notBegun)
         {
             return Result.Failure<CredentialCeremony>(notBegun);
         }
