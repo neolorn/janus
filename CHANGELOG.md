@@ -10,6 +10,8 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Adding a member a group already holds and taking out one it does not hold answer as
+  before and roll their transaction back.
 - A withdrawal of a consent or of an objection made meanwhile, an objection that meets
   one recorded meanwhile, the erasure of an organization whose window was cancelled
   meanwhile, and a pass, a sweep or a completion of a key rotation that finds nothing
