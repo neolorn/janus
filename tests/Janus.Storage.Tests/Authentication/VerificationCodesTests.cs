@@ -74,14 +74,23 @@ public sealed class VerificationCodesTests(DatabaseFixture database) : IClassFix
             .Match(code => code, error => throw new Xunit.Sdk.XunitException("The code was not issued: " + error.Code));
     }
 
-    // Each presentation is its own request: its own context, connection and transaction.
+    // Each presentation is its own request: its own context, connection and transaction,
+    // which its caller begins and commits as the operation presenting a code does.
     private async Task<ErrorCode?> PresentedAsync(byte[] holder, string entered)
     {
         await using StoreContext context = database.Context();
         await using var work = new UnitOfWork(context);
 
-        return (await Codes(context, work).PresentAsync(holder, entered, TestContext.Current.CancellationToken))
-            .Match<ErrorCode?>(() => null, error => error.Code);
+        (await work.BeginAsync(TestContext.Current.CancellationToken))
+            .Switch(() => { }, error => throw new Xunit.Sdk.XunitException("No unit of work began: " + error.Code));
+
+        Result presented = await Codes(context, work)
+            .PresentAsync(holder, entered, TestContext.Current.CancellationToken);
+
+        (await work.CommitAsync(TestContext.Current.CancellationToken))
+            .Switch(() => { }, error => throw new Xunit.Sdk.XunitException("Nothing was committed: " + error.Code));
+
+        return presented.Match<ErrorCode?>(() => null, error => error.Code);
     }
 
     private VerificationCodes Codes(StoreContext context, UnitOfWork work)

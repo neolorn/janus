@@ -2136,6 +2136,26 @@ public sealed class InvitationServiceTests : IAsyncDisposable
         Assert.Null(_invitations.Held[0].Invitee);
     }
 
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: a revocation that finds the invitation revoked while it
+    /// waited for its lock is done having written nothing, so it rolls its unit of work
+    /// back.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ARevocationMadeMeanwhileIsRolledBackAsync()
+    {
+        IssuedInvitation issued = Accepted(await IssueAsync(Customer, Request(phone: Number)));
+
+        _invitations.Locking = held => held.Revoke(Noon.AddMinutes(1));
+        _work.Reset();
+
+        Accepted(await RevokeAsync(Customer, issued.Id));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
     /// <summary>
     /// CONV-DESIGN-003 AC5: an end that finds the membership ended while it waited for
     /// its row rolls its unit of work back and commits nothing.

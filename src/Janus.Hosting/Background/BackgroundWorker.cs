@@ -331,7 +331,10 @@ internal sealed class BackgroundWorker(
                             .LapsedAsync(job.Name, now, interval, window, cancellationToken)
                             .ConfigureAwait(false))
                     {
-                        return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+                        // CONV-DESIGN-003: no lapse was claimed, so nothing was written.
+                        await work.RollbackAsync().ConfigureAwait(false);
+
+                        return Result.Success();
                     }
 
                     AlertRaised lapse = Alerts.Of(AlertCondition.BackgroundJobFailed, job.Name, now, Lapse(job));

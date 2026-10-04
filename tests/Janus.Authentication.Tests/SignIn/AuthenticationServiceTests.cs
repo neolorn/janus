@@ -1,4 +1,6 @@
 using System;
+using System.Buffers.Binary;
+using System.Buffers.Text;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
@@ -51,6 +53,8 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     private static readonly DeviceDescription Browser = new("Firefox", "Fedora");
 
     private static readonly OrganizationId Locked = new(Guid.NewGuid());
+
+    private static readonly byte[] CredentialId = [7, 7, 7];
 
     private readonly ChallengeStoreInMemory _challenges = new();
     private readonly PendingSignInStoreInMemory _pending = new();
@@ -684,11 +688,12 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// CONV-DESIGN-003 AC5, AUTH-FACT-004: a wrong try at a sign-in code is refused with
-    /// its count kept, so its transaction is committed and not rolled back.
+    /// CONV-DESIGN-003 AC10, AUTH-FACT-004: a wrong try at a sign-in code is decided in
+    /// its caller's unit of work, which it leaves open with the count written on the
+    /// code's record for the caller to commit.
     /// </summary>
     [Fact]
-    public async Task CONV_DESIGN_003_AC5_AWrongSignInCodeKeepsItsCountAsync()
+    public async Task CONV_DESIGN_003_AC10_AWrongSignInCodeIsCountedInItsCallersUnitOfWorkAsync()
     {
         SubjectId subject = await AccountAsync();
         PendingSignIn held = await CodeSentAsync(subject);
@@ -698,19 +703,19 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Result wrong = await Links.SpendCodeAsync(held, Other(Code()), TestContext.Current.CancellationToken);
 
         Assert.Equal(ErrorCodes.CodeInvalid, wrong.Match(() => (ErrorCode?)null, error => error.Code));
-        Assert.False(_work.Open);
-        Assert.Equal((1, 0), (_work.Committed, _work.RolledBack));
+        Assert.Equal((0, 0, 0), (_work.Opened, _work.Committed, _work.RolledBack));
         Assert.Equal(
             1,
             (await _pending.FindAsync(subject, Factor.EmailCode, TestContext.Current.CancellationToken))?.WrongAttempts);
     }
 
     /// <summary>
-    /// CONV-DESIGN-003 AC5: a sign-in code found gone under its lock is refused as
-    /// expired with no count to keep, so its transaction is rolled back and left closed.
+    /// CONV-DESIGN-003 AC10: a sign-in code found gone under its lock is refused as
+    /// expired having written nothing, and the refusal neither begins nor ends a unit of
+    /// work, so its caller may still commit the kept writes it makes for it.
     /// </summary>
     [Fact]
-    public async Task CONV_DESIGN_003_AC5_ASignInCodeGoneUnderItsLockIsRolledBackAsync()
+    public async Task CONV_DESIGN_003_AC10_ASignInCodeGoneUnderItsLockWritesNothingAsync()
     {
         SubjectId subject = await AccountAsync();
         PendingSignIn held = await CodeSentAsync(subject);
@@ -721,8 +726,223 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Result gone = await Links.SpendCodeAsync(held, Code(), TestContext.Current.CancellationToken);
 
         Assert.Equal(ErrorCodes.CodeExpired, gone.Match(() => (ErrorCode?)null, error => error.Code));
+        Assert.Equal((0, 0, 0), (_work.Opened, _work.Committed, _work.RolledBack));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10, AUTH-FACT-004: a wrong sign-in code commits its count on the
+    /// code's record, the failed authentication's record and the failure's counts in one
+    /// unit of work, and the try that reaches the cap commits the code's removal the
+    /// same way.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AWrongSignInCodeCommitsItsKeptWritesTogetherAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailCode);
+        Remembered(subject);
+        AuthenticationCodeKeys();
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await Service.SendCodeAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+
+        string right = Code();
+
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.CodeInvalid, Refused(await PresentAsync(began.Challenge, Factor.EmailCode, Other(right))));
         Assert.False(_work.Open);
-        Assert.Equal((0, 1), (_work.Committed, _work.RolledBack));
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.Equal(
+            1,
+            (await _pending.FindAsync(subject, Factor.EmailCode, TestContext.Current.CancellationToken))?.WrongAttempts);
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.EmailCode)], _audit.Failed);
+        Assert.Contains(_throttle.Counted, counter => counter.Scope is ThrottleScope.Source);
+
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.CodeInvalid, Refused(await PresentAsync(began.Challenge, Factor.EmailCode, Other(right))));
+        Assert.False(_work.Open);
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.Null(await _pending.FindAsync(subject, Factor.EmailCode, TestContext.Current.CancellationToken));
+        Assert.Equal(2, _audit.Failed.Count);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10, AUTH-FACT-004: a sign-in code presented past its lifetime
+    /// changes nothing on the code's record and commits the failed authentication's
+    /// record and the failure's counts alone.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ASignInCodePastItsLifetimeCommitsOnlyItsRecordAndItsCountsAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailCode);
+        Remembered(subject);
+        AuthenticationCodeKeys();
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await Service.SendCodeAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+
+        string right = Code();
+
+        _clock.Advance(TimeSpan.FromMinutes(4));
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.CodeExpired, Refused(await PresentAsync(began.Challenge, Factor.EmailCode, right)));
+        Assert.False(_work.Open);
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.Equal(
+            0,
+            (await _pending.FindAsync(subject, Factor.EmailCode, TestContext.Current.CancellationToken))?.WrongAttempts);
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.EmailCode)], _audit.Failed);
+        Assert.Contains(_throttle.Counted, counter => counter.Scope is ThrottleScope.Source);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10, AUTH-FACT-004: a wrong code of the new-device check commits
+    /// its count on the code's record, the refusal's record and the failure's counts in
+    /// one unit of work.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AWrongDeviceCodeCommitsItsKeptWritesTogetherAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await PresentAsync(began.Challenge, Factor.Password, Secret);
+
+        string right = Code();
+
+        _work.Reset();
+
+        Result<SignInProgress> wrong = await Service.VerifyDeviceAsync(
+            began.Challenge,
+            Other(right),
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.CodeInvalid, Refused(wrong));
+        Assert.False(_work.Open);
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.Equal(1, Assert.Single(_codes.All).Attempts);
+        Assert.Equal([subject], _audit.DeviceVerificationsFailed);
+        Assert.Contains(_throttle.Counted, counter => counter.Scope is ThrottleScope.Source);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10, AUTH-FACT-004: a new-device code presented past its
+    /// lifetime leaves the code's record as it stood, the lapsed record being the
+    /// sweep's, and commits the refusal's record and the failure's counts alone.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ADeviceCodePastItsLifetimeCommitsOnlyItsRecordAndItsCountsAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        // The sign-in lives as long as the key held when it began, the code as long as
+        // the key holds when it is sent, so the code lapses first.
+        _configuration.Set(Settings.CodeVerificationLifetime, TimeSpan.FromMinutes(1));
+
+        _ = await PresentAsync(began.Challenge, Factor.Password, Secret);
+
+        string right = Code();
+
+        _clock.Advance(TimeSpan.FromMinutes(1));
+        _work.Reset();
+
+        Result<SignInProgress> lapsed = await Service.VerifyDeviceAsync(
+            began.Challenge,
+            right,
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.CodeExpired, Refused(lapsed));
+        Assert.False(_work.Open);
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.Equal(0, Assert.Single(_codes.All).Attempts);
+        Assert.Equal([subject], _audit.DeviceVerificationsFailed);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-014 AC3, CONV-DESIGN-003 AC10: a signature counter that did not advance
+    /// is refused, and the refusal's record, the failed authentication's record and the
+    /// failure's counts are committed together, the stored counter left as it stood.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_014_AC3_ACounterThatDidNotAdvanceCommitsItsThreeWritesTogetherAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+
+        AuthenticatorId credential = Keyed(subject, key, counter: 9);
+        SignInChallenge began = await BeganAsync(Address);
+
+        _work.Reset();
+
+        Result<SignInProgress> refused = await Service.PresentAsync(
+            began.Challenge,
+            new FactorPresentation(Factor.Passkey) { Assertion = Asserted(key, began.WebAuthn.Challenge, counter: 8) },
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.WebAuthnCounterMismatch, Refused(refused));
+        Assert.False(_work.Open);
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+
+        (AuditAction action, SubjectId audited, AuthenticatorId named) = Assert.Single(_credentials.Records);
+
+        Assert.Equal(("auth.credential.countermismatch", subject, credential), (action.ToString(), audited, named));
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.Passkey)], _audit.Failed);
+        Assert.Contains(_throttle.Counted, counter => counter.Scope is ThrottleScope.Source);
+        Assert.Equal(
+            9u,
+            (await _authenticators.FindAsync(credential, TestContext.Current.CancellationToken))!.WebAuthn!.Counter);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: an assertion the credential did not sign keeps no write of
+    /// its own, so its unit of work is rolled back and the failed authentication's
+    /// record and the failure's counts are committed in theirs.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AnAssertionRefusedOtherwiseIsRolledBackAndCountedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var other = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+
+        AuthenticatorId credential = Keyed(subject, key, counter: 9);
+        SignInChallenge began = await BeganAsync(Address);
+
+        _work.Reset();
+
+        Result<SignInProgress> refused = await Service.PresentAsync(
+            began.Challenge,
+            new FactorPresentation(Factor.Passkey) { Assertion = Asserted(other, began.WebAuthn.Challenge, counter: 10) },
+            Browser,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.FactorRejected, Refused(refused));
+        Assert.False(_work.Open);
+        Assert.Equal((1, 1), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.Empty(_credentials.Records);
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.Passkey)], _audit.Failed);
+        Assert.Equal(
+            9u,
+            (await _authenticators.FindAsync(credential, TestContext.Current.CancellationToken))!.WebAuthn!.Counter);
     }
 
     /// <summary>
@@ -2184,6 +2404,58 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Assert.NotNull(await _pending.FindAsync(subject, Factor.EmailLink, TestContext.Current.CancellationToken));
 
         return (began.Challenge, Token(), browser.Value);
+    }
+
+    // A passkey of the account whose public key is the given one, as its enrolment
+    // left it.
+    private AuthenticatorId Keyed(SubjectId subject, ECDsa key, uint counter)
+    {
+        var id = AuthenticatorId.New(_clock);
+
+        _authenticators.Hold(Authenticator.Existing(
+            id,
+            subject,
+            Factor.Passkey,
+            Label(Factor.Passkey),
+            AuthenticatorState.Active,
+            _clock.GetUtcNow(),
+            null,
+            null,
+            confirmed: true,
+            null,
+            new WebAuthnMaterial(CredentialId, key.ExportSubjectPublicKeyInfo(), -7, "example.test", counter, false, false),
+            isPreferred: false));
+
+        return id;
+    }
+
+    // What an authenticator holding the key answers the sign-in's ceremony with, user
+    // present and verified, reporting the given counter.
+    private static AuthenticatorAssertion Asserted(ECDsa key, string challenge, uint counter)
+    {
+        byte[] clientData = JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, string>
+        {
+            ["type"] = "webauthn.get",
+            ["challenge"] = challenge,
+            ["origin"] = "https://example.test",
+        });
+
+        byte[] authenticatorData = new byte[37];
+
+        SHA256.HashData(Encoding.UTF8.GetBytes("example.test")).CopyTo(authenticatorData, 0);
+        authenticatorData[32] = 0x05;
+        BinaryPrimitives.WriteUInt32BigEndian(authenticatorData.AsSpan(33), counter);
+
+        byte[] signature = key.SignData(
+            [.. authenticatorData, .. SHA256.HashData(clientData)],
+            HashAlgorithmName.SHA256,
+            DSASignatureFormat.Rfc3279DerSequence);
+
+        return new AuthenticatorAssertion(
+            Base64Url.EncodeToString(CredentialId),
+            Base64Url.EncodeToString(clientData),
+            Base64Url.EncodeToString(authenticatorData),
+            Base64Url.EncodeToString(signature));
     }
 
     // The account's outstanding email sign-in code, as the ask left it.

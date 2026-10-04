@@ -505,6 +505,31 @@ public sealed class HostCallbackTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC10, INT-GEN-003, BFF-MACH-003: a rejected callback commits its
+    /// admission count, its rejection's count and the raise past the threshold together,
+    /// and leaves no unit of work open.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ARejectedCallbackCommitsItsCountsAndItsRaiseAsync()
+    {
+        _configuration.Set(Settings.AlertingCallbackThreshold, 0);
+
+        HttpContext answered = await SentAsync(Events, Body, SignedHostCallback.Signing(Body, Noon, "a-guessed-secret"));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, answered.Response.StatusCode);
+        Assert.Equal(0, _reached);
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(2, _callbacks.Counted.Count);
+        Assert.Single(_callbacks.Counted, callback => callback.Rejected);
+        Assert.Equal(
+            AlertCondition.CallbackVerificationFailed,
+            Assert.Single(_events.Of<AlertRaised>()).Condition);
+    }
+
+    /// <summary>
     /// BFF-MACH-001 AC2 and AC3: a host's callback authenticates by what its provider
     /// sends, and one carrying a browser's session cookie is refused before its checks.
     /// </summary>

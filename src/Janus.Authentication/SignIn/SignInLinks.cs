@@ -165,7 +165,9 @@ internal sealed class SignInLinks(
     /// Implements AUTH-FACT-004. The code is an authentication code, held to its own
     /// cap, and every try is decided under a lock on the pending sign-in's row, so
     /// concurrent tries count as the same number of sequential ones and the right code
-    /// answers once.
+    /// answers once. The try is decided in its caller's unit of work and begins none of
+    /// its own, so the caller commits the wrong try's count with the refusal's other
+    /// kept writes (CONV-DESIGN-003).
     /// </remarks>
     public async ValueTask<Result> SpendCodeAsync(
         PendingSignIn held,
@@ -186,22 +188,15 @@ internal sealed class SignInLinks(
             return Result.Failure(failure);
         }
 
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
-        {
-            return Result.Failure(notBegun);
-        }
-
         PendingSignIn? locked = await pending
             .FindForUpdateAsync(held.Fingerprint, cancellationToken)
             .ConfigureAwait(false);
 
         // AUTH-FACT-004 AC3: whatever is presented once the code is gone or has lapsed is
-        // refused as expired, the right code included, and that refusal keeps no count.
+        // refused as expired, the right code included, and that refusal writes nothing,
+        // the lapsed record being the sweep's.
         if (locked is null || locked.HasExpired(time.GetUtcNow()))
         {
-            await work.RollbackAsync().ConfigureAwait(false);
-
             return Result.Failure(Error.From(ErrorCodes.CodeExpired));
         }
 
@@ -210,7 +205,7 @@ internal sealed class SignInLinks(
         // The right code is spent by the try it answered, and enough wrong codes end
         // the link, which is what stops a six-digit code being guessed at leisure
         // (AUTH-FACT-004 AC3). A wrong try's count stands whatever the outcome, so the
-        // refusal that keeps it commits (CONV-DESIGN-003).
+        // caller commits the refusal that keeps it (CONV-DESIGN-003).
         if (answer.Match(() => true, _ => false) || locked.WrongAttempts >= attempts)
         {
             await pending.RemoveAsync(locked.Fingerprint, cancellationToken).ConfigureAwait(false);
@@ -218,12 +213,6 @@ internal sealed class SignInLinks(
         else
         {
             await pending.RecordAsync(locked, cancellationToken).ConfigureAwait(false);
-        }
-
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure(notCommitted);
         }
 
         return answer;
@@ -320,7 +309,7 @@ internal sealed class SignInLinks(
             return Result.Success(true);
         }
 
-        if (!await signals.AllowsAsync(factor, number.Canonical, subject, cancellationToken)
+        if (!await signals.AllowsAsync(factor, texted.Value, subject, cancellationToken)
                 .ConfigureAwait(false))
         {
             return Result.Success(false);

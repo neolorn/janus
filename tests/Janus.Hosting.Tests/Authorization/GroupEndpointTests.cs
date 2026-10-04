@@ -424,7 +424,8 @@ public sealed class GroupEndpointTests : IAsyncLifetime
 
     /// <summary>
     /// AUTHZ-GROUP-001: adding a member already held, or taking out one that is not,
-    /// changes nothing and records nothing.
+    /// changes nothing and records nothing, and each ends its unit of work by rolling it
+    /// back.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -446,7 +447,40 @@ public sealed class GroupEndpointTests : IAsyncLifetime
         Assert.Equal(2, _deployment.GroupChanges.Changes.Count);
         Assert.Equal([User], await _deployment.Groups.MembersAsync(tellers, CancellationToken.None));
         Assert.False(_deployment.Work.Open);
-        Assert.Equal(0, _deployment.Work.RolledBack);
+        Assert.Equal(2, _deployment.Work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: a member added that the group already holds, and one taken
+    /// out that it does not hold, are each answered as done having written nothing, so
+    /// each rolls its unit of work back and records nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AMemberChangeThatWritesNothingIsRolledBackAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Branch, Permissions.GroupManage);
+        GroupId tellers = Id(await CreatedAsync(administrator, "Tellers"));
+
+        _ = await AddedAsync(administrator, tellers, User);
+
+        int rolledBack = _deployment.Work.RolledBack;
+        int recorded = _deployment.GroupChanges.Changes.Count;
+
+        Answer again = await AddedAsync(administrator, tellers, User);
+
+        Assert.Equal(StatusCodes.Status204NoContent, again.Status);
+        Assert.Equal(rolledBack + 1, _deployment.Work.RolledBack);
+
+        Answer absent = await MemberRemovedAsync(
+            administrator,
+            tellers,
+            GrantSubject.Of(new SubjectId(Guid.NewGuid())));
+
+        Assert.Equal(StatusCodes.Status204NoContent, absent.Status);
+        Assert.Equal(rolledBack + 2, _deployment.Work.RolledBack);
+        Assert.Equal(recorded, _deployment.GroupChanges.Changes.Count);
+        Assert.False(_deployment.Work.Open);
     }
 
     /// <summary>

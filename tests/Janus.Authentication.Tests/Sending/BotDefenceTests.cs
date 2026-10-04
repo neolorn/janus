@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Janus.Authentication.Sending;
 using Janus.Core;
@@ -132,6 +133,46 @@ public sealed class BotDefenceTests : IAsyncDisposable
         await PassedAsync(Datacenter, "solved");
     }
 
+
+    /// <summary>
+    /// AUTH-ABUSE-008 AC5: a signal that fires is recorded whether or not a verifier is
+    /// declared. With one declared the record is committed, alone, before the verifier
+    /// is asked, no transaction is open while it is asked, and the record stands where
+    /// the verifier requires a challenge, fails or does not answer.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_008_AC5_TheSignalIsCommittedBeforeTheVerifierIsAskedAndStandsAsync()
+    {
+        await PassedAsync(Datacenter);
+
+        Assert.Equal((1, 0, false), (_work.OutermostCommitted, _work.RolledBack, _work.Open));
+
+        var asked = new List<(int Recorded, int Committed, bool Open)>();
+        bool answers = true;
+
+        _verifier = new ChallengeVerifier((_, cancellationToken) =>
+        {
+            asked.Add((_audit.Records.Count, _work.OutermostCommitted, _work.Open));
+
+            return answers
+                ? ValueTask.FromResult(false)
+                : ValueTask.FromException<bool>(new OperationCanceledException(cancellationToken));
+        });
+
+        Assert.Equal(ErrorCodes.ChallengeRequired, Refusal(await CheckedAsync(Datacenter, null)));
+        Assert.Equal(ErrorCodes.ChallengeRequired, Refusal(await CheckedAsync(Datacenter, "guessed")));
+
+        answers = false;
+
+        _ = await Assert.ThrowsAsync<OperationCanceledException>(
+            async () => await CheckedAsync(Datacenter, "unanswered"));
+
+        Assert.Equal([(3, 3, false), (4, 4, false)], asked);
+        Assert.Equal(
+            [false, true, true, true],
+            _audit.Records.Select(recorded => recorded.Challenged));
+        Assert.Equal((4, 0, false), (_work.OutermostCommitted, _work.RolledBack, _work.Open));
+    }
     /// <summary>
     /// A signal the deployment stopped counting fires for nobody, which is how the
     /// closed set is turned off (chapter 10 section 4.5).

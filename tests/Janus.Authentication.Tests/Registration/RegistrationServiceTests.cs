@@ -2566,6 +2566,51 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC10, REG-PROF-002: an under-age answer is refused with the
+    /// session's end and its lock committed, the refusal's one kept write, and nothing
+    /// rolled back.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AnUnderAgeAnswerCommitsTheSessionsEndAndItsLockAsync()
+    {
+        _configuration.Set(Settings.RegistrationAdultAffirmation, AttributeRequirement.Required);
+
+        RegistrationSessionId session = await StartedAsync();
+
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.ProfileUnderage,
+            Refused(await Service.RecordAgeAsync(session, Minor, TestContext.Current.CancellationToken)));
+        Assert.False(_work.Open);
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.True(Assert.Single(_sessions.All).AgeRefused);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10, REG-SESS-005: a staged identifier taken since it was staged
+    /// ends the session at the terms step, the refusal's one kept write, which is
+    /// committed, and the step is answered as an ended session is, with no details.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AnIdentifierTakenSinceCommitsTheSessionsEndAsync()
+    {
+        RegistrationSessionId session = await SecuredAsync();
+
+        _directory.Held(IdentifierKind.Email, Address, SubjectId.New(_randomness));
+        _work.Reset();
+
+        Error? refused = (await AcceptedAsync(session)).Match(_ => (Error?)null, error => error);
+
+        Assert.Equal(ErrorCodes.SessionExpired, refused?.Code);
+        Assert.Empty(refused!.Details);
+        Assert.False(_work.Open);
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.Empty(_sessions.All);
+        Assert.Empty(_directory.Created);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC5: a code presented for an identifier the session does not
     /// stage counts nothing, so the refusal rolls the unit of work back.
     /// </summary>

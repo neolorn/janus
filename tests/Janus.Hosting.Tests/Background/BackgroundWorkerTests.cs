@@ -234,7 +234,8 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
     /// <summary>
     /// CONV-DESIGN-003 AC5: a lapse whose alert cannot be raised is refused after its
     /// unit of work began, and rolls it back, so the claim on the lapse is not kept; a
-    /// turn that finds no lapse ends its unit of work too.
+    /// turn that finds no lapse wrote nothing and rolls back too (AC10), so nothing
+    /// commits.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -255,8 +256,36 @@ public sealed class BackgroundWorkerTests : IAsyncDisposable
 
         Assert.Empty(_alerts.Of<AlertRaised>());
         Assert.All(units, unit => Assert.False(unit.Open));
-        Assert.Equal(1, units.Sum(unit => unit.RolledBack));
-        Assert.Equal(units.Sum(unit => unit.Opened) - 1, units.Sum(unit => unit.Committed));
+        Assert.True(units.Sum(unit => unit.Opened) > 1);
+        Assert.Equal(units.Sum(unit => unit.Opened), units.Sum(unit => unit.RolledBack));
+        Assert.Equal(0, units.Sum(unit => unit.Committed));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: of the turns of a job that keeps failing, the one that
+    /// claims the lapse and raises it commits, and each turn that finds no lapse to
+    /// claim wrote nothing and rolls its unit of work back.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ATurnThatFindsNoLapseRollsBackAsync()
+    {
+        using BackgroundWorker worker = Worker(Failing("failing"));
+
+        await TurnsAsync(worker, 4);
+
+        UnitOfWorkInMemory[] units;
+
+        lock (_gate)
+        {
+            units = [.. _units];
+        }
+
+        _ = Assert.Single(_alerts.Of<AlertRaised>());
+        Assert.All(units, unit => Assert.False(unit.Open));
+        Assert.Equal(1, units.Sum(unit => unit.Committed));
+        Assert.Equal(units.Sum(unit => unit.Opened) - 1, units.Sum(unit => unit.RolledBack));
+        Assert.True(units.Sum(unit => unit.RolledBack) > 0);
     }
 
     /// <summary>

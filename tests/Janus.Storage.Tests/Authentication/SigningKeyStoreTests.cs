@@ -191,15 +191,15 @@ public sealed class SigningKeyStoreTests(DatabaseFixture database)
 
         await using (StoreContext early = database.Context())
         {
-            await Keys(early).RetireAsync(replaced, overlapEnds.AddSeconds(-1), Cancellation);
-            await Keys(early).RemoveAsync(replaced, at + Keeping - TimeSpan.FromSeconds(1), Cancellation);
+            Assert.False(await Keys(early).RetireAsync(replaced, overlapEnds.AddSeconds(-1), Cancellation));
+            Assert.False(await Keys(early).RemoveAsync(replaced, at + Keeping - TimeSpan.FromSeconds(1), Cancellation));
         }
 
         Assert.True((await HeldAsync()).Single(key => key.KeyId == current.KeyId).HoldsPrivateKey);
 
         await using (StoreContext retiring = database.Context())
         {
-            await Keys(retiring).RetireAsync(replaced, overlapEnds, Cancellation);
+            Assert.True(await Keys(retiring).RetireAsync(replaced, overlapEnds, Cancellation));
 
             Assert.Null(await Keys(retiring).PrivateKeyAsync(current.KeyId, Cancellation));
         }
@@ -208,7 +208,7 @@ public sealed class SigningKeyStoreTests(DatabaseFixture database)
 
         await using (StoreContext removing = database.Context())
         {
-            await Keys(removing).RemoveAsync(replaced, at + Keeping, Cancellation);
+            Assert.True(await Keys(removing).RemoveAsync(replaced, at + Keeping, Cancellation));
         }
 
         Assert.DoesNotContain(await HeldAsync(), key => key.KeyId == current.KeyId);

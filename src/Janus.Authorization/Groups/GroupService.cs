@@ -303,15 +303,19 @@ internal sealed class GroupService(
             return Result.Failure(refused);
         }
 
-        // X9: a member already held changes nothing and records nothing, and the unit
-        // of work still ends before the operation returns.
-        if (!(await groups.MembersAsync(group, cancellationToken).ConfigureAwait(false)).Contains(member))
+        // CONV-DESIGN-003: a member already held changes nothing and records nothing, so
+        // the unit of work is rolled back.
+        if ((await groups.MembersAsync(group, cancellationToken).ConfigureAwait(false)).Contains(member))
         {
-            await groups.AddMemberAsync(group, member, cancellationToken).ConfigureAwait(false);
-            await audit
-                .MemberAddedAsync(held!, member, stated, acting, context.BreakGlassReason, time.GetUtcNow(), cancellationToken)
-                .ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success();
         }
+
+        await groups.AddMemberAsync(group, member, cancellationToken).ConfigureAwait(false);
+        await audit
+            .MemberAddedAsync(held!, member, stated, acting, context.BreakGlassReason, time.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -385,11 +389,13 @@ internal sealed class GroupService(
             return Result.Failure(refused);
         }
 
-        // X9: a member not held changes nothing and records nothing, and the unit of
-        // work still ends before the operation returns.
+        // CONV-DESIGN-003: a member not held changes nothing and records nothing, so the
+        // unit of work is rolled back.
         if (!(await groups.MembersAsync(group, cancellationToken).ConfigureAwait(false)).Contains(member))
         {
-            return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success();
         }
 
         await groups.RemoveMemberAsync(group, member, cancellationToken).ConfigureAwait(false);

@@ -487,6 +487,59 @@ public sealed class SigningKeysTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC10, AUTH-KEY-001: a change asked for where none is due answers
+    /// success having written nothing, so its unit of work is rolled back.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AChangeWithNothingDueIsRolledBackAsync()
+    {
+        _ = await _process.ReadAsync();
+
+        await using var work = new UnitOfWorkInMemory();
+        var keys = new SigningKeys(_keys, _configuration, work, _clock);
+
+        Result changed = await keys.ChangeAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(changed.Match(() => true, _ => false));
+        Assert.False(work.Open);
+        Assert.Equal((0, 1), (work.Committed, work.RolledBack));
+        Assert.Equal(1, _keys.Count);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10, AUTH-KEY-001 AC7: a longer lifetime stored against a key that
+    /// is no longer current writes nothing, so its unit of work is rolled back; against
+    /// the current key it commits.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ALifetimeAgainstAKeyNoLongerCurrentIsRolledBackAsync()
+    {
+        SigningKey first = (await _process.ReadAsync()).Keys.Single(held => held.Key.IsCurrent).Key;
+
+        await using var work = new UnitOfWorkInMemory();
+        var keys = new SigningKeys(_keys, _configuration, work, _clock);
+
+        Result kept = await keys.LengthenAsync(first, TimeSpan.FromHours(2), TestContext.Current.CancellationToken);
+
+        Assert.True(kept.Match(() => true, _ => false));
+        Assert.Equal((1, 0), (work.OutermostCommitted, work.RolledBack));
+
+        _clock.Advance(Cadence - Lead);
+        _ = await _process.ReadAsync();
+        _clock.Advance(Lead);
+        _ = await _process.SigningAsync(accessToken: false);
+        work.Reset();
+
+        Result late = await keys.LengthenAsync(first, TimeSpan.FromHours(3), TestContext.Current.CancellationToken);
+
+        Assert.True(late.Match(() => true, _ => false));
+        Assert.False(work.Open);
+        Assert.Equal((0, 1), (work.Committed, work.RolledBack));
+    }
+
+    /// <summary>
     /// AUTH-KEY-001 AC7: a longer lifetime stored against a key another process has just
     /// replaced is refused, and the token is signed by the current key, which carries
     /// the longer lifetime in turn. The other process's clock runs a little behind, so

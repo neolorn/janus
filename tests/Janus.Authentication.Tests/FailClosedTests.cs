@@ -69,7 +69,10 @@ public sealed class FailClosedTests
     /// <summary>
     /// AUTH-PRIN-001 AC3: no code path returns an allow on an exception. An exception
     /// is caught only where an outage has to become a refusal (INT-PWD-002 AC1), and
-    /// every such block answers with a failure or throws; JAN0006 forbids the rest.
+    /// every such block answers with a failure or throws; JAN0006 forbids the rest. The
+    /// one catch that carries on, around a send's attempt after the commit, answers
+    /// nothing: it logs the fault, and what it follows was decided before the commit
+    /// (CONV-ERR-003).
     /// </summary>
     [Fact]
     public void AUTH_PRIN_001_AC3_NoPathReturnsAnAllowOnAnException() => Assert.Empty(Allowing());
@@ -103,7 +106,8 @@ public sealed class FailClosedTests
         .. Catches().Where(caught =>
             caught.Contains("Result.Success", StringComparison.Ordinal)
             || !(caught.Contains("Result.Failure", StringComparison.Ordinal)
-                || caught.Contains("throw", StringComparison.Ordinal))),
+                || caught.Contains("throw", StringComparison.Ordinal)
+                || caught.Contains("SendLog.AttemptLeft(", StringComparison.Ordinal))),
     ];
 
     // The shipped files in which a line says something, as the repository lays them

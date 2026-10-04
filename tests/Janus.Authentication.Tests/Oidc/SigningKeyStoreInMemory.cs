@@ -170,42 +170,42 @@ internal sealed class SigningKeyStoreInMemory : ISigningKeyStore
     }
 
     /// <inheritdoc/>
-    public ValueTask RetireAsync(SigningKey key, DateTimeOffset now, CancellationToken cancellationToken)
+    public ValueTask<bool> RetireAsync(SigningKey key, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(key);
 
-        if (_keys.TryGetValue(key.KeyId, out (SigningKey Key, byte[]? PrivateKey) held)
-            && held.Key.OverlapEndsAt is DateTimeOffset ends
-            && ends <= now)
+        if (!_keys.TryGetValue(key.KeyId, out (SigningKey Key, byte[]? PrivateKey) held)
+            || held.PrivateKey is null
+            || held.Key.OverlapEndsAt is not DateTimeOffset ends
+            || ends > now)
         {
-            _keys[key.KeyId] = (
-                With(
-                    held.Key,
-                    held.Key.SigningFrom,
-                    held.Key.LongestLifetime,
-                    held.Key.ReplacedAt,
-                    held.Key.OverlapEndsAt,
-                    held.Key.KeptUntil,
-                    false),
-                null);
+            return ValueTask.FromResult(false);
         }
 
-        return ValueTask.CompletedTask;
+        _keys[key.KeyId] = (
+            With(
+                held.Key,
+                held.Key.SigningFrom,
+                held.Key.LongestLifetime,
+                held.Key.ReplacedAt,
+                held.Key.OverlapEndsAt,
+                held.Key.KeptUntil,
+                false),
+            null);
+
+        return ValueTask.FromResult(true);
     }
 
     /// <inheritdoc/>
-    public ValueTask RemoveAsync(SigningKey key, DateTimeOffset now, CancellationToken cancellationToken)
+    public ValueTask<bool> RemoveAsync(SigningKey key, DateTimeOffset now, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(key);
 
-        if (_keys.TryGetValue(key.KeyId, out (SigningKey Key, byte[]? PrivateKey) held)
+        return ValueTask.FromResult(
+            _keys.TryGetValue(key.KeyId, out (SigningKey Key, byte[]? PrivateKey) held)
             && held.Key.KeptUntil is DateTimeOffset kept
-            && kept <= now)
-        {
-            _ = _keys.Remove(key.KeyId);
-        }
-
-        return ValueTask.CompletedTask;
+            && kept <= now
+            && _keys.Remove(key.KeyId));
     }
 
     private static SigningKey With(

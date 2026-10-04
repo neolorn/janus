@@ -121,7 +121,10 @@ internal sealed class AccountAdministration(
         // operation is done with nothing to write.
         if (state is null)
         {
-            return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            // CONV-DESIGN-003: nothing was written, so the unit of work is rolled back.
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success();
         }
 
         await directory.SuspendAsync(subject, cancellationToken).ConfigureAwait(false);
@@ -401,7 +404,10 @@ internal sealed class AccountAdministration(
 
         if (deleting is null)
         {
-            return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            // CONV-DESIGN-003: nothing was written, so the unit of work is rolled back.
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success();
         }
 
         // IDN-LIFE-003: the cancellation of a window an out-of-band request began is

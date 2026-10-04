@@ -419,7 +419,8 @@ internal sealed class WebAuthnService(
         }
 
         // AUTH-FACT-014 AC3: a counter that did not advance is refused and the refusal
-        // audited, the record being all it writes.
+        // audited, the record being all this level writes; the sign-in whose unit of
+        // work it joins commits it with the failed authentication's record and count.
         bool moved = Moved(assertion, locked.WebAuthn);
 
         if (moved)

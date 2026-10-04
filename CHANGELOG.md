@@ -24,6 +24,49 @@ against the public contract of LIB-API-001.
   UseSTD3ASCIIRules, CheckHyphens, CheckBidi, CheckJoiners and VerifyDnsLength set and
   invalid Punycode refused, in lower case. The form does not depend on the ICU of the
   machine.
+- A refused factor's record, the delay's counts and a trusted device's failure are
+  committed in one transaction, and none stands where one cannot be written. A wrong
+  sign-in code or new-device code commits its count on the code, or the code's removal
+  at the cap, in that same transaction; a code presented past its lifetime is no longer
+  removed by the presentation and is left to the sweep. A passkey or security key whose
+  signature counter did not advance commits `auth.credential.countermismatch` with the
+  failed authentication's record and the failure's counts, and an assertion refused
+  after its counter was read no longer advances the stored counter.
+- A break-glass presentation runs in one transaction. A refused code, the code of the
+  issue last used presented again included, commits the attempt's count, the source's
+  failure and the failed authentication together, and a refusal by the global limit
+  commits the count with its `auth-failures-sustained` raise. A consumed code is now
+  recorded as a failed authentication and counted against its source.
+- The phone signal callback is asked before an operation's transaction begins and never
+  inside one. What it answered is recorded in the transaction that undertakes the
+  restricted factor, and a restricted factor undertaken for a number nothing was asked
+  about is a fault.
+- A fault of the library's own in a send's immediate attempt after the commit (a
+  setting that does not read, the database failing at the claim or at the outcome) is
+  logged and left to the publisher's next pass. The operation answers what it
+  committed instead of `system.fault`.
+- A suspension, a revocation of an invitation, and a request or a cancellation of an
+  organization's deletion that another caller made first answer as before and roll
+  their transaction back.
+- A turn of the background worker that finds no lapse to claim rolls its transaction
+  back.
+- Adding a member a group already holds and taking out one it does not hold answer as
+  before and roll their transaction back.
+- A withdrawal of a consent or of an objection made meanwhile, an objection that meets
+  one recorded meanwhile, the erasure of an organization whose window was cancelled
+  meanwhile, and a pass, a sweep or a completion of a key rotation that finds nothing
+  left to do each answer as before and roll their transaction back.
+- A trust or a remembered browser found revoked under its lock, and the end of a
+  suspension window for a loss report cancelled meanwhile, answer as before and roll
+  their transaction back, having written nothing.
+- A rotation of a registered client's secret that another process made first, a change
+  of the signing keys with nothing due, and a longer lifetime stored against a key no
+  longer current each answer as before and commit nothing: an operation that succeeds
+  having written nothing ends its transaction by rolling it back.
+- A delivery report that fails for any cause but its rejection (a setting that does not
+  read, a raise that cannot be written) leaves nothing of itself behind and no
+  transaction open. A rejected report, like every rejected callback, keeps its
+  admission count, its rejection's count and the `callback-verification-failed` raise.
 - A route or query value that does not read as its type is refused 400
   `api.request.malformed` with `details.member` naming it, the first in the order the
   endpoint declares where more than one does not read. An identifier in a path that is

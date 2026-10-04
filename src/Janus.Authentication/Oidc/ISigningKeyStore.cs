@@ -82,8 +82,8 @@ internal interface ISigningKeyStore
     /// <param name="key">The key as read.</param>
     /// <param name="now">Now.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The work of removing it.</returns>
-    ValueTask RetireAsync(SigningKey key, DateTimeOffset now, CancellationToken cancellationToken);
+    /// <returns>Whether anything was removed; another process may have removed it first.</returns>
+    ValueTask<bool> RetireAsync(SigningKey key, DateTimeOffset now, CancellationToken cancellationToken);
 
     /// <summary>
     /// Removes a key whose keeping has ended.
@@ -91,6 +91,6 @@ internal interface ISigningKeyStore
     /// <param name="key">The key as read.</param>
     /// <param name="now">Now.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The work of removing it.</returns>
-    ValueTask RemoveAsync(SigningKey key, DateTimeOffset now, CancellationToken cancellationToken);
+    /// <returns>Whether anything was removed; another process may have removed it first.</returns>
+    ValueTask<bool> RemoveAsync(SigningKey key, DateTimeOffset now, CancellationToken cancellationToken);
 }

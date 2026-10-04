@@ -597,6 +597,35 @@ public sealed class ProviderEventTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC10, IDN-LIFE-012a: a rejected provider event commits its
+    /// rejection's record with its counts, in one unit of work, and nothing else.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ARejectedProviderEventCommitsItsRecordAndItsCountsAsync()
+    {
+        (SubjectId subject, Authenticator linked) = await LinkedAsync(Factor.Google, GoogleSubject);
+        int live = Live(subject).Count;
+        int committed = _deployment.Work.OutermostCommitted;
+        int rolledBack = _deployment.Work.RolledBack;
+
+        Answer answered = await DeliveredAsync(
+            Google,
+            _deployment.SocialProviders.Forged(
+                Factor.Google,
+                "evt-1",
+                GoogleEvent(Risc + "sessions-revoked", GoogleSubject)));
+
+        Assert.Equal(StatusCodes.Status400BadRequest, answered.Status);
+        Assert.False(_deployment.Work.Open);
+        Assert.Equal(committed + 1, _deployment.Work.OutermostCommitted);
+        Assert.Equal(rolledBack, _deployment.Work.RolledBack);
+        Assert.Equal(live, Live(subject).Count);
+        Assert.Equal(AuthenticatorState.Active, Held(linked).State);
+        _ = Assert.Single(_deployment.CredentialAudit.ProviderEvents);
+    }
+
+    /// <summary>
     /// IDN-LIFE-012a AC2, IDN-LIFE-013, CONV-DESIGN-003 AC6: a deletion begun while the
     /// withdrawal waited for the account's row is found under the lock, so the account
     /// is left to its deletion and no suspension is made or announced.

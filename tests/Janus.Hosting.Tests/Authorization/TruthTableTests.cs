@@ -125,6 +125,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             Decided.Restricted),
         ("a group created, by a caller managing groups", Decided.Allowed),
         ("a group created, by a caller restricted since the gate step", Decided.Restricted),
+        ("a member a group already holds added again, by a caller managing groups", Decided.Allowed),
+        ("a member a group does not hold taken out, by a caller managing groups", Decided.Allowed),
         ("a lookup of a record a fact in the host's data reaches, by a caller reading grants", Decided.Allowed),
         ("a fact in the host's data no grant was materialised for, after the drift check", Decided.Allowed),
         ("a materialised grant the host's data no longer supports, after the drift check", Decided.Denied),
@@ -808,6 +810,12 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     caller,
                     restricted: scenario.EndsWith("since the gate step", StringComparison.Ordinal));
 
+            case "a member a group already holds added again, by a caller managing groups":
+                return await MemberChangedAsync(deployment, caller, held: true);
+
+            case "a member a group does not hold taken out, by a caller managing groups":
+                return await MemberChangedAsync(deployment, caller, held: false);
+
             case "a lookup of a record a fact in the host's data reaches, by a caller reading grants":
                 return await ViewedAsync(deployment, caller);
 
@@ -975,6 +983,93 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Assert.False(Assert.IsType<UnitOfWorkInterleaved>(
             scope.ServiceProvider.GetRequiredService<IUnitOfWork>()).Open);
         Assert.Equal(decided is Decided.Allowed ? 1 : 0, written);
+
+        return decided;
+    }
+
+    // A session of the caller that proved two factors a minute ago, which meets the gate
+    // a change of members asks.
+    private static async Task<SessionId> SteppedUpAsync(IServiceProvider services, SubjectId caller)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        var session = Session.Begin(
+            SessionId.New(TimeProvider.System),
+            caller,
+            new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),
+            new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")),
+            Deployment.Noon - TimeSpan.FromMinutes(1),
+            TimeSpan.FromDays(7),
+            TimeSpan.FromDays(30),
+            breakGlassReason: null);
+
+        IUnitOfWork work = services.GetRequiredService<IUnitOfWork>();
+
+        await work.BeginAsync(cancellationToken);
+
+        // A session is kept under its person's key, which an account written directly
+        // does not have until its first session asks for it.
+        ISubjectKeyStore keys = services.GetRequiredService<ISubjectKeyStore>();
+
+        if (await keys.FindBySubjectAsync(caller, cancellationToken) is null)
+        {
+            await keys.CreateAsync(caller, cancellationToken);
+        }
+
+        await services.GetRequiredService<ISessionStore>().AddAsync(
+            session,
+            RandomNumberGenerator.GetBytes(32),
+            RandomNumberGenerator.GetBytes(32),
+            cancellationToken);
+        await work.CommitAsync(cancellationToken);
+
+        return session.Id;
+    }
+
+    // AUTHZ-GROUP-001, CONV-DESIGN-003 AC10: a change of members that changes nothing is
+    // decided as any other, the gate asked at its step and again inside the unit of work
+    // and the step-up met, and is answered as done; it writes no row and leaves no
+    // transaction open.
+    private async Task<Decided> MemberChangedAsync(Deployment deployment, SubjectId caller, bool held)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        var member = GrantSubject.Of(account);
+        var context = AccessContext.Of(caller);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        IServiceProvider services = scope.ServiceProvider;
+        SessionId session = await SteppedUpAsync(services, caller);
+        IGroups groups = services.GetRequiredService<IGroups>();
+
+        GroupId group = (await groups.CreateAsync(
+                context,
+                deployment.Organization,
+                "Reviewers",
+                "A group for the reviewers.",
+                cancellationToken))
+            .Match(created => created, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        if (held)
+        {
+            (await groups.AddMemberAsync(context, session, group, member, "Joined the reviewers.", cancellationToken))
+                .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+        }
+
+        Decided decided = (held
+                ? await groups.AddMemberAsync(context, session, group, member, "Joined the reviewers.", cancellationToken)
+                : await groups.RemoveMemberAsync(context, session, group, member, "Left the reviewers.", cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        int members = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT count(*) FROM identity.group_members WHERE group_id = @group;",
+            new { group = group.Value },
+            cancellationToken: cancellationToken));
+
+        Assert.Equal(held ? 1 : 0, members);
 
         return decided;
     }

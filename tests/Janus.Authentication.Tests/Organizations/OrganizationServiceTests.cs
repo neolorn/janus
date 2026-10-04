@@ -141,6 +141,42 @@ public sealed class OrganizationServiceTests : IAsyncDisposable
         Assert.Empty(_audit.Changes);
     }
 
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: a deletion request that finds one made under the
+    /// organization's lock, and a cancellation that finds the deletion cancelled, are
+    /// each done having written nothing, so each rolls its unit of work back.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AChangeMadeMeanwhileIsRolledBackAsync()
+    {
+        _organizations.Holding = organization => _organizations.Seed(organization, deletionRequestedAt: Noon);
+
+        Result requested = await Service.RequestDeletionAsync(
+            Acting,
+            Stepped(),
+            Customer,
+            Reason,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(requested.Match(() => true, _ => false));
+        Assert.Equal((0, 1, false), (_work.Committed, _work.RolledBack, _work.Open));
+        Assert.Empty(_audit.Changes);
+
+        _organizations.Holding = organization => _organizations.Seed(organization);
+        _work.Reset();
+
+        Result cancelled = await Service.CancelDeletionAsync(
+            Acting,
+            Stepped(),
+            Customer,
+            Reason,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(cancelled.Match(() => true, _ => false));
+        Assert.Equal((0, 1, false), (_work.Committed, _work.RolledBack, _work.Open));
+        Assert.Empty(_audit.Changes);
+    }
     /// <summary>
     /// CONV-DESIGN-003 AC5: a cancellation that finds the organization erased under its
     /// lock rolls its unit of work back and commits nothing.

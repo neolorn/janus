@@ -69,10 +69,9 @@ public sealed class BreakGlassServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// CONV-DESIGN-003 AC5, OPS-BOOT-002 AC3: a use whose alert cannot be raised is
-    /// refused after the credential was spent and the session opened, and the refusal
-    /// ends the unit of work with nothing of the use committed; the attempt, counted in
-    /// a unit of work of its own, stands.
+    /// CONV-DESIGN-003 AC5, OPS-BOOT-002 AC3: a use whose alert cannot be raised fails
+    /// after the credential was spent and the session opened, and the failure ends the
+    /// one unit of work of the presentation with nothing committed.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -87,9 +86,8 @@ public sealed class BreakGlassServiceTests : IAsyncDisposable
             ErrorCodes.SystemFault,
             Refused(await Service.PresentAsync(code, Reason, Somewhere, TestContext.Current.CancellationToken)));
         Assert.False(_work.Open);
-        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.OutermostCommitted);
         Assert.Equal(1, _work.RolledBack);
-        _ = Assert.Single(_store.Attempts);
     }
 
     /// <summary>
@@ -130,13 +128,13 @@ public sealed class BreakGlassServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// CONV-DESIGN-003 AC5, OPS-BOOT-004, CONV-LOG-005: a refused code is refused with
-    /// its attempt counted and its failed authentication recorded, each committed, and
-    /// nothing rolled back.
+    /// CONV-DESIGN-003 AC10, OPS-BOOT-004, CONV-LOG-005: a refused code is refused with
+    /// its attempt counted, its source's failure counted and its failed authentication
+    /// recorded, committed together by the one unit of work that decided the refusal.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
-    public async Task CONV_DESIGN_003_AC5_ARefusedCodeCommitsItsAttemptAndItsRecordAsync()
+    public async Task CONV_DESIGN_003_AC10_ARefusedCodeCommitsItsKeptWritesTogetherAsync()
     {
         _ = await IssuedAsync();
 
@@ -151,10 +149,105 @@ public sealed class BreakGlassServiceTests : IAsyncDisposable
                 TestContext.Current.CancellationToken)));
         Assert.False(_work.Open);
         Assert.Equal(0, _work.RolledBack);
-        Assert.Equal(_work.Committed, _work.OutermostCommitted);
+        Assert.Equal(1, _work.OutermostCommitted);
         _ = Assert.Single(_store.Attempts);
+        Assert.Contains(_throttle.Counted, counted => counted.Scope is ThrottleScope.Source);
         Assert.Equal((_emergency.Account, Factor.BreakGlass), Assert.Single(_audit.Failed));
         Assert.Empty(_recorded.Used);
+    }
+
+    /// <summary>
+    /// OPS-BOOT-004, CONV-LOG-005: the code of the issue last used, presented again, is
+    /// a refused credential like any other: one unit of work decides the refusal and
+    /// commits the attempt, the source's failure and the failed authentication with it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_004_AConsumedCodeIsARefusedCredentialAsync()
+    {
+        string code = await IssuedAsync();
+
+        _ = await Service.PresentAsync(code, Reason, Somewhere, TestContext.Current.CancellationToken);
+
+        Assert.Single(_recorded.Used);
+
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.BreakGlassConsumed,
+            Refused(await Service.PresentAsync(code, Reason, Somewhere, TestContext.Current.CancellationToken)));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(2, _store.Attempts.Count);
+        Assert.Contains(_throttle.Counted, counted => counted.Scope is ThrottleScope.Source);
+        Assert.Equal((_emergency.Account, Factor.BreakGlass), Assert.Single(_audit.Failed));
+    }
+
+    /// <summary>
+    /// OPS-BOOT-004 AC7, CONV-DESIGN-003 AC10: an attempt the global limit refuses is
+    /// counted, and the first one raises <c>auth-failures-sustained</c>, the count and
+    /// the raise committed together with the refusal; no code is looked at.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_BOOT_004_AC7_ARefusalByTheLimitCommitsItsCountAndItsRaiseTogetherAsync()
+    {
+        _ = await IssuedAsync();
+
+        for (int arrived = 0; arrived < 5; arrived++)
+        {
+            _store.Attempts.Add(Noon);
+        }
+
+        int read = _store.Reads;
+
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.Throttled,
+            Refused(await Service.PresentAsync(
+                BreakGlassCode.Draw(_randomness),
+                Reason,
+                Somewhere,
+                TestContext.Current.CancellationToken)));
+        Assert.False(_work.Open);
+        Assert.Equal((1, 1, 0), (_work.Opened, _work.OutermostCommitted, _work.RolledBack));
+        Assert.Equal(6, _store.Attempts.Count);
+        Assert.Equal(read, _store.Reads);
+        Assert.Equal(
+            AlertCondition.AuthFailuresSustained,
+            Assert.Single(_alerts.Of<AlertRaised>()).Condition);
+        Assert.Empty(_audit.Failed);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: where the raise of the first attempt the limit refuses
+    /// cannot be written, the presentation fails and its unit of work is rolled back.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ALimitWhoseRaiseIsNotWrittenRollsBackAsync()
+    {
+        _ = await IssuedAsync();
+
+        for (int arrived = 0; arrived < 5; arrived++)
+        {
+            _store.Attempts.Add(Noon);
+        }
+
+        _alerts.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            Refused(await Service.PresentAsync(
+                BreakGlassCode.Draw(_randomness),
+                Reason,
+                Somewhere,
+                TestContext.Current.CancellationToken)));
+        Assert.False(_work.Open);
+        Assert.Equal((0, 1), (_work.OutermostCommitted, _work.RolledBack));
     }
 
     private BreakGlassService Service =>

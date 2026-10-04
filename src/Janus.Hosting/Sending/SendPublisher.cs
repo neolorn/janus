@@ -10,6 +10,7 @@ using Janus.Authentication.Alerting;
 using Janus.Authentication.Sending;
 using Janus.Core;
 using Janus.Core.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace Janus.Hosting.Sending;
 
@@ -25,6 +26,7 @@ namespace Janus.Hosting.Sending;
 /// <param name="alerts">Where a spent retry budget's alert goes.</param>
 /// <param name="work">The transactions a claim and an outcome are each written in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
+/// <param name="log">Where a fault of the immediate attempt is written down.</param>
 /// <param name="randomness">Where the retry jitter is drawn from.</param>
 /// <remarks>
 /// Implements AUTH-ABUSE-004, CONV-DESIGN-002, CONV-DESIGN-003, D-022, INF-BG-001 and
@@ -45,7 +47,8 @@ internal sealed class SendPublisher(
     IAlertChannels alerts,
     IUnitOfWork work,
     TimeProvider time,
-    RandomNumberGenerator randomness) : ISendCarrier
+    RandomNumberGenerator randomness,
+    ILogger<SendPublisher> log) : ISendCarrier
 {
     // A pass never holds more than this many in memory; the rest wait for the next.
     private const int Batch = 100;
@@ -53,17 +56,25 @@ internal sealed class SendPublisher(
     /// <inheritdoc/>
     /// <remarks>
     /// The transaction that undertook the message has committed. A handler that refuses
-    /// or throws leaves the message to the publisher; only a fault of the library's own
-    /// (a setting that does not read, a database that does not answer) reaches the
-    /// caller, as any fault does.
+    /// or throws leaves the message to the publisher, and so does a fault of the
+    /// library's own (a setting that does not read, a database that does not answer),
+    /// which is logged here and goes no further: the commit stands, and the operation
+    /// answers what it committed (CONV-DESIGN-003, CONV-ERR-003).
     /// </remarks>
     public async ValueTask AttemptAsync(SendDeliveryId delivery, CancellationToken cancellationToken)
     {
-        Schedule schedule = (await ScheduleAsync(cancellationToken).ConfigureAwait(false))
-            .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
+        try
+        {
+            Schedule schedule = (await ScheduleAsync(cancellationToken).ConfigureAwait(false))
+                .Match(value => value, error => throw new InvalidOperationException(error.Code.ToString()));
 
-        (await CarriedAsync(delivery, schedule, cancellationToken).ConfigureAwait(false))
-            .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+            (await CarriedAsync(delivery, schedule, cancellationToken).ConfigureAwait(false))
+                .Switch(_ => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+        }
+        catch (Exception fault) when (fault is not OperationCanceledException)
+        {
+            SendLog.AttemptLeft(log, FaultLog.Of(fault));
+        }
     }
 
     /// <summary>

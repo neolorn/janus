@@ -283,6 +283,58 @@ public sealed class DeliveryReportsTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC10, INT-GEN-003: a rejected report commits its admission count,
+    /// its rejection's count and the raise past the threshold together, and nothing else.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ARejectedReportCommitsItsCountsAndItsRaiseAsync()
+    {
+        _configuration.Set(Settings.AlertingCallbackThreshold, 0);
+        SendReference reference = await SentAsync();
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.CallbackRejected,
+            Refusal(await Reports.ReportAsync(
+                Gateway,
+                SendReference.Draw(_randomness).Value,
+                delivered: false,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal(2, _callbacks.Counted.Count);
+        Assert.Single(_callbacks.Counted, callback => callback.Rejected);
+        Assert.Single(_events.Of<AlertRaised>());
+        Assert.True(await _ledger.HoldsAsync(SendReferences.Of(reference.Value), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10, INT-GEN-003: a report that fails for any cause but its
+    /// rejection, here the raise that cannot be written, rolls back and leaves no unit
+    /// of work open.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AReportWhoseRaiseIsNotWrittenRollsBackAsync()
+    {
+        _configuration.Set(Settings.AlertingCallbackThreshold, 0);
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            Refusal(await Reports.ReportAsync(
+                Gateway,
+                reference: null,
+                delivered: false,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
     /// INT-SMS-005 AC2 and AUTH-ABUSE-007: a correlation reference is 128 random
     /// bits in base64url, and two draws never agree.
     /// </summary>

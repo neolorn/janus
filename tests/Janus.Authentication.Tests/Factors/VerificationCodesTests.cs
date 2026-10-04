@@ -106,25 +106,46 @@ public sealed class VerificationCodesTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// CONV-DESIGN-003 AC5, AUTH-FACT-004: a wrong try is refused with its count
-    /// committed, and the count is all the refusal wrote.
+    /// CONV-DESIGN-003 AC10, AUTH-FACT-004: a wrong try is decided in its caller's unit
+    /// of work and begins none of its own, the count written on the code's record being
+    /// all the refusal wrote.
     /// </summary>
     [Fact]
-    public async Task CONV_DESIGN_003_AC5_AWrongTryCommitsItsCountAsync()
+    public async Task CONV_DESIGN_003_AC10_AWrongTryIsCountedInItsCallersUnitOfWorkAsync()
     {
         string right = Drawn(await Service.IssueAsync(Holder, TestContext.Current.CancellationToken));
 
         _work.Reset();
 
         Assert.Equal(ErrorCodes.CodeInvalid, await RefusalAsync(Wrong(right)));
-        Assert.False(_work.Open);
-        Assert.Equal(1, _work.Committed);
-        Assert.Equal(0, _work.RolledBack);
+        Assert.Equal((0, 0, 0), (_work.Opened, _work.Committed, _work.RolledBack));
 
         VerificationCode held = Assert.Single(_codes.All);
 
         Assert.Equal(1, held.Attempts);
         Assert.True(held.Is(right));
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10, AUTH-FACT-004: a try past the code's lifetime is refused as
+    /// expired and changes nothing on the code's record, which is left to the sweep.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ATryPastTheLifetimeLeavesTheRecordAsItStoodAsync()
+    {
+        string right = Drawn(await Service.IssueAsync(Holder, TestContext.Current.CancellationToken));
+
+        _clock.Advance(Settings.CodeVerificationLifetime.Default);
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.CodeExpired, await RefusalAsync(Wrong(right)));
+        Assert.Equal(ErrorCodes.CodeExpired, await RefusalAsync(right));
+        Assert.Equal((0, 0, 0), (_work.Opened, _work.Committed, _work.RolledBack));
+
+        VerificationCode held = Assert.Single(_codes.All);
+
+        Assert.Equal(0, held.Attempts);
+        Assert.Equal(1, await _codes.SweepAsync(_clock.GetUtcNow(), TestContext.Current.CancellationToken));
     }
 
     /// <summary>

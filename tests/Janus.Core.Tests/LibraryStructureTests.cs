@@ -445,6 +445,13 @@ public sealed class LibraryStructureTests
         RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(5));
 
+    // CONV-ERR-003 AC2: a last statement that logs what was caught, as its fault log
+    // entry, through a source-generated method of a log class.
+    private static readonly Regex Logging = new(
+        @"^\w+Log\s*\.\s*\w+\s*\(\s*log\b[\s\S]*\bFaultLog\s*\.\s*Of\s*\(",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
+
     /// <summary>
     /// AUTH-PASS-004: the notice names the source the offline leaked-password list was
     /// drawn from, and the date the list itself carries.
@@ -1228,25 +1235,29 @@ public sealed class LibraryStructureTests
     }
 
     /// <summary>
-    /// CONV-ERR-003 AC2: no catch block of the library carries on after the exception,
-    /// logging or not, since every path of the library is a security path: each one
-    /// throws, returns a failure, or answers the request with a refusal as the last act
-    /// of the block that holds it.
+    /// CONV-ERR-003 AC2: no catch block of the library carries on after the exception
+    /// but the one around after-commit work, which logs it, since every path of the
+    /// library is a security path: each other one throws, returns a failure, or answers
+    /// the request with a refusal as the last act of the block that holds it.
     /// </summary>
     [Fact]
-    public void CONV_ERR_003_AC2_NoCatchOfTheLibraryCarriesOnAfterTheException()
+    public void CONV_ERR_003_AC2_NoCatchButTheOneAroundAfterCommitWorkCarriesOn()
     {
-        (string Site, bool Ended)[] caught =
+        (string Site, bool Ended, bool Logged)[] caught =
         [
             .. Sources()
                 .Where(file => file.StartsWith(
                     Path.Combine(Repository.Root, "src") + Path.DirectorySeparatorChar,
                     StringComparison.Ordinal))
-                .SelectMany(file => Catches(file).Select(found => (Path.GetFileName(file) + ":" + found.Line, found.Ended))),
+                .SelectMany(file => Catches(file).Select(found => (Path.GetFileName(file) + ":" + found.Line, found.Ended, found.Logged))),
         ];
 
         Assert.NotEmpty(caught);
-        Assert.Empty(caught.Where(found => !found.Ended).Select(found => found.Site));
+        (string Site, bool Logged)[] carrying =
+            [.. caught.Where(found => !found.Ended).Select(found => (found.Site, found.Logged))];
+
+        Assert.Equal(["SendPublisher.cs"], carrying.Select(found => found.Site.Split(':')[0]));
+        Assert.All(carrying, found => Assert.True(found.Logged, found.Site));
     }
 
     /// <summary>
@@ -1475,11 +1486,12 @@ public sealed class LibraryStructureTests
             && !Materialised.IsMatch(code[start..comparison.Index]);
     }
 
-    // CONV-ERR-003 AC2: every catch block of a file, by its line, and whether it ends
-    // the operation: its last statement throws or returns a failure, or it writes a
-    // refusal as the answer and the block that holds it closes after it, so nothing
-    // runs after the exception as though it had not been thrown.
-    private static IEnumerable<(int Line, bool Ended)> Catches(string file)
+    // CONV-ERR-003 AC2: every catch block of a file, by its line, whether it ends the
+    // operation (its last statement throws or returns a failure, or it writes a refusal
+    // as the answer and the block that holds it closes after it, so nothing runs after
+    // the exception as though it had not been thrown), and whether its last statement
+    // logs the fault.
+    private static IEnumerable<(int Line, bool Ended, bool Logged)> Catches(string file)
     {
         string code = Comment.Replace(File.ReadAllText(file), string.Empty);
 
@@ -1492,7 +1504,8 @@ public sealed class LibraryStructureTests
             yield return (
                 LineOf(code, head.Index),
                 Ending.IsMatch(last)
-                    || (Answering.IsMatch(last) && code[(closed + 1)..].TrimStart().StartsWith('}')));
+                    || (Answering.IsMatch(last) && code[(closed + 1)..].TrimStart().StartsWith('}')),
+                Logging.IsMatch(last));
         }
     }
 

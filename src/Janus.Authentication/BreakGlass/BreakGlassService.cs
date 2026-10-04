@@ -108,6 +108,10 @@ internal sealed class BreakGlassService(
 
         DateTimeOffset now = time.GetUtcNow();
 
+        // OPS-BOOT-004, D-186: one unit of work for the whole presentation. A refusal
+        // commits the kept writes it made together (the attempt's count, the raise at
+        // the limit, the source's failure and the failed authentication) and nothing
+        // else; every other failure rolls back.
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
@@ -116,20 +120,19 @@ internal sealed class BreakGlassService(
 
         int attempted = await store.AttemptedAsync(now, now - GlobalWindow, cancellationToken).ConfigureAwait(false);
 
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure<IssuedSession>(notCommitted);
-        }
-
         // The limit makes an attack loud rather than infeasible, so an hour from the
         // refused attempt is the earliest the answer promises (OPS-BOOT-004 AC7).
         if (attempted > GlobalAttempts)
         {
-            return attempted == GlobalAttempts + 1
-                && await LimitReachedAsync(now, cancellationToken).ConfigureAwait(false) is Error unraised
-                ? Result.Failure<IssuedSession>(unraised)
-                : Result.Failure<IssuedSession>(Error.Throttled(now + GlobalWindow));
+            if (attempted == GlobalAttempts + 1
+                && await LimitReachedAsync(now, cancellationToken).ConfigureAwait(false) is Error unraised)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure<IssuedSession>(unraised);
+            }
+
+            return await KeptAsync(Error.Throttled(now + GlobalWindow), cancellationToken).ConfigureAwait(false);
         }
 
         var attempt = new ThrottleAttempt(origin.Source, Identifier: null);
@@ -140,12 +143,14 @@ internal sealed class BreakGlassService(
 
         if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<IssuedSession>(failure);
         }
 
         if (delay > TimeSpan.Zero)
         {
-            return Result.Failure<IssuedSession>(Error.Throttled(now + delay));
+            return await KeptAsync(Error.Throttled(now + delay), cancellationToken).ConfigureAwait(false);
         }
 
         if (BreakGlassCode.Checked(credential) is not string canonical
@@ -159,12 +164,6 @@ internal sealed class BreakGlassService(
 
         try
         {
-            if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notBegunAgain)
-            {
-                return Result.Failure<IssuedSession>(notBegunAgain);
-            }
-
             await store.HoldAsync(cancellationToken).ConfigureAwait(false);
 
             BreakGlassCredential? standing = await store.StandingAsync(cancellationToken).ConfigureAwait(false);
@@ -178,12 +177,6 @@ internal sealed class BreakGlassService(
             bool spent = await store.LastConsumedAsync(cancellationToken).ConfigureAwait(false)
                 is BreakGlassCredential last
                 && Argon2idHasher.Verify(presented, last.Hash);
-
-            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
-            {
-                return Result.Failure<IssuedSession>(notCommittedAgain);
-            }
 
             return await RefusedAsync(
                     attempt,
@@ -356,8 +349,9 @@ internal sealed class BreakGlassService(
     }
 
     // OPS-BOOT-004 AC7 and OPS-ALERT-001 (D-166, 292): the first arrival the limit
-    // refuses is raised against the reserved account, in a transaction of its own, so
-    // the attack is heard while the limit holds it.
+    // refuses is raised against the reserved account, in the unit of work that counted
+    // it, so the count and the raise commit together and the attack is heard while the
+    // limit holds it.
     private async ValueTask<Error?> LimitReachedAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
         SubjectId? account = await emergency.FindAsync(cancellationToken).ConfigureAwait(false);
@@ -379,11 +373,12 @@ internal sealed class BreakGlassService(
     {
         standing.Consume(now);
 
+        // OPS-BOOT-004, D-186: a code another presentation spent first wrote nothing here,
+        // and is a refused credential like any other.
         if (!await store.RecordAsync(standing, cancellationToken).ConfigureAwait(false))
         {
-            await work.RollbackAsync().ConfigureAwait(false);
-
-            return Result.Failure<IssuedSession>(Error.From(ErrorCodes.BreakGlassConsumed));
+            return await RefusedAsync(attempt, ErrorCodes.BreakGlassConsumed, account, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         Error? failure = null;
@@ -443,33 +438,32 @@ internal sealed class BreakGlassService(
 
     // CONV-LOG-005: a refused code is a failed authentication, written to the trail
     // against the reserved account where the refusal came after it was looked up, and
-    // never with anything that was typed.
+    // never with anything that was typed. The record and the source's failure join the
+    // presentation's unit of work and commit with the attempt's count (OPS-BOOT-004).
     private async ValueTask<Result<IssuedSession>> RefusedAsync(
         ThrottleAttempt attempt,
         ErrorCode refusal,
         SubjectId? account,
         CancellationToken cancellationToken)
     {
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
-        {
-            return Result.Failure<IssuedSession>(notBegun);
-        }
-
         await refusals.FailedAsync(account, Factor.BreakGlass, time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
 
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        // CONV-DESIGN-003: where the failure cannot be counted the refusal keeps nothing.
+        if ((await throttle.FailedAsync(attempt, cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error uncounted)
         {
-            return Result.Failure<IssuedSession>(notCommitted);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<IssuedSession>(uncounted);
         }
 
-        Result counted = await throttle.FailedAsync(attempt, cancellationToken).ConfigureAwait(false);
-
-        return counted.Match(
-            () => Result.Failure<IssuedSession>(Error.From(refusal)),
-            Result.Failure<IssuedSession>);
+        return await KeptAsync(Error.From(refusal), cancellationToken).ConfigureAwait(false);
     }
+
+    // CONV-DESIGN-003: a refusal that made kept writes and nothing else commits them.
+    private async ValueTask<Result<IssuedSession>> KeptAsync(Error refusal, CancellationToken cancellationToken) =>
+        (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match(() => Result.Failure<IssuedSession>(refusal), Result.Failure<IssuedSession>);
 
     private async ValueTask<Result<Argon2StrengthClass>> ParametersAsync(CancellationToken cancellationToken)
     {
