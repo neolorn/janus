@@ -110,9 +110,11 @@ as the query member `error` (BFF-ERR-001) and is rendered from its code the same
 the original request**, without requiring the person to re-enter what they had already
 provided. An expired session SHALL NOT redirect the person to a sign-in page. A 401 with
 no `details` means no session was held, and is FE-API-006's, save on a registration
-request, where it means the registration session ended (FE-REG-005).
+request, where it means the registration session ended (FE-REG-005), and on a request of
+an enrolment session (`09` `POST /enrol/begin`), where it means that session ended and
+the person needs a new link (D-188).
 
-*Source: BFF-STEP-001, AUTH-STEP-001, AUTH-SESS-005, D-123, D-166, D-186*
+*Source: BFF-STEP-001, AUTH-STEP-001, AUTH-SESS-005, D-123, D-166, D-186, D-188*
 
 The BFF rejects rather than redirecting mid-request. Recovering is the frontend's
 job. For an expiry, `details.reauthenticate` is `single-factor` or `full`, and the
@@ -138,9 +140,11 @@ frontend initiates enrolment in place, and the original request completes afterw
 `POST /recovery/report-loss`, explaining that the action becomes available when the
 window completes). A `pending` outcome shows the completion time (`pendingUntil`) and
 the cancel option; it is a status, not an error, though it arrives as a 403 because the
-operation did not proceed (`09` `/auth/step-up`).
+operation did not proceed (`09` `/auth/step-up`). A `phoneCode` ask at the step-up that
+is answered 200 `factorRequired` re-presents the combinations offered, and one answered
+200 with `required` empty retries the original request (D-188).
 
-*Source: D-148; AUTH-STEP-002, AUTH-RECOV-007, D-086, D-128, D-141, D-166*
+*Source: D-148; AUTH-STEP-002, AUTH-RECOV-007, D-086, D-128, D-141, D-166, D-188*
 
 **Acceptance criteria**
 1. A form submission interrupted by step-up **or by session expiry** completes after
@@ -187,11 +191,12 @@ exceptions to the content rule).
 **FE-API-006** — A frontend that finds no per-app session SHALL navigate the browser to
 `GET /auth/signon?returnTo=<route>`, `<route>` being the path of its own route the
 person was on. It finds none where `GET /auth/session` answers that no session is held,
-or where any request other than a registration request (FE-REG-005) is refused 401 with
-no `details` (BFF-ORDER-001 stage 8). A route the browser was returned to with `error`
-(FE-API-003) SHALL render the refusal and SHALL NOT navigate to the sign-on by itself.
+or where any request other than a registration request (FE-REG-005) or an enrolment
+session's (FE-API-004, D-188) is refused 401 with no `details` (BFF-ORDER-001 stage 8).
+A route the browser was returned to with `error` (FE-API-003) SHALL render the refusal
+and SHALL NOT navigate to the sign-on by itself.
 
-*Source: BFF-SESS-006, BFF-ORDER-001, BFF-ERR-001, D-166, D-186*
+*Source: BFF-SESS-006, BFF-ORDER-001, BFF-ERR-001, D-166, D-186, D-188*
 
 The sign-on is the library's (BFF-SESS-006); the frontend only starts it, because only
 the frontend knows the route the person meant to reach.
@@ -436,12 +441,19 @@ portability, rectification, objection, and consent management.
 **FE-REG-001** — The originating application SHALL send its **client identifier** when
 starting registration. No return destination SHALL be sent at any step.
 
-*Source: API-REDIR-002, D-057*
+**Values (D-188).** Where `POST /register` answers 403 `auth.challenge.required`, the
+frontend runs the host's challenge, repeats the same request with the token it yields as
+`challengeToken`, and shows the challenge again where the repeat is refused alike
+(AUTH-ABUSE-008).
+
+*Source: API-REDIR-002, D-057, D-188*
 
 **Acceptance criteria**
 1. The link to registration carries the identifier from the application's own
    configuration.
 2. No registration step accepts or forwards a destination parameter.
+3. A 403 `auth.challenge.required` runs the host's challenge and repeats the request
+   with `challengeToken`; no registration session exists before the passing repeat.
 
 ---
 

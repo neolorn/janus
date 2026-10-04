@@ -454,7 +454,7 @@ subtle failure.
 **BFF-MACH-001** — A second pipeline profile SHALL exist for **non-browser traffic**,
 carrying no session and no CSRF protection.
 
-*Source: D-070, D-166*
+*Source: D-070, D-166, D-188*
 
 A protocol client calling the token endpoint, the BFFs pushing their sign-on requests
 and exchanging the codes (BFF-SESS-006), the SMS gateway calling its delivery-report
@@ -466,7 +466,10 @@ day one.
 
 **The no-opt-out property is preserved.** An endpoint's protection derives from **where
 it is mounted**, not from a flag or attribute. A developer cannot accidentally place a
-browser endpoint on this profile; it is a deliberate act.
+browser endpoint on this profile; it is a deliberate act. A machine route that refuses a
+request for carrying the session cookie answers as its protocol refuses a bad request: a
+callback 422 `integration.callback.rejected`, counted as a rejection (`09` section 10);
+an OIDC route its protocol error `invalid_request` (D-188).
 
 **No source rate limit of its own.** The profile has no stage 4 (BFF-ORDER-001); each
 machine endpoint carries its own limit. A callback is admitted
@@ -478,13 +481,14 @@ volumetric flood is the reverse proxy's to absorb, not the library's.
 
 **Acceptance criteria**
 1. A browser endpoint cannot be moved to this profile by configuration or attribute.
-2. Machine endpoints reject browser-originated requests carrying a session cookie —
-   **except the break-glass endpoint**, which is reached from a browser and SHALL ignore
-   any cookie present rather than refusing. Otherwise a stale cookie for the domain would
-   produce an inexplicable refusal, during an emergency, for the system's one
-   non-technical user. The provider return `/callbacks/providers/{provider}/return`
-   likewise ignores any cookie, and only re-addresses the browser by `303` to its
-   browser-profile continuation.
+2. Machine endpoints reject browser-originated requests carrying a session cookie (a
+   callback 422 `integration.callback.rejected`, an OIDC route `invalid_request`,
+   D-188), **except the break-glass endpoint**, which is reached from a browser and
+   SHALL ignore any cookie present rather than refusing. Otherwise a stale cookie for
+   the domain would produce an inexplicable refusal, during an emergency, for the
+   system's one non-technical user. The provider return
+   `/callbacks/providers/{provider}/return` likewise ignores any cookie, and only
+   re-addresses the browser by `303` to its browser-profile continuation.
 3. The token endpoint and every callback authenticate successfully.
 
 ---
@@ -803,7 +807,7 @@ reads or changes the account's state.
 | 5 | Session resolution | Identity established. A cookie that no longer resolves is cleared, and the request continues as one that carried none (D-162) |
 | 6 | CSRF synchronizer token validation | Requires the session; must precede any state change |
 | 7 | Account-based throttling (AUTH-ABUSE-001, AUTH-RECOV-002) | Requires the account the request names, which only the operation reads |
-| 8 | Assurance and step-up gating | Requires the session's assurance properties. An endpoint that requires a session refuses a request stage 5 left without one: 401 `auth.session.expired`, with `details.reauthenticate` where a session ended (BFF-STEP-001 AC3), the code alone where none was held |
+| 8 | Assurance and step-up gating | Requires the session's assurance properties. An endpoint that requires a session refuses a request stage 5 left without one: 401 `auth.session.expired`, with `details.reauthenticate` where a sign-in session ended (BFF-STEP-001 AC3), the code alone where none was held or a registration or enrolment session ended (D-186, D-188) |
 | 9 | Host endpoint | |
 | 10 | Capability projection | Requires the result set |
 | 11 | Error translation and concealment | **Last**, so nothing earlier has disclosed existence |
@@ -816,7 +820,7 @@ in its own memory, so a deployment of several instances sets both keys to its sh
 the limit it wants. A source or /48 already over its limit is refused without reading
 configuration or any store, and without a log line for each refused request.
 
-*Source: D-052, D-053, D-162, D-166*
+*Source: D-052, D-053, D-162, D-166, D-188*
 
 **Throttling is two stages, not one.** Source-based limiting must precede session
 lookup to protect against resource exhaustion; account-based limiting cannot, because

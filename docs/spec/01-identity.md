@@ -70,7 +70,7 @@ stored and compared; the original SHALL be retained for display.
 Applies to: email addresses, phone numbers, organization names, display names,
 usernames.
 
-*Source: D-040, D-115, D-146, D-166, D-187*
+*Source: D-040, D-115, D-146, D-166, D-187, D-188*
 
 **The canonical form is `NFKC_Casefold`** (Unicode Standard §3.13, the `NFKC_CF`
 property): compatibility normalisation, full case folding and removal of
@@ -94,14 +94,16 @@ categories and the derived properties PRECIS needs, `Script` and `Script_Extensi
 and, for the ASCII form of a domain (REG-DOM-001), the IDNA mapping, `Bidi_Class` and
 `Joining_Type`. The pinned version is a constant beside the tables and is the
 canonicalisation version recorded with every fingerprint. The public types are
-`CanonicalForm` (`NFKC_Casefold`, E.164 digit mapping), `Precis` (the two profiles
-below) and `ScriptMixing` (IDN-ACCT-005) in `Janus.Core`, because Identity and
-Authentication both canonicalise. No package. The ASCII form of a domain (REG-DOM-001)
-is the library's own in the same way: UTS #46 processing, nontransitional and with the
-checks REG-DOM-001 names, over the IDNA mapping table of the pinned version
+`CanonicalForm` (`NFKC_Casefold`, E.164 digit mapping, a domain's ASCII form), `Precis`
+(the two profiles below) and `ScriptMixing` (IDN-ACCT-005) in `Janus.Core`, because
+Identity and Authentication both canonicalise. No package. The ASCII form of a domain
+(REG-DOM-001) is the library's own in the same way: UTS #46 processing, nontransitional
+and with the checks REG-DOM-001 names, over the IDNA mapping table of the pinned version
 (`IdnaMappingTable.txt`, carried beside the Unicode Character Database files, whose
 bidirectional classes and joining types the checks read), with RFC 3492 Punycode, never
-the machine's ICU (D-166, D-187).
+the machine's ICU (D-166, D-187), reached through
+`CanonicalForm.TryDomainToAscii(string, out string)`, since the tables are
+`Janus.Core`'s and an area sees none of its internals (CONV-LAYOUT-002, D-188).
 
 **Usernames** take the PRECIS UsernameCaseMapped profile (RFC 8265) and nothing else:
 letters and digits, no spaces, case-folded, NFC, 3 to 32 characters, checked against
@@ -193,7 +195,7 @@ typed a capital.
 | `deleting` | Deletion requested, grace window (`account.deletion.grace`, default 30 days) running — **cancellable until it elapses** | No |
 | `deleted` | Personal data removed or key-destroyed, anonymised record retained | No |
 
-*Source: D-006, D-037, D-026.1, D-113, D-146, D-166, D-183*
+*Source: D-006, D-037, D-026.1, D-113, D-146, D-166, D-183, D-188*
 
 Entering `deleting` is the customer's exercise of the erasure right (PRIV-RIGHT-001);
 no separate privacy request is created for it. There is no `pending` state: an account
@@ -202,18 +204,19 @@ is created `active` in one transaction at the end of the registration session
 
 **IDN-ACCT-007a** — *Retired by D-146. See REG-SESS-001.*
 
-`restricted` exists because the right to restrict processing requires a state in
-which the account still exists but cannot be acted upon (`04-privacy`). A `restricted`
-account signs in and reads, as the table states; every modifying action stays refused
-through the gate (AUTHZ-GATE-006). While restricted, rectification of the account's own
-fields is a request (`POST /privacy/requests`, type `rectification`); ending sessions,
-reporting a credential lost, listing and revoking app passwords, the link-borne undo
-of an identifier change, and a credential set by recovery or enrolled where a policy hold
+`restricted` exists because the right to restrict processing requires a state in which
+the account still exists but cannot be acted upon (`04-privacy`). A `restricted` account
+signs in and reads, as the table states; every modifying action stays refused through
+the gate (AUTHZ-GATE-006). While restricted, rectification of the account's own fields
+is a request (`POST /privacy/requests`, type `rectification`); ending sessions,
+reporting a credential lost, listing and revoking app passwords, the link-borne undo of
+an identifier change, and a credential set by recovery or enrolled where a policy hold
 stops its sign-in (AUTH-FACT-017) stay available, since each grants nothing or restores
-the sign-in the table grants (D-166). A restriction
-the person asked for does not cut them off from their mail: a mailbox is owed `enabled`
-while its holder is `active` or `restricted` (INT-MAIL-006), and a `restricted` account
-keeps its app passwords but cannot create one (D-166).
+the sign-in the table grants (D-166). A restriction the person asked for does not cut
+them off from their mail: a mailbox is owed `enabled` while its holder is `active` or
+`restricted` (INT-MAIL-006), and a `restricted` account keeps its app passwords but
+cannot create one (D-166); recording that its recovery codes were exported changes their
+record, so it is refused like any other change (D-188).
 
 **An operation the state does not admit (D-166).** An operation that does not apply to
 the state an account is in SHALL be refused with `identity.account.stateconflict` (409),

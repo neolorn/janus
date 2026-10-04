@@ -171,14 +171,19 @@ Where the right code, or a press of the add's link, is presented, whether the va
 held or reserved SHALL be judged again inside that presentation's transaction, under the
 value's lock, as REG-SESS-005 judges it at the terms step: where an identifier has come
 to hold it or an undo to reserve it since the add was staged, nothing is written and the
-presentation is answered 422 `auth.code.expired`; the pending add stays listed until it
-is swept or abandoned. A route that names the add by that identifier treats it as an
-unverified identifier: made primary or named by the backup setting it is refused
-`identity.identifier.unverified`, and removed it ends as an abandon does
-(REG-IDENT-006). An add whose every record is spent or past its lifetime SHALL be swept
-(OPS-OBS-003) with what it staged; the person adds the identifier again (D-187).
+presentation is answered 422 `auth.code.expired`, and where the account's verified
+identifiers already fill the kind, it is answered 409 `identity.identifier.maximum`
+(D-188); the pending add stays listed until it is swept or abandoned. A route that names
+the add by that identifier treats it as an unverified identifier: made primary or named
+by the backup setting it is refused `identity.identifier.unverified`, and removed it
+ends as an abandon does (REG-IDENT-006). An add whose every record is spent or past its
+lifetime SHALL be swept (OPS-OBS-003) with what it staged; the person adds the
+identifier again (D-187). A resend of a code holds the pending verification's row
+(`SELECT ... FOR UPDATE`) while it writes, and the sweep locks its candidates
+(`SKIP LOCKED`) and judges each again before it deletes, so a resend in flight keeps its
+record (D-188).
 
-*Source: D-146, D-166, D-187; amends D-035*
+*Source: D-146, D-166, D-187, D-188; amends D-035*
 
 **Acceptance criteria**
 1. `POST /account/identifiers` without step-up at the gate's level returns the step-up
@@ -235,19 +240,23 @@ account it was removed from: no other account may add it and no registration ses
 stage it. An attempt SHALL be answered exactly as an attempt on a value another account
 holds (REG-SESS-005, API-CONV-005), and nobody SHALL be notified. A removal and an undo
 SHALL write the value under its lock (REG-SESS-005), so that an add of the value
-presented meanwhile finds it held or reserved, never free. A write of the value to the
-account it is reserved to (an add's verification, a replace's swap, a corporate address
-taken on at an acknowledgement) ends the reservation, and the undo is then answered as
-one past its window (422 `identity.change.windowelapsed`). A sign-in link or email code
-sent to the identifier before its removal SHALL NOT sign in; it is refused with
-`auth.factor.rejected`. Other sessions SHALL end when a sign-in identifier is removed. A
-pending add listed on the account (REG-IDENT-004) is not an identifier this item
-removes: a removal naming it, admitted at the same gate, ends its pending verification
-as `POST /account/identifiers/{id}/abandon` does, with no undo, reservation, notice or
-session ended (D-187).
+presented meanwhile finds it held or reserved, never free; a removal replaces a lapsed
+removal row of the same kind and value not yet swept (D-188). An undo counts the
+account's verified identifiers alone and is refused 409 `identity.identifier.maximum`
+only where they fill the kind; pending adds never refuse it, and a pending add's
+verification judges the maximum again (REG-IDENT-004, D-188). A write of the value to
+the account it is reserved to (an add's verification, a replace's swap, a corporate
+address taken on at an acknowledgement) ends the reservation, and the undo is then
+answered as one past its window (422 `identity.change.windowelapsed`). A sign-in link or
+email code sent to the identifier before its removal SHALL NOT sign in; it is refused
+with `auth.factor.rejected`. Other sessions SHALL end when a sign-in identifier is
+removed. A pending add listed on the account (REG-IDENT-004) is not an identifier this
+item removes: a removal naming it, admitted at the same gate, ends its pending
+verification as `POST /account/identifiers/{id}/abandon` does, with no undo,
+reservation, notice or session ended (D-187).
 
-*Source: D-146, D-162, D-166, D-187; amends D-035 (old-address confirmation retired
-except in REG-IDENT-007); IDN-LIFE-008 applies*
+*Source: D-146, D-162, D-166, D-187, D-188; amends D-035 (old-address confirmation
+retired except in REG-IDENT-007); IDN-LIFE-008 applies*
 
 Why the undo goes to the remaining set and never to the removed address: an undo that
 reaches the removed address lets a compromised mailbox re-attach itself. A stolen session
@@ -277,6 +286,10 @@ usable.
 8. An account that adds again a value it removed, or replaces back to a value it
    replaced, and verifies it within the window, ends the value's reservation; its undo
    link is then answered 422 `identity.change.windowelapsed`.
+9. With `identifiers.email.max` at n, an account holding n emails that removes one and
+   stages a pending add is admitted its undo, and the pending add's verification is then
+   refused 409 `identity.identifier.maximum`; one whose verified emails fill the kind is
+   refused the undo with the same code.
 
 ---
 
@@ -299,10 +312,11 @@ after that changes nothing and is answered 422 `auth.code.expired`, as a verific
 link past its lifetime is. A replace whose swap has not applied SHALL be swept
 (OPS-OBS-003) once every record it holds is spent or past its lifetime, the new
 address's code and, where the old address must confirm, that confirmation, leaving the
-identifier as it stood (D-187).
+identifier as it stood (D-187). A resend of the new address's code holds the staged
+replace's row while it writes, as REG-IDENT-004's does (D-188).
 
-*Source: D-148; D-146, D-166, D-183, D-187, amends D-035 and restates IDN-LIFE-004,
-IDN-LIFE-007, IDN-LIFE-010*
+*Source: D-148; D-146, D-166, D-183, D-187, D-188, amends D-035 and restates
+IDN-LIFE-004, IDN-LIFE-007, IDN-LIFE-010*
 
 The degenerate case is one email, phone optional and never added: nothing else could
 undo a hostile change. If that address is lost or compromised, administrative recovery
@@ -321,8 +335,8 @@ undo a hostile change. If that address is lost or compromised, administrative re
    `verification` and is neither counted nor refused by `notification.destination`.
 6. A replace whose new address verified and whose old address does not confirm within
    `code.verification.lifetime` of the confirmation's send is swept, leaving the
-   identifier as it stood, and a press of the confirmation after that changes nothing
-   and is answered 422 `auth.code.expired`.
+   identifier as it stood, and a press of the confirmation after that changes nothing,
+   is answered 422 `auth.code.expired` and counts against the source (AUTH-ABUSE-001).
 7. A replace whose new value an identifier has come to hold, or an undo to reserve,
    since it was staged applies no swap: the presentation that would apply it writes
    nothing and is answered 422 `auth.code.expired`, the identifier stays as it stood,
@@ -722,15 +736,16 @@ The step SHALL complete only when every identifier on the screen is verified;
 **REG-SESS-005** — An identifier that already belongs to another account SHALL NOT let
 the session complete. The person SHALL see the ordinary sent outcome, no code SHALL be
 sent to the identifier, and its owner SHALL be notified once per
-`abuse.nonexistent.window` that someone tried to register with it. The session SHALL
-carry a sign-in exit. A value reserved for an undo (REG-IDENT-006) SHALL be answered the
-same, and nobody SHALL be notified. Whether a staged identifier is held or reserved
-SHALL be judged again inside the terms step's transaction, before the step's first
-write: one taken or reserved since it was staged ends the session, which is answered as
-an expired one (401 `auth.session.expired`), and no account is created; the session's
-end is that refusal's kept write (CONV-DESIGN-003). The email an invitation binds is the
-one exception: where an account holds it, the press that begins the registration is
-refused (REG-INV-001). A code presented for a held value, or for one reserved to another
+`abuse.nonexistent.window` that someone tried to register with it, the window spent only
+where the notice's send is admitted (AUTH-ABUSE-003, D-188). The session SHALL carry a
+sign-in exit. A value reserved for an undo (REG-IDENT-006) SHALL be answered the same,
+and nobody SHALL be notified. Whether a staged identifier is held or reserved SHALL be
+judged again inside the terms step's transaction, before the step's first write: one
+taken or reserved since it was staged ends the session, which is answered as an expired
+one (401 `auth.session.expired`), and no account is created; the session's end is that
+refusal's kept write (CONV-DESIGN-003). The email an invitation binds is the one
+exception: where an account holds it, the press that begins the registration is refused
+(REG-INV-001). A code presented for a held value, or for one reserved to another
 account, SHALL be answered from a verification-code record that no code matches
 (AUTH-FACT-004), exactly as a wrong code for a value no account holds; the same holds at
 an identifier's add and replace (REG-IDENT-004, REG-IDENT-007). Every operation that
@@ -746,7 +761,7 @@ to another account.
 by the frontend; `GET /register` carries no field for it, because a field present only
 for a duplicate would be an oracle.
 
-*Source: D-146, D-162, D-166, D-183, D-186, D-187; D-076, D-112*
+*Source: D-146, D-162, D-166, D-183, D-186, D-187, D-188; D-076, D-112*
 
 **Acceptance criteria**
 1. The response to a duplicate, the email an invitation binds excepted, is byte- and

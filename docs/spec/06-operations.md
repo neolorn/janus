@@ -998,7 +998,10 @@ and the account names no terms or notice version.
 (REG-MAIL-001): the address becomes the administrator's primary, locked, verified
 corporate email, and a mailbox is reserved at it and queued (INT-MAIL-006 AC1a). An
 address equal to `--email` is refused with `identity.identifier.invalid` naming
-`mailbox`. Without it no mailbox is queued.
+`mailbox`. Without it no mailbox is queued. The command takes the lock on every
+identifier value it writes, as every writer does (REG-SESS-005), and judges no value for
+being held or reserved: it refuses to run on a deployment already stood up, so no value
+can be either, and a uniqueness constraint met there is a fault (D-188).
 
 The enrolment link is printed once to the command's standard output and sent nowhere,
 as `<origin>/link#enrolment.<token>`: the origin is the first entry of
@@ -1009,7 +1012,7 @@ fragment, so no request, log or referrer carries it. It lives for
 output; 1 on refusal, with one JSON line `{"code": ..., "details": {...}}` on standard
 error and nothing on standard output.
 
-*Source: D-028, D-133, D-166*
+*Source: D-028, D-133, D-166, D-188*
 
 Whoever runs the deployment already holds server access, which is strictly more
 privileged than anything the first account can do. No new secret is created, nothing
@@ -1494,15 +1497,16 @@ and elapsed grace windows SHALL run as background jobs.
 **Values (D-153, D-166).** One sweep every `sweep.interval` (default five minutes)
 covers expired sessions, tokens and codes (a consumed refresh token kept until no
 session it could derive from can still exist, AUTH-KEY-003), identifier adds and
-replaces whose every record is spent or past its lifetime (REG-IDENT-004, REG-IDENT-007,
-D-187), elapsed grace and cooling-off windows, privacy request deadlines
-(PRIV-RIGHT-002), sending-restriction records and every other abuse ledger line its own
-check no longer reads (PRIV-RET-005), export-limit records an hour old (OPS-ALERT-006),
-and domain re-verification (`domain.reverify.interval`); a deadline therefore takes
-effect within that interval of its instant. The DR-016 replay is the
-`replay-erasures <ledger path>` command of `Janus.Cli`.
+replaces whose every record is spent or past its lifetime, locked `SKIP LOCKED` and
+judged again before the delete (REG-IDENT-004, REG-IDENT-007, D-187, D-188), elapsed
+grace and cooling-off windows, privacy request deadlines (PRIV-RIGHT-002),
+sending-restriction records and every other abuse ledger line its own check no longer
+reads (PRIV-RET-005), export-limit records an hour old (OPS-ALERT-006), and domain
+re-verification (`domain.reverify.interval`); a deadline therefore takes effect within
+that interval of its instant. The DR-016 replay is the `replay-erasures <ledger path>`
+command of `Janus.Cli`.
 
-*Source: D-007, D-038, D-166, D-187*
+*Source: D-007, D-038, D-166, D-187, D-188*
 
 **Acceptance criteria**
 1. No recurring human task is required for cleanup.

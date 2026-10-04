@@ -366,58 +366,60 @@ ciphertext, a record never holds plaintext of an encrypted column.
 The **unit of work is the operation**: a service method runs inside one transaction
 opened by an `IUnitOfWork` port and committed once, at the end, after every write, save
 a kept write committed alone before a host callback (below). A refusal that needs no
-write SHALL be returned before the unit of work begins. Once `BeginAsync` has succeeded,
-the operation SHALL end its unit of work before it returns: with `CommitAsync` where it
-succeeds having written, or where it refuses having made one or more of the kept writes
-below and nothing else; and with `RollbackAsync` on every other return, whether or not
-it wrote, a refusal decided under a row lock and, at the outermost level, a success that
-wrote nothing included, so that a commit always keeps a write. A level an operation
-joined (a nested `BeginAsync`) that succeeds ends with `CommitAsync` whatever it wrote.
-The **kept writes** are the counts and records a chapter requires to stand whatever the
-outcome, and no others: a wrong try's count on a code's record, and the code's
-invalidation at its attempt cap (AUTH-FACT-004); a failure AUTH-ABUSE-001 counts, a
-pressed registration link token that opens nothing among them, and the
-`auth-failures-sustained` raise such failures bring past
-`alerting.authfailures.threshold` for their account (OPS-ALERT-001, OPS-ALERT-002); a
-trusted device's failure and its trust revoked at the failure limit (AUTH-FACT-015); the
-record of a refused step-up factor (`auth.stepup.failed`) and of a failed authentication
-(AUTH-STEP-002, CONV-LOG-005); the audit record of a signature counter that did not
-advance (AUTH-FACT-014); the record of a bot-defence signal (AUTH-ABUSE-008) and of a
-phone signal's consideration (AUTH-FACT-002b); a break-glass attempt's global count and
-the `auth-failures-sustained` raise (OPS-BOOT-004); a callback's admission count, a
-rejected callback's count and record, and the `callback-verification-failed` raise past
-`alerting.callback.threshold` (INT-GEN-003, BFF-MACH-003, INT-SMS-005); the record of a
-rejected provider event (IDN-LIFE-012a); a consumed refresh token's session family
-revoked at its reuse, with the revocation's audit record (AUTH-OIDC-003); and a
-registration session's end at an under-age answer with its locked date (REG-PROF-002),
-and where a staged identifier was taken or reserved since (REG-SESS-005). A refusal
-SHALL commit every kept write it made, together, and nothing else, and an operation
-SHALL decide every refusal that keeps a write before it makes any write that is not
-kept. An operation whose refusal keeps a write begins the outermost unit of work and is
-never called inside another's, and a call it makes to write a kept write (a throttle's
-count, an audit record) joins its unit of work. A host callback that may call across the
-network (the challenge verifier, AUTH-ABUSE-008; the phone signal, AUTH-FACT-002b) is
-never called inside an open transaction: a kept write that must stand whatever it
-answers is committed first, alone, in a unit of work of its own (the bot-defence
-signal's record), and one that records its answer is written in the unit of work that
-follows the call (the phone signal's consideration). A refusal the gate records is
-written outside the operation (CONV-DESIGN-002). A rollback discards the transaction,
-every change the scope's context tracks and every after-commit registration, and leaves
-the unit of work as though no operation had begun it. An operation that joined a unit of
-work another opened (a nested `BeginAsync`) and rolls back ends its level and marks the
-whole unit of work: nothing of it commits, the outermost level's `RollbackAsync` rolls
-it back, and its `CommitAsync` rolls it back and throws a fault. A call an operation
-must be able to survive being refused begins no unit of work of its own; it decides in
-its caller's. A `CommitAsync` that fails leaves the unit of work rolled back. Work
-registered on the unit of work to run after the commit (`IUnitOfWork.AfterCommit`, a
-fault where no unit of work is in progress; a send's immediate attempt, AUTH-ABUSE-004)
-runs once the outermost level has committed, and a fault of the library's own inside it
-(a setting that does not read, the database failing at the claim or at the outcome) is
-logged and left to the publisher, which carries the row at a later pass, once it is due
-and unclaimed or its claim has timed out: the commit stands and the operation answers
-what it committed (CONV-ERR-003). A later operation in the same scope SHALL open and
-commit its own. `RollbackAsync` takes no cancellation token and answers no result: it
-has no expected failure, and a database error in it is a fault (CONV-ERR-001).
+write SHALL be returned before the unit of work begins. `BeginAsync` answers whether the
+level it opened is the outermost (D-188). Once `BeginAsync` has succeeded, the operation
+SHALL end its unit of work before it returns: with `CommitAsync` where it succeeds
+having written, or where it refuses having made one or more of the kept writes below and
+nothing else; and with `RollbackAsync` on every other return, whether or not it wrote, a
+refusal decided under a row lock and, at the outermost level, a success that wrote
+nothing included, so that a commit always keeps a write. A level an operation joined (a
+nested `BeginAsync`) that succeeds ends with `CommitAsync` whatever it wrote. The **kept
+writes** are the counts and records a chapter requires to stand whatever the outcome,
+and no others: a wrong try's count on a code's record, the code's invalidation at its
+attempt cap, and the spend of a code presented right where the sign-in it would complete
+is then refused (AUTH-FACT-004); a failure AUTH-ABUSE-001 counts, a pressed registration
+link token that opens nothing among them, and the `auth-failures-sustained` raise such
+failures bring past `alerting.authfailures.threshold` for their account (OPS-ALERT-001,
+OPS-ALERT-002); a trusted device's failure and its trust revoked at the failure limit
+(AUTH-FACT-015); the record of a refused step-up factor (`auth.stepup.failed`) and of a
+failed authentication (AUTH-STEP-002, CONV-LOG-005); the audit record of a signature
+counter that did not advance (AUTH-FACT-014); the record of a bot-defence signal
+(AUTH-ABUSE-008) and of a phone signal's consideration (AUTH-FACT-002b); a break-glass
+attempt's global count and the `auth-failures-sustained` raise (OPS-BOOT-004); a
+callback's admission count, a rejected callback's count and record, and the
+`callback-verification-failed` raise past `alerting.callback.threshold` (INT-GEN-003,
+BFF-MACH-003, INT-SMS-005); the record of a rejected provider event (IDN-LIFE-012a); a
+consumed refresh token's session family revoked at its reuse, with the revocation's
+audit record (AUTH-OIDC-003); and a registration session's end at an under-age answer
+with its locked date (REG-PROF-002), and where a staged identifier was taken or reserved
+since (REG-SESS-005). A refusal SHALL commit every kept write it made, together, and
+nothing else, and an operation SHALL decide every refusal that keeps a write before it
+makes any write that is not kept. An operation whose refusal keeps a write begins the
+outermost unit of work and is never called inside another's, and a call it makes to
+write a kept write (a throttle's count, an audit record) joins its unit of work. A host
+callback that may call across the network (the challenge verifier, AUTH-ABUSE-008; the
+phone signal, AUTH-FACT-002b) is never called inside an open transaction: a kept write
+that must stand whatever it answers is committed first, alone, in a unit of work of its
+own (the bot-defence signal's record), and one that records its answer is written in the
+unit of work that follows the call (the phone signal's consideration). A refusal the
+gate records is written outside the operation (CONV-DESIGN-002). A rollback discards the
+transaction, every change the scope's context tracks and every after-commit
+registration, and leaves the unit of work as though no operation had begun it. An
+operation that joined a unit of work another opened (a nested `BeginAsync`) and rolls
+back ends its level and marks the whole unit of work: nothing of it commits, the
+outermost level's `RollbackAsync` rolls it back, and its `CommitAsync` rolls it back and
+throws a fault. A call an operation must be able to survive being refused begins no unit
+of work of its own; it decides in its caller's. A `CommitAsync` that fails leaves the
+unit of work rolled back. Work registered on the unit of work to run after the commit
+(`IUnitOfWork.AfterCommit`, a fault where no unit of work is in progress; a send's
+immediate attempt, AUTH-ABUSE-004) runs once the outermost level has committed, and a
+fault of the library's own inside it (a setting that does not read, the database failing
+at the claim or at the outcome) is caught and logged by that work itself, never by the
+unit of work, and left to the publisher, which carries the row at a later pass, once it
+is due and unclaimed or its claim has timed out: the commit stands and the operation
+answers what it committed (CONV-ERR-003). A later operation in the same scope SHALL open
+and commit its own. `RollbackAsync` takes no cancellation token and answers no result:
+it has no expected failure, and a database error in it is a fault (CONV-ERR-001).
 `BeginAsync` and `CommitAsync` return a result and name no failure code; a caller that
 returns a result passes their failure up, and a caller that returns none (background
 work, a hosted service) throws it as a fault naming the code its `Error` carries, as a
@@ -447,18 +449,22 @@ is called, by one conditional update committed on its own that marks it claimed 
 `outbox.claim.timeout` from then and succeeds only where the row is due (its next
 attempt's instant, where it carries one, has come) and is unclaimed or its claim has
 timed out. A row that tracks several deliveries (an outbox row's subscribers, an event
-row's consumers, a send row's languages) is claimed whole, and an attempt of it is one
-pass over its outstanding deliveries: before each delivery the pass renews its claim, by
-one update conditional on the claim still being its own that moves its end to
-`outbox.claim.timeout` from then, and stops where the renewal changes nothing; each
-delivery's outcome (a subscriber's confirmation, a consumer's take, a language taken) is
+row's consumers; a send row tracks one, a text message owed in several languages being
+one row for each and a mail one composed row, AUTH-ABUSE-004) is claimed whole, and an
+attempt of it is one pass over its outstanding deliveries: before each delivery the pass
+renews its claim, by one update conditional on the claim still being its own that moves
+its end to `outbox.claim.timeout` from then, and stops where the renewal changes
+nothing; each delivery's outcome (a subscriber's confirmation, a consumer's take) is
 written as it happens, by one update conditional on that claim. The attempt's outcome
 for the row (its attempts, its schedule, its status, the alert at exhaustion) SHALL be
 written by one update conditional on that claim, which changes nothing where the claim
 has been taken over, and an attempt still running when its claim times out is abandoned
 as a failed attempt. A pass reads its due rows without a lock, and passes in one process
 or several may run at once; the claim alone decides who carries a row. A send's
-immediate attempt (AUTH-ABUSE-004) claims its row the same way.
+immediate attempt (AUTH-ABUSE-004) claims its row the same way, save that it claims
+whatever the row's due instant, since it is the row's first attempt; a new send row is
+due `outbox.retry.initial` after its admission, with no jitter, so the pass takes it
+only once that attempt has had its chance (D-188).
 Hand-written SQL (OPS-DATA-001) lives in `Janus.Storage` beside the port implementation
 it serves, never at a call site. Migrations are EF Core migrations in `Janus.Storage`,
 applied in the pipeline as an **EF Core migration bundle** built from the same commit
@@ -472,7 +478,7 @@ serialized model of AUTHZ-MODEL-005 is JSON written by `System.Text.Json` source
 generation to `artifacts/model.json`.
 
 *Source: OPS-DATA-001 to 003, OPS-MIG-001, OPS-DEP-002, LIB-PKG-002, D-149, D-166,
-D-171, D-173, D-181, D-183, D-186, D-187*
+D-171, D-173, D-181, D-183, D-186, D-187, D-188*
 
 **Acceptance criteria**
 1. No area project references EF Core or Npgsql.
@@ -496,8 +502,10 @@ D-171, D-173, D-181, D-183, D-186, D-187*
    immediate attempt meeting the retry pass, carry each row once, count each attempt
    once and record each outcome once; a row whose claim has timed out is carried by the
    next pass, a row released and rescheduled is not claimed before its next attempt is
-   due, and a row that tracks several deliveries is carried by one pass at a time, which
-   renews its claim before each delivery and records each delivery once.
+   due, a new send row is claimed by its immediate attempt before `outbox.retry.initial`
+   has passed and by no pass until it has, and a row that tracks several deliveries is
+   carried by one pass at a time, which renews its claim before each delivery and
+   records each delivery once.
 10. Each refusal that makes a kept write commits every kept write it made and nothing
     else; any other refusal, and an outermost operation's success that wrote nothing,
     leaves its unit of work rolled back, and a joined level that succeeds ends with
@@ -531,9 +539,11 @@ document's name (`DocumentName`), both under the rule of INT-SMS-003, public in
 (INT-SMS-003). An identifier another system draws keeps that system's form and is a
 value type over it, never over a UUID: an app password's (`AppPasswordId`) is the mail
 server's JMAP `Id`, 1 to 255 octets of the URL and filename safe base64 alphabet, the
-pad `=` excluded (RFC 8620 section 1.2).
+pad `=` excluded (RFC 8620 section 1.2). Every public member that takes or returns such
+a name or identifier takes the type, the mail server's app-password operations included;
+an internal record MAY hold the value as text once the boundary has read it (D-188).
 
-*Source: IDN-ACCT-002, IDN-ACCT-004, D-149, D-166, D-174, D-183, D-187*
+*Source: IDN-ACCT-002, IDN-ACCT-004, D-149, D-166, D-174, D-183, D-187, D-188*
 
 **Acceptance criteria**
 1. No entity exposes a public or internal property setter.
@@ -586,7 +596,7 @@ binds to that type at the edge through `IParsable<T>`; no handler takes it as a 
 route-builder extension of `Janus.Hosting`, the error codes `09` gives it: its row's,
 and those the text of its section or subsection gives the routes that text governs,
 before or after a table (among them `authz.restricted` and `authz.denied` in section 6;
-`authz.denied` and `identity.organization.notfound` in section 8;
+`authz.restricted`, `authz.denied` and `identity.organization.notfound` in section 8;
 `identity.registration.incomplete` for the step endpoints of section 2), and 422
 `integration.sms.balancefloor` where the `09` preamble gives it; what its mounting
 answers, where its row does not give it, is derived, as the chapter's preamble says, and
@@ -632,11 +642,18 @@ calls every other one and itself registers `Janus.Hosting`'s own types, the host
 declaration it is given, and of another project's types only one kind, which no other
 project can register: a type built by a factory that reads a type of a project the
 type's own cannot reference (`SendingValidation`, whose placeholders come from
-`Janus.Privacy`; `DeclaredProcessing`, read from the authorization model). A factory of
-`Janus.Hosting` that needs a type of another project asks for its contract where one
-exists (`IAccessGate`, never `AccessGate`, which `Janus.Authorization`'s method
-registers). The shipped defaults that stand in for an absent host declaration
-(`RestrictionKeySuppliers.None`, `PreferenceDeclarations.None`,
+`Janus.Privacy`; `DeclaredProcessing`, read from the authorization model). A type of
+`Janus.Hosting` that bridges two areas (the settings restriction over the gate, the mail
+server's token over the OIDC provider) is `Janus.Hosting`'s own. A factory or
+constructor of `Janus.Hosting` that needs a member of another project's type asks for a
+contract that declares it, never for the implementation (`AccessGate`, `OidcService`):
+the public contract where it declares the member, and otherwise an `internal interface`
+the implementation's own project declares for exactly those members, implements and
+registers by its method (the settings-change gate of `Janus.Authorization`, the token
+minting of `Janus.Authentication`). A port and its implementation that live in one
+project need no adapter in another: `AccessGate` implements `Janus.Authorization`'s
+unscoped refusal itself (D-188). The shipped defaults that stand in for an absent host
+declaration (`RestrictionKeySuppliers.None`, `PreferenceDeclarations.None`,
 `ReservedUsernames.Default`, `DictionaryWords.Default`) are registered by `Janus.Core`'s
 method, each only where none is registered. A `Janus.Cli` command's composition calls
 the methods of the projects it uses and itself registers the types only a command uses
@@ -701,7 +718,7 @@ where the database holds none, and then builds the OIDC provider's options, whic
 no `ValidateOnStart` (CONV-CODE-007).
 
 *Source: OPS-CFG-001, OPS-CFG-008, D-149, D-166, D-171, D-176, D-180, D-181, D-183,
-D-187*
+D-187, D-188*
 
 **Acceptance criteria**
 1. A host calls one method to register the library.
@@ -724,8 +741,9 @@ D-187*
    project exposes one; `AddJanus` calls every other one; every type of such a project
    that `AddJanus` registers is registered by that project's own method, save the host's
    declaration and a type built by a factory that reads a type of a project the type's
-   own cannot reference, which `AddJanus` registers; and no factory of `Janus.Hosting`
-   names an implementation of another project where a contract of it exists.
+   own cannot reference, which `AddJanus` registers; and no factory or constructor of
+   `Janus.Hosting` names an implementation type of another project, each asking for a
+   public or internal contract that declares the members it uses.
 8. No project of the package but `Janus.Hosting` uses a type of a `Microsoft.AspNetCore`
    namespace; the framework reference gives the others the container's abstractions
    alone.
@@ -1104,18 +1122,19 @@ pressure defeats the entire security model, and it looks reasonable in review.
 
 **CONV-ERR-003** — Exceptions SHALL NOT be swallowed. A caught exception is either
 handled meaningfully or rethrown. Empty catch blocks SHALL NOT exist. One catch carries
-on after logging the exception: the one around work registered to run after a commit
-(CONV-DESIGN-003), since the commit stands and the publisher carries what that work
-leaves.
+on after logging the exception: the one inside work registered to run after a commit,
+written by that work itself (CONV-DESIGN-003), since the commit stands and the publisher
+carries what that work leaves.
 
-*Source: D-150, D-166, D-186*
+*Source: D-150, D-166, D-186, D-188*
 
 **Acceptance criteria**
 1. JAN0006 (CONV-CODE-008) fails the build on an empty catch and on a catch that
    neither throws, rethrows, returns a failure result nor logs.
-2. No catch block of the library carries on after the exception but the one around
-   after-commit work, which logs it (CONV-DESIGN-003): each other throws, returns a
-   failure result, or answers the request with a refusal as its last act.
+2. No catch block of the library carries on after the exception but the one inside
+   after-commit work, written by that work, which logs it (CONV-DESIGN-003): each other
+   throws, returns a failure result, or answers the request with a refusal as its last
+   act.
 
 ---
 
@@ -1385,13 +1404,14 @@ level governs: failed authentication (`auth.authentication.failed`), denied auth
 refused), configuration change (`ops.configuration.changed`), break-glass use
 (`auth.breakglass.used`).
 
-*Source: OPS-CFG-005, OPS-BOOT-002, D-166*
+*Source: OPS-CFG-005, OPS-BOOT-002, D-166, D-188*
 
-**Values.** Failed authentication is a factor refused at sign-in, at a sign-in link press
-(a link token unknown or expired included, when pressed) or on a social provider's
+**Values.** Failed authentication is a factor refused at sign-in, at a sign-in link
+press (a link token unknown or expired included, when pressed) or on a social provider's
 return, a refused new-device verification code, or a refused break-glass credential. A
 plain open of a link, a press in another browser, and a provider's own error or a cancel
-present nothing and are not failed authentication.
+present nothing and are not failed authentication, and neither is a fault of the
+library's own inside a sign-in (AUTH-ABUSE-001, D-188).
 
 **Acceptance criteria**
 1. Raising the minimum log level does not suppress these.

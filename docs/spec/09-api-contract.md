@@ -167,18 +167,22 @@ living `registration.session.lifetime`, that stages everything the steps collect
 **reserves nothing**. No account exists until the terms step.
 
 ```json
-{ "clientId": "...", "invitationToken": "..." }   // originating application, per API-REDIR-002; invitationToken optional, the token of an invitation link (REG-INV-001)
+{ "clientId": "...", "invitationToken": "...", "challengeToken": "..." }   // originating application, per API-REDIR-002; invitationToken optional, the token of an invitation link (REG-INV-001); challengeToken only on a repeat after auth.challenge.required (AUTH-ABUSE-008)
 ```
 
 **201**: session created; the cookie is set; body is the state document of
 `GET /register` at its first step
+**403**: `auth.challenge.required` where a bot-defence signal fired and the host
+declared a verifier (AUTH-ABUSE-008): no session is created; the request is repeated
+with the host's challenge token as `challengeToken`, and a passing token creates the
+session
 **409**: `identity.registration.signedin`
 **422**: `identity.invitation.expired`, a token that opens no invitation;
 `identity.invitation.identifiermismatch`, an account already holds the email the
 invitation binds
 **429**: `auth.throttled` with `retryAt`
 
-*Source: D-146; REG-SESS-001, REG-SESS-002, API-REDIR-002, D-162, D-166, D-183*
+*Source: D-146; REG-SESS-001, REG-SESS-002, API-REDIR-002, D-162, D-166, D-183, D-188*
 
 A signed-in person is not offered registration; a request that nonetheless arrives
 with a live session creates no registration session and is refused **409**
@@ -371,13 +375,21 @@ constant, D-147), usable only against the endpoints below
 
 Within the enrolment session the person MAY call: `POST /account/password`,
 `/auth/webauthn/register/*`, `/account/factors/totp/*` (set a password or enrol a
-passkey; for a recovery, replacing what was lost), and, for a recovery whose
-approver recorded the mailbox as lost, `PUT /account/identifiers/{id}/replace`
-completing on the **new address alone** (AUTH-RECOV-002: the approver's recorded
-confirmation stands in for the old address; the exception is stated in REG-IDENT-007). Completing the enrolment ends the
-enrolment session and requires an ordinary sign-in with the new credential.
+passkey; for a recovery, replacing what was lost), and, for a recovery whose approver
+recorded the mailbox as lost, `PUT /account/identifiers/{id}/replace` completing on the
+**new address alone** (AUTH-RECOV-002: the approver's recorded confirmation stands in
+for the old address; the exception is stated in REG-IDENT-007),
+`POST /account/identifiers/{id}/verify` for that replace, and
+`POST /account/recoverycodes/exported` for the codes a second step enrolled beside a
+password shows (AUTH-RECOV-006). These are the only routes it reaches: any other route,
+`DELETE /account/credentials/{id}` and `POST /account/credentials/{id}/upgrade` among
+them, refuses it **403** `authz.denied`, and an ended enrolment session is answered
+**401** `auth.session.expired` with no `details` wherever it is presented, as an ended
+registration session is (D-188). Completing the enrolment ends the enrolment session and
+requires an ordinary sign-in with the new credential.
 
-*Source: D-148; AUTH-RECOV-002, AUTH-RECOV-005, API-LAND-001, D-140, D-146, D-147*
+*Source: D-148; AUTH-RECOV-002, AUTH-RECOV-005, API-LAND-001, D-140, D-146, D-147,
+D-188*
 
 ---
 
@@ -641,14 +653,19 @@ Raises an existing session's assurance. Same request and response shape as
 `/auth/factor`; called once per factor until the session reaches the gate. A factor the
 policy in force for the account does not permit is refused `auth.factor.notpermitted`
 before it is verified, and counted (AUTH-STEP-002, IDN-LIFE-009b). A `phoneCode` ask
-whose number answers `risk` is answered **403** `auth.stepup.required` with `details`
-computed without that entry, against the strictest of the policy's gates field by field,
-since the step-up names no action (AUTH-FACT-002, AUTH-FACT-002b, D-187).
+whose number answers `risk` is answered as `/auth/factor` answers it: **200**
+`factorRequired` with the combinations the challenge still offers, judged against the
+strictest of the policy's gates field by field, since the step-up names no action;
+**403** `auth.stepup.required` with `outcome` `report-loss` or `enrol` where none is
+left; and **200** with `required` empty where the factors already presented meet that
+gate (AUTH-FACT-002, AUTH-FACT-002b, D-187, D-188). The shape's refusals of a presented
+factor are this route's too: **422** `auth.factor.rejected`, `auth.code.invalid` and
+`auth.code.expired` (D-188).
 
 **429**: `auth.throttled`, with `Retry-After`; `auth.restriction.exceeded` with
 `retryAt` where a restriction refuses the send of a `phoneCode` ask (AUTH-ABUSE-004)
 
-*Source: AUTH-STEP-001, AUTH-STEP-002, D-141, D-166, D-183, D-187*
+*Source: AUTH-STEP-001, AUTH-STEP-002, D-141, D-166, D-183, D-187, D-188*
 
 Rotates the session identifier on success.
 
@@ -916,11 +933,11 @@ new email confirmed by the new address alone (AUTH-RECOV-002, D-111).
 
 A `restricted` account signs in and reads its own data through the endpoints below.
 Every change it asks to its identifiers, credentials, profile and preferences is refused
-**403**
-`authz.restricted` (IDN-ACCT-007, AUTHZ-GATE-006), except ending a session, reporting a
-credential lost, listing and revoking app passwords, the link-borne undo of an identifier
-change, and a credential set by recovery or enrolled where a policy hold stops its
-sign-in (AUTH-FACT-017) (D-166).
+**403** `authz.restricted` (IDN-ACCT-007, AUTHZ-GATE-006), except ending a session,
+reporting a credential lost, listing and revoking app passwords, the link-borne undo of
+an identifier change, and a credential set by recovery or enrolled where a policy hold
+stops its sign-in (AUTH-FACT-017) (D-166); recording an export of its recovery codes is
+a change and is refused (D-188).
 
 From the break-glass session, or a session another application opened from it
 (BFF-SESS-006), each of the step-up actions `password:set`, `identifier:add`,
@@ -1058,13 +1075,18 @@ replace (`identifier-confirm`, REG-IDENT-007): link-borne, needing no session an
 to no browser, a press with its `linkToken` and `press` confirms from any browser, under
 the `{id}` its landing names as an `identifier` link's does, and a press after
 `code.verification.lifetime` from its send changes nothing and is answered **422**
-`auth.code.expired`.
+`auth.code.expired`. A pressed token that opens nothing (swept, abandoned or never
+issued) is **422** `auth.code.expired` and counts against the source, and every code and
+press here is counted and throttled as at `POST /register/verify/{id}` (AUTH-ABUSE-001,
+D-188).
 
 **204** · **200** (link opened elsewhere: nothing changes, the code is shown) ·
+**409**: `identity.identifier.maximum`, the kind full at an add's verification
+(REG-IDENT-004) ·
 **422**: `auth.code.invalid`, `auth.code.expired` ·
 **429**: `auth.throttled` with `retryAt`
 
-*Source: D-146; REG-IDENT-004, REG-SESS-003, REG-IDENT-007, D-183, D-187*
+*Source: D-146; REG-IDENT-004, REG-SESS-003, REG-IDENT-007, D-183, D-187, D-188*
 
 Emits `IdentifierAdded` on success.
 
@@ -1127,10 +1149,12 @@ accepts the link token from the undo notice, the same shape as deletion cancella
 ```
 
 **204**: restored, verified as it was, and the security-notice set notified
+**409**: `identity.identifier.maximum` where the account's verified identifiers of the
+kind fill `identifiers.<kind>.max`; pending adds do not refuse an undo (D-188)
 **422**: `identity.change.windowelapsed` (after `identifier.change.coolingoff`, or
 once a write of the value to the account has ended its reservation, REG-IDENT-006)
 
-*Source: D-146; REG-IDENT-006, D-187*
+*Source: D-146; REG-IDENT-006, D-187, D-188*
 
 ---
 
@@ -1286,12 +1310,14 @@ Lists enrolled credentials, each with its state (`active` · `suspended` ·
 removes one.
 
 **204**
+**403**: `authz.denied` for an enrolment session, which does not reach this route
+(D-188)
 **202**: `auth.credential.lastsecondfactor`: removing this credential would lower
 the account's reachable assurance (AUTH-STEP-006); it is `suspended` now and
 invalidated after the window (AUTH-RECOV-007), notified throughout. The body is the
 API-CONV-002 body, `details.invalidatesAt` carrying the instant of invalidation.
 
-*Source: D-092, D-141, D-166*
+*Source: D-092, D-141, D-166, D-188*
 
 Removal is gated at the account's reachable assurance (AUTH-STEP-002a). Removing one
 of several passkeys, or un-enrolling TOTP while a passkey remains, leaves reachable
@@ -1328,12 +1354,13 @@ entry is retired; on failure nothing changes. Gated as an enrolment (AUTH-STEP-0
 notified like one.
 
 **200**: the ceremony options, completed at `/auth/webauthn/register/complete`
-**403**: `auth.stepup.required`
+**403**: `auth.stepup.required`; `authz.denied` for an enrolment session, which does not
+reach this route (D-188)
 **404**: `auth.credential.notfound` (the account holds no such credential)
 **409**: `auth.credential.notupgradable` (the credential is not a second-factor security
 key)
 
-*Source: D-146; AUTH-FACT-002b, AUTH-STEP-007, D-162, D-166*
+*Source: D-146; AUTH-FACT-002b, AUTH-STEP-007, D-162, D-166, D-188*
 
 ---
 
@@ -1372,15 +1399,16 @@ Generates or **regenerates** the recovery-code set (AUTH-FACT-008, AUTH-RECOV-00
 Step-up action (generate recovery codes, `10` §5a).
 
 **200**: ten codes, returned **once**, with `generatedAt`; the frontend offers copy,
-download and print and confirms they were saved. The set records `viewedAt` when this
-200 is produced, the one time the codes are shown, and `exportedAt` when the frontend
-reports a copy, download or print at `POST /account/recoverycodes/exported`; both are
-visible in `GET /account`.
+download and print and confirms they were saved. The set records `viewedAt` in the unit
+of work whose response returns the codes (AUTH-FACT-008, D-188), the one time they are
+shown, and `exportedAt` when the frontend reports a copy, download or print at
+`POST /account/recoverycodes/exported`; both are visible in `GET /account`.
 **403**: `auth.stepup.required`
 **409**: `auth.factor.passwordrequired`, the account has no password (a passkey-only
 account has no recovery codes, AUTH-FACT-002b)
 
-*Source: D-146; AUTH-FACT-008, AUTH-FACT-009, AUTH-RECOV-006, D-162, D-166, D-183*
+*Source: D-146; AUTH-FACT-008, AUTH-FACT-009, AUTH-RECOV-006, D-162, D-166, D-183,
+D-188*
 
 Regeneration invalidates the entire previous set. A reminder fires in the account and
 to the security-notice set when `recovery.codes.reminder` has elapsed since generation.
@@ -1391,12 +1419,14 @@ Replaces `POST /account/factors/recovery-codes/generate`.
 ### `POST /account/recoverycodes/exported`
 
 Records that the person copied, downloaded or printed the account's current
-recovery-code set (AUTH-FACT-008, AUTH-RECOV-006 AC2). No body. No gate.
+recovery-code set (AUTH-FACT-008, AUTH-RECOV-006 AC2). No body. No step-up; the gate
+is asked for the restriction alone.
 
 **204**
+**403**: `authz.restricted` (IDN-ACCT-007)
 **409**: `auth.factor.notenrolled`, the account holds no recovery-code set
 
-*Source: AUTH-FACT-008, AUTH-RECOV-006, D-162, D-166, D-183*
+*Source: AUTH-FACT-008, AUTH-RECOV-006, D-162, D-166, D-183, D-188*
 
 ---
 
@@ -1792,10 +1822,12 @@ read while authenticated.
 
 ## 8. Administration
 
-All endpoints under `/admin` require the corresponding permission. Denials return
-403 — no record existence is concealed at this level.
+All endpoints under `/admin` require the corresponding permission. Denials return 403 —
+no record existence is concealed at this level. Every `/admin` route below that modifies
+answers **403** `authz.restricted` for a restricted account (AUTHZ-GATE-006,
+IDN-ACCT-007), and the rows do not each list it (D-188).
 
-*Source: AUTHZ-CONCEAL-005, D-162, D-166*
+*Source: AUTHZ-CONCEAL-005, D-162, D-166, D-188*
 
 Where the organization a permission is asked in is read from the row a request names (a
 group, a grant, a registered record), an identifier naming no row SHALL be refused
@@ -2381,16 +2413,18 @@ or its key set) refuses nothing: the delivery is answered **500** `system.fault`
 nothing is claimed, recorded or changed, and the provider may deliver the event again
 (RFC 8935 section 2.3).
 
-Every other refusal on a callback, the host's included, is `integration.callback.rejected`:
-**429** with `Retry-After` and `details.retryAt` where `integration.callback.ratelimit`
-refused it, **422** for every other cause, with no `Retry-After`. A delivery of an event
-whose earlier delivery is still being carried, its claim younger than
-`integration.callback.claimtimeout`, is answered **409** `integration.callback.inprogress`,
-is not counted as a rejection, and is carried when the provider delivers it again; one
-meeting an older unsettled claim takes it over and is carried (BFF-MACH-002).
+Every other refusal on a callback, the host's included, is
+`integration.callback.rejected`: **429** with `Retry-After` and `details.retryAt` where
+`integration.callback.ratelimit` refused it, **422** for every other cause, with no
+`Retry-After`, a request carrying the session cookie among them (BFF-MACH-001, D-188). A
+delivery of an event whose earlier delivery is still being carried, its claim younger
+than `integration.callback.claimtimeout`, is answered **409**
+`integration.callback.inprogress`, is not counted as a rejection, and is carried when
+the provider delivers it again; one meeting an older unsettled claim takes it over and
+is carried (BFF-MACH-002).
 
 *Source: AUTH-ABUSE-007, INT-GEN-003, IDN-LIFE-012a, BFF-MACH-002, D-164, D-166, D-183,
-D-187*
+D-187, D-188*
 
 **Acceptance criteria**
 1. A forged callback with a guessed reference is rejected and logged.

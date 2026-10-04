@@ -207,7 +207,7 @@ others.
 | App passwords | **Stored by Stalwart**, never by this system; managed for the person through the library's first-party OIDC client (INT-MAIL-010) |
 | Storage | Stalwart's own database, not co-located with business data |
 
-*Source: D-006, D-146, D-166, D-176, D-177, D-183, D-187*
+*Source: D-006, D-146, D-166, D-176, D-177, D-183, D-187, D-188*
 
 **Restated** (D-146): every management operation happens through JMAP objects, so
 "management API" means JMAP and nothing else. The four concerns are unchanged. Should the edition change,
@@ -226,31 +226,32 @@ registered one or the key was set at the start, and a change of the key by `conf
 management key, which the library reads through the host's secret source (INT-GEN-002).
 A status other than 2xx, a timeout, an answer that does not read, a method error, or any
 entry the server reports as not created, not updated or not destroyed is a failure;
-nothing is read as success by default. A mailbox is an `Account` of `@type` `User` named
-by the address's local part in the `Domain` of its domain, and is created with the
-library's identifier of the mailbox, which every push carries (LIB-HOST-001), as its
-`description`. `disabled` is the account with the `authenticate` permission disabled,
-which overrides any grant of it, the account still receiving mail; `enabled` is the
-account with it not disabled and, where the account's own permissions replace the
-inherited ones (`Replace`), enabled. A push changes that one permission alone: every
-other permission, and whether the account inherits, merges or replaces its permissions,
-stays as it stands, except that an account that inherits them is changed to merge them
-when it is disabled, `authenticate` its only disabled one. `removed` is the account
-destroyed (`x:Account/set`); where the server holds no account under the mailbox's name,
-the removal is done. A push that meets an account the server already holds under the
-mailbox's name acts on it only where its `description` carries the mailbox's identifier
-(a create adopts it, a change of state alters it, a removal destroys it); otherwise the
-adapter changes nothing and answers `integration.mailserver.conflict`, and the push is
-marked failed at that attempt and raises `degradation` scoped
-`mailbox.conflict:<mailbox id>`, naming the mailbox by its identifier and never by its
-address, without waiting for `outbox.retry.maxattempts`, since retrying within the run
-of `outbox.retry.*` cannot resolve a conflict that someone must resolve at the mail
-server (INT-MAIL-007). The listing is `x:Account/query` with `x:Account/get` of
-`emailAddress`, `description` and `permissions`, and answers for each account the
-mailbox identifier its `description` carries (none where it carries none), its address
-(none where `emailAddress` is absent, is not text, or does not read as an email address,
-D-187) and whether it is enabled; an account is listed enabled exactly where
-`authenticate` is not disabled and, under `Replace`, is enabled. App passwords are
+nothing is read as success by default; an identifier the server answers outside the JMAP
+`Id` form (CONV-DESIGN-004) is an answer that does not read (D-188). A mailbox is an
+`Account` of `@type` `User` named by the address's local part in the `Domain` of its
+domain, and is created with the library's identifier of the mailbox, which every push
+carries (LIB-HOST-001), as its `description`. `disabled` is the account with the
+`authenticate` permission disabled, which overrides any grant of it, the account still
+receiving mail; `enabled` is the account with it not disabled and, where the account's
+own permissions replace the inherited ones (`Replace`), enabled. A push changes that one
+permission alone: every other permission, and whether the account inherits, merges or
+replaces its permissions, stays as it stands, except that an account that inherits them
+is changed to merge them when it is disabled, `authenticate` its only disabled one.
+`removed` is the account destroyed (`x:Account/set`); where the server holds no account
+under the mailbox's name, the removal is done. A push that meets an account the server
+already holds under the mailbox's name acts on it only where its `description` carries
+the mailbox's identifier (a create adopts it, a change of state alters it, a removal
+destroys it); otherwise the adapter changes nothing and answers
+`integration.mailserver.conflict`, and the push is marked failed at that attempt and
+raises `degradation` scoped `mailbox.conflict:<mailbox id>`, naming the mailbox by its
+identifier and never by its address, without waiting for `outbox.retry.maxattempts`,
+since retrying within the run of `outbox.retry.*` cannot resolve a conflict that someone
+must resolve at the mail server (INT-MAIL-007). The listing is `x:Account/query` with
+`x:Account/get` of `emailAddress`, `description` and `permissions`, and answers for each
+account the mailbox identifier its `description` carries (none where it carries none),
+its address (none where `emailAddress` is absent, is not text, or does not read as an
+email address, D-187) and whether it is enabled; an account is listed enabled exactly
+where `authenticate` is not disabled and, under `Replace`, is enabled. App passwords are
 `AppPassword` objects (`x:AppPassword/get`, `x:AppPassword/set`) called with the
 person's token (INT-MAIL-010) and never with the management key.
 

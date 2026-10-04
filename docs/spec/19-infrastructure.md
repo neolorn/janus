@@ -357,12 +357,14 @@ credential (OPS-BOOT-001); the privacy-request deadline alerts and the holiday-l
 as the system principal `10` names for it (INF-BG-002). A job may run in several
 processes at once; what a delivery job carries is claimed row by row before it is
 carried (CONV-DESIGN-003), so each row is carried by one process at a time: a row is
-claimed only once it is due, and a row that tracks several deliveries is carried under
-one claim, renewed before each delivery (D-186). The key-encryption-key re-wrap
-(OPS-SEC-003) is not background work of the worker: it runs inside the command-line
-process so that it does not depend on the application being up (D-147).
+claimed by a pass only once it is due, a send's immediate attempt claiming its new row
+whatever its due instant (CONV-DESIGN-003, D-188), and a row that tracks several
+deliveries is carried under one claim, renewed before each delivery (D-186). The
+key-encryption-key re-wrap (OPS-SEC-003) is not background work of the worker: it runs
+inside the command-line process so that it does not depend on the application being up
+(D-147).
 
-*Source: D-148, D-166, D-183, D-186; D-147, the items named above*
+*Source: D-148, D-166, D-183, D-186, D-188; D-147, the items named above*
 
 **Acceptance criteria**
 1. Scheduled work runs without a person triggering it.
