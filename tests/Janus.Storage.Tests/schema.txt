@@ -222,7 +222,7 @@ table callbacks
 table compliance_records
   column id integer not null
   column data_owner text
-  column organisational_measures text
+  column organizational_measures text
   column assessment_links jsonb not null
   column updated_at timestamp with time zone not null
   constraint ck_compliance_records_only CHECK ((id = 1))

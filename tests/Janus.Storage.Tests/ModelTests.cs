@@ -230,7 +230,7 @@ public sealed class ModelTests
             "compliance_records.assessment_links",
             "compliance_records.data_owner",
             "compliance_records.id",
-            "compliance_records.organisational_measures",
+            "compliance_records.organizational_measures",
             "compliance_records.updated_at",
 
             // Not an account field: what the subject consented to, against which document

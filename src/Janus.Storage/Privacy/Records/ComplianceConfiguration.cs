@@ -33,8 +33,8 @@ internal sealed class ComplianceConfiguration : IEntityTypeConfiguration<Complia
 
         builder.Property(record => record.DataOwner).HasColumnName("data_owner");
 
-        builder.Property(record => record.OrganisationalMeasures)
-            .HasColumnName("organisational_measures");
+        builder.Property(record => record.OrganizationalMeasures)
+            .HasColumnName("organizational_measures");
 
         builder.Property(record => record.AssessmentLinks)
             .HasColumnName("assessment_links")

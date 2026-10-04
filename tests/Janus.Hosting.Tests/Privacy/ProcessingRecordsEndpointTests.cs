@@ -61,7 +61,7 @@ public sealed class ProcessingRecordsEndpointTests : IAsyncDisposable
                 "hostingLocation",
                 "crossBorderBasis",
                 "dataOwner",
-                "organisationalSecurityMeasures",
+                "organizationalSecurityMeasures",
                 "assessmentLinks",
                 "records",
                 "recipients",
@@ -153,7 +153,7 @@ public sealed class ProcessingRecordsEndpointTests : IAsyncDisposable
         Assert.Equal("the head of customer operations", after.GetProperty("dataOwner").GetString());
         Assert.Equal(
             "annual training and a clear-desk rule",
-            after.GetProperty("organisationalSecurityMeasures").GetString());
+            after.GetProperty("organizationalSecurityMeasures").GetString());
         Assert.Equal(
             ["wiki/lia-2026", "wiki/dpia-2026"],
             after.GetProperty("assessmentLinks").EnumerateArray().Select(link => link.GetString()));
@@ -216,7 +216,7 @@ public sealed class ProcessingRecordsEndpointTests : IAsyncDisposable
 
         Assert.Equal(StatusCodes.Status204NoContent, stated.Status);
         Assert.Equal("the head of customer operations", _deployment.Compliance.Held.DataOwner);
-        Assert.Equal("annual training", _deployment.Compliance.Held.OrganisationalSecurityMeasures);
+        Assert.Equal("annual training", _deployment.Compliance.Held.OrganizationalSecurityMeasures);
 
         Answer narrowed = await browser.SendAsync(
             "PUT",
@@ -224,7 +224,7 @@ public sealed class ProcessingRecordsEndpointTests : IAsyncDisposable
             ("dataOwner", "the head of customer operations"));
 
         Assert.Equal(StatusCodes.Status204NoContent, narrowed.Status);
-        Assert.Null(_deployment.Compliance.Held.OrganisationalSecurityMeasures);
+        Assert.Null(_deployment.Compliance.Held.OrganizationalSecurityMeasures);
     }
 
     /// <summary>

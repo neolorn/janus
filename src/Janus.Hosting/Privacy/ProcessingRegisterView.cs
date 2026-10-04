@@ -14,7 +14,7 @@ namespace Janus.Hosting.Privacy;
 /// <param name="HostingLocation">Where that is.</param>
 /// <param name="CrossBorderBasis">What a transfer out of the country rests on.</param>
 /// <param name="DataOwner">Who owns the data, as a person stated it.</param>
-/// <param name="OrganisationalSecurityMeasures">The measures that are not the software's.</param>
+/// <param name="OrganizationalSecurityMeasures">The measures that are not the software's.</param>
 /// <param name="AssessmentLinks">The assessments, as a person stated them.</param>
 /// <param name="Records">One row a purpose.</param>
 /// <param name="Recipients">Everyone the data reaches.</param>
@@ -26,7 +26,7 @@ internal sealed record ProcessingRegisterView(
     HostingLocation HostingLocation,
     string? CrossBorderBasis,
     string? DataOwner,
-    string? OrganisationalSecurityMeasures,
+    string? OrganizationalSecurityMeasures,
     IReadOnlyList<string> AssessmentLinks,
     IReadOnlyList<ProcessingRecordView> Records,
     IReadOnlyList<RecipientRecordView> Recipients,
@@ -48,7 +48,7 @@ internal sealed record ProcessingRegisterView(
             register.HostingLocation,
             register.CrossBorderBasis,
             register.DataOwner,
-            register.OrganisationalSecurityMeasures,
+            register.OrganizationalSecurityMeasures,
             register.AssessmentLinks,
             [.. register.Records.Select(Row)],
             [.. register.Recipients.Select(Reached)],

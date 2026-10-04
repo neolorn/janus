@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The organizational security measures of the records of processing are spelled
+  `organizational` wherever the library names them: the answer of `GET /admin/ropa`
+  carries `organizationalSecurityMeasures`, as the request of
+  `PUT /admin/compliance/assessments` already did; the public members are
+  `ComplianceRecord.OrganizationalSecurityMeasures` and
+  `ProcessingRegister.OrganizationalSecurityMeasures`; and a migration renames the
+  column to `compliance_records.organizational_measures`, keeping the statement it
+  holds.
 - A domain of an organization's lock, and the domain of an address judged against it,
   takes its ASCII form from the library's own UTS #46 processing and no longer from the
   machine's ICU, so one domain is listed and compared in one form on every machine. A
