@@ -211,7 +211,9 @@ internal static class PrivacyEndpoints
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(requests);
 
-        if (Asked(body.Type) is not PrivacyRequestType type)
+        // 09 section 7: erasure is not a request type on this endpoint, so a body naming
+        // it is not the shape the endpoint takes (API-CONV-003).
+        if (Asked(body.Type) is not PrivacyRequestType type || type is PrivacyRequestType.Erasure)
         {
             return Answers.Malformed("type");
         }

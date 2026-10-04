@@ -117,7 +117,9 @@ public sealed class PrivacyRequestEndpointTests : IAsyncDisposable
             ("type", "erasure"),
             ("detail", "please erase me"));
 
-        Assert.Equal(StatusCodes.Status403Forbidden, submitted.Status);
+        Assert.Equal(StatusCodes.Status400BadRequest, submitted.Status);
+        Assert.Equal(ErrorCodes.RequestMalformed.ToString(), submitted.Text("code"));
+        Assert.Equal("type", submitted.Json().GetProperty("details").GetProperty("member").GetString());
         Assert.Empty(_deployment.Requests.Queue);
     }
 

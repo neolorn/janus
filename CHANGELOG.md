@@ -2986,3 +2986,5 @@ against the public contract of LIB-API-001.
   an enrolment session and no other is refused 401 `auth.session.expired`, where it
   was answered as the account, or 422 `auth.enrolment.tokeninvalid` once the enrolment
   had ended.
+- `POST /privacy/requests` refuses a body whose `type` is `erasure` 400
+  `api.request.malformed` naming `type`, where it was refused 403 `authz.denied`.
