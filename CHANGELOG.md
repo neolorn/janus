@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A factor refused 422 `auth.credential.suspended` at a sign-in or a step-up is a
+  failed attempt: it is counted against the source and the account and recorded as
+  every other refusal of a presented factor is.
+- `POST /auth/factor` and `POST /auth/step-up` declare every refusal of a presented
+  factor: 422 `auth.code.replayed`, `auth.credential.suspended`,
+  `auth.webauthn.algorithmnotallowed`, `auth.webauthn.countermismatch`,
+  `auth.webauthn.rpidchanged` and `auth.webauthn.userverificationrequired` join the
+  codes the two routes already listed.
 - An enrolment session reaches the routes `POST /enrol/begin` lists and no other
   credential route: `DELETE /account/credentials/{id}` and
   `POST /account/credentials/{id}/upgrade` refuse it 403 `authz.denied`, as do

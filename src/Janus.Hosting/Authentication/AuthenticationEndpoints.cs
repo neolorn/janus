@@ -53,8 +53,10 @@ internal static class AuthenticationEndpoints
                     ErrorCodes.RequestMalformed, ErrorCodes.PolicyGraceExpired,
                     ErrorCodes.FactorRejected, ErrorCodes.FactorNotPermitted,
                     ErrorCodes.IdentifierDomainNotAllowed, ErrorCodes.CodeInvalid,
-                    ErrorCodes.CodeExpired, ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded,
-                    ErrorCodes.SmsBalanceFloor))
+                    ErrorCodes.CodeExpired, ErrorCodes.CodeReplayed, ErrorCodes.CredentialSuspended,
+                    ErrorCodes.WebAuthnAlgorithmNotAllowed, ErrorCodes.WebAuthnCounterMismatch,
+                    ErrorCodes.WebAuthnRelyingPartyChanged, ErrorCodes.WebAuthnUserVerificationRequired,
+                    ErrorCodes.Throttled, ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor))
             .Produces<SignInProgressView>()
             .Produces<SignInLandingView>()
             .Produces(StatusCodes.Status202Accepted);
@@ -67,7 +69,10 @@ internal static class AuthenticationEndpoints
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.StepUpRequired, ErrorCodes.FactorNotPermitted, ErrorCodes.FactorRejected,
-                    ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired, ErrorCodes.Throttled,
+                    ErrorCodes.CodeInvalid, ErrorCodes.CodeExpired, ErrorCodes.CodeReplayed,
+                    ErrorCodes.CredentialSuspended, ErrorCodes.WebAuthnAlgorithmNotAllowed,
+                    ErrorCodes.WebAuthnCounterMismatch, ErrorCodes.WebAuthnRelyingPartyChanged,
+                    ErrorCodes.WebAuthnUserVerificationRequired, ErrorCodes.Throttled,
                     ErrorCodes.RestrictionExceeded, ErrorCodes.SmsBalanceFloor))
             .Produces<SignInProgressView>()
             .Produces(StatusCodes.Status202Accepted);
