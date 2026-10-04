@@ -1122,18 +1122,19 @@ identity into every audit record and permission check later would not be.
 relationship, permission, and condition for each resource type. Changing a policy
 SHALL require changing the table first.
 
-*Source: D-015, D-183, D-187*
+*Source: D-015, D-183, D-187, D-189*
 
 The diff in that table is the change under review. It is the difference between an
 authorization system that is trusted and one that is feared.
 
 **Acceptance criteria**
-1. The table covers direct grants, container inheritance, multi-level inheritance,
-   group membership, nested group membership, deny overriding allow, expiry,
-   cross-organization isolation, **derived grants**, **deny defeating a derived
-   grant**, **a derived grant on a container reaching its contents**, and **a bound
-   action judged from a host's assurance report** (met; unmet on its level, its phishing
-   resistance, its age or an instant after now; a provider that fails; no provider).
+1. The table covers direct grants, container inheritance, multi-level inheritance, group
+   membership, nested group membership, deny overriding allow, expiry,
+   cross-organization isolation, **derived grants**, **deny defeating a derived grant**,
+   **a derived grant on a container reaching its contents**, and **a bound action judged
+   from a host's assurance report** (met; unmet on its level, its phishing resistance,
+   its age, each where the bound gate asks it, or an instant after now; a provider that
+   fails; no provider).
 2. Every case runs through both the single check and the list filter (AUTHZ-PRIN-001). A
    step-up case agrees when the check answers the gate's outcome and the filter answers
    the same: where the gate is met, the filter lists the record; where it is not, the

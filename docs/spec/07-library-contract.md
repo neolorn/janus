@@ -14,20 +14,25 @@ must supply.
 
 **LIB-PKG-001** — The library SHALL ship as **one package** with strict internal
 boundaries between Identity, Authentication, Authorization, Privacy, Storage, and
-Hosting. Those areas SHALL NOT reach into one another. The conformance suite
-(LIB-TEST-001) and the analysers (`08` CONV-CODE-008) ship as two further packages,
-because a host runs the first and the build consumes the second; neither carries
-library behaviour.
+Hosting. Those areas SHALL NOT reach into one another, save `Janus.Hosting`, which
+registers their types and maps its endpoints, handlers, jobs and middleware onto their
+internal operation services and asks the internal interfaces `08` CONV-DESIGN-007 names
+(LIB-API-005, `08` CONV-DESIGN-007), and `Janus.Storage`, which implements their ports
+(D-189). The conformance suite (LIB-TEST-001) and the analysers (`08` CONV-CODE-008)
+ship as two further packages, because a host runs the first and the build consumes the
+second; neither carries library behaviour.
 
-*Source: D-005, D-149*
+*Source: D-005, D-149, D-189*
 
 Splitting into separate packages up front means maintaining a version matrix between
 packages that only ever ship together. Split when a real second consumer needs one
 part without the others, not before.
 
 **Acceptance criteria**
-1. Each internal area compiles without reference to the others' internals.
-2. A test asserts no cross-area dependency outside declared contracts.
+1. Each internal area compiles without reference to the others' internals, save as the
+   body allows `Janus.Hosting` and `Janus.Storage`.
+2. A test asserts no cross-area dependency outside declared contracts and the grants
+   `08` CONV-LAYOUT-002 permits.
 
 ---
 
@@ -259,6 +264,7 @@ operation that changes a relationship; and the conformance suite's provider prob
 | **Mail server client** | Required where a mail server is registered, no default: `MailServerClient` (`clientId`), the registry's `protocol` client the mail server trusts, to which the library issues the person's token for the app-password calls (INT-MAIL-010, AUTH-OIDC-001 AC4). Absent, startup fails with `model.startup.declarationmissing` naming `mailServerClient.clientId` |
 | **DNS resolver** | Optional: `IDnsResolver` (`TextRecordsAsync`), the TXT lookup domain verification reads (REG-DOM-001). Absent, adding a domain to an organization's lock is refused with `config.value.notallowed`, `details.requires` `dnsResolver`, and a stored listed domain fails startup with `model.startup.declarationmissing` naming `dnsResolver`; a deployment that locks no domain needs none |
 | **Location file** | Optional: `ILocationSource`, which opens the IP-to-city file in the format INT-GEN-006 gives. Absent, no session carries a location and `degradation` is raised (INT-GEN-006, AUTH-SESS-013) |
+| **Datacenter range file** | Optional: `IDatacenterRangeSource`, which opens the file of datacenter ranges in the format AUTH-ABUSE-008 gives. Absent or stale, `datacenterRange` does not fire and `degradation` is raised until the host supplies one or takes `datacenterRange` out of `abuse.botdefence.signals` (AUTH-ABUSE-008, D-189) |
 | **Clock reference** | Optional: `IClockReference`, the offset the environment measured against its time source (INF-HOST-001). Absent, or unable to answer, `degradation` is raised under `clock.reference.absent` or `clock.reference.unread` |
 | **Certificate renewal** | Optional: `ICertificateRenewal`, the outcome of the latest certificate renewal (INF-TLS-003). Absent, or unable to answer, `degradation` is raised under `certificate.renewal.absent` or `certificate.renewal.unread` |
 | **Restore-test instance** | Optional: `IRestoreTestInstance`, which builds the throwaway instance the restore test restores into and tears it down (DR-007, DR-008). Absent, every run of the restore test fails as `unrestored` and raises `restore-test-failed` |
@@ -282,7 +288,8 @@ other requirements already contradicted; the subject-event handlers added by D-0
 were still missing after that correction; and `10` then listed twenty keys with no
 default, of which fourteen could be defaulted and six belonged here (D-107).*
 
-*Source: D-148; D-005, D-015, D-068, D-107, D-146, D-153, D-162, D-166, D-176, D-177, D-179, D-180, D-183*
+*Source: D-148; D-005, D-015, D-068, D-107, D-146, D-153, D-162, D-166, D-176, D-177,
+D-179, D-180, D-183, D-189*
 
 **Acceptance criteria**
 1. A minimal working configuration requires only the declarations listed above; every
@@ -395,14 +402,14 @@ source.
 | Record-level rules atop the permission model | None |
 | Mail server (`IMailServer`: mailbox provisioning and app passwords, INT-MAIL-001) | The JMAP adapter in `Janus.Hosting`, used where `integration.mailserver.endpoint` is set when the application starts and the host registered none (LIB-HOST-001, CONV-DESIGN-007) |
 | Secret source (`ISecretSource`: the secrets LIB-HOST-001 lists; INF-HOST-003) | None: the host supplies it (D-149). The library reads every secret through it, asynchronously, when the application starts and before it serves a request; no secret is an argument of `AddJanus`, and startup fails without it. A `Janus.Cli` command reads the same values from one key document on standard input (OPS-SEC-001) |
-| Environment seams (clock reference, certificate renewal, DNS resolver, location file, restore-test instance, off-host erasure ledger) | None: each is an optional declaration of LIB-HOST-001, whose row states what its absence does |
+| Environment seams (clock reference, certificate renewal, DNS resolver, location file, datacenter range file, restore-test instance, off-host erasure ledger) | None: each is an optional declaration of LIB-HOST-001, whose row states what its absence does |
 
 A core namespace is `Janus.Core` or an area project's (`Janus.Identity`,
 `Janus.Authentication`, `Janus.Authorization`, `Janus.Privacy`). A product behind an
 extension point SHALL be named only in `Janus.Hosting`, where the shipped defaults and
 adapters live.
 
-*Source: D-022, D-012, P-003, D-162, D-166, D-176*
+*Source: D-022, D-012, P-003, D-162, D-166, D-176, D-189*
 
 **Acceptance criteria**
 1. Each is registered through configuration, not inheritance from a library type.
@@ -465,7 +472,7 @@ versions.
 **LIB-TEST-001** — The library SHALL ship a conformance suite a host can run against
 its own configuration, as the `Janus.Conformance` package (`08` CONV-LAYOUT-001).
 
-*Source: P-003, AUTHZ-TEST-001, D-149, D-166, D-172, D-187, D-188*
+*Source: P-003, AUTHZ-TEST-001, D-149, D-166, D-172, D-187, D-188, D-189*
 
 The suite answers a report whose findings each carry the check and a `10` section 1 code
 with structured data; it writes no sentence (CONV-CONTENT-001).
@@ -496,19 +503,24 @@ the host (D-172).
    deployment factory, a public delegate of `Janus.Conformance` that builds the host's
    composition with the provider it is given registered as `IAssuranceProvider`, or with
    none where it is given none, and calls it once for each step-up scenario, the other
-   scenarios running on the container the host passed; a step-up case's `Allowed` is
-   true for `stepup-met` alone, and the case type refuses at its construction, naming
-   the scenario, a step-up case that says otherwise or names a permission bound to no
-   gate (CONV-ERR-001), so no such case reaches the run; a finding on one names the
-   action's gate (`details.gate`) (D-188).
+   scenarios running on the container the host passed; the factory is optional, and a
+   table with a step-up case and no factory is refused, as a fault naming the scenario,
+   before anything is written; a step-up case's `Allowed` is true for `stepup-met`
+   alone, and the case type refuses at its construction, naming the scenario, a step-up
+   case that says otherwise (CONV-ERR-001); the run refuses, before anything is written
+   or any deployment built, a step-up case whose permission no host binding ties to a
+   gate the assurance provider judges (LIB-HOST-004), as a fault naming the scenario and
+   the permission; a finding on one names the action's gate (`details.gate`) (D-188,
+   D-189).
 3. It validates the model declaration as startup does and reports each kind of failure
    under its own `10` section 1.5 code, stopping at the first; a refusal the model raises
    without a code fails the suite as the startup failure.
 4. It asks the deployment's provider, as the application's sign-on client through the
-   library's own client half, and at the endpoints its discovery document names, for each form AUTH-OIDC-006 retires that needs no signed-in
-   person, a pushed request naming a destination other than the client's registered one
-   included, and reports each form admitted, and each retired form the document lists,
-      under `auth.oidc.nonconformant`.
+   library's own client half, and at the endpoints its discovery document names, for
+   each form AUTH-OIDC-006 retires that needs no signed-in person, a pushed request
+   naming a destination other than the client's registered one included, and reports
+   each form admitted, and each retired form the document lists, under
+   `auth.oidc.nonconformant`.
 5. No public type of `Janus.Conformance`, and no member of the contract in `Janus.Core`
    through which the suite asks for the provider probes, carries or receives a client
    secret.

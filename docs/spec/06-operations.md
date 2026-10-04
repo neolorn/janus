@@ -1467,8 +1467,10 @@ blocklist, a failed provider push, a notification whose attempts are exhausted (
 the restrictions or the gateway floor refuse, at its admission or at its retry, is no
 degradation and raises nothing, AUTH-ABUSE-004), a reconciliation discrepancy and a lost
 database channel (the registration signal, REG-SESS-003) SHALL each surface. The absence
-of a watch the library needs from the environment (a clock reference, a certificate
-renewal outcome, the location file) is a degradation too.
+or staleness of a watch the library needs from the environment (a clock reference, a
+certificate renewal outcome, the location file, the datacenter range file while
+`datacenterRange` is among `abuse.botdefence.signals`, AUTH-ABUSE-008) is a degradation
+too.
 
 **Values (D-166).** Each degradation raises `degradation` (OPS-ALERT-001) under a scope
 naming it; the scopes include `password.blocklist.fallback`, `clock.reference.absent`,
@@ -1482,7 +1484,7 @@ is raised as `password.blocklist.fallback` with `details.configured` (the corpus
 configured) and `details.used` (`offline`) before the offline corpus is asked; a fall
 back that cannot be raised refuses the operation with what refused the raise.
 
-*Source: D-011, D-006, D-022, P-003, D-166, D-183, D-186*
+*Source: D-011, D-006, D-022, P-003, D-166, D-183, D-186, D-189*
 
 **Acceptance criteria**
 1. Each listed condition produces a monitored signal.

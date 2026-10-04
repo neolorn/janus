@@ -181,9 +181,11 @@ lifetime SHALL be swept (OPS-OBS-003) with what it staged; the person adds the
 identifier again (D-187). A resend of a code holds the pending verification's row
 (`SELECT ... FOR UPDATE`) while it writes, and the sweep locks its candidates
 (`SKIP LOCKED`) and judges each again before it deletes, so a resend in flight keeps its
-record (D-188).
+record (D-188); a repeated add whose pending verification is gone under that lock
+proceeds as a fresh add, judged under the value's lock and against the maximum, staged
+and its code sent (D-189).
 
-*Source: D-146, D-166, D-187, D-188; amends D-035*
+*Source: D-146, D-166, D-187, D-188, D-189; amends D-035*
 
 **Acceptance criteria**
 1. `POST /account/identifiers` without step-up at the gate's level returns the step-up
@@ -241,22 +243,28 @@ stage it. An attempt SHALL be answered exactly as an attempt on a value another 
 holds (REG-SESS-005, API-CONV-005), and nobody SHALL be notified. A removal and an undo
 SHALL write the value under its lock (REG-SESS-005), so that an add of the value
 presented meanwhile finds it held or reserved, never free; a removal replaces a lapsed
-removal row of the same kind and value not yet swept (D-188). An undo counts the
-account's verified identifiers alone and is refused 409 `identity.identifier.maximum`
-only where they fill the kind; pending adds never refuse it, and a pending add's
-verification judges the maximum again (REG-IDENT-004, D-188). A write of the value to
-the account it is reserved to (an add's verification, a replace's swap, a corporate
-address taken on at an acknowledgement) ends the reservation, and the undo is then
-answered as one past its window (422 `identity.change.windowelapsed`). A sign-in link or
-email code sent to the identifier before its removal SHALL NOT sign in; it is refused
-with `auth.factor.rejected`. Other sessions SHALL end when a sign-in identifier is
-removed. A pending add listed on the account (REG-IDENT-004) is not an identifier this
-item removes: a removal naming it, admitted at the same gate, ends its pending
-verification as `POST /account/identifiers/{id}/abandon` does, with no undo,
-reservation, notice or session ended (D-187).
+removal row of the same kind and value not yet swept (D-188). Each removal or replace
+writes a removal row of its own, keyed by an identifier of its own and naming the
+identifier it came from, so an identifier changed twice within the window stands behind
+two rows, each reserved and undone apart; an undo moves its value back onto the
+identifier, displacing what the identifier then holds as a replace displaces a value; an
+undo that moves a value back onto a standing identifier adds none and is never refused
+for the maximum (D-189). An undo that restores a removed identifier counts the account's
+verified identifiers alone and is refused 409 `identity.identifier.maximum` only where
+they fill the kind; pending adds never refuse it, and a pending add's verification
+judges the maximum again (REG-IDENT-004, D-188). A write of the value to the account it
+is reserved to (an add's verification, a replace's swap, a corporate address taken on at
+an acknowledgement) ends the reservation, and the undo is then answered as one past its
+window (422 `identity.change.windowelapsed`). A sign-in link or email code sent to the
+identifier before its removal SHALL NOT sign in; it is refused with
+`auth.factor.rejected`. Other sessions SHALL end when a sign-in identifier is removed. A
+pending add listed on the account (REG-IDENT-004) is not an identifier this item
+removes: a removal naming it, admitted at the same gate, ends its pending verification
+as `POST /account/identifiers/{id}/abandon` does, with no undo, reservation, notice or
+session ended (D-187).
 
-*Source: D-146, D-162, D-166, D-187, D-188; amends D-035 (old-address confirmation
-retired except in REG-IDENT-007); IDN-LIFE-008 applies*
+*Source: D-146, D-162, D-166, D-187, D-188, D-189; amends D-035 (old-address
+confirmation retired except in REG-IDENT-007); IDN-LIFE-008 applies*
 
 Why the undo goes to the remaining set and never to the removed address: an undo that
 reaches the removed address lets a compromised mailbox re-attach itself. A stolen session
@@ -290,6 +298,9 @@ usable.
    stages a pending add is admitted its undo, and the pending add's verification is then
    refused 409 `identity.identifier.maximum`; one whose verified emails fill the kind is
    refused the undo with the same code.
+10. An identifier replaced twice within `identifier.change.coolingoff`, through three
+    distinct values, stands behind two removal rows; each undo restores its own value
+    and both values stay reserved until their windows end or their undo is used.
 
 ---
 
@@ -312,10 +323,14 @@ after that changes nothing and is answered 422 `auth.code.expired`, as a verific
 link past its lifetime is. A replace whose swap has not applied SHALL be swept
 (OPS-OBS-003) once every record it holds is spent or past its lifetime, the new
 address's code and, where the old address must confirm, that confirmation, leaving the
-identifier as it stood (D-187). A resend of the new address's code holds the staged
-replace's row while it writes, as REG-IDENT-004's does (D-188).
+identifier as it stood (D-187). A repeated replace naming the value already staged is a
+resend: it sends again each of the replace's records not yet spent (the new address's
+code, and the old address's confirmation where it must confirm and has not), each a send
+of its purpose counted by the restrictions (AUTH-ABUSE-004), holding the staged
+replace's row while it writes, as REG-IDENT-004's resend does (D-188, D-189); a replace
+naming another value is refused `identity.change.pending`.
 
-*Source: D-148; D-146, D-166, D-183, D-187, D-188, amends D-035 and restates
+*Source: D-148; D-146, D-166, D-183, D-187, D-188, D-189, amends D-035 and restates
 IDN-LIFE-004, IDN-LIFE-007, IDN-LIFE-010*
 
 The degenerate case is one email, phone optional and never added: nothing else could
@@ -340,8 +355,11 @@ undo a hostile change. If that address is lost or compromised, administrative re
 7. A replace whose new value an identifier has come to hold, or an undo to reserve,
    since it was staged applies no swap: the presentation that would apply it writes
    nothing and is answered 422 `auth.code.expired`, the identifier stays as it stood,
-   and a new replace of it is refused `identity.change.pending` until the staged one is
-   swept or abandoned.
+   and a new replace of it naming another value is refused `identity.change.pending`
+   until the staged one is swept or abandoned.
+8. A repeated replace naming the staged value sends again each of its records not yet
+   spent, each counted by the restrictions, and, within them, is answered 202 as the
+   first was; one naming another value is refused 409 `identity.change.pending` (D-189).
 
 ---
 
@@ -648,10 +666,12 @@ Nothing SHALL change on a plain open. Five wrong codes SHALL invalidate the code
 (`code.verification.attempts`); a new code draws on the sending restrictions
 (AUTH-ABUSE-004). The message SHALL be `verification-link` (`10`, message kinds),
 carrying both the code and the link. A wrong code SHALL be counted as a failure against
-the source and the identifier by the throttle of AUTH-ABUSE-001, and a pressed link
-token that opens nothing against the source alone; the source is that of the request in
-hand. Every ask for a code or a link, and every press, SHALL first be held to that
-throttle's delay.
+the source and the identifier by the throttle of AUTH-ABUSE-001, and a code or press
+past its lifetime or its attempt cap, a code for an identifier the session does not hold
+and a pressed link token that opens nothing against the source alone; the source is that
+of the request in hand. Every ask for a code or a link, every code and every press SHALL
+first be held to that throttle's delay, the press that opens a verification included
+(D-189).
 
 **Values (D-162, D-166).** `GET /register/events` is woken by a PostgreSQL notification
 on the channel `identity_registration`, raised inside the transaction that changes the
@@ -673,7 +693,7 @@ account application. Every kind acts only on a press, never on load (FE-VER-001)
 token travels in the fragment, so no request, log or referrer carries it.
 
 *Source: D-148; D-146, D-162, D-166, D-183, supersedes the code-only design of
-IDN-LIFE-004; API-LAND-001, D-187*
+IDN-LIFE-004; API-LAND-001, D-187, D-189*
 
 Without the browser binding, an attacker who starts a registration with a victim's
 address gets it verified the moment the victim clicks the verification link. Mail scanners
@@ -702,12 +722,14 @@ keys.
    can request a new one within the restrictions.
 4. A verification completing by link advances the waiting screen without a reload.
 5. A registration message carries both the code and the link.
-6. Wrong registration codes are counted by the throttle of AUTH-ABUSE-001 against the
-   source and the identifier; while its delay stands, a further code or ask is refused
-   with `auth.throttled` and `retryAt`. A pressed link token that opens nothing is
-   counted against the source of the request that presents it and answered
-   `auth.code.expired`; while that source's delay stands, the press is refused with
-   `auth.throttled` and `retryAt`. An unpressed one counts nothing.
+6. At `POST /register/verify/{id}` every code and press is first held to the delay of
+   AUTH-ABUSE-001; while it stands, a further code, press or ask is refused with
+   `auth.throttled` and `retryAt`. A wrong code is counted against the source and the
+   identifier; a code or press past its lifetime or its attempt cap, a code for an
+   identifier the session does not hold and a pressed link token that opens nothing are
+   counted against the source alone, that of the request that presents them, the press
+   that opens nothing answered `auth.code.expired`. An unpressed one counts nothing
+   (D-189).
 7. With the database channel lost, a verification still advances the waiting screen
    within `registration.events.pollinterval`, and `degradation` is raised.
 
@@ -798,10 +820,12 @@ floor (AUTH-PASS-001, AUTH-PASS-001a), for a length over `password.maximum`
 AUTH-PASS-004 only; strength feedback is advisory (AUTH-PASS-005). A password below the
 single-factor floor SHALL make a second step mandatory on the same screen, and
 lengthening it SHALL lift that in place. When a second step is enrolled beside a
-password, recovery codes SHALL be generated and shown (AUTH-RECOV-006). Every WebAuthn
-and TOTP enrolment SHALL take a label (AUTH-FACT-001).
+password, recovery codes SHALL be generated and shown (AUTH-RECOV-006), and the instant
+the step's response returns them is staged on the session and carried into the set's
+`viewedAt` at the terms step (AUTH-FACT-008, D-189). Every WebAuthn and TOTP enrolment
+SHALL take a label (AUTH-FACT-001).
 
-*Source: D-146, D-162, D-166; AUTH-PASS-001a, AUTH-RECOV-006*
+*Source: D-146, D-162, D-166, D-189; AUTH-PASS-001a, AUTH-RECOV-006*
 
 A provider-only registration yields a `delegated` account (D-141). A passkey-only
 account has no password and no recovery codes.
