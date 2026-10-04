@@ -368,6 +368,22 @@ against the public contract of LIB-API-001.
   and nothing else: no client is registered for it and it holds no secret.
   `IProviderProbes` in `Janus.Core` is the operation it asks through, called in process
   only.
+- `ConformanceSuite.TruthTableAsync` takes a `DeploymentFactory`, a delegate the host
+  supplies that builds and starts its composition with the `IAssuranceProvider` it is
+  given registered, or with none where it is given none, and runs seven step-up
+  scenarios through it: `stepup-met`, `stepup-level-unmet`,
+  `stepup-phishingresistance-unmet`, `stepup-age-unmet`, `stepup-instant-future`,
+  `stepup-provider-failed` and `stepup-provider-absent`. The factory is called once for
+  each step-up case, with a provider of the suite's own that gives the scenario's report
+  or fails to give one, and with none for `stepup-provider-absent`; the composition it
+  answers is disposed once the case is judged, and every other case runs on the
+  container passed. A step-up case agrees where the check answers the gate's outcome
+  and the filter answers the same, and its finding names the action's gate under
+  `details.gate`. A `TruthTableCase` of a step-up scenario states `Allowed` true for
+  `stepup-met` and false for the rest; one stating otherwise throws where it is
+  constructed, and a table whose step-up case names a permission bound to no gate is
+  refused before anything is written. The members of a `TruthTableCase` are set at
+  construction alone.
 - `IResources` in `Janus.Core`: a host registers each record it creates, many at once
   for an import, and moves one, inside its own unit of work, and the ancestry the
   permission filter reads is written in the same transaction. A record is placed only in

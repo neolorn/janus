@@ -64,6 +64,11 @@ public sealed class SampleHost : IAsyncLifetime
     /// </summary>
     public const string Borrower = "borrower";
 
+    /// <summary>
+    /// The step-up gate the host binds amending a sheet to, a gate of its own naming.
+    /// </summary>
+    public const string Amending = "amending";
+
     // The one purpose the host processes its records for, and what it holds of whom.
     private const string Keeping = "keeping records";
 
@@ -131,6 +136,11 @@ public sealed class SampleHost : IAsyncLifetime
     public static Permission ReadSheet { get; } = Permission.Parse("sheet:read");
 
     /// <summary>
+    /// Amending a sheet, which the host binds to a step-up gate.
+    /// </summary>
+    public static Permission AmendSheet { get; } = Permission.Parse("sheet:amend");
+
+    /// <summary>
     /// The container the library's services are resolved from.
     /// </summary>
     public IServiceProvider Services => _application?.Services
@@ -164,6 +174,8 @@ public sealed class SampleHost : IAsyncLifetime
             .Permission(ReadShelf.ToString())
             .Permission(ReadBinder.ToString())
             .Permission(ReadSheet.ToString())
+            .Permission(AmendSheet.ToString())
+            .StepUpGate(AmendSheet.ToString(), Amending)
             .Relationship<ShelfKeeper>(
                 Keeper,
                 ShelfType.ToString(),
@@ -216,6 +228,38 @@ public sealed class SampleHost : IAsyncLifetime
         await connection.OpenAsync(cancellationToken);
 
         return connection;
+    }
+
+    /// <summary>
+    /// Builds and starts a further application of the deployment with the assurance
+    /// provider it is given, or with none: the host's deployment factory, which the
+    /// suite asks for each step-up case of a truth table (LIB-TEST-001 AC2).
+    /// </summary>
+    /// <param name="assurance">The provider the application registers, or nothing.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The application's container, which stops the application when disposed.</returns>
+    public async ValueTask<IServiceProvider> DeployAsync(
+        IAssuranceProvider? assurance,
+        CancellationToken cancellationToken)
+    {
+        ServerInMemory? server = new();
+
+        try
+        {
+            WebApplication application = Built(server, Issuer, _server.Channel, assurance);
+
+            await application.StartAsync(cancellationToken);
+
+            var deployment = new SampleDeployment(application, server);
+
+            server = null;
+
+            return deployment;
+        }
+        finally
+        {
+            server?.Dispose();
+        }
     }
 
     /// <summary>
@@ -273,6 +317,20 @@ public sealed class SampleHost : IAsyncLifetime
                     PRIMARY KEY (binder_id, borrower));
                 CREATE INDEX ix_borrowers_borrower ON sample.borrowers (borrower);
                 """);
+
+            // Chapter 10 section 4.1a: the operator's policy for people in no
+            // organization asks at every gate what the administrative organization's
+            // asks, a phishing-resistant proof among it, so a report that lacks one is
+            // refused at the host's own gate (LIB-HOST-004 AC4).
+            _ = await connection.ExecuteAsync(
+                "INSERT INTO identity.settings (key, value) VALUES (@key, @value) "
+                    + "ON CONFLICT (key) DO UPDATE SET value = excluded.value;",
+                new
+                {
+                    key = Settings.PolicyDefault.Key.ToString(),
+                    value = Settings.PolicyDefault.Write(
+                        Policies.SystemDefault with { Gates = Policies.AdministrativeOrganization.Gates }),
+                });
         }
 
         // AUTH-OIDC-001: this application's own client is registered from the server,
@@ -289,7 +347,7 @@ public sealed class SampleHost : IAsyncLifetime
             Keys(),
             CancellationToken.None);
 
-        _application = Built(_server, Issuer, _server.Channel);
+        _application = Built(_server, Issuer, _server.Channel, assurance: null);
 
         await _application.StartAsync(CancellationToken.None);
     }
@@ -329,7 +387,7 @@ public sealed class SampleHost : IAsyncLifetime
     {
         using var server = new ServerInMemory();
 
-        WebApplication beside = Built(server, provider, channel);
+        WebApplication beside = Built(server, provider, channel, assurance: null);
 
         await using (beside)
         {
@@ -347,12 +405,22 @@ public sealed class SampleHost : IAsyncLifetime
     }
 
     // One application of the deployment as a host builds it: the web server it runs
-    // on, the provider it names and what its back channel reaches that provider on.
-    private WebApplication Built(ServerInMemory server, Uri provider, Func<HttpMessageHandler> channel)
+    // on, the provider it names, what its back channel reaches that provider on, and
+    // the assurance provider it registers where it is given one (LIB-HOST-004).
+    private WebApplication Built(
+        ServerInMemory server,
+        Uri provider,
+        Func<HttpMessageHandler> channel,
+        IAssuranceProvider? assurance)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
 
         builder.Logging.ClearProviders();
+
+        if (assurance is not null)
+        {
+            builder.Services.AddSingleton(assurance);
+        }
 
         builder.Services.AddSingleton<IServer>(server);
         builder.Services.AddSingleton<IMailTransport>(Mail);

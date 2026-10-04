@@ -112,6 +112,10 @@ public static class ConformanceSuite
     /// </summary>
     /// <typeparam name="TResource">The host's type of the records asked about.</typeparam>
     /// <param name="services">The host's deployment, as it registered the library.</param>
+    /// <param name="deployment">
+    /// Builds the host's composition with the assurance provider it is given, or with
+    /// none. The suite calls it once for each step-up case and for no other.
+    /// </param>
     /// <param name="connect">
     /// Opens a connection to the deployment's database, which the suite writes the
     /// library's rows for each case through and closes.
@@ -121,16 +125,24 @@ public static class ConformanceSuite
     /// <param name="cancellationToken">Abandons the run.</param>
     /// <returns>
     /// A finding, <c>authz.truthtable.disagreement</c> naming the case and what each
-    /// path decided, for each case that either path decided otherwise.
+    /// path decided, for each case that either path decided otherwise; a finding on a
+    /// derived case names the relationship, and one on a step-up case the action's gate.
     /// </returns>
     /// <exception cref="ArgumentNullException">An argument is absent.</exception>
     /// <exception cref="ArgumentException">
-    /// The deployment declares no such type, or a case names a scenario its declaration
-    /// does not place it in.
+    /// The deployment declares no such type, a case names a scenario its declaration
+    /// does not place it in, or a step-up case names a permission the declaration binds
+    /// to no step-up gate.
     /// </exception>
-    /// <remarks>Implements LIB-TEST-001 AC2, AUTHZ-TEST-001 and AUTHZ-PRIN-001.</remarks>
+    /// <remarks>
+    /// Implements LIB-TEST-001 AC2, AUTHZ-TEST-001 and AUTHZ-PRIN-001. A step-up case is
+    /// judged from the report of an assurance provider of the suite's own, in a
+    /// composition the factory builds for that case, so the provider the deployment
+    /// registers, or its having none, decides no case (chapter 10 section 5.30).
+    /// </remarks>
     public static async ValueTask<ConformanceReport> TruthTableAsync<TResource>(
         IServiceProvider services,
+        DeploymentFactory deployment,
         Func<CancellationToken, ValueTask<DbConnection>> connect,
         IConformanceRows<TResource> rows,
         IReadOnlyList<TruthTableCase> cases,
@@ -138,6 +150,7 @@ public static class ConformanceSuite
         where TResource : class
     {
         ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(deployment);
         ArgumentNullException.ThrowIfNull(connect);
         ArgumentNullException.ThrowIfNull(rows);
 
@@ -146,7 +159,7 @@ public static class ConformanceSuite
             services.GetRequiredService<TimeProvider>(),
             services.GetRequiredService<RandomNumberGenerator>());
 
-        return await new TruthTable<TResource>(services, library, rows)
+        return await new TruthTable<TResource>(services, deployment, library, rows)
             .RunAsync(cases, cancellationToken)
             .ConfigureAwait(false);
     }

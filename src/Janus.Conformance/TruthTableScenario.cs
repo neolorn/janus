@@ -11,7 +11,9 @@ namespace Janus.Conformance;
 /// resource type, from what the type's declaration says of its containment and its
 /// derivations, so a case states only the scenario, the permission and the outcome.
 /// Every role a case names allows the case's permission, but for
-/// <see cref="RoleWithoutPermission"/>, whose role allows nothing.
+/// <see cref="RoleWithoutPermission"/>, whose role allows nothing. A step-up scenario
+/// is a grant on the record at an action bound to a step-up gate, judged from the
+/// report of an assurance provider of the suite's own (LIB-TEST-001 AC2, LIB-HOST-004).
 /// </remarks>
 public enum TruthTableScenario
 {
@@ -122,4 +124,53 @@ public enum TruthTableScenario
     /// </summary>
     [JsonStringEnumMemberName("deny-over-derived-grant")]
     DenyOverDerivedGrant = 16,
+
+    /// <summary>
+    /// A grant on the record, at an action bound to a step-up gate, where the assurance
+    /// report meets the gate.
+    /// </summary>
+    [JsonStringEnumMemberName("stepup-met")]
+    StepUpMet = 17,
+
+    /// <summary>
+    /// A grant on the record, at an action bound to a step-up gate, where the assurance
+    /// report is below the level the gate asks.
+    /// </summary>
+    [JsonStringEnumMemberName("stepup-level-unmet")]
+    StepUpLevelUnmet = 18,
+
+    /// <summary>
+    /// A grant on the record, at an action bound to a step-up gate, where the assurance
+    /// report was not attained phishing-resistant.
+    /// </summary>
+    [JsonStringEnumMemberName("stepup-phishingresistance-unmet")]
+    StepUpPhishingResistanceUnmet = 19,
+
+    /// <summary>
+    /// A grant on the record, at an action bound to a step-up gate, where the assurance
+    /// report is older than the gate's maximum age.
+    /// </summary>
+    [JsonStringEnumMemberName("stepup-age-unmet")]
+    StepUpAgeUnmet = 20,
+
+    /// <summary>
+    /// A grant on the record, at an action bound to a step-up gate, where the assurance
+    /// report names an instant after now.
+    /// </summary>
+    [JsonStringEnumMemberName("stepup-instant-future")]
+    StepUpInstantFuture = 21,
+
+    /// <summary>
+    /// A grant on the record, at an action bound to a step-up gate, where the assurance
+    /// provider fails to give a report.
+    /// </summary>
+    [JsonStringEnumMemberName("stepup-provider-failed")]
+    StepUpProviderFailed = 22,
+
+    /// <summary>
+    /// A grant on the record, at an action bound to a step-up gate, where the deployment
+    /// registers no assurance provider.
+    /// </summary>
+    [JsonStringEnumMemberName("stepup-provider-absent")]
+    StepUpProviderAbsent = 23,
 }
