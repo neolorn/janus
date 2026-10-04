@@ -148,8 +148,10 @@ internal sealed class FingerprintKeyRotation(
             {
                 KeyRotationProgress reached = open ?? progress;
 
-                return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                    .Match(() => Result.Success(reached), Result.Failure<KeyRotationProgress>);
+                // CONV-DESIGN-003: another run completed it, so this one wrote nothing.
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Success(reached);
             }
 
             progress = open;
@@ -199,11 +201,8 @@ internal sealed class FingerprintKeyRotation(
 
         KeyRotationProgress? latest = await rotations.LatestAsync(Kind, cancellationToken).ConfigureAwait(false);
 
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure<KeyRetirement>(notCommitted);
-        }
+        // CONV-DESIGN-003: the read wrote nothing.
+        await work.RollbackAsync().ConfigureAwait(false);
 
         if (Held() is not { } held || (latest is not null && latest.Version != held.Current))
         {
@@ -293,8 +292,8 @@ internal sealed class FingerprintKeyRotation(
             if (await CommittedAsync(progress, cancellationToken).ConfigureAwait(false)
                 is not { CompletedAt: null } committed)
             {
-                (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                    .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+                // CONV-DESIGN-003: nothing was written.
+                await work.RollbackAsync().ConfigureAwait(false);
 
                 return progress;
             }
@@ -307,8 +306,8 @@ internal sealed class FingerprintKeyRotation(
 
             if (batch.Last is not SubjectKeyId last)
             {
-                (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                    .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+                // CONV-DESIGN-003: nothing was written.
+                await work.RollbackAsync().ConfigureAwait(false);
 
                 return progress;
             }
@@ -340,8 +339,8 @@ internal sealed class FingerprintKeyRotation(
             if (await CommittedAsync(progress, cancellationToken).ConfigureAwait(false)
                 is not { RetiredAt: null } committed)
             {
-                (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                    .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+                // CONV-DESIGN-003: nothing was written.
+                await work.RollbackAsync().ConfigureAwait(false);
 
                 return (progress, swept);
             }
@@ -351,6 +350,15 @@ internal sealed class FingerprintKeyRotation(
             taken = await store
                 .RecomputeRemainingAsync(KeyRotation.BatchSize, time.GetUtcNow(), cancellationToken)
                 .ConfigureAwait(false);
+
+            if (taken == 0)
+            {
+                // CONV-DESIGN-003: nothing was left, so nothing was written.
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return (progress, swept);
+            }
+
             progress.Swept(taken);
 
             await rotations.RecordAsync(progress, cancellationToken).ConfigureAwait(false);

@@ -67,7 +67,8 @@ public sealed class KeyRotationTests : IAsyncDisposable
     /// <summary>
     /// CONV-DESIGN-003 AC5: a retirement that finds the rotation retired by another run
     /// while it waited for the progress is refused under that hold, and rolls its unit
-    /// of work back; the read and the sweep before it committed on their own.
+    /// of work back; the read and the sweep before it wrote nothing and rolled back too
+    /// (AC10).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -91,8 +92,58 @@ public sealed class KeyRotationTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.RotationNotReady, Code(refused));
         Assert.Empty(_audit.Entries);
         Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(3, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: a pass and a sweep that find nothing left write nothing and
+    /// roll their units of work back; the start and the completion, which write,
+    /// commit.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_APassWithNothingLeftIsRolledBackAsync()
+    {
+        _ring.KeyEncryptionKeys = Keys(current: 1, 1);
+
+        Result<KeyRotationProgress> rotated = await Rotation.ReWrapAsync(TestContext.Current.CancellationToken);
+
+        Assert.Null(Code(rotated));
+        Assert.NotNull(_store.Latest!.CompletedAt);
+        Assert.False(_work.Open);
         Assert.Equal(2, _work.Committed);
-        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(2, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10: a rotation another run completed while this one waited for
+    /// the progress answers the rotation as that run left it, having written nothing at
+    /// its completion, and rolls that unit of work back.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ACompletionAnotherRunMadeIsRolledBackAsync()
+    {
+        _ring.KeyEncryptionKeys = Keys(current: 1, 1);
+
+        int held = 0;
+
+        _store.Holding = () =>
+        {
+            if (++held == 4)
+            {
+                _store.Latest = Completed(retiredAt: null);
+            }
+        };
+
+        Result<KeyRotationProgress> rotated = await Rotation.ReWrapAsync(TestContext.Current.CancellationToken);
+
+        Assert.Null(Code(rotated));
+        Assert.Single(_audit.Entries);
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Committed);
+        Assert.Equal(3, _work.RolledBack);
     }
 
     private static KeyRotationProgress Completed(DateTimeOffset? retiredAt) =>

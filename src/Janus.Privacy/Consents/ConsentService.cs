@@ -259,7 +259,10 @@ internal sealed class ConsentService(
                 is not { WithdrawnAt: null } consent
             || !await consents.WithdrawConsentAsync(subject, purpose, now, cancellationToken).ConfigureAwait(false))
         {
-            return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            // CONV-DESIGN-003: taken back meanwhile, so nothing was written.
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success();
         }
 
         if (await AnnouncedAsync(subject, purpose, ConsentChange.Withdrawn, now, cancellationToken)
@@ -356,7 +359,10 @@ internal sealed class ConsentService(
         // unwritten and is the objection this asks for.
         if (!await consents.AddAsync(subject, objection, cancellationToken).ConfigureAwait(false))
         {
-            return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            // CONV-DESIGN-003: nothing was written.
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success();
         }
 
         if (await ObjectedAsync(subject, purpose, objecting: true, now, cancellationToken)
@@ -435,7 +441,10 @@ internal sealed class ConsentService(
                 is not ObjectionRecord objection
             || !await consents.WithdrawObjectionAsync(subject, purpose, now, cancellationToken).ConfigureAwait(false))
         {
-            return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
+            // CONV-DESIGN-003: taken back meanwhile, so nothing was written.
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success();
         }
 
         if (await ObjectedAsync(subject, purpose, objecting: false, now, cancellationToken)

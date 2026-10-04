@@ -232,6 +232,63 @@ public sealed class ConsentTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC10: a withdrawal of a consent or of an objection that another
+    /// transaction made first, and an objection that meets one recorded meanwhile, each
+    /// answer success having written nothing, so each unit of work is rolled back.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AChangeMadeMeanwhileIsRolledBackAsync()
+    {
+        await GrantAsync(Recommendations);
+
+        _consents.Holding = () =>
+        {
+            _consents.Holding = null;
+            _ = _consents.WithdrawConsentAsync(Ahmed, Recommendations, Noon, CancellationToken.None).AsTask();
+        };
+        _work.Reset();
+
+        Assert.True(await WithdrawAsync(Recommendations));
+        Assert.Equal((0, 1, false), (_work.Committed, _work.RolledBack, _work.Open));
+
+        Assert.True(await ObjectAsync(Security));
+
+        _consents.Holding = () =>
+        {
+            _consents.Holding = null;
+            _ = _consents.WithdrawObjectionAsync(Ahmed, Security, Noon, CancellationToken.None).AsTask();
+        };
+        _work.Reset();
+
+        Result withdrawn = await Consents.WithdrawObjectionAsync(Acting, Security, CancellationToken.None);
+
+        Assert.True(withdrawn.Match(() => true, _ => false));
+        Assert.Equal((0, 1, false), (_work.Committed, _work.RolledBack, _work.Open));
+
+        _consents.Adding = () =>
+        {
+            _consents.Adding = null;
+            _ = _consents
+                .AddAsync(
+                    Ahmed,
+                    new ObjectionRecord(
+                        Security,
+                        ConsentService.Notice,
+                        "1",
+                        ConsentMechanism.Administrator,
+                        Noon,
+                        WithdrawnAt: null),
+                    CancellationToken.None)
+                .AsTask();
+        };
+        _work.Reset();
+
+        Assert.True(await ObjectAsync(Security));
+        Assert.Equal((0, 1, false), (_work.Committed, _work.RolledBack, _work.Open));
+    }
+
+    /// <summary>
     /// PRIV-SENS-002a AC1: withdrawing the consent-based purpose of a record announces
     /// that purpose alone, so a handler the host registered for the contractual
     /// purpose of the same record is never invoked by it.

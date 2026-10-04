@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A withdrawal of a consent or of an objection made meanwhile, an objection that meets
+  one recorded meanwhile, the erasure of an organization whose window was cancelled
+  meanwhile, and a pass, a sweep or a completion of a key rotation that finds nothing
+  left to do each answer as before and roll their transaction back.
 - A trust or a remembered browser found revoked under its lock, and the end of a
   suspension window for a loss report cancelled meanwhile, answer as before and roll
   their transaction back, having written nothing.

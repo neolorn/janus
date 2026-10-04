@@ -106,8 +106,10 @@ internal sealed class OrganizationErasureSweep(
         if (await organizations.EraseAsync(deletion.Organization, now, grace, cancellationToken).ConfigureAwait(false)
             is not IReadOnlyList<EndedMembership> ended)
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Success(0), Result.Failure<int>);
+            // CONV-DESIGN-003: the erasure wrote nothing.
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success(0);
         }
 
         // IDN-ORG-005: the record is filed under the organization it erased.
