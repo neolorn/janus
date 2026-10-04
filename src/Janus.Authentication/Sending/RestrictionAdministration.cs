@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Janus.Authentication.Alerting;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Policies;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -19,6 +20,7 @@ namespace Janus.Authentication.Sending;
 /// </summary>
 /// <param name="configuration">Where the restriction set is read.</param>
 /// <param name="administration">The one operation a runtime setting is written through.</param>
+/// <param name="scope">Whether the caller still holds the permission inside the unit of work.</param>
 /// <param name="ledger">Where credit is added.</param>
 /// <param name="audit">Where the change is written down.</param>
 /// <param name="suppliers">The host-registered key suppliers.</param>
@@ -34,6 +36,7 @@ namespace Janus.Authentication.Sending;
 internal sealed class RestrictionAdministration(
     IConfigurationStore configuration,
     ConfigurationAdministration administration,
+    AdministrativeScope scope,
     ISendLedger ledger,
     ISendAudit audit,
     RestrictionKeySuppliers suppliers,
@@ -120,6 +123,17 @@ internal sealed class RestrictionAdministration(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.RestrictionEdit, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
         }
 
         // D-166 X3: the set is read again under its row's lock and the edit made on what
@@ -298,6 +312,17 @@ internal sealed class RestrictionAdministration(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.RestrictionGrant, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
         }
 
         await ledger

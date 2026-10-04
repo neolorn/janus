@@ -874,7 +874,7 @@ public sealed class GrantEndpointTests : IAsyncLifetime
         {
             int rolledBack = _deployment.Work.RolledBack;
 
-            _deployment.Gate.Admitted = () => _deployment.Work.Meanwhile = () => _deployment.Gate.Restrict(actor);
+            _deployment.Gate.Admitted = _ => _deployment.Work.Meanwhile = () => _deployment.Gate.Restrict(actor);
 
             Answer refused = await change();
 

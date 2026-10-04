@@ -149,6 +149,31 @@ public sealed class SessionRevocationEndpointTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status200OK, (await customer.SendAsync("GET", "/auth/session")).Status);
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the administrator committed after the gate
+    /// step and before the first write refuses the revoking of one account's sessions
+    /// and of every session, and no session is ended.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesBothRevocationsAsync()
+    {
+        Session other = await OtherSessionAsync();
+        Browser administrator = await AuthorisedAsync(Permissions.SessionRevokeAccount);
+
+        _deployment.Gate.Grant(_deployment.Directory.Created[^1].Subject, Administration, Permissions.SessionRevoke);
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("POST", $"/admin/accounts/{other.Subject.Value}/sessions/revoke"));
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("POST", "/admin/sessions/revoke-all"));
+
+        Assert.Null(other.EndedAt);
+        Assert.Equal(StatusCodes.Status200OK, (await administrator.SendAsync("GET", "/auth/session")).Status);
+    }
+
     private async Task<(Browser Browser, SubjectId Subject)> SignedInAsync()
     {
         Browser browser = await Flow.SignedInAsync(_deployment);

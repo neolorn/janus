@@ -522,6 +522,25 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
                 .GetBoolean());
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the administrator committed after the gate
+    /// step and before the first write refuses the replacing of a policy, which stays as
+    /// it stood.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesAPolicyChangeAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("PUT", PathOf(Branch), Tightened));
+
+        Assert.Empty(_deployment.Changes.Written);
+        Assert.Null((await OverrideAsync(Branch)).RequiredAssurance);
+    }
+
     private static string PathOf(OrganizationId organization) => "/admin/organizations/" + organization + "/policy";
 
     private static string PolicyKey(OrganizationId organization) =>

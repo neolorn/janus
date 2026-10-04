@@ -19,6 +19,13 @@ against the public contract of LIB-API-001.
   and changing the members of a group ask the gate again inside their unit of work
   before the first write. A restriction of the acting account committed after the first
   ask refuses the change `authz.restricted` and leaves nothing written.
+- The administrative changes of accounts, organizations, their policies, domains,
+  invitations and memberships, sessions, the restriction set, maintenance records, the
+  break-glass credential and a recovery approval, and an account's own changes of its
+  profile, preferences, photo, credentials, deactivation and invitation
+  acknowledgement, ask the gate again inside their unit of work before the first
+  write, with the acting account's row locked first. A restriction committed after the
+  first ask refuses the change `authz.restricted` and leaves nothing written.
 - The shipped mail-server adapter lists an account whose `emailAddress` does not read as
   an email address, or that holds none, with no address, where it failed the listing
   for an account holding none. Reconciliation reads such a listing whole: the account

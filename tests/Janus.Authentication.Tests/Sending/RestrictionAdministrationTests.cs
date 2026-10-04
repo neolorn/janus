@@ -57,6 +57,8 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
         var administrative = OrganizationId.New(_clock);
         _administrative.Organization = administrative;
         _gate.GrantEveryone(administrative, Permissions.SystemAdminister);
+        _gate.GrantEveryone(administrative, Permissions.RestrictionEdit);
+        _gate.GrantEveryone(administrative, Permissions.RestrictionGrant);
     }
 
     private RestrictionAdministration Administration => Announcing(_events);
@@ -76,6 +78,7 @@ public sealed class RestrictionAdministrationTests : IAsyncDisposable
                 _events,
                 _work,
                 _clock),
+            new AdministrativeScope(_gate, _administrative),
             _ledger,
             _audit,
             RestrictionKeySuppliers.None,

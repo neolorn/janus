@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Events;
@@ -1052,6 +1053,93 @@ public sealed class CredentialServiceTests : IAsyncDisposable
         Assert.Equal(0, _work.Committed);
         Assert.Equal(1, _work.RolledBack);
         Assert.DoesNotContain(_credentials.Records, record => record.Action == AuditActions.CredentialRemoved);
+    }
+
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the account committed after the gate step
+    /// and before the first write refuses the opening and the completing of a key's
+    /// ceremony, a key's upgrade, a removal, a link and an unlink, each inside its unit
+    /// of work, which rolls back and leaves the credentials as they stood.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesEachCredentialChangeAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        CredentialAuthority authority = Authority(subject, session);
+
+        await RestrictedSinceTheGateStepAsync(
+            subject,
+            async () => Refused(await Service.BeginKeyAsync(authority, Factor.SecurityKey, cancellationToken)));
+
+        CredentialCeremony ceremony = Value(await Service.BeginKeyAsync(authority, Factor.SecurityKey, cancellationToken));
+
+        await RestrictedSinceTheGateStepAsync(
+            subject,
+            async () => Refused(await Service.CompleteKeyAsync(
+                authority,
+                Attestation(ceremony.Challenge, synced: false),
+                "This key",
+                Source,
+                cancellationToken)));
+
+        Assert.Empty(_authenticators.All);
+
+        EnrolledCredential key = Value(await Service.CompleteKeyAsync(
+            authority,
+            Attestation(ceremony.Challenge, synced: false),
+            "This key",
+            Source,
+            cancellationToken));
+
+        await PresentedAsync(subject, session);
+        await RestrictedSinceTheGateStepAsync(
+            subject,
+            async () => Refused(await Service.UpgradeKeyAsync(authority, key.Credential, cancellationToken)));
+        await RestrictedSinceTheGateStepAsync(
+            subject,
+            async () => Refused(await Service.RemoveAsync(authority, key.Credential, Source, cancellationToken)));
+        await RestrictedSinceTheGateStepAsync(
+            subject,
+            async () => Refused(await Service.LinkAsync(
+                authority,
+                Factor.Google,
+                "provider-subject",
+                Label("Google"),
+                Source,
+                cancellationToken)));
+
+        Assert.Equal(AuthenticatorState.Active, Assert.Single(_authenticators.All).State);
+
+        var linked = Authenticator.Linked(AuthenticatorId.New(_clock), subject, Factor.Google, Label("Google"), Noon);
+
+        await _authenticators.LinkAsync(linked, "provider-subject", cancellationToken);
+        await PresentedAsync(subject, session);
+        await RestrictedSinceTheGateStepAsync(
+            subject,
+            async () => Refused(await Service.UnlinkAsync(authority, Factor.Google, Source, cancellationToken)));
+
+        Assert.Equal([key.Credential, linked.Id], _authenticators.All.Select(held => held.Id));
+    }
+
+    // AUTHZ-GATE-006 AC3: the change made with the account restricted in the moment
+    // before the next unit of work begins, which is after the change's gate step. It is
+    // refused as the gate refuses, the unit of work it began is rolled back and none is
+    // left open; the restriction is lifted once the change has answered.
+    private async ValueTask RestrictedSinceTheGateStepAsync(SubjectId subject, Func<ValueTask<ErrorCode>> change)
+    {
+        int rolledBack = _work.RolledBack;
+
+        _restriction.Admitted = admitted => _work.Meanwhile = () => _restriction.Restrict(admitted);
+
+        ErrorCode refused = await change();
+
+        _restriction.Lift(subject);
+
+        Assert.Equal(ErrorCodes.Restricted, refused);
+        Assert.Equal(rolledBack + 1, _work.RolledBack);
+        Assert.False(_work.Open);
     }
 
     private CredentialService Service =>

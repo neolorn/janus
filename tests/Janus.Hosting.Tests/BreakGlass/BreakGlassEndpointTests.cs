@@ -1115,6 +1115,27 @@ public sealed class BreakGlassEndpointTests : IAsyncDisposable
     private AlertRaised Raised(AlertCondition condition) =>
         _deployment.Events.Of<AlertRaised>().Last(raised => raised.Condition == condition);
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the administrator committed after the gate
+    /// step and before the first write refuses the generation, and no credential is
+    /// issued or announced.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesAGenerationAsync()
+    {
+        Browser administrator = await SystemAdministratorAsync();
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("POST", Generate));
+
+        Assert.Empty(_deployment.BreakGlass.Issues);
+        Assert.DoesNotContain(
+            _deployment.Events.Of<AlertRaised>(),
+            raised => raised.Condition is AlertCondition.BreakGlassGenerated);
+    }
+
     private async Task<string> GeneratedAsync() => (await AdministratorAsync()).Credential;
 
     // A signed-in system administrator of the administrative organization.

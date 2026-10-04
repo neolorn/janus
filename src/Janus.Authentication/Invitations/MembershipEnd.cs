@@ -131,6 +131,26 @@ internal sealed class MembershipEnd(
             return Result.Failure(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written. A member ending
+        // their own membership goes on to lock that row itself, so it is taken for the
+        // change first.
+        if (acting == member)
+        {
+            await identifiers.HoldAsync(member, cancellationToken).ConfigureAwait(false);
+        }
+
+        if ((await gate
+                    .RequireAsync(context, Permissions.MembershipManage, organization, cancellationToken)
+                    .ConfigureAwait(false))
+                .Match<Error?>(() => null, error => error) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
         // A second end that read the membership before this one committed finds none
         // here, and is answered as the find would answer it.
         if (await memberships.EndAsync(member, organization, now, cancellationToken).ConfigureAwait(false)

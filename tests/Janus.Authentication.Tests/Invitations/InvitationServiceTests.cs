@@ -1172,6 +1172,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
 
         _identifiers.Holding = subject =>
         {
+            _identifiers.Holding = null;
             _ = _identifiers.Verified(subject, IdentifierKind.Email, "meanwhile@elsewhere.test");
 
             return ValueTask.CompletedTask;

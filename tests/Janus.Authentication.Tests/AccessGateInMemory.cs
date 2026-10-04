@@ -44,9 +44,10 @@ internal sealed class AccessGateInMemory : IAccessGate
 
     /// <summary>
     /// Gets or sets what happens once the gate next admits a modifying action, where a
-    /// test sets it: what follows an operation's gate step. It happens once.
+    /// test sets it: what follows an operation's gate step. It happens once, and is
+    /// handed the account admitted.
     /// </summary>
-    public Action? Admitted { get; set; }
+    public Action<SubjectId>? Admitted { get; set; }
 
     /// <summary>
     /// Restricts a principal's processing, as a restriction that committed does: every
@@ -110,7 +111,7 @@ internal sealed class AccessGateInMemory : IAccessGate
         if (context.Effective is SubjectId subject
             && (_granted.Contains((subject, organization, permission)) || _everyone.Contains((organization, permission))))
         {
-            return ValueTask.FromResult(Admit(permission));
+            return ValueTask.FromResult(Admit(subject, permission));
         }
 
         _refusals.Add((
@@ -291,12 +292,12 @@ internal sealed class AccessGateInMemory : IAccessGate
 
     // What a test set to follow the gate step runs once, after a modifying action is
     // admitted and before the caller is answered.
-    private Result Admit(Permission permission)
+    private Result Admit(SubjectId subject, Permission permission)
     {
-        if (permission.Action is not ("read" or "list" or "export") && Admitted is Action admitted)
+        if (permission.Action is not ("read" or "list" or "export") && Admitted is Action<SubjectId> admitted)
         {
             Admitted = null;
-            admitted();
+            admitted(subject);
         }
 
         return Result.Success();

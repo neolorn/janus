@@ -484,6 +484,46 @@ public sealed class InvitationEndpointTests : IAsyncDisposable
         return address;
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the administrator committed after the gate
+    /// step and before the first write refuses the issuing and the revoking of an
+    /// invitation and the ending of a membership, the administrator's own included, and
+    /// nothing of any is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesEachMembershipChangeAsync()
+    {
+        Browser administrator = await AuthorisedAsync();
+        SubjectId acting = _deployment.Directory.Created[^1].Subject;
+        var member = new SubjectId(Guid.NewGuid());
+
+        _deployment.Memberships.Place(member, Branch);
+        _deployment.Memberships.Place(acting, Branch);
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("POST", PathOf(Branch), Personal));
+
+        Assert.Empty(_deployment.Invitations.Held);
+
+        string id = (await administrator.SendAsync("POST", PathOf(Branch), Personal)).Text("id");
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("DELETE", PathOf(Branch) + "/" + id));
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("DELETE", MembershipOf(Branch, member)));
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("DELETE", MembershipOf(Branch, acting)));
+
+        Assert.False(Assert.Single(_deployment.Invitations.Held).IsRevoked);
+        Assert.Empty(_deployment.Endings.Ended);
+        Assert.Equal(AuditActions.InvitationIssued, Assert.Single(_deployment.OrganizationChanges.Changes).Action);
+    }
+
     private static string MembershipOf(OrganizationId organization, SubjectId member) =>
         "/admin/organizations/" + organization + "/memberships/" + member;
 

@@ -236,6 +236,17 @@ internal sealed class OrganizationDomainService(
             return Result.Failure<OrganizationDomain>(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.DomainManage, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<OrganizationDomain>(since);
+        }
+
         await domains.RecordAsync(listed, cancellationToken).ConfigureAwait(false);
         await audit
             .DomainChangedAsync(
@@ -443,6 +454,18 @@ internal sealed class OrganizationDomainService(
         {
             (await work.BeginAsync(cancellationToken).ConfigureAwait(false))
                 .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+
+            // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with
+            // the acting account's row held before any other lock, so a restriction
+            // committed since the gate step refuses the change before anything is written.
+            if (await scope.RefusedAsync(context, Permissions.DomainManage, cancellationToken).ConfigureAwait(false)
+                is Error since)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Change.Refused(acting, since);
+            }
+
             await administration
                 .HoldAsync(Settings.OrganizationPolicy, organization.ToString(), cancellationToken)
                 .ConfigureAwait(false);

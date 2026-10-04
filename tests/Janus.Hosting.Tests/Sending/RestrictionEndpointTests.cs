@@ -488,6 +488,42 @@ public sealed class RestrictionEndpointTests : IAsyncDisposable
         Assert.Empty(_deployment.Events.Of<SendingRestrictionGranted>());
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the administrator committed after the gate
+    /// step and before the first write refuses an edit, a deletion and a grant, and the
+    /// set and the credit stay as they stood.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesAnEditADeletionAndAGrantAsync()
+    {
+        Browser administrator = await AuthorisedAsync(
+            Permissions.RestrictionEdit,
+            Permissions.RestrictionGrant,
+            Permissions.SystemAdminister);
+        IReadOnlyList<Restriction> before = await InForceAsync();
+
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => EditedAsync(administrator, Tighter, "fewer texts"));
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync("DELETE", "/admin/restrictions/sms.source", ("reason", "a load test")));
+        await RestrictedSinceTheGateStep.RefusesAsync(
+            _deployment,
+            () => administrator.SendAsync(
+                "POST",
+                "/admin/restrictions/sms.destination/grant",
+                ("keyValue", "+201001234567"),
+                ("credit", 3),
+                ("reason", "their carrier dropped both codes")));
+
+        Assert.Equal(before, await InForceAsync());
+        Assert.Empty(_deployment.Changes.Written);
+        Assert.Empty(_deployment.Events.Of<SendingRestrictionChanged>());
+        Assert.Empty(_deployment.Events.Of<SendingRestrictionGranted>());
+    }
+
     private static Task<Answer> EditedAsync(Browser browser, object[] buckets, string? reason) =>
         browser.SendAsync(
             "PUT",

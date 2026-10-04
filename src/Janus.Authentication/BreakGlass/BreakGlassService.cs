@@ -272,6 +272,17 @@ internal sealed class BreakGlassService(
             return Result.Failure<GeneratedBreakGlass>(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.SystemAdminister, cancellationToken).ConfigureAwait(false)
+            is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<GeneratedBreakGlass>(since);
+        }
+
         await store.HoldAsync(cancellationToken).ConfigureAwait(false);
 
         BreakGlassCredential? standing = await store.StandingAsync(cancellationToken).ConfigureAwait(false);

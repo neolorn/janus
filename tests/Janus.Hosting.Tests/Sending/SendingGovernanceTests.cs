@@ -85,6 +85,8 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         var administrative = OrganizationId.New(_clock);
         _administrative.Organization = administrative;
         _gate.GrantEveryone(administrative, Permissions.SystemAdminister);
+        _gate.GrantEveryone(administrative, Permissions.RestrictionEdit);
+        _gate.GrantEveryone(administrative, Permissions.RestrictionGrant);
     }
 
     private SendingPath Path =>
@@ -109,6 +111,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
                 _events,
                 _work,
                 _clock),
+            new AdministrativeScope(_gate, _administrative),
             _ledger,
             _audit,
             RestrictionKeySuppliers.None,

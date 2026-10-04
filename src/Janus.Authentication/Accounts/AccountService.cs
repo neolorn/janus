@@ -209,6 +209,22 @@ internal sealed class AccountService(
             return Result.Failure(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written. A username's choice
+        // goes on to lock that row itself, so it is taken for the change first.
+        if (username is not null)
+        {
+            await identifiers.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
         if (username is Username chosen
             && await ChooseAsync(context, subject, session, chosen, now, cancellationToken)
                 .ConfigureAwait(false) is Error refused)
@@ -311,6 +327,16 @@ internal sealed class AccountService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
         }
 
         // The account application's own endpoint, where the person is always the
@@ -431,6 +457,16 @@ internal sealed class AccountService(
             return Result.Failure(notBegun);
         }
 
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
         held.Rename(named);
 
         await authenticators.RecordAsync(held, cancellationToken).ConfigureAwait(false);
@@ -499,6 +535,16 @@ internal sealed class AccountService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await restriction.RefusedAsync(context, cancellationToken).ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
         }
 
         // At most one credential carries the mark, which the database holds as well.
