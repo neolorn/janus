@@ -221,6 +221,9 @@ public sealed class ExportServiceTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.Throttled, refused.Code);
         Assert.Single(_ledger.Taken);
         Assert.Empty(_outbox.Deliveries);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>
