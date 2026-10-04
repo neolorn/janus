@@ -302,6 +302,96 @@ public sealed class SignInFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-FACT-002 AC7 and AUTH-FACT-002b AC6: a text code asked for after the first
+    /// factor, where the number's signal answers <c>risk</c> by then, sends nothing and
+    /// is answered with what the challenge still offers: 200 <c>factorRequired</c>
+    /// naming the factors left, and 422 <c>auth.factor.rejected</c> once none is.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002_AC7_ATextCodeAskedForAReportedNumberIsAnsweredWithWhatIsLeftAsync()
+    {
+        PhoneSignal reported = PhoneSignal.Clear;
+
+        await using var changing = new Deployment(
+            signals: new PhoneSignalProvider((_, _) => ValueTask.FromResult(reported)));
+
+        Flow.Prepare(changing);
+
+        changing.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+        changing.Configuration.Set(
+            Settings.PolicyDefault,
+            Policies.SystemDefault with
+            {
+                LoginFactors = new HashSet<Factor>([.. Policies.SystemDefault.LoginFactors, Factor.PhoneCode]),
+            });
+
+        _ = await Flow.SignedInAsync(changing);
+
+        changing.Clock.Advance(TimeSpan.FromMinutes(5));
+
+        SubjectId subject = changing.Directory.Created[^1].Subject;
+        Authenticator generator = Held(Factor.Totp, "Generator");
+
+        changing.Authenticators.Hold(Held(Factor.PhoneCode, "Phone"));
+        changing.Authenticators.Hold(generator);
+
+        var browser = new Browser(changing);
+        string challenge = await BegunAsync(browser);
+
+        Answer first = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "password"),
+            ("value", Flow.Password));
+
+        reported = PhoneSignal.Risk;
+
+        int sent = changing.Sms.Taken.Count;
+        Answer left = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "phoneCode"));
+
+        generator.Invalidate();
+
+        Answer none = await browser.SendAsync(
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "phoneCode"));
+
+        Assert.Equal("factorRequired", first.Text("status"));
+        Assert.Equal(StatusCodes.Status200OK, left.Status);
+        Assert.Equal("factorRequired", left.Text("status"));
+        Assert.Equal(
+            ["totp"],
+            left.Json().GetProperty("required").EnumerateArray().Select(factor => factor.GetString()));
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, none.Status);
+        Assert.Equal("auth.factor.rejected", none.Text("code"));
+        Assert.Equal(sent, changing.Sms.Taken.Count);
+
+        Authenticator Held(Factor factor, string named) =>
+            Authenticator.Existing(
+                AuthenticatorId.New(changing.Clock),
+                subject,
+                factor,
+                CredentialLabel.TryParse(named, out CredentialLabel label)
+                    ? label
+                    : throw new InvalidOperationException("The label does not read."),
+                AuthenticatorState.Active,
+                changing.Clock.GetUtcNow(),
+                null,
+                null,
+                confirmed: true,
+                factor is Factor.Totp ? new TotpMaterial(new byte[20], null) : null,
+                null,
+                isPreferred: false);
+    }
+
+    /// <summary>
     /// AUTH-FACT-002b AC6 and AUTH-ABUSE-003 AC1: a sign-in link asked for by text to a
     /// number the carrier reports a recent change for is not sent, and the ask is
     /// answered 202 in the bytes an ask for a number no account holds is answered in.

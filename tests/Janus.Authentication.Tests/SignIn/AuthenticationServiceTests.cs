@@ -1700,7 +1700,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         SignInChallenge began = await BeganAsync(Address);
 
         Assert.Equal([Factor.PhoneCode], Reached(await PresentAsync(began.Challenge, Factor.Password, Secret)).Required);
-        Assert.True((await AskedAsync(began.Challenge, stepping: null)).Match(() => true, _ => false));
+        Assert.True((await AskedAsync(began.Challenge, stepping: null)).Match(offered => offered is null, _ => false));
 
         SendRequest texted = Assert.Single(_notifications.Texts);
         SignInProgress reached = Reached(await PresentAsync(began.Challenge, Factor.PhoneCode, texted.Values["code"]));
@@ -1752,20 +1752,20 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         SignInChallenge began = await BeganAsync(Address);
 
-        Assert.True((await AskedAsync(began.Challenge, stepping: null)).Match(() => true, _ => false));
-        Assert.True((await AskedAsync("a-handle-nothing-opened", stepping: null)).Match(() => true, _ => false));
+        Assert.True((await AskedAsync(began.Challenge, stepping: null)).Match(offered => offered is null, _ => false));
+        Assert.True((await AskedAsync("a-handle-nothing-opened", stepping: null)).Match(offered => offered is null, _ => false));
         Assert.Empty(_notifications.Texts);
         Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
     }
 
     /// <summary>
-    /// AUTH-FACT-002b AC6: where the carrier reports a recent change of SIM or of
-    /// network when the text code is asked for, no code is issued and nothing goes to
-    /// the number; the ask is answered as every ask is, nothing is counted, and the
-    /// consideration is recorded.
+    /// AUTH-FACT-002 AC7, AUTH-FACT-002b AC6: where the carrier reports a recent change
+    /// of SIM or of network when the text code is asked for at a sign-in, no code is
+    /// issued and nothing goes to the number, nothing is counted, the consideration is
+    /// recorded, and a sign-in left with no factor is refused <c>auth.factor.rejected</c>.
     /// </summary>
     [Fact]
-    public async Task AUTH_FACT_002b_AC6_AReportedChangeAtTheAskSendsNoTextCodeAsync()
+    public async Task AUTH_FACT_002_AC7_AReportedChangeAtTheAskLeavingNoFactorIsRefusedAsync()
     {
         SubjectId subject = await AccountAsync();
 
@@ -1779,11 +1779,46 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         Answers(PhoneSignal.Risk);
 
-        Assert.True((await AskedAsync(began.Challenge, stepping: null)).Match(() => true, _ => false));
+        Assert.Equal(
+            ErrorCodes.FactorRejected,
+            (await AskedAsync(began.Challenge, stepping: null)).Match(_ => (ErrorCode?)null, error => error.Code));
         Assert.Empty(_notifications.Texts);
         Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
         Assert.Equal([(Factor.PhoneCode, (PhoneSignal?)PhoneSignal.Risk, (SubjectId?)subject)], _considered.Records);
         Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002 AC7, AUTH-FACT-002b AC6: a text code asked for at a sign-in whose
+    /// number answers <c>risk</c> is answered with the factors the challenge still
+    /// offers, the text code no longer among them, and sends nothing.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_002_AC7_AReportedChangeAtTheAskIsAnsweredWithTheFactorsLeftAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        Holds(subject, Factor.Totp);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await PresentAsync(began.Challenge, Factor.Password, Secret);
+
+        Answers(PhoneSignal.Risk);
+
+        SignInProgress? offered = (await AskedAsync(began.Challenge, stepping: null))
+            .Match(progress => progress, error => throw new InvalidOperationException(error.Code.ToString()));
+
+        Assert.Equal(SignInStatus.FactorRequired, offered?.Status);
+        Assert.Equal([Factor.Totp], offered?.Required);
+        Assert.Equal(AssuranceLevel.Aal1, offered?.AssuranceLevel);
+        Assert.Empty(_notifications.Texts);
+        Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
+        Assert.Equal([(Factor.PhoneCode, (PhoneSignal?)PhoneSignal.Risk, (SubjectId?)subject)], _considered.Records);
         Assert.Empty(_throttle.Counted);
     }
 
@@ -1803,7 +1838,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         SignInChallenge began = await BeganAsync(Address);
 
-        Assert.True((await AskedAsync(began.Challenge, subject)).Match(() => true, _ => false));
+        Assert.True((await AskedAsync(began.Challenge, subject)).Match(offered => offered is null, _ => false));
         Assert.Empty(_notifications.Texts);
         Assert.Null(await _pending.FindAsync(subject, Factor.PhoneCode, TestContext.Current.CancellationToken));
         Assert.Equal([(Factor.PhoneCode, (PhoneSignal?)PhoneSignal.Risk, (SubjectId?)subject)], _considered.Records);
@@ -1952,7 +1987,7 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     // AUTH-FACT-002 AC6: the text code asked for, in the language of the ask.
-    private ValueTask<Result> AskedAsync(string challenge, SubjectId? stepping) =>
+    private ValueTask<Result<SignInProgress?>> AskedAsync(string challenge, SubjectId? stepping) =>
         Service.AskAsync(challenge, Factor.PhoneCode, stepping, Source, Language, TestContext.Current.CancellationToken);
 
     // AUTH-FACT-002b: the deployment's own provider, standing for the carrier.

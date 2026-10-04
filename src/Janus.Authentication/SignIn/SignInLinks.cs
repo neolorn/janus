@@ -267,7 +267,10 @@ internal sealed class SignInLinks(
     /// <param name="source">The address the ask came from.</param>
     /// <param name="language">The language the ask was made in.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Nothing, or the refusal of the send.</returns>
+    /// <returns>
+    /// Whether the ask is answered as one that sent its code, which it is not where the
+    /// number's signal withheld it; or the refusal of the send.
+    /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     /// <remarks>
     /// Implements AUTH-FACT-002 AC6, AUTH-FACT-002b AC6 and AUTH-FACT-004. The code is an
@@ -275,9 +278,10 @@ internal sealed class SignInLinks(
     /// <c>code.signin.attempts</c>, and it goes out as <c>secondstep-code</c> under the
     /// purpose <c>secondfactor</c>. Where the carrier reports a recent change of SIM or
     /// of network for the number, nothing is issued and nothing goes out, the
-    /// consideration is recorded, and the ask is answered as every ask is.
+    /// consideration is recorded, and the caller is told so, since what the ask is
+    /// answered with then depends on where it was made (AUTH-FACT-002 AC7).
     /// </remarks>
-    public async ValueTask<Result> SendSecondStepAsync(
+    public async ValueTask<Result<bool>> SendSecondStepAsync(
         [NeverLogged] byte[] challenge,
         SubjectId subject,
         Factor factor,
@@ -303,17 +307,23 @@ internal sealed class SignInLinks(
 
         if (failure is not null)
         {
-            return Result.Failure(failure);
+            return Result.Failure<bool>(failure);
         }
 
         HeldIdentifiers held = await identifiers.HeldAsync(subject, cancellationToken).ConfigureAwait(false);
 
+        // An account with no number to text is sent nothing and answered as an ask
+        // that sent its code; only the carrier's signal is told apart.
         if (held.Texted() is not HeldIdentifier number
-            || !PhoneNumber.TryParse(number.Canonical, out PhoneNumber texted)
-            || !await signals.AllowsAsync(factor, number.Canonical, subject, cancellationToken)
+            || !PhoneNumber.TryParse(number.Canonical, out PhoneNumber texted))
+        {
+            return Result.Success(true);
+        }
+
+        if (!await signals.AllowsAsync(factor, number.Canonical, subject, cancellationToken)
                 .ConfigureAwait(false))
         {
-            return Result.Success();
+            return Result.Success(false);
         }
 
         string? settled = await identifiers.LanguageAsync(subject, cancellationToken).ConfigureAwait(false);
@@ -340,13 +350,13 @@ internal sealed class SignInLinks(
 
         if (failure is not null)
         {
-            return Result.Failure(failure);
+            return Result.Failure<bool>(failure);
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
-            return Result.Failure(notBegun);
+            return Result.Failure<bool>(notBegun);
         }
 
         await pending
@@ -367,10 +377,10 @@ internal sealed class SignInLinks(
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
         {
-            return Result.Failure(notCommitted);
+            return Result.Failure<bool>(notCommitted);
         }
 
-        return Result.Success();
+        return Result.Success(true);
     }
 
     /// <summary>

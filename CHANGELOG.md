@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A text code asked for at a sign-in, after a first factor, whose number's signal
+  answers `risk` is no longer answered 202: nothing is issued, sent or counted, the
+  consideration is recorded, and `POST /auth/factor` answers with what the challenge
+  then offers, 200 `factorRequired` naming the factors left or 422
+  `auth.factor.rejected` where none is. An ask before a first factor is still 202
+  and sends nothing.
 - A session records the instant it was last downgraded (`sessions.downgraded_at`,
   migration `RecordWhenASessionWasDowngraded`). Acknowledging an invitation downgrades
   every session the account holds, in the transaction that attaches the membership:
