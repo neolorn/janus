@@ -625,6 +625,34 @@ public sealed class PublicSurfaceTests
     }
 
     /// <summary>
+    /// CONV-DESIGN-007, CONV-CODE-007: a composition a job builds inside the application
+    /// over another credential registers the key ring the start filled, as it stands,
+    /// and calls the storage's method and never the core's, whose ring would be a
+    /// second, empty one. The audit retention and the restore test build the only two.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_007_AJobsOwnCompositionRegistersTheFilledRingAndNeverCallsTheCoreMethod()
+    {
+        (string Name, string Text)[] compositions =
+        [
+            .. Repository
+                .Project(Mounting)
+                .Select(file => (Name: Path.GetFileName(file), Text: File.ReadAllText(file)))
+                .Where(file => file.Text.Contains("new " + nameof(ServiceCollection) + "()", StringComparison.Ordinal))
+                .OrderBy(file => file.Name, StringComparer.Ordinal),
+        ];
+
+        Assert.Equal(["AuditRetention.cs", "RestoreTest.cs"], compositions.Select(file => file.Name));
+        Assert.All(compositions, file =>
+        {
+            Assert.Contains("IKeyRing ring", file.Text, StringComparison.Ordinal);
+            Assert.Contains("services.AddSingleton(ring);", file.Text, StringComparison.Ordinal);
+            Assert.Contains("services.AddStorageArea(", file.Text, StringComparison.Ordinal);
+            Assert.DoesNotContain("AddCoreArea", file.Text, StringComparison.Ordinal);
+        });
+    }
+
+    /// <summary>
     /// CONV-DESIGN-007 AC8: no project but the hosting project names a namespace of the
     /// shared framework's own, and of the framework's extensions each names the
     /// container's abstractions alone. A project that names them takes them by the
