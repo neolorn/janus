@@ -199,7 +199,7 @@ internal static partial class BrowserProfileLog
         EventId = 15,
         Level = LogLevel.Information,
         Message = "The refusal recorded as {Correlation} was answered as an absent record ({CorrelationId}).")]
-    public static partial void Concealed(ILogger log, string correlationId, Guid correlation);
+    public static partial void Concealed(ILogger log, string correlationId, AuditRecordId correlation);
 
     /// <summary>
     /// A refusal on a type that conceals, made after the endpoint had begun its answer,
@@ -212,7 +212,7 @@ internal static partial class BrowserProfileLog
         EventId = 16,
         Level = LogLevel.Error,
         Message = "The refusal recorded as {Correlation} came after the answer had begun, so the connection was closed ({CorrelationId}).")]
-    public static partial void ConcealedTooLate(ILogger log, string correlationId, Guid correlation);
+    public static partial void ConcealedTooLate(ILogger log, string correlationId, AuditRecordId correlation);
 
     /// <summary>
     /// A round trip to a social provider that could not be bound to what the browser

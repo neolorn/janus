@@ -10,6 +10,8 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The two log entries of a concealed refusal carry the audit record they name as an
+  `AuditRecordId`, in the text it was always written in.
 - `IUnitOfWork.RollbackAsync` ends an operation with nothing of it saved: the
   transaction, every tracked change and every registration to run after the commit are
   discarded. It takes no cancellation token and answers no result. An operation that

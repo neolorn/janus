@@ -266,8 +266,8 @@ internal sealed class DeclarationCoverage(
 
     // An origin is the scheme, host and port alone, written as a browser writes it, so
     // one address stands for it and nothing else does; anything else is no origin.
-    private static string? Origin(string address) =>
-        Uri.TryCreate(address, UriKind.Absolute, out Uri? parsed)
+    private static string? Origin(string location) =>
+        Uri.TryCreate(location, UriKind.Absolute, out Uri? parsed)
             ? parsed.GetLeftPart(UriPartial.Authority)
             : null;
 
