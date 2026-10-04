@@ -266,8 +266,9 @@ internal sealed class PrivacyRequestService(
 
         if (failure is Error undecidable)
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Failure(undecidable), Result.Failure);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(undecidable);
         }
 
         // IDN-LIFE-003: what the fulfilment could not do leaves the request open.
@@ -276,6 +277,8 @@ internal sealed class PrivacyRequestService(
 
         if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(failure);
         }
 
@@ -359,8 +362,9 @@ internal sealed class PrivacyRequestService(
 
         if (failure is Error undecidable)
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Failure(undecidable), Result.Failure);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(undecidable);
         }
 
         held.Refuse(now, stated);
@@ -509,10 +513,9 @@ internal sealed class PrivacyRequestService(
 
         if (await requests.OpenAsync(request.Subject, request.Type, cancellationToken).ConfigureAwait(false))
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(
-                    () => Result.Failure<PrivacyRequestReceipt>(Error.From(ErrorCodes.RequestDuplicate)),
-                    Result.Failure<PrivacyRequestReceipt>);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<PrivacyRequestReceipt>(Error.From(ErrorCodes.RequestDuplicate));
         }
 
         await requests.AddAsync(request, cancellationToken).ConfigureAwait(false);
