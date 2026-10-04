@@ -615,7 +615,7 @@ CONV-DESIGN-008 criterion 3, "no project's build reports MSB3277": no test decid
 
 What earlier runs left: nine worktrees held uncommitted work whose commits were all in the branch; each is kept as a patch outside the repository and removed with its branch. The reason rule of the configuration route that one of them carried is on the branch at the endpoint and in the service (`ConfigurationEndpointTests.OPS_CFG_005_EveryChangeCarriesAReasonAsync`, `ConfigurationAdministrationTests.OPS_CFG_008_AC2_ATighteningWithNoReasonIsRefusedAsync`). Four stashes are dropped: three held earlier states of the docs, and every file of the fourth is in the history (the changelog describes `MapAuthorizationTables`).
 
-**In progress when this section was written.** The X9 sweep of question 58 (every return after `BeginAsync`) runs in four parts, `part/rollback-accounts`, `part/rollback-factors`, `part/rollback-sessions` and `part/rollback-privacy`, and question 57 in `part/registration`, each in a worktree of its own cut from `83819e32`. None is merged. The parts of D-183 the owner's split names (sending, privacy, sessions, authorization, gates) and the work after their merges are not started.
+**In progress when this section was written.** The X9 sweep of question 58 (every return after `BeginAsync`) runs in four parts, `part/rollback-accounts`, `part/rollback-factors`, `part/rollback-sessions` and `part/rollback-privacy`, and question 57 in `part/registration` (merged, below), each in a worktree of its own cut from `83819e32`. The parts of D-183 the owner's split names (sending, privacy, sessions, authorization, gates) and the work after their merges are not started.
 
 ### The section C sweeps, place by place
 
@@ -962,6 +962,16 @@ The rollback is written inline at each return. The helpers that committed a refu
 - Parked: the under-age refusal of `RegistrationService.RecordAgeAsync` (question 78); the taken identifier at `RegistrationService.CompleteAsync` (question 79); the operations that discard a send's refusal inside their unit of work (question 80); the throttle's count inside the verification's unit of work (question 81).
 - Observed, outside the sweep: the holding read of `OrganizationDomainService` throws where `BeginAsync` fails although its operations return a result (CONV-DESIGN-003 criterion 7).
 
+#### Question 57, `part/registration`, merged as `2f4bdeaf` (`dae18972`, `66771b55`, `52cf4197`, `89e6fdc2`, `59b89a67`, `a8dc5501`, `58847dde`)
+
+- `Janus.Core`, `AddCoreArea`: the key ring and the mail server in use (4 singletons). `Janus.Storage`, `AddStorageArea`: gains the schema check. `Janus.Authorization`, `AddAuthorizationArea(declaration)`: 16 registrations. `Janus.Privacy`, `AddPrivacyArea`: 20. `Janus.Authentication`, `AddAuthenticationArea`: 81. `Janus.Identity`, `Janus.Cli` and `Janus.Conformance` expose none.
+- `AddJanus` calls the five methods and registers the types `Janus.Hosting` defines (the gates of the request, the alerts, the concealed refusals, the gated settings, the notices, the word list and the leaked-password corpus, the location database, the mail-server tokens, the configuration service, the sending service, the restore test, the audit retention, the browser boundary, the hosted services, the provider's setup). `AddKeyRing` is removed.
+- Each command's composition calls `AddCoreArea` and `AddStorageArea`, registers the ring its key document filled after them, and bootstrap and `configure` call `AddAuthenticationArea`.
+- `Microsoft.AspNetCore.App` is a framework reference of Core, Authentication, Authorization, Privacy, Storage, Cli and Conformance; the lockfiles of Authentication, Cli, Conformance and Storage lose their `Microsoft.Extensions.*` entries.
+- The descriptors `AddJanus` makes (903) were compared before and after: for each service type the sequence of lifetime, kind and made type is the same, and the order of the hosted services is the same.
+- Tests: `PublicSurfaceTests.CONV_DESIGN_007_AC7_EachProjectExposesItsOneRegistrationMethodAndNoOtherExposesOne`, `PublicSurfaceTests.CONV_DESIGN_007_AC7_TheEntryPointCallsEveryMethodAndEachRegistersItsOwnProjectsTypesAlone`, `PublicSurfaceTests.CONV_DESIGN_007_AC8_OnlyTheHostingProjectUsesTheFrameworkAndTheOthersItsContainerAlone`. The integration tests of `Janus.Cli.Tests` (72) and of `Janus.Hosting.Tests` (272) passed on the part.
+- Not built: criterion 7's clause that every type of such a project `AddJanus` registers is registered by that project's own method has no test; nine registrations stay in Hosting on questions 82 to 84. Questions 85 and 86 park the commands' own registrations and two inner compositions.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1118,6 +1128,7 @@ The rollback is written inline at each return. The helpers that committed a refu
 | `FingerprintKeyTests` at the merge of `part/gates` (`d5a7fc0e`) | `RestrictionKey` takes a kind since 122 | INF-HOST-003 criterion 4 | The test passes `RestrictionKeyKind.Destination`; test only |
 | `.gitleaks.toml` (`1a5a2af6`) | The scan of the full history flagged `PRIV-BREACH-002` under `generic-api-key` in `docs/reports/corrections-4.md` line 313 (from `a22c76f7`), where the row of D-166 D.8 cites the item beside its tests | OPS-DEP-004; the working guide's section 3, an allow-list entry for specification text | One entry: that file and the exact value `^PRIV-BREACH-002$`, `condition = "AND"`, reason "an item identifier a report cites beside the tests that carry it" |
 | Fakes and tests of the unit tests, at the X9 sweep (`a64c93e2`, `ccfec930`, `9c84477a`) | No fake let a membership end between the find and the end; no fake of `IDeploymentSeed` stood in the unit tests; two tests of the host asserted a commit on a refusal under the lock | CONV-DESIGN-003 criterion 5, CONV-TEST-007; the working guide's section 3, test infrastructure | `MembershipEndingInMemory` takes a hook as `InvitationStoreInMemory` has; `DeploymentSeedInMemory` is added; the two tests assert the rollback. No runtime code |
+| `Janus.Core.csproj` and the fixtures of `Janus.Hosting.Tests` (`66771b55`, `a8dc5501`) | The fixtures stood the key ring up through `AddKeyRing` of Hosting, which question 57 removes, and relied on the provider's setup to register `SigningCredentialSource`, now registered by `AddAuthenticationArea` | CONV-DESIGN-007; the working guide's section 3, a grant to a test project and a fixture arrangement | `Janus.Core` grants `InternalsVisibleTo` to `Janus.Hosting.Tests`, and `LibraryStructureTests` permits it; the fixtures call `AddCoreArea` and register `SigningCredentialSource` themselves. No runtime code. CONV-LAYOUT-002 criterion 1's list in `08` does not name the grant |
 
 ## 4. Open questions
 
@@ -2490,6 +2501,57 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** A refused code is counted through `ThrottleService.FailedAsync`, which begins a level of its own inside the verification's outermost unit of work. The verification commits where the count succeeded and rolls back where it failed. The unit also holds the wrong try on the code's record.
 - **What the specification says.** "An operation whose refusal keeps such a count begins the outermost unit of work and is never called inside another's."
 - **Parked.** The site is left as `fe7a5cdc` made it.
+- **Answer:** pending.
+
+**82. Tier 2. CONV-DESIGN-007 criterion 7 and D-183 question 57: the types of `Janus.Core` that `AddJanus` registers beside the ring and the mail server in use.**
+
+- **Item.** Question 57.
+- **What the code needs.** `AddJanus` registers `RestrictionKeySuppliers.None`, `PreferenceDeclarations.None`, `ReservedUsernames.Default` and `DictionaryWords.Default` (each where the host registered none), the host's declaration, and `DeclaredProcessing` by a factory that reads `AuthorizationModel`, which `Janus.Core` cannot see. `AddCoreArea` is also called by every command, which has no declaration.
+- **What the specification says.** Criterion 7: every type of such a project that `AddJanus` registers is registered by that project's own method. D-183 question 57: Core's method registers the key ring and the mail server in use.
+- **Readings.**
+  1. These are the host's declarations and their defaults, outside the rule; they stay in Hosting.
+  2. The four defaults move to `AddCoreArea`, the commands then registering them too; the declaration and `DeclaredProcessing` take a parameter or stay.
+- **Parked.** Those six registrations, left in Hosting, and with them the test of criterion 7's third clause.
+- **Answer:** pending.
+
+**83. Tier 3. CONV-DESIGN-007 criterion 7 and LIB-SEAM-001 criterion 1: where `AccessGate` is registered.**
+
+- **Item.** Question 57.
+- **The contradiction.** Criterion 7 puts `AccessGate` and its `IAccessGate` forward in `AddAuthorizationArea`. `AccessSeamTests.LIB_SEAM_001_AC1_ReplacingWhatEvaluatesIsOneChange` holds `AccessGate` to two files, its own and `HostingRegistration.cs`. Hosting keeps naming it for the factories of `GatedSettings` and `GatedUnscopedRefusal`, which are Hosting's types, so the move makes three.
+- **Parked.** The two registrations, left in Hosting.
+- **Answer:** pending.
+
+**84. Tier 2. CONV-DESIGN-007 criterion 7 and CONV-LAYOUT-001: the factory of `SendingValidation`.**
+
+- **Item.** Question 57.
+- **What the code needs.** `SendingValidation` is a type of `Janus.Authentication` made by a factory in `Janus.Hosting` that builds its placeholders from `Janus.Privacy`'s `ErasureLedgerSubscriber.Joined`, which Authentication cannot reference.
+- **What the specification says.** A factory registration belongs with the type it builds; no area depends on another.
+- **Readings.**
+  1. It stays in Hosting, the one project that sees both.
+  2. The placeholders reach the type another way, and the factory moves; this changes a class.
+- **Parked.** That registration, left in Hosting.
+- **Answer:** pending.
+
+**85. Tier 2. CONV-DESIGN-007: the types only a command registers.**
+
+- **Item.** Question 57.
+- **What the code needs.** The commands' compositions register `DeploymentBootstrap`, `ClientRegistry` and `ProtectedConfiguration` (Authentication), `ErasureReplay`, `KeyRotation` and `FingerprintKeyRotation` (Privacy), `KeyRotationStore` and `FingerprintRotationStore` (Storage). `LibraryStructureTests` holds the files that may name `ProtectedConfiguration`, `KeyRotation` and the rotation stores (OPS-CFG-004 criterion 2, OPS-SEC-003 criterion 1, DR-009a criterion 5). The replay, the rotations and the client registration call no area method but Core's and Storage's, using none of the others' registered types.
+- **What the specification says.** A project's method holds "the registrations of the types that project defines and no other"; criterion 7 speaks of what `AddJanus` registers; a command's composition "calls the methods of the projects it uses".
+- **Readings.**
+  1. A type only a command resolves is registered by that command; nothing changes.
+  2. They move into the area methods, and the three criteria's file lists change with them.
+- **Parked.** Those registrations, left in the commands.
+- **Answer:** pending.
+
+**86. Tier 2. CONV-DESIGN-007: the inner compositions of `AuditRetention` and `RestoreTest`.**
+
+- **Item.** Question 57.
+- **What the code needs.** Each builds a container of its own over another credential, registering the outer key ring's instance and calling `AddStorageArea`, not `AddCoreArea`.
+- **What the specification says.** Core's method registers the key ring; these compositions need the ring already filled.
+- **Readings.**
+  1. An inner composition over the filled ring registers that instance, as a command does after `AddCoreArea`; nothing changes.
+  2. Each calls `AddCoreArea` and then registers the instance.
+- **Parked.** Both, left as they are.
 - **Answer:** pending.
 
 ## 5. Gate result
