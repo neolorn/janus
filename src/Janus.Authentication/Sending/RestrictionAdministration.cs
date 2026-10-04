@@ -197,6 +197,7 @@ internal sealed class RestrictionAdministration(
                 new SendingRestrictionChanged(now, Edit + ":" + name + ":" + now.Ticks, name, loosening)
                 {
                     Actor = actor,
+                    Effective = context.Effective,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -347,6 +348,7 @@ internal sealed class RestrictionAdministration(
                     stated)
                 {
                     Actor = actor,
+                    Effective = context.Effective,
                 },
                 cancellationToken)
             .ConfigureAwait(false);

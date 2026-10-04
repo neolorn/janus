@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- Every event raised with the access context of a person who acted now carries
+  `Effective` beside `Actor`, each as the context gives it: `AccountSuspended`,
+  `AccountReactivated`, `AccountDeletionRequested` and `AccountDeletionCancelled` raised
+  from a session or by an administrator, `CredentialEnrolled`,
+  `SendingRestrictionChanged`, `SendingRestrictionGranted`, `TakedownReversed` and the
+  `AlertRaised` of a destination change. `AccountReactivated` and
+  `AccountDeletionCancelled` raised from the link a notice carried, with no context,
+  carry neither, where they carried the subject as `Actor`.
 - The drift check of materialised derivations records each grant it writes as
   `authz.grant.materialised` and each grant it takes back as `authz.grant.retracted`
   (`AuditActions.GrantMaterialised`, `AuditActions.GrantRetracted`), in the transaction

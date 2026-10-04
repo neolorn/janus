@@ -126,7 +126,10 @@ internal sealed class PasswordService(
     /// What the account reaches with the credentials it holds, which is what decides
     /// whether the shorter floor applies (AUTH-PASS-001a).
     /// </param>
-    /// <param name="actor">Who set it, where a person the library knows did.</param>
+    /// <param name="actor">
+    /// The context of who set it, where a person the library knows did; its acting and
+    /// effective identity are carried on the event (AUTHZ-IMP-001).
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The advice to show beside the password that was accepted, or the failure that
@@ -138,7 +141,7 @@ internal sealed class PasswordService(
         [NeverLogged] byte[] password,
         IReadOnlyCollection<string> ownWords,
         AssuranceLevel reachable,
-        SubjectId? actor,
+        AccessContext? actor,
         CancellationToken cancellationToken)
     {
         Error? failure = null;
@@ -185,7 +188,8 @@ internal sealed class PasswordService(
                         FactorCatalogue.Password)
                     {
                         Subject = subject,
-                        Actor = actor,
+                        Actor = actor?.Acting,
+                        Effective = actor?.Effective,
                     },
                     cancellationToken)
                 .ConfigureAwait(false))

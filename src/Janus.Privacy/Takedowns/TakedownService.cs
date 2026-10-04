@@ -161,6 +161,7 @@ internal sealed class TakedownService(
                     {
                         Subject = subject,
                         Actor = context.Acting,
+                        Effective = context.Effective,
                     },
                     cancellationToken)
                 .ConfigureAwait(false))
@@ -346,6 +347,7 @@ internal sealed class TakedownService(
                     {
                         Subject = subject,
                         Actor = context.Acting,
+                        Effective = context.Effective,
                     },
                     cancellationToken)
                 .ConfigureAwait(false))

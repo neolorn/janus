@@ -181,7 +181,7 @@ internal sealed class AlertDestinationChange(
         }
 
         Result published = await events
-            .PublishAsync(raised with { Actor = actor }, cancellationToken)
+            .PublishAsync(raised with { Actor = actor, Effective = context.Effective }, cancellationToken)
             .ConfigureAwait(false);
 
         if (published.Match(() => (Error?)null, error => error) is Error unpublished)

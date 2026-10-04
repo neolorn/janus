@@ -171,7 +171,8 @@ internal sealed class AccountLifecycle(
                 new AccountSuspended(now, Key(subject, now), SuspensionOrigin.Self)
                 {
                     Subject = subject,
-                    Actor = subject,
+                    Actor = context.Acting,
+                    Effective = context.Effective,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -246,7 +247,6 @@ internal sealed class AccountLifecycle(
                 new AccountReactivated(now, Key(link.Subject, now))
                 {
                     Subject = link.Subject,
-                    Actor = link.Subject,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -366,7 +366,8 @@ internal sealed class AccountLifecycle(
                 new AccountDeletionRequested(now, Key(subject, now), DeletionOrigin.Self, erasesAt)
                 {
                     Subject = subject,
-                    Actor = subject,
+                    Actor = context.Acting,
+                    Effective = context.Effective,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
@@ -440,7 +441,6 @@ internal sealed class AccountLifecycle(
                 new AccountDeletionCancelled(now, Key(link.Subject, now))
                 {
                     Subject = link.Subject,
-                    Actor = link.Subject,
                 },
                 cancellationToken)
             .ConfigureAwait(false);
