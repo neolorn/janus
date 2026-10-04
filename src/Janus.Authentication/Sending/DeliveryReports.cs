@@ -82,17 +82,22 @@ internal sealed class DeliveryReports(
             ? ledger.HoldsAsync(reference, cancellationToken)
             : ledger.ReleaseAsync(reference, cancellationToken);
 
-    // The counts are kept whenever the callback was answered, a rejection included;
-    // a failure of anything else leaves the transaction to roll back.
+    // CONV-DESIGN-003, INT-GEN-003: a report that was answered commits what it wrote,
+    // and a rejected one its kept writes, the admission's count, the rejection's count
+    // and the raise past the threshold; any other failure rolls back.
     private async ValueTask<Result> KeptAsync(Result outcome, CancellationToken cancellationToken)
     {
-        if (outcome.Match(() => true, error => error.Code == ErrorCodes.CallbackRejected))
+        if (!outcome.Match(() => true, error => error.Code == ErrorCodes.CallbackRejected))
         {
-            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notCommitted)
-            {
-                return Result.Failure(notCommitted);
-            }
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return outcome;
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
         }
 
         return outcome;

@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A delivery report that fails for any cause but its rejection (a setting that does not
+  read, a raise that cannot be written) leaves nothing of itself behind and no
+  transaction open. A rejected report, like every rejected callback, keeps its
+  admission count, its rejection's count and the `callback-verification-failed` raise.
 - A route or query value that does not read as its type is refused 400
   `api.request.malformed` with `details.member` naming it, the first in the order the
   endpoint declares where more than one does not read. An identifier in a path that is
