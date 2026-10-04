@@ -10,6 +10,16 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- An identifier replaced twice within `identifier.change.coolingoff` keeps both
+  displaced values reserved, each behind a removal of its own, and each undo link
+  restores its own value, where the second replace overwrote the first removal and
+  spent its link. `POST /account/identifiers/{id}/undo` and `IIdentifiers.UndoAsync`
+  move the value back onto an identifier that now holds another value and displace
+  that value as a replace does: it is reserved for a window of its own and the
+  account's other channels are sent its undo link. The migration
+  `KeyEachIdentifierRemovalByItsOwnIdentifier` gives each row of
+  `identity.identifier_removals` a key of its own, `removal_id`, and keeps
+  `identifier_id` as the identifier the value came from.
 - An enrolment session reaches the routes `POST /enrol/begin` lists and no other
   credential route: `DELETE /account/credentials/{id}` and
   `POST /account/credentials/{id}/upgrade` refuse it 403 `authz.denied`, as do

@@ -341,6 +341,7 @@ public sealed class ModelTests
             "identifier_removals.identifier_id",
             "identifier_removals.is_locked",
             "identifier_removals.kind",
+            "identifier_removals.removal_id",
             "identifier_removals.removed_at",
             "identifier_removals.subject",
             "identifier_removals.undo_fingerprint",

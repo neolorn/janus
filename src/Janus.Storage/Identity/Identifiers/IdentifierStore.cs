@@ -224,7 +224,7 @@ internal sealed class IdentifierStore(
 
         byte[][] candidates = Candidates(canonical);
 
-        List<IdentifierId> ended = await context.IdentifierRemovals
+        List<IdentifierRemovalId> ended = await context.IdentifierRemovals
             .Where(removal =>
                 removal.Subject == subject
                 && removal.Kind == kind
@@ -270,18 +270,6 @@ internal sealed class IdentifierStore(
     }
 
     /// <inheritdoc/>
-    public async ValueTask<IdentifierRemoval?> FindRemovalAsync(
-        IdentifierId id,
-        CancellationToken cancellationToken)
-    {
-        IdentifierRemovalRecord? row = await context.IdentifierRemovals
-            .FindAsync([id], cancellationToken)
-            .ConfigureAwait(false);
-
-        return row is null ? null : await ReadAsync(row, cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc/>
     public async ValueTask RecordRemovalAsync(
         IdentifierRemoval removal,
         CancellationToken cancellationToken)
@@ -311,6 +299,7 @@ internal sealed class IdentifierStore(
                     new IdentifierRemovalRecord
                     {
                         Id = removal.Id,
+                        Origin = removal.Origin,
                         Subject = removal.Subject,
                         Kind = removal.Kind,
                         Fingerprint = Fingerprinted(removal.Canonical),
@@ -342,7 +331,7 @@ internal sealed class IdentifierStore(
     }
 
     /// <inheritdoc/>
-    public async ValueTask DiscardRemovalAsync(IdentifierId id, CancellationToken cancellationToken)
+    public async ValueTask DiscardRemovalAsync(IdentifierRemovalId id, CancellationToken cancellationToken)
     {
         IdentifierRemovalRecord? row = await context.IdentifierRemovals
             .FindAsync([id], cancellationToken)
@@ -552,6 +541,7 @@ internal sealed class IdentifierStore(
         {
             return IdentifierRemoval.Existing(
                 row.Id,
+                row.Origin,
                 row.Subject,
                 row.Kind,
                 Given(dataKey, row, IdentifierRemovalConfiguration.EnteredColumn, row.Entered),

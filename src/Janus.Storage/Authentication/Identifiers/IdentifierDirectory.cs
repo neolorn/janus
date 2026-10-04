@@ -401,7 +401,7 @@ internal sealed class IdentifierDirectory(
         return removal is null
             ? null
             : new GivenUpIdentifier(
-                removal.Id,
+                removal.Origin,
                 removal.Subject,
                 removal.Kind,
                 removal.Entered,
@@ -410,11 +410,17 @@ internal sealed class IdentifierDirectory(
     }
 
     /// <inheritdoc/>
-    public async ValueTask TakeBackAsync(
-        IdentifierId id,
+    public async ValueTask<bool> TakeBackAsync(
+        byte[] undo,
+        DateTimeOffset at,
+        DateTimeOffset expiresAt,
+        byte[] displacedUndo,
         CancellationToken cancellationToken)
     {
-        IdentifierRemoval removal = await identifiers.FindRemovalAsync(id, cancellationToken)
+        ArgumentNullException.ThrowIfNull(undo);
+        ArgumentNullException.ThrowIfNull(displacedUndo);
+
+        IdentifierRemoval removal = await identifiers.FindRemovalAsync(undo, cancellationToken)
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException("The identifier was not given up.");
 
@@ -422,10 +428,17 @@ internal sealed class IdentifierDirectory(
             .FindBySubjectAsync(removal.Subject, cancellationToken)
             .ConfigureAwait(false);
 
-        // A replace left the row standing under its new value, so the undo moves the
-        // old value back onto it; a removal took the row away, so the undo adds it.
-        if (set.Find(id) is Identifier standing)
+        IdentifierRemoval? displaced = null;
+
+        // A replace left the row standing under another value, so the undo moves its own
+        // value back onto it; a removal took the row away, so the undo adds it.
+        if (set.Find(removal.Origin) is Identifier standing)
         {
+            // REG-IDENT-006 (D-189): what the identifier then holds is displaced as a
+            // replace displaces a value, into a removal of its own taken before the
+            // value moves. A value nobody proved is discarded, not removed.
+            displaced = standing.IsVerified ? IdentifierRemoval.Of(standing, at, expiresAt, displacedUndo) : null;
+
             standing.Replace(removal.Entered, removal.Canonical, removal.VerifiedAt);
         }
         else
@@ -437,7 +450,16 @@ internal sealed class IdentifierDirectory(
 
         await identifiers.RecordAsync(set, cancellationToken).ConfigureAwait(false);
 
-        await identifiers.DiscardRemovalAsync(id, cancellationToken).ConfigureAwait(false);
+        // The removal the link named is given up and no other: a second removal of the
+        // same identifier keeps its value reserved and its undo good.
+        await identifiers.DiscardRemovalAsync(removal.Id, cancellationToken).ConfigureAwait(false);
+
+        if (displaced is not null)
+        {
+            await identifiers.RecordRemovalAsync(displaced, cancellationToken).ConfigureAwait(false);
+        }
+
+        return displaced is not null;
     }
 
     private static HeldIdentifier Held(Identifier identifier) =>

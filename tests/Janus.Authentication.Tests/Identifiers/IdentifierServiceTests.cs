@@ -1649,6 +1649,118 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-006 AC10: an identifier replaced twice within the window, through three
+    /// distinct values, stands behind two removals. Both displaced values stay reserved
+    /// to the account, and each undo link restores the value its own removal holds.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AC10_AnIdentifierReplacedTwiceStandsBehindTwoRemovalsAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+        string first = await ReplacedAsync(email, Second);
+        string second = await ReplacedAsync(email, Third);
+
+        int standing = _directory.RemovalsOf(email);
+        SubjectId? primary = await ReservedAsync(Primary);
+        SubjectId? replaced = await ReservedAsync(Second);
+        Accepted(await Service.UndoAsync(second, Source, TestContext.Current.CancellationToken));
+        string afterSecond = Assert.Single(await HeldAsync(), identifier => identifier.Id == email).Canonical;
+        Accepted(await Service.UndoAsync(first, Source, TestContext.Current.CancellationToken));
+        string afterFirst = Assert.Single(await HeldAsync(), identifier => identifier.Id == email).Canonical;
+
+        Assert.Equal(2, standing);
+        Assert.Equal(_person, primary);
+        Assert.Equal(_person, replaced);
+        Assert.Equal(Second, afterSecond);
+        Assert.Equal(Primary, afterFirst);
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 AC10: the undo of the first of two replaces moves its own value
+    /// back and leaves the second removal as it stands, so the second value is still
+    /// reserved and its link still good, and the first link is spent.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AC10_AnUndoLeavesTheOtherRemovalOfItsIdentifierAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+        string first = await ReplacedAsync(email, Second);
+        string second = await ReplacedAsync(email, Third);
+
+        Accepted(await Service.UndoAsync(first, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(Primary, Assert.Single(await HeldAsync(), identifier => identifier.Id == email).Canonical);
+        Assert.Null(await ReservedAsync(Primary));
+        Assert.Equal(_person, await ReservedAsync(Second));
+        Assert.Equal(
+            ErrorCodes.ChangeWindowElapsed,
+            Refused(await Service.UndoAsync(first, Source, TestContext.Current.CancellationToken)));
+        Accepted(await Service.UndoAsync(second, Source, TestContext.Current.CancellationToken));
+        Assert.Equal(Second, Assert.Single(await HeldAsync(), identifier => identifier.Id == email).Canonical);
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 (D-189): an undo onto an identifier that holds another value
+    /// displaces that value as a replace does. The displaced value is reserved to the
+    /// account behind a removal of its own, under both values' locks taken together,
+    /// and its undo goes to the channels the account still has and restores it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AnUndoOntoAStandingIdentifierDisplacesTheValueItHoldsAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+        string first = await ReplacedAsync(email, Second);
+        int told = _notifications.Texts.Count(sent => sent.Message is MessageKind.IdentifierRemoved);
+        _directory.Locked.Clear();
+
+        Accepted(await Service.UndoAsync(first, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal([(IdentifierKind.Email, Primary), (IdentifierKind.Email, Second)], _directory.Locked);
+        Assert.Equal(Primary, Assert.Single(await HeldAsync(), identifier => identifier.Id == email).Canonical);
+        Assert.Equal(_person, await ReservedAsync(Second));
+        Assert.Equal(1, _directory.RemovalsOf(email));
+        Assert.Equal(told + 1, _notifications.Texts.Count(sent => sent.Message is MessageKind.IdentifierRemoved));
+        Assert.DoesNotContain(_notifications.Mail, sent => sent.Message is MessageKind.IdentifierRemoved);
+        Accepted(await Service.UndoAsync(
+            _notifications.Texts.Last(sent => sent.Message is MessageKind.IdentifierRemoved).Token(),
+            Source,
+            TestContext.Current.CancellationToken));
+        Assert.Equal(Second, Assert.Single(await HeldAsync(), identifier => identifier.Id == email).Canonical);
+        Assert.Equal(_person, await ReservedAsync(Primary));
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 (D-189): an undo that moves a value back onto a standing identifier
+    /// adds none to the kind, so it is not refused for the maximum even where a second
+    /// replace has since moved the identifier on.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AnUndoOntoAStandingIdentifierIsNeverRefusedTheMaximumAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+        string first = await ReplacedAsync(email, Second);
+        _ = await ReplacedAsync(email, Third);
+
+        Accepted(await Service.UndoAsync(first, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(Primary, Assert.Single(await HeldAsync(), identifier => identifier.Kind is IdentifierKind.Email).Canonical);
+        Assert.Equal(_person, await ReservedAsync(Third));
+        Assert.Equal(2, _directory.RemovalsOf(email));
+    }
+
+    /// <summary>
     /// REG-IDENT-006 AC4: the sessions the account holds elsewhere end with the
     /// identifier, and the one that asked is left alone.
     /// </summary>
@@ -3494,13 +3606,19 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
         IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
         Accepted(await Service.RemoveAsync(Acting, Stepped(), second, Source, TestContext.Current.CancellationToken));
-        _directory.Holding = _ =>
-            _directory.TakeBackAsync(second, TestContext.Current.CancellationToken);
+        string undo = Undo();
+        _directory.Holding = async _ =>
+            await _directory.TakeBackAsync(
+                OpaqueToken.Of(undo).Fingerprint(),
+                _clock.GetUtcNow(),
+                _clock.GetUtcNow() + Settings.IdentifierChangeCoolingOff.Default,
+                Drawn(),
+                TestContext.Current.CancellationToken);
         _work.Reset();
 
         Assert.Equal(
             ErrorCodes.ChangeWindowElapsed,
-            Refused(await Service.UndoAsync(Undo(), Source, TestContext.Current.CancellationToken)));
+            Refused(await Service.UndoAsync(undo, Source, TestContext.Current.CancellationToken)));
 
         Assert.False(_work.Open);
         Assert.Equal(0, _work.Committed);
@@ -3869,6 +3987,30 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
             Source,
             TestContext.Current.CancellationToken));
     }
+
+    // A replace of single-address mode carried through its code, and the undo link the
+    // remaining channel was sent for the value it displaced (REG-IDENT-007).
+    private async Task<string> ReplacedAsync(IdentifierId identifier, string value)
+    {
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            identifier,
+            value,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        await VerifiedAsync(identifier);
+
+        return _notifications.Texts.Last(sent => sent.Message is MessageKind.IdentifierRemoved).Token();
+    }
+
+    private async Task<SubjectId?> ReservedAsync(string canonical) =>
+        await _directory.ReservedToAsync(
+            IdentifierKind.Email,
+            canonical,
+            _clock.GetUtcNow(),
+            TestContext.Current.CancellationToken);
 
     // The code is in the verification-code record it is answered from, as it is in
     // the message.

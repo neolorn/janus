@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Core;
+using Janus.Identity.Accounts;
 using Janus.Identity.Identifiers;
 using Janus.Privacy.SubjectKeys;
 using Janus.Storage.Authentication.Identifiers;
@@ -13,6 +16,9 @@ using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Preferences;
 using Janus.Storage.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Storage.Tests;
@@ -30,6 +36,11 @@ namespace Janus.Storage.Tests;
 [Trait("kind", "integration")]
 public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixture<DatabaseFixture>, IDisposable
 {
+    private const string KeyedByItsIdentifier = "20261004125537_ClaimAnOutboxRowBeforeItIsDelivered";
+
+    private const string KeyEachIdentifierRemovalByItsOwnIdentifier =
+        "20261004230636_KeyEachIdentifierRemovalByItsOwnIdentifier";
+
     private static readonly DateTimeOffset Noon = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
 
     private static readonly FingerprintKeys Elsewhere =
@@ -276,6 +287,72 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
         Assert.Equal(
             first,
             (await Store(reading).FindRemovalAsync(lapsed, TestContext.Current.CancellationToken))?.Subject);
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 AC10: a removal row written while the table was keyed on the
+    /// identifier keeps that identifier as the one it came from and takes an identifier
+    /// of its own, a version 7 value made from the instant the row carries, and a
+    /// second removal of the same identifier is then a row beside it.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AC10_ARowWrittenBeforeTheKeyKeepsItsIdentifierUnderOneOfItsOwnAsync()
+    {
+        const string insert =
+            """
+            INSERT INTO identity.identifier_removals
+                (identifier_id, subject, kind, fingerprint, fingerprint_version, enc_entered, enc_canonical,
+                 is_locked, added_at, verified_at, removed_at, expires_at, undo_fingerprint)
+            VALUES
+                (@identifier, @subject, 'email', @fingerprint, 1, @value, @value,
+                 FALSE, @at, @at, @at, @lapses, @undo);
+            """;
+        string moved = await database.CreateDatabaseAsync("removal_key");
+        SubjectId subject = Subjects.New();
+        var identifier = Guid.CreateVersion7(Noon);
+        await MigrateAsync(moved, KeyedByItsIdentifier);
+
+        await using (StoreContext writing = DatabaseFixture.Context(moved))
+        {
+            await new AccountStore(writing)
+                .AddAsync(Account.Create(subject, Noon), TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var connection = new NpgsqlConnection(moved);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(insert, Row(identifier, subject, Noon.AddHours(2)));
+        await MigrateAsync(moved, KeyEachIdentifierRemovalByItsOwnIdentifier);
+        await connection.ReloadTypesAsync(TestContext.Current.CancellationToken);
+        (Guid Removal, Guid Origin) carried = await connection.QuerySingleAsync<(Guid, Guid)>(
+            "SELECT removal_id, identifier_id FROM identity.identifier_removals;");
+        await connection.ExecuteAsync(
+            insert.Replace("(identifier_id,", "(removal_id, identifier_id,", StringComparison.Ordinal)
+                .Replace("(@identifier,", "(@removal, @identifier,", StringComparison.Ordinal),
+            new
+            {
+                removal = Guid.CreateVersion7(Noon.AddHours(3)),
+                identifier,
+                subject = subject.Value,
+                fingerprint = RandomNumberGenerator.GetBytes(32),
+                value = RandomNumberGenerator.GetBytes(48),
+                at = Noon.AddHours(3),
+                lapses = Noon.AddHours(75),
+                undo = RandomNumberGenerator.GetBytes(32),
+            });
+
+        Assert.Equal(identifier, carried.Origin);
+        Assert.NotEqual(identifier, carried.Removal);
+        Assert.Equal(7, carried.Removal.Version);
+        Assert.Equal(
+            Noon.AddHours(2).ToUnixTimeMilliseconds().ToString("x12", CultureInfo.InvariantCulture),
+            carried.Removal.ToString("N", CultureInfo.InvariantCulture)[..12]);
+        Assert.Equal(
+            2,
+            await connection.ExecuteScalarAsync<int>(
+                "SELECT count(*)::int FROM identity.identifier_removals WHERE identifier_id = @identifier;",
+                new { identifier }));
     }
 
     /// <summary>
@@ -821,6 +898,26 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
 
     private IdentifierStore Store(StoreContext context) =>
         new(context, _deployment.Ring, _deployment.Randomness);
+
+    private static async Task MigrateAsync(string connectionString, string target)
+    {
+        await using StoreContext context = DatabaseFixture.Context(connectionString);
+        await context.GetService<IMigrator>().MigrateAsync(target, TestContext.Current.CancellationToken);
+    }
+
+    // A removal row as the table carried it while it was keyed on the identifier. The
+    // ciphertext is never read, so it is drawn and not encrypted.
+    private static object Row(Guid identifier, SubjectId subject, DateTimeOffset at) =>
+        new
+        {
+            identifier,
+            subject = subject.Value,
+            fingerprint = RandomNumberGenerator.GetBytes(32),
+            value = RandomNumberGenerator.GetBytes(48),
+            at,
+            lapses = at.AddHours(72),
+            undo = RandomNumberGenerator.GetBytes(32),
+        };
 
     // A verified primary personal email displaced by a corporate address, as an
     // acknowledgement into an organization whose mail is integrated leaves it.

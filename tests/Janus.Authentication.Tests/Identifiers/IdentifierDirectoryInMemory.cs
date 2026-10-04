@@ -17,9 +17,7 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
 {
     private readonly Dictionary<SubjectId, List<HeldIdentifier>> _held = [];
     private readonly Dictionary<(SubjectId Subject, IdentifierKind Kind), HeldBackup> _backups = [];
-    private readonly Dictionary<IdentifierId, GivenUpIdentifier> _givenUp = [];
-    private readonly Dictionary<IdentifierId, byte[]> _undo = [];
-    private readonly Dictionary<IdentifierId, DateTimeOffset> _proved = [];
+    private readonly List<Removal> _givenUp = [];
     private readonly Dictionary<string, DateTimeOffset> _usernames = new(StringComparer.Ordinal);
     private readonly Dictionary<SubjectId, string> _languages = [];
 
@@ -123,7 +121,7 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        foreach (GivenUpIdentifier given in _givenUp.Values)
+        foreach (GivenUpIdentifier given in _givenUp.Select(removal => removal.Given))
         {
             if (given.Kind == kind
                 && string.Equals(given.Canonical, canonical, StringComparison.Ordinal)
@@ -392,15 +390,7 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
 
         EndReservation(subject, displaced.Kind, canonical);
 
-        _givenUp[id] = new GivenUpIdentifier(
-            id,
-            subject,
-            displaced.Kind,
-            displaced.Entered,
-            displaced.Canonical,
-            expiresAt);
-        _undo[id] = undo;
-        _proved[id] = displaced.VerifiedAt ?? at;
+        GiveUp(subject, displaced, at, expiresAt, undo);
 
         Replace(
             subject,
@@ -469,55 +459,44 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
 
         _ = Of(subject).RemoveAll(identifier => identifier.Id == id);
 
-        _givenUp[id] = new GivenUpIdentifier(
-            id,
-            subject,
-            given.Kind,
-            given.Entered,
-            given.Canonical,
-            expiresAt);
-        _undo[id] = undo;
-        _proved[id] = given.VerifiedAt ?? at;
+        GiveUp(subject, given, at, expiresAt, undo);
 
         return ValueTask.CompletedTask;
     }
 
-    /// <inheritdoc/>
-    public ValueTask<GivenUpIdentifier?> GivenUpAsync(byte[] undo, CancellationToken cancellationToken)
-    {
-        foreach (KeyValuePair<IdentifierId, byte[]> held in _undo)
-        {
-            if (held.Value.SequenceEqual(undo))
-            {
-                return ValueTask.FromResult<GivenUpIdentifier?>(_givenUp[held.Key]);
-            }
-        }
-
-        return ValueTask.FromResult<GivenUpIdentifier?>(null);
-    }
+    /// <summary>
+    /// How many removals hold a value an identifier gave up, each undone apart
+    /// (REG-IDENT-006).
+    /// </summary>
+    /// <param name="id">The identifier the values came from.</param>
+    /// <returns>The number of removals standing behind it.</returns>
+    public int RemovalsOf(IdentifierId id) => _givenUp.Count(removal => removal.Given.Id == id);
 
     /// <inheritdoc/>
-    public ValueTask TakeBackAsync(IdentifierId id, CancellationToken cancellationToken)
+    public ValueTask<GivenUpIdentifier?> GivenUpAsync(byte[] undo, CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_givenUp.Find(removal => removal.Undo.SequenceEqual(undo))?.Given);
+
+    /// <inheritdoc/>
+    public ValueTask<bool> TakeBackAsync(
+        byte[] undo,
+        DateTimeOffset at,
+        DateTimeOffset expiresAt,
+        byte[] displacedUndo,
+        CancellationToken cancellationToken)
     {
-        GivenUpIdentifier given = _givenUp[id];
+        Removal removal = _givenUp.Find(held => held.Undo.SequenceEqual(undo))
+            ?? throw new InvalidOperationException("The identifier was not given up.");
+
+        GivenUpIdentifier given = removal.Given;
         List<HeldIdentifier> all = Of(given.Subject);
+        HeldIdentifier? standing = all.SingleOrDefault(identifier => identifier.Id == given.Id);
 
-        if (all.Any(identifier => identifier.Id == id))
-        {
-            Replace(
-                given.Subject,
-                id,
-                identifier => identifier with
-                {
-                    Entered = given.Entered,
-                    Canonical = given.Canonical,
-                    VerifiedAt = _proved[id],
-                });
-        }
-        else
+        _ = _givenUp.Remove(removal);
+
+        if (standing is null)
         {
             all.Add(new HeldIdentifier(
-                id,
+                given.Id,
                 given.Kind,
                 given.Entered,
                 given.Canonical,
@@ -525,16 +504,30 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
                 IsPrimary: false,
                 IsLocked: false,
                 IsPersonal: false,
-                _proved[id]));
+                removal.Proved));
 
-            Settle(given.Subject, id);
+            Settle(given.Subject, given.Id);
+
+            return ValueTask.FromResult(false);
         }
 
-        _ = _givenUp.Remove(id);
-        _ = _undo.Remove(id);
-        _ = _proved.Remove(id);
+        if (standing.IsVerified)
+        {
+            GiveUp(given.Subject, standing, at, expiresAt, displacedUndo);
+        }
 
-        return ValueTask.CompletedTask;
+        Replace(
+            given.Subject,
+            given.Id,
+            identifier => identifier with
+            {
+                Entered = given.Entered,
+                Canonical = given.Canonical,
+                IsVerified = true,
+                VerifiedAt = removal.Proved,
+            });
+
+        return ValueTask.FromResult(standing.IsVerified);
     }
 
     private HeldBackup Backup(SubjectId subject, IdentifierKind kind) =>
@@ -579,19 +572,24 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
     // reservation, so its undo answers to nothing.
     private void EndReservation(SubjectId subject, IdentifierKind kind, string canonical)
     {
-        foreach (IdentifierId ended in _givenUp.Values
-            .Where(given =>
-                given.Subject == subject
-                && given.Kind == kind
-                && string.Equals(given.Canonical, canonical, StringComparison.Ordinal))
-            .Select(given => given.Id)
-            .ToList())
-        {
-            _ = _givenUp.Remove(ended);
-            _ = _undo.Remove(ended);
-            _ = _proved.Remove(ended);
-        }
+        _ = _givenUp.RemoveAll(removal =>
+            removal.Given.Subject == subject
+            && removal.Given.Kind == kind
+            && string.Equals(removal.Given.Canonical, canonical, StringComparison.Ordinal));
     }
+
+    // REG-IDENT-006: each removal or replace holds its value behind a removal of its
+    // own, which names the identifier it came from and answers to its own undo.
+    private void GiveUp(
+        SubjectId subject,
+        HeldIdentifier given,
+        DateTimeOffset at,
+        DateTimeOffset expiresAt,
+        byte[] undo) =>
+        _givenUp.Add(new Removal(
+            new GivenUpIdentifier(given.Id, subject, given.Kind, given.Entered, given.Canonical, expiresAt),
+            undo,
+            given.VerifiedAt ?? at));
 
     private HeldIdentifier Required(SubjectId subject, IdentifierId id) =>
         Of(subject).SingleOrDefault(identifier => identifier.Id == id)
@@ -639,4 +637,6 @@ internal sealed class IdentifierDirectoryInMemory : IIdentifierDirectory
             Replace(subject, id, identifier => identifier with { IsPrimary = true });
         }
     }
+
+    private sealed record Removal(GivenUpIdentifier Given, byte[] Undo, DateTimeOffset Proved);
 }

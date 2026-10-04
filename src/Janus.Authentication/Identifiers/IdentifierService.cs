@@ -922,17 +922,17 @@ internal sealed class IdentifierService(
         ArgumentNullException.ThrowIfNull(linkToken);
         ArgumentNullException.ThrowIfNull(source);
 
-        GivenUpIdentifier? given = string.IsNullOrWhiteSpace(linkToken)
+        byte[]? answering = string.IsNullOrWhiteSpace(linkToken) ? null : OpaqueToken.Of(linkToken).Fingerprint();
+
+        GivenUpIdentifier? given = answering is null
             ? null
-            : await directory
-                .GivenUpAsync(OpaqueToken.Of(linkToken).Fingerprint(), cancellationToken)
-                .ConfigureAwait(false);
+            : await directory.GivenUpAsync(answering, cancellationToken).ConfigureAwait(false);
 
         DateTimeOffset now = time.GetUtcNow();
 
         // A token that answers to nothing and one whose window has run out are the
         // same answer: neither says whether a removal ever existed.
-        if (given is null || now >= given.ExpiresAt)
+        if (answering is null || given is null || now >= given.ExpiresAt)
         {
             return Result.Failure(Error.From(ErrorCodes.ChangeWindowElapsed));
         }
@@ -942,6 +942,17 @@ internal sealed class IdentifierService(
         int maximum = (await configuration
                 .ReadAsync(Maximum(given.Kind), cancellationToken).ConfigureAwait(false))
             .Match(read => read, error => Withheld<int>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
+
+        // REG-IDENT-006 (D-189): a value the undo displaces is reserved for a window of
+        // its own, which runs from the undo.
+        TimeSpan window = (await configuration
+                .ReadAsync(Settings.IdentifierChangeCoolingOff, cancellationToken).ConfigureAwait(false))
+            .Match(read => read, error => Withheld<TimeSpan>(error, ref failure));
 
         if (failure is not null)
         {
@@ -966,14 +977,23 @@ internal sealed class IdentifierService(
         // once the second finds the value already back and answers as for a spent link.
         await directory.HoldAsync(given.Subject, cancellationToken).ConfigureAwait(false);
 
+        HeldIdentifiers held = await directory.HeldAsync(given.Subject, cancellationToken)
+            .ConfigureAwait(false);
+
         // REG-IDENT-006: the undo writes the value back under its lock. A write of the
         // value to the account meanwhile ended the reservation, and the link then
-        // answers as one past its window.
-        await directory.LockValuesAsync([(given.Kind, given.Canonical)], cancellationToken).ConfigureAwait(false);
+        // answers as one past its window. Where the identifier stands under another
+        // value, the undo displaces that value and reserves it, so its lock is taken
+        // with the first, both in one order (D-189).
+        await directory
+            .LockValuesAsync(
+                held.Find(given.Id) is HeldIdentifier standing
+                    ? [(given.Kind, given.Canonical), (standing.Kind, standing.Canonical)]
+                    : [(given.Kind, given.Canonical)],
+                cancellationToken)
+            .ConfigureAwait(false);
 
-        if (await directory
-                .GivenUpAsync(OpaqueToken.Of(linkToken).Fingerprint(), cancellationToken)
-                .ConfigureAwait(false) is null)
+        if (await directory.GivenUpAsync(answering, cancellationToken).ConfigureAwait(false) is null)
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
@@ -983,23 +1003,38 @@ internal sealed class IdentifierService(
         // REG-IDENT-006 (D-188): the maximum is judged again on the set under its lock,
         // against the verified identifiers alone, so an add verified since refuses the
         // undo and a pending add never does.
-        if (Overfull(
-                await directory.HeldAsync(given.Subject, cancellationToken).ConfigureAwait(false),
-                given,
-                maximum))
+        if (Overfull(held, given, maximum))
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Failure(Error.From(ErrorCodes.IdentifierMaximum));
         }
 
+        var undo = OpaqueToken.Draw(randomness);
+
         // REG-IDENT-004: an add of the value the account staged meanwhile is left as it
         // stands. The undo's write is what its verification then finds, so it writes
         // nothing and the add is the sweep's.
-        await directory.TakeBackAsync(given.Id, cancellationToken).ConfigureAwait(false);
-
-        HeldIdentifiers held = await directory.HeldAsync(given.Subject, cancellationToken)
+        bool displaced = await directory
+            .TakeBackAsync(answering, now, now + window, undo.Fingerprint(), cancellationToken)
             .ConfigureAwait(false);
+
+        // REG-IDENT-006 (D-189): a value the undo displaced is held behind a removal of
+        // its own, and its undo goes to the channels the account still has, which is
+        // every member of the set but the identifier whose value moved, as a replace's.
+        if (displaced)
+        {
+            _ = await TellAsync(
+                    held.NoticeSetWithout(given.Id),
+                    given.Subject,
+                    MessageKind.IdentifierRemoved,
+                    source,
+                    landing.Of(LinkKind.Undo, undo.Value),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        held = await directory.HeldAsync(given.Subject, cancellationToken).ConfigureAwait(false);
 
         _ = await TellAsync(
                 held.NoticeSet,
