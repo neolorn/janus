@@ -230,7 +230,6 @@ public sealed class PendingEventsTests(DatabaseFixture database) : IClassFixture
             new MembershipId(Guid.CreateVersion7(Noon)),
             new OrganizationId(Guid.CreateVersion7(Noon)),
             MembershipChange.Ended),
-        new NotificationRequested(Noon, "notification", MessageKind.SignInLink, SendKind.Sms),
         new ObjectionChanged(Noon, "objection", "profiling", Objecting: true) { Subject = Subject },
         new OrganizationErased(Noon, "organization-erased", new OrganizationId(Guid.CreateVersion7(Noon)), 3),
         new RestrictionChanged(Noon, "restriction", Restricted: true) { Subject = Subject },

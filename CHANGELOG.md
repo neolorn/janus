@@ -2657,8 +2657,9 @@ against the public contract of LIB-API-001.
   a new-device code and every notice an operation owes are undertaken in the
   transaction of that operation. An invitation whose link the restrictions refuse is
   not issued and reserves nothing.
-- `NotificationRequested` is no longer emitted: every message is carried from the
-  library's send outbox.
+- No event is emitted for a message: every message is carried from the library's send
+  outbox to the notification handler, and an alert travels on its `AlertRaised` row.
+  The event type `NotificationRequested` is retired with it.
 - An erased wrapped key is 32 zero bytes wherever one is held, with no marker byte in
   them, and every unwrap refuses that value before it is tried. An erasure overwrites
   with it the key of every message admitted for the subject and not yet carried, in the

@@ -45,7 +45,6 @@ internal sealed class PendingEvents(StoreContext context) : IPendingEvents
         EventJson.Default.IdentifierPrimaryChanged,
         EventJson.Default.IdentifierRemoved,
         EventJson.Default.MembershipChanged,
-        EventJson.Default.NotificationRequested,
         EventJson.Default.ObjectionChanged,
         EventJson.Default.OrganizationErased,
         EventJson.Default.RestrictionChanged,
