@@ -154,7 +154,7 @@ internal static class AuthenticationRegistration
         services.AddScoped(provider => new ProfilePhotos(
             provider.GetRequiredService<IAccountDirectory>(),
             provider.GetRequiredService<ISettingsRestriction>(),
-            provider.GetRequiredService<IMembershipLookup>(),
+            provider.GetRequiredService<PolicyResolution>(),
             provider.GetRequiredService<IConfigurationStore>(),
             provider.GetRequiredService<IAccountAudit>(),
             provider.GetRequiredService<IUnitOfWork>(),
@@ -186,7 +186,22 @@ internal static class AuthenticationRegistration
         services.AddScoped<OidcService>();
         services.AddScoped<IOidc>(provider => provider.GetRequiredService<OidcService>());
 
-        services.AddScoped<IOrganizations, OrganizationService>();
+        // IDN-ATTR-002, OPS-CFG-003: a policy that shows photos is refused where the
+        // deployment declared no codec, so what changes a policy takes the codec as it
+        // was registered.
+        services.AddScoped<IOrganizations>(provider => new OrganizationService(
+            provider.GetRequiredService<AdministrativeScope>(),
+            provider.GetRequiredService<StepUpGuard>(),
+            provider.GetRequiredService<IOrganizationDirectory>(),
+            provider.GetRequiredService<ISessionStore>(),
+            provider.GetRequiredService<IOrganizationAudit>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<ConfigurationAdministration>(),
+            provider.GetRequiredService<PolicyResolution>(),
+            provider.GetRequiredService<IAlertChannels>(),
+            provider.GetService<ImageCodec>(),
+            provider.GetRequiredService<IUnitOfWork>(),
+            provider.GetRequiredService<TimeProvider>()));
 
         // REG-DOM-001, LIB-EXT-001: the resolver is the deployment's and may be absent,
         // so what reads a record takes it as it was registered and proves nothing

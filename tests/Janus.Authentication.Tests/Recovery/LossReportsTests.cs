@@ -681,7 +681,7 @@ public sealed class LossReportsTests : IAsyncDisposable
         _configuration.Set(
             Settings.OrganizationPolicy,
             Staff.ToString(),
-            new PolicyOverride(null, null, null, null, SelfServiceRecovery: false, null));
+            new PolicyOverride(null, null, null, null, SelfServiceRecovery: false, null, null));
 
         Assert.Equal(
             ErrorCodes.LossReportNotPermitted,

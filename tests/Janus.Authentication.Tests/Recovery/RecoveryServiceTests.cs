@@ -348,7 +348,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         _configuration.Set(
             Settings.OrganizationPolicy,
             Support.ToString(),
-            new PolicyOverride(null, null, null, null, SelfServiceRecovery: false, null));
+            new PolicyOverride(null, null, null, null, SelfServiceRecovery: false, null, null));
 
         Assert.True(Succeeded(await Service.BeginAsync(
             Address,
@@ -944,7 +944,7 @@ public sealed class RecoveryServiceTests : IAsyncDisposable
         _configuration.Set(
             Settings.OrganizationPolicy,
             Support.ToString(),
-            new PolicyOverride(null, null, null, null, SelfServiceRecovery: false, null));
+            new PolicyOverride(null, null, null, null, SelfServiceRecovery: false, null, null));
 
         Assert.True(Succeeded(await AskedAsync(Address)));
         Assert.True(Succeeded(await AskedAsync(Elsewhere)));

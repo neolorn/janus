@@ -5,9 +5,9 @@ using System.Threading.Tasks;
 namespace Janus.Core;
 
 /// <summary>
-/// The two operations of the OpenID Connect provider a host calls in process and the
-/// library answers over HTTP: the claims a token covers, and the keys the tokens are
-/// validated against.
+/// What a host calls of the OpenID Connect provider in process and the library answers
+/// over HTTP: the claims a token covers, which is an operation, and the keys the tokens
+/// are validated against, whose read is none.
 /// </summary>
 /// <remarks>
 /// Implements LIB-API-005, AUTH-OIDC-001 and AUTH-KEY-001. The protocol itself is not
@@ -35,9 +35,12 @@ public interface IOidc
 
     /// <summary>
     /// The keys a relying party validates against: the next key, the one signing now
-    /// and each one it replaced, through its overlap.
+    /// and each one it replaced, through its overlap. The read is no operation
+    /// (LIB-API-005): it answers the public keys the key set's endpoint publishes and
+    /// nothing else, reads no record of a person, takes no access context and meets no
+    /// gate (CONV-DESIGN-002).
     /// </summary>
-    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
     /// <returns>
     /// The published set, or the refusal where the deployment's own signing settings
     /// cannot be read: a set that is empty because something failed would validate

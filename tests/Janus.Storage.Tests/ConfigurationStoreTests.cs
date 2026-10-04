@@ -219,7 +219,7 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
         SettingRecord[] written =
         [
             new() { Key = Catalogue.LinkMagicLifetime.Key, Value = stored },
-            new() { Key = Catalogue.OrganizationPhoto.For(organization), Value = stored },
+            new() { Key = Catalogue.OrganizationPolicy.For(organization), Value = stored },
         ];
 
         context.Settings.AddRange(written);
@@ -236,13 +236,13 @@ public sealed class ConfigurationStoreTests(DatabaseFixture database) : IClassFi
 
             InvalidOperationException member = await Assert.ThrowsAsync<InvalidOperationException>(
                 async () => await store.ReadAsync(
-                    Catalogue.OrganizationPhoto,
+                    Catalogue.OrganizationPolicy,
                     organization,
                     TestContext.Current.CancellationToken));
 
             InvalidOperationException members = await Assert.ThrowsAsync<InvalidOperationException>(
                 async () => await store.ReadWrittenAsync(
-                    Catalogue.OrganizationPhoto,
+                    Catalogue.OrganizationPolicy,
                     TestContext.Current.CancellationToken));
 
             Assert.Contains(Catalogue.LinkMagicLifetime.Key.ToString(), single.Message, StringComparison.Ordinal);

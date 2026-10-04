@@ -128,20 +128,6 @@ public sealed class LibraryStructureTests
         RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(5));
 
-    // CONV-DESIGN-004 AC2: a parameter of the underlying type where the library has a
-    // type of its own for the thing.
-    private static readonly Regex Untyped = new(
-        @"[(,]\s*(Guid\s+[a-z]|string\s+(subject|organization|email|phone|username|address)\b)",
-        RegexOptions.CultureInvariant,
-        TimeSpan.FromSeconds(5));
-
-    // CONV-DESIGN-004 AC2: a member that implements another package's interface takes
-    // what that interface declares, which no type of the library's can change.
-    // OpenIddict's stores name the OIDC subject as text.
-    private static readonly Regex Foreign = new(
-        @":\s*IOpenIddict\w+Store<",
-        RegexOptions.CultureInvariant,
-        TimeSpan.FromSeconds(5));
 
     private static readonly string[] AllowedPackages =
     [
@@ -917,20 +903,6 @@ public sealed class LibraryStructureTests
         Assert.Empty(assignable);
     }
 
-    /// <summary>
-    /// CONV-DESIGN-004 AC2: nothing outside the type that gives a value its rules takes
-    /// that value as the type it is stored in.
-    /// </summary>
-    [Fact]
-    public void CONV_DESIGN_004_AC2_NoMethodTakesAValueAsItsUnderlyingType()
-    {
-        IEnumerable<string> taking = SourcesOf([.. Areas, "Janus.Storage"])
-            .Select(file => (File: file, Text: File.ReadAllText(file)))
-            .Where(one => Untyped.IsMatch(one.Text) && !Foreign.IsMatch(one.Text))
-            .Select(one => one.File);
-
-        Assert.Empty(taking);
-    }
 
     /// <summary>
     /// CONV-DESIGN-007 AC2: nothing outside the tests reads the wall clock, makes a

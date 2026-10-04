@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using Janus.Core;
@@ -23,8 +24,9 @@ namespace Janus.Hosting.Tests;
 /// What the shipped assemblies may expose, derive from and carry: public types in the
 /// contract's projects alone, one internal sealed implementation of each service
 /// contract whose operations meet the gate first, one public registration, no
-/// controller, and no validation attribute (LIB-API-002, CONV-LAYOUT-002,
-/// CONV-DESIGN-002, CONV-DESIGN-006, CONV-DESIGN-007, CONV-CODE-006).
+/// controller, no validation attribute, and no member that takes a typed value as the
+/// type it is stored in (LIB-API-002, CONV-LAYOUT-002, CONV-DESIGN-002, CONV-DESIGN-004,
+/// CONV-DESIGN-006, CONV-DESIGN-007, CONV-CODE-006).
 /// </summary>
 [Trait("kind", "contract")]
 public sealed class PublicSurfaceTests
@@ -113,6 +115,45 @@ public sealed class PublicSurfaceTests
         @"\bMicrosoft\s*\.\s*Extensions\s*\.\s*(?<part>\w+)",
         RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(5));
+
+    // CONV-DESIGN-004 AC2: a parameter of the underlying type where the library has a
+    // type of its own for the thing.
+    private static readonly Regex Untyped = new(
+        @"[(,]\s*(?:(?<wrapped>Guid)\s+[a-z]|(?<wrapped>string)\s+(?:subject|organization|email|phone|username|address)\b)",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
+
+    // CONV-DESIGN-004 AC2: the type a typed identifier or value wraps, read from the
+    // value its declaration holds.
+    private static readonly Regex Wrapped = new(
+        @"\b(?<wrapped>Guid|string)\s+Value\b",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(5));
+
+    // CONV-DESIGN-004 AC2: the members whose parameters an interface of a package
+    // fixes, each as the type that declares it and the member. The provider's stores
+    // name the OIDC subject as text, and the document retrievers take an address as
+    // text. No other member of these types is exempt.
+    private static readonly (string Type, string Member)[] ForeignMembers =
+    [
+        ("OidcAuthorizationStore", "FindBySubjectAsync"),
+        ("OidcAuthorizationStore", "RevokeBySubjectAsync"),
+        ("OidcTokenStore", "FindBySubjectAsync"),
+        ("OidcTokenStore", "RevokeBySubjectAsync"),
+        ("ProviderDocuments", "GetDocumentAsync"),
+        ("ProviderMetadataReading", "GetConfigurationAsync"),
+    ];
+
+    // CONV-DESIGN-004 AC2: the folders the repository's projects are written under.
+    private static readonly string[] ProjectRoots = ["src", "tools"];
+
+    // CONV-DESIGN-008: the packages the table names only as ones a listed package
+    // brings, which no project references directly.
+    private static readonly string[] BroughtPackages =
+    [
+        "Microsoft.IdentityModel.JsonWebTokens",
+        "Microsoft.IdentityModel.Protocols",
+    ];
 
     // Every type the shipped assemblies declare.
     private static readonly Type[] ShippedTypes = [.. Shipped.SelectMany(name => Load(name).GetTypes())];
@@ -265,6 +306,61 @@ public sealed class PublicSurfaceTests
     }
 
     /// <summary>
+    /// CONV-DESIGN-004 AC2: no member of any project takes a typed identifier or value
+    /// as the type it is stored in. A parameter of the type a typed identifier or value
+    /// wraps, inside its own declaration, is the value it is made from, and a member an
+    /// interface of a package fixes takes what that interface declares; every other
+    /// match is reported with its type and member.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_004_AC2_NoMethodTakesAValueAsItsUnderlyingType()
+    {
+        IEnumerable<string> taking = EveryProject()
+            .SelectMany(Sources)
+            .Select(file => (Type: Path.GetFileNameWithoutExtension(file), Text: File.ReadAllText(file)))
+            .SelectMany(one => Untyped
+                .Matches(one.Text)
+                .Where(match => !MadeFrom(one.Type, one.Text, match.Groups["wrapped"].Value))
+                .Select(match => (one.Type, Member: Taking(one.Text, match.Index)))
+                .Where(member => !ForeignMembers.Contains(member))
+                .Select(member => member.Type + "." + member.Member));
+
+        Assert.Empty(taking);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-004 AC2: a member is exempt only where a package's interface fixes
+    /// its parameters: each exempt member is the target of an interface map entry whose
+    /// interface is declared in an assembly of a package CONV-DESIGN-008 lists or names
+    /// as one a listed package brings, the provider's abstractions among them, which
+    /// the listed provider packages bring (D-166, D-183).
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_004_AC2_OnlyAMemberAPackagesInterfaceFixesIsExempt()
+    {
+        string[] packages =
+        [
+            .. XDocument
+                .Load(Path.Combine(Repository.Root(), "Directory.Packages.props"))
+                .Descendants("PackageVersion")
+                .Select(package => package.Attribute("Include")!.Value),
+            .. BroughtPackages,
+        ];
+
+        IEnumerable<string> unfixed = ForeignMembers
+            .Where(member => !ShippedTypes
+                .Where(type => type.Name == member.Type)
+                .SelectMany(type => type.GetInterfaces().Select(type.GetInterfaceMap))
+                .Where(map => OfAPackage(map.InterfaceType.Assembly.GetName().Name!, packages))
+                .SelectMany(map => map.TargetMethods)
+                .Any(target => target.Name == member.Member
+                    || target.Name.EndsWith("." + member.Member, StringComparison.Ordinal)))
+            .Select(member => member.Type + "." + member.Member);
+
+        Assert.Empty(unfixed);
+    }
+
+    /// <summary>
     /// CONV-CODE-006 AC1: no type of any shipped assembly, no member it declares and no
     /// parameter of one carries a validation attribute, so shape is checked by a guard
     /// at the boundary and a domain type is valid by construction.
@@ -342,6 +438,36 @@ public sealed class PublicSurfaceTests
         Assert.Empty(OwnOperations.Concat(Ungated).Except(operations.Select(operation => operation.Name)));
         Assert.Empty(resolving);
         Assert.Empty(unmet);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-002 AC3, LIB-API-005: the read of the provider's published key set
+    /// is no operation. It takes no access context, so no gate is asked of it, and what
+    /// it answers is the public key, its identifier, its algorithm and when it retires,
+    /// and nothing of a person or of a private key.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_002_AC3_TheReadOfThePublishedKeySetTakesNoAccessContextAndAnswersPublicKeysAlone()
+    {
+        MethodInfo read = typeof(IOidc).GetMethod(nameof(IOidc.KeysAsync))!;
+
+        Assert.Equal([typeof(CancellationToken)], read.GetParameters().Select(parameter => parameter.ParameterType));
+        Assert.Equal(typeof(ValueTask<Result<IReadOnlyList<PublishedSigningKey>>>), read.ReturnType);
+        Assert.Equal(
+            [
+                nameof(PublishedSigningKey.Algorithm),
+                nameof(PublishedSigningKey.KeyId),
+                nameof(PublishedSigningKey.PublicKey),
+                nameof(PublishedSigningKey.RetiresAt),
+            ],
+            typeof(PublishedSigningKey)
+                .GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                .Select(property => property.Name)
+                .Where(name => name != "EqualityContract")
+                .Order(StringComparer.Ordinal));
+        Assert.DoesNotContain(
+            ServiceContracts().SelectMany(Operations),
+            operation => operation.Name == nameof(IOidc) + "." + nameof(IOidc.KeysAsync));
     }
 
     /// <summary>
@@ -573,6 +699,74 @@ public sealed class PublicSurfaceTests
             .Where(type => type.IsInterface)
             .Where(type => !NotServiceContracts.Contains(type.IsGenericType ? type.GetGenericTypeDefinition() : type)),
     ];
+
+    // CONV-DESIGN-004 AC2: the folder of every project of the repository: the areas,
+    // the storage, the contract, the mounting, the command line, the conformance suite,
+    // the analysers and the tools alike.
+    private static IEnumerable<string> EveryProject() =>
+        ProjectRoots
+            .SelectMany(root => Directory.GetFiles(
+                Path.Combine(Repository.Root(), root),
+                "*.csproj",
+                SearchOption.AllDirectories))
+            .Select(project => Path.GetDirectoryName(project)!);
+
+    // Every file written for a project, leaving out what the build writes.
+    private static IEnumerable<string> Sources(string project) =>
+        Directory
+            .GetFiles(project, "*.cs", SearchOption.AllDirectories)
+            .Where(path => !path.Split(Path.DirectorySeparatorChar).Any(folder => folder is "bin" or "obj"));
+
+    // CONV-DESIGN-004 AC2: whether the file declares the typed identifier or value it is
+    // named for, wrapping the type a parameter was matched as.
+    private static bool MadeFrom(string type, string text, string wrapped) =>
+        Regex.IsMatch(
+            text,
+            @"\breadonly\s+record\s+struct\s+" + Regex.Escape(type) + @"\b",
+            RegexOptions.CultureInvariant,
+            TimeSpan.FromSeconds(5))
+        && Wrapped.Matches(text).Any(value => value.Groups["wrapped"].Value == wrapped);
+
+    // CONV-DESIGN-004 AC2: the member whose parameter list holds the place given: the
+    // name before the bracket that list opens with.
+    private static string Taking(string text, int at)
+    {
+        int depth = 0;
+        int open = at;
+
+        while (open > 0 && !(text[open] == '(' && depth == 0))
+        {
+            depth += text[open] switch
+            {
+                ')' => 1,
+                '(' => -1,
+                _ => 0,
+            };
+            open--;
+        }
+
+        int end = open;
+
+        while (end > 0 && char.IsWhiteSpace(text[end - 1]))
+        {
+            end--;
+        }
+
+        int start = end;
+
+        while (start > 0 && (char.IsLetterOrDigit(text[start - 1]) || text[start - 1] == '_'))
+        {
+            start--;
+        }
+
+        return text[start..end];
+    }
+
+    // CONV-DESIGN-004 AC2: an assembly a listed or named package ships under its own
+    // name, or one of the provider's, whose listed packages bring its abstractions.
+    private static bool OfAPackage(string assembly, string[] packages) =>
+        packages.Contains(assembly, StringComparer.Ordinal)
+        || assembly.StartsWith("OpenIddict.", StringComparison.Ordinal);
 
     private static IEnumerable<Type> Implementations() => ShippedTypes
         .Where(type => type is { IsClass: true, IsAbstract: false })

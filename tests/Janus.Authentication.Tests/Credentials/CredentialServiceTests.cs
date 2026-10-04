@@ -348,6 +348,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
                 null,
                 CredentialRedundancy.Enforced,
                 null,
+                null,
                 null));
 
         EnrolledCredential enrolled = await KeyAsync(subject, session, synced: false);

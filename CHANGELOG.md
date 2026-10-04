@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The shipped mail-server adapter lists an account whose `emailAddress` does not read as
+  an email address, or that holds none, with no address, where it failed the listing
+  for an account holding none. Reconciliation reads such a listing whole: the account
+  is counted where it carries no held mailbox's identifier and is a difference where it
+  carries one.
+- The two log entries of a concealed refusal carry the audit record they name as an
+  `AuditRecordId`, in the text it was always written in.
 - `IUnitOfWork.RollbackAsync` ends an operation with nothing of it saved: the
   transaction, every tracked change and every registration to run after the commit are
   discarded. It takes no cancellation token and answers no result. An operation that
@@ -387,9 +394,20 @@ against the public contract of LIB-API-001.
   signs in by another factor, which restores it under `auth.credential.restored`;
   withdrawn consent or a deleted provider account unlinks the credential, or suspends
   the account with a security notice where no other usable credential, the password
-  included, may begin a sign-in; a disabled relay address drops to unverified. An event of an undeclared provider, or one the keys do
-  not verify, is refused as every rejected callback is. The client the documents are
-  read with is `identity-providers`.
+  included, may begin a sign-in; a disabled relay address drops to unverified. A carried
+  or repeated event is answered 202 on the Google route and 200 on the Apple route. A
+  token that fails validation on the Google route is answered as RFC 8935 section 2.3
+  fixes: 400 with `Content-Language: en` and a body of `err`, the code of the first
+  failure in a fixed order, and `description`, which carries the same code: a token
+  that cannot be read or carries no `jti`, `invalid_request`; a provider not declared,
+  `invalid_issuer`; a key the published set does not hold or a signature it does not
+  verify, `invalid_key`; another issuer, `invalid_issuer`; an audience naming no
+  declared client, `invalid_audience`; a lifetime that has passed, `invalid_request`.
+  On the Apple route each of these is refused as every rejected callback is, 422
+  `integration.callback.rejected`. On either route a provider document that cannot be
+  read refuses nothing: the delivery is answered 500 `system.fault`, nothing is
+  claimed, recorded or counted, and the provider may deliver the event again. The
+  client the documents are read with is `identity-providers`.
 - `UseCallback` mounts one of the host's own providers' callbacks on the machine
   profile, at a path the host chooses and ahead of the browser profile. A signed
   callback (`ISignedCallback`) names its provider's keyed hash, where the signature and
@@ -950,16 +968,21 @@ against the public contract of LIB-API-001.
   done step reads it from the session and never from a request.
 - An account shows a photo. `GET`, `PUT` and `DELETE /account/photo` read it, replace it
   and give it up, and the image is served through the session gate as `image/jpeg` from
-  no address a cache could share. Availability is the organization's, held in the key
-  `photo.enabled.<organization>` and off until an organization is given it; an account
-  of no organization, and one whose organization shows none, is answered as an account
-  with no photo, 404 `identity.photo.notfound`. The library reads no image itself: a
-  deployment declares an `ImageCodec`, which decides by content what an upload is, holds
-  it to `photo.maxdimension` and answers the JPEG that is stored. The photo is held in a
-  table and a port of its own, encrypted under the subject's own key like any other
-  personal field: nothing that reads an account reads image bytes, a dump yields no
-  photograph, and erasure of the key leaves the image unrecoverable. A deployment whose
-  policy shows photos and which declared no codec does not start.
+  no address a cache could share. Availability is the policy field `photos`, off by
+  default and resolved as every policy field is: an account of no organization follows
+  the system policy, and an account of several shows a photo only where every one of
+  them does; one whose policy withholds photos is answered as an account with no photo,
+  404 `identity.photo.notfound`. Bootstrap writes the administrative organization's
+  `photos` off, and a change that turns `photos` on while the deployment declares no
+  codec is refused with 422 `config.value.notallowed`, `details.field` `photos` and
+  `details.requires` `imageCodec`. The library reads no image itself: a deployment
+  declares an `ImageCodec`, which decides by content what an upload is, holds it to
+  `photo.maxdimension` and answers the JPEG that is stored. The photo is held in a table
+  and a port of its own, encrypted under the subject's own key like any other personal
+  field: nothing that reads an account reads image bytes, a dump yields no photograph,
+  and erasure of the key leaves the image unrecoverable. A deployment whose stored
+  policy shows photos, the system's or an organization's, and which declared no codec
+  does not start.
 - Every runtime configuration change goes through one operation that classifies it,
   gates it and writes it down. A configuration key loosens the way its row states; where
   a row states nothing, a key with only a ceiling loosens upward, a key with only a
@@ -1274,10 +1297,12 @@ against the public contract of LIB-API-001.
   a party verifying a token offline can refuse one issued to any other client. The token
   and userinfo routes are carried on the machine profile, a second pipeline profile that
   reads no cookie and asks for no synchronizer token, and refuses a request that arrives
-  with one. `IOidc` carries the two operations a host calls in process and the library
-  answers over HTTP, `ClaimsAsync` and `KeysAsync`; `ClaimsAsync` takes the caller's
-  `AccessContext` and answers the claims of its effective identity alone, and
-  `authz.denied` where it names none.
+  with one. `IOidc` carries what a host calls in process and the library answers over
+  HTTP, `ClaimsAsync` and `KeysAsync`; `ClaimsAsync` takes the caller's `AccessContext`
+  and answers the claims of its effective identity alone, and `authz.denied` where it
+  names none. `KeysAsync`, the read of the published key set, is no operation: it takes
+  no access context, meets no gate and answers the public keys `GET /oidc/jwks`
+  publishes and nothing else.
 - An application establishes its own session from the one the authentication application
   holds without a line of host code: `GET /auth/signon` forwards the browser to the
   provider with proof key and a state bound to its pre-authentication session,

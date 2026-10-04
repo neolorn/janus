@@ -356,6 +356,35 @@ public sealed class JmapMailServerTests : IDisposable
     }
 
     /// <summary>
+    /// INT-MAIL-001, INT-MAIL-007 AC9: an account whose <c>emailAddress</c> does not
+    /// read as an email address, or holds none, is listed with no address, and the
+    /// listing is read whole.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_007_AC9_AnAccountWhoseAddressDoesNotReadIsListedWithNoneAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using Started started = await StartedAsync();
+
+        _ = _server.Account("reads@example.test", Mailbox.ToString(), new JsonObject { ["@type"] = "Inherit" });
+        _ = _server.Account("two words@example.test", Another.ToString(), new JsonObject { ["@type"] = "Inherit" });
+        _ = _server.Account("unaddressed@example.test", null, new JsonObject { ["@type"] = "Inherit" });
+        _server.At("unaddressed@example.test")[0]["emailAddress"] = null;
+
+        IReadOnlyList<HostedMailbox> listed = Value(await started.Server.MailboxesAsync(cancellationToken));
+
+        Assert.Equal(
+            [
+                new HostedMailbox(Mailbox, Email("reads@example.test"), Enabled: true),
+                new HostedMailbox(Another, null, Enabled: true),
+                new HostedMailbox(null, null, Enabled: true),
+            ],
+            listed);
+    }
+
+    /// <summary>
     /// INT-MAIL-010 AC1: creating an app password is one call to the server's
     /// app-password call carrying the person's token and never the management key; the
     /// server generates the secret; the listing reads what the server holds; a revocation

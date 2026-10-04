@@ -170,6 +170,29 @@ internal sealed class SocialProvidersInMemory(TimeProvider clock) : HttpMessageH
         Token(provider, eventId, events, _stranger);
 
     /// <summary>
+    /// An event the provider signed that departs from what it sends in the ways named:
+    /// one carrying no identifier, issued by another issuer, addressed to another
+    /// client, naming a key the provider does not publish, or stating a lifetime.
+    /// </summary>
+    /// <param name="provider">Which provider.</param>
+    /// <param name="eventId">The event's identifier, or nothing for a token carrying none.</param>
+    /// <param name="events">The event claim, as the provider writes it.</param>
+    /// <param name="issuer">Who it says issued it, where not the provider.</param>
+    /// <param name="audience">Whom it is addressed to, where not the deployment's client.</param>
+    /// <param name="keyId">The key it names, where not the provider's.</param>
+    /// <param name="expires">When it says it expires, in seconds of the epoch, where it says so.</param>
+    /// <returns>The token.</returns>
+    public string Departing(
+        Factor provider,
+        string? eventId,
+        object events,
+        string? issuer = null,
+        string? audience = null,
+        string? keyId = null,
+        long? expires = null) =>
+        Token(provider, eventId, events, provider is Factor.Google ? _google : _apple, issuer, audience, keyId, expires);
+
+    /// <summary>
     /// Issues a code, as the provider does once the person has signed in there, for the
     /// identity token the exchange of it answers with.
     /// </summary>
@@ -334,24 +357,43 @@ internal sealed class SocialProvidersInMemory(TimeProvider clock) : HttpMessageH
         });
     }
 
-    // A security event states no lifetime, so the token carries none.
-    private static string Token(Factor provider, string eventId, object events, RSA signer)
+    // A security event states no lifetime, so the token carries none unless it is told
+    // to.
+    private static string Token(
+        Factor provider,
+        string? eventId,
+        object events,
+        RSA signer,
+        string? issuer = null,
+        string? audience = null,
+        string? keyId = null,
+        long? expires = null)
     {
         bool google = provider is Factor.Google;
+        var claims = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["iat"] = 1772366400,
+            ["events"] = events,
+        };
+
+        if (eventId is not null)
+        {
+            claims["jti"] = eventId;
+        }
+
+        if (expires is long lapses)
+        {
+            claims["exp"] = lapses;
+        }
 
         return new JsonWebTokenHandler { SetDefaultTimesOnTokenCreation = false }.CreateToken(
             new SecurityTokenDescriptor
             {
-                Issuer = google ? GoogleIssuer : AppleIssuer,
-                Audience = google ? GoogleClient : AppleClient,
-                Claims = new Dictionary<string, object>(StringComparer.Ordinal)
-                {
-                    ["jti"] = eventId,
-                    ["iat"] = 1772366400,
-                    ["events"] = events,
-                },
+                Issuer = issuer ?? (google ? GoogleIssuer : AppleIssuer),
+                Audience = audience ?? (google ? GoogleClient : AppleClient),
+                Claims = claims,
                 SigningCredentials = new SigningCredentials(
-                    new RsaSecurityKey(signer) { KeyId = google ? GoogleKey : AppleKey },
+                    new RsaSecurityKey(signer) { KeyId = keyId ?? (google ? GoogleKey : AppleKey) },
                     SecurityAlgorithms.RsaSha256),
             });
     }

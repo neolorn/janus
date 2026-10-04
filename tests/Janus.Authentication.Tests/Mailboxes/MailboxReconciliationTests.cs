@@ -226,6 +226,35 @@ public sealed class MailboxReconciliationTests : IDisposable
     }
 
     /// <summary>
+    /// INT-MAIL-007 AC9: a listing that holds an account whose address does not read is
+    /// read whole. Every other account is compared as before, and that account is
+    /// counted where it carries no identifier of a held mailbox and is a difference
+    /// where it carries one.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task INT_MAIL_007_AC9_AnAccountWhoseAddressDoesNotReadIsCountedOrIsADifferenceAsync()
+    {
+        Mailbox agreeing = await HeldAsync(enabledOnServer: true);
+        var carried = Mailbox.Reserved(Parsed("carried@example.test"), Noon);
+
+        await _mailboxes.AddAsync(carried, TestContext.Current.CancellationToken);
+        _server.Set("not an address", enabled: false, carried.Id);
+        _server.Set("nor is this", enabled: true);
+
+        MailboxDrift drift = await ReconciledAsync();
+
+        Assert.Equal([carried.Id], drift.Mailboxes);
+        Assert.DoesNotContain(agreeing.Id, drift.Mailboxes);
+        Assert.Equal(1, drift.Unknown);
+
+        AlertRaised raised = Assert.Single(_events.Of<AlertRaised>());
+
+        Assert.Equal(carried.Id.ToString(), Assert.Single(raised.Details["mailboxes"].EnumerateArray()).GetString());
+        Assert.Equal(1, raised.Details["unknown"].GetInt32());
+    }
+
+    /// <summary>
     /// OPS-OBS-002: a comparison that could not be made is a degradation of its own,
     /// and the pass answers the failure.
     /// </summary>

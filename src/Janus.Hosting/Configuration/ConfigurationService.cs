@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Accounts;
 using Janus.Authentication.Configuration;
 using Janus.Authentication.Factors;
 using Janus.Authentication.Policies;
@@ -25,6 +26,9 @@ namespace Janus.Hosting.Configuration;
 /// <param name="destinations">The one way the alert destinations change.</param>
 /// <param name="declaration">The categories of data the host declared, with their floors.</param>
 /// <param name="retention">How long a declared category is kept now.</param>
+/// <param name="codec">
+/// What the deployment reads uploaded images with, or nothing where it declared none.
+/// </param>
 /// <param name="work">The one transaction a change runs in.</param>
 /// <remarks>
 /// Implements LIB-API-005, OPS-CFG-002, OPS-CFG-003, OPS-CFG-004, OPS-CFG-005,
@@ -41,6 +45,7 @@ internal sealed class ConfigurationService(
     AlertDestinationChange destinations,
     AuthorizationDeclaration declaration,
     CategoryRetention retention,
+    ImageCodec? codec,
     IUnitOfWork work) : IConfigurationAdministration
 {
     private static readonly FrozenDictionary<ConfigurationKey, Setting> Served = Settings.All
@@ -129,6 +134,15 @@ internal sealed class ConfigurationService(
         {
             return await DestinationsAsync(key, value, reason, context, actor, session, cancellationToken)
                 .ConfigureAwait(false);
+        }
+
+        // IDN-ATTR-002, OPS-CFG-003: a system policy that shows photos needs the codec
+        // the host declares, so it is refused while there is none.
+        if (key == Settings.PolicyDefault.Key
+            && codec is null
+            && Settings.PolicyDefault.Received(value).Match(policy => policy.Photos, _ => false))
+        {
+            return Result.Failure(ProfilePhotos.Undeclared);
         }
 
         Error? failure = null;

@@ -1351,7 +1351,8 @@ public sealed class SessionServiceTests : IAsyncDisposable
                 shipped.Gates,
                 shipped.CredentialRedundancy,
                 shipped.SelfServiceRecovery,
-                shipped.EmailDomains));
+                shipped.EmailDomains,
+                shipped.Photos));
 
         Assert.Null(Refusal(await Service.BeginAsync(
             Subject(),
@@ -1596,6 +1597,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
             null,
             null,
             null,
+            null,
             null);
 
     private static TValue Value<TValue>(Result<TValue> result) =>
@@ -1620,7 +1622,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
         _configuration.Set(
             Settings.OrganizationPolicy,
             organization.ToString(),
-            new PolicyOverride(null, factors.ToFrozenSet(), null, null, null, null));
+            new PolicyOverride(null, factors.ToFrozenSet(), null, null, null, null, null));
 
     private SubjectId Staff(params Factor[] factors)
     {
@@ -1634,6 +1636,7 @@ public sealed class SessionServiceTests : IAsyncDisposable
             new PolicyOverride(
                 AssuranceLevel.Aal2,
                 factors.Length == 0 ? null : factors.ToFrozenSet(),
+                null,
                 null,
                 null,
                 null,

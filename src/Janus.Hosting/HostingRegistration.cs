@@ -7,6 +7,8 @@ using System.Text.Json.Serialization;
 using Janus.Authentication;
 using Janus.Authentication.Accounts;
 using Janus.Authentication.Alerting;
+using Janus.Authentication.Configuration;
+using Janus.Authentication.Factors;
 using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Oidc;
 using Janus.Authentication.Passwords;
@@ -192,7 +194,20 @@ public static class HostingRegistration
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<AlertDestinationChange>();
         services.AddScoped<IAlertLog, AlertLog>();
-        services.AddScoped<IConfigurationAdministration, ConfigurationService>();
+
+        // IDN-ATTR-002, OPS-CFG-003: a system policy that shows photos is refused where
+        // the deployment declared no codec, so what changes it takes the codec as it was
+        // registered.
+        services.AddScoped<IConfigurationAdministration>(provider => new ConfigurationService(
+            provider.GetRequiredService<Janus.Authentication.Policies.AdministrativeScope>(),
+            provider.GetRequiredService<StepUpGuard>(),
+            provider.GetRequiredService<IConfigurationStore>(),
+            provider.GetRequiredService<ConfigurationAdministration>(),
+            provider.GetRequiredService<AlertDestinationChange>(),
+            provider.GetRequiredService<AuthorizationDeclaration>(),
+            provider.GetRequiredService<CategoryRetention>(),
+            provider.GetService<ImageCodec>(),
+            provider.GetRequiredService<IUnitOfWork>()));
 
         // AUTH-PASS-004: what a password is screened against, and the record of each
         // screening.

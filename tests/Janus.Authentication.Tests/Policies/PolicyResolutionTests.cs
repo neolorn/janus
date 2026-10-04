@@ -45,6 +45,7 @@ public sealed class PolicyResolutionTests : IDisposable
             null,
             null,
             SelfServiceRecovery: false,
+            null,
             null));
 
         Policy resolved = await ResolvedAsync(SubjectId.New(_randomness));
@@ -88,6 +89,7 @@ public sealed class PolicyResolutionTests : IDisposable
             null,
             CredentialRedundancy.Enforced,
             SelfServiceRecovery: false,
+            null,
             null));
         Override(ordinary, PolicyOverride.None);
 
@@ -121,6 +123,7 @@ public sealed class PolicyResolutionTests : IDisposable
             null,
             null,
             SelfServiceRecovery: true,
+            null,
             null));
 
         Assert.False((await ResolvedAsync(subject)).SelfServiceRecovery);
@@ -170,6 +173,7 @@ public sealed class PolicyResolutionTests : IDisposable
             null,
             null,
             null,
+            null,
             null));
         Override(strict, new PolicyOverride(
             AssuranceLevel.Aal2,
@@ -177,6 +181,7 @@ public sealed class PolicyResolutionTests : IDisposable
             null,
             CredentialRedundancy.Enforced,
             SelfServiceRecovery: false,
+            null,
             null));
 
         Policy resolved = await ResolvedAsync(subject);
@@ -274,6 +279,7 @@ public sealed class PolicyResolutionTests : IDisposable
                 _ => new Gate(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5))),
             CredentialRedundancy.Enforced,
             SelfServiceRecovery: false,
+            null,
             null));
 
         AssertTheSame(before, await ResolvedAsync(customer));

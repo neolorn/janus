@@ -180,14 +180,8 @@ public sealed class PhotoFlowTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status404NotFound, read.Status);
     }
 
-    // IDN-ATTR-002: photos are an organization's to show, so the browser's account is
-    // placed in one whose key says it shows them.
-    private void ShowsPhotos()
-    {
-        SubjectId subject = _deployment.Directory.Created[^1].Subject;
-        var organization = OrganizationId.New(_deployment.Clock);
-
-        _deployment.Memberships.Place(subject, organization);
-        _deployment.Configuration.Set(Settings.OrganizationPhoto, organization.ToString(), true);
-    }
+    // IDN-ATTR-002: photos are the policy's to show, and the browser's account belongs
+    // to no organization, so the system policy is the one that shows them.
+    private void ShowsPhotos() =>
+        _deployment.Configuration.Set(Settings.PolicyDefault, Policies.SystemDefault with { Photos = true });
 }

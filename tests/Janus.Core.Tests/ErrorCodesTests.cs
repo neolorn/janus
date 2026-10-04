@@ -209,10 +209,8 @@ public sealed class ErrorCodesTests
     }
 
     /// <summary>
-    /// REF-001 AC1: a code the catalogue holds and chapter 10 does not fails here,
-    /// unless the ledger owes chapter 10 its row. A row the ledger owes that names no
-    /// code of the catalogue fails as well, so what is owed cannot outlive the code it
-    /// is owed for.
+    /// REF-001 AC1: a code the catalogue holds that is no live row of chapter 10 fails
+    /// here. The test reads chapter 10 alone (D-183).
     /// </summary>
     [Fact]
     public void REF_001_AC1_EveryCodeInTheSourceIsARowOfTheReference()
@@ -220,12 +218,11 @@ public sealed class ErrorCodesTests
         string[] declared = [.. Codes().Values];
 
         Assert.Empty(Undocumented(declared));
-        Assert.Empty(ReferenceRows.OwedCodes.Except(declared, StringComparer.Ordinal));
     }
 
     /// <summary>
-    /// BFF-ERR-001 AC3: every code the boundary can answer with is a row of chapter 10
-    /// or one the ledger owes it. A code is made only through
+    /// BFF-ERR-001 AC3: every code the boundary can answer with is a row of chapter 10.
+    /// A code is made only through
     /// <see cref="ErrorCode.Parse"/>, since no other constructor is reachable, so the
     /// codes a response can carry are the literals the library's source parses; no
     /// source parses a code it computed.
@@ -272,10 +269,9 @@ public sealed class ErrorCodesTests
         }
     }
 
-    // The codes of those given that chapter 10 holds no live row for and the ledger
-    // does not owe it.
+    // The codes of those given that chapter 10 holds no live row for.
     private static string[] Undocumented(IReadOnlyList<string> codes) =>
-        [.. codes.Except(ReferenceRows.ChapterCodes.Concat(ReferenceRows.OwedCodes), StringComparer.Ordinal)];
+        [.. codes.Except(ReferenceRows.ChapterCodes, StringComparer.Ordinal)];
 
     private static Dictionary<string, string> Codes() =>
         typeof(ErrorCodes)

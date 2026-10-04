@@ -151,15 +151,19 @@ internal sealed class JmapMailServer(IHttpClientFactory channel, IKeyRing ring) 
                 continue;
             }
 
-            if (Text(account, "emailAddress") is not string address
-                || Permitted(account) is not bool enabled)
+            if (Permitted(account) is not bool enabled)
             {
                 return Result.Failure<IReadOnlyList<HostedMailbox>>(Fault());
             }
 
+            // INT-MAIL-007 AC9: an address that does not read, or an account holding
+            // none, is listed with no address and never fails the listing.
             hosted.Add(new HostedMailbox(
                 Carried(account),
-                EmailAddress.TryParse(address, out EmailAddress listed) ? listed : null,
+                Text(account, "emailAddress") is string address
+                && EmailAddress.TryParse(address, out EmailAddress listed)
+                    ? listed
+                    : null,
                 enabled));
         }
 

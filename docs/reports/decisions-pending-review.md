@@ -5008,6 +5008,8 @@ host's and that the library stores what it answers. `09` section 6 should say th
 upload is the request body and that `DELETE` is not held to the policy. `10` section 1.1
 should drop the **(new)** mark from the three photo codes, which are now raised.
 
+**Superseded by D-166.**
+
 **Revised by entry 315.**
 
 ---
@@ -16832,6 +16834,8 @@ could name these as failed authentication.
 `ErrorCodesTests.BFF_ERR_001_AC3_EveryCodeTheBoundaryCanAnswerIsInTheReference`.
 
 *Chapter text that should change.* REF-001 AC1 could say that a row owed in the ledger counts until the chapter takes it. Permissions, which the REF-001 statement names, have no criterion.
+
+**Superseded by D-183.**
 
 ---
 

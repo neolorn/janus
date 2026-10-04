@@ -92,7 +92,15 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
             _configuration,
             _events,
             _audit,
-            new ProfilePhotos(_directory, new SettingsRestrictionInMemory(), _memberships, _configuration, _audit, _work, codec: null, _clock),
+            new ProfilePhotos(
+                _directory,
+                new SettingsRestrictionInMemory(),
+                new PolicyResolution(_memberships, _configuration, _raises),
+                _configuration,
+                _audit,
+                _work,
+                codec: null,
+                _clock),
             _work,
             _clock);
 
@@ -485,7 +493,7 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
         byte[] image = [0xFF, 0xD8, 0xFF, 0xD9];
 
         _memberships.Place(_member, organization);
-        _configuration.Set(Settings.OrganizationPhoto, organization.ToString(), true);
+        _configuration.Set(Settings.PolicyDefault, Janus.Core.Policies.SystemDefault with { Photos = true });
         _directory.Shows(_member, image);
 
         Assert.Equal(image, (await PhotoAsync(Acting, _member)).Match(read => read.ToArray(), _ => []));
@@ -498,8 +506,8 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
 
     /// <summary>
     /// IDN-ATTR-002, IDN-ATTR-003 (D-166): a photo is read for an administrator only
-    /// where the account's own organizations show photos, and an account that shows none
-    /// answers alike, with <c>identity.photo.notfound</c>.
+    /// where the policy in force for the account shows photos, and an account that shows
+    /// none answers alike, with <c>identity.photo.notfound</c>.
     /// </summary>
     [Fact]
     public async Task IDN_ATTR_002_APhotoThePolicyWithholdsIsNotReadAsync()
@@ -510,12 +518,16 @@ public sealed class AccountAdministrationTests : IAsyncDisposable
         _directory.Stands(bare, AccountState.Active);
         _memberships.Place(_member, organization);
         _memberships.Place(bare, organization);
-        _configuration.Set(Settings.OrganizationPhoto, organization.ToString(), false);
+        _configuration.Set(Settings.PolicyDefault, Janus.Core.Policies.SystemDefault with { Photos = true });
+        _configuration.Set(
+            Settings.OrganizationPolicy,
+            organization.ToString(),
+            PolicyOverride.None with { Photos = false });
         _directory.Shows(_member, new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 });
 
         Assert.Equal(ErrorCodes.PhotoNotFound, Refused(await PhotoAsync(Acting, _member)));
 
-        _configuration.Set(Settings.OrganizationPhoto, organization.ToString(), true);
+        _configuration.Set(Settings.OrganizationPolicy, organization.ToString(), PolicyOverride.None);
 
         Assert.Equal(ErrorCodes.PhotoNotFound, Refused(await PhotoAsync(Acting, bare)));
     }

@@ -85,6 +85,8 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
         Assert.False(policy.GetProperty("selfServiceRecovery").GetProperty("overridden").GetBoolean());
         Assert.Equal(0, policy.GetProperty("emailDomains").GetProperty("value").GetArrayLength());
         Assert.False(policy.GetProperty("emailDomains").GetProperty("overridden").GetBoolean());
+        Assert.False(policy.GetProperty("photos").GetProperty("value").GetBoolean());
+        Assert.False(policy.GetProperty("photos").GetProperty("overridden").GetBoolean());
     }
 
     /// <summary>
@@ -467,6 +469,57 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
         Assert.Equal(StatusCodes.Status403Forbidden, replaced.Status);
         Assert.Equal(ErrorCodes.Denied.ToString(), replaced.Text("code"));
         Assert.Empty(_deployment.Changes.Written);
+    }
+
+    /// <summary>
+    /// IDN-ATTR-002 AC4, OPS-CFG-003 AC4: where the host declares no image codec, a
+    /// change that turns photos on is refused naming the field and the declaration it
+    /// needs, for an organization's policy and for the system's alike, and nothing is
+    /// written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ATTR_002_AC4_PhotosAreNotTurnedOnWithoutACodecAsync()
+    {
+        await using var bare = new Janus.Hosting.Tests.Deployment(codec: false);
+
+        Flow.Prepare(bare);
+        bare.Administers(Administration);
+        bare.Organizations.Seed(Branch);
+
+        Browser administrator = await Flow.SignedInAsync(bare);
+        SubjectId subject = bare.Directory.Created[^1].Subject;
+
+        bare.Gate.Grant(subject, Administration, Permissions.OrganizationManage);
+        bare.Gate.Grant(subject, Administration, Permissions.ConfigurationManage);
+        bare.Gate.Grant(subject, Administration, Permissions.SystemAdminister);
+
+        Answer organization = await administrator.SendAsync(
+            "PUT",
+            PathOf(Branch),
+            """{"photos":true,"reason":"Staff show their faces."}""");
+        Answer system = await administrator.SendAsync(
+            "PUT",
+            "/admin/config/policy.default",
+            """{"value":{"requiredAssurance":"aal1","loginFactors":["passkey","password"],"gates":{},"credentialRedundancy":"advisory","selfServiceRecovery":true,"emailDomains":[],"photos":true},"reason":"Everyone shows a face."}""");
+
+        foreach (Answer refused in new[] { organization, system })
+        {
+            JsonElement details = refused.Json().GetProperty("details");
+
+            Assert.Equal(StatusCodes.Status422UnprocessableEntity, refused.Status);
+            Assert.Equal(ErrorCodes.ConfigurationValueNotAllowed.ToString(), refused.Text("code"));
+            Assert.Equal("photos", details.GetProperty("field").GetString());
+            Assert.Equal("imageCodec", details.GetProperty("requires").GetString());
+        }
+
+        Assert.Empty(bare.Changes.Written);
+        Assert.False(
+            (await administrator.SendAsync("GET", PathOf(Branch)))
+                .Json()
+                .GetProperty("photos")
+                .GetProperty("value")
+                .GetBoolean());
     }
 
     private static string PathOf(OrganizationId organization) => "/admin/organizations/" + organization + "/policy";
