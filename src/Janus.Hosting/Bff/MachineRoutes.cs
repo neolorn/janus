@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Microsoft.AspNetCore.Http;
 
 namespace Janus.Hosting.Bff;
@@ -37,6 +38,11 @@ internal static class MachineRoutes
         new("/callbacks/providers/google/return"),
         new("/callbacks/providers/apple/return"),
     ];
+
+    /// <summary>
+    /// Every path the machine profile governs.
+    /// </summary>
+    public static IReadOnlyList<PathString> Paths => Governed;
 
     /// <summary>
     /// Whether the machine profile governs a path.

@@ -785,6 +785,10 @@ internal sealed class Deployment : IAsyncDisposable
 
         await _pipeline(context);
 
+        // CONV-DESIGN-006: no endpoint answers a code it does not declare, which every
+        // request a test sends is held to.
+        EndpointAnswers.Hold(context);
+
         // The worker's passes follow every request within seconds, so what a request left
         // to the publisher is carried before a test reads what was sent, unless the test
         // is about what the request itself did.
