@@ -414,6 +414,8 @@ internal sealed class SendingService(
                         .ConfigureAwait(false))
                     .Match(() => (Error?)null, error => error) is Error unalerted)
                 {
+                    await work.RollbackAsync().ConfigureAwait(false);
+
                     return Result.Failure(unalerted);
                 }
             }
