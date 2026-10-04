@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The drift check of materialised derivations records each grant it writes as
+  `authz.grant.materialised` and each grant it takes back as `authz.grant.retracted`
+  (`AuditActions.GrantMaterialised`, `AuditActions.GrantRetracted`), in the transaction
+  that corrects the drift: a security record naming the principal
+  `derivation-driftcheck`, the reason `AUTHZ-DERIVE-005`, the grant and its role.
 - A domain of an organization's lock, and the domain of an address judged against it,
   takes its ASCII form from the library's own UTS #46 processing and no longer from the
   machine's ICU, so one domain is listed and compared in one form on every machine. A
