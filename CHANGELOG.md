@@ -2666,3 +2666,13 @@ against the public contract of LIB-API-001.
   channels in several processes carry each raised condition once. The claim stands for
   `outbox.claim.timeout`; a condition the router refused gives its claim up and is
   taken by the next pass.
+- The security step of a registration enrols a passkey, a security key or an
+  authenticator app before the account exists: `POST /auth/webauthn/register/begin`
+  and `complete`, and `POST /account/factors/totp/begin` and `confirm`, accept the
+  registration session in place of an account session while its step is `security` or
+  `terms`, and `CredentialAuthority.Of(RegistrationSessionId)` is the authority
+  `ICredentials` takes for it. The ceremony runs under the session's provisional
+  handle and the staged email. The open ceremony and the unconfirmed secret are held
+  in the session's encrypted document and nowhere else, one of each, spent or replaced
+  under the session's lock; the terms step writes only a credential that was created or
+  confirmed, and an abandoned or expired session leaves nothing of either.

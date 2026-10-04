@@ -1,4 +1,5 @@
 using System;
+using System.Buffers.Text;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -8,6 +9,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Authentication;
+using Janus.Authentication.Factors;
 using Janus.Authentication.Invitations;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Tests.Sending;
@@ -15,6 +17,7 @@ using Janus.Core;
 using Janus.Core.Configuration;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using OtpNet;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Registration;
@@ -307,6 +310,103 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
 
             Assert.Equal(StatusCodes.Status401Unauthorized, refused.Status);
         }
+    }
+
+    /// <summary>
+    /// REG-SESS-006 AC1, API section 4: the WebAuthn enrolment endpoints accept the
+    /// registration session at the security step, the ceremony runs under the staged
+    /// email, and a passkey alone carries the registration to an account that holds it
+    /// and no password.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_SESS_006_AC1_APasskeyAloneCompletesTheSecurityStepOverTheWireAsync()
+    {
+        Browser browser = await Flow.ConfirmedAsync(_deployment);
+
+        Answer begun = await browser.SendAsync(
+            "POST",
+            "/auth/webauthn/register/begin",
+            ("kind", "passkey"));
+        Answer created = await browser.SendAsync(
+            "POST",
+            "/auth/webauthn/register/complete",
+            Attested(begun.Text("challenge")));
+        Answer state = await browser.SendAsync("GET", "/register");
+        Answer completed = await browser.SendAsync(
+            "POST",
+            "/register/terms",
+            ("termsVersion", "terms-3"),
+            ("noticeVersion", "notice-2"));
+
+        Assert.Equal(StatusCodes.Status200OK, begun.Status);
+        Assert.Equal(Flow.Address, begun.Json().GetProperty("user").GetProperty("name").GetString());
+        Assert.Equal(StatusCodes.Status200OK, created.Status);
+        Assert.Equal("terms", state.Text("step"));
+        Assert.Equal(StatusCodes.Status201Created, completed.Status);
+        Authenticator held = Assert.Single(_deployment.Authenticators.All);
+        Assert.Equal(Factor.Passkey, held.Factor);
+        Assert.Equal(_deployment.Directory.Created[^1].Subject, held.Subject);
+        Assert.Null(await _deployment.Passwords.FindAsync(held.Subject, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-SESS-006 AC4, API section 4: the TOTP enrolment endpoints accept the
+    /// registration session at the security step, and a generator confirmed beside a
+    /// password that does not stand alone answers with the recovery codes and
+    /// completes the step.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_SESS_006_AC4_AGeneratorBesideAPasswordShowsRecoveryCodesOverTheWireAsync()
+    {
+        _deployment.Configuration.Set(Settings.ServiceName, "Example");
+        Browser browser = await Flow.ConfirmedAsync(_deployment);
+        Answer set = await browser.SendAsync("PUT", "/register/security", ("password", "tenletters12"));
+
+        Answer begun = await browser.SendAsync(
+            "POST",
+            "/account/factors/totp/begin",
+            ("label", "Authenticator"));
+        Answer confirmed = await browser.SendAsync(
+            "POST",
+            "/account/factors/totp/confirm",
+            ("credentialId", begun.Text("id")),
+            ("code", Generated(begun.Text("secret"))));
+        Answer state = await browser.SendAsync("GET", "/register");
+
+        Assert.Equal("security", set.Text("step"));
+        Assert.Equal(StatusCodes.Status200OK, begun.Status);
+        Assert.Equal(StatusCodes.Status200OK, confirmed.Status);
+        Assert.Equal(
+            Settings.FactorRecoveryCodesCount.Default,
+            confirmed.Json().GetProperty("recoveryCodes").GetArrayLength());
+        Assert.Equal("terms", state.Text("step"));
+        Assert.Empty(_deployment.Authenticators.All);
+    }
+
+    /// <summary>
+    /// REG-SESS-006: the registration session is accepted in place of an account's
+    /// session for the security step alone, so before it the enrolment endpoints
+    /// answer a registering browser as they answer one that holds nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_SESS_006_TheRegistrationSessionEnrolsAtNoEarlierStepAsync()
+    {
+        Browser browser = await Flow.AwaitingAsync(_deployment);
+
+        Answer key = await browser.SendAsync(
+            "POST",
+            "/auth/webauthn/register/begin",
+            ("kind", "passkey"));
+        Answer generator = await browser.SendAsync(
+            "POST",
+            "/account/factors/totp/begin",
+            ("label", "Authenticator"));
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, key.Status);
+        Assert.Equal(StatusCodes.Status401Unauthorized, generator.Status);
     }
 
     /// <summary>
@@ -674,4 +774,43 @@ public sealed class RegistrationFlowTests : IAsyncDisposable
 
         return sent[(at + 6)..].TrimEnd('\n');
     }
+
+    // What a browser sends back from a creation ceremony: the challenge the server
+    // issued, an origin the relying party admits, and a key the runtime can read.
+    private static string Attested(string challenge)
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+
+        byte[] clientData = Encoding.UTF8.GetBytes(
+            "{\"type\":\"webauthn.create\",\"challenge\":\""
+            + challenge
+            + "\",\"origin\":\"https://identity.example.test\"}");
+
+        byte[] authenticatorData = new byte[37];
+
+        SHA256.HashData(Encoding.UTF8.GetBytes("identity.example.test")).CopyTo(authenticatorData, 0);
+
+        // User present and user verified, with the two backup flags of a synced
+        // credential (AUTH-FACT-013).
+        authenticatorData[32] = 0x1D;
+
+        return "{\"credential\":{\"credentialId\":\""
+            + Base64Url.EncodeToString(Guid.NewGuid().ToByteArray())
+            + "\",\"clientDataJson\":\""
+            + Base64Url.EncodeToString(clientData)
+            + "\",\"authenticatorData\":\""
+            + Base64Url.EncodeToString(authenticatorData)
+            + "\",\"publicKey\":\""
+            + Base64Url.EncodeToString(key.ExportSubjectPublicKeyInfo())
+            + "\",\"algorithm\":-7},\"label\":\"This phone\"}";
+    }
+
+    // The code an authenticator app shows now for the secret it was given.
+    private string Generated(string secret) =>
+        new Totp(
+                Base32Encoding.ToBytes(secret),
+                TotpCodes.StepSeconds,
+                OtpHashMode.Sha1,
+                TotpCodes.Digits)
+            .ComputeTotp(_deployment.Clock.GetUtcNow().UtcDateTime);
 }

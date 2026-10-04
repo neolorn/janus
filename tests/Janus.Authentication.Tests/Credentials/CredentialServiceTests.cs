@@ -8,18 +8,24 @@ using System.Threading.Tasks;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Events;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Invitations;
+using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Recovery;
+using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests.Accounts;
 using Janus.Authentication.Tests.Factors;
 using Janus.Authentication.Tests.Identifiers;
+using Janus.Authentication.Tests.Invitations;
 using Janus.Authentication.Tests.Oidc;
+using Janus.Authentication.Tests.Organizations;
 using Janus.Authentication.Tests.Passwords;
 using Janus.Authentication.Tests.Policies;
 using Janus.Authentication.Tests.Recovery;
+using Janus.Authentication.Tests.Registration;
 using Janus.Authentication.Tests.Sending;
 using Janus.Authentication.Tests.Sessions;
 using Janus.Core;
@@ -1075,8 +1081,40 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _credentials,
             _outbox ?? _events,
             _configuration,
+            Registration,
             _work,
             _clock);
+
+    // The registration session reaches the four enrolment operations through the same
+    // service (REG-SESS-006), so it is built beside it on the same stores.
+    private RegistrationService Registration =>
+        new(
+            new RegistrationSessionStoreInMemory(),
+            new RegistrationDirectoryInMemory(),
+            _notifications,
+            Landing.Links,
+            _notices,
+            Passwords,
+            _passwords,
+            Codes,
+            _sets,
+            _authenticators,
+            Keys,
+            Totp,
+            new OidcClientStoreInMemory(),
+            Policies,
+            new InvitationStoreInMemory(),
+            new InvitationOpening(new InvitationStoreInMemory(), _work, _clock),
+            new DomainLock(_memberships, _configuration, new DomainStoreInMemory()),
+            Sessions,
+            new DeviceService(new DeviceStoreInMemory(), _configuration, _work, _events, _clock, _randomness),
+            Throttle,
+            new ConsentsInMemory(),
+            _configuration,
+            _work,
+            _events,
+            _clock,
+            _randomness);
 
     private WebAuthnService Keys =>
         new(_authenticators, _passwords, _credentials, _configuration, _work, _clock, _randomness);

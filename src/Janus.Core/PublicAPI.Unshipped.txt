@@ -569,6 +569,7 @@ Janus.Core.CredentialAuthority.<Clone>$() -> Janus.Core.CredentialAuthority!
 Janus.Core.CredentialAuthority.Context.get -> Janus.Core.AccessContext?
 Janus.Core.CredentialAuthority.Enrolment.get -> Janus.Core.EnrolmentSessionId?
 Janus.Core.CredentialAuthority.Equals(Janus.Core.CredentialAuthority? other) -> bool
+Janus.Core.CredentialAuthority.Registration.get -> Janus.Core.RegistrationSessionId?
 Janus.Core.CredentialAuthority.Session.get -> Janus.Core.SessionId?
 Janus.Core.CredentialCeremony
 Janus.Core.CredentialCeremony.<Clone>$() -> Janus.Core.CredentialCeremony!
@@ -3821,6 +3822,7 @@ static Janus.Core.ConsentRecord.operator !=(Janus.Core.ConsentRecord? left, Janu
 static Janus.Core.ConsentRecord.operator ==(Janus.Core.ConsentRecord? left, Janus.Core.ConsentRecord? right) -> bool
 static Janus.Core.CredentialAuthority.Of(Janus.Core.AccessContext! context, Janus.Core.SessionId session) -> Janus.Core.CredentialAuthority!
 static Janus.Core.CredentialAuthority.Of(Janus.Core.EnrolmentSessionId enrolment) -> Janus.Core.CredentialAuthority!
+static Janus.Core.CredentialAuthority.Of(Janus.Core.RegistrationSessionId registration) -> Janus.Core.CredentialAuthority!
 static Janus.Core.CredentialAuthority.operator !=(Janus.Core.CredentialAuthority? left, Janus.Core.CredentialAuthority? right) -> bool
 static Janus.Core.CredentialAuthority.operator ==(Janus.Core.CredentialAuthority? left, Janus.Core.CredentialAuthority? right) -> bool
 static Janus.Core.CredentialCeremony.operator !=(Janus.Core.CredentialCeremony? left, Janus.Core.CredentialCeremony? right) -> bool

@@ -135,6 +135,60 @@ internal sealed class TotpService(
     }
 
     /// <summary>
+    /// The time step a code of a secret is accepted for now, within the drift the
+    /// deployment tolerates, writing nothing: a registration session confirms the
+    /// generator it staged by it (REG-SESS-006).
+    /// </summary>
+    /// <param name="material">The secret, and the last step a code of it was accepted for.</param>
+    /// <param name="code">What was typed.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The step, or nothing where the code is not one of the secret.</returns>
+    public async ValueTask<long?> AcceptsAsync(
+        TotpMaterial material,
+        [NeverLogged] string code,
+        CancellationToken cancellationToken) =>
+        TotpCodes.Accepts(
+            material,
+            code,
+            time.GetUtcNow(),
+            await DriftAsync(cancellationToken).ConfigureAwait(false));
+
+    /// <summary>
+    /// What the authenticator app is given for an enrolment just begun: the secret as
+    /// text to type and as the address a QR code carries.
+    /// </summary>
+    /// <param name="credential">Which enrolment.</param>
+    /// <param name="secret">The shared secret.</param>
+    /// <param name="account">What the app shows beside the code.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The enrolment as it is shown once.</returns>
+    public async ValueTask<GeneratorEnrolment> ShownAsync(
+        AuthenticatorId credential,
+        ReadOnlyMemory<byte> secret,
+        string account,
+        CancellationToken cancellationToken)
+    {
+        byte[] shown = secret.ToArray();
+
+        try
+        {
+            string text = TotpCodes.Text(shown);
+
+            return new GeneratorEnrolment(
+                credential,
+                text,
+                TotpCodes.Address(
+                    await IssuerAsync(cancellationToken).ConfigureAwait(false),
+                    account,
+                    text));
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(shown);
+        }
+    }
+
+    /// <summary>
     /// Abandons an enrolment that was never confirmed, leaving no credential behind.
     /// </summary>
     /// <param name="subject">Whose credential.</param>
@@ -254,6 +308,16 @@ internal sealed class TotpService(
             TotpCodes.Accepts(generator.Totp! with { ConsumedStep = null }, code, now, drift) is not null)
             ? ErrorCodes.CodeReplayed
             : ErrorCodes.CodeInvalid;
+
+    // The service name is a key the deployment names only where the context source is
+    // on, so one never named is no name for the authenticator app to show.
+    private async ValueTask<string> IssuerAsync(CancellationToken cancellationToken) =>
+        (await configuration.ReadAsync(Settings.ServiceName, cancellationToken).ConfigureAwait(false))
+            .Match(
+                value => value,
+                error => error.Code == ErrorCodes.StartupDeclarationMissing
+                    ? string.Empty
+                    : throw new InvalidOperationException(error.Code.ToString()));
 
     private async ValueTask<int> DriftAsync(CancellationToken cancellationToken) =>
         (await configuration.ReadAsync(Settings.FactorTotpDrift, cancellationToken)

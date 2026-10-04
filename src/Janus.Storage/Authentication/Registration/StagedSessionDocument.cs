@@ -26,6 +26,8 @@ namespace Janus.Storage.Authentication.Registration;
 /// <param name="Identifiers">Every identifier staged.</param>
 /// <param name="Credentials">Every credential enrolled against it.</param>
 /// <param name="Invitation">The invitation whose link opened it, where one did.</param>
+/// <param name="Ceremony">The creation ceremony it has open, where it has one.</param>
+/// <param name="Generator">The generator begun and not confirmed, where there is one.</param>
 /// <remarks>
 /// Implements REG-SESS-001 and REG-SESS-002. The shape is generated at build time
 /// rather than reflected over at run time, so the column's format is fixed by
@@ -48,4 +50,6 @@ internal sealed record StagedSessionDocument(
     IReadOnlyList<string>? RecoveryCodes,
     IReadOnlyList<StagedIdentityDocument> Identifiers,
     IReadOnlyList<StagedCredentialDocument> Credentials,
-    Guid? Invitation);
+    Guid? Invitation,
+    StagedCeremonyDocument? Ceremony = null,
+    StagedGeneratorDocument? Generator = null);

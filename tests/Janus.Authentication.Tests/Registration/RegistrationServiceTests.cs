@@ -1,4 +1,5 @@
 using System;
+using System.Buffers.Text;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
@@ -25,6 +26,7 @@ using Janus.Authentication.Tests.Sending;
 using Janus.Authentication.Tests.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
+using OtpNet;
 using Xunit;
 
 namespace Janus.Authentication.Tests.Registration;
@@ -47,6 +49,8 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
     // API-REDIR-002 (D-166, 145): what the completion answers of the registered address.
     private const string Origin = "https://app.example.test";
     private const string Language = "en";
+    private const string RelyingParty = "example.test";
+    private const string WebOrigin = "https://app.example.test";
 
     private static readonly string[] Arabic = ["ar"];
     private const string Source = "198.51.100.7";
@@ -136,6 +140,8 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 _randomness),
             _sets,
             _authenticators,
+            new WebAuthnService(_authenticators, _passwords, _credentials, _configuration, _work, _clock, _randomness),
+            new TotpService(_authenticators, _passwords, _configuration, _work, _clock, _randomness),
             _clients,
             new PolicyResolution(_memberships, _configuration, _raises),
             _invitations,
@@ -426,6 +432,268 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         Assert.Equal(RegistrationStep.Terms, settled.Step);
         Assert.NotNull(settled.Security.RecoveryCodes);
         Assert.NotEmpty(settled.Security.RecoveryCodes);
+    }
+
+    /// <summary>
+    /// REG-SESS-006 AC1, REG-PM-001: a passkey created against the registration
+    /// session, under its provisional handle and the staged email, completes the step
+    /// with no password, and the account the terms step creates holds it.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_006_AC1_APasskeyCreatedAgainstTheSessionCompletesTheStepAsync()
+    {
+        Keyed();
+        RegistrationSessionId session = await ConfirmedAsync();
+
+        CredentialCeremony ceremony = Ok(await Service.BeginKeyAsync(
+            session,
+            Factor.Passkey,
+            TestContext.Current.CancellationToken));
+        EnrolledCredential created = Ok(await Service.CompleteKeyAsync(
+            session,
+            Attestation(ceremony.Challenge),
+            "this phone",
+            TestContext.Current.CancellationToken));
+        RegistrationCompleted completed = Ok(await AcceptedAsync(session));
+
+        Assert.Equal(WebAuthnService.Handle(completed.Subject), ceremony.User.Id);
+        Assert.Equal(Address, ceremony.User.Name);
+        Assert.Null(created.RecoveryCodes);
+        Assert.Null(await _passwords.FindAsync(completed.Subject, TestContext.Current.CancellationToken));
+        Authenticator held = Assert.Single(_authenticators.All);
+        Assert.Equal(created.Credential, held.Id);
+        Assert.Equal(Factor.Passkey, held.Factor);
+        Assert.Equal(completed.Subject, held.Subject);
+    }
+
+    /// <summary>
+    /// REG-SESS-006 AC4: a generator confirmed against the registration session beside
+    /// a password that does not stand alone answers with the recovery codes, and the
+    /// step is done.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_006_AC4_AGeneratorConfirmedBesideAPasswordShowsRecoveryCodesAsync()
+    {
+        Keyed();
+        RegistrationSessionId session = await ConfirmedAsync();
+        _ = Ok(await Service.SetPasswordAsync(session, Short, TestContext.Current.CancellationToken));
+
+        GeneratorEnrolment begun = Ok(await Service.BeginGeneratorAsync(
+            session,
+            "authenticator",
+            TestContext.Current.CancellationToken));
+        EnrolledCredential confirmed = Ok(await Service.ConfirmGeneratorAsync(
+            session,
+            begun.Credential,
+            Generated(begun.Secret),
+            TestContext.Current.CancellationToken));
+
+        Assert.NotNull(confirmed.RecoveryCodes);
+        Assert.Equal(Settings.FactorRecoveryCodesCount.Default, confirmed.RecoveryCodes.Count);
+        Assert.Equal(begun.Credential, confirmed.Credential);
+        Assert.Equal(RegistrationStep.Terms, Live(session).Step);
+    }
+
+    /// <summary>
+    /// REG-SESS-006: the registration session stands in for an account's session at
+    /// the security step and at no other, before which an enrolment is answered as one
+    /// asked for under no session, and a second step is refused where no password is
+    /// staged for it to stand beside (AUTH-FACT-002b).
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_006_TheSessionEnrolsOnlyAtTheSecurityStepAsync()
+    {
+        Keyed();
+        RegistrationSessionId early = await StagedAsync();
+        Later();
+        RegistrationSessionId bare = await ConfirmedAsync();
+
+        ErrorCode beforeTheStep = Refused(await Service.BeginKeyAsync(
+            early,
+            Factor.Passkey,
+            TestContext.Current.CancellationToken));
+        ErrorCode generatorBeforeTheStep = Refused(await Service.BeginGeneratorAsync(
+            early,
+            "authenticator",
+            TestContext.Current.CancellationToken));
+        ErrorCode withoutAPassword = Refused(await Service.BeginGeneratorAsync(
+            bare,
+            "authenticator",
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.SessionExpired, beforeTheStep);
+        Assert.Equal(ErrorCodes.SessionExpired, generatorBeforeTheStep);
+        Assert.Equal(ErrorCodes.FactorNotPermitted, withoutAPassword);
+        Assert.Null(Live(early).Ceremony);
+        Assert.Null(Live(bare).Generator);
+    }
+
+    /// <summary>
+    /// REG-SESS-001 AC5: a passkey ceremony and a generator begun at the security step
+    /// are staged on the session and written nowhere else.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_001_AC5_ACeremonyAndAGeneratorBegunAreHeldOnTheSessionAloneAsync()
+    {
+        Keyed();
+        RegistrationSessionId session = await ConfirmedAsync();
+        _ = Ok(await Service.SetPasswordAsync(session, Short, TestContext.Current.CancellationToken));
+
+        CredentialCeremony ceremony = Ok(await Service.BeginKeyAsync(
+            session,
+            Factor.Passkey,
+            TestContext.Current.CancellationToken));
+        GeneratorEnrolment begun = Ok(await Service.BeginGeneratorAsync(
+            session,
+            "authenticator",
+            TestContext.Current.CancellationToken));
+
+        Assert.Empty(_authenticators.All);
+        Assert.Empty(_directory.Created);
+        Assert.Empty(Live(session).Credentials);
+        Assert.Equal(ceremony.Challenge, Live(session).Ceremony?.Challenge);
+        Assert.Equal(Factor.Passkey, Live(session).Ceremony?.Kind);
+        Assert.Equal(begun.Credential, Live(session).Generator?.Id);
+    }
+
+    /// <summary>
+    /// REG-SESS-001 AC5: the terms step writes the generator a code confirmed, under
+    /// the new account's subject, and nothing of one begun and never confirmed.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_001_AC5_TheTermsStepWritesOnlyAConfirmedGeneratorAsync()
+    {
+        Keyed();
+        RegistrationSessionId session = await ConfirmedAsync();
+        _ = Ok(await Service.SetPasswordAsync(session, Short, TestContext.Current.CancellationToken));
+        GeneratorEnrolment first = Ok(await Service.BeginGeneratorAsync(
+            session,
+            "authenticator",
+            TestContext.Current.CancellationToken));
+        _ = Ok(await Service.ConfirmGeneratorAsync(
+            session,
+            first.Credential,
+            Generated(first.Secret),
+            TestContext.Current.CancellationToken));
+        GeneratorEnrolment second = Ok(await Service.BeginGeneratorAsync(
+            session,
+            "another",
+            TestContext.Current.CancellationToken));
+
+        RegistrationCompleted completed = Ok(await AcceptedAsync(session));
+
+        Authenticator held = Assert.Single(_authenticators.All);
+        Assert.Equal(first.Credential, held.Id);
+        Assert.NotEqual(second.Credential, held.Id);
+        Assert.Equal(completed.Subject, held.Subject);
+        Assert.True(held.Confirmed);
+        Assert.Empty(_sessions.All);
+    }
+
+    /// <summary>
+    /// REG-SESS-001 AC5: a session abandoned, and one that ran out, leave neither the
+    /// ceremony nor the generator behind.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_001_AC5_AnAbandonedOrExpiredSessionLeavesNeitherBehindAsync()
+    {
+        Keyed();
+        RegistrationSessionId abandoned = await BegunBothAsync();
+        Later();
+        RegistrationSessionId expired = await BegunBothAsync();
+
+        Result left = await Service.AbandonAsync(abandoned, linkToken: null, TestContext.Current.CancellationToken);
+        _clock.Advance(Settings.RegistrationSessionLifetime.Default + TimeSpan.FromMinutes(1));
+        int swept = await Service.SweepAsync(Sweeper, TestContext.Current.CancellationToken);
+
+        Assert.True(left.Match(() => true, _ => false));
+        Assert.Equal(1, swept);
+        Assert.DoesNotContain(_sessions.All, held => held.Id == expired);
+        Assert.Empty(_sessions.All);
+        Assert.Empty(_authenticators.All);
+    }
+
+    /// <summary>
+    /// REG-SESS-001: the ceremony a session has open is spent by the credential it
+    /// creates and replaced by the next one begun, so an answer to a challenge that no
+    /// longer stands creates nothing.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_001_ACeremonyIsSpentOrReplacedUnderTheSessionAsync()
+    {
+        Keyed();
+        RegistrationSessionId session = await ConfirmedAsync();
+        CredentialCeremony replaced = Ok(await Service.BeginKeyAsync(
+            session,
+            Factor.Passkey,
+            TestContext.Current.CancellationToken));
+        CredentialCeremony standing = Ok(await Service.BeginKeyAsync(
+            session,
+            Factor.Passkey,
+            TestContext.Current.CancellationToken));
+
+        ErrorCode toTheReplaced = Refused(await Service.CompleteKeyAsync(
+            session,
+            Attestation(replaced.Challenge),
+            "this phone",
+            TestContext.Current.CancellationToken));
+        _ = Ok(await Service.CompleteKeyAsync(
+            session,
+            Attestation(standing.Challenge),
+            "this phone",
+            TestContext.Current.CancellationToken));
+        ErrorCode toTheSpent = Refused(await Service.CompleteKeyAsync(
+            session,
+            Attestation(standing.Challenge),
+            "that laptop",
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.FactorRejected, toTheReplaced);
+        Assert.Equal(ErrorCodes.FactorRejected, toTheSpent);
+        Assert.Null(Live(session).Ceremony);
+        Assert.Single(Live(session).Credentials);
+    }
+
+    /// <summary>
+    /// REG-SESS-001, CONV-DESIGN-003: a wrong code confirms nothing and commits
+    /// nothing, the generator stands for the right one, and the code that confirms it
+    /// spends it, so one enrolment is not confirmed twice.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_001_AGeneratorIsSpentByTheCodeThatConfirmsItAsync()
+    {
+        Keyed();
+        RegistrationSessionId session = await ConfirmedAsync();
+        _ = Ok(await Service.SetPasswordAsync(session, Short, TestContext.Current.CancellationToken));
+        GeneratorEnrolment begun = Ok(await Service.BeginGeneratorAsync(
+            session,
+            "authenticator",
+            TestContext.Current.CancellationToken));
+        string right = Generated(begun.Secret);
+        _work.Reset();
+
+        ErrorCode wrong = Refused(await Service.ConfirmGeneratorAsync(
+            session,
+            begun.Credential,
+            string.Equals(right, "000000", StringComparison.Ordinal) ? "000001" : "000000",
+            TestContext.Current.CancellationToken));
+        int committedByTheRefusal = _work.Committed;
+        _ = Ok(await Service.ConfirmGeneratorAsync(
+            session,
+            begun.Credential,
+            right,
+            TestContext.Current.CancellationToken));
+        ErrorCode again = Refused(await Service.ConfirmGeneratorAsync(
+            session,
+            begun.Credential,
+            right,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.CodeInvalid, wrong);
+        Assert.Equal(0, committedByTheRefusal);
+        Assert.Equal(ErrorCodes.FactorRejected, again);
+        Assert.Null(Live(session).Generator);
+        Assert.Single(Live(session).Credentials);
     }
 
     /// <summary>
@@ -2429,6 +2697,65 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             Label("authenticator"),
             new TotpMaterial(Secret(), ConsumedStep: null),
             WebAuthn: null);
+
+    // A deployment that has named its relying party and the name an authenticator
+    // app shows, neither of which has a default.
+    private void Keyed()
+    {
+        _configuration.Set(Settings.ServiceName, "Example");
+        _configuration.Set(Settings.WebAuthnRelyingPartyId, RelyingParty);
+        _configuration.Set(Settings.WebAuthnOrigins, [WebOrigin]);
+    }
+
+    // A session at its security step with a ceremony open and a generator begun.
+    private async Task<RegistrationSessionId> BegunBothAsync()
+    {
+        RegistrationSessionId session = await ConfirmedAsync();
+
+        _ = Ok(await Service.SetPasswordAsync(session, Short, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.BeginKeyAsync(session, Factor.Passkey, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.BeginGeneratorAsync(session, "authenticator", TestContext.Current.CancellationToken));
+
+        return session;
+    }
+
+    // What a browser sends back from a creation ceremony: the challenge the server
+    // issued, an origin the relying party admits, and a key the runtime can read.
+    private static AuthenticatorAttestation Attestation(string challenge)
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+
+        byte[] clientData = Encoding.UTF8.GetBytes(
+            "{\"type\":\"webauthn.create\",\"challenge\":\""
+            + challenge
+            + "\",\"origin\":\""
+            + WebOrigin
+            + "\"}");
+
+        byte[] authenticatorData = new byte[37];
+
+        SHA256.HashData(Encoding.UTF8.GetBytes(RelyingParty)).CopyTo(authenticatorData, 0);
+
+        // User present and user verified, with the two backup flags of a synced
+        // credential (AUTH-FACT-013).
+        authenticatorData[32] = 0x1D;
+
+        return new AuthenticatorAttestation(
+            Base64Url.EncodeToString(Guid.NewGuid().ToByteArray()),
+            Base64Url.EncodeToString(clientData),
+            Base64Url.EncodeToString(authenticatorData),
+            Base64Url.EncodeToString(key.ExportSubjectPublicKeyInfo()),
+            Algorithm: -7);
+    }
+
+    // The code an authenticator app shows now for the secret it was given.
+    private string Generated(string secret) =>
+        new Totp(
+                Base32Encoding.ToBytes(secret),
+                TotpCodes.StepSeconds,
+                OtpHashMode.Sha1,
+                TotpCodes.Digits)
+            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
 
     private byte[] Secret()
     {

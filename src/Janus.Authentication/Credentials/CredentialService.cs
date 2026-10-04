@@ -12,6 +12,7 @@ using Janus.Authentication.Identifiers;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Recovery;
+using Janus.Authentication.Registration;
 using Janus.Authentication.Sending;
 using Janus.Authentication.Sessions;
 using Janus.Core;
@@ -42,6 +43,7 @@ namespace Janus.Authentication.Credentials;
 /// <param name="audit">Where what became of a credential is recorded.</param>
 /// <param name="events">Where a completed enrolment is announced.</param>
 /// <param name="configuration">Where the lifetimes and the service name come from.</param>
+/// <param name="registration">What stages a credential on a registration session.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
 /// <param name="time">The clock the deployment runs on.</param>
 /// <remarks>
@@ -50,7 +52,9 @@ namespace Janus.Authentication.Credentials;
 /// reach the same operations: a session, which every gate applies to, and the
 /// enrolment session an approved recovery opened, which stands in for the gates
 /// somebody locked out could never pass (D-148) and ends the moment the enrolment
-/// completes.
+/// completes. A third, the registration session at its security step, reaches the
+/// four enrolment operations alone, which stage on the session what an account would
+/// hold and write no account row (REG-SESS-006, REG-SESS-001).
 /// </remarks>
 internal sealed class CredentialService(
     WebAuthnService keys,
@@ -72,6 +76,7 @@ internal sealed class CredentialService(
     ICredentialAudit audit,
     IEvents events,
     IConfigurationStore configuration,
+    RegistrationService registration,
     IUnitOfWork work,
     TimeProvider time) : ICredentials
 {
@@ -163,6 +168,13 @@ internal sealed class CredentialService(
         Factor kind,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(authority);
+
+        if (authority.Registration is RegistrationSessionId registering)
+        {
+            return await registration.BeginKeyAsync(registering, kind, cancellationToken).ConfigureAwait(false);
+        }
+
         Error? failure = null;
 
         Acting acting = (await ActingAsync(authority, StepUpAction.FactorEnrol, cancellationToken).ConfigureAwait(false))
@@ -245,6 +257,14 @@ internal sealed class CredentialService(
     {
         ArgumentNullException.ThrowIfNull(label);
         ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(authority);
+
+        if (authority.Registration is RegistrationSessionId registering)
+        {
+            return await registration
+                .CompleteKeyAsync(registering, attestation, label, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         Error? failure = null;
 
@@ -344,6 +364,12 @@ internal sealed class CredentialService(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(label);
+        ArgumentNullException.ThrowIfNull(authority);
+
+        if (authority.Registration is RegistrationSessionId registering)
+        {
+            return await registration.BeginGeneratorAsync(registering, label, cancellationToken).ConfigureAwait(false);
+        }
 
         Error? failure = null;
 
@@ -393,24 +419,13 @@ internal sealed class CredentialService(
             return Result.Failure<GeneratorEnrolment>(failure);
         }
 
-        byte[] secret = begun.Secret.ToArray();
-
-        try
-        {
-            string text = TotpCodes.Text(secret);
-
-            return Result.Success(new GeneratorEnrolment(
+        return Result.Success(await generators
+            .ShownAsync(
                 begun.Id,
-                text,
-                TotpCodes.Address(
-                    await IssuerAsync(cancellationToken).ConfigureAwait(false),
-                    await AccountAsync(acting.Subject, cancellationToken).ConfigureAwait(false),
-                    text)));
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(secret);
-        }
+                begun.Secret,
+                await AccountAsync(acting.Subject, cancellationToken).ConfigureAwait(false),
+                cancellationToken)
+            .ConfigureAwait(false));
     }
 
     /// <inheritdoc/>
@@ -423,6 +438,14 @@ internal sealed class CredentialService(
     {
         ArgumentNullException.ThrowIfNull(code);
         ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(authority);
+
+        if (authority.Registration is RegistrationSessionId registering)
+        {
+            return await registration
+                .ConfirmGeneratorAsync(registering, credential, code, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         Error? failure = null;
 

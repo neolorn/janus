@@ -1,5 +1,6 @@
 using System;
 using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication.Registration;
@@ -119,6 +120,63 @@ public sealed class RegistrationSessionStoreTests(DatabaseFixture database) : IC
         Assert.Equal(3, read.Identity(staged)!.WrongAttempts);
     }
 
+    /// <summary>
+    /// REG-SESS-001 AC5: the ceremony a session has open and the generator it has
+    /// begun are kept in the session's own encrypted document, so both come back as
+    /// they were staged, a dump of the row reads neither the challenge nor the
+    /// generator's secret, and the row's removal leaves neither behind.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_SESS_001_AC5_AnOpenCeremonyAndABegunGeneratorAreKeptEncryptedOnTheSessionAsync()
+    {
+        const string challenge = "a-challenge-the-server-issued-0123456789";
+        byte[] secret = RandomNumberGenerator.GetBytes(20);
+        RegistrationSession opened = Opened();
+        var generator = AuthenticatorId.New(TimeProvider.System);
+        opened.Open(new StagedCeremony(Factor.Passkey, challenge, Noon.AddMinutes(10)));
+        opened.Begin(new StagedGenerator(generator, Label("Authenticator"), secret));
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Store(writing).AddAsync(opened, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        RegistrationSession read;
+        byte[] dumped;
+
+        await using (StoreContext reading = database.Context())
+        {
+            read = Assert.IsType<RegistrationSession>(
+                await Store(reading).FindAsync(opened.Id, TestContext.Current.CancellationToken));
+        }
+
+        await using (NpgsqlConnection connection = await database.OpenAsync())
+        {
+            dumped = await connection.QuerySingleAsync<byte[]>(
+                "SELECT enc_session FROM identity.registration_sessions WHERE id = @id;",
+                new { id = opened.Id.Value });
+        }
+
+        await using (StoreContext removing = database.Context())
+        {
+            await Store(removing).RemoveAsync(opened.Id, TestContext.Current.CancellationToken);
+            await removing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext after = database.Context();
+
+        Assert.Equal(new StagedCeremony(Factor.Passkey, challenge, Noon.AddMinutes(10)), read.Ceremony);
+        Assert.Equal(generator, read.Generator?.Id);
+        Assert.Equal("Authenticator", read.Generator?.Label.Value);
+        Assert.Equal(secret, read.Generator?.Secret.ToArray());
+        Assert.Equal(-1, dumped.AsSpan().IndexOf(secret));
+        Assert.Equal(-1, dumped.AsSpan().IndexOf(Encoding.UTF8.GetBytes(Convert.ToBase64String(secret))));
+        Assert.Equal(-1, dumped.AsSpan().IndexOf(Encoding.UTF8.GetBytes(challenge)));
+        Assert.Null(await Store(after).FindAsync(opened.Id, TestContext.Current.CancellationToken));
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
@@ -151,6 +209,11 @@ public sealed class RegistrationSessionStoreTests(DatabaseFixture database) : IC
             "198.51.100.7",
             Noon,
             TimeSpan.FromHours(24));
+
+    private static CredentialLabel Label(string written) =>
+        CredentialLabel.TryParse(written, out CredentialLabel label)
+            ? label
+            : throw new Xunit.Sdk.XunitException(written);
 
     private RegistrationSessionStore Store(StoreContext context) =>
         new(context, new DataConnections(context), _deployment.DataKey(context), _deployment.Randomness);
