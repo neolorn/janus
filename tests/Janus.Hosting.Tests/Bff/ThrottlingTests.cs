@@ -97,6 +97,29 @@ public sealed class ThrottlingTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-001 AC13: two addresses of one IPv6 /64 are one source, so the delay
+    /// one earns holds the other, whatever identifier it asks for; an address of
+    /// another /64 is not held, and an IPv4-mapped address shares its IPv4 address's.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_001_TwoAddressesOfOneIpv6SubnetShareTheSourceDelayAsync()
+    {
+        await RegisteredAsync();
+
+        _ = await FailedAsync(Unheld, IPAddress.Parse("2001:db8:1:1::5"));
+        _ = await FailedAsync("somebody@example.test", Attacker);
+
+        Answer neighbour = await ArrivedAsync(IPAddress.Parse("2001:db8:1:1:ffff::6"), "/auth/link", "other@example.test");
+        Answer another = await ArrivedAsync(IPAddress.Parse("2001:db8:1:2::5"), "/auth/link", "third@example.test");
+        Answer mapped = await ArrivedAsync(Attacker.MapToIPv6(), "/auth/link", "fourth@example.test");
+
+        AssertThrottled(neighbour);
+        Assert.Equal(StatusCodes.Status202Accepted, another.Status);
+        AssertThrottled(mapped);
+    }
+
+    /// <summary>
     /// BFF-ABUSE-001 AC2: a sign-in link asked for from an address that has earned a
     /// delay is answered with the interval.
     /// </summary>

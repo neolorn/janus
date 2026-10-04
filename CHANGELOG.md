@@ -10,6 +10,15 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A source, for every count the library keeps per source, is the address the connection
+  arrived on with an IPv4-mapped IPv6 address read as its IPv4 address and any other
+  IPv6 address counted by its /64, so one host no longer holds a budget for each
+  address of its subnet; an IPv6 address whose first three bits are 000 is counted
+  whole. The flood limit also counts each IPv6 source's enclosing /48 under the new key
+  `abuse.source.sitelimit` (3000 a minute, sliding, per instance), and a request
+  refused while its source or /48 is held writes no log line of its own. A session
+  still records the whole address, and the session a registration opens records the
+  whole address of the request that completes its terms step.
 - A text code asked for at a sign-in, after a first factor, whose number's signal
   answers `risk` is no longer answered 202: nothing is issued, sent or counted, the
   consideration is recorded, and `POST /auth/factor` answers with what the challenge

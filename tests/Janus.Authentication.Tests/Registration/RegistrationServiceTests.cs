@@ -1101,6 +1101,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             Notice,
             Unticked,
             Browser,
+            address: null,
             TestContext.Current.CancellationToken));
 
         var devices = new DeviceService(
@@ -2486,6 +2487,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             Notice,
             Unticked,
             Browser,
+            address: null,
             TestContext.Current.CancellationToken));
 
         var single = new Assurance(AssuranceLevel.Aal1, PhishingResistant: false);
@@ -2506,5 +2508,48 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             single,
             completed.Browser.Value,
             TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// REG-SESS-007 AC6, AUTH-SESS-013 AC6: the session the terms step opens records the
+    /// whole address of the request that completes the step, whatever address the
+    /// registration began on; completed in process, with no request, it records the
+    /// address the registration began on.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_007_AC6_TheFirstSessionRecordsTheWholeAddressOfTheCompletingRequestAsync()
+    {
+        const string completing = "2001:db8:1:1::7";
+
+        RegistrationSessionId overTheWire = await SecuredAsync(Floor);
+
+        RegistrationOutcome completed = Ok(await Service.CompleteAsync(
+            overTheWire,
+            Terms,
+            Notice,
+            Unticked,
+            Browser,
+            completing,
+            TestContext.Current.CancellationToken));
+
+        Session opened = Assert.IsType<Session>(
+            await _live.FindAsync(completed.Session.Id, TestContext.Current.CancellationToken));
+
+        RegistrationSessionId inProcess = await SecuredAsync(Floor);
+        string began = Assert.Single(_sessions.All, held => held.Id == inProcess).Source;
+
+        RegistrationCompleted accepted = Ok(await Service.AcceptTermsAsync(
+            inProcess,
+            Terms,
+            Notice,
+            Unticked,
+            Browser,
+            TestContext.Current.CancellationToken));
+
+        Session own = Assert.IsType<Session>(
+            await _live.FindAsync(accepted.Session, TestContext.Current.CancellationToken));
+
+        Assert.Equal(completing, opened.Origin.Address);
+        Assert.Equal((Source, Source), (began, own.Origin.Address));
     }
 }

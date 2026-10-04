@@ -897,6 +897,7 @@ internal sealed class RegistrationService(
                     noticeVersion,
                     consents,
                     device,
+                    address: null,
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(
@@ -939,6 +940,11 @@ internal sealed class RegistrationService(
     /// <param name="noticeVersion">The version of the notice presented.</param>
     /// <param name="consents">What each consent control was left at.</param>
     /// <param name="device">What the browser said it is.</param>
+    /// <param name="address">
+    /// The whole address of the request completing the step, which the first session
+    /// records (REG-SESS-007, AUTH-SESS-013), or nothing where a caller in process
+    /// completes it, whose session records the address the registration began on.
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The account, the session it is signed in on, and the browser token.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
@@ -948,6 +954,7 @@ internal sealed class RegistrationService(
         string noticeVersion,
         IReadOnlyDictionary<string, bool> consents,
         DeviceDescription device,
+        string? address,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(termsVersion);
@@ -1074,7 +1081,7 @@ internal sealed class RegistrationService(
                 .BeginRegisteredAsync(
                     live.Provisional,
                     SecurityStep.Presented(live, policy.LoginFactors),
-                    new SessionOrigin(live.Source, device),
+                    new SessionOrigin(address ?? live.Source, device),
                     live.Client.Length > 0 ? live.Client : null,
                     cancellationToken)
                 .ConfigureAwait(false))

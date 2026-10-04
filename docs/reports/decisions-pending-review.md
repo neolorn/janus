@@ -16211,6 +16211,8 @@ counts are kept, or what a deployment of several instances admits.
 - the count is kept per instance, by connection address after trusted proxies;
 - a deployment of several instances sets its share.
 
+**Superseded by D-166.**
+
 ---
 
 ## 390. Stage 4 is the one file of the boundary that reads a key, and it reads that key alone

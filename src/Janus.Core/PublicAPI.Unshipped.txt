@@ -3636,6 +3636,7 @@ static Janus.Core.Configuration.Settings.AbuseSmsBalanceFloor.get -> Janus.Core.
 static Janus.Core.Configuration.Settings.AbuseSmsDrainFactor.get -> Janus.Core.Configuration.DecimalSetting!
 static Janus.Core.Configuration.Settings.AbuseSmsPollInterval.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.AbuseSourceRateLimit.get -> Janus.Core.Configuration.IntegerSetting!
+static Janus.Core.Configuration.Settings.AbuseSourceSiteLimit.get -> Janus.Core.Configuration.IntegerSetting!
 static Janus.Core.Configuration.Settings.AbuseThrottleAccountCap.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.AbuseThrottleDecay.get -> Janus.Core.Configuration.DurationSetting!
 static Janus.Core.Configuration.Settings.AbuseThrottleDelayFactor.get -> Janus.Core.Configuration.DecimalSetting!

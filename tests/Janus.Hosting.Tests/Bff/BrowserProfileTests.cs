@@ -445,9 +445,9 @@ public sealed class BrowserProfileTests : IDisposable
     /// logging of BFF-LOG-002, which only ever takes a body out of a log, and the
     /// fourth is error translation, which asks only whether routing found an endpoint,
     /// once every stage has run, to answer a path none serves. The one stage that
-    /// reads a key is the flood limit of stage 4, which reads that key alone, runs
-    /// before the token is checked and either refuses the request or hands it on to
-    /// every stage after it.
+    /// reads a key is the flood limit of stage 4, which reads its two limits and nothing
+    /// else (BFF-ORDER-001), runs before the token is checked and either refuses the
+    /// request or hands it on to every stage after it.
     /// </summary>
     [Fact]
     public void AUTH_SESS_007_AC2_NoEndpointCanOptOut()
@@ -459,7 +459,7 @@ public sealed class BrowserProfileTests : IDisposable
 
         Assert.Equal(["SourceRateLimiting.cs"], Reading("IConfigurationStore", "Settings."));
         Assert.Equal(
-            ["Settings.AbuseSourceRateLimit"],
+            ["Settings.AbuseSourceRateLimit", "Settings.AbuseSourceSiteLimit"],
             Regex.Matches(Repository.Source("SourceRateLimiting"), @"Settings\.\w+").Select(read => read.Value));
     }
 

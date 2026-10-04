@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -124,6 +125,167 @@ public sealed class SourceRateLimitingTests
         Assert.NotEqual(StatusCodes.Status429TooManyRequests, again.Status);
         Assert.Equal(StatusCodes.Status429TooManyRequests, full.Status);
         Assert.Equal(began.AddSeconds(30).AddMinutes(1), RetryAt(full));
+    }
+
+    /// <summary>
+    /// BFF-ORDER-001 AC3, AC6: every address of one IPv6 /64 is one source, so requests
+    /// spread across a subnet are counted together and refused past the one limit.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ORDER_001_AC3_AddressesInOneIpv6SubnetAreOneSourceAsync()
+    {
+        await using var deployment = new Deployment();
+        var browser = new Browser(deployment);
+
+        deployment.Configuration.Set(Settings.AbuseSourceRateLimit, 2);
+
+        Answer first = await browser.SendAsync("GET", "/register", source: IPAddress.Parse("2001:db8:1:1::1"));
+        Answer second = await browser.SendAsync("GET", "/register", source: IPAddress.Parse("2001:db8:1:1:ffff::2"));
+        Answer third = await browser.SendAsync("GET", "/register", source: IPAddress.Parse("2001:db8:1:1::3"));
+
+        Assert.NotEqual(StatusCodes.Status429TooManyRequests, first.Status);
+        Assert.NotEqual(StatusCodes.Status429TooManyRequests, second.Status);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, third.Status);
+        Assert.Equal(ErrorCodes.Throttled.ToString(), third.Text("code"));
+    }
+
+    /// <summary>
+    /// BFF-ORDER-001 AC3, AC7: another /64 of the same /48 is a source of its own and
+    /// is admitted until the /48 reaches <c>abuse.source.sitelimit</c>; past it every
+    /// subnet of the site is refused, and another site is not.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ORDER_001_AC3_AnotherSubnetOfTheSiteIsAdmittedUntilTheSiteLimitAsync()
+    {
+        await using var deployment = new Deployment();
+        var browser = new Browser(deployment);
+
+        deployment.Configuration.Set(Settings.AbuseSourceRateLimit, 1);
+        deployment.Configuration.Set(Settings.AbuseSourceSiteLimit, 2);
+
+        Answer first = await browser.SendAsync("GET", "/register", source: IPAddress.Parse("2001:db8:1:1::1"));
+        Answer held = await browser.SendAsync("GET", "/register", source: IPAddress.Parse("2001:db8:1:1::2"));
+        Answer second = await browser.SendAsync("GET", "/register", source: IPAddress.Parse("2001:db8:1:2::1"));
+        Answer third = await browser.SendAsync("GET", "/register", source: IPAddress.Parse("2001:db8:1:3::1"));
+        Answer elsewhere = await browser.SendAsync("GET", "/register", source: IPAddress.Parse("2001:db8:2:1::1"));
+
+        Assert.NotEqual(StatusCodes.Status429TooManyRequests, first.Status);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, held.Status);
+        Assert.NotEqual(StatusCodes.Status429TooManyRequests, second.Status);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, third.Status);
+        Assert.Equal(ErrorCodes.Throttled.ToString(), third.Text("code"));
+        Assert.NotEqual(StatusCodes.Status429TooManyRequests, elsewhere.Status);
+    }
+
+    /// <summary>
+    /// BFF-ORDER-001 AC3, AC6: an IPv4 address that arrives mapped into IPv6 is the
+    /// source its IPv4 address is, and is counted by no /48.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ORDER_001_AC3_AnIpv4MappedAddressIsItsIpv4SourceAsync()
+    {
+        await using var deployment = new Deployment();
+        var browser = new Browser(deployment);
+
+        deployment.Configuration.Set(Settings.AbuseSourceRateLimit, 1);
+        deployment.Configuration.Unreachable = Settings.AbuseSourceSiteLimit.Key;
+
+        Answer plain = await browser.SendAsync("GET", "/register", source: Flooding);
+        Answer mapped = await browser.SendAsync("GET", "/register", source: Flooding.MapToIPv6());
+
+        Assert.NotEqual(StatusCodes.Status429TooManyRequests, plain.Status);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, mapped.Status);
+    }
+
+    /// <summary>
+    /// BFF-ORDER-001 AC3: a source or a /48 going over its limit writes one line when
+    /// its hold begins, and each request refused while it is held writes none.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task BFF_ORDER_001_AC3_AHeldSourceWritesNoLineForEachRefusalAsync()
+    {
+        await using var deployment = new Deployment();
+        var browser = new Browser(deployment);
+
+        deployment.Configuration.Set(Settings.AbuseSourceRateLimit, 1);
+        deployment.Configuration.Set(Settings.AbuseSourceSiteLimit, 2);
+
+        _ = await browser.SendAsync("GET", "/register", source: IPAddress.Parse("2001:db8:1:1::1"));
+
+        int before = Held();
+
+        _ = await browser.SendAsync("GET", "/register", source: IPAddress.Parse("2001:db8:1:1::2"));
+
+        int begun = Held();
+
+        _ = await browser.SendAsync("GET", "/register", source: IPAddress.Parse("2001:db8:1:1::3"));
+        _ = await browser.SendAsync("GET", "/register", source: IPAddress.Parse("2001:db8:1:2::1"));
+        _ = await browser.SendAsync("GET", "/register", source: IPAddress.Parse("2001:db8:1:3::1"));
+
+        int siteBegun = Held();
+
+        Answer refused = await browser.SendAsync("GET", "/register", source: IPAddress.Parse("2001:db8:1:4::1"));
+
+        Assert.Equal(before + 1, begun);
+        Assert.Equal(begun + 1, siteBegun);
+        Assert.Equal(StatusCodes.Status429TooManyRequests, refused.Status);
+        Assert.Equal(siteBegun, Held());
+
+        int Held() => deployment.Logs.Lines.Count(line =>
+            line.Contains("went over its request limit", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// AUTH-SESS-013 AC6: a sign-in from an IPv6 address opens a session that records
+    /// the whole address, never the /64 its failures are counted by.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_SESS_013_TheSessionRecordsTheWholeAddressAsync()
+    {
+        await using var deployment = new Deployment();
+        var whole = IPAddress.Parse("2001:db8:1:1::7");
+
+        Flow.Prepare(deployment);
+        deployment.Configuration.Set(Settings.DeviceVerificationEnabled, false);
+
+        _ = await Flow.SignedInAsync(deployment);
+
+        deployment.Clock.Advance(TimeSpan.FromMinutes(5));
+
+        var browser = new Browser(deployment);
+
+        _ = await browser.SendAsync("GET", "/auth/session", source: whole);
+
+        Answer began = await browser.SendAsync(whole, "trace-begin", "POST", "/auth/begin", ("identifier", Flow.Address));
+        string challenge = began.Text("challengeId");
+
+        Answer wrong = await browser.SendAsync(
+            whole,
+            "trace-wrong",
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "password"),
+            ("value", "not the password at all"));
+        Answer signedIn = await browser.SendAsync(
+            whole,
+            "trace-right",
+            "POST",
+            "/auth/factor",
+            ("challengeId", challenge),
+            ("factor", "password"),
+            ("value", Flow.Password));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, wrong.Status);
+        Assert.Equal("complete", signedIn.Text("status"));
+        Assert.Contains(deployment.Sessions.All, session => session.Origin.Address == "2001:db8:1:1::7");
+        Assert.DoesNotContain(deployment.Sessions.All, session => session.Origin.Address.EndsWith("/64", StringComparison.Ordinal));
+        Assert.Contains(deployment.Sessions.All, session => session.Origin.Source == "2001:db8:1:1::/64");
     }
 
     /// <summary>

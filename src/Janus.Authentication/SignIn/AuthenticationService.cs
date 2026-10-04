@@ -425,7 +425,7 @@ internal sealed class AuthenticationService(
             .ByProviderAsync(provider, providerSubject, cancellationToken)
             .ConfigureAwait(false);
 
-        var attempt = new ThrottleAttempt(origin.Address, null) { Account = linked?.Subject };
+        var attempt = new ThrottleAttempt(origin.Source, null) { Account = linked?.Subject };
 
         if (await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false) is Error held)
         {
@@ -536,7 +536,7 @@ internal sealed class AuthenticationService(
 
         // AUTH-ABUSE-001 AC5: only a token that stands for this sign-in's account
         // recognises the browser; carrying one proves nothing.
-        var attempt = new ThrottleAttempt(origin.Address, open?.Identifier)
+        var attempt = new ThrottleAttempt(origin.Source, open?.Identifier)
         {
             Account = open?.Subject,
             Recognised = await RecognisedAsync(open?.Subject, remembered, trusted, cancellationToken)
@@ -626,7 +626,7 @@ internal sealed class AuthenticationService(
         ArgumentNullException.ThrowIfNull(origin);
 
         Challenge? open = await OpenAsync(challenge, cancellationToken).ConfigureAwait(false);
-        var attempt = new ThrottleAttempt(origin.Address, open?.Identifier) { Account = open?.Subject };
+        var attempt = new ThrottleAttempt(origin.Source, open?.Identifier) { Account = open?.Subject };
 
         if (await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false) is Error held)
         {
@@ -872,7 +872,7 @@ internal sealed class AuthenticationService(
         {
             return Result.Failure<LandedSignIn>(
                 press
-                    ? await GoneAsync(new ThrottleAttempt(origin.Address, null), factor, cancellationToken)
+                    ? await GoneAsync(new ThrottleAttempt(origin.Source, null), factor, cancellationToken)
                         .ConfigureAwait(false)
                     : Error.From(ErrorCodes.CodeExpired));
         }
@@ -892,7 +892,7 @@ internal sealed class AuthenticationService(
 
         Challenge? open = await OpenAsync(challenge, cancellationToken).ConfigureAwait(false);
 
-        var attempt = new ThrottleAttempt(origin.Address, open?.Identifier)
+        var attempt = new ThrottleAttempt(origin.Source, open?.Identifier)
         {
             Account = held.Subject,
             Recognised = await RecognisedAsync(held.Subject, remembered, trusted: null, cancellationToken)
@@ -1385,7 +1385,7 @@ internal sealed class AuthenticationService(
         }
 
         return checks
-            ? await HoldAsync(open, subject, reached, origin.Address, changeRequired, cancellationToken)
+            ? await HoldAsync(open, subject, reached, origin.Source, changeRequired, cancellationToken)
                 .ConfigureAwait(false)
             : await CompleteAsync(
                     open,

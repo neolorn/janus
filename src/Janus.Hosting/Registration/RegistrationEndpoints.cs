@@ -103,7 +103,7 @@ internal static class RegistrationEndpoints
                     browser.Context,
                     request.ClientId ?? string.Empty,
                     RequestOrigin.Language(context.Request),
-                    RequestOrigin.Source(context.Request),
+                    RequestOrigin.Address(context.Request),
                     request.InvitationToken,
                     cancellationToken)
                 .ConfigureAwait(false))
@@ -351,6 +351,7 @@ internal static class RegistrationEndpoints
                     notice,
                     request.Consents ?? NoConsents,
                     origin.Device,
+                    origin.Address,
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(outcome => outcome, error => Withheld<RegistrationOutcome>(error, ref failure));

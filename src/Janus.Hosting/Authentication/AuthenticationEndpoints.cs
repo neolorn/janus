@@ -155,7 +155,7 @@ internal static class AuthenticationEndpoints
                         challenge,
                         request.Factor,
                         stepping: null,
-                        origin.Address,
+                        origin.Source,
                         RequestOrigin.Language(context.Request),
                         cancellationToken)
                     .ConfigureAwait(false),

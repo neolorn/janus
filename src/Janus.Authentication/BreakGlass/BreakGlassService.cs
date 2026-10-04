@@ -132,7 +132,7 @@ internal sealed class BreakGlassService(
                 : Result.Failure<IssuedSession>(Error.Throttled(now + GlobalWindow));
         }
 
-        var attempt = new ThrottleAttempt(origin.Address, Identifier: null);
+        var attempt = new ThrottleAttempt(origin.Source, Identifier: null);
         Error? failure = null;
 
         TimeSpan delay = (await throttle.DelayAsync(attempt, cancellationToken).ConfigureAwait(false))
