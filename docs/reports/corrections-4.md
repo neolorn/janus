@@ -615,7 +615,7 @@ CONV-DESIGN-008 criterion 3, "no project's build reports MSB3277": no test decid
 
 What earlier runs left: nine worktrees held uncommitted work whose commits were all in the branch; each is kept as a patch outside the repository and removed with its branch. The reason rule of the configuration route that one of them carried is on the branch at the endpoint and in the service (`ConfigurationEndpointTests.OPS_CFG_005_EveryChangeCarriesAReasonAsync`, `ConfigurationAdministrationTests.OPS_CFG_008_AC2_ATighteningWithNoReasonIsRefusedAsync`). Four stashes are dropped: three held earlier states of the docs, and every file of the fourth is in the history (the changelog describes `MapAuthorizationTables`).
 
-**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The parts of D-183 the owner's split names run each in a worktree of its own cut from `7bce9374`: gates, sessions, privacy and authorization are merged (below), sessions without questions 31 and 42 and privacy without questions 29 and 30; sending is not, and a further part builds question 30. Questions 68 to 101 park the sites they name. The work after the merges is not started.
+**State.** The X9 sweep of question 58 ran in four parts and question 57 in a fifth; all five are merged (below). The parts of D-183 the owner's split names run each in a worktree of its own cut from `7bce9374`: gates, sessions, privacy and authorization are merged (below), sessions without questions 31 and 42 and privacy without questions 29 and 30; the further part for question 30 is merged; sending is not. Questions 68 to 106 park the sites they name. The work after the merges is not started.
 
 ### The section C sweeps, place by place
 
@@ -1077,6 +1077,19 @@ After the merge: build 0 warnings 0 errors, format clean, 3000 unit tests, 139 c
   - Observed: `IAccessGate.WhoCanAccessAsync` with the rows handed in still stands beside the declared-source path; no chapter says whether it stays.
 - No parked site of questions 69 to 88 was touched; `AccessGate`'s registration (question 83) is where it was.
 
+#### D-183, `part/consent`, merged as `6ad5c978` (`c3191b69`)
+
+After the merge: build 0 warnings 0 errors, format clean, 3012 unit tests, 139 contract tests; `TruthTableTests` (84) passed on the merged tree. One migration, `KeepARecordForEachGrant`; the snapshot merged without conflict and the model has no change a migration does not carry, so nothing was regenerated. Hand-written in it: `id` added nullable, filled for the existing rows in SQL (a version 7 value from the row's instant), then set not null before the keys are added. Its `Down` restores the key on subject and purpose and deletes nothing, so it fails where a subject holds two records of one purpose (question 104).
+
+- **Question 30** (`c3191b69`; PRIV-CONS-001 criteria 4 and 6, PRIV-RIGHT-001a criterion 6; D-166 133 and 147 (5)). `consents` and `objections` are keyed on an identifier, a record for each grant and objection, with a unique index on the live consent and on the standing objection of a subject and purpose. The store's port adds and stamps and never overwrites. A grant over a live record the purpose admits writes and raises nothing; over one it no longer admits, the live record is stamped superseded and the new one added in the same transaction, `ConsentChanged` superseded then granted; an objection while one stands records nothing. The supersession announces only a consent it stamped; the gate reads the standing record (the live one, else the latest). No public signature changed.
+  - `ConsentTests`: `PRIV_CONS_001_AC4_AGrantAfterAWithdrawalAddsARecordAndLeavesTheEarlierAsItWasAsync`, `PRIV_CONS_001_AC4_AGrantAfterASupersessionAddsARecordAndLeavesTheEarlierAsItWasAsync`, `PRIV_CONS_001_AC6_AGrantOverALiveRecordThePurposeAdmitsChangesNothingAsync`, `PRIV_CONS_001_AC6_AGrantMeetingARecordWrittenMeanwhileAddsNoneAsync`, `PRIV_CONS_001_AC6_AGrantFindingARecordWrittenWhileItWaitedAddsNoneAsync`, `PRIV_CONS_001_AC6_AGrantOverALiveRecordAgainstAnotherDocumentSupersedesItAndAddsOneAsync`, `PRIV_CONS_001_AC6_AReplacingGrantWhoseEventCannotBeWrittenRollsBackAsync`, `PRIV_CONS_001_AnAdministratorGrantOverALiveRecordNoLongerAdmittedIsRecordedAsNamedAsync`, `PRIV_CONS_001_AGrantOverALiveRecordOfAKindThePurposeDoesNotAdmitSupersedesItAsync`, `PRIV_RIGHT_001a_AC6_ObjectingAgainWhileAnObjectionStandsRecordsNothingAsync`, `PRIV_RIGHT_001a_AC6_AnObjectionMeetingOneRecordedMeanwhileRecordsNothingAsync`, `PRIV_RIGHT_001a_AC2_AnObjectionAfterAWithdrawalIsARecordOfItsOwnAsync`.
+  - `ConsentStoreTests`: `PRIV_CONS_001_AC1_AConsentReadsBackEveryFieldItWasWrittenWithAsync`, `PRIV_CONS_001_AC1_AConsentAddedWithItsAccountInOneUnitOfWorkIsHeldAsync`, `PRIV_CONS_008_AC4_WithdrawalKeepsTheRecordAndTimestampsItAsync`, `PRIV_CONS_001_AC4_AGrantAfterAWithdrawalKeepsTheWithdrawnRecordAsync`, `PRIV_CONS_001_AC4_ASupersessionAndAWithdrawalEachStampTheLiveRecordAsync`, `WithdrawConsent_OverASupersededRecord_StampsItOnceAsync`, `PRIV_CONS_001_AC4_AtMostOneLiveRecordASubjectAndPurposeExistsAsync`, `PRIV_CONS_001_AC6_TwoGrantsAtOnceAddOneRecordAsync`, `PRIV_CONS_007_AC1_OnlyLiveConsentsAgainstAnEarlierVersionAreFoundAsync`, `PRIV_CONS_007_AC1_ALiveConsentAgainstAnotherDocumentIsFoundAsync`, `PRIV_RIGHT_001a_AC1_AnObjectionReadsBackAndItsWithdrawalIsTimestampedAsync`, `PRIV_RIGHT_001a_AC6_AnObjectionWhileOneStandsIsNotAddedAsync`, `PRIV_CONS_008_AC5_TwoWithdrawalsAtOnceWithdrawOnceAsync`, `PRIV_CONS_001_AC4_ARecordWrittenBeforeTheKeyStaysUnderAnIdentifierOfItsOwnAsync`.
+  - `ConsentGateTests`: `PRIV_CONS_001_AC4_AConsentGivenAgainAfterAWithdrawalAdmitsTheActionAsync`, `PRIV_CONS_001_AC4_WhereNoRecordIsLiveTheLatestDecidesTheRefusalAsync`.
+  - The 204 for a grant over an admitted live record is asserted at the service; the endpoint maps success as before.
+  - Ledger: no line for 133 or 147, which also cover question 29.
+  - Two more sites of questions 77 and 88, left committing: `ConsentService.GrantAsync` where it finds an admitted live record written meanwhile, and `ConsentService.ObjectAsync` where it meets an objection recorded meanwhile.
+  - The integration classes `ConsentStoreTests`, `MigrationRunTests`, `SchemaContractTests`, `ModelTests`, `ConsentGateTests` and `TruthTableTests` passed on the part.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1247,6 +1260,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3000 unit tests, 139 c
 | `DerivationMaterialiser`, the fault for rows not supplied (`10e7acb6`) | It was thrown after the unit of work began | CONV-DESIGN-003 | What needs no write is judged before the beginning; same exception, same condition |
 | `DeclarationCoverage`, `details.key` of a missing relationship source (`10e7acb6`) | D-183 question 22 names the code and not the key's form | `10` section 1.5, "a relationship source is named by its relationship" | The key is the relationship's name, with no prefix |
 | Fixtures and fakes for questions 22, 34 and 59 (`be757f8d`, `e467284d`, `10e7acb6`) | The test host and the conformance sample declared no relationship source and no longer started; no fake held the alerts of the gate or the order the audit is asked in | The working guide's section 3, test infrastructure | The fixtures register the test host's context and its sources; fakes alone, no runtime code |
+| `ConsentStoreTests.PRIV_CONS_001_AC4_AGrantAfterAWithdrawalKeepsTheWithdrawnRecordAsync` (`c3191b69`) | D-166 names this test with criterion 3; the criterion that states it is PRIV-CONS-001 criterion 4 | `04` PRIV-CONS-001; CONV-TEST-007 | The test carries the number of the criterion the chapter states |
 
 ## 4. Open questions
 
@@ -1891,7 +1905,7 @@ After the merge: build 0 warnings 0 errors, format clean, 3000 unit tests, 139 c
   purpose stands. A unique partial index refuses a second live row.
 - **What the specification says.** No chapter says.
 - **Parked.** 133 and 147 (5).
-- **Answer:** D-183. Not yet built.
+- **Answer:** D-183. Built in `c3191b69` (`part/consent`); questions 102 to 106 follow from it.
 
 **31. Tier 3. D-166 115 (2), AUTH-FACT-004 criterion 3, REG-SESS-005 criterion 1 and AUTH-ABUSE-003: verifying a code for a held identifier.**
 
@@ -2826,6 +2840,56 @@ part of 389 (3) and waits with 389 on question 48.
   2. The grant's own row is the record (nil granter, the reason), and the job names the principal: the two sentences of `03` change.
   3. A principal column on grants: a migration.
 - **Parked.** That audit record alone.
+- **Answer:** pending.
+
+**102. Tier 2. CONV-VCS-004: the gate's read of the standing consent and the truth table.**
+
+- **Item.** Question 30.
+- **What the code does.** `RecordedConsents`, under a path the check counts as permission logic, reads the standing record (the live one, else the latest) where it read the one row. No outcome a truth-table case states changed; the table's file changed in a fixture call alone, which satisfies the check.
+- **Readings.**
+  1. That suffices.
+  2. The table gains two rows (a live record beside an ended one; no live record, the latest decides), which `ConsentGateTests` hold today.
+- **Parked.** Nothing.
+- **Answer:** pending.
+
+**103. Tier 2. CONV-DESIGN-004 and PRIV-CONS-001: the identifiers the migration gives the existing records.**
+
+- **Item.** Question 30.
+- **What the code does.** The migration fills `id` in SQL: the 48-bit millisecond instant of the row, the version 7 nibble, the rest from `gen_random_uuid()`. The values are valid version 7; a test asserts version and instant.
+- **Readings.**
+  1. The store's rule applied in SQL, as built.
+  2. The identifiers are minted in code, in a data step outside the migration.
+- **Parked.** Nothing.
+- **Answer:** pending.
+
+**104. Tier 2. PRIV-CONS-001 and OPS-DEP-002: the `Down` of `KeepARecordForEachGrant`.**
+
+- **Item.** Question 30.
+- **What the code does.** `Down` restores the key on subject and purpose and deletes nothing, so it fails where a subject holds two records of one purpose. `Up` drops both primary keys and adds keys and unique indexes to existing tables; the destructive-operations report will list it.
+- **Readings.**
+  1. A revert removes no evidence, as built.
+  2. `Down` keeps the latest record and deletes the rest.
+- **Parked.** Nothing.
+- **Answer:** pending.
+
+**105. Tier 2. PRIV-CONS-008: a withdrawal where no record is live.**
+
+- **Item.** Question 30.
+- **What the code does.** A withdrawal stamps the live record, else the latest unwithdrawn one, so a superseded, unwithdrawn consent can still be withdrawn, as before the change (D-166 148).
+- **Readings.**
+  1. As built.
+  2. A withdrawal touches a live record alone: one statement of the store and one test.
+- **Parked.** Nothing.
+- **Answer:** pending.
+
+**106. Tier 2. CONV-DESIGN-003 and PRIV-CONS-002: the store saves tracked changes before its conditional insert.**
+
+- **Item.** Question 30.
+- **What the code does.** The insert conditional on the live index is hand-written SQL on the ambient transaction. The unit of work saves tracked changes at the outermost commit alone, so a consent given at registration would name an account not yet written. `ConsentStore` saves the tracked changes before its insert, inside the same transaction (`ConsentStoreTests.PRIV_CONS_001_AC1_AConsentAddedWithItsAccountInOneUnitOfWorkIsHeldAsync`).
+- **Readings.**
+  1. As built.
+  2. The record is inserted through the model, which cannot be conditional on the partial index: a second grant at once then fails on the index and is read again.
+- **Parked.** Nothing.
 - **Answer:** pending.
 
 ## 5. Gate result
