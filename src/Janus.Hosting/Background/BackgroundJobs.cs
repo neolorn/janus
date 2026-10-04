@@ -344,10 +344,11 @@ internal static class BackgroundJobs
         _ = await services.GetRequiredService<IVerificationCodeStore>()
             .SweepAsync(now, cancellationToken).ConfigureAwait(false);
 
-        // REG-IDENT-004, REG-IDENT-007 (D-187): an add or a replace goes once every
-        // record it holds is spent or past its lifetime.
-        _ = await services.GetRequiredService<IPendingVerificationStore>()
-            .SweepAsync(now, cancellationToken).ConfigureAwait(false);
+        if (await SweepPendingAsync(services, now, cancellationToken).ConfigureAwait(false) is Error unswept)
+        {
+            return Result.Failure(unswept);
+        }
+
         _ = await services.GetRequiredService<IKeyCeremonyStore>()
             .SweepAsync(now, cancellationToken).ConfigureAwait(false);
         _ = await services.GetRequiredService<IRecoveryLinkStore>()
@@ -392,6 +393,35 @@ internal static class BackgroundJobs
         // waiting for its key to be sent to again.
         return await services.GetRequiredService<SendCounterSweep>()
             .SweepAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    // REG-IDENT-004, REG-IDENT-007 (D-187, D-188), OPS-OBS-003: an add or a replace goes
+    // once every record it holds is spent or past its lifetime. The pass runs in a
+    // transaction, where its candidates are locked and judged again before they are
+    // deleted; one that ended nothing wrote nothing and is rolled back (CONV-DESIGN-003).
+    private static async ValueTask<Error?> SweepPendingAsync(
+        IServiceProvider services,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        IUnitOfWork work = services.GetRequiredService<IUnitOfWork>();
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return notBegun;
+        }
+
+        if (await services.GetRequiredService<IPendingVerificationStore>()
+                .SweepAsync(now, cancellationToken).ConfigureAwait(false) is 0)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return null;
+        }
+
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error);
     }
 
     // INT-SMS-004: no poll succeeds without a balance read, so a deployment that

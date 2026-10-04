@@ -288,6 +288,20 @@ internal sealed class IdentifierStore(
     {
         ArgumentNullException.ThrowIfNull(removal);
 
+        // REG-IDENT-006 (D-188): a row of the same kind and value whose window ran out
+        // before this removal, and that the sweep has not taken, reserves nothing and
+        // would still meet the unique index, so the removal replaces it. The caller
+        // holds the value's lock, so no row of the value is written meanwhile.
+        byte[][] candidates = Candidates(removal.Canonical);
+
+        _ = await context.IdentifierRemovals
+            .Where(lapsed =>
+                lapsed.Kind == removal.Kind
+                && candidates.Contains(lapsed.Fingerprint)
+                && lapsed.ExpiresAt <= removal.RemovedAt)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+
         byte[] dataKey = await DataKeyAsync(removal.Subject, cancellationToken).ConfigureAwait(false);
 
         try

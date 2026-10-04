@@ -158,24 +158,58 @@ internal sealed class PendingVerificationStore(
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">No transaction is open.</exception>
     /// <remarks>
-    /// The holders are computed in the statement as
+    /// The holders are computed in the statements as
     /// <see cref="PendingVerification.CodeHolder"/> and
     /// <see cref="PendingVerification.ConfirmationHolder"/> compute them: the SHA-256
     /// of the UUID's sixteen bytes in the order of RFC 9562, which is what
     /// <c>uuid_send</c> gives (AUTH-FACT-004). A spent record is a removed one, so a
     /// verification stays exactly while a record under either holder is within its
-    /// lifetime.
+    /// lifetime. The candidates are locked in one statement and deleted in a second,
+    /// which reads what has been committed since the first: a row a resend holds is
+    /// skipped, and one a resend gave a record before its lock was taken is judged
+    /// again and kept (REG-IDENT-004, D-188).
     /// </remarks>
     public async ValueTask<int> SweepAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("The verifications are swept only inside the operation's transaction.");
+        }
+
         byte[] confirmation = PendingVerification.ConfirmationName.ToArray();
+
+        Guid[] candidates = [.. (await context.IdentifierVerifications
+                .FromSql(
+                    $"""
+                    SELECT pending.*
+                    FROM identity.identifier_verifications AS pending
+                    WHERE NOT EXISTS (
+                        SELECT 1
+                        FROM identity.verification_codes AS held
+                        WHERE held.expires_at > {now}
+                          AND held.holder IN (
+                              sha256(uuid_send(pending.identifier_id)),
+                              sha256(uuid_send(pending.identifier_id) || {confirmation})))
+                    FOR UPDATE OF pending SKIP LOCKED
+                    """)
+                .AsNoTracking()
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+            .Select(record => record.Identifier.Value)];
+
+        if (candidates.Length is 0)
+        {
+            return 0;
+        }
 
         return await context.Database
             .ExecuteSqlAsync(
                 $"""
                 DELETE FROM identity.identifier_verifications AS pending
-                WHERE NOT EXISTS (
+                WHERE pending.identifier_id = ANY ({candidates})
+                  AND NOT EXISTS (
                     SELECT 1
                     FROM identity.verification_codes AS held
                     WHERE held.expires_at > {now}

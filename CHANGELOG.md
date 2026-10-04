@@ -56,6 +56,30 @@ against the public contract of LIB-API-001.
   where it applied the change for as long as the replace was pending. A code or a
   confirmation outstanding on an add or a replace when this version is deployed no
   longer answers: the add is asked again, and the replace is abandoned and made again.
+- A removal of an identifier, and the swap of a replace, replaces a removal record of
+  the same kind and value whose undo window has run out and that the `expiry-sweep` job
+  has not yet taken, where the second removal of such a value was a fault until the
+  sweep ran.
+- `POST /account/identifiers/{id}/undo` counts the account's verified identifiers of
+  the kind alone: it answers 409 `identity.identifier.maximum` only where they fill
+  `identifiers.<kind>.max`, and a pending add or an unverified identifier never refuses
+  it, where an undo into a full kind was a fault. The right code or a press of the
+  link of a pending add, at `POST /account/identifiers/{id}/verify`, answers 409
+  `identity.identifier.maximum` and writes nothing where the account's verified
+  identifiers already fill the kind; the add stays listed until it is swept or
+  abandoned.
+- `POST /account/identifiers/{id}/verify` counts and throttles its codes and presses
+  as `POST /register/verify/{id}` does. A refused code is counted against the request's
+  source and the identifier, an expired or capped one included, and a further code is
+  answered 429 `auth.throttled` with `retryAt` while that delay stands. Every press is
+  first held to the delay of its source. A pressed token that opens nothing (swept,
+  abandoned, settled or never issued) answers 422 `auth.code.expired`, where it
+  answered `auth.code.invalid`, and is counted against the source alone; one merely
+  opened counts nothing.
+- The expiry sweep ends pending identifier verifications in a transaction: it locks
+  its candidates, passing over any row another transaction holds, and judges each
+  again before it deletes, so a resend of an add's code, which holds the pending
+  verification's row while it writes, keeps its record.
 - `ICredentials.MarkRecoveryCodesExportedAsync` records that the person copied,
   downloaded or printed the recovery-code set the account holds, and
   `POST /account/recoverycodes/exported` maps it. An account holding no set is refused

@@ -219,6 +219,66 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     /// <summary>
+    /// REG-IDENT-006: a removal of a value replaces a removal row of the same kind and
+    /// value whose window has run out and that the sweep has not yet taken, so the
+    /// second removal never meets the unique constraint on the value: the value is
+    /// then reserved to the account that removed it last, and the lapsed row's undo
+    /// link answers to no removal.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_ARemovalReplacesALapsedRemovalOfTheSameValueAsync()
+    {
+        SubjectId first = await _deployment.AccountAsync(Noon);
+        SubjectId second = await _deployment.AccountAsync(Noon);
+        string given = Fresh("Hana");
+        byte[] lapsed = RandomNumberGenerator.GetBytes(32);
+        byte[] standing = RandomNumberGenerator.GetBytes(32);
+        DateTimeOffset lapses = Noon.AddHours(72);
+
+        await GivenUpAsync(first, given, Noon.AddHours(2), lapses, lapsed);
+        await GivenUpAsync(second, given, lapses, lapses.AddHours(72), standing);
+
+        await using StoreContext reading = database.Context();
+        IdentifierStore held = Store(reading);
+
+        Assert.Null(await held.FindRemovalAsync(lapsed, TestContext.Current.CancellationToken));
+        Assert.Equal(
+            second,
+            (await held.FindRemovalAsync(standing, TestContext.Current.CancellationToken))?.Subject);
+        Assert.Equal(
+            second,
+            await held.FindReservedToAsync(
+                IdentifierKind.Email,
+                Canonicalised(given),
+                lapses.AddHours(1),
+                TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-IDENT-006: only the lapsed row of the value removed goes with a removal; a
+    /// lapsed row of another value is left to the sweep.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_ARemovalLeavesALapsedRemovalOfAnotherValueToTheSweepAsync()
+    {
+        SubjectId first = await _deployment.AccountAsync(Noon);
+        SubjectId second = await _deployment.AccountAsync(Noon);
+        byte[] lapsed = RandomNumberGenerator.GetBytes(32);
+        DateTimeOffset lapses = Noon.AddHours(72);
+
+        await GivenUpAsync(first, Fresh("Hana"), Noon.AddHours(2), lapses, lapsed);
+        await GivenUpAsync(second, Fresh("Laila"), lapses, lapses.AddHours(72), RandomNumberGenerator.GetBytes(32));
+
+        await using StoreContext reading = database.Context();
+
+        Assert.Equal(
+            first,
+            (await Store(reading).FindRemovalAsync(lapsed, TestContext.Current.CancellationToken))?.Subject);
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-005a AC12: reading an account's identifiers takes the subject's data
     /// key out once, however many encrypted columns the read decrypts.
     /// </summary>
@@ -719,6 +779,41 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
         IdentifierSet set = await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
         set.MakePrimary(promoted);
 
+        await store.RecordAsync(set, TestContext.Current.CancellationToken);
+
+        Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+    }
+
+    // An account that holds a primary email takes a second one on, verified, and gives
+    // it up inside one unit of work, under the value's lock as a removal takes it.
+    private async Task GivenUpAsync(
+        SubjectId subject,
+        string entered,
+        DateTimeOffset at,
+        DateTimeOffset lapses,
+        byte[] undo)
+    {
+        IdentifierId primary = await WriteAsync(subject, Fresh("Primary"));
+        IdentifierId given = await WriteAsync(subject, entered);
+
+        await using StoreContext context = database.Context();
+        await using var work = new UnitOfWork(context);
+        IdentifierStore store = Store(context);
+
+        Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        await store.HoldAsync(subject, TestContext.Current.CancellationToken);
+        await store.LockValuesAsync(
+            [(IdentifierKind.Email, Canonicalised(entered))],
+            TestContext.Current.CancellationToken);
+
+        IdentifierSet set = await store.FindBySubjectAsync(subject, TestContext.Current.CancellationToken);
+        set.Verify(primary, Noon);
+        set.Verify(given, Noon);
+
+        await store.RecordRemovalAsync(
+            IdentifierRemoval.Of(set.Remove(given), at, lapses, undo),
+            TestContext.Current.CancellationToken);
         await store.RecordAsync(set, TestContext.Current.CancellationToken);
 
         Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
