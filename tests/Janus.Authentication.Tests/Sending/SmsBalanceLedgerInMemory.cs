@@ -44,4 +44,8 @@ internal sealed class SmsBalanceLedgerInMemory : ISmsBalanceLedger
         CancellationToken cancellationToken) =>
         ValueTask.FromResult<IReadOnlyList<BalanceReading>>(
             [.. _readings.Where(reading => reading.At >= from).OrderBy(reading => reading.At)]);
+
+    /// <inheritdoc/>
+    public ValueTask<BalanceReading?> LatestAsync(CancellationToken cancellationToken) =>
+        ValueTask.FromResult(_readings.MaxBy(reading => reading.At));
 }

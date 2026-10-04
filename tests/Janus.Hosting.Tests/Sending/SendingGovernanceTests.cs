@@ -847,7 +847,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     public async Task INT_SMS_004_AC2_ADrawIsRefusedBelowTheFloorAsTheTextWouldBeAsync()
     {
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 50m);
-        _sms.Balance = 40m;
+        _balances.Given(new BalanceReading(Noon, 40m));
 
         Result drawn = await DrawAsync(Texted(), TestContext.Current.CancellationToken);
 
@@ -865,13 +865,40 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     public async Task INT_SMS_004_AC2_AnOrdinarySendIsRefusedBelowTheFloorAsync()
     {
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 50m);
-        _sms.Balance = 40m;
+        _balances.Given(new BalanceReading(Noon, 40m));
 
         Assert.Equal(
             ErrorCodes.SmsBalanceFloor,
             Refusal(await SendAsync(Texted(), TestContext.Current.CancellationToken)));
 
         Assert.Empty(_sms.Taken);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC17: with no balance yet recorded a text message is not refused
+    /// by the floor; with a recorded balance below it, a text message other than an
+    /// alert is refused and an alert is not; and the gateway is never asked for its
+    /// balance by the send.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC17_TheFloorIsJudgedOnTheRecordedBalanceAndNeverOnTheGatewayAsync()
+    {
+        _configuration.Set(Settings.AbuseSmsBalanceFloor, 50m);
+        _sms.Balance = 0m;
+
+        _ = await SentAsync(Texted());
+
+        _balances.Given(new BalanceReading(Noon, 40m));
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        Result<SendReference> ordinary = await SendAsync(Texted(), TestContext.Current.CancellationToken);
+
+        _ = await SentAsync(Texted() with { Message = MessageKind.Alert });
+
+        Assert.Equal(ErrorCodes.SmsBalanceFloor, Refusal(ordinary));
+        Assert.Equal(2, _sms.Taken.Count);
+        Assert.Equal(0, _sms.Reads);
+        Assert.Single(_balances.Readings);
     }
 
     /// <summary>
@@ -887,7 +914,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         _sms.Accepts = true;
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 50m);
-        _sms.Balance = 40m;
+        _balances.Given(new BalanceReading(Noon, 40m));
         _clock.Advance(TimeSpan.FromHours(1));
 
         Assert.Equal(0, await RetriedAsync());
@@ -903,7 +930,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     public async Task OPS_ALERT_003_AC3_AnAlertIsSentBelowTheFloorAsync()
     {
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 50m);
-        _sms.Balance = 0m;
+        _balances.Given(new BalanceReading(Noon, 0m));
 
         await SentAsync(new OutboundMessage(
             SendDestination.Of(Phone),
@@ -1207,6 +1234,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         Assert.All(replaced.Taken, taken => Assert.Equal(Phone.Value, taken.Destination.Canonical));
         Assert.Empty(_sms.Taken);
 
+        _balances.Given(new BalanceReading(Noon, 1000m));
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 5000m);
         _clock.Advance(TimeSpan.FromHours(25));
 

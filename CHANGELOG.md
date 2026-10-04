@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The gateway floor is judged on the latest balance the `sms-balance` poll recorded,
+  however old, and a send never asks the gateway for its balance. Until a first balance
+  is recorded the floor refuses nothing. A poll the gateway does not answer records
+  nothing and fails, so its lapse raises `background-job-failed`.
 - A domain of an organization's lock, and the domain of an address judged against it,
   takes its ASCII form from the library's own UTS #46 processing and no longer from the
   machine's ICU, so one domain is listed and compared in one form on every machine. A
