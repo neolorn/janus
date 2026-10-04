@@ -1438,6 +1438,40 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - No migration, no public surface change.
 - Parked: questions 161 to 163.
 
+### `part/conformance`, merged as `2408413b`: question 144 with question 93
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| `DeploymentFactory`, a public delegate of `Janus.Conformance`; `ConformanceSuite.TruthTableAsync` takes it and calls it once for each step-up case, with a provider of the suite's own or with none for `stepup-provider-absent`; the seven step-up scenarios of `10` section 5.30; a finding on a step-up case carries `details.gate`; `TruthTableCase` refuses at construction a step-up case whose `Allowed` is not its scenario's | `1efd2fff` | LIB-TEST-001, AUTHZ-TEST-001 | `TruthTableCaseTests.LIB_TEST_001_AC2_AnUnmetStepUpCaseStatedAllowedIsRefusedNamingTheScenario`, `TruthTableCaseTests.LIB_TEST_001_AC2_AMetStepUpCaseStatedRefusedIsRefusedNamingTheScenario`, `TruthTableCaseTests.LIB_TEST_001_AC2_AStepUpCaseStatesTheOutcomeItsScenarioHas`, `TruthTableCaseTests.LIB_TEST_001_AC2_EachStepUpScenarioIsWrittenAsTheReferenceSpellsIt`, `TruthTableCaseTests.Construct_ACaseOfAnotherScenario_StatesEitherOutcome`, `ConformanceSuiteTests.LIB_TEST_001_AC2_EveryStepUpCaseAgreesOnACompositionBuiltForItAsync`, `ConformanceSuiteTests.LIB_TEST_001_AC2_AStepUpCaseDecidedOtherwiseIsReportedNamingTheGateAsync`, `ConformanceSuiteTests.LIB_TEST_001_AC2_AStepUpCaseOnAPermissionBoundToNoGateReachesNoRunAsync` |
+
+- Public surface of `Janus.Conformance`: the delegate, the seven enum members, the new `TruthTableAsync` signature, and the three `init` accessors of `TruthTableCase` removed. One changelog line.
+- A step-up case that names a permission bound to no gate is refused by the run before anything is written or built, not by the case type (question 164).
+- No change under `Janus.Authorization`; no truth-table row. No migration.
+- Parked: questions 164 to 166.
+
+### `part/machine-routes`, merged as `b7a1432f`: question 155
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| A callback carrying the session cookie is counted by its source, then counted as a rejection and answered 422 `integration.callback.rejected`; `POST /oidc/par`, `POST /oidc/token` and `GET /oidc/userinfo` answer the provider's own `invalid_request`; the test host's check derives nothing for a machine route and `endpoints.txt` loses `403 authz.denied` under the three callbacks | `7f3832db` | BFF-MACH-001, INT-GEN-003 | `HostCallbackTests.BFF_MACH_001_AC2_AHostCallbackCarryingASessionCookieIsRejectedAndCountedAsync`, `HostCallbackTests.INT_GEN_003_AC4_ACallbackCarryingASessionCookiePastTheRateLimitIsAnswered429Async`, `DeliveryReportEndpointTests.BFF_MACH_001_AC2_ADeliveryReportCarryingASessionCookieIsRejectedAndCountedAsync`, `DeliveryReportEndpointTests.INT_GEN_003_AC4_ADeliveryReportCarryingASessionCookiePastTheRateLimitIsAnswered429Async`, `ProviderEventTests.IDN_LIFE_012a_AC3_TheEndpointIsOnTheMachineProfileAsync`, `OidcFlowTests.BFF_MACH_001_AC2_ACookieOnAnOidcRouteIsRefusedWithInvalidRequestAsync` |
+
+- The OIDC answers as observed: par and token 400 with `{"error":"invalid_request"}`; userinfo 400 with `WWW-Authenticate: Bearer error="invalid_request"` and no body.
+- The Google event route answers the cookie refusal 422 in the API-CONV-002 body.
+- No change to permission logic by the gate's list; no truth-table row. No migration, no public surface change.
+- Parked: question 167.
+
+### `part/seams`, merged as `b8028cd9`: question 128 with question 83
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| `Janus.Authorization` declares the internal `ISettingsChangeGate`; `AccessGate` implements it and `IUnscopedRefusal`, and `AddAuthorizationArea` registers the gate under its three contracts; `GatedSettings` takes the contract; `GatedUnscopedRefusal` is removed | `dec8e8d2` | CONV-DESIGN-007, LIB-SEAM-001 | `AccessSeamTests.LIB_SEAM_001_AC1_ReplacingWhatEvaluatesIsOneChange`, `PublicSurfaceTests.CONV_DESIGN_007_AC7_TheEntryPointRegistersOfAnotherProjectTheDeclarationAndWhatNoOtherCan` |
+| `Janus.Authentication` declares the internal `ITokenMinting`; `OidcService` implements it and `AddAuthenticationArea` registers it; `MailServerTokens` takes the contract | `1d6bc05b` | CONV-DESIGN-007 | `PublicSurfaceTests.CONV_DESIGN_007_ABridgingTypeAsksTheContractTheImplementationsProjectDeclares` |
+
+- `dec8e8d2` changes files under `src/Janus.Authorization` (interfaces implemented, one internal method renamed to the contract's member, registrations moved) and no case of the table, so it carries no row; the truth-table change check passes over the branch's range and fails over that commit alone.
+- Not built: the fourth-clause test of CONV-DESIGN-007 criterion 7 (question 168).
+- No migration, no public surface change.
+- Parked: question 168.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -3808,6 +3842,96 @@ part of 389 (3) and waits with 389 on question 48.
   1. The comparison is over ASCII forms as well.
   2. It stays: the answer names the list alone.
 - **Parked.** That comparison, left as it is.
+- **Answer:** pending.
+
+**164. Tier 2. LIB-TEST-001 criterion 2: a step-up case that names a permission bound to no gate, refused "at its construction".**
+
+- **Item.** Question 144.
+- **What the code does.** `TruthTableCase(Scenario, Permission, Allowed)` holds no declaration, so it cannot know a permission's binding. The constructor refuses the `Allowed` half; the run refuses the unbound permission (`ArgumentException` naming the scenario and the permission) before anything is written or a deployment is built. "Bound" is read as the host's `StepUpGate` binding in the declaration, so an export action that carries only the library's own export gate counts as unbound.
+- **What the specification says.** Criterion 2 and D-188 put both refusals at the case type's construction. LIB-API-001 names no member that gives the case the declaration.
+- **Readings.**
+  1. The run refuses it before any write: as built, no surface change.
+  2. `TruthTableCase` gains a constructor or factory taking the `AuthorizationDeclaration`: a new public member.
+- **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
+
+**165. Tier 2. `10` section 5.30: `stepup-phishingresistance-unmet` where the gate asks no phishing resistance.**
+
+- **Item.** Question 144.
+- **What the code does.** The gate's values come from the policy of the suite's account, which has no membership, so `policy.default`. Where that gate asks no phishing resistance (the shipped `Policies.SystemDefault`), a report that is not phishing-resistant meets the gate: the case is allowed, the case type does not let the host state it allowed, and the suite reports a finding. Read from the code, not run.
+- **What the specification says.** Section 5.30: the scenarios are judged "under that provider's report and no policy".
+- **Readings.**
+  1. The finding stands; a host whose gate asks none leaves the case out of its table: as built.
+  2. The suite refuses the scenario as unwritable where the gate asks none; it has no public way to read the gate's cost.
+- **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
+
+**166. Tier 2. LIB-API-001 and LIB-TEST-001: the shape of the deployment factory and of the case type.**
+
+- **Item.** Question 144.
+- **What the code does.** Each of these is a choice the chapters do not fix:
+  - The delegate is `ValueTask<IServiceProvider> DeploymentFactory(IAssuranceProvider? assurance, CancellationToken cancellationToken)`: asynchronous, since building a composition starts it.
+  - It is a required parameter of `TruthTableAsync`, also for a table with no step-up case.
+  - The suite disposes what the factory answers once the case is judged.
+  - `TruthTableCase`'s three members are get-only (their `init` accessors left the public surface), so a `with` expression cannot state an outcome the constructor refuses.
+  - A step-up case refused with a code other than its scenario's is reported with `expected`, `check` and `filter` all false.
+  - The met report's instant is read from the passed container's `TimeProvider`.
+- **What the specification says.** LIB-API-001 and LIB-TEST-001 name the delegate and what it builds, not its signature.
+- **Parked.** Nothing: built as above.
+- **Answer:** pending.
+
+**167. Tier 2. BFF-MACH-001 criterion 2, BFF-MACH-002 and INT-GEN-003 criterion 4: the cookie refusal against the rate limit.**
+
+- **Item.** Question 155.
+- **What the code does.** A callback carrying the session cookie is first counted against its source: past `integration.callback.ratelimit` it answers 429 and is not counted as a rejection; within it, it is counted as a rejection and answered 422. Before the change the cookie was refused before any count.
+- **What the specification says.** BFF-MACH-002: the machine profile runs the rate limit per source first. INT-GEN-003 criterion 4: 429 past the limit, 422 for any other cause. D-188: the refusal counts as a rejection.
+- **Readings.**
+  1. The rate limit first: as built.
+  2. The cookie refusal ahead of the rate limit, counted as a rejection alone.
+- **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
+
+**168. Tier 2. CONV-DESIGN-007 criterion 7, fourth clause: the sites beyond the two factories, and where the three OIDC handlers live.**
+
+- **Item.** Question 128.
+- **What the code does.** `AuthorizationIssue`, `TokenIssue` and `TokenReuse` are in `src/Janus.Hosting/Oidc`, not in `Janus.Authentication`, and each takes `OidcService`; `TokenReuse` uses `OidcService.ReuseAsync`, which no contract declares. Beyond them these constructors and factories of `Janus.Hosting` name a class of another project that stands behind a contract: `KeyRingService(KeyRing, MailServerInUse)` and the factory in `KeyRingRegistration.cs`; `ProviderSignIn(AuthenticationService, RegistrationService, CredentialService)`; `SessionResolution(SessionService)`; `SignOn(SessionService)`. Asked inside a method body, neither factory nor constructor: `BackgroundJobs.cs` (`RegistrationService`, `InvitationService`, `ReadVolume`, `BreakGlassService`), `UnsignedCallbackGuard` and `MachineProfile` (`CallbackReferences`, `CallbackAdmission`), and endpoint handlers that take an internal service as a parameter.
+- **What the specification says.** Criterion 7: "no factory or constructor of `Janus.Hosting` names an implementation type of another project". LIB-API-005: an endpoint that establishes or rotates the session maps its operation through the library's internal service. Criterion 8: no project but `Janus.Hosting` uses a `Microsoft.AspNetCore` type, and `AuthorizationIssue` uses them. D-188 names `AccessGate` and `OidcService` at the two factories and the mail-server token type, and says the three handlers live in `Janus.Authentication`.
+- **Readings.**
+  1. The clause reads as written: every such site takes a contract, one internal interface for each set of members (`ReuseAsync` included).
+  2. `TokenIssue` and `TokenReuse` move to `Janus.Authentication` and keep `OidcService`; `AuthorizationIssue` cannot move and takes `ITokenMinting`; the other sites under reading 1 or 3.
+  3. The clause covers a type behind a contract of another area that `Janus.Hosting` could ask instead; the library's internal services and the ring are outside it, and the chapter says so.
+  Open under each: whether a service asked inside a job's or a middleware's body counts.
+- **Parked.** The fourth-clause test, and those constructors and that factory, left as they are.
+- **Answer:** pending.
+
+**169. Tier 3. AUTH-ABUSE-008 criterion 3: the datacenter range file has no source.**
+
+- **Item.** Question 136.
+- **The gap.** `IDatacenterRanges` has no implementation and no registration under `src`. `AuthenticationRegistration` builds `BotDefence` with it required, so once `POST /register` calls the check, every such request of a real composition faults. Criterion 3: "`datacenterRange` matches a bundled range file refreshed like the IP location database (INT-GEN-006)". No chapter states whether the file is in the package or the host's, whose ranges it holds, its format, its refresh and maximum-age keys, what a missing or stale file does, or whether it is matched against the whole address or the AUTH-ABUSE-001 source. LIB-HOST-001 has no row for it, and CONV-VCS-005's list of embedded lists does not name one.
+- **Parked.** The range source, and with it the merge of `part/bot-defence`: the part builds question 136 (`b099d14a`, fast checks green) over a `BotDefence` that takes the ranges as optional and judges `datacenterRange` only where one is registered, which leaves a signal that is on by default silent in every real deployment. That is a decision on the signal's semantics, so the part is not merged and its branch is kept until this is answered.
+- **Answer:** pending.
+
+**170. Tier 2. AUTH-ABUSE-008 criterion 3: whether the session being started counts toward "more than".**
+
+- **Item.** Question 136 (on `part/bot-defence`, not merged).
+- **What the code does.** The signal fires where the sessions already created from the source in the hour exceed `abuse.botdefence.repeatedattempts`. The check now runs before the session is created, so with the default 3 the fifth request is the first challenged.
+- **What the specification says.** "more than `abuse.botdefence.repeatedattempts` registration sessions from one source in an hour".
+- **Readings.**
+  1. Sessions already created are counted: as built.
+  2. The session the request would create counts: the fourth request is challenged.
+- **Parked.** With question 169.
+- **Answer:** pending.
+
+**171. Tier 2. `09` `POST /register`: where the bot defence stands among the route's refusals.**
+
+- **Item.** Question 136 (on `part/bot-defence`, not merged).
+- **What the code does.** The signed-in refusal (409 `identity.registration.signedin`) comes first and the defence is not asked for it; then the defence; then the invitation's judgement (422). A signalled request with a verifier and a token that opens no invitation answers 403. A signal is recorded on every request it fires for, the passing repeat included. `challengeToken` reaches the verifier as written, an empty string included.
+- **What the specification says.** AUTH-ABUSE-008 and the row: "before the session is created".
+- **Readings.**
+  1. As built.
+  2. The defence before the signed-in refusal as well.
+  3. The invitation judged before the defence.
+- **Parked.** With question 169.
 - **Answer:** pending.
 
 ## 5. Gate result
