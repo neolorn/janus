@@ -1508,6 +1508,11 @@ against the public contract of LIB-API-001.
   `null` `detail` records none: `PrivacyRequestEntry.Detail` and
   `PrivacyRequest.Detail` are nullable, the `detail` column of `privacy_requests`
   takes null, and an empty text is never stored for none.
+- `PUT /admin/compliance/assessments` reads the measures as
+  `organizationalSecurityMeasures`, and holds `dataOwner` and it to the bound of free
+  text: each is trimmed, refused 400 `api.request.malformed` naming the member where
+  blank or past 1024 characters, at the endpoint and by `IProcessingRecords` for a
+  caller in process, and cleared where the statement omits it.
 - `GET /privacy/documents/{document}`, `POST /admin/documents/{document}/versions`
   and the translation route refuse a `{document}` that is not a document name (1 to
   64 lower-case letters and digits separated by single `.`, `-` or `_`) with 400

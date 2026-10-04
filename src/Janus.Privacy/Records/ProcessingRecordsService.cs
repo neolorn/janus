@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
@@ -180,13 +181,33 @@ internal sealed class ProcessingRecordsService(
             return Result.Failure(denied);
         }
 
+        // 09 section 8a, API-CONV-002 (D-183): the two statements are free text, held to
+        // the bound for a caller in process as at the endpoint; one omitted is cleared.
+        string? dataOwner = record.DataOwner?.Trim();
+
+        if (dataOwner is { Length: 0 or > 1024 })
+        {
+            return Result.Failure(Malformed("dataOwner"));
+        }
+
+        string? measures = record.OrganisationalSecurityMeasures?.Trim();
+
+        if (measures is { Length: 0 or > 1024 })
+        {
+            return Result.Failure(Malformed("organizationalSecurityMeasures"));
+        }
+
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
         }
 
-        await compliance.RecordAsync(record, cancellationToken).ConfigureAwait(false);
+        await compliance
+            .RecordAsync(
+                record with { DataOwner = dataOwner, OrganisationalSecurityMeasures = measures },
+                cancellationToken)
+            .ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -198,6 +219,9 @@ internal sealed class ProcessingRecordsService(
     }
 
     private static string? Stated(string basis) => basis.Length is 0 ? null : basis;
+
+    private static Error Malformed(string member) =>
+        Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
 
     // PRIV-SENS-001: children's data is one of the declared sensitivity categories,
     // and the register's children's column is that category and no other property of

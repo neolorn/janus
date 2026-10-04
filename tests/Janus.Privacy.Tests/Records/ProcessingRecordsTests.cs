@@ -259,6 +259,68 @@ public sealed class ProcessingRecordsTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// API-CONV-002 AC3, CONV-CODE-006 AC3 (D-183): for a caller in process the data
+    /// owner and the organizational security measures are held to the bound of free text
+    /// as at the endpoint, refused naming the member, and nothing is recorded.
+    /// </summary>
+    /// <param name="member">The member written outside the bound.</param>
+    /// <param name="character">What it is written of.</param>
+    /// <param name="length">How many of it.</param>
+    /// <returns>The work of the test.</returns>
+    [Theory]
+    [InlineData("dataOwner", "d", 0)]
+    [InlineData("dataOwner", " ", 3)]
+    [InlineData("dataOwner", "d", 1025)]
+    [InlineData("organizationalSecurityMeasures", "d", 0)]
+    [InlineData("organizationalSecurityMeasures", " ", 3)]
+    [InlineData("organizationalSecurityMeasures", "d", 1025)]
+    public async Task API_CONV_002_AStatementOutsideTheBoundIsMalformedAsync(
+        string member,
+        string character,
+        int length)
+    {
+        string written = string.Concat(Enumerable.Repeat(character, length));
+
+        Result refused = await Records(Declaration.Declared().Build()).DeclareAsync(
+            AccessContext.Of(Mona),
+            member == "dataOwner"
+                ? new ComplianceRecord(written, "annual training", [])
+                : new ComplianceRecord("the operations lead", written, []),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.RequestMalformed, refused.Match(() => default, error => error.Code));
+        Assert.Equal(member, refused.Match(() => null, error => error.Details["member"].GetString()));
+        Assert.Null(_compliance.Held.DataOwner);
+    }
+
+    /// <summary>
+    /// API-CONV-002, 09 section 8a (D-183): a statement within the bound is recorded
+    /// trimmed, and one omitted is cleared.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_CONV_002_AStatementIsRecordedTrimmedAndAnOmittedOneIsClearedAsync()
+    {
+        ProcessingRecordsService records = Records(Declaration.Declared().Build());
+
+        _ = await records.DeclareAsync(
+            AccessContext.Of(Mona),
+            new ComplianceRecord("  the operations lead ", " " + new string('d', 1024) + " ", ["LIA-1"]),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("the operations lead", _compliance.Held.DataOwner);
+        Assert.Equal(new string('d', 1024), _compliance.Held.OrganisationalSecurityMeasures);
+
+        _ = await records.DeclareAsync(
+            AccessContext.Of(Mona),
+            new ComplianceRecord(DataOwner: null, "annual training", []),
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(_compliance.Held.DataOwner);
+        Assert.Equal("annual training", _compliance.Held.OrganisationalSecurityMeasures);
+    }
+
+    /// <summary>
     /// PRIV-ROPA-001 AC2: the three fields a person supplies are reported missing
     /// while they are missing, and carried once they are supplied.
     /// </summary>

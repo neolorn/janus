@@ -295,6 +295,22 @@ internal static class PrivacyEndpoints
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(records);
 
+        // 09 section 8a, API-CONV-002 (D-183): the two statements are free text, so one
+        // given is trimmed and refused blank or past the bound; one omitted is cleared.
+        string? dataOwner = request.DataOwner?.Trim();
+
+        if (dataOwner is { Length: 0 or > 1024 })
+        {
+            return Answers.Malformed("dataOwner");
+        }
+
+        string? measures = request.OrganizationalSecurityMeasures?.Trim();
+
+        if (measures is { Length: 0 or > 1024 })
+        {
+            return Answers.Malformed("organizationalSecurityMeasures");
+        }
+
         AccessContext holder = Asking(browser);
 
         return Answers.Of(
@@ -302,8 +318,8 @@ internal static class PrivacyEndpoints
                 .DeclareAsync(
                     holder,
                     new ComplianceRecord(
-                        request.DataOwner,
-                        request.OrganisationalSecurityMeasures,
+                        dataOwner,
+                        measures,
                         request.AssessmentLinks ?? []),
                     cancellationToken)
                 .ConfigureAwait(false),
