@@ -709,6 +709,53 @@ public sealed class PublicSurfaceTests
     }
 
     /// <summary>
+    /// CONV-DESIGN-007 AC7 (D-189): no constructor or factory of the hosting project
+    /// names the implementation of a seam: the access gate, the key ring or the mail
+    /// server in use. No constructor of a type of the project takes one, and no file of
+    /// the project asks the container for one, names one as a type or makes one. What
+    /// the service that fills the key ring needs of the ring and of the mail server in
+    /// use beyond their public contracts it asks of the internal contract the core
+    /// declares for the filling of the one and the recording of the other at the start,
+    /// which the core implements and registers by its method.
+    /// </summary>
+    [Fact]
+    public void CONV_DESIGN_007_AC7_NoConstructorOrFactoryOfTheHostingProjectNamesASeamsImplementation()
+    {
+        Type[] seams = [typeof(Janus.Authorization.Gate.AccessGate), typeof(KeyRing), typeof(MailServerInUse)];
+        var asked = new Regex(
+            @"(?:<\s*|\btypeof\s*\(\s*|\bnew\s+)(?:\w+\s*\.\s*)*(?:" + string.Join('|', seams.Select(seam => seam.Name)) + @")\b",
+            RegexOptions.CultureInvariant,
+            TimeSpan.FromSeconds(5));
+        Type filling = typeof(IKeyRingFilling);
+
+        IEnumerable<string> taken = Load(Mounting)
+            .GetTypes()
+            .SelectMany(type => type
+                .GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                .SelectMany(constructor => constructor.GetParameters())
+                .Where(parameter => seams.Contains(parameter.ParameterType))
+                .Select(parameter => type.FullName + " " + parameter.Name));
+        IEnumerable<string> named = Repository
+            .Project(Mounting)
+            .Where(file => asked.IsMatch(Comment.Replace(File.ReadAllText(file), string.Empty)))
+            .Select(file => Path.GetFileName(file));
+
+        Assert.Empty(taken);
+        Assert.Empty(named);
+        Assert.True(filling is { IsInterface: true, IsVisible: false });
+        Assert.Equal(typeof(KeyRingFilling), Assert.Single(Implementations(), filling.IsAssignableFrom));
+        Assert.Contains(
+            Alone("Janus.Core", RegistrationMethods["Janus.Core"]),
+            service => service.ServiceType == filling);
+        Assert.Contains(
+            filling,
+            typeof(KeyRingService)
+                .GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                .SelectMany(constructor => constructor.GetParameters())
+                .Select(parameter => parameter.ParameterType));
+    }
+
+    /// <summary>
     /// CONV-DESIGN-007, CONV-CODE-007: a composition a job builds inside the application
     /// over another credential registers the key ring the start filled, as it stands,
     /// and calls the storage's method and never the core's, whose ring would be a
