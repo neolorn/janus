@@ -292,7 +292,7 @@ internal sealed class IdentifierService(
         // AUTH-FACT-004: the try is read, compared and counted on the verification-code
         // record under its lock.
         Result presented = await codes
-            .PresentAsync(Holder(identifier), code, cancellationToken)
+            .PresentAsync(PendingVerification.CodeHolder(identifier), code, cancellationToken)
             .ConfigureAwait(false);
 
         if (presented.Match(() => (Error?)null, error => error) is Error refused)
@@ -379,6 +379,20 @@ internal sealed class IdentifierService(
 
             waiting = confirming;
 
+            // REG-IDENT-007, D-187: the confirmation answers from a record of its own,
+            // read under its lock after the verification's. A press past its lifetime
+            // changes nothing, so its unit of work is rolled back (CONV-DESIGN-003).
+            Result pressed = await codes
+                .PressAsync(PendingVerification.ConfirmationHolder(waiting.Identifier), cancellationToken)
+                .ConfigureAwait(false);
+
+            if (pressed.Match(() => (Error?)null, error => error) is Error lapsed)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
+
+                return Result.Failure<LinkLanding>(lapsed);
+            }
+
             waiting.ConfirmOld(now);
 
             // IDN-LIFE-008 AC1: the displaced address confirms from no session of the
@@ -419,7 +433,7 @@ internal sealed class IdentifierService(
                 sameBrowser,
                 sameBrowser
                     ? null
-                    : await codes.ShownAsync(Holder(staged.Id), cancellationToken).ConfigureAwait(false)));
+                    : await codes.ShownAsync(PendingVerification.CodeHolder(staged.Id), cancellationToken).ConfigureAwait(false)));
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -448,7 +462,7 @@ internal sealed class IdentifierService(
         }
 
         // The press proved the value, so the code that would have is ended with it.
-        await codes.EndAsync(Holder(staged.Id), cancellationToken).ConfigureAwait(false);
+        await codes.EndAsync(PendingVerification.CodeHolder(staged.Id), cancellationToken).ConfigureAwait(false);
 
         staged.Verify(now);
 
@@ -490,7 +504,7 @@ internal sealed class IdentifierService(
             return Result.Failure(notBegun);
         }
 
-        await codes.EndAsync(Holder(waiting.Identifier), cancellationToken).ConfigureAwait(false);
+        await EndRecordsAsync(waiting.Identifier, cancellationToken).ConfigureAwait(false);
         await pending.RemoveAsync(waiting.Identifier, cancellationToken).ConfigureAwait(false);
 
         // What an add wrote to the account goes with the verification it was waiting
@@ -782,7 +796,7 @@ internal sealed class IdentifierService(
         // presented meanwhile finds it held or reserved, never free.
         await directory.LockValuesAsync([(going.Kind, going.Canonical)], cancellationToken).ConfigureAwait(false);
 
-        await codes.EndAsync(Holder(identifier), cancellationToken).ConfigureAwait(false);
+        await EndRecordsAsync(identifier, cancellationToken).ConfigureAwait(false);
         await pending.RemoveAsync(identifier, cancellationToken).ConfigureAwait(false);
 
         if (going.IsVerified)
@@ -888,7 +902,7 @@ internal sealed class IdentifierService(
         if (Standing(await directory.HeldAsync(given.Subject, cancellationToken).ConfigureAwait(false), given.Canonical)
             is { IsVerified: false } again)
         {
-            await codes.EndAsync(Holder(again.Id), cancellationToken).ConfigureAwait(false);
+            await codes.EndAsync(PendingVerification.CodeHolder(again.Id), cancellationToken).ConfigureAwait(false);
             await pending.RemoveAsync(again.Id, cancellationToken).ConfigureAwait(false);
             await directory.DiscardAsync(given.Subject, again.Id, cancellationToken).ConfigureAwait(false);
         }
@@ -1159,18 +1173,6 @@ internal sealed class IdentifierService(
 
     private static string Key(IdentifierId identifier, DateTimeOffset at) =>
         string.Create(CultureInfo.InvariantCulture, $"{identifier.Value}@{at.UtcTicks}");
-
-    // AUTH-FACT-004 (D-166, 115): the verification-code record of a staged value is
-    // held against a fingerprint of the pending verification, which its identifier
-    // names.
-    private static byte[] Holder(IdentifierId identifier)
-    {
-        Span<byte> named = stackalloc byte[16];
-
-        _ = identifier.Value.TryWriteBytes(named);
-
-        return SHA256.HashData(named);
-    }
 
     private static bool Displaced(PendingVerification waiting, byte[] fingerprint) =>
         waiting.OldLink is byte[] link
@@ -1466,7 +1468,7 @@ internal sealed class IdentifierService(
 
         // AUTH-ABUSE-004: the code is issued and its message undertaken in the caller's
         // unit of work, so a send the restrictions refuse leaves no code behind it.
-        string code = (await codes.IssueAsync(Holder(staged.Id), cancellationToken).ConfigureAwait(false))
+        string code = (await codes.IssueAsync(PendingVerification.CodeHolder(staged.Id), cancellationToken).ConfigureAwait(false))
             .Match(drawn => drawn, error => Withheld<string>(error, ref failure));
 
         if (failure is not null)
@@ -1534,6 +1536,17 @@ internal sealed class IdentifierService(
         if (sent.Match(_ => (Error?)null, error => error) is Error refused)
         {
             return refused;
+        }
+
+        // REG-IDENT-007, D-187: the confirmation lives code.verification.lifetime from
+        // its send, in a record of its own that holds no code.
+        Result held = await codes
+            .WithholdAsync(PendingVerification.ConfirmationHolder(waiting.Identifier), cancellationToken)
+            .ConfigureAwait(false);
+
+        if (held.Match(() => (Error?)null, error => error) is Error unheld)
+        {
+            return unheld;
         }
 
         waiting.AskedOld(link.Fingerprint());
@@ -1667,6 +1680,17 @@ internal sealed class IdentifierService(
                 source,
                 link: null,
                 cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    // AUTH-FACT-004, REG-IDENT-007: a pending verification ended leaves neither of the
+    // records it holds, the code's and, for a replace the old address was asked to
+    // confirm, the confirmation's.
+    private async ValueTask EndRecordsAsync(IdentifierId identifier, CancellationToken cancellationToken)
+    {
+        await codes.EndAsync(PendingVerification.CodeHolder(identifier), cancellationToken).ConfigureAwait(false);
+        await codes
+            .EndAsync(PendingVerification.ConfirmationHolder(identifier), cancellationToken)
             .ConfigureAwait(false);
     }
 

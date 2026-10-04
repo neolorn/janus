@@ -84,9 +84,10 @@ internal sealed class VerificationCodes(
     }
 
     /// <summary>
-    /// Holds against something the record of a held or reserved value, replacing
-    /// whatever that thing had outstanding: it lives and is counted as an issued code
-    /// is, and no code presented against it is the right one (AUTH-FACT-004).
+    /// Holds against something a record that holds no code, replacing whatever that
+    /// thing had outstanding: the record of a held or reserved value, or of a
+    /// confirmation asked by link alone. It lives and is counted as an issued code is,
+    /// and no code presented against it is the right one (AUTH-FACT-004).
     /// </summary>
     /// <param name="holder">What the record stands against.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
@@ -190,6 +191,39 @@ internal sealed class VerificationCodes(
         }
 
         return answer;
+    }
+
+    /// <summary>
+    /// Answers a press against a record that holds no code, which is what the displaced
+    /// address's confirmation of a replace is held in (REG-IDENT-007).
+    /// </summary>
+    /// <param name="holder">What the record stands against.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Nothing where the record is outstanding and live, which spends it;
+    /// <c>auth.code.expired</c> where none is outstanding or it has run out of life.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The holder is absent.</exception>
+    /// <remarks>
+    /// Implements AUTH-FACT-004 and CONV-DESIGN-003. The press is decided in its
+    /// caller's unit of work under the record's lock and begins none of its own; a press
+    /// at a record out of life writes nothing, the lapsed record being the sweep's.
+    /// </remarks>
+    public async ValueTask<Result> PressAsync(byte[] holder, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(holder);
+
+        VerificationCode? outstanding = await codes.FindForUpdateAsync(holder, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (outstanding is null || !outstanding.IsLive(time.GetUtcNow()))
+        {
+            return Expired();
+        }
+
+        await codes.RemoveAsync(holder, cancellationToken).ConfigureAwait(false);
+
+        return Result.Success();
     }
 
     /// <summary>

@@ -10,6 +10,11 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The old address's confirmation of a replace lives `code.verification.lifetime` from
+  its send: a press after it changes nothing and is answered 422 `auth.code.expired`,
+  where it applied the change for as long as the replace was pending. A code or a
+  confirmation outstanding on an add or a replace when this version is deployed no
+  longer answers: the add is asked again, and the replace is abandoned and made again.
 - `ICredentials.MarkRecoveryCodesExportedAsync` records that the person copied,
   downloaded or printed the recovery-code set the account holds, and
   `POST /account/recoverycodes/exported` maps it. An account holding no set is refused

@@ -944,6 +944,164 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-007, AUTH-FACT-004: the confirmation asked of the displaced address is
+    /// held in a verification-code record of its own, beside the new address's, living
+    /// <c>code.verification.lifetime</c> from its send and holding no code.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_TheConfirmationIsHeldInARecordOfItsOwnAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        VerificationCode confirmation = Confirmation(email);
+
+        Assert.Equal(2, _codes.All.Count);
+        Assert.False(confirmation.IsAnswerable());
+        Assert.Equal(Noon + Settings.CodeVerificationLifetime.Default, confirmation.ExpiresAt);
+        Assert.True(Outstanding(email).IsAnswerable());
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC2, AUTH-FACT-004: the press that confirms spends the
+    /// confirmation's record, so nothing of the replace is left once the swap applies.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC2_TheConfirmingPressSpendsItsRecordAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        OutboundMessage asked = _notifications.Mail.Last(
+            sent => sent.Message is MessageKind.IdentifierChangeConfirm);
+
+        Accepted(await Service.LandAsync(
+            session: null,
+            asked.Token(),
+            press: true,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.True(Assert.Single(_codes.All).IsAnswerable());
+
+        await VerifiedAsync(email);
+
+        Assert.Empty(_codes.All);
+        Assert.Equal(Second, Named(await HeldAsync(), Second).Canonical);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC6: a confirmation pressed after
+    /// <c>code.verification.lifetime</c> from its send changes nothing and is answered
+    /// <c>auth.code.expired</c>; the identifier stays as it stood and the unit of work
+    /// is rolled back.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC6_AConfirmationPressedPastItsLifetimeChangesNothingAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        await VerifiedAsync(email);
+
+        OutboundMessage asked = _notifications.Mail.Last(
+            sent => sent.Message is MessageKind.IdentifierChangeConfirm);
+
+        _clock.Advance(Settings.CodeVerificationLifetime.Default);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            Refused(await Service.LandAsync(
+                session: null,
+                asked.Token(),
+                press: true,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(Primary, Named(await HeldAsync(), Primary).Canonical);
+        Assert.Null(Waiting(email).OldConfirmedAt);
+        Assert.NotNull(Waiting(email).OldLink);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007, REG-SESS-003: a replace abandoned from its link leaves neither of
+    /// its records standing.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AnAbandonedReplaceLeavesNoRecordAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        string link = _notifications.Mail
+            .Last(sent => sent.Message is MessageKind.VerificationLink)
+            .Token();
+
+        Accepted(await Service.AbandonAsync(link, TestContext.Current.CancellationToken));
+
+        Assert.Empty(_pending.All);
+        Assert.Empty(_codes.All);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-004: the holder of a pending verification's record is the SHA-256 of
+    /// its UUID's sixteen bytes in the order of RFC 9562, and the confirmation's is a
+    /// holder of its own.
+    /// </summary>
+    [Fact]
+    public void AUTH_FACT_004_TheHolderTakesTheUuidInTheOrderOfRfc9562()
+    {
+        var identifier = new IdentifierId(Guid.Parse("00112233-4455-6677-8899-aabbccddeeff"));
+
+        byte[] ordered = Convert.FromHexString("00112233445566778899AABBCCDDEEFF");
+
+        Assert.Equal(SHA256.HashData(ordered), PendingVerification.CodeHolder(identifier));
+        Assert.NotEqual(
+            PendingVerification.CodeHolder(identifier),
+            PendingVerification.ConfirmationHolder(identifier));
+    }
+
+    /// <summary>
     /// IDN-ACCT-007 AC2: a restricted account changes none of its identifiers. Adding,
     /// removing, replacing, promoting and naming a backup are each refused with the
     /// code the gate refuses a modifying action with, and nothing is staged or given up.
@@ -2134,17 +2292,16 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private string Code(IdentifierId identifier) => VerificationCode.Read(Outstanding(identifier).Code);
 
     // The verification-code record held against a pending verification, which is the
-    // fingerprint of the identifier it names (AUTH-FACT-004).
-    private VerificationCode Outstanding(IdentifierId identifier)
-    {
-        byte[] named = new byte[16];
+    // holder its identifier gives (AUTH-FACT-004).
+    private VerificationCode Outstanding(IdentifierId identifier) =>
+        Held(PendingVerification.CodeHolder(identifier));
 
-        _ = identifier.Value.TryWriteBytes(named);
+    // The record the displaced address's confirmation is held in (REG-IDENT-007).
+    private VerificationCode Confirmation(IdentifierId identifier) =>
+        Held(PendingVerification.ConfirmationHolder(identifier));
 
-        byte[] holder = SHA256.HashData(named);
-
-        return _codes.All.Single(held => held.Holder.AsSpan().SequenceEqual(holder));
-    }
+    private VerificationCode Held(byte[] holder) =>
+        _codes.All.Single(held => held.Holder.AsSpan().SequenceEqual(holder));
 
     // The undo the remaining channels were sent, which is what the removal notice
     // carries for the deployment's template to put in its words.
