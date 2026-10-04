@@ -418,7 +418,7 @@ public sealed class ResourceRegistrationTests(HostFixture host) : IClassFixture<
                 AccessContext.Of(account),
                 HostPermissions.Read,
                 resource,
-                new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, document => document.Id)
+                new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, reading.Consented, document => document.Id)
                     .Relationship("reviewer", reading.Reviewers),
                 TestContext.Current.CancellationToken);
 

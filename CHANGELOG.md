@@ -2602,3 +2602,13 @@ against the public contract of LIB-API-001.
   `AddConsentedResources`: a row for each registered record whose data subject holds a
   consent neither withdrawn nor superseded, with the purpose, the document and the kind
   of that consent. The application role reads it.
+- `ConsentedResource` in `Janus.Core`, the row of `identity.consented_resources`, mapped
+  by `MapAuthorizationTables` beside `AncestryEntry` and `EffectiveGrant`.
+  `FilterSources<TResource>` takes its `IQueryable` as a third required source, so a
+  host passes `context.Set<ConsentedResource>()` beside the other two. For a permission
+  bound to a consent-based purpose, `FilterAsync` and `FragmentAsync` admit only the
+  records whose data subject holds a live consent for that purpose, recorded against
+  the document the purpose now names and written where the purpose requires written
+  consent; the fragment carries the purpose, the document and the kind as parameters. A
+  check and a capability page refuse a live consent recorded against another document
+  with `privacy.consent.superseded`, as the lists leave its record out.

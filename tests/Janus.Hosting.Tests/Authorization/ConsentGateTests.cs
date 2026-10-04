@@ -1,10 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
 using Janus.Core;
+using Janus.Hosting.Bff;
 using Janus.Privacy.Consents;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Xunit;
 
 namespace Janus.Hosting.Tests.Authorization;
@@ -84,6 +90,41 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
             Held(ConsentKind.Written) with { SupersededAt = Deployment.Noon.AddDays(30) });
 
         Assert.Equal(ErrorCodes.ConsentSuperseded, await RefusalAsync(granted));
+    }
+
+    /// <summary>
+    /// PRIV-CONS-007 AC2, AC4, AC5, AUTHZ-GATE-002 AC4: a deployment whose declaration
+    /// gives the purpose another governing document refuses the consent recorded against
+    /// the earlier one as superseded, in the check and in both renderings of the list
+    /// alike, interrupts nothing resting on another basis, and admits the action again
+    /// once the subject consents against the document the purpose now names.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_CONS_007_APurposeGivenAnotherDocumentAsksItsSubjectsAgainAsync()
+    {
+        Granted granted = await GrantedAsync();
+
+        await RecordAsync(granted.Account, Held(ConsentKind.Written));
+
+        await using ServiceProvider redeclared = Redeclared("recommendation-terms");
+
+        Assert.Null(await RefusalAsync(granted));
+        Assert.True(await ListedAsync(granted, host.Services));
+        Assert.True(await ListedByFragmentAsync(granted, host.Services));
+
+        Assert.Equal(ErrorCodes.ConsentSuperseded, await RefusalAsync(granted, deployment: redeclared));
+        Assert.False(await ListedAsync(granted, redeclared));
+        Assert.False(await ListedByFragmentAsync(granted, redeclared));
+        Assert.Null(await RefusalAsync(granted, HostPermissions.Read, redeclared));
+
+        await RecordAsync(
+            granted.Account,
+            Held(ConsentKind.Written) with { Document = "recommendation-terms", GrantedAt = Deployment.Noon.AddDays(1) });
+
+        Assert.Null(await RefusalAsync(granted, deployment: redeclared));
+        Assert.True(await ListedAsync(granted, redeclared));
+        Assert.True(await ListedByFragmentAsync(granted, redeclared));
     }
 
     /// <summary>
@@ -335,7 +376,7 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
             null,
             cancellationToken);
 
-        var acting = new Granted(staff, record);
+        var acting = new Granted(staff, record, deployment.Organization);
 
         await RecordAsync(staff, Held(ConsentKind.Written));
 
@@ -377,7 +418,7 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
             null,
             cancellationToken);
 
-        var acting = new Granted(account, record);
+        var acting = new Granted(account, record, deployment.Organization);
 
         await RecordAsync(account, Held(ConsentKind.Written));
 
@@ -484,7 +525,7 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
             null,
             cancellationToken);
 
-        return new Granted(account, record);
+        return new Granted(account, record, deployment.Organization);
     }
 
     private async Task RecordAsync(SubjectId subject, ConsentRecord consent)
@@ -525,9 +566,12 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
 
     // The type a document sits in declares a derivation, so the check is asked with the
     // rows that derivation is evaluated over (AUTHZ-DERIVE-001, D-162).
-    private async Task<ErrorCode?> RefusalAsync(Granted granted, Permission? permission = null)
+    private async Task<ErrorCode?> RefusalAsync(
+        Granted granted,
+        Permission? permission = null,
+        IServiceProvider? deployment = null)
     {
-        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using AsyncServiceScope scope = (deployment ?? host.Services).CreateAsyncScope();
         await using HostContext reading = host.Context();
 
         Result outcome = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
@@ -587,10 +631,90 @@ public sealed class ConsentGateTests(HostFixture host) : IClassFixture<HostFixtu
             traced.Statements);
     }
 
+    // The same deployment under a declaration that gives the recommendations purpose
+    // another governing document, which is what a release that moves a purpose is.
+    private ServiceProvider Redeclared(string document)
+    {
+        var services = new ServiceCollection();
+
+        services.AddSingleton<TimeProvider>(new FixedTime(Deployment.Noon));
+        services.AddSingleton<ISecretSource>(HostFixture.Secrets(host.MaintenanceConnectionString));
+        HostFixture.Sourced(services, host.ConnectionString);
+        services.AddJanus(host.ConnectionString, HostFixture.Declaration(document: document), ApplicationKind.Public);
+
+        return HostFixture.Started(services.BuildServiceProvider());
+    }
+
+    // Whether the list for the consent-bound action holds the record, through the
+    // expression composed into the host's own query.
+    private async Task<bool> ListedAsync(Granted granted, IServiceProvider deployment)
+    {
+        await using AsyncServiceScope scope = deployment.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        Result<Expression<Func<HostDocument, bool>>> filter = await scope.ServiceProvider
+            .GetRequiredService<IAccessGate>()
+            .FilterAsync(
+                AccessContext.Of(granted.Account),
+                HostPermissions.Recommend,
+                Document,
+                granted.Organization,
+                Sources(reading),
+                TestContext.Current.CancellationToken);
+
+        return await reading.Documents
+            .Where(filter.Match(
+                rendering => rendering,
+                error => throw new InvalidOperationException(error.Code.ToString())))
+            .AnyAsync(
+                document => document.Id == granted.Record.Id.ToString(),
+                TestContext.Current.CancellationToken);
+    }
+
+    // The same through the fragment, composed into a hand-written query.
+    private async Task<bool> ListedByFragmentAsync(Granted granted, IServiceProvider deployment)
+    {
+        Result<SqlFilter> rendered;
+
+        await using (AsyncServiceScope scope = deployment.CreateAsyncScope())
+        {
+            rendered = await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .FragmentAsync(
+                    AccessContext.Of(granted.Account),
+                    HostPermissions.Recommend,
+                    Document,
+                    granted.Organization,
+                    "identity_authz_row",
+                    "id",
+                    TestContext.Current.CancellationToken);
+        }
+
+        SqlFilter fragment = rendered.Match(
+            rendering => rendering,
+            error => throw new InvalidOperationException(error.Code.ToString()));
+
+        var arguments = new DynamicParameters();
+
+        foreach (KeyValuePair<string, object> parameter in fragment.Parameters)
+        {
+            arguments.Add(parameter.Key, parameter.Value);
+        }
+
+        arguments.Add("record", granted.Record.Id.ToString());
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<bool>(new CommandDefinition(
+            "SELECT EXISTS (SELECT 1 FROM host.documents AS identity_authz_row "
+            + "WHERE identity_authz_row.id = @record AND " + fragment.Text + ");",
+            arguments,
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
     private static FilterSources<HostDocument> Sources(HostContext reading) =>
-        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, document => document.Id)
+        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, reading.Consented, document => document.Id)
             .Relationship("reviewer", reading.Reviewers);
 
     // One case's rows: the account holding the grant and the record it holds it on.
-    private sealed record Granted(SubjectId Account, ResourceReference Record);
+    private sealed record Granted(SubjectId Account, ResourceReference Record, OrganizationId Organization);
 }

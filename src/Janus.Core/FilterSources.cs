@@ -7,7 +7,7 @@ namespace Janus.Core;
 
 /// <summary>
 /// What the host supplies from its own context so that a permission filter composes
-/// into its own query: the two contract tables, the rows of every relationship a
+/// into its own query: the three contract tables, the rows of every relationship a
 /// derivation follows from, and how a row of its table names the record the library
 /// registered. The same object serves the check, the capability page and the refresh of
 /// a materialised derivation (D-161).
@@ -27,19 +27,23 @@ public sealed class FilterSources<TResource>
     /// </summary>
     /// <param name="ancestry">The ancestry closure from the host's context.</param>
     /// <param name="grants">The effective grants from the host's context.</param>
+    /// <param name="consented">The consented resources from the host's context.</param>
     /// <param name="identifier">How a row names the record it was registered as.</param>
     /// <exception cref="ArgumentNullException">One of them is absent.</exception>
     public FilterSources(
         IQueryable<AncestryEntry> ancestry,
         IQueryable<EffectiveGrant> grants,
+        IQueryable<ConsentedResource> consented,
         Expression<Func<TResource, string>> identifier)
     {
         ArgumentNullException.ThrowIfNull(ancestry);
         ArgumentNullException.ThrowIfNull(grants);
+        ArgumentNullException.ThrowIfNull(consented);
         ArgumentNullException.ThrowIfNull(identifier);
 
         Ancestry = ancestry;
         Grants = grants;
+        Consented = consented;
         Identifier = identifier;
     }
 
@@ -52,6 +56,12 @@ public sealed class FilterSources<TResource>
     /// The grants and the permissions their roles allow, as the host's context maps them.
     /// </summary>
     public IQueryable<EffectiveGrant> Grants { get; }
+
+    /// <summary>
+    /// The records whose data subject holds a live consent, as the host's context maps
+    /// them, read for a permission bound to a consent-based purpose.
+    /// </summary>
+    public IQueryable<ConsentedResource> Consented { get; }
 
     /// <summary>
     /// How a row names the record it was registered as, which is the host's own text.

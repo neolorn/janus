@@ -48,6 +48,8 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         [ErrorCodes.Denied] = Decided.Denied,
         [ErrorCodes.Restricted] = Decided.Restricted,
         [ErrorCodes.ConsentRequired] = Decided.ConsentRequired,
+        [ErrorCodes.ConsentSuperseded] = Decided.ConsentSuperseded,
+        [ErrorCodes.ConsentWrittenRequired] = Decided.ConsentWrittenRequired,
         [ErrorCodes.StepUpRequired] = Decided.StepUpRequired,
         [ErrorCodes.StepUpUnavailable] = Decided.StepUpUnavailable,
     };
@@ -134,6 +136,25 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("no provider", Decided.StepUpUnavailable),
     ];
 
+    // An action bound to a consent-based purpose, on a sensitive type, which asks the
+    // written consent of the record's data subject against the document the purpose
+    // names. The caller holds the grant in every case, so what decides is the consent,
+    // and the lists admit the record where the check does and nowhere else
+    // (AUTHZ-TEST-001 AC1, AUTHZ-GATE-002 AC4, PRIV-SENS-002 AC1, PRIV-CONS-007 AC5).
+    private static readonly (string Scenario, Decided Decided)[] Consents =
+    [
+        ("a written consent against the document the purpose names", Decided.Allowed),
+        ("no consent", Decided.ConsentRequired),
+        ("a consent that was withdrawn", Decided.ConsentRequired),
+        ("a consent that was superseded", Decided.ConsentSuperseded),
+        ("a consent given again after one was withdrawn", Decided.Allowed),
+        ("a written consent against another document", Decided.ConsentSuperseded),
+        ("an ordinary consent where the purpose asks a written one", Decided.ConsentWrittenRequired),
+        ("a consent to another purpose", Decided.ConsentRequired),
+        ("a consent of the caller, who is not the record's data subject", Decided.ConsentRequired),
+        ("a record that names no data subject", Decided.ConsentRequired),
+    ];
+
     /// <summary>
     /// The table as the run reads it.
     /// </summary>
@@ -148,6 +169,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     /// The operations' table as the run reads it.
     /// </summary>
     public static TheoryData<string, Decided> OperationCases => Read(Operations);
+
+    /// <summary>
+    /// The consents' table as the run reads it.
+    /// </summary>
+    public static TheoryData<string, Decided> ConsentCases => Read(Consents);
 
     /// <summary>
     /// AUTHZ-TEST-001 AC1, AC2, AUTHZ-GATE-002 AC2: every case of the table decides the
@@ -209,6 +235,30 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             Assert.Equal(Decided.Allowed, await ExpressionAdmitsAsync(written, reporting));
             Assert.Equal(Decided.Allowed, await FragmentAdmitsAsync(written, reporting));
         }
+    }
+
+    /// <summary>
+    /// AUTHZ-TEST-001 AC1, AUTHZ-GATE-002 AC4, PRIV-SENS-002 AC5: every case of the
+    /// consents' table decides the way the table says through the single check, and both
+    /// renderings of the filter list the record where the check admits it and nowhere
+    /// else.
+    /// </summary>
+    /// <param name="scenario">The case.</param>
+    /// <param name="decided">What it decides.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [MemberData(nameof(ConsentCases))]
+    public async Task AUTHZ_GATE_002_AC4_EveryConsentCaseDecidesTheSameWayThroughBothPathsAsync(
+        string scenario,
+        Decided decided)
+    {
+        Case written = await WriteConsentedAsync(scenario);
+
+        Decided listed = decided is Decided.Allowed ? Decided.Allowed : Decided.Denied;
+
+        Assert.Equal(decided, await ChecksAsync(written));
+        Assert.Equal(listed, await ExpressionAdmitsAsync(written));
+        Assert.Equal(listed, await FragmentAdmitsAsync(written));
     }
 
     /// <summary>
@@ -468,7 +518,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
     // What the host supplies from its own context, the same object every path on a type
     // with a derivation takes (D-161).
     private static FilterSources<HostDocument> Sources(HostContext reading) =>
-        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, document => document.Id)
+        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, reading.Consented, document => document.Id)
             .Relationship("reviewer", reading.Reviewers);
 
     private static TRendering Rendered<TRendering>(Result<TRendering> outcome) =>
@@ -1035,6 +1085,74 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         return asked;
     }
 
+    // A record the account's grant confers the consent-bound action on, whose data
+    // subject holds what the case names.
+    private async Task<Case> WriteConsentedAsync(string scenario)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        RoleName role = await deployment.BeginAsync(
+            [HostPermissions.Read, HostPermissions.Recommend],
+            cancellationToken);
+
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        SubjectId subject = await deployment.AccountAsync(cancellationToken);
+        ResourceReference outer = Reference(Workspace);
+        ResourceReference inner = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+        ResourceReference sibling = Reference(Document);
+
+        await deployment.RegisterAsync(outer, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(inner, outer, cancellationToken);
+        await deployment.RegisterAsync(sibling, inner, cancellationToken);
+        await deployment.RegisterAsync(
+            record,
+            inner,
+            cancellationToken,
+            scenario == "a record that names no data subject" ? null : subject);
+        await deployment.GrantAsync(GrantSubject.Of(account), role, record, false, null, null, cancellationToken);
+
+        switch (scenario)
+        {
+            case "a written consent against the document the purpose names":
+                await ConsentedAsync(subject);
+                break;
+            case "a consent that was withdrawn":
+                await ConsentedAsync(subject);
+                await EndedAsync(subject, withdrawn: true);
+                break;
+            case "a consent that was superseded":
+                await ConsentedAsync(subject);
+                await EndedAsync(subject, withdrawn: false);
+                break;
+            case "a consent given again after one was withdrawn":
+                await ConsentedAsync(subject);
+                await EndedAsync(subject, withdrawn: true);
+                await ConsentedAsync(subject);
+                break;
+            case "a written consent against another document":
+                await ConsentedAsync(subject, document: "newsletter-terms");
+                break;
+            case "an ordinary consent where the purpose asks a written one":
+                await ConsentedAsync(subject, kind: ConsentKind.Ordinary);
+                break;
+            case "a consent to another purpose":
+                await ConsentedAsync(subject, purpose: "newsletters");
+                break;
+            case "a consent of the caller, who is not the record's data subject":
+            case "a record that names no data subject":
+                await ConsentedAsync(account);
+                break;
+            case "no consent":
+                break;
+            default:
+                throw new InvalidOperationException("The consents' table holds a case nothing writes.");
+        }
+
+        return new Case(host, deployment, account, record, sibling, inner, outer, HostPermissions.Recommend);
+    }
+
     // What the page decides on one record: the consent it still requires, the action
     // it admits, or neither.
     private static Decided Paged(Capability capability) =>
@@ -1045,7 +1163,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
 
     // PRIV-SENS-002 AC1: the written consent the consent-based purpose asks of a
     // sensitive type, recorded for its data subject.
-    private async Task ConsentedAsync(SubjectId subject)
+    private async Task ConsentedAsync(
+        SubjectId subject,
+        string purpose = "recommendations",
+        string document = "privacy-notice",
+        ConsentKind kind = ConsentKind.Written)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -1057,15 +1179,36 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         _ = await scope.ServiceProvider.GetRequiredService<IConsentStore>().AddAsync(
             subject,
             new ConsentRecord(
-                "recommendations",
-                "privacy-notice",
+                purpose,
+                document,
                 "1",
                 ConsentMechanism.Dashboard,
-                ConsentKind.Written,
+                kind,
                 Deployment.Noon,
                 WithdrawnAt: null,
                 SupersededAt: null),
             cancellationToken);
+        await work.CommitAsync(cancellationToken);
+    }
+
+    // PRIV-CONS-004, PRIV-CONS-007: the subject's live consent to the purpose, stamped
+    // withdrawn or superseded.
+    private async Task EndedAsync(SubjectId subject, bool withdrawn)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        IConsentStore store = scope.ServiceProvider.GetRequiredService<IConsentStore>();
+        DateTimeOffset at = Deployment.Noon.AddHours(1);
+
+        await work.BeginAsync(cancellationToken);
+
+        Assert.True(withdrawn
+            ? await store.WithdrawConsentAsync(subject, "recommendations", at, cancellationToken)
+            : await store.SupersedeAsync(subject, "recommendations", at, cancellationToken));
+
         await work.CommitAsync(cancellationToken);
     }
 

@@ -65,7 +65,7 @@ public sealed class ConcealmentTests(HostFixture host) : IClassFixture<HostFixtu
         new(type, ResourceId.Parse(Guid.NewGuid().ToString()));
 
     private static FilterSources<HostDocument> Sources(HostContext reading) =>
-        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, held => held.Id)
+        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, reading.Consented, held => held.Id)
             .Relationship("reviewer", reading.Reviewers);
 
     private static void Refused(Result outcome) =>

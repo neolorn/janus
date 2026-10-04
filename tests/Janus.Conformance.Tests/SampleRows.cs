@@ -29,7 +29,7 @@ internal sealed class SampleRows<TResource>(
 
     /// <inheritdoc/>
     public FilterSources<TResource> Sources { get; } =
-        new FilterSources<TResource>(context.Ancestry, context.Grants, identifier)
+        new FilterSources<TResource>(context.Ancestry, context.Grants, context.Consented, identifier)
             .Relationship(SampleHost.Keeper, context.Keepers)
             .Relationship(SampleHost.Steward, context.Stewards)
             .Relationship(SampleHost.Borrower, context.Borrowers);

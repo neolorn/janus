@@ -14,6 +14,7 @@ using Janus.Authorization.Gate;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
+using Janus.Privacy.Consents;
 using Janus.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -1524,10 +1525,156 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
         Assert.Contains(derived.Id.ToString(), listed, StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// PRIV-SENS-002 AC1, AC5, AUTHZ-GATE-002 AC4: a list for an action bound to a
+    /// consent-based purpose admits the records whose data subject consented and no
+    /// other, through the expression and the fragment alike, while the list for an
+    /// action resting on another basis admits them all.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_SENS_002_AC1_AListAdmitsOnlyTheRecordsWhoseSubjectsConsentedAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Recommend]);
+        SubjectId giving = await nested.Deployment.AccountAsync(cancellationToken);
+        SubjectId withholding = await nested.Deployment.AccountAsync(cancellationToken);
+        ResourceReference given = Reference(Document);
+        ResourceReference withheld = Reference(Document);
+
+        await nested.Deployment.RegisterAsync(given, nested.Bottom, cancellationToken, giving);
+        await nested.Deployment.RegisterAsync(withheld, nested.Bottom, cancellationToken, withholding);
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account), nested.Role, nested.Top, false, null, null, cancellationToken);
+        await ConsentedAsync(giving);
+
+        await using HostContext reading = host.Context();
+
+        Assert.Equal(3, (await ListedAsync(nested, reading)).Count);
+        Assert.Equal([given.Id.ToString()], await ListedAsync(nested, reading, HostPermissions.Recommend));
+        Assert.Equal([given.Id.ToString()], await ListedByFragmentAsync(nested, HostPermissions.Recommend));
+    }
+
+    /// <summary>
+    /// PRIV-SENS-002a AC2, AC3, PRIV-SENS-002 AC5: a withdrawal takes the record out of
+    /// the next list for the consent-based purpose, through the expression and the
+    /// fragment alike, and leaves it in the list for the purpose resting on another
+    /// basis.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task PRIV_SENS_002a_AC2_AWithdrawalRemovesTheRecordFromTheNextListAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        Nested nested = await NestAsync(allowing: [HostPermissions.Read, HostPermissions.Recommend]);
+        SubjectId giving = await nested.Deployment.AccountAsync(cancellationToken);
+        ResourceReference given = Reference(Document);
+
+        await nested.Deployment.RegisterAsync(given, nested.Bottom, cancellationToken, giving);
+        await nested.Deployment.GrantAsync(
+            GrantSubject.Of(nested.Account), nested.Role, nested.Top, false, null, null, cancellationToken);
+        await ConsentedAsync(giving);
+
+        await using HostContext reading = host.Context();
+
+        IReadOnlyList<string> before = await ListedAsync(nested, reading, HostPermissions.Recommend);
+
+        await WithdrawnAsync(giving);
+
+        Assert.Equal([given.Id.ToString()], before);
+        Assert.Empty(await ListedAsync(nested, reading, HostPermissions.Recommend));
+        Assert.Empty(await ListedByFragmentAsync(nested, HostPermissions.Recommend));
+        Assert.Contains(given.Id.ToString(), await ListedAsync(nested, reading), StringComparer.Ordinal);
+    }
+
+    // PRIV-SENS-002 AC1: the written consent the consent-based purpose asks of a
+    // sensitive type, recorded for its data subject against the privacy notice.
+    private async Task ConsentedAsync(SubjectId subject)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+        await work.BeginAsync(cancellationToken);
+
+        Assert.True(await scope.ServiceProvider.GetRequiredService<IConsentStore>().AddAsync(
+            subject,
+            new ConsentRecord(
+                "recommendations",
+                "privacy-notice",
+                "1",
+                ConsentMechanism.Dashboard,
+                ConsentKind.Written,
+                Deployment.Noon,
+                WithdrawnAt: null,
+                SupersededAt: null),
+            cancellationToken));
+
+        await work.CommitAsync(cancellationToken);
+    }
+
+    private async Task WithdrawnAsync(SubjectId subject)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+        await work.BeginAsync(cancellationToken);
+
+        Assert.True(await scope.ServiceProvider.GetRequiredService<IConsentStore>().WithdrawConsentAsync(
+            subject,
+            "recommendations",
+            Deployment.Noon.AddHours(1),
+            cancellationToken));
+
+        await work.CommitAsync(cancellationToken);
+    }
+
+    // The same listing through the fragment, composed into a hand-written query over
+    // the host's own table.
+    private async Task<IReadOnlyList<string>> ListedByFragmentAsync(Nested nested, Permission permission)
+    {
+        SqlFilter fragment;
+
+        await using (AsyncServiceScope scope = host.Services.CreateAsyncScope())
+        {
+            fragment = Rendered(await scope.ServiceProvider.GetRequiredService<IAccessGate>()
+                .FragmentAsync(
+                    AccessContext.Of(nested.Account),
+                    permission,
+                    Document,
+                    nested.Deployment.Organization,
+                    "identity_authz_row",
+                    "id",
+                    TestContext.Current.CancellationToken));
+        }
+
+        var arguments = new DynamicParameters();
+
+        foreach (KeyValuePair<string, object> parameter in fragment.Parameters)
+        {
+            arguments.Add(parameter.Key, parameter.Value);
+        }
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        return [.. await connection.QueryAsync<string>(new CommandDefinition(
+            "SELECT identity_authz_row.id FROM host.documents AS identity_authz_row WHERE " + fragment.Text + ";",
+            arguments,
+            cancellationToken: TestContext.Current.CancellationToken))];
+    }
+
     // What a listing over the host's own table returns with the filter applied, which
     // is the path a derivation is evaluated through (D-160): the rows of the host's
     // relation are the host's, and its context executes the composed query.
-    private async Task<IReadOnlyList<string>> ListedAsync(Nested nested, HostContext reading)
+    private async Task<IReadOnlyList<string>> ListedAsync(
+        Nested nested,
+        HostContext reading,
+        Permission? permission = null)
     {
         await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
 
@@ -1535,7 +1682,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
             await scope.ServiceProvider.GetRequiredService<IAccessGate>()
                 .FilterAsync(
                     AccessContext.Of(nested.Account),
-                    HostPermissions.Read,
+                    permission ?? HostPermissions.Read,
                     Document,
                     nested.Deployment.Organization,
                     Sources(reading),
@@ -1569,7 +1716,7 @@ public sealed class GateBehaviourTests(HostFixture host) : IClassFixture<HostFix
     // What the host supplies from its own context, the same object every path on a
     // type with a derivation takes (D-161).
     private static FilterSources<HostDocument> Sources(HostContext reading) =>
-        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, document => document.Id)
+        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, reading.Consented, document => document.Id)
             .Relationship("reviewer", reading.Reviewers);
 
     private static TRendering Rendered<TRendering>(Result<TRendering> outcome) =>

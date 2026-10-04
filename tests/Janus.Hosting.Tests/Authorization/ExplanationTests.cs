@@ -887,7 +887,7 @@ public sealed class ExplanationTests(HostFixture host) : IClassFixture<HostFixtu
     }
 
     private static FilterSources<HostDocument> Sources(HostContext reading) =>
-        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, document => document.Id)
+        new FilterSources<HostDocument>(reading.Ancestry, reading.Grants, reading.Consented, document => document.Id)
             .Relationship("reviewer", reading.Reviewers);
 
     // The type a note sits in declares a derivation, so the explanation is asked with
