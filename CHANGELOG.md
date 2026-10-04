@@ -3144,3 +3144,15 @@ against the public contract of LIB-API-001.
   with those its source already created in the hour: with
   `abuse.botdefence.repeatedattempts` at its default of 3, the fourth session from one
   source in an hour is the one challenged.
+- A deployment can supply its datacenter ranges through `IDatacenterRangeSource`, in the
+  format the interface documents: a dated UTF-8 file of one tab-separated range a line,
+  first address and last address. The `datacenterRange` signal matches the whole address
+  a `POST /register` arrived on, never the source its sessions are counted under,
+  against a copy read in process on first use and refreshed by the `datacenter-ranges`
+  job every `abuse.botdefence.ranges.refresh` (a day). A file that cannot be read whole
+  is refused and the copy held before it kept. The library ships no ranges: while
+  `datacenterRange` is among `abuse.botdefence.signals` and no file is held, or the one
+  held is older by its own date than `abuse.botdefence.ranges.maxage` (30 days), the
+  signal does not fire and `degradation` is raised under `botdefence.ranges.absent` or
+  `botdefence.ranges.stale`, until the deployment supplies a file or takes the signal
+  out of the set.

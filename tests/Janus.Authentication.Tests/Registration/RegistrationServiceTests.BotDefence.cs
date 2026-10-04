@@ -215,6 +215,22 @@ public sealed partial class RegistrationServiceTests
         Assert.Empty(_signalled.Records);
     }
 
+    /// <summary>
+    /// OPS-OBS-002: where the degradation of the range file cannot be raised, the begin
+    /// is refused with what refused the raise and creates nothing, so the signal is
+    /// never skipped in silence (AUTH-ABUSE-008).
+    /// </summary>
+    [Fact]
+    public async Task BeginAsync_ARangeDegradationThatCannotBeRaised_CreatesNoSessionAsync()
+    {
+        _ranges.Refusal = Error.From(ErrorCodes.RequestMalformed);
+
+        Assert.Equal(ErrorCodes.RequestMalformed, Refused(await BegunFromAsync(Source)));
+        Assert.Empty(_sessions.All);
+        Assert.Empty(_signalled.Records);
+        Assert.Equal((0, 0, false), (_work.OutermostCommitted, _work.RolledBack, _work.Open));
+    }
+
     private void Verifying() =>
         _verifier = new ChallengeVerifier((token, _) =>
             ValueTask.FromResult(string.Equals(token, Solved, StringComparison.Ordinal)));

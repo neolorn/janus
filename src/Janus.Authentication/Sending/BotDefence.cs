@@ -13,10 +13,7 @@ namespace Janus.Authentication.Sending;
 /// of every customer is friction without proportionate benefit.
 /// </summary>
 /// <param name="configuration">Where the signals and their counts come from.</param>
-/// <param name="ranges">
-/// What answers whether a source is a datacenter address, or nothing where the
-/// deployment holds no range file.
-/// </param>
+/// <param name="ranges">What answers whether an address is a datacenter address.</param>
 /// <param name="sources">What counts registration sessions per source.</param>
 /// <param name="audit">Where a signal with no challenge behind it is written down.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
@@ -29,7 +26,7 @@ namespace Janus.Authentication.Sending;
 /// </remarks>
 internal sealed class BotDefence(
     IConfigurationStore configuration,
-    IDatacenterRanges? ranges,
+    IDatacenterRanges ranges,
     IRegistrationSources sources,
     IBotDefenceAudit audit,
     IUnitOfWork work,
@@ -41,19 +38,29 @@ internal sealed class BotDefence(
     /// <summary>
     /// Whether this registration step goes on, and what it asks for first.
     /// </summary>
-    /// <param name="source">The address the registration came from.</param>
+    /// <param name="ipAddress">
+    /// The whole address the request arrived on, which the datacenter ranges are
+    /// matched against.
+    /// </param>
+    /// <param name="source">
+    /// The source of the request, which its registration sessions are counted under
+    /// (AUTH-ABUSE-001).
+    /// </param>
     /// <param name="token">The challenge token presented, where one was.</param>
     /// <param name="cancellationToken">Abandons the check.</param>
     /// <returns>
-    /// Nothing where the step goes on, or <c>auth.challenge.required</c> where a
-    /// signal fired and the deployment can judge a challenge.
+    /// Nothing where the step goes on, <c>auth.challenge.required</c> where a signal
+    /// fired and the deployment can judge a challenge, or the failure where a
+    /// degradation of the range file could not be raised.
     /// </returns>
-    /// <exception cref="ArgumentNullException">The source is absent.</exception>
+    /// <exception cref="ArgumentNullException">The address or the source is absent.</exception>
     public async ValueTask<Result> CheckAsync(
+        string ipAddress,
         string source,
         [NeverLogged] string? token,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(ipAddress);
         ArgumentNullException.ThrowIfNull(source);
 
         Error? failure = null;
@@ -75,12 +82,19 @@ internal sealed class BotDefence(
 
         DateTimeOffset now = time.GetUtcNow();
 
-        BotDefenceSignal? fired = await FiredAsync(
-            source,
-            watched,
-            repeated,
-            now,
-            cancellationToken).ConfigureAwait(false);
+        BotDefenceSignal? fired = (await FiredAsync(
+                ipAddress,
+                source,
+                watched,
+                repeated,
+                now,
+                cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<BotDefenceSignal?>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure(failure);
+        }
 
         if (fired is not BotDefenceSignal signal)
         {
@@ -153,21 +167,38 @@ internal sealed class BotDefence(
         return default!;
     }
 
-    private async ValueTask<BotDefenceSignal?> FiredAsync(
+    private async ValueTask<Result<BotDefenceSignal?>> FiredAsync(
+        string ipAddress,
         string source,
         IReadOnlySet<BotDefenceSignal> watched,
         int repeated,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        if (watched.Contains(BotDefenceSignal.DatacenterRange) && ranges is not null && ranges.Contains(source))
+        // AUTH-ABUSE-008: the ranges are asked only while the signal is watched, so a
+        // deployment that took it out of the set is told nothing of a file it does not
+        // use, and they are asked about the whole address, never the counting source.
+        if (watched.Contains(BotDefenceSignal.DatacenterRange))
         {
-            return BotDefenceSignal.DatacenterRange;
+            Error? unanswered = null;
+
+            bool inside = (await ranges.ContainsAsync(ipAddress, cancellationToken).ConfigureAwait(false))
+                .Match(value => value, error => Held<bool>(error, ref unanswered));
+
+            if (unanswered is not null)
+            {
+                return Result.Failure<BotDefenceSignal?>(unanswered);
+            }
+
+            if (inside)
+            {
+                return Result.Success<BotDefenceSignal?>(BotDefenceSignal.DatacenterRange);
+            }
         }
 
         if (!watched.Contains(BotDefenceSignal.RepeatedAttempts))
         {
-            return null;
+            return Result.Success<BotDefenceSignal?>(null);
         }
 
         int started = await sources
@@ -177,6 +208,6 @@ internal sealed class BotDefence(
         // AUTH-ABUSE-008 AC3: the session this request would create counts with those
         // already created, so the one that makes more than the setting is the one
         // challenged.
-        return started + 1 > repeated ? BotDefenceSignal.RepeatedAttempts : null;
+        return Result.Success<BotDefenceSignal?>(started + 1 > repeated ? BotDefenceSignal.RepeatedAttempts : null);
     }
 }

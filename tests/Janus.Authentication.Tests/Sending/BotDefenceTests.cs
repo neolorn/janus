@@ -177,7 +177,9 @@ public sealed class BotDefenceTests : IAsyncDisposable
     }
     /// <summary>
     /// A signal the deployment stopped counting fires for nobody, which is how the
-    /// closed set is turned off (chapter 10 section 4.5).
+    /// closed set is turned off (chapter 10 section 4.5), and the ranges are not asked
+    /// while <c>datacenterRange</c> is out of the set, so nothing is raised about a
+    /// file the deployment does not use (AUTH-ABUSE-008).
     /// </summary>
     [Fact]
     public async Task CheckAsync_ASignalTheDeploymentDoesNotCount_FiresForNobodyAsync()
@@ -191,6 +193,59 @@ public sealed class BotDefenceTests : IAsyncDisposable
         await PassedAsync(Datacenter);
 
         Assert.Empty(_audit.Records);
+        Assert.Empty(_ranges.Asked);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-008: the ranges are matched against the whole address the request
+    /// arrived on, never the source its sessions are counted under (AUTH-ABUSE-001),
+    /// and the signal is recorded under that source.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_008_TheRangesAreMatchedAgainstTheWholeAddressAsync()
+    {
+        const string whole = "2001:db8:1:2::9";
+        const string counted = "2001:db8:1:2::/64";
+
+        _ranges.Inside.Add(whole);
+
+        Result checkedWhole = await Defence.CheckAsync(
+            whole,
+            counted,
+            token: null,
+            TestContext.Current.CancellationToken);
+
+        checkedWhole.Switch(
+            () => { },
+            error => throw new Xunit.Sdk.XunitException($"The check was refused: {error.Code}."));
+        Assert.Equal([whole], _ranges.Asked);
+        Assert.Equal(
+            (BotDefenceSignal.DatacenterRange, counted, false),
+            Assert.Single(_audit.Records));
+    }
+
+    /// <summary>
+    /// OPS-OBS-002: where the degradation of the range file cannot be raised the check
+    /// is refused with what refused the raise, before anything is recorded or the
+    /// verifier asked, so the signal is never silently skipped.
+    /// </summary>
+    [Fact]
+    public async Task CheckAsync_ADegradationThatCannotBeRaised_RefusesTheCheckAsync()
+    {
+        int asked = 0;
+
+        _verifier = new ChallengeVerifier((_, _) =>
+        {
+            asked++;
+
+            return ValueTask.FromResult(true);
+        });
+        _ranges.Refusal = Error.From(ErrorCodes.RequestMalformed);
+
+        Assert.Equal(ErrorCodes.RequestMalformed, Refusal(await CheckedAsync(Ordinary, "solved")));
+        Assert.Equal(0, asked);
+        Assert.Empty(_audit.Records);
+        Assert.Equal((0, 0, false), (_work.OutermostCommitted, _work.RolledBack, _work.Open));
     }
 
     private static ErrorCode Refusal(Result result) =>
@@ -199,7 +254,7 @@ public sealed class BotDefenceTests : IAsyncDisposable
             error => error.Code);
 
     private async Task<Result> CheckedAsync(string source, string? token) =>
-        await Defence.CheckAsync(source, token, TestContext.Current.CancellationToken);
+        await Defence.CheckAsync(source, source, token, TestContext.Current.CancellationToken);
 
     private async Task PassedAsync(string source, string? token = null) =>
         (await CheckedAsync(source, token)).Switch(

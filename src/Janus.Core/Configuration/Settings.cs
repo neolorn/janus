@@ -434,6 +434,17 @@ public static class Settings
             FrozenSet<BotDefenceSignal>.Empty,
             loosening: SettingDirection.Decrease);
 
+    /// <summary>How often the datacenter range file is refreshed.</summary>
+    public static DurationSetting AbuseBotDefenceRangesRefresh { get; } =
+        new("abuse.botdefence.ranges.refresh", SettingScope.Runtime, "P1D");
+
+    /// <summary>
+    /// The age beyond which the datacenter range file is stale, the datacenter range
+    /// signal does not fire and a degradation is raised.
+    /// </summary>
+    public static DurationSetting AbuseBotDefenceRangesMaxAge { get; } =
+        new("abuse.botdefence.ranges.maxage", SettingScope.Runtime, "P30D");
+
     /// <summary>Whether an unusual read volume per actor raises an alert.</summary>
     public static FlagSetting ExfiltrationReadVolumeAlerting { get; } =
         new("exfiltration.readvolume.alerting", SettingScope.Runtime, true);
@@ -1010,6 +1021,8 @@ public static class Settings
         AbuseSmsPollInterval,
         AbuseSmsDrainFactor,
         AbuseBotDefenceSignals,
+        AbuseBotDefenceRangesRefresh,
+        AbuseBotDefenceRangesMaxAge,
         ExfiltrationReadVolumeAlerting,
         ExfiltrationExportStepUpRequired,
         ExfiltrationExportRateLimit,

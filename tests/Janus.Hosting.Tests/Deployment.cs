@@ -1000,7 +1000,7 @@ internal sealed class Deployment : IAsyncDisposable
         _ = services.AddSingleton<IBotDefenceAudit>(Signalled);
         _ = services.AddScoped(provider => new BotDefence(
             provider.GetRequiredService<IConfigurationStore>(),
-            provider.GetService<IDatacenterRanges>(),
+            provider.GetRequiredService<IDatacenterRanges>(),
             provider.GetRequiredService<IRegistrationSources>(),
             provider.GetRequiredService<IBotDefenceAudit>(),
             provider.GetRequiredService<IUnitOfWork>(),

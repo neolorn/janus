@@ -75,6 +75,7 @@ public sealed class PublicSurfaceTests
         typeof(IAssuranceProvider), // LIB-HOST-004: assurance where authentication is not the library's.
         typeof(ICertificateRenewal), // LIB-HOST-001, optional: an environment seam (INF-TLS-003).
         typeof(IClockReference), // LIB-HOST-001, optional: an environment seam (INF-HOST-001).
+        typeof(IDatacenterRangeSource), // LIB-HOST-001, optional: an environment seam (AUTH-ABUSE-008).
         typeof(IDnsResolver), // LIB-HOST-001, optional: an environment seam (REG-DOM-001).
         typeof(IErasureLedger), // LIB-HOST-001, optional: an environment seam (DR-016).
         typeof(IEventConsumer<>), // LIB-API-001 and IDN-LIFE-003a: the receiver of an emitted event.

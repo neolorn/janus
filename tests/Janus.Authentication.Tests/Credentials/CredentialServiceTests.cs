@@ -1527,7 +1527,7 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             _restrictions,
             new BotDefence(
                 _configuration,
-                ranges: null,
+                new DatacenterRangesInMemory(),
                 new RegistrationSourcesInMemory(),
                 new BotDefenceAuditInMemory(),
                 _work,

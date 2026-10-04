@@ -139,6 +139,28 @@ public sealed class RegistrationWizardTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-ABUSE-008: the datacenter ranges are asked about the whole address the
+    /// request arrived on, never the /64 its sessions are counted under
+    /// (AUTH-ABUSE-001), and the signal is recorded under the counting source.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_ABUSE_008_TheRangesAreAskedAboutTheWholeAddressOfTheRequestAsync()
+    {
+        var whole = IPAddress.Parse("2001:db8:9:9::7");
+
+        _deployment.Ranges.Inside.Add(whole.ToString());
+
+        Answer begun = await BeginFromAsync(_deployment, whole);
+
+        Assert.Equal(StatusCodes.Status201Created, begun.Status);
+        Assert.Equal([whole.ToString()], _deployment.Ranges.Asked);
+        Assert.Equal(
+            (BotDefenceSignal.DatacenterRange, "2001:db8:9:9::/64", false),
+            Assert.Single(_deployment.Signalled.Records));
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-008 AC3: the sessions are counted by the source of the request, so
     /// addresses of one IPv6 /64 are one source (AUTH-ABUSE-001), the session a request
     /// would create is counted with those the source already has in the hour, and each

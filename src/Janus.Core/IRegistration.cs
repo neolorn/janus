@@ -36,13 +36,15 @@ public interface IRegistration
     /// <param name="ipAddress">
     /// The whole address the registration is started from, which the session holds and
     /// the account's first session records where the terms step is completed in process
-    /// (REG-SESS-001, AUTH-SESS-013). Nothing is counted against it: every count and
-    /// delay of a registration uses the source of the request in hand (AUTH-ABUSE-001).
+    /// (REG-SESS-001, AUTH-SESS-013), and which the bot defence matches against the
+    /// deployment's datacenter ranges before the session is created (AUTH-ABUSE-008).
+    /// Nothing is counted against it: every count and delay of a registration uses the
+    /// source of the request in hand (AUTH-ABUSE-001).
     /// </param>
     /// <param name="source">
-    /// The source of the request in hand, which the bot defence judges before the
-    /// session is created and which the session, once created, is counted against
-    /// (AUTH-ABUSE-008, AUTH-ABUSE-001).
+    /// The source of the request in hand, whose registration sessions in the hour the
+    /// bot defence counts before the session is created and which the session, once
+    /// created, is counted against (AUTH-ABUSE-008, AUTH-ABUSE-001).
     /// </param>
     /// <param name="invitationToken">
     /// The token of the invitation link the person pressed, or nothing for a public

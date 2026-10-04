@@ -116,8 +116,10 @@ internal sealed class RegistrationService(
 
         // AUTH-ABUSE-008: the defence is asked before anything of the session exists.
         // Its record is committed alone and the host's verifier asked with no unit of
-        // work open (CONV-DESIGN-003), so the session's own begins only after it.
-        if ((await defence.CheckAsync(source, challengeToken, cancellationToken).ConfigureAwait(false))
+        // work open (CONV-DESIGN-003), so the session's own begins only after it. A
+        // degradation of the range file is raised in a unit of work of its own as well,
+        // and one that cannot be raised refuses the begin (OPS-OBS-002).
+        if ((await defence.CheckAsync(ipAddress, source, challengeToken, cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error challenged)
         {
             return Result.Failure<RegistrationSessionId>(challenged);
