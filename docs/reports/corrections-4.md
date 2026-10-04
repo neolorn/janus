@@ -3427,7 +3427,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The mark stands: one attempt per window. Nothing changes.
   2. A refused notice leaves the window unmarked: the mark is written only once the send is admitted.
 - **Parked.** That site, left as it is.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **128. Tier 3. CONV-DESIGN-007 criterion 7, D-187 question 83 and LIB-API-001: the two factories cannot be built from `IAccessGate`.**
 
@@ -3437,7 +3437,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The contradiction.** The factories must work from `IAccessGate`, and the members they need exist on `AccessGate` alone. Reaching them is a change to the public `IAccessGate`, a new type, or `AccessGate` named in `Janus.Hosting`; no chapter states which.
 - **A second site of the same shape.** The factory of `MailServerTokens` in `HostingRegistration.cs` asks for `OidcService`, which implements `IOidc`, for `OidcService.MintAsync`, which `IOidc` does not declare. `AuthorizationIssue`, `TokenIssue` and `TokenReuse` take `OidcService` by constructor.
 - **Parked.** All of question 83 (the move of `AccessGate` and `IAccessGate`, the two factories, the seam test) and the tests of criterion 7's third and fourth clauses. With question 82 built, what `AddJanus` registers of other projects' types is `SendingValidation`, `AuthorizationDeclaration`, `DeclaredProcessing` and `AccessGate`.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **129. Tier 2. IDN-ACCT-004 and LIB-API-001: the public member through which `DomainName` reaches the conversion.**
 
@@ -3448,7 +3448,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. A member on one of the three named types. Built: `CanonicalForm.TryDomainToAscii(string, out string)`, with its public surface line and changelog line.
   2. A fourth public type for the conversion, against the sentence that lists three.
 - **Parked.** Nothing: reading 1 is built, since the item cannot exist without a public member. A change of name or type moves one member, its surface line and two call sites.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **130. Tier 2. AUTH-FACT-010 and D-154: `PublicSuffixList` still takes a host's ASCII form from the machine.**
 
@@ -3459,7 +3459,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. It stays: the suffix list is no domain lock.
   2. It takes the library's conversion, with the checks REG-DOM-001 names or without the STD3 rules.
 - **Parked.** That line, left as it is.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **131. Tier 2. CONV-DESIGN-003 and CONV-ERR-003: where the catch of question 112 sits.**
 
@@ -3470,7 +3470,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The rule is the immediate attempt's: as built.
   2. Every registration is covered: the loop in the unit of work catches and logs, which needs a logger reachable from `Janus.Storage`.
 - **Parked.** Nothing built beyond reading 1.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **132. Tier 3. AUTH-FACT-002b: a restricted factor undertaken with a phone-signal provider declared and no signal asked beforehand.**
 
@@ -3478,7 +3478,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** `PhoneSignals.ConsiderAsync` records the answer `AllowsAsync` remembered before the unit of work began. Where a provider is declared and nothing was asked for the number, it throws (a fault).
 - **What the specification says.** AUTH-FACT-002b: the signal is asked before the unit of work begins and its consideration recorded in the unit that follows. It does not say what a send does where no ask came first.
 - **Parked.** Nothing: the fault stands as built, since the other course lets a restricted factor go unconsidered.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **133. Tier 2. CONV-DESIGN-003: `ConsentService.GrantAsync` where nothing was added or ended.**
 
@@ -3489,7 +3489,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. It stays: the joined call must commit.
   2. The method is split, or the port tells a level its depth, so that the outermost call rolls back.
 - **Parked.** That return, left committing.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **134. Tier 3. AUTH-FACT-004 and CONV-DESIGN-003: a domain lock's refusal after the sign-in code is spent.**
 
@@ -3497,7 +3497,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** The right code is spent and committed; then `SignInLinks.LockedAsync` may refuse for a domain lock, and that refusal is counted in a second unit of work. The refusal follows a write that is not kept.
 - **What the specification says.** CONV-DESIGN-003: an operation decides every refusal that keeps a write before it makes any write that is not kept, and every return but a success or a kept refusal rolls back.
 - **Parked.** That path, as it was before the part.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **135. Tier 2. AUTH-ABUSE-001 and CONV-LOG-005: a failure that is no refusal inside the code and device paths.**
 
@@ -3508,7 +3508,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. It is counted, as the sign-in did.
   2. It is not: only a refused credential is a failed attempt.
 - **Parked.** Left as it was.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **136. Tier 3. AUTH-ABUSE-008: `BotDefence.CheckAsync` has no caller.**
 
@@ -3516,7 +3516,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** `BotDefence` is registered and nothing under `src` calls `CheckAsync`, so no signal is recorded and no verifier asked on any route.
 - **What the specification says.** AUTH-ABUSE-008: every signal is recorded, a verifier declared or not, and the routes it names may answer `auth.challenge.required`.
 - **Parked.** The call sites of the check. `BotDefence` itself is as question 70 leaves it.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **137. Tier 2. CONV-DESIGN-004 criterion 2 and D-187 questions 97, 98 and 118: how far the three value types reach.**
 
@@ -3527,7 +3527,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. Only the named operations take the type; the four app-password members go back to text.
   2. Every public member that carries the name is typed; the five record members change.
 - **Parked.** Nothing of the named operations. The two halves are built on different readings.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **138. Tier 3. INT-MAIL-001: an identifier the mail server writes outside the JMAP `Id` form.**
 
@@ -3535,7 +3535,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** `JmapMailServer` answers `system.fault` for a listing or a creation whose identifier from the server is outside the form, read as an answer that does not read.
 - **What the specification says.** INT-MAIL-001 speaks of an answer that does not read; no chapter states what an identifier outside the form is.
 - **Parked.** Nothing: it stands as built, and falls with reading 1 of question 137.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **139. Tier 3. `09` `POST /account/recoverycodes/exported` and IDN-ACCT-007: a restricted account recording an export.**
 
@@ -3543,7 +3543,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The contradiction.** The route's row says "No body. No gate", with 204 and 409 only. The preamble of `09` section 6 and IDN-ACCT-007 refuse a restricted account's changes to credentials with `authz.restricted`.
 - **What the code does.** As the row states: no restriction is checked.
 - **Parked.** Nothing built beyond the row.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **140. Tier 2. AUTH-FACT-008 criterion 4: `viewedAt` is not set when the codes are returned.**
 
@@ -3554,7 +3554,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. It is set inside the unit of work of the generation and of the confirmation.
   2. It is a second write after the response.
 - **Parked.** `viewedAt` at generation.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **141. Tier 2. API-CONV-003: an invitation naming a document outside the rule.**
 
@@ -3565,7 +3565,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. A name in a body member that does not read is malformed: as built.
   2. The invitation's list is text judged by the service, and keeps 422.
 - **Parked.** Nothing: reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **142. Tier 2. REG-SESS-005 and OPS-BOOT-001: what the bootstrap answers where a value it writes is held or reserved.**
 
@@ -3576,7 +3576,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The bootstrap runs only where no system administrator exists and is outside the judgement: a breach is a fault.
   2. It judges and refuses, with a code a chapter names.
 - **Parked.** The bootstrap's judgement.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **143. Tier 2. REG-IDENT-006: a removal past its window and not yet swept.**
 
@@ -3587,7 +3587,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. A removal replaces a lapsed row of the same value.
   2. The index is over rows inside their window alone.
 - **Parked.** That case, left as it is.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **144. Tier 2. LIB-TEST-001 criterion 2, `10` section 5.30 and LIB-API-001: how the conformance suite sets its assurance provider.**
 
@@ -3600,7 +3600,7 @@ part of 389 (3) and waits with 389 on question 48.
   3. `ConformanceSuite.TruthTableAsync` takes a factory that builds the deployment with a given provider or none.
 - **Also unsettled.** What `Allowed` means for a step-up `TruthTableCase`, whose members are booleans while the unmet outcome is a code; the expected outcome under the host's own policy, since the suite's account holds no membership and the system policy applies; whether a step-up scenario on a permission bound to no gate is refused as unwritable.
 - **Parked.** The seven step-up scenarios, `details.gate` on a finding, and their running.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **145. Tier 3. AUTH-FACT-002 criterion 7 and `09` `POST /auth/step-up` against `10` `auth.stepup.required`: the ask from a session that meets the strictest gate.**
 
@@ -3608,7 +3608,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The contradiction.** The ask on `risk` is answered 403 `auth.stepup.required` with details computed against the strictest gate. `10` defines the code as the gate not met, with an `outcome` of `present`, `enrol`, `report-loss` or `pending`. Where the session meets that gate already the judgement is satisfied, for which the refusal has no outcome.
 - **What the code does.** That case is unchanged: nothing is issued, sent or counted, the consideration is recorded, and the ask answers 202. Every unmet case answers the 403.
 - **Parked.** The answer of that case.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **146. Tier 2. CONV-VCS-004: question 94 carries no truth-table row.**
 
@@ -3619,7 +3619,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The change is outside permission logic as CONV-VCS-004 defines it: no row.
   2. The table gains a row for it, and its fixture the sign-in it needs.
 - **Parked.** The row.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **147. Tier 2. PRIV-RIGHT-005a criterion 14 and PRIV-RIGHT-002: schema the answers do not spell out.**
 
@@ -3630,7 +3630,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. A nullable key column or another constraint; `receiptSentAt` as the instant of the send's admission.
 - **Parked.** Nothing: reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **148. Tier 2. CONV-DESIGN-003: "a send row's languages".**
 
@@ -3641,7 +3641,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The wording binds nothing as the rows stand.
   2. A text message in several languages is one row with a take for each language: a schema and publisher change.
 - **Parked.** Nothing: the sends stand on reading 1.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **149. Tier 2. AUTH-ABUSE-003 and AUTH-ABUSE-006: what an ask the floor refuses leaves behind.**
 
@@ -3652,7 +3652,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. The pending record is written all the same, so that its absence tells nothing later: the write moves before the send in `SignInLinks` and `RecoveryService`.
 - **Parked.** Nothing: reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **150. Tier 2. CONV-DESIGN-003 criterion 9, AUTH-ABUSE-004 criterion 19 and question 111: a new send row is due from its admission.**
 
@@ -3663,7 +3663,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built: the answer is the immediate attempt's own outcome, as question 111 says.
   2. The hold-back stays and the immediate attempt is exempt from the due condition.
 - **Parked.** Nothing: reading 1 is built. It changes when a row is due, so it is raised here and not recorded as resolved by rule.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **151. Tier 3. REG-IDENT-007 criterion 6, REG-SESS-003 and AUTH-ABUSE-001: a pressed token whose pending verification is gone, and the throttle on the account's verify route.**
 
@@ -3671,7 +3671,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** `IdentifierService.LandAsync` answers `auth.code.invalid` for a pressed `identifier` or `identifier-confirm` token that finds no pending verification (after the sweep, an abandon, or never issued). `IdentifierService` applies no AUTH-ABUSE-001 throttle on a code or a press: no count, no `auth.throttled`. A press between the lifetime's end and the sweep answers 422 `auth.code.expired`.
 - **What the specification says.** REG-IDENT-007 criterion 6: the replace is swept, and a press of the confirmation after that changes nothing and is answered 422 `auth.code.expired`. `09`: the account route has the same request, responses and browser binding as `POST /register/verify/{id}`, where a pressed link token that opens nothing is `auth.code.expired` and is counted against the source, and whose 429 row lists `auth.throttled`. The `10` row of `auth.code.expired` names a registration link token alone.
 - **Parked.** The answer once the row is gone, and the throttle on the account's verify route.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **152. Tier 2. REG-IDENT-006 and REG-IDENT-004: an undo while pending adds fill the kind.**
 
@@ -3683,7 +3683,7 @@ part of 389 (3) and waits with 389 on question 48.
   2. The undo is never refused by pending adds, and the add's verification judges the maximum again, with an answer a chapter names.
   3. It stays, the excess accepted.
 - **Parked.** That case, left as it is.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **153. Tier 2. D-166 306: the sweep against a resend that commits meanwhile.**
 
@@ -3694,7 +3694,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. It stays: the person adds again.
   2. The sweep locks its candidates and judges again inside a transaction.
 - **Parked.** Nothing built beyond reading 1.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **154. Tier 2. CONV-DESIGN-006 criterion 3, AUTHZ-GATE-006 and IDN-ACCT-007: `authz.restricted` on the `/admin` routes that modify.**
 
@@ -3705,7 +3705,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The routes declare it: as built.
   2. `09` lists it only where a row does; the declarations go, and those answers then fail criterion 4.
 - **Parked.** Nothing: reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **155. Tier 3. BFF-MACH-001 criterion 2, `09` section 10 and API-CONV-003: the code of a machine route refused for carrying the session cookie.**
 
@@ -3713,7 +3713,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **The contradiction.** `MachineProfile` answers 403 `authz.denied` to a request carrying the session cookie on `GET /callbacks/sms/dlr` and `POST /callbacks/providers/{provider}` (and on `/oidc/par`, `/oidc/token` and `/oidc/userinfo`). BFF-MACH-001 criterion 2 names no code. `09` section 10 says every other refusal on a callback is `integration.callback.rejected`. API-CONV-003 gives `authz.denied` to a missing permission alone. The preamble's list of the mounting's answers holds no such entry.
 - **What the code does.** The test host's check derives `authz.denied` for a machine route that does not ignore the cookie, as what the mounting answers today, and `endpoints.txt` lists it under those entries.
 - **Parked.** The code of that refusal.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **156. Tier 2. `09` `POST /auth/step-up`: the refusals of a presented factor.**
 
@@ -3724,7 +3724,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. The shape's refusals of a presented factor are the route's: as built.
   2. The row's own list alone; the route then fails criterion 4.
 - **Parked.** Nothing: reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **157. Tier 3. `09` `POST /enrol/begin` and D-148: what an enrolment session reaches, and what an ended one is answered.**
 
@@ -3732,7 +3732,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** The enrolment session reaches `DELETE /account/credentials/{id}` and `POST /account/credentials/{id}/upgrade` with no gate, beside the routes the chapter names. An ended enrolment session answers 422 `auth.enrolment.tokeninvalid` on the credential routes it reaches (password, totp, webauthn register, remove, upgrade).
 - **What the specification says.** The enrolment session is usable only against password, webauthn register, totp and, for a lost mailbox, identifier replace. `10` defines `auth.enrolment.tokeninvalid` for the link token at `/enrol/begin`, and no row gives it to those routes; an ended registration session is 401 `auth.session.expired`.
 - **Parked.** Those routes' reach and answer for an enrolment session. Nothing is declared for it and no test sends an ended enrolment session there.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **158. Tier 2. D-166 382 (3): `Accepts` on the three routes that read a raw body.**
 
@@ -3743,7 +3743,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. No `Accepts` on the three: as built.
   2. `Accepts` with `*/*`, once its effect on a request with no content type is confirmed.
 - **Parked.** Nothing: reading 1 is built.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **159. Tier 2. REG-SESS-002, REG-PROF-002, PRIV-RIGHT-001 and API-CONV-003: two answers changed to their rows.**
 
@@ -3754,7 +3754,7 @@ part of 389 (3) and waits with 389 on question 48.
   1. Each answer is its row's: as built.
   2. The earlier answers stand and the rows gain them.
 - **Parked.** Nothing: reading 1 is built. Each changes an answer, so it is raised here.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 **160. Tier 2. REF-001 criterion 1 and AUTHZ-DERIVE-005: `derivation.materialised.driftcheck` joins the catalogue's list.**
 
@@ -3763,7 +3763,7 @@ part of 389 (3) and waits with 389 on question 48.
 - **What the code does.** The key is in `Settings.All` and the contract file. It is now validated and can be set.
 - **What the specification says.** The row of `10` section 4.5a is live, and AUTHZ-DERIVE-005 uses the key.
 - **Parked.** Nothing: the chapter plainly uses the key. It changes behaviour, so it is raised here and not recorded as resolved by rule.
-- **Answer:** pending.
+- **Answer:** D-188.
 
 ## 5. Gate result
 
