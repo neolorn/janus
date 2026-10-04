@@ -258,6 +258,38 @@ internal sealed class WebAuthnService(
     }
 
     /// <summary>
+    /// Reads what a creation ceremony answered into the key material it produced,
+    /// checking the ceremony as an enrolment does and writing nothing: a registration
+    /// session stages the material until its account exists (REG-SESS-006).
+    /// </summary>
+    /// <param name="kind">Which kind is being created.</param>
+    /// <param name="answered">What the browser sent back.</param>
+    /// <param name="challenge">The value the ceremony was opened with.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The key material, or the refusal.</returns>
+    public async ValueTask<Result<WebAuthnMaterial>> ReadAsync(
+        Factor kind,
+        AuthenticatorAttestation answered,
+        string challenge,
+        CancellationToken cancellationToken)
+    {
+        RelyingParty party = await RelyingParty.ForAsync(configuration, cancellationToken)
+            .ConfigureAwait(false);
+
+        Error? refusal = null;
+
+        WebAuthnRegistration registration = WebAuthnCeremonies
+            .Created(answered, challenge, party.Origins, party.Id)
+            .Match(read => read, error => Withheld<WebAuthnRegistration>(error, ref refusal));
+
+        refusal ??= Admits(party, kind, registration);
+
+        return refusal is not null
+            ? Result.Failure<WebAuthnMaterial>(refusal)
+            : Result.Success(Material(registration, party));
+    }
+
+    /// <summary>
     /// Judges what a sign-in ceremony answered against the credential it names,
     /// reading and checking the ceremony first.
     /// </summary>
@@ -505,13 +537,16 @@ internal sealed class WebAuthnService(
             subject,
             kind,
             label,
-            new WebAuthnMaterial(
-                registration.CredentialId,
-                registration.PublicKey,
-                registration.Algorithm,
-                party.Id,
-                registration.Counter is 0 ? null : registration.Counter,
-                registration.BackupEligible,
-                registration.BackupState),
+            Material(registration, party),
             time.GetUtcNow());
+
+    private static WebAuthnMaterial Material(WebAuthnRegistration registration, RelyingParty party) =>
+        new(
+            registration.CredentialId,
+            registration.PublicKey,
+            registration.Algorithm,
+            party.Id,
+            registration.Counter is 0 ? null : registration.Counter,
+            registration.BackupEligible,
+            registration.BackupState);
 }

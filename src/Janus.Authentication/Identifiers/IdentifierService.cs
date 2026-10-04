@@ -21,6 +21,7 @@ namespace Janus.Authentication.Identifiers;
 /// <param name="directory">Where the account's identifiers are read and written.</param>
 /// <param name="restriction">Whether the account's processing is restricted, as the gate answers it.</param>
 /// <param name="pending">Where the verifications outstanding are held.</param>
+/// <param name="codes">Where the code that verifies a staged value is issued and answered.</param>
 /// <param name="sending">The one path every message takes.</param>
 /// <param name="landing">Where a link the message carries lands.</param>
 /// <param name="notices">What keeps a holder from being told twice in a window.</param>
@@ -44,6 +45,7 @@ internal sealed class IdentifierService(
     IIdentifierDirectory directory,
     ISettingsRestriction restriction,
     IPendingVerificationStore pending,
+    VerificationCodes codes,
     IGovernedSend sending,
     LandingLinks landing,
     INoticeLedger notices,
@@ -246,9 +248,7 @@ internal sealed class IdentifierService(
             .FindForUpdateAsync(identifier, cancellationToken)
             .ConfigureAwait(false);
 
-        if (waiting is null
-            || waiting.Subject != subject
-            || waiting.Staged is { IsVerified: true } or { CodeExpiresAt: null } or { Code: null })
+        if (waiting is null || waiting.Subject != subject || waiting.Staged.IsVerified)
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
@@ -257,36 +257,25 @@ internal sealed class IdentifierService(
 
         StagedIdentity staged = waiting.Staged;
 
-        if (now >= staged.CodeExpiresAt)
+        // AUTH-FACT-004: the try is read, compared and counted on the verification-code
+        // record under its lock.
+        Result presented = await codes
+            .PresentAsync(Holder(identifier), code, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (presented.Match(() => (Error?)null, error => error) is Error refused)
         {
-            await work.RollbackAsync().ConfigureAwait(false);
+            if (refused.Code != ErrorCodes.CodeInvalid)
+            {
+                await work.RollbackAsync().ConfigureAwait(false);
 
-            return Result.Failure(Error.From(ErrorCodes.CodeExpired));
-        }
-
-        Error? failure = null;
-
-        int cap = (await configuration
-                .ReadAsync(Settings.CodeVerificationAttempts, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, error => Withheld<int>(error, ref failure));
-
-        if (failure is not null)
-        {
-            await work.RollbackAsync().ConfigureAwait(false);
-
-            return Result.Failure(failure);
-        }
-
-        if (staged.CodeSpent || !VerificationCode.Matches(staged.Code!, code))
-        {
-            staged.Missed(cap);
-
-            await pending.RecordAsync(waiting, cancellationToken).ConfigureAwait(false);
+                return Result.Failure(refused);
+            }
 
             // AUTH-FACT-004, CONV-DESIGN-003: the wrong try is counted on the code's
             // record whatever the outcome, so this refusal commits the count alone.
             return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Failure(Error.From(ErrorCodes.CodeInvalid)), Result.Failure);
+                .Match(() => Result.Failure(refused), Result.Failure);
         }
 
         staged.Verify(now);
@@ -396,7 +385,9 @@ internal sealed class IdentifierService(
             return Result.Success(new LinkLanding(
                 Verified: false,
                 sameBrowser,
-                sameBrowser || staged.Code is null ? null : VerificationCode.Read(staged.Code)));
+                sameBrowser
+                    ? null
+                    : await codes.ShownAsync(Holder(staged.Id), cancellationToken).ConfigureAwait(false)));
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -423,6 +414,9 @@ internal sealed class IdentifierService(
             return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
                 .Match(() => Result.Success(new LinkLanding(Verified: false, sameBrowser, Code: null)), Result.Failure<LinkLanding>);
         }
+
+        // The press proved the value, so the code that would have is ended with it.
+        await codes.EndAsync(Holder(staged.Id), cancellationToken).ConfigureAwait(false);
 
         staged.Verify(now);
 
@@ -464,6 +458,7 @@ internal sealed class IdentifierService(
             return Result.Failure(notBegun);
         }
 
+        await codes.EndAsync(Holder(waiting.Identifier), cancellationToken).ConfigureAwait(false);
         await pending.RemoveAsync(waiting.Identifier, cancellationToken).ConfigureAwait(false);
 
         // What an add wrote to the account goes with the verification it was waiting
@@ -721,6 +716,7 @@ internal sealed class IdentifierService(
 
         HeldIdentifier going = held.Find(identifier)!;
 
+        await codes.EndAsync(Holder(identifier), cancellationToken).ConfigureAwait(false);
         await pending.RemoveAsync(identifier, cancellationToken).ConfigureAwait(false);
 
         if (going.IsVerified)
@@ -1059,6 +1055,18 @@ internal sealed class IdentifierService(
     private static string Key(IdentifierId identifier, DateTimeOffset at) =>
         string.Create(CultureInfo.InvariantCulture, $"{identifier.Value}@{at.UtcTicks}");
 
+    // AUTH-FACT-004 (D-166, 115): the verification-code record of a staged value is
+    // held against a fingerprint of the pending verification, which its identifier
+    // names.
+    private static byte[] Holder(IdentifierId identifier)
+    {
+        Span<byte> named = stackalloc byte[16];
+
+        _ = identifier.Value.TryWriteBytes(named);
+
+        return SHA256.HashData(named);
+    }
+
     private static bool Displaced(PendingVerification waiting, byte[] fingerprint) =>
         waiting.OldLink is byte[] link
         && CryptographicOperations.FixedTimeEquals(link, fingerprint);
@@ -1347,17 +1355,18 @@ internal sealed class IdentifierService(
     {
         Error? failure = null;
 
-        TimeSpan lifetime = (await configuration
-                .ReadAsync(Settings.CodeVerificationLifetime, cancellationToken).ConfigureAwait(false))
-            .Match(read => read, error => Withheld<TimeSpan>(error, ref failure));
+        StagedIdentity staged = waiting.Staged;
+
+        // AUTH-ABUSE-004: the code is issued and its message undertaken in the caller's
+        // unit of work, so a send the restrictions refuse leaves no code behind it.
+        string code = (await codes.IssueAsync(Holder(staged.Id), cancellationToken).ConfigureAwait(false))
+            .Match(drawn => drawn, error => Withheld<string>(error, ref failure));
 
         if (failure is not null)
         {
             return failure;
         }
 
-        StagedIdentity staged = waiting.Staged;
-        string code = VerificationCode.Draw(randomness);
         var link = OpaqueToken.Draw(randomness);
 
         Result<SendReference> sent = await sending
@@ -1384,7 +1393,7 @@ internal sealed class IdentifierService(
             return refused;
         }
 
-        staged.Sent(VerificationCode.Held(code), link.Fingerprint(), time.GetUtcNow() + lifetime);
+        staged.Linked(link.Fingerprint());
 
         return null;
     }

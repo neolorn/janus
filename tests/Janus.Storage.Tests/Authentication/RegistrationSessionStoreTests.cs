@@ -1,5 +1,6 @@
 using System;
 using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication.Registration;
@@ -91,13 +92,14 @@ public sealed class RegistrationSessionStoreTests(DatabaseFixture database) : IC
     }
 
     /// <summary>
-    /// REG-SESS-003 AC3, CONV-DESIGN-003 AC6: wrong codes presented at once are each
-    /// decided on the session's row under its lock, so every one is counted against
-    /// the staged identifier and none is written over another.
+    /// REG-SESS-003, CONV-DESIGN-003 AC6: an identifier verified by several requests
+    /// at once is decided each time on the session's row under its lock, so the first
+    /// verifies it and every other finds it verified. The wrong tries of its code are
+    /// counted on the verification-code record (AUTH-FACT-004 AC4).
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task REG_SESS_003_AC3_WrongCodesAtOnceAreAllCountedAsync()
+    public async Task REG_SESS_003_AnIdentifierVerifiedAtOnceIsVerifiedOnceAsync()
     {
         RegistrationSession opened = Opened();
         var staged = IdentifierId.New(TimeProvider.System);
@@ -110,21 +112,82 @@ public sealed class RegistrationSessionStoreTests(DatabaseFixture database) : IC
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await Task.WhenAll(MissedAsync(opened.Id, staged), MissedAsync(opened.Id, staged), MissedAsync(opened.Id, staged));
+        bool[] verified = await Task.WhenAll(
+            VerifiedAsync(opened.Id, staged),
+            VerifiedAsync(opened.Id, staged),
+            VerifiedAsync(opened.Id, staged));
 
         await using StoreContext reading = database.Context();
         RegistrationSession read = Assert.IsType<RegistrationSession>(
             await Store(reading).FindAsync(opened.Id, TestContext.Current.CancellationToken));
 
-        Assert.Equal(3, read.Identity(staged)!.WrongAttempts);
+        Assert.Single(verified, by => by);
+        Assert.Equal(Noon, read.Identity(staged)!.VerifiedAt);
+    }
+
+    /// <summary>
+    /// REG-SESS-001 AC5: the ceremony a session has open and the generator it has
+    /// begun are kept in the session's own encrypted document, so both come back as
+    /// they were staged, a dump of the row reads neither the challenge nor the
+    /// generator's secret, and the row's removal leaves neither behind.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_SESS_001_AC5_AnOpenCeremonyAndABegunGeneratorAreKeptEncryptedOnTheSessionAsync()
+    {
+        const string challenge = "a-challenge-the-server-issued-0123456789";
+        byte[] secret = RandomNumberGenerator.GetBytes(20);
+        RegistrationSession opened = Opened();
+        var generator = AuthenticatorId.New(TimeProvider.System);
+        opened.Open(new StagedCeremony(Factor.Passkey, challenge, Noon.AddMinutes(10)));
+        opened.Begin(new StagedGenerator(generator, Label("Authenticator"), secret));
+
+        await using (StoreContext writing = database.Context())
+        {
+            await Store(writing).AddAsync(opened, TestContext.Current.CancellationToken);
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        RegistrationSession read;
+        byte[] dumped;
+
+        await using (StoreContext reading = database.Context())
+        {
+            read = Assert.IsType<RegistrationSession>(
+                await Store(reading).FindAsync(opened.Id, TestContext.Current.CancellationToken));
+        }
+
+        await using (NpgsqlConnection connection = await database.OpenAsync())
+        {
+            dumped = await connection.QuerySingleAsync<byte[]>(
+                "SELECT enc_session FROM identity.registration_sessions WHERE id = @id;",
+                new { id = opened.Id.Value });
+        }
+
+        await using (StoreContext removing = database.Context())
+        {
+            await Store(removing).RemoveAsync(opened.Id, TestContext.Current.CancellationToken);
+            await removing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext after = database.Context();
+
+        Assert.Equal(new StagedCeremony(Factor.Passkey, challenge, Noon.AddMinutes(10)), read.Ceremony);
+        Assert.Equal(generator, read.Generator?.Id);
+        Assert.Equal("Authenticator", read.Generator?.Label.Value);
+        Assert.Equal(secret, read.Generator?.Secret.ToArray());
+        Assert.Equal(-1, dumped.AsSpan().IndexOf(secret));
+        Assert.Equal(-1, dumped.AsSpan().IndexOf(Encoding.UTF8.GetBytes(Convert.ToBase64String(secret))));
+        Assert.Equal(-1, dumped.AsSpan().IndexOf(Encoding.UTF8.GetBytes(challenge)));
+        Assert.Null(await Store(after).FindAsync(opened.Id, TestContext.Current.CancellationToken));
     }
 
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
-    // Each wrong code is its own request, deciding on the session as the registration
-    // service does.
-    private async Task MissedAsync(RegistrationSessionId session, IdentifierId staged)
+    // Each verification is its own request, deciding on the session as the
+    // registration service does, and says whether it was the one that verified.
+    private async Task<bool> VerifiedAsync(RegistrationSessionId session, IdentifierId staged)
     {
         await using StoreContext context = database.Context();
         await using var work = new UnitOfWork(context);
@@ -135,11 +198,18 @@ public sealed class RegistrationSessionStoreTests(DatabaseFixture database) : IC
         RegistrationSession held = Assert.IsType<RegistrationSession>(
             await store.FindForUpdateAsync(session, TestContext.Current.CancellationToken));
 
-        held.Identity(staged)!.Missed(cap: 5);
+        bool verifying = !held.Identity(staged)!.IsVerified;
 
-        await store.RecordAsync(held, TestContext.Current.CancellationToken);
+        if (verifying)
+        {
+            held.Identity(staged)!.Verify(Noon);
+
+            await store.RecordAsync(held, TestContext.Current.CancellationToken);
+        }
 
         Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return verifying;
     }
 
     private static RegistrationSession Opened() =>
@@ -151,6 +221,11 @@ public sealed class RegistrationSessionStoreTests(DatabaseFixture database) : IC
             "198.51.100.7",
             Noon,
             TimeSpan.FromHours(24));
+
+    private static CredentialLabel Label(string written) =>
+        CredentialLabel.TryParse(written, out CredentialLabel label)
+            ? label
+            : throw new Xunit.Sdk.XunitException(written);
 
     private RegistrationSessionStore Store(StoreContext context) =>
         new(context, new DataConnections(context), _deployment.DataKey(context), _deployment.Randomness);

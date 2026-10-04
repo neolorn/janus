@@ -93,7 +93,7 @@ internal static class CredentialEndpoints
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(credentials);
 
-        if (Asking(browser) is not CredentialAuthority authority)
+        if (Enrolling(browser) is not CredentialAuthority authority)
         {
             return Nobody();
         }
@@ -119,7 +119,7 @@ internal static class CredentialEndpoints
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentNullException.ThrowIfNull(context);
 
-        if (Asking(browser) is not CredentialAuthority authority)
+        if (Enrolling(browser) is not CredentialAuthority authority)
         {
             return Nobody();
         }
@@ -176,7 +176,7 @@ internal static class CredentialEndpoints
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(credentials);
 
-        if (Asking(browser) is not CredentialAuthority authority)
+        if (Enrolling(browser) is not CredentialAuthority authority)
         {
             return Nobody();
         }
@@ -206,7 +206,7 @@ internal static class CredentialEndpoints
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentNullException.ThrowIfNull(context);
 
-        if (Asking(browser) is not CredentialAuthority authority)
+        if (Enrolling(browser) is not CredentialAuthority authority)
         {
             return Nobody();
         }
@@ -312,5 +312,14 @@ internal static class CredentialEndpoints
 
     // API-CONV-003: nobody is asking, which is what 401 is for and what nothing else
     // is for.
+    // REG-SESS-006: an enrolment is also asked for under the registration session the
+    // browser carries, which the service accepts in place of an account's session at
+    // the security step and at no other.
+    private static CredentialAuthority? Enrolling(RequestSession browser) =>
+        Asking(browser)
+        ?? (browser.FirstContact?.Registration is RegistrationSessionId registering
+            ? CredentialAuthority.Of(registering)
+            : null);
+
     private static IResult Nobody() => Answers.Refused(ErrorCodes.SessionExpired);
 }

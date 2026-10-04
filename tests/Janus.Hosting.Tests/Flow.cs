@@ -105,6 +105,23 @@ internal static class Flow
     /// <returns>The browser.</returns>
     public static async Task<Browser> SecuredAsync(Deployment deployment)
     {
+        Browser browser = await ConfirmedAsync(deployment);
+
+        Assert.Equal(
+            StatusCodes.Status200OK,
+            (await browser.SendAsync("PUT", "/register/security", ("password", Password))).Status);
+
+        return browser;
+    }
+
+    /// <summary>
+    /// A browser that has reached the security step: both identifiers verified and
+    /// the confirm step passed, with nothing to sign in by yet.
+    /// </summary>
+    /// <param name="deployment">What it talks to.</param>
+    /// <returns>The browser.</returns>
+    public static async Task<Browser> ConfirmedAsync(Deployment deployment)
+    {
         Browser browser = await AwaitingAsync(deployment);
 
         await VerifiedAsync(deployment, browser, IdentifierKind.Email);
@@ -116,10 +133,6 @@ internal static class Flow
         Assert.Equal(
             StatusCodes.Status200OK,
             (await browser.SendAsync("POST", "/register/confirm")).Status);
-
-        Assert.Equal(
-            StatusCodes.Status200OK,
-            (await browser.SendAsync("PUT", "/register/security", ("password", Password))).Status);
 
         return browser;
     }

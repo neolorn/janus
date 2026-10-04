@@ -206,11 +206,7 @@ internal sealed class RegistrationSessionStore(
             staged.Canonical,
             staged.IsLocked,
             staged.IsExtra,
-            staged.Code,
-            staged.CodeExpiresAt,
             staged.Link,
-            staged.WrongAttempts,
-            staged.CodeSpent,
             staged.VerifiedAt);
 
     private static StagedCredentialDocument Written(StagedCredential staged) =>
@@ -226,7 +222,20 @@ internal sealed class RegistrationSessionStore(
             staged.WebAuthn?.Counter,
             staged.WebAuthn?.BackupEligible ?? false,
             staged.WebAuthn?.BackupState ?? false,
-            staged.ProviderSubject);
+            staged.ProviderSubject,
+            staged.Totp?.ConsumedStep);
+
+    private static StagedCeremonyDocument Written(StagedCeremony staged) =>
+        new(VocabularyConverter<Factor>.Write(staged.Kind), staged.Challenge, staged.ExpiresAt);
+
+    private static StagedGeneratorDocument Written(StagedGenerator staged) =>
+        new(staged.Id.Value, staged.Label.Value, staged.Secret.ToArray());
+
+    private static StagedCeremony Read(StagedCeremonyDocument staged) =>
+        new(VocabularyConverter<Factor>.Read(staged.Kind), staged.Challenge, staged.ExpiresAt);
+
+    private static StagedGenerator Read(StagedGeneratorDocument staged) =>
+        new(new AuthenticatorId(staged.Id), Label(staged.Label), staged.Secret);
 
     private static StagedIdentity Read(StagedIdentityDocument staged) =>
         StagedIdentity.Existing(
@@ -236,11 +245,7 @@ internal sealed class RegistrationSessionStore(
             staged.Canonical,
             staged.IsLocked,
             staged.IsExtra,
-            staged.Code,
-            staged.CodeExpiresAt,
             staged.Link,
-            staged.WrongAttempts,
-            staged.CodeSpent,
             staged.VerifiedAt);
 
     private static StagedCredential Read(StagedCredentialDocument staged) =>
@@ -248,7 +253,7 @@ internal sealed class RegistrationSessionStore(
             new AuthenticatorId(staged.Id),
             VocabularyConverter<Factor>.Read(staged.Factor),
             Label(staged.Label),
-            staged.TotpSecret is null ? null : new TotpMaterial(staged.TotpSecret, ConsumedStep: null),
+            staged.TotpSecret is null ? null : new TotpMaterial(staged.TotpSecret, staged.TotpConsumedStep),
             staged.CredentialId is null
                 ? null
                 : new WebAuthnMaterial(
@@ -287,7 +292,9 @@ internal sealed class RegistrationSessionStore(
             session.RecoveryCodes?.Select(hash => hash.Encoded).ToArray(),
             [.. session.Identifiers.Select(Written)],
             [.. session.Credentials.Select(Written)],
-            session.Invitation?.Value);
+            session.Invitation?.Value,
+            session.Ceremony is null ? null : Written(session.Ceremony),
+            session.Generator is null ? null : Written(session.Generator));
 
         return PersonalFieldCipher.Encrypt(
             dataKey,
@@ -355,7 +362,9 @@ internal sealed class RegistrationSessionStore(
             document.RecoveryCodes?.Select(PasswordHash.Parse).ToArray(),
             termsVersion: null,
             noticeVersion: null,
-            document.Invitation is Guid invitation ? new InvitationId(invitation) : null);
+            document.Invitation is Guid invitation ? new InvitationId(invitation) : null,
+            document.Ceremony is null ? null : Read(document.Ceremony),
+            document.Generator is null ? null : Read(document.Generator));
 
         return session;
     }

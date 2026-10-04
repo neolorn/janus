@@ -4407,6 +4407,8 @@ does, is judged as before.
 `POST /auth/webauthn/register/begin`, including the `user` object, and say that the
 assertion may carry the handle the authenticator returned.
 
+**Superseded by D-166.**
+
 ---
 
 ## 130. Three privacy refusals take names of their own

@@ -22,22 +22,20 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
     private readonly Deployment _deployment = new(database);
 
     /// <summary>
-    /// REG-IDENT-004, CONV-DESIGN-003 AC6: wrong codes presented at once are each
-    /// decided on the verification's row under its lock, so every one is counted and
-    /// none is written over another.
+    /// REG-IDENT-004, CONV-DESIGN-003 AC6: a value proved by several requests at once
+    /// is decided each time on the verification's row under its lock, so the first
+    /// proves it and every other finds it proved. The wrong tries of its code are
+    /// counted on the verification-code record (AUTH-FACT-004 AC4).
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task REG_IDENT_004_WrongCodesAtOnceAreAllCountedAsync()
+    public async Task REG_IDENT_004_AValueProvedAtOnceIsProvedOnceAsync()
     {
         SubjectId subject = await _deployment.AccountAsync(Noon);
         var staged = IdentifierId.New(TimeProvider.System);
         var identity = StagedIdentity.Of(staged, IdentifierKind.Email, "person@example.test", "person@example.test");
 
-        identity.Sent(
-            RandomNumberGenerator.GetBytes(Fingerprint.Length),
-            RandomNumberGenerator.GetBytes(Fingerprint.Length),
-            Noon.AddMinutes(10));
+        identity.Linked(RandomNumberGenerator.GetBytes(Fingerprint.Length));
 
         await using (StoreContext writing = database.Context())
         {
@@ -47,21 +45,23 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
             await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await Task.WhenAll(MissedAsync(staged), MissedAsync(staged), MissedAsync(staged));
+        bool[] proved = await Task.WhenAll(ProvedAsync(staged), ProvedAsync(staged), ProvedAsync(staged));
 
         await using StoreContext reading = database.Context();
         PendingVerification read = Assert.IsType<PendingVerification>(
             await Store(reading).FindAsync(staged, TestContext.Current.CancellationToken));
 
-        Assert.Equal(3, read.Staged.WrongAttempts);
+        Assert.Single(proved, by => by);
+        Assert.Equal(Noon, read.Staged.VerifiedAt);
     }
 
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
-    // Each wrong code is its own request, read before its transaction and again under
-    // the lock, as the identifier service does.
-    private async Task MissedAsync(IdentifierId staged)
+    // Each proof is its own request, read before its transaction and again under the
+    // lock, as the identifier service does, and says whether it was the one that
+    // proved the value.
+    private async Task<bool> ProvedAsync(IdentifierId staged)
     {
         await using StoreContext context = database.Context();
         await using var work = new UnitOfWork(context);
@@ -74,11 +74,18 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
         PendingVerification held = Assert.IsType<PendingVerification>(
             await store.FindForUpdateAsync(staged, TestContext.Current.CancellationToken));
 
-        held.Staged.Missed(cap: 5);
+        bool proving = !held.Staged.IsVerified;
 
-        await store.RecordAsync(held, TestContext.Current.CancellationToken);
+        if (proving)
+        {
+            held.Staged.Verify(Noon);
+
+            await store.RecordAsync(held, TestContext.Current.CancellationToken);
+        }
 
         Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+
+        return proving;
     }
 
     private PendingVerificationStore Store(StoreContext context) =>

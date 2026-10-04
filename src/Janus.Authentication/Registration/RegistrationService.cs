@@ -33,6 +33,8 @@ namespace Janus.Authentication.Registration;
 /// <param name="recoveryCodes">What draws a set of recovery codes.</param>
 /// <param name="recoveryCodeStore">Where the account's set is written.</param>
 /// <param name="authenticators">Where the account's credentials are written.</param>
+/// <param name="keys">What opens and reads a WebAuthn creation ceremony.</param>
+/// <param name="generators">What judges a code of a generator's secret.</param>
 /// <param name="clients">The registry the originating client is resolved against.</param>
 /// <param name="policies">Where the policy in force is resolved.</param>
 /// <param name="invitations">Where the invitation a registration was opened by is kept.</param>
@@ -41,6 +43,8 @@ namespace Janus.Authentication.Registration;
 /// <param name="issuing">What issues the session the person is signed in on.</param>
 /// <param name="devices">What remembers the registering browser.</param>
 /// <param name="throttle">The progressive delay a registration's asks and tries are held to.</param>
+/// <param name="codes">Where the code that verifies a staged identifier is issued and answered.</param>
+/// <param name="restrictions">What an ask that sends nothing draws on.</param>
 /// <param name="capture">Where the consent controls the person ticked are recorded.</param>
 /// <param name="configuration">Where the registration settings are read.</param>
 /// <param name="work">The one transaction an operation runs in.</param>
@@ -66,6 +70,8 @@ internal sealed class RegistrationService(
     RecoveryCodeService recoveryCodes,
     IRecoveryCodeStore recoveryCodeStore,
     IAuthenticatorStore authenticators,
+    WebAuthnService keys,
+    TotpService generators,
     IOidcClientStore clients,
     PolicyResolution policies,
     IInvitationStore invitations,
@@ -74,6 +80,8 @@ internal sealed class RegistrationService(
     SessionService issuing,
     DeviceService devices,
     ThrottleService throttle,
+    VerificationCodes codes,
+    ISendingRestrictions restrictions,
     IConsents capture,
     IConfigurationStore configuration,
     IUnitOfWork work,
@@ -664,31 +672,24 @@ internal sealed class RegistrationService(
             return (Result.Failure<RegistrationState>(delayed), false);
         }
 
-        Error? failure = null;
-
-        int cap = (await configuration
-                .ReadAsync(Settings.CodeVerificationAttempts, cancellationToken).ConfigureAwait(false))
-            .Match(value => value, error => Held<int>(error, ref failure));
-
-        if (failure is not null)
-        {
-            return (Result.Failure<RegistrationState>(failure), false);
-        }
-
-        // A code invalidated by wrong tries refuses the right one too (REG-SESS-003
-        // AC3), which is the answer a code that was never outstanding also gets.
-        if (staged.IsVerified || staged.Code is not byte[] held || staged.CodeSpent)
+        if (staged.IsVerified)
         {
             return await CountedAsync(attempt, Error.From(ErrorCodes.CodeInvalid), cancellationToken)
                 .ConfigureAwait(false);
         }
 
-        DateTimeOffset now = time.GetUtcNow();
+        // AUTH-FACT-004: the try is read, compared and counted on the verification-code
+        // record under its lock, the same for a code that was sent and for the record
+        // of a held or reserved value, which no code matches (REG-SESS-005 AC5).
+        Result presented = await codes
+            .PresentAsync(Holder(live.Id, staged.Id), code, cancellationToken)
+            .ConfigureAwait(false);
 
-        if (staged.CodeExpiresAt <= now)
+        if (presented.Match(() => (Error?)null, error => error) is Error refused)
         {
-            return await CountedAsync(attempt, Error.From(ErrorCodes.CodeExpired), cancellationToken)
-                .ConfigureAwait(false);
+            return refused.Code == ErrorCodes.CodeInvalid || refused.Code == ErrorCodes.CodeExpired
+                ? await CountedAsync(attempt, refused, cancellationToken).ConfigureAwait(false)
+                : (Result.Failure<RegistrationState>(refused), false);
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -697,23 +698,7 @@ internal sealed class RegistrationService(
             return (Result.Failure<RegistrationState>(notBegun), false);
         }
 
-        if (!VerificationCode.Matches(held, code))
-        {
-            staged.Missed(cap);
-
-            await sessions.RecordAsync(live, cancellationToken).ConfigureAwait(false);
-
-            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
-            {
-                return (Result.Failure<RegistrationState>(notCommittedAgain), true);
-            }
-
-            return await CountedAsync(attempt, Error.From(ErrorCodes.CodeInvalid), cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        staged.Verify(now);
+        staged.Verify(time.GetUtcNow());
 
         await sessions.RecordAsync(live, cancellationToken).ConfigureAwait(false);
 
@@ -766,7 +751,9 @@ internal sealed class RegistrationService(
             return Result.Success(new LinkLanding(
                 Verified: false,
                 sameBrowser,
-                sameBrowser || staged.Code is null ? null : VerificationCode.Read(staged.Code)));
+                sameBrowser
+                    ? null
+                    : await codes.ShownAsync(Holder(sender.Id, staged.Id), cancellationToken).ConfigureAwait(false)));
         }
 
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
@@ -774,6 +761,9 @@ internal sealed class RegistrationService(
         {
             return Result.Failure<LinkLanding>(notBegun);
         }
+
+        // The press proved the address, so the code that would have is ended with it.
+        await codes.EndAsync(Holder(sender.Id, staged.Id), cancellationToken).ConfigureAwait(false);
 
         staged.Verify(now);
 
@@ -1140,6 +1130,7 @@ internal sealed class RegistrationService(
 
         // Nothing of the session survives it: an account exists now, and a staged
         // copy of what made it would be a second place the same facts live.
+        await EndCodesAsync(live, cancellationToken).ConfigureAwait(false);
         await sessions.RemoveAsync(live.Id, cancellationToken).ConfigureAwait(false);
 
         Result published = await events
@@ -1231,6 +1222,7 @@ internal sealed class RegistrationService(
             return Result.Failure(notBegun);
         }
 
+        await EndCodesAsync(live, cancellationToken).ConfigureAwait(false);
         await sessions.RemoveAsync(live.Id, cancellationToken).ConfigureAwait(false);
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
@@ -1287,35 +1279,419 @@ internal sealed class RegistrationService(
     /// second step beside a password, or the refusal where the step admits none.
     /// </returns>
     /// <exception cref="ArgumentNullException">The credential is absent.</exception>
-    public async ValueTask<Result<RegistrationState>> EnrolAsync(
+    public ValueTask<Result<RegistrationState>> EnrolAsync(
         RegistrationSessionId session,
         StagedCredential credential,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(credential);
 
-        RegistrationSession? live =
-            await LiveAsync(session, cancellationToken).ConfigureAwait(false);
+        return HeldAsync(
+            session,
+            async live =>
+            {
+                if (live is null)
+                {
+                    return (Gone(), false);
+                }
 
-        if (live is null)
+                if (live.Step is not (RegistrationStep.Security or RegistrationStep.Terms))
+                {
+                    return (OutOfStep(), false);
+                }
+
+                live.Enrol(credential);
+
+                (Error? failure, IReadOnlyList<string>? drawn) =
+                    await SettleAsync(live, cancellationToken).ConfigureAwait(false);
+
+                return failure is not null
+                    ? (Result.Failure<RegistrationState>(failure), false)
+                    : (Result.Success(State(live, drawn)), true);
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Opens a WebAuthn creation ceremony against the session at its security step,
+    /// in place of any it had open. The ceremony is a staged value of the session and
+    /// nothing is written outside the session store (REG-SESS-001, REG-SESS-006).
+    /// </summary>
+    /// <param name="session">Which session.</param>
+    /// <param name="kind">Which catalogue entry the ceremony creates.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>What the browser is asked for, or the refusal.</returns>
+    /// <remarks>
+    /// Implements REG-PM-001: the handle is the session's provisional subject
+    /// identifier, which the account carries, and the name is the staged email.
+    /// </remarks>
+    public ValueTask<Result<CredentialCeremony>> BeginKeyAsync(
+        RegistrationSessionId session,
+        Factor kind,
+        CancellationToken cancellationToken) =>
+        HeldAsync(session, live => OpenedAsync(live, kind, cancellationToken), cancellationToken);
+
+    /// <summary>
+    /// Stages the credential a creation ceremony produced, spending the ceremony the
+    /// session had open. No account row is written before the terms step.
+    /// </summary>
+    /// <param name="session">Which session.</param>
+    /// <param name="attestation">What the browser sent back.</param>
+    /// <param name="label">What the person calls it.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The credential, with the recovery codes where it is what put a second step
+    /// beside a password, or the refusal.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    public ValueTask<Result<EnrolledCredential>> CompleteKeyAsync(
+        RegistrationSessionId session,
+        AuthenticatorAttestation attestation,
+        string label,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(attestation);
+        ArgumentNullException.ThrowIfNull(label);
+
+        return CredentialLabel.TryParse(label, out CredentialLabel named)
+            ? HeldAsync(session, live => CreatedAsync(live, attestation, named, cancellationToken), cancellationToken)
+            : ValueTask.FromResult(
+                Result.Failure<EnrolledCredential>(Error.From(ErrorCodes.CredentialLabelInvalid)));
+    }
+
+    /// <summary>
+    /// Begins a code generator against the session at its security step, in place of
+    /// any it had begun and not confirmed. The secret is a staged value of the session
+    /// until a code confirms it (AUTH-FACT-006, AUTH-FACT-007).
+    /// </summary>
+    /// <param name="session">Which session.</param>
+    /// <param name="label">What the person calls it.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>What the authenticator app is given, or the refusal.</returns>
+    /// <exception cref="ArgumentNullException">The label is absent.</exception>
+    public ValueTask<Result<GeneratorEnrolment>> BeginGeneratorAsync(
+        RegistrationSessionId session,
+        string label,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(label);
+
+        return CredentialLabel.TryParse(label, out CredentialLabel named)
+            ? HeldAsync(session, live => BegunAsync(live, named, cancellationToken), cancellationToken)
+            : ValueTask.FromResult(
+                Result.Failure<GeneratorEnrolment>(Error.From(ErrorCodes.CredentialLabelInvalid)));
+    }
+
+    /// <summary>
+    /// Confirms the generator the session began with one code of its secret, which
+    /// spends it and stages the credential.
+    /// </summary>
+    /// <param name="session">Which session.</param>
+    /// <param name="credential">Which enrolment.</param>
+    /// <param name="code">What was typed.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The credential, with the recovery codes where it is what put a second step
+    /// beside a password, or the refusal.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The code is absent.</exception>
+    public ValueTask<Result<EnrolledCredential>> ConfirmGeneratorAsync(
+        RegistrationSessionId session,
+        AuthenticatorId credential,
+        [NeverLogged] string code,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(code);
+
+        return HeldAsync(
+            session,
+            live => ConfirmedAsync(live, credential, code, cancellationToken),
+            cancellationToken);
+    }
+
+    private async ValueTask<(Result<CredentialCeremony> Answer, bool Commits)> OpenedAsync(
+        RegistrationSession? live,
+        Factor kind,
+        CancellationToken cancellationToken)
+    {
+        if ((Enrolling(live) ?? await AdmitsAsync(live!, kind, cancellationToken).ConfigureAwait(false))
+            is Error refused)
         {
-            return Gone();
+            return (Result.Failure<CredentialCeremony>(refused), false);
         }
 
-        if (live.Step is not (RegistrationStep.Security or RegistrationStep.Terms))
+        Error? failure = null;
+
+        WebAuthnCeremony ceremony = (await keys
+                .BeginAsync(
+                    kind,
+                    new CeremonyUser(WebAuthnService.Handle(live!.Provisional), Shown(live), string.Empty),
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<WebAuthnCeremony>(error, ref failure));
+
+        TimeSpan lifetime = (await configuration
+                .ReadAsync(Settings.CodeVerificationLifetime, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<TimeSpan>(error, ref failure));
+
+        if (failure is not null)
         {
-            return OutOfStep();
+            return (Result.Failure<CredentialCeremony>(failure), false);
         }
 
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
+        // REG-SESS-001: one ceremony stands per session, replaced under the lock the
+        // session is held by, so an abandoned challenge is never a second way in.
+        live.Open(new StagedCeremony(kind, ceremony.Challenge, time.GetUtcNow() + lifetime));
+
+        await sessions.RecordAsync(live, cancellationToken).ConfigureAwait(false);
+
+        return (
+            Result.Success(new CredentialCeremony(
+                ceremony.RelyingPartyId,
+                ceremony.User,
+                ceremony.Algorithms,
+                ceremony.DiscoverableCredential,
+                ceremony.Challenge)),
+            true);
+    }
+
+    private async ValueTask<(Result<EnrolledCredential> Answer, bool Commits)> CreatedAsync(
+        RegistrationSession? live,
+        AuthenticatorAttestation attestation,
+        CredentialLabel label,
+        CancellationToken cancellationToken)
+    {
+        if (Enrolling(live) is Error refused)
         {
-            return Result.Failure<RegistrationState>(notBegun);
+            return (Result.Failure<EnrolledCredential>(refused), false);
         }
 
+        // AUTH-FACT-014: what the browser sends back is judged against the challenge
+        // the session staged, which the request never carries.
+        if (live!.Ceremony is not StagedCeremony open || open.HasExpired(time.GetUtcNow()))
+        {
+            return (Result.Failure<EnrolledCredential>(Error.From(ErrorCodes.FactorRejected)), false);
+        }
+
+        if (await AdmitsAsync(live, open.Kind, cancellationToken).ConfigureAwait(false) is Error unadmitted)
+        {
+            return (Result.Failure<EnrolledCredential>(unadmitted), false);
+        }
+
+        if (LabelHeld(live, open.Kind, label))
+        {
+            return (Result.Failure<EnrolledCredential>(Error.From(ErrorCodes.CredentialLabelInvalid)), false);
+        }
+
+        Error? failure = null;
+
+        WebAuthnMaterial material = (await keys
+                .ReadAsync(open.Kind, attestation, open.Challenge, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<WebAuthnMaterial>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return (Result.Failure<EnrolledCredential>(failure), false);
+        }
+
+        live.SpendCeremony();
+
+        return await StagedAsync(
+                live,
+                new StagedCredential(AuthenticatorId.New(time), open.Kind, label, Totp: null, material),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async ValueTask<(Result<GeneratorEnrolment> Answer, bool Commits)> BegunAsync(
+        RegistrationSession? live,
+        CredentialLabel label,
+        CancellationToken cancellationToken)
+    {
+        Factor generated = FactorCatalogue.Generated;
+
+        if ((Enrolling(live) ?? await AdmitsAsync(live!, generated, cancellationToken).ConfigureAwait(false))
+            is Error refused)
+        {
+            return (Result.Failure<GeneratorEnrolment>(refused), false);
+        }
+
+        if (LabelHeld(live!, generated, label))
+        {
+            return (Result.Failure<GeneratorEnrolment>(Error.From(ErrorCodes.CredentialLabelInvalid)), false);
+        }
+
+        var begun = new StagedGenerator(AuthenticatorId.New(time), label, TotpCodes.Draw(randomness));
+
+        // REG-SESS-001: one unconfirmed generator stands per session, replaced under
+        // the lock the session is held by.
+        live!.Begin(begun);
+
+        await sessions.RecordAsync(live, cancellationToken).ConfigureAwait(false);
+
+        return (
+            Result.Success(await generators
+                .ShownAsync(begun.Id, begun.Secret, Shown(live), cancellationToken)
+                .ConfigureAwait(false)),
+            true);
+    }
+
+    private async ValueTask<(Result<EnrolledCredential> Answer, bool Commits)> ConfirmedAsync(
+        RegistrationSession? live,
+        AuthenticatorId credential,
+        [NeverLogged] string code,
+        CancellationToken cancellationToken)
+    {
+        if (Enrolling(live) is Error refused)
+        {
+            return (Result.Failure<EnrolledCredential>(refused), false);
+        }
+
+        if (live!.Generator is not StagedGenerator begun || begun.Id != credential)
+        {
+            return (Result.Failure<EnrolledCredential>(Error.From(ErrorCodes.FactorRejected)), false);
+        }
+
+        Factor generated = FactorCatalogue.Generated;
+
+        if (await AdmitsAsync(live, generated, cancellationToken).ConfigureAwait(false) is Error unadmitted)
+        {
+            return (Result.Failure<EnrolledCredential>(unadmitted), false);
+        }
+
+        // AUTH-FACT-007: one valid code of the secret is what makes it a credential, and
+        // the step that code was accepted for is kept, so the same code is refused once
+        // the account holds the generator (AUTH-FACT-005).
+        if (await generators
+                .AcceptsAsync(new TotpMaterial(begun.Secret, ConsumedStep: null), code, cancellationToken)
+                .ConfigureAwait(false) is not long step)
+        {
+            return (Result.Failure<EnrolledCredential>(Error.From(ErrorCodes.CodeInvalid)), false);
+        }
+
+        live.SpendGenerator();
+
+        return await StagedAsync(
+                live,
+                new StagedCredential(
+                    begun.Id,
+                    generated,
+                    begun.Label,
+                    new TotpMaterial(begun.Secret, step),
+                    WebAuthn: null),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    // What every enrolment at the security step ends with, under the lock its caller
+    // holds: the credential staged, the recovery codes a second step beside a password
+    // brings, and the step the session has reached.
+    private async ValueTask<(Result<EnrolledCredential> Answer, bool Commits)> StagedAsync(
+        RegistrationSession live,
+        StagedCredential credential,
+        CancellationToken cancellationToken)
+    {
         live.Enrol(credential);
 
-        return await SettledAsync(live, cancellationToken).ConfigureAwait(false);
+        Error? failure = null;
+
+        Policy policy = (await PolicyAsync(live, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<Policy>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return (Result.Failure<EnrolledCredential>(failure), false);
+        }
+
+        (Error? unsettled, IReadOnlyList<string>? drawn) =
+            await SettleAsync(live, cancellationToken).ConfigureAwait(false);
+
+        if (unsettled is not null)
+        {
+            return (Result.Failure<EnrolledCredential>(unsettled), false);
+        }
+
+        DateTimeOffset now = time.GetUtcNow();
+
+        // AUTH-RECOV-001: what the account would hold decides whether a second
+        // credential is prompted for, exactly as it does once the account exists.
+        List<Authenticator> enrolled =
+            [.. live.Credentials
+                .Where(staged => staged.ProviderSubject is null)
+                .Select(staged => Enrolled(live.Provisional, staged, now))];
+
+        return (
+            Result.Success(new EnrolledCredential(
+                credential.Id,
+                Redundancy.Satisfied(enrolled) ? null : policy.CredentialRedundancy,
+                drawn)),
+            true);
+    }
+
+    // REG-SESS-006: the registration session stands in for an account's session at
+    // the security step and at no other, so before that step an enrolment is answered
+    // as one asked for under no session at all.
+    private static Error? Enrolling(RegistrationSession? live) =>
+        live?.Step is RegistrationStep.Security or RegistrationStep.Terms
+            ? null
+            : Error.From(ErrorCodes.SessionExpired);
+
+    // What the session may enrol at all: the policy's own list, and, for a second
+    // step, the password it is second to (AUTH-FACT-002b).
+    private async ValueTask<Error?> AdmitsAsync(
+        RegistrationSession live,
+        Factor kind,
+        CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        Policy policy = (await PolicyAsync(live, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<Policy>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return failure;
+        }
+
+        return !policy.LoginFactors.Contains(kind) || (SecondStep.Is(kind) && live.Password is null)
+            ? Error.From(ErrorCodes.FactorNotPermitted)
+            : null;
+    }
+
+    // AUTH-FACT-001 AC5: a label is held once per kind per account, so the session
+    // stages no two of a kind under one label, compared in the canonical form the
+    // account's own credentials are compared in.
+    private static bool LabelHeld(RegistrationSession live, Factor kind, CredentialLabel label)
+    {
+        string canonical = CanonicalForm.Of(label.Value);
+
+        foreach (StagedCredential staged in live.Credentials)
+        {
+            if (staged.Factor == kind
+                && string.Equals(CanonicalForm.Of(staged.Label.Value), canonical, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // REG-PM-001: the name a ceremony and an authenticator app show is the staged
+    // email, the first staged being the one the account takes as its primary
+    // (REG-IDENT-002).
+    private static string Shown(RegistrationSession live)
+    {
+        foreach (StagedIdentity staged in live.Identifiers)
+        {
+            if (staged.Kind is IdentifierKind.Email)
+            {
+                return staged.Canonical;
+            }
+        }
+
+        return string.Empty;
     }
 
     /// <summary>
@@ -1663,21 +2039,21 @@ internal sealed class RegistrationService(
     // one after another and none is written over another. CONV-DESIGN-003: the answer
     // says whether it commits, as a success and a refusal that keeps a count do; every
     // other refusal rolls back.
-    private async ValueTask<Result<RegistrationState>> HeldAsync(
+    private async ValueTask<Result<TAnswer>> HeldAsync<TAnswer>(
         RegistrationSessionId id,
-        Func<RegistrationSession?, ValueTask<(Result<RegistrationState> Answer, bool Commits)>> decide,
+        Func<RegistrationSession?, ValueTask<(Result<TAnswer> Answer, bool Commits)>> decide,
         CancellationToken cancellationToken)
     {
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
-            return Result.Failure<RegistrationState>(notBegun);
+            return Result.Failure<TAnswer>(notBegun);
         }
 
         RegistrationSession? held = await sessions.FindForUpdateAsync(id, cancellationToken)
             .ConfigureAwait(false);
 
-        (Result<RegistrationState> decided, bool commits) = await decide(
+        (Result<TAnswer> decided, bool commits) = await decide(
                 held is null || held.HasExpired(time.GetUtcNow()) ? null : held)
             .ConfigureAwait(false);
 
@@ -1689,7 +2065,7 @@ internal sealed class RegistrationService(
         }
 
         return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match(() => decided, Result.Failure<RegistrationState>);
+            .Match(() => decided, Result.Failure<TAnswer>);
     }
 
     private async ValueTask<RegistrationSession?> LiveAsync(
@@ -1709,6 +2085,32 @@ internal sealed class RegistrationService(
         RegistrationSession session,
         CancellationToken cancellationToken)
     {
+        (Error? failure, IReadOnlyList<string>? drawn) =
+            await SettleAsync(session, cancellationToken).ConfigureAwait(false);
+
+        if (failure is not null)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<RegistrationState>(failure);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<RegistrationState>(notCommitted);
+        }
+
+        return Result.Success(State(session, drawn));
+    }
+
+    // What settling writes, inside the unit of work its caller holds and ends: the
+    // recovery codes a second step beside a password brings, drawn once, and the step
+    // the session has reached.
+    private async ValueTask<(Error? Failure, IReadOnlyList<string>? Drawn)> SettleAsync(
+        RegistrationSession session,
+        CancellationToken cancellationToken)
+    {
         Error? failure = null;
 
         Policy policy = (await PolicyAsync(session, cancellationToken).ConfigureAwait(false))
@@ -1716,9 +2118,7 @@ internal sealed class RegistrationService(
 
         if (failure is not null)
         {
-            await work.RollbackAsync().ConfigureAwait(false);
-
-            return Result.Failure<RegistrationState>(failure);
+            return (failure, null);
         }
 
         IReadOnlyList<string>? drawn = null;
@@ -1731,9 +2131,7 @@ internal sealed class RegistrationService(
 
             if (failure is not null)
             {
-                await work.RollbackAsync().ConfigureAwait(false);
-
-                return Result.Failure<RegistrationState>(failure);
+                return (failure, null);
             }
 
             session.StageRecoveryCodes(set.Hashes);
@@ -1747,13 +2145,7 @@ internal sealed class RegistrationService(
 
         await sessions.RecordAsync(session, cancellationToken).ConfigureAwait(false);
 
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure<RegistrationState>(notCommitted);
-        }
-
-        return Result.Success(State(session, drawn));
+        return (null, drawn);
     }
 
     // IDN-LIFE-009a: from the moment the token attaches, the invitation's organization
@@ -1998,17 +2390,83 @@ internal sealed class RegistrationService(
 
         if (owner is SubjectId holder)
         {
-            return await TellHolderAsync(session, staged, holder, source, cancellationToken).ConfigureAwait(false);
+            return await WithheldAsync(session, staged, source, cancellationToken).ConfigureAwait(false)
+                ?? await TellHolderAsync(session, staged, holder, source, cancellationToken).ConfigureAwait(false);
         }
 
         if (await directory
                 .IsReservedAsync(staged.Kind, staged.Canonical, time.GetUtcNow(), cancellationToken)
                 .ConfigureAwait(false))
         {
-            return null;
+            return await WithheldAsync(session, staged, source, cancellationToken).ConfigureAwait(false);
         }
 
         return await SendCodeAsync(session, staged, source, cancellationToken).ConfigureAwait(false);
+    }
+
+    // AUTH-FACT-004, AUTH-ABUSE-004: an ask of a code for a held or reserved value is
+    // judged and counted against the restrictions as its message would be, and refused
+    // by them alike; admitted, the value is given a verification-code record that
+    // lives and counts as a sent code's does and that no code matches. Nothing is
+    // sent, and no link stands for a press to prove.
+    private async ValueTask<Error?> WithheldAsync(
+        RegistrationSession session,
+        StagedIdentity staged,
+        string source,
+        CancellationToken cancellationToken)
+    {
+        Error? failure = null;
+
+        IReadOnlyList<string> languages = (await configuration
+                .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Held<IReadOnlyList<string>>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return failure;
+        }
+
+        Result drawn = await restrictions
+            .DrawAsync(
+                new OutboundMessage(
+                    Destination(staged),
+                    MessageKind.VerificationLink,
+                    RestrictionPurpose.Verification,
+                    source,
+                    RecipientLanguage.Found(session.Language, languages)),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (drawn.Match(() => (Error?)null, error => error) is Error refused)
+        {
+            return refused;
+        }
+
+        staged.Unlinked();
+
+        return (await codes.WithholdAsync(Holder(session.Id, staged.Id), cancellationToken).ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error);
+    }
+
+    // AUTH-FACT-004 (D-166, 115): the verification-code record of a staged identifier
+    // is held against a fingerprint of the registration session and the identifier.
+    private static byte[] Holder(RegistrationSessionId session, IdentifierId staged)
+    {
+        Span<byte> named = stackalloc byte[32];
+
+        _ = session.Value.TryWriteBytes(named);
+        _ = staged.Value.TryWriteBytes(named[16..]);
+
+        return SHA256.HashData(named);
+    }
+
+    // The codes a session's staged identifiers had outstanding go with the session.
+    private async ValueTask EndCodesAsync(RegistrationSession session, CancellationToken cancellationToken)
+    {
+        foreach (StagedIdentity staged in session.Identifiers)
+        {
+            await codes.EndAsync(Holder(session.Id, staged.Id), cancellationToken).ConfigureAwait(false);
+        }
     }
 
     // Whether a value belongs to an account or is held out of reach for an undo, which
@@ -2030,10 +2488,6 @@ internal sealed class RegistrationService(
     {
         Error? failure = null;
 
-        TimeSpan lifetime = (await configuration
-                .ReadAsync(Settings.CodeVerificationLifetime, cancellationToken).ConfigureAwait(false))
-            .Match(value => value, error => Held<TimeSpan>(error, ref failure));
-
         IReadOnlyList<string> languages = (await configuration
                 .ReadAsync(Settings.NotificationLanguages, cancellationToken).ConfigureAwait(false))
             .Match(value => value, error => Held<IReadOnlyList<string>>(error, ref failure));
@@ -2043,7 +2497,17 @@ internal sealed class RegistrationService(
             return failure;
         }
 
-        string code = VerificationCode.Draw(randomness);
+        // AUTH-ABUSE-004: the code is issued and its message undertaken in the caller's
+        // unit of work, so a send the restrictions refuse leaves no code behind it.
+        string code = (await codes.IssueAsync(Holder(session.Id, staged.Id), cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Held<string>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return failure;
+        }
+
         var link = OpaqueToken.Draw(randomness);
 
         Result<SendReference> sent = await sending
@@ -2069,7 +2533,7 @@ internal sealed class RegistrationService(
             return refused;
         }
 
-        staged.Sent(VerificationCode.Held(code), link.Fingerprint(), time.GetUtcNow() + lifetime);
+        staged.Linked(link.Fingerprint());
 
         return null;
     }
