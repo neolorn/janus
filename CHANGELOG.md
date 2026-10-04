@@ -10,6 +10,12 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A message's row is claimed only where its next attempt is due, by the attempt that
+  follows the commit as by the `sends` job, so a row one attempt released and
+  rescheduled is not carried early by another. A message is due from its admission: it
+  is no longer held back from the job for `outbox.retry.initial`, and where the job
+  reaches a row before the attempt that follows the commit, the claim decides which of
+  them carries it.
 - A message carried again that the restrictions or the gateway floor refuse fails for
   good: its row is removed without being carried, its count and the credit it spent are
   given back, and no alert is raised. It no longer waits as a failed attempt does.

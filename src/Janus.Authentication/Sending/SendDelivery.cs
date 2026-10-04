@@ -29,9 +29,8 @@ internal sealed record SendDelivery(
     public int Attempts { get; init; }
 
     /// <summary>
-    /// When the publisher next carries it. A message whose immediate attempt follows the
-    /// commit is held back by the first retry delay, so the publisher leaves it to that
-    /// attempt.
+    /// When it is next due. A message just admitted is due at once, to the attempt that
+    /// follows its commit and to the publisher alike, and the claim decides between them.
     /// </summary>
     public DateTimeOffset NextAttemptAt { get; init; }
 
@@ -52,20 +51,18 @@ internal sealed record SendDelivery(
     /// <param name="message">What was undertaken.</param>
     /// <param name="reference">The reference drawn for it.</param>
     /// <param name="recordedAt">When it was admitted.</param>
-    /// <param name="held">How long the publisher leaves it to the attempt that follows the commit.</param>
     /// <returns>The delivery.</returns>
     /// <exception cref="ArgumentNullException">The message is absent.</exception>
     public static SendDelivery Of(
         OutboundMessage message,
         SendReference reference,
-        DateTimeOffset recordedAt,
-        TimeSpan held)
+        DateTimeOffset recordedAt)
     {
         ArgumentNullException.ThrowIfNull(message);
 
         return new SendDelivery(SendDeliveryId.Of(recordedAt), recordedAt, message, reference)
         {
-            NextAttemptAt = recordedAt + held,
+            NextAttemptAt = recordedAt,
         };
     }
 

@@ -1483,6 +1483,44 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
 
     /// <summary>
+    /// CONV-DESIGN-003 AC9: a claim is taken only on a due row, the immediate attempt's
+    /// and the pass's alike. A message just admitted is due at once; one an attempt
+    /// released and rescheduled is not claimed, and so not carried, before its next
+    /// attempt's instant has come.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC9_ARowReleasedAndRescheduledIsNotClaimedBeforeItIsDueAsync()
+    {
+        _mail.Accepts = false;
+
+        _ = await SentAsync(Mailed());
+
+        Assert.Equal(Noon, Assert.Single(_outbox.Written).NextAttemptAt);
+
+        SendDelivery rescheduled = Assert.Single(_outbox.Waiting);
+
+        Assert.Equal(1, rescheduled.Attempts);
+        Assert.True(rescheduled.NextAttemptAt > Noon);
+
+        _mail.Accepts = true;
+        _clock.Advance(TimeSpan.FromMinutes(3));
+        _outbox.Reschedule(rescheduled.Id, _clock.GetUtcNow() + TimeSpan.FromSeconds(1));
+
+        await Path.Publisher.AttemptAsync(rescheduled.Id, TestContext.Current.CancellationToken);
+
+        Assert.Empty(_mail.Taken);
+        Assert.Single(_outbox.Claimed);
+        Assert.Equal(1, Assert.Single(_outbox.Waiting).Attempts);
+
+        _clock.Advance(TimeSpan.FromSeconds(1));
+
+        await Path.Publisher.AttemptAsync(rescheduled.Id, TestContext.Current.CancellationToken);
+
+        Assert.Single(_mail.Taken);
+        Assert.Empty(_outbox.Waiting);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC12, CONV-ERR-003 AC2: a fault of the library's own in the
     /// immediate attempt after the commit, here the outbox failing at the claim, is
     /// logged and goes no further. The send answers as it committed, its row and its

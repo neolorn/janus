@@ -42,8 +42,8 @@ internal interface ISendOutbox
 
     /// <summary>
     /// Claims one message for an attempt, by one update that succeeds only where the
-    /// row is unclaimed or its claim has timed out. The caller commits it on its own
-    /// before the handler is called.
+    /// row is due, its next attempt's instant come, and is unclaimed or its claim has
+    /// timed out. The caller commits it on its own before the handler is called.
     /// </summary>
     /// <param name="delivery">What it is held under.</param>
     /// <param name="now">The instant of the claim.</param>
@@ -51,7 +51,7 @@ internal interface ISendOutbox
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// The claim, which the attempt's outcome is written under, or nothing where another
-    /// attempt holds the row or the row is gone.
+    /// attempt holds the row, the row is not yet due or the row is gone.
     /// </returns>
     ValueTask<SendClaim?> ClaimAsync(
         SendDeliveryId delivery,

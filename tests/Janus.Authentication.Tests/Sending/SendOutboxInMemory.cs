@@ -57,6 +57,17 @@ internal sealed class SendOutboxInMemory : ISendOutbox
     public void TakeOver(SendDeliveryId delivery, DateTimeOffset until) => _claims[delivery] = until;
 
     /// <summary>
+    /// Stands in for an attempt that released the row and rescheduled it.
+    /// </summary>
+    /// <param name="delivery">The row.</param>
+    /// <param name="next">When its next attempt is due.</param>
+    public void Reschedule(SendDeliveryId delivery, DateTimeOffset next)
+    {
+        _held[delivery] = _held[delivery] with { NextAttemptAt = next };
+        _ = _claims.Remove(delivery);
+    }
+
+    /// <summary>
     /// Stands in for an erasure that overwrote the key of one row, which then reads as
     /// nothing but the hash of its reference.
     /// </summary>
@@ -95,7 +106,8 @@ internal sealed class SendOutboxInMemory : ISendOutbox
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
-        if (!_held.ContainsKey(delivery)
+        if (!_held.TryGetValue(delivery, out SendDelivery? held)
+            || held.NextAttemptAt > now
             || (_claims.TryGetValue(delivery, out DateTimeOffset until) && until > now))
         {
             return ValueTask.FromResult<SendClaim?>(null);
