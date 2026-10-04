@@ -36,8 +36,9 @@ namespace Janus.Hosting.Sending;
 /// number of processes carry each message once, count each attempt once and record each
 /// outcome once. The handler is never called while a transaction is open. A message no
 /// handler took is carried again under <c>outbox.retry.*</c>, judged again by the
-/// restrictions as they then stand, until its attempts are spent, when its count is
-/// released and <c>degradation</c> is raised in the transaction that removes its row.
+/// restrictions as they then stand, which end it where they refuse it, until its attempts
+/// are spent, when its count is released and <c>degradation</c> is raised in the
+/// transaction that removes its row.
 /// </remarks>
 internal sealed class SendPublisher(
     ISendOutbox outbox,
@@ -213,8 +214,7 @@ internal sealed class SendPublisher(
 
         // AUTH-ABUSE-004 AC9: a send carried again is judged by the restrictions as
         // they stand now, with its own count set aside, and counts at this instant where
-        // they admit it. One they refuse holds no count and waits as any failed attempt.
-        // A send that holds no count, one refused at an earlier retry among them, is
+        // they admit it. One they refuse fails for good. A send that holds no count is
         // judged before it is carried whatever its attempts.
         if (delivery.Attempts > 0
             || !await admission.HoldsAsync(delivery.Reference, cancellationToken).ConfigureAwait(false))
@@ -246,7 +246,7 @@ internal sealed class SendPublisher(
         return settled.Match(() => Result.Success(taken), Result.Failure<bool>);
     }
 
-    // The judgement of a retry, in the unit of work it is settled in where it is
+    // The judgement of a retry, in the unit of work that removes its row where it is
     // refused: whether the restrictions admit the message again.
     private async ValueTask<Result<bool>> RetriedAsync(
         SendDelivery delivery,
@@ -266,8 +266,22 @@ internal sealed class SendPublisher(
             return Result.Success(true);
         }
 
-        // Refused, it holds none: the gateway floor refuses before the counters are
-        // held, so what the send still held is released here.
+        // AUTH-ABUSE-004 AC9: one the restrictions or the gateway floor refuse fails
+        // for good. Its row is removed uncarried under the claim, the count and the
+        // credit it held are released, and nothing is raised: no channel faulted.
+        if (judged.Match(_ => false, error => error.Code == ErrorCodes.RestrictionExceeded
+            || error.Code == ErrorCodes.SmsBalanceFloor))
+        {
+            if (await outbox.RemoveAsync(claim, cancellationToken).ConfigureAwait(false))
+            {
+                await admission.ReleaseAsync(delivery.Reference, cancellationToken).ConfigureAwait(false);
+            }
+
+            return Result.Success(false);
+        }
+
+        // Not judged at all (a setting that does not read): it holds no count and waits
+        // as any failed attempt does, to be judged before it is next carried.
         await admission.ReleaseAsync(delivery.Reference, cancellationToken).ConfigureAwait(false);
 
         return (await SettledAsync(delivery, claim, taken: false, schedule, now, cancellationToken)

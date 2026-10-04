@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A message carried again that the restrictions or the gateway floor refuse fails for
+  good: its row is removed without being carried, its count and the credit it spent are
+  given back, and no alert is raised. It no longer waits as a failed attempt does.
 - An ask of a sign-in link, of a recovery link or of a notice to an address no account
   holds, where the gateway floor refuses its text message, is answered as the ask would
   have been and nothing is sent. A verification code the floor refuses is refused

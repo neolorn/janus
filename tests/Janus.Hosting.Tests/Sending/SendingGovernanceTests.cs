@@ -467,11 +467,12 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
     /// <summary>
     /// AUTH-ABUSE-004 AC9, AC16: a retried send is judged by the restrictions as they
-    /// stand when it is retried, with its own count set aside. One they refuse is not
-    /// handed to the handler, holds no count, and waits as any failed attempt does.
+    /// stand when it is retried, with its own count set aside. One they refuse fails for
+    /// good: it is not handed to the handler, its row is removed, its count is released
+    /// as AC16 has a send that fails for good released, and nothing is raised.
     /// </summary>
     [Fact]
-    public async Task AUTH_ABUSE_004_AC9_ARetryIsJudgedByTheRestrictionsAgainAsync()
+    public async Task AUTH_ABUSE_004_AC9_ARetryTheRestrictionsRefuseFailsForGoodAsync()
     {
         var key = new RestrictionKey("email.destination", RestrictionKeyKind.Destination, Mailbox.Value);
 
@@ -497,18 +498,18 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
             ]);
         _mail.Accepts = true;
         _clock.Advance(TimeSpan.FromSeconds(30));
-        _ledger.Given(key, Noon, Noon + TimeSpan.FromSeconds(20));
+        _ledger.Given(key, Noon + TimeSpan.FromSeconds(20));
 
         Assert.Equal(0, await RetriedAsync());
         Assert.Empty(_mail.Taken);
-        Assert.Equal(2, Assert.Single(_outbox.Waiting).Attempts);
+        Assert.Empty(_outbox.Waiting);
         Assert.Equal([Noon + TimeSpan.FromSeconds(20)], _ledger.Sends(key));
+        Assert.Empty(_events.Of<AlertRaised>());
 
         _clock.Advance(TimeSpan.FromHours(2));
 
-        Assert.Equal(1, await RetriedAsync());
-        Assert.Single(_mail.Taken);
-        Assert.Equal([Noon + TimeSpan.FromSeconds(30) + TimeSpan.FromHours(2)], _ledger.Sends(key));
+        Assert.Equal(0, await RetriedAsync());
+        Assert.Empty(_mail.Taken);
     }
 
     /// <summary>
@@ -902,11 +903,12 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// INT-SMS-004 AC2: a text message carried again is held below the floor as any
-    /// ordinary send is, and the attempt counts against its budget.
+    /// INT-SMS-004 AC2, AUTH-ABUSE-004 AC9: a text message carried again is refused
+    /// below the floor as any ordinary send is, and fails for good: its row is removed
+    /// uncarried, its count is released and nothing is raised.
     /// </summary>
     [Fact]
-    public async Task INT_SMS_004_AC2_ARetryIsHeldBelowTheFloorAsync()
+    public async Task AUTH_ABUSE_004_AC9_ARetryTheFloorRefusesFailsForGoodAsync()
     {
         _sms.Accepts = false;
 
@@ -919,7 +921,9 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
         Assert.Equal(0, await RetriedAsync());
         Assert.Empty(_sms.Taken);
-        Assert.Equal(2, Assert.Single(_outbox.Waiting).Attempts);
+        Assert.Empty(_outbox.Waiting);
+        Assert.Empty(_ledger.Keys);
+        Assert.Empty(_events.Of<AlertRaised>());
     }
 
     /// <summary>
@@ -1550,9 +1554,8 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
     /// <summary>
     /// AUTH-ABUSE-004 AC9, AC16: a send that holds no count is judged before it is
-    /// carried, whatever its attempts: one whose count a refused retry released, or one
-    /// written before a send counted from its admission, counts at the instant the
-    /// restrictions admit it and is refused where they do not.
+    /// carried, whatever its attempts: one written before a send counted from its
+    /// admission counts at the instant the restrictions admit it.
     /// </summary>
     [Fact]
     public async Task AUTH_ABUSE_004_AC9_ASendThatHoldsNoCountIsJudgedBeforeItIsCarriedAsync()
@@ -1564,18 +1567,13 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         SendDelivery waiting = Assert.Single(_outbox.Waiting);
 
         Assert.True(await _ledger.ReleaseAsync(SendReferences.Of(waiting.Reference), TestContext.Current.CancellationToken));
-        _ledger.Given(key, Noon);
-
-        Assert.Equal(0, await RetriedAsync());
-        Assert.Empty(_mail.Taken);
-        Assert.Equal(1, Assert.Single(_outbox.Waiting).Attempts);
-        Assert.Equal([Noon], _ledger.Sends(key));
+        Assert.Empty(_ledger.Sends(key));
 
         _clock.Advance(TimeSpan.FromMinutes(2));
 
         Assert.Equal(1, await RetriedAsync());
         Assert.Single(_mail.Taken);
-        Assert.Equal([Noon, Noon + TimeSpan.FromMinutes(2)], _ledger.Sends(key));
+        Assert.Equal([Noon + TimeSpan.FromMinutes(2)], _ledger.Sends(key));
     }
 
     private static IEnumerable<Type> Carried(MemberInfo member) =>
