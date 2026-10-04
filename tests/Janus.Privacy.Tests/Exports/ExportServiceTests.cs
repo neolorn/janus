@@ -95,7 +95,7 @@ public sealed class ExportServiceTests : IAsyncDisposable
                 ["value"] = "ahmed@example.test",
             })]));
 
-        await _consents.RecordAsync(
+        _consents.Keep(
             Ahmed,
             new ConsentRecord(
                 "recommendations",
@@ -105,10 +105,9 @@ public sealed class ExportServiceTests : IAsyncDisposable
                 ConsentKind.Ordinary,
                 Noon,
                 WithdrawnAt: null,
-                SupersededAt: null),
-            TestContext.Current.CancellationToken);
+                SupersededAt: null));
 
-        await _consents.RecordAsync(
+        _ = await _consents.AddAsync(
             Ahmed,
             new ObjectionRecord(
                 "marketing",

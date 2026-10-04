@@ -340,14 +340,17 @@ public sealed class SupersessionTests : IAsyncDisposable
     {
         Holds(Declaration.Newsletter, "1");
 
-        await GrantAsync(Ahmed, Newsletter);
-
-        ConsentRecord given = Assert.Single(await HeldAsync(Ahmed));
-
-        await _consents.RecordAsync(
+        _consents.Keep(
             Ahmed,
-            given with { Document = ConsentService.Notice, NoticeVersion = "2" },
-            CancellationToken.None);
+            new ConsentRecord(
+                Newsletter,
+                ConsentService.Notice,
+                "2",
+                ConsentMechanism.Dashboard,
+                ConsentKind.Ordinary,
+                Noon,
+                WithdrawnAt: null,
+                SupersededAt: null));
 
         await PublishAsync(Declaration.Newsletter, material: true);
 

@@ -1054,7 +1054,7 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
         await work.BeginAsync(cancellationToken);
-        await scope.ServiceProvider.GetRequiredService<IConsentStore>().RecordAsync(
+        _ = await scope.ServiceProvider.GetRequiredService<IConsentStore>().AddAsync(
             subject,
             new ConsentRecord(
                 "recommendations",

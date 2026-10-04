@@ -2583,3 +2583,18 @@ against the public contract of LIB-API-001.
   already holds is what stands in its place; the verification staged for it records no
   browser. Everywhere else an address is displaced only by a session that has stepped
   up, and the old address is asked where the account has no other channel at all.
+- A consent is a record for each grant and an objection a record for each objection:
+  `identity.consents` and `identity.objections` are keyed on `id`, a partial unique index
+  (`ux_consents_live`, `ux_objections_standing`) holds at most one live record a
+  subject and purpose, and `GET /privacy/consents` and `GET /privacy/objections` answer
+  every record, the withdrawn and superseded ones as they were. A grant after a
+  withdrawal or a supersession adds a record and changes none. A grant over a live
+  record the purpose admits (given against the document the purpose names, written
+  where it requires written), and an objection while one stands, are answered as
+  success and record and raise nothing, two at once included. A grant over a live record
+  the purpose no longer admits stamps it superseded and adds the new one in one
+  transaction, `ConsentChanged` `superseded` then `granted`, and is recorded as
+  `reconsent` where it was named `dashboard`. The gate reads the live record, or the
+  latest where none is live. The migration `KeepARecordForEachGrant` gives each record
+  held an `id` and deletes none; reverting it is refused where a subject holds a second
+  record of one purpose.

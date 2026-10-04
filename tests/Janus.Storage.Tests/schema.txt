@@ -237,13 +237,16 @@ table consents
   column withdrawn_at timestamp with time zone
   column superseded_at timestamp with time zone
   column document text not null
+  column id uuid not null
   constraint ck_consents_kind CHECK ((kind = ANY (ARRAY['ordinary'::text, 'written'::text])))
   constraint ck_consents_mechanism CHECK ((mechanism = ANY (ARRAY['administrator'::text, 'dashboard'::text, 'reconsent'::text, 'registration'::text])))
   constraint ck_consents_purpose CHECK ((length(TRIM(BOTH FROM purpose)) > 0))
   constraint ck_consents_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint fk_consents_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
-  constraint pk_consents PRIMARY KEY (subject, purpose)
+  constraint pk_consents PRIMARY KEY (id)
   index ix_consents_live using btree (notice_version) WHERE ((withdrawn_at IS NULL) AND (superseded_at IS NULL))
+  index ix_consents_subject using btree (subject, granted_at)
+  index ux_consents_live unique using btree (subject, purpose) WHERE ((withdrawn_at IS NULL) AND (superseded_at IS NULL))
 table devices
   column id uuid not null
   column subject uuid not null
@@ -635,11 +638,14 @@ table objections
   column recorded_at timestamp with time zone not null
   column withdrawn_at timestamp with time zone
   column document text not null
+  column id uuid not null
   constraint ck_objections_mechanism CHECK ((mechanism = ANY (ARRAY['administrator'::text, 'dashboard'::text, 'reconsent'::text, 'registration'::text])))
   constraint ck_objections_purpose CHECK ((length(TRIM(BOTH FROM purpose)) > 0))
   constraint ck_objections_subject_not_max_uuid CHECK ((subject <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
   constraint fk_objections_subject FOREIGN KEY (subject) REFERENCES identity.accounts(subject) ON DELETE RESTRICT
-  constraint pk_objections PRIMARY KEY (subject, purpose)
+  constraint pk_objections PRIMARY KEY (id)
+  index ix_objections_subject using btree (subject, recorded_at)
+  index ux_objections_standing unique using btree (subject, purpose) WHERE (withdrawn_at IS NULL)
 table oidc_authorizations
   column id uuid not null
   column concurrency_token uuid not null
