@@ -2982,3 +2982,7 @@ against the public contract of LIB-API-001.
   refused 409 `identity.registration.incomplete`, as every step asked for before the
   one it follows is, where it was refused 422 `identity.affirmation.required`, which is
   the terms step's alone.
+- `POST /account/recoverycodes` answers only the holder of a session: a browser holding
+  an enrolment session and no other is refused 401 `auth.session.expired`, where it
+  was answered as the account, or 422 `auth.enrolment.tokeninvalid` once the enrolment
+  had ended.

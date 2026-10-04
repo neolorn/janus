@@ -65,7 +65,7 @@ internal static class CredentialEndpoints
                 .Answering(
                     ErrorCodes.SessionExpired, ErrorCodes.StepUpRequired, ErrorCodes.Restricted,
                     ErrorCodes.Denied, ErrorCodes.FactorPasswordRequired));
-        _ = account.MapPost("/recoverycodes", GenerateRecoveryCodesAsync)
+        _ = SessionRequired.On(account.MapPost("/recoverycodes", GenerateRecoveryCodesAsync))
             .Declares(EndpointDeclaration
                 .Answering(
                     ErrorCodes.StepUpRequired, ErrorCodes.Restricted, ErrorCodes.Denied,
@@ -277,14 +277,17 @@ internal static class CredentialEndpoints
 
     // AUTH-FACT-009: the whole previous set stops validating, and the new one is
     // shown once.
+    // AUTH-RECOV-002: the enrolment session is not among those the set is generated
+    // under, so only the holder of a session asks here.
     private static async Task<IResult> GenerateRecoveryCodesAsync(
         ICredentials credentials,
         RequestSession browser,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(credentials);
+        ArgumentNullException.ThrowIfNull(browser);
 
-        return Asking(browser) is not CredentialAuthority authority
+        return Holding(browser) is not CredentialAuthority authority
             ? Nobody()
             : Answers.Of(
                 await credentials.GenerateRecoveryCodesAsync(authority, cancellationToken)
@@ -360,15 +363,16 @@ internal static class CredentialEndpoints
     {
         ArgumentNullException.ThrowIfNull(browser);
 
-        if (browser.Context is AccessContext holder && browser.Live is Session live)
-        {
-            return CredentialAuthority.Of(holder, live.Id);
-        }
-
-        return browser.FirstContact?.Enrolment is EnrolmentSessionId opened
-            ? CredentialAuthority.Of(opened)
-            : null;
+        return Holding(browser)
+            ?? (browser.FirstContact?.Enrolment is EnrolmentSessionId opened
+                ? CredentialAuthority.Of(opened)
+                : null);
     }
+
+    private static CredentialAuthority? Holding(RequestSession browser) =>
+        browser.Context is AccessContext holder && browser.Live is Session live
+            ? CredentialAuthority.Of(holder, live.Id)
+            : null;
 
     // API-CONV-003: nobody is asking, which is what 401 is for and what nothing else
     // is for.

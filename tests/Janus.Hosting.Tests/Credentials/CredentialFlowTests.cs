@@ -371,12 +371,39 @@ public sealed class CredentialFlowTests : IAsyncDisposable
             StatusCodes.Status204NoContent,
             (await browser.SendAsync("POST", "/account/password", ("password", Replacement))).Status);
 
-        // The browser still carries the session on its first contact, so what answers
-        // is the ended session and not an absent one.
-        Answer spent = await browser.SendAsync("POST", "/account/recoverycodes");
+        // The enrolment ended with the link it was opened from.
+        Assert.Empty(_deployment.Links.Held);
+    }
 
-        Assert.Equal(StatusCodes.Status422UnprocessableEntity, spent.Status);
-        Assert.Equal(ErrorCodes.EnrolmentTokenInvalid.ToString(), spent.Text("code"));
+    /// <summary>
+    /// AUTH-RECOV-002 and chapter 09 section 3: the enrolment session is usable only
+    /// against the endpoints the chapter names for it, and the recovery codes are not
+    /// one of them, so a browser holding that session and no other is answered there as
+    /// one holding no session, while the enrolment stands and once it has ended.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_002_TheEnrolmentSessionDoesNotReachTheRecoveryCodesAsync()
+    {
+        _ = await SignedInAsync();
+
+        await LinkedAsync(_deployment.Directory.Created[^1].Subject);
+
+        Browser browser = await ArrivedAsync();
+
+        _ = await browser.SendAsync("POST", "/enrol/begin", ("token", Link));
+
+        Answer standing = await browser.SendAsync("POST", "/account/recoverycodes");
+
+        _ = await browser.SendAsync("POST", "/account/password", ("password", Replacement));
+
+        Answer ended = await browser.SendAsync("POST", "/account/recoverycodes");
+
+        Assert.Equal(StatusCodes.Status401Unauthorized, standing.Status);
+        Assert.Equal(ErrorCodes.SessionExpired.ToString(), standing.Text("code"));
+        Assert.Equal(StatusCodes.Status401Unauthorized, ended.Status);
+        Assert.Equal(ErrorCodes.SessionExpired.ToString(), ended.Text("code"));
+        Assert.DoesNotContain(_deployment.Authenticators.All, held => held.Factor is Factor.RecoveryCodes);
     }
 
     /// <summary>
