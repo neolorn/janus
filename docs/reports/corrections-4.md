@@ -1344,7 +1344,7 @@ Tests: `ValueLockTests.REG_SESS_005_AC6_ATermsStepAndAnotherAccountsAddAtOnceLea
 | Question 102: the two standing-consent rows | `d44deb32` | AUTHZ-GATE-002, AUTHZ-TEST-001 | `TruthTableTests.AUTHZ_GATE_002_AC4_EveryConsentCaseDecidesTheSameWayThroughBothPathsAsync` (12 cases) |
 | Question 92: no logic change, the gate refused before rendering already; the step-up cases hold the check, the expression and the fragment to the table for all seven rows | `5dc2537e` | AUTHZ-TEST-001, AUTHZ-GATE-005 | `TruthTableTests.AUTHZ_TEST_001_AC2_EveryStepUpCaseDecidesTheSameWayThroughBothPathsAsync`, which replaces `TruthTableTests.AUTHZ_TEST_001_AC1_EveryStepUpCaseDecidesTheWayTheTableSaysAsync` |
 | Question 95: `Effective` set from the context at the thirteen sites; the two link sites of `AccountLifecycle` carry neither identity | `e81ee0f2` | AUTHZ-IMP-001 | `AccountAdministrationTests.AUTHZ_IMP_001_AC5_ASuspensionCarriesBothIdentitiesOfItsContextAsync`, `AccountAdministrationTests.AUTHZ_IMP_001_AC5_AReactivationCarriesBothIdentitiesOfItsContextAsync`, `AccountAdministrationTests.AUTHZ_IMP_001_AC5_ACancelledDeletionCarriesBothIdentitiesOfItsContextAsync`, `AccountLifecycleTests.AUTHZ_IMP_001_AC5_ADeactivationCarriesBothIdentitiesAndItsLinkNeitherAsync`, `AccountLifecycleTests.AUTHZ_IMP_001_AC5_ARequestedDeletionCarriesBothIdentitiesAndItsLinkNeitherAsync`, `CredentialServiceTests.AUTHZ_IMP_001_AC5_AConfirmedEnrolmentCarriesBothIdentitiesOfItsContextAsync`, `CredentialServiceTests.AUTHZ_IMP_001_AC5_ALinkedProviderCarriesBothIdentitiesOfItsContextAsync`, `PasswordServiceTests.AUTHZ_IMP_001_AC5_ASetPasswordCarriesBothIdentitiesOfItsContextAsync`, `RestrictionAdministrationTests.AUTHZ_IMP_001_AC5_AnEditCarriesBothIdentitiesOfItsContextAsync`, `RestrictionAdministrationTests.AUTHZ_IMP_001_AC5_AGrantCarriesBothIdentitiesOfItsContextAsync`, `AlertDestinationChangeTests.AUTHZ_IMP_001_AC5_ADestinationChangeCarriesBothIdentitiesOfItsContextAsync`, `TakedownServiceTests.AUTHZ_IMP_001_AC5_ATakedownsSuspensionCarriesBothIdentitiesOfItsContextAsync`, `TakedownServiceTests.AUTHZ_IMP_001_AC5_AReversalCarriesBothIdentitiesOfItsContextAsync` |
-| Question 94, and the step-up half of the correction of `52482ed5`: a step-up `phoneCode` ask on `risk` is answered 403 `auth.stepup.required` judged against the strictest of the policy's gates, field by field; one consideration is recorded | `dee734ac` | AUTH-FACT-002, AUTH-FACT-002b, AUTH-STEP-002 | `AuthenticationServiceTests.AUTH_FACT_002b_AC6_AReportedChangeWithholdsTheTextCodeFromAStepUpAsync`, `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtAStepUpLeavingNoCombinationAsksForALossReportAsync`, `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtAStepUpThatNeverReachedTheGateOffersEnrolmentAsync`, `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtAStepUpWithNoSessionOfTheAccountJudgesNoGateAsync`, `SignInFlowTests.AUTH_FACT_002_AC7_ATextCodeAskedAtAStepUpForAReportedNumberIsAnsweredWithTheGateAsync` |
+| Question 94, and the step-up half of the correction of `52482ed5`: a step-up `phoneCode` ask on `risk` is answered 403 `auth.stepup.required` judged against the strictest of the policy's gates, field by field; one consideration is recorded | `dee734ac` | AUTH-FACT-002, AUTH-FACT-002b, AUTH-STEP-002 | `AuthenticationServiceTests.AUTH_FACT_002b_AC6_AReportedChangeWithholdsTheTextCodeFromAStepUpAsync`, `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtAStepUpLeavingNoCombinationAsksForALossReportAsync`, `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtAStepUpThatNeverReachedTheGateOffersEnrolmentAsync`, `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtAStepUpWithNoSessionOfTheAccountJudgesNoGateAsync`, `SignInFlowTests.AUTH_FACT_002_AC7_ATextCodeAskedAtAStepUpForAReportedNumberIsAnsweredWithWhatIsLeftAsync` |
 
 - The second consent of the two new rows is granted two hours after the first: at one instant "the latest" fell to the identifiers.
 - On the enrolment-session path of `CredentialService` both identities are the enrolment's subject, as `Actor` was.
@@ -1471,6 +1471,33 @@ The part ran in a worktree beside `part/identifiers`, not on `corrections-4` aft
 - Not built: the fourth-clause test of CONV-DESIGN-007 criterion 7 (question 168).
 - No migration, no public surface change.
 - Parked: question 168.
+
+### `part/sign-in`, merged as `689ebdb0`: questions 134, 135 and 145
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 134: the domain lock is judged inside the unit of work that spends a right sign-in code; its refusal commits the spend alone, counts nothing and records nothing; the second unit of work is gone | `eeee4029` | AUTH-FACT-004, CONV-DESIGN-003 | `AuthenticationServiceTests.CONV_DESIGN_003_AC10_ARightSignInCodeADomainLockRefusesCommitsItsSpendAloneAsync`, `AuthenticationServiceTests.AUTH_FACT_004_AWrongSignInCodeUnderADomainLockLearnsNothingOfTheLockAsync`, `AuthenticationServiceTests.CONV_DESIGN_003_AC10_ARightSignInCodeToAnAddressGivenUpCommitsItsSpendWithTheRefusalAsync`, `AuthenticationServiceTests.REG_IDENT_006_AC6_ACodeSentBeforeTheAddressWasRemovedDoesNotSignInAsync` |
+| Question 135: a failure that is no refusal of a presented factor is rolled back, counted nowhere, recorded nowhere and returned as it is | `1bd40618` | AUTH-ABUSE-001, CONV-LOG-005 | `AuthenticationServiceTests.AUTH_ABUSE_001_AFaultInsideASignInIsNeitherCountedNorRecordedAsync`, `AuthenticationServiceTests.AUTH_ABUSE_001_AFaultInsideAStepUpIsNeitherCountedNorRecordedAsync`, `AuthenticationServiceTests.AUTH_ABUSE_001_AFaultOnASignInCodesPathIsRolledBackAndCountedNowhereAsync`, `AuthenticationServiceTests.AUTH_ABUSE_001_AFaultJudgingTheLockAfterARightSignInCodeIsRolledBackAsync`, `AuthenticationServiceTests.AUTH_ABUSE_001_AFaultOnADeviceChecksPathIsRolledBackAndCountedNowhereAsync` |
+| Question 145: a step-up `phoneCode` ask on `risk` answers 200 `factorRequired` where combinations are left, 200 with `required` empty where the session meets the strictest gate, 403 `auth.stepup.required` where none is left | `52654192` | AUTH-FACT-002, AUTH-FACT-002b | `AuthenticationServiceTests.AUTH_FACT_002b_AC6_AReportedChangeWithholdsTheTextCodeFromAStepUpAsync`, `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtAStepUpTheSessionAlreadyMeetsRequiresNothingAsync`, `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtAStepUpLeavingNoCombinationAsksForALossReportAsync`, `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtAStepUpThatNeverReachedTheGateOffersEnrolmentAsync`, `AuthenticationServiceTests.AUTH_FACT_002_AC7_AReportedChangeAtAStepUpWithNoSessionOfTheAccountJudgesNoGateAsync`, `SignInFlowTests.AUTH_FACT_002_AC7_ATextCodeAskedAtAStepUpForAReportedNumberIsAnsweredWithWhatIsLeftAsync` |
+
+- Question 135, "the request answers `system.fault`": no new test. The service returns the fault's own code and the translation to 500 `system.fault` is held by `ApiStatusTests` and `ErrorTranslationTests`.
+- Question 145: the 200 with `required` empty is tested at the service, not over HTTP.
+- Questions 132 and 146: nothing built.
+- No migration, no public surface change, no line of `endpoints.txt`.
+- Parked: questions 172 to 175.
+
+### `part/enrolment-session`, merged as `f6ca10c6`: questions 140, 139 and 157
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 140: a set is marked viewed at the instant it is written, in the unit of work of the generation and of the second-step enrolment | `70ea4a33` | AUTH-FACT-008 | `RecoveryCodeServiceTests.AUTH_FACT_008_AC4_TheSetRecordsWhenItWasShownAndExportedAsync`, `CredentialServiceTests.AUTH_FACT_008_AC4_ASetReturnedIsViewedInTheUnitOfWorkThatReturnsItAsync`, `CredentialFlowTests.AUTH_FACT_008_AC4_AGeneratedSetIsReadFromTheAccountAsViewedAsync` |
+| Question 139: `POST /account/recoverycodes/exported` asks the gate for the restriction before and inside its unit of work, asks no step-up and answers 403 `authz.restricted`; a repeated report writes nothing and rolls back | `3bcb08ff` | IDN-ACCT-007, AUTH-FACT-008 | `CredentialServiceTests.IDN_ACCT_007_AC2_ARestrictedAccountRecordsNoExportAsync`, `CredentialServiceTests.AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesTheExportAsync`, `CredentialServiceTests.CONV_DESIGN_003_AC10_AnExportReportedAgainWritesNothingAndRollsBackAsync`, `CredentialFlowTests.IDN_ACCT_007_AC2_ARestrictedAccountsReportOfAnExportIsRefusedAsync`, `CredentialFlowTests.AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesTheExportAsync`, `RecoveryCodeServiceTests.AUTH_RECOV_006_AC2_EachWayOfTakingTheCodesAwaySetsTheExportAsync`, `RecoveryCodeServiceTests.ExportedAsync_AnAccountHoldingNoSet_IsRefusedAsNotEnrolledAsync` |
+| Question 157: an enrolment session is refused 403 `authz.denied` at `DELETE /account/credentials/{id}` and `POST /account/credentials/{id}/upgrade`; an ended one answers 401 `auth.session.expired` wherever the service takes it; it reaches `POST /account/recoverycodes/exported` (`ICredentials.MarkRecoveryCodesExportedAsync(EnrolmentSessionId, CancellationToken)`, public); `auth.enrolment.tokeninvalid` is answered at `POST /enrol/begin` alone | `b0bd9843` | AUTH-RECOV-002, AUTH-FACT-008, IDN-ACCT-007 | `CredentialServiceTests.AUTH_RECOV_002_TheEnrolmentSessionIsDeniedWhatItDoesNotReachAsync`, `CredentialServiceTests.AUTH_RECOV_002_AnEndedEnrolmentSessionIsExpiredWhereverPresentedAsync`, `CredentialServiceTests.AUTH_FACT_008_AC4_TheEnrolmentSessionReportsAnExportAsync`, `CredentialServiceTests.IDN_ACCT_007_AC2_ARestrictedAccountsEnrolmentSessionRecordsNoExportAsync`, `CredentialFlowTests.AUTH_RECOV_002_TheEnrolmentSessionIsDeniedRemovalAndUpgradeAsync`, `CredentialFlowTests.AUTH_RECOV_002_AnEndedEnrolmentSessionIsExpiredWithNoDetailsAsync`, `CredentialFlowTests.AUTH_FACT_008_AC4_TheEnrolmentSessionReportsAnExportAsync`, `CredentialServiceTests.AUTH_RECOV_002_TheEnrolmentSessionSetsAPasswordAndThenEndsAsync`, `CredentialServiceTests.AUTH_RECOV_002_ALapsedEnrolmentSessionReachesNothingAsync`, `IdentifierServiceTests.REG_IDENT_007_ALapsedEnrolmentSessionReachesNoReplacementAsync` |
+
+- An enrolment session lapsed by time is decided by the unit test alone: over HTTP the first contact lapses with it and the pipeline answers 403 `auth.session.csrfinvalid` first.
+- No path of the truth-table change check is touched; no row. No migration.
+- Public surface: the one overload, with a changelog line for each commit.
+- Parked: questions 176 to 179.
 
 ## 2. Items not implemented
 
@@ -3932,6 +3959,80 @@ part of 389 (3) and waits with 389 on question 48.
   2. The defence before the signed-in refusal as well.
   3. The invitation judged before the defence.
 - **Parked.** With question 169.
+- **Answer:** pending.
+
+**172. Tier 2. `09` `POST /auth/step-up` and AUTH-FACT-002: how "the combinations" travel in the 200 `factorRequired` answer.**
+
+- **Item.** Question 145.
+- **What the code does.** `required` is the distinct factors of the combinations left, in order of first appearance; `assuranceLevel` and `phishingResistant` are what the session has attained; the met case is `status` complete with `required` empty. Which factors go together is lost (a password with a generator, and a passkey alone, flatten to three names).
+- **What the specification says.** The route has the response shape of `/auth/factor`, whose `required` is a flat list; the answer is "200 `factorRequired` with the combinations the challenge still offers".
+- **Readings.**
+  1. The flat list: as built.
+  2. The combinations travel as combinations, which changes the shape `09` gives.
+- **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
+
+**173. Tier 3. AUTH-FACT-002 criterion 7: a loss report already pending at the step-up's `phoneCode` ask.**
+
+- **Item.** Question 145.
+- **The gap.** The chapters give 403 `auth.stepup.required` "with `outcome` `report-loss` or `enrol` only where none is left". The guard can also answer `pending` (a loss report in flight) with no combination, and no chapter names that case for this ask.
+- **What the code does.** It answers the 403 with `outcome` `pending` and `pendingUntil`, as before. No test drives it.
+- **Parked.** That case, left as it is.
+- **Answer:** pending.
+
+**174. Tier 3. AUTH-ABUSE-001: question 135 at a step-up, and which failures are refusals.**
+
+- **Item.** Question 135.
+- **The gap.** D-188 names "a sign-in, a sign-in code's or a device check's path". A step-up's presentation runs through the same two methods, so a fault at a step-up no longer counts or writes `auth.stepup.failed`; the chapters do not name the step-up for the rule. The line between a refusal and a fault is a list of nine codes in `AuthenticationService` (`auth.factor.rejected`, `auth.factor.notpermitted`, `auth.code.invalid`, `auth.code.expired`, `auth.code.replayed` and the four `auth.webauthn.*` refusals); a refusal a factor answers under another code would go uncounted, and no chapter gives the list.
+- **What the code does.** As above: both built, since the path is shared.
+- **Parked.** Nothing further.
+- **Answer:** pending.
+
+**175. Tier 3. AUTH-FACT-004 and CONV-DESIGN-003: what follows a right sign-in code other than the domain lock's refusal.**
+
+- **Item.** Question 134.
+- **The gap.** "A sign-in code presented right is spent whatever follows", and the kept-write list's parenthesis names the domain lock's refusal alone.
+  - A fault judging the lock after a right code rolls the spend back (question 135), so the code stays presentable.
+  - A right code sent to an address given up since (`auth.factor.rejected`, REG-IDENT-006 criterion 6) now commits its spend, its record and its counts in one unit of work, not two.
+  - The lock on the address the sign-in was opened with is judged after the factor's unit of work has committed, for every factor, and is told uncounted; untouched.
+- **What the code does.** As above.
+- **Parked.** Nothing further.
+- **Answer:** pending.
+
+**176. Tier 3. `09` `POST /enrol/begin`, the `10` row `authz.denied` and BFF-ORDER-001 stage 8: an open enrolment session on any other route that requires a session.**
+
+- **Item.** Question 157.
+- **The contradiction.** `POST /enrol/begin` and the `10` row say any other route refuses the enrolment session 403 `authz.denied`. Stage 8 says an endpoint that requires a session refuses a request without one 401 `auth.session.expired`; the section 6 preamble's derived answers hold no 403 `authz.denied`, and only the rows of the removal and the upgrade were given it. FE-API-004 reads a 401 with no `details` as the session having ended.
+- **What the code does.** `GET /account`, `PATCH /account/credentials/{id}`, `POST /account/recoverycodes` and the like answer 401 `auth.session.expired` to a browser holding an open enrolment session and no session. In process, generation, link, linkable and unlink refuse an enrolment authority `authz.denied`.
+- **Parked.** Those routes' answer. `CredentialFlowTests.AUTH_RECOV_002_TheEnrolmentSessionDoesNotReachTheRecoveryCodesAsync` stands asserting 401.
+- **Answer:** pending.
+
+**177. Tier 3. AUTH-FACT-008 and AUTH-RECOV-002: the export's report for the codes a second-step enrolment showed.**
+
+- **Item.** Question 157.
+- **The contradiction.** The route "is reached for the codes a second step enrolled beside a password shows". Completing the enrolment ends the enrolment session, in the unit of work that shows the codes, and an ended one is 401 `auth.session.expired` wherever presented: the report for those codes arrives on an ended session.
+- **What the code does.** The route admits an open enrolment session. When the session ends is as it was.
+- **Parked.** When the enrolment session ends where its second step showed codes.
+- **Answer:** pending.
+
+**178. Tier 3. REG-IDENT-007 and `09` `POST /account/identifiers/{id}/verify`: "for that replace".**
+
+- **Item.** Question 157.
+- **The gap.** `POST /enrol/begin` lists the verify route for the replace of a lost mailbox. Today any open enrolment session, lost mailbox or not, proves any pending verification of its account, an add or a replace a signed-in session staged included. The chapter limits the reach, and the row gives no answer for the excess.
+- **What the code does.** On that route only the ended session's answer changed (401).
+- **Parked.** The narrowing of the reach.
+- **Answer:** pending.
+
+**179. Tier 2. AUTH-FACT-008 criterion 4: `viewedAt` of the set a registration's security step returned.**
+
+- **Item.** Question 140.
+- **What the code does.** The set's row is first written at the terms step, not in the unit of work whose response returned the codes, and is written with `viewedAt` unset.
+- **What the specification says.** Question 140's answer names the generation and the second-step enrolment; criterion 4 asks that the set record when it was viewed.
+- **Readings.**
+  1. The instant the security step returned the codes, staged on the registration session and carried into the set at the terms step.
+  2. The terms step's instant.
+  3. Unset, which fails criterion 4 for such an account.
+- **Parked.** The registration's set, left as it is.
 - **Answer:** pending.
 
 ## 5. Gate result
