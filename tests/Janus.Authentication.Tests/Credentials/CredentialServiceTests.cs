@@ -1027,6 +1027,140 @@ public sealed class CredentialServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-RECOV-006 AC5 and AC2, D-189: an enrolment session whose second step
+    /// showed recovery codes stays open on what it reaches, whatever else it sets
+    /// there, until the report of their export ends it.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_006_AC5_AnEnrolmentSessionThatShowedCodesStaysOpenUntilTheirExportIsReportedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        EnrolmentSession opened = await OpenedAsync(subject);
+        var authority = CredentialAuthority.Of(opened.Id);
+
+        EnrolledCredential confirmed = await ConfirmedAsync(authority);
+
+        _clock.Advance(TimeSpan.FromMinutes(2));
+
+        EnrolmentSession? standing = await Enrolments.FindAsync(opened.Id, TestContext.Current.CancellationToken);
+        bool reached = Succeeded(await Service.SetPasswordAsync(
+            authority,
+            Another,
+            Source,
+            TestContext.Current.CancellationToken));
+        EnrolmentSession? afterPassword = await Enrolments.FindAsync(opened.Id, TestContext.Current.CancellationToken);
+
+        Accepted(await Service.MarkRecoveryCodesExportedAsync(opened.Id, TestContext.Current.CancellationToken));
+
+        Assert.NotNull(confirmed.RecoveryCodes);
+        Assert.NotNull(standing);
+        Assert.True(reached);
+        Assert.NotNull(afterPassword);
+        Assert.Equal(
+            ErrorCodes.SessionExpired,
+            Refused(await Service.MarkRecoveryCodesExportedAsync(opened.Id, TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-006 AC5 and AC2, D-189: the one report of the confirm-saved control
+    /// sets the export against the set the second step showed and ends the enrolment
+    /// session, which then reaches nothing.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_006_AC5_TheReportSetsTheExportAndEndsTheEnrolmentSessionAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        EnrolmentSession opened = await OpenedAsync(subject);
+        var authority = CredentialAuthority.Of(opened.Id);
+        _ = await ConfirmedAsync(authority);
+        _clock.Advance(TimeSpan.FromMinutes(2));
+
+        Accepted(await Service.MarkRecoveryCodesExportedAsync(opened.Id, TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            _clock.GetUtcNow(),
+            (await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.ExportedAt);
+        Assert.Null(await Enrolments.FindAsync(opened.Id, TestContext.Current.CancellationToken));
+        Assert.Equal(
+            ErrorCodes.SessionExpired,
+            Refused(await Service.BeginGeneratorAsync(authority, "Tablet", TestContext.Current.CancellationToken)));
+        Assert.Equal(
+            ErrorCodes.SessionExpired,
+            Refused(await Service.MarkRecoveryCodesExportedAsync(opened.Id, TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// AUTH-RECOV-006 AC5, D-148, D-189: an enrolment that showed no recovery codes
+    /// ends the enrolment session as before, a passkey bringing none.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_006_AC5_AnEnrolmentThatShowedNoCodesEndsTheEnrolmentSessionAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        EnrolmentSession opened = await OpenedAsync(subject);
+        var authority = CredentialAuthority.Of(opened.Id);
+
+        EnrolledCredential enrolled = await PasskeyAsync(authority);
+
+        Assert.Null(enrolled.RecoveryCodes);
+        Assert.Null(await Enrolments.FindAsync(opened.Id, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 AC2, D-189: the report that completes an enrolment session is
+    /// admitted for a restricted account, as the second step it completes is, while
+    /// the account's own session is still refused the same report.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedAccountsReportCompletingAnEnrolmentSessionIsAdmittedAsync()
+    {
+        (SubjectId subject, SessionId _) = await SignedInAsync();
+        _restriction.Restrict(subject);
+        EnrolmentSession opened = await OpenedAsync(subject);
+        _ = await ConfirmedAsync(CredentialAuthority.Of(opened.Id));
+
+        ErrorCode own = Refused(await Service.MarkRecoveryCodesExportedAsync(
+            AccessContext.Of(subject),
+            TestContext.Current.CancellationToken));
+
+        Accepted(await Service.MarkRecoveryCodesExportedAsync(opened.Id, TestContext.Current.CancellationToken));
+
+        Assert.Equal(ErrorCodes.Restricted, own);
+        Assert.Equal(
+            _clock.GetUtcNow(),
+            (await _sets.FindAsync(subject, TestContext.Current.CancellationToken))!.ExportedAt);
+        Assert.Null(await Enrolments.FindAsync(opened.Id, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 AC2, D-189: a WebAuthn enrolment that sets a credential by
+    /// recovery in an enrolment session is admitted for a restricted account, while
+    /// the account's own session is refused the same ceremony.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedAccountEnrolsAKeyByRecoveryInAnEnrolmentSessionAsync()
+    {
+        (SubjectId subject, SessionId session) = await SignedInAsync();
+        _restriction.Restrict(subject);
+        EnrolmentSession opened = await OpenedAsync(subject);
+
+        ErrorCode own = Refused(await Service.BeginKeyAsync(
+            Authority(subject, session),
+            Factor.Passkey,
+            TestContext.Current.CancellationToken));
+
+        EnrolledCredential enrolled = await PasskeyAsync(CredentialAuthority.Of(opened.Id));
+
+        Assert.Equal(ErrorCodes.Restricted, own);
+        Assert.Contains(_authenticators.All, held => held.Id == enrolled.Credential && held.Confirmed);
+    }
+
+    /// <summary>
     /// AUTH-FACT-002b AC3: the upgrade replaces a second-factor security key and
     /// refuses anything else, so a passkey has nothing to be upgraded from.
     /// </summary>
@@ -1733,17 +1867,35 @@ public sealed class CredentialServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken));
     }
 
-    private async ValueTask<EnrolledCredential> ConfirmedAsync(SubjectId subject, SessionId session)
+    private async ValueTask<EnrolledCredential> ConfirmedAsync(SubjectId subject, SessionId session) =>
+        await ConfirmedAsync(Authority(subject, session));
+
+    private async ValueTask<EnrolledCredential> ConfirmedAsync(CredentialAuthority authority)
     {
         GeneratorEnrolment begun = Value(await Service.BeginGeneratorAsync(
-            Authority(subject, session),
+            authority,
             "Phone",
             TestContext.Current.CancellationToken));
 
         return Value(await Service.ConfirmGeneratorAsync(
-            Authority(subject, session),
+            authority,
             begun.Credential,
             Code(begun.Credential),
+            Source,
+            TestContext.Current.CancellationToken));
+    }
+
+    private async ValueTask<EnrolledCredential> PasskeyAsync(CredentialAuthority authority)
+    {
+        CredentialCeremony ceremony = Value(await Service.BeginKeyAsync(
+            authority,
+            Factor.Passkey,
+            TestContext.Current.CancellationToken));
+
+        return Value(await Service.CompleteKeyAsync(
+            authority,
+            Attestation(ceremony.Challenge, synced: true),
+            "This laptop",
             Source,
             TestContext.Current.CancellationToken));
     }

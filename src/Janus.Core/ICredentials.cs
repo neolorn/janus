@@ -159,14 +159,17 @@ public interface ICredentials
     /// <summary>
     /// Records the same under an enrolment session, for the set a second step it
     /// enrolled beside a password showed (AUTH-FACT-008, AUTH-RECOV-006). The set is
-    /// that of the account the enrolment session was opened for.
+    /// that of the account the enrolment session was opened for. Where the session's
+    /// second step showed the codes, the report completes the enrolment and ends the
+    /// session, and is admitted for a restricted account (IDN-ACCT-007).
     /// </summary>
     /// <param name="enrolment">The enrolment session the request arrived under.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
-    /// Nothing, or <c>authz.restricted</c> for a restricted account,
-    /// <c>auth.factor.notenrolled</c> where the account holds no set, or
-    /// <c>auth.session.expired</c> where the enrolment session has ended.
+    /// Nothing, or <c>authz.restricted</c> for a restricted account whose report
+    /// completes no enrolment session, <c>auth.factor.notenrolled</c> where the
+    /// account holds no set, or <c>auth.session.expired</c> where the enrolment
+    /// session has ended.
     /// </returns>
     ValueTask<Result> MarkRecoveryCodesExportedAsync(
         EnrolmentSessionId enrolment,

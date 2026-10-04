@@ -314,7 +314,8 @@ internal static class CredentialEndpoints
 
     // AUTH-FACT-008: the report is about the set of the account whose session the
     // browser holds, or of the account an enrolment session was opened for, whose
-    // second step showed the codes (chapter 09 POST /enrol/begin).
+    // second step showed the codes, which the report then completes and ends
+    // (chapter 09 POST /enrol/begin, AUTH-RECOV-006).
     private static async Task<IResult> MarkRecoveryCodesExportedAsync(
         ICredentials credentials,
         RequestSession browser,

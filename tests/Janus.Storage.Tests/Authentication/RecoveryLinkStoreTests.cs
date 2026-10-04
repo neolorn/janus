@@ -75,6 +75,62 @@ public sealed class RecoveryLinkStoreTests(DatabaseFixture database)
         Assert.Equal(1, completed.Count(answer => answer));
     }
 
+    /// <summary>
+    /// AUTH-RECOV-006 AC5, D-189: that the second step an enrolment session enrolled
+    /// showed recovery codes is kept on the link the session stands on, and read back
+    /// with it; a session that showed none reads none.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_RECOV_006_AC5_ThatASessionShowedRecoveryCodesIsKeptOnItsLinkAsync()
+    {
+        var now = new DateTimeOffset(DateTimeOffset.UtcNow.Ticks / 10 * 10, TimeSpan.Zero);
+        SubjectId subject = await _deployment.AccountAsync(now);
+        SubjectId other = await _deployment.AccountAsync(now);
+        var showing = EnrolmentSessionId.New(TimeProvider.System);
+        var silent = EnrolmentSessionId.New(TimeProvider.System);
+
+        await using (StoreContext issuing = database.Context())
+        {
+            var links = new RecoveryLinkStore(issuing);
+
+            foreach ((SubjectId account, EnrolmentSessionId opened) in new[] { (subject, showing), (other, silent) })
+            {
+                var link = RecoveryLink.Issue(
+                    OpaqueToken.Draw(_deployment.Randomness),
+                    account,
+                    RecoveryPurpose.Enrolment,
+                    now,
+                    TimeSpan.FromHours(1));
+
+                link.Spend(opened, now);
+                await links.ReplaceAsync(link, TestContext.Current.CancellationToken);
+            }
+
+            await issuing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (StoreContext context = database.Context())
+        {
+            await using var work = new UnitOfWork(context);
+            var enrolments = new EnrolmentSessions(new RecoveryLinkStore(context), work, TimeProvider.System);
+
+            Assert.True((await work.BeginAsync(TestContext.Current.CancellationToken)).Match(_ => true, _ => false));
+            Assert.True(await enrolments.HoldAsync(showing, TestContext.Current.CancellationToken));
+            await enrolments.CodesShownAsync(showing, TestContext.Current.CancellationToken);
+            Assert.True((await work.CommitAsync(TestContext.Current.CancellationToken)).Match(() => true, _ => false));
+        }
+
+        await using StoreContext reading = database.Context();
+        await using var read = new UnitOfWork(reading);
+        var standing = new EnrolmentSessions(new RecoveryLinkStore(reading), read, TimeProvider.System);
+
+        Assert.True(await standing.ShowedCodesAsync(showing, TestContext.Current.CancellationToken));
+        Assert.False(await standing.ShowedCodesAsync(silent, TestContext.Current.CancellationToken));
+        Assert.NotNull(
+            (await new RecoveryLinkStore(reading).FindAsync(showing, TestContext.Current.CancellationToken))!
+                .CodesShownAt);
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 

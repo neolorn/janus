@@ -937,7 +937,9 @@ table recovery_links
   column mailbox_lost boolean not null
   column session uuid
   column spent_at timestamp with time zone
+  column codes_shown_at timestamp with time zone
   constraint ck_recovery_links_approver_not_max_uuid CHECK ((approver <> 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
+  constraint ck_recovery_links_codes_shown CHECK (((codes_shown_at IS NULL) OR (session IS NOT NULL)))
   constraint ck_recovery_links_expiry CHECK ((expires_at > issued_at))
   constraint ck_recovery_links_purpose CHECK ((purpose = ANY (ARRAY['enrolment'::text, 'self-service'::text])))
   constraint ck_recovery_links_session CHECK (((session IS NULL) OR (spent_at IS NOT NULL)))

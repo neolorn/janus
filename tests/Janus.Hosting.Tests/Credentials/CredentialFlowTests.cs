@@ -580,6 +580,80 @@ public sealed class CredentialFlowTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-RECOV-006 AC5 and chapter 09 sections 3 and 6, D-189: an enrolment session
+    /// whose second step showed recovery codes stays open on its routes until the
+    /// report of their export, which answers 204, sets the export and ends the
+    /// session, so the same browser is then answered as one holding none.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_RECOV_006_AC5_TheReportOfAnExportCompletesTheEnrolmentSessionAsync()
+    {
+        Browser holder = await SignedInAsync();
+        await LinkedAsync(_deployment.Directory.Created[^1].Subject);
+        Browser browser = await ArrivedAsync();
+        _ = await browser.SendAsync("POST", "/enrol/begin", ("token", Link));
+        Answer begun = await browser.SendAsync("POST", "/account/factors/totp/begin", ("label", Label));
+        Answer confirmed = await browser.SendAsync(
+            "POST",
+            "/account/factors/totp/confirm",
+            ("credentialId", begun.Text("id")),
+            ("code", Code(begun.Text("secret"))));
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(2));
+
+        Answer standing = await browser.SendAsync("POST", "/account/factors/totp/begin", ("label", Label + " 2"));
+        Answer reported = await browser.SendAsync("POST", "/account/recoverycodes/exported");
+        Answer again = await browser.SendAsync("POST", "/account/recoverycodes/exported");
+        Answer ended = await browser.SendAsync("POST", "/account/password", ("password", Replacement));
+
+        Assert.Equal(StatusCodes.Status200OK, confirmed.Status);
+        Assert.Equal(
+            Settings.FactorRecoveryCodesCount.Default,
+            confirmed.Json().GetProperty("recoveryCodes").GetArrayLength());
+        Assert.Equal(StatusCodes.Status200OK, standing.Status);
+        Assert.Equal(StatusCodes.Status204NoContent, reported.Status);
+        Assert.Equal(StatusCodes.Status401Unauthorized, again.Status);
+        Assert.Equal(ErrorCodes.SessionExpired.ToString(), again.Text("code"));
+        Assert.Equal(StatusCodes.Status401Unauthorized, ended.Status);
+        Assert.Equal(ErrorCodes.SessionExpired.ToString(), ended.Text("code"));
+        Assert.Equal(
+            _deployment.Clock.GetUtcNow(),
+            (await holder.SendAsync("GET", "/account"))
+                .Json().GetProperty("recoveryCodes").GetProperty("exportedAt").GetDateTimeOffset());
+    }
+
+    /// <summary>
+    /// IDN-ACCT-007 AC2 and chapter 09 section 6, D-189: the report that completes an
+    /// enrolment session is admitted for a restricted account, where its own session's
+    /// report is refused 403.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task IDN_ACCT_007_AC2_ARestrictedAccountsReportCompletingAnEnrolmentSessionIsAdmittedAsync()
+    {
+        Browser holder = await SignedInAsync();
+        SubjectId subject = _deployment.Directory.Created[^1].Subject;
+        _deployment.Restriction.Restrict(subject);
+        await LinkedAsync(subject);
+        Browser browser = await ArrivedAsync();
+        _ = await browser.SendAsync("POST", "/enrol/begin", ("token", Link));
+        Answer begun = await browser.SendAsync("POST", "/account/factors/totp/begin", ("label", Label));
+        Answer confirmed = await browser.SendAsync(
+            "POST",
+            "/account/factors/totp/confirm",
+            ("credentialId", begun.Text("id")),
+            ("code", Code(begun.Text("secret"))));
+
+        Answer own = await holder.SendAsync("POST", "/account/recoverycodes/exported");
+        Answer reported = await browser.SendAsync("POST", "/account/recoverycodes/exported");
+
+        Assert.Equal(StatusCodes.Status200OK, confirmed.Status);
+        Assert.Equal(StatusCodes.Status403Forbidden, own.Status);
+        Assert.Equal(ErrorCodes.Restricted.ToString(), own.Text("code"));
+        Assert.Equal(StatusCodes.Status204NoContent, reported.Status);
+    }
+
+    /// <summary>
     /// D-148: a browser that never opened an enrolment session reaches none of these,
     /// so the endpoints answer nobody rather than guessing whose account it is.
     /// </summary>

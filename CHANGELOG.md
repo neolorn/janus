@@ -14,6 +14,13 @@ against the public contract of LIB-API-001.
   while registering carries `viewedAt`: the instant the security step returned the
   codes, kept on the registration session and written with the set at the terms
   step, where the set was written with it unset.
+- An enrolment session whose second step showed recovery codes no longer ends when
+  that step is enrolled: it stays open on its routes until
+  `POST /account/recoverycodes/exported` reports the codes saved, which sets
+  `exportedAt` and ends it, or until the end of its lifetime. That report is admitted
+  for a restricted account. An enrolment that showed no codes ends the session as
+  before. The migration `KeepWhenAnEnrolmentSessionShowedRecoveryCodes` adds the
+  column `recovery_links.codes_shown_at`.
 - Over HTTP an enrolment session is resolved only on the routes `POST /enrol/begin`
   lists. On every other route the request goes on as one that carried none and the
   browser keeps its cookie, so a route that requires a session answers 401
