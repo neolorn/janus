@@ -92,6 +92,40 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
     }
 
     /// <summary>
+    /// REG-IDENT-004 AC7: two accounts that added one value no account holds and verify
+    /// it at once on two connections end with one identifier, on the account that takes
+    /// the value's lock first. The second judges under the lock, finds the value held
+    /// and writes nothing, so it never meets the unique constraint.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_004_AC7_TwoAccountsVerifyingOneValueAtOnceLeaveItOnTheFirstAsync()
+    {
+        string entered = Fresh("Yusuf");
+        string canonical = Canonicalised(entered);
+        SubjectId one = await _deployment.AccountAsync(Noon);
+        SubjectId other = await _deployment.AccountAsync(Noon);
+        var holding = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Task<bool> VerifiedAsync(SubjectId subject, TaskCompletionSource? held) =>
+            DecidedAsync(
+                context => Directory(context).LockValuesAsync(
+                    [(IdentifierKind.Email, canonical)],
+                    TestContext.Current.CancellationToken),
+                context => AddedAsync(context, subject, entered, canonical),
+                held);
+
+        Task<bool> first = VerifiedAsync(one, holding);
+        _ = await Task.WhenAny(holding.Task, first);
+        Task<bool> second = VerifiedAsync(other, null);
+        bool[] wrote = await Task.WhenAll(first, second);
+
+        Assert.Equal([true, false], wrote);
+        Assert.Equal(one, await OwnerAsync(IdentifierKind.Email, canonical));
+        Assert.Equal(1, await HoldersAsync(canonical));
+    }
+
+    /// <summary>
     /// REG-IDENT-006 AC7: another account's add of a value, judged while that value's
     /// removal commits, waits for the removal under the value's lock, finds the value
     /// reserved to the account it was removed from and writes nothing; the undo then
@@ -512,19 +546,14 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
             return false;
         }
 
-        var id = IdentifierId.New(TimeProvider.System);
-
         await directory.TakeOnAsync(
             subject,
-            id,
+            IdentifierId.New(TimeProvider.System),
             IdentifierKind.Email,
             entered,
             canonical,
             Noon.AddHours(2),
-            maximum: 5,
             TestContext.Current.CancellationToken);
-        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
-        await directory.ProveAsync(subject, id, Noon.AddHours(2), TestContext.Current.CancellationToken);
 
         return true;
     }
@@ -577,29 +606,12 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
     {
         _ = await HeldPrimaryAsync(subject, Fresh("Primary"));
 
-        IdentifierId id = await WriteAsync(subject, entered, _deployment.Ring);
-
-        await using StoreContext context = database.Context();
-
-        await Directory(context).ProveAsync(subject, id, Noon, TestContext.Current.CancellationToken);
-        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
-
-        return id;
+        return await WriteAsync(subject, entered, _deployment.Ring);
     }
 
-    private async Task<IdentifierId> HeldPrimaryAsync(SubjectId subject, string entered)
-    {
-        IdentifierId id = await WriteAsync(subject, entered, _deployment.Ring);
-
-        await using StoreContext context = database.Context();
-        IdentifierDirectory directory = Directory(context);
-
-        await directory.ProveAsync(subject, id, Noon, TestContext.Current.CancellationToken);
-        await directory.PromoteAsync(subject, id, TestContext.Current.CancellationToken);
-        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
-
-        return id;
-    }
+    // The first verified address an account takes on is its primary.
+    private Task<IdentifierId> HeldPrimaryAsync(SubjectId subject, string entered) =>
+        WriteAsync(subject, entered, _deployment.Ring);
 
     private async Task<IdentifierId> WriteAsync(SubjectId subject, string entered, IKeyRing ring)
     {
@@ -614,7 +626,6 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
             entered,
             Canonicalised(entered),
             Noon,
-            maximum: 5,
             TestContext.Current.CancellationToken);
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
@@ -684,7 +695,8 @@ public sealed class ValueLockTests(DatabaseFixture database) : IClassFixture<Dat
     private IdentifierDirectory Directory(StoreContext context, IKeyRing? ring = null) =>
         new(
             Store(context, ring),
-            new PreferenceStore(context, ring ?? _deployment.Ring, _deployment.Randomness));
+            new PreferenceStore(context, ring ?? _deployment.Ring, _deployment.Randomness),
+            new PendingVerificationStore(context, ring ?? _deployment.Ring, _deployment.Randomness));
 
     private RegistrationDirectory Registration(StoreContext context) =>
         new(

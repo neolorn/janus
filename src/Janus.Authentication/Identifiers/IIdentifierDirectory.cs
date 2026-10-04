@@ -69,7 +69,8 @@ internal interface IIdentifierDirectory
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// One account's identifiers as they stand.
+    /// One account's identifiers as they stand, each add it has pending listed after
+    /// them as an unverified identifier (REG-IDENT-004).
     /// </summary>
     /// <param name="subject">Whose identifiers.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
@@ -102,15 +103,19 @@ internal interface IIdentifierDirectory
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Takes an identifier on to the account, unverified.
+    /// Writes to the account the identifier an add verified, verified from the instant
+    /// it was proved and under the identifier its pending verification was held under.
+    /// The first verified of its kind becomes the primary. A reservation of its value
+    /// to the account ends with the write (REG-IDENT-004, REG-IDENT-006). The add
+    /// counted toward its kind's maximum while it was pending, so the maximum is not
+    /// judged again here.
     /// </summary>
     /// <param name="subject">Whose it is.</param>
-    /// <param name="id">The identifier issued for it.</param>
+    /// <param name="id">The identifier the pending verification was held under.</param>
     /// <param name="kind">Which kind it is.</param>
     /// <param name="entered">The form the person entered.</param>
     /// <param name="canonical">The form it is compared under.</param>
-    /// <param name="at">When it was added.</param>
-    /// <param name="maximum">How many of its kind the account may hold.</param>
+    /// <param name="at">When it was proved.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The work of taking it on.</returns>
     ValueTask TakeOnAsync(
@@ -120,7 +125,6 @@ internal interface IIdentifierDirectory
         string entered,
         string canonical,
         DateTimeOffset at,
-        int maximum,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -197,21 +201,6 @@ internal interface IIdentifierDirectory
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Records that a code or a same-browser link proved an identifier. A reservation
-    /// of its value to the account ends with the write (REG-IDENT-006).
-    /// </summary>
-    /// <param name="subject">Whose it is.</param>
-    /// <param name="id">Which identifier.</param>
-    /// <param name="at">When it was proved.</param>
-    /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>The work of recording it.</returns>
-    ValueTask ProveAsync(
-        SubjectId subject,
-        IdentifierId id,
-        DateTimeOffset at,
-        CancellationToken cancellationToken);
-
-    /// <summary>
     /// Puts a new value in the place of the old one on the same identifier.
     /// </summary>
     /// <param name="subject">Whose it is.</param>
@@ -282,7 +271,8 @@ internal interface IIdentifierDirectory
 
     /// <summary>
     /// Takes an unverified identifier off the account, which leaves nothing behind:
-    /// a value nobody proved holds nothing out of reach and has no undo.
+    /// a value nobody proved holds nothing out of reach and has no undo. A pending add
+    /// is no identifier and is not taken off here; its pending verification is ended.
     /// </summary>
     /// <param name="subject">Whose it is.</param>
     /// <param name="id">Which identifier.</param>

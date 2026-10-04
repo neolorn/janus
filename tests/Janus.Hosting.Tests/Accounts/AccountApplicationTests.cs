@@ -268,6 +268,163 @@ public sealed class AccountApplicationTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-004 AC5 and AC2: an add is listed on the account as an unverified
+    /// identifier and writes none until its code verifies it, and the verified
+    /// identifier keeps the identifier it was listed under.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_004_AC5_AnAddIsListedUnverifiedUnderTheIdentifierItKeepsAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        SubjectId subject = Registered();
+
+        Assert.Equal(
+            StatusCodes.Status202Accepted,
+            (await browser.SendAsync("POST", "/account/identifiers", ("kind", "email"), ("value", Second))).Status);
+
+        string staged = Assert.Single(_deployment.Pending.All).Identifier.Value.ToString();
+        JsonElement listed = Listed(Emails(await browser.SendAsync("GET", "/account")), staged);
+
+        Assert.Equal(Second, listed.GetProperty("value").GetString());
+        Assert.False(listed.GetProperty("verified").GetBoolean());
+        Assert.False(listed.GetProperty("primary").GetBoolean());
+        Assert.Null(await _deployment.Identifiers.OwnerAsync(
+            IdentifierKind.Email,
+            Second,
+            TestContext.Current.CancellationToken));
+
+        Answer verified = await browser.SendAsync(
+            "POST",
+            "/account/identifiers/" + staged + "/verify",
+            ("code", Flow.Code(_deployment, IdentifierKind.Email)));
+
+        Assert.Equal(StatusCodes.Status204NoContent, verified.Status);
+        Assert.True(Listed(Emails(await browser.SendAsync("GET", "/account")), staged)
+            .GetProperty("verified")
+            .GetBoolean());
+        Assert.Empty(_deployment.Pending.All);
+        Assert.Equal(subject, await _deployment.Identifiers.OwnerAsync(
+            IdentifierKind.Email,
+            Second,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// API-CONV-005 AC1, REG-SESS-005 AC5: an add of a value another account holds is
+    /// answered in the bytes an add of a value no account holds is, is listed alike, and
+    /// a code presented for it is answered <c>auth.code.invalid</c> as a wrong code is.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task API_CONV_005_AC1_AnAddOfAHeldValueIsAnsweredAndListedAsAFreshOneIsAsync()
+    {
+        const string held = "held@example.test";
+
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        var other = SubjectId.New(_randomness);
+
+        _ = _deployment.Identifiers.Verified(other, IdentifierKind.Email, held);
+
+        Answer fresh = await browser.SendAsync("POST", "/account/identifiers", ("kind", "email"), ("value", Second));
+        Answer duplicate = await browser.SendAsync("POST", "/account/identifiers", ("kind", "email"), ("value", held));
+
+        Assert.Equal(StatusCodes.Status202Accepted, fresh.Status);
+        Assert.Equal(fresh.Status, duplicate.Status);
+        Assert.Equal(fresh.Body, duplicate.Body);
+
+        string staged = _deployment.Pending.All
+            .Single(pending => string.Equals(pending.Staged.Canonical, held, StringComparison.Ordinal))
+            .Identifier
+            .Value
+            .ToString();
+        JsonElement emails = Emails(await browser.SendAsync("GET", "/account"));
+
+        Assert.Equal(3, emails.GetArrayLength());
+        Assert.False(Listed(emails, staged).GetProperty("verified").GetBoolean());
+
+        Answer presented = await browser.SendAsync(
+            "POST",
+            "/account/identifiers/" + staged + "/verify",
+            ("code", "000000"));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, presented.Status);
+        Assert.Equal(ErrorCodes.CodeInvalid.ToString(), presented.Text("code"));
+        Assert.Equal(other, await _deployment.Identifiers.OwnerAsync(
+            IdentifierKind.Email,
+            held,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-IDENT-004 AC7: the right code for an add whose value another account has
+    /// come to hold is answered 422 <c>auth.code.expired</c>, writes no identifier and
+    /// leaves the add listed.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_004_AC7_TheCodeOfAnAddWhoseValueIsHeldSinceIsAnsweredExpiredAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+        var other = SubjectId.New(_randomness);
+
+        Assert.Equal(
+            StatusCodes.Status202Accepted,
+            (await browser.SendAsync("POST", "/account/identifiers", ("kind", "email"), ("value", Second))).Status);
+
+        string staged = Assert.Single(_deployment.Pending.All).Identifier.Value.ToString();
+        string code = Flow.Code(_deployment, IdentifierKind.Email);
+
+        _ = _deployment.Identifiers.Verified(other, IdentifierKind.Email, Second);
+
+        Answer presented = await browser.SendAsync(
+            "POST",
+            "/account/identifiers/" + staged + "/verify",
+            ("code", code));
+
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, presented.Status);
+        Assert.Equal(ErrorCodes.CodeExpired.ToString(), presented.Text("code"));
+        Assert.False(Listed(Emails(await browser.SendAsync("GET", "/account")), staged)
+            .GetProperty("verified")
+            .GetBoolean());
+        Assert.Equal(other, await _deployment.Identifiers.OwnerAsync(
+            IdentifierKind.Email,
+            Second,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 (D-187): a removal naming a pending add answers 204 and ends its
+    /// pending verification, so the account lists it no longer; nothing is reserved and
+    /// no undo is sent.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_ARemovalNamingAPendingAddEndsItsPendingVerificationAsync()
+    {
+        Browser browser = await Flow.SignedInAsync(_deployment);
+
+        Assert.Equal(
+            StatusCodes.Status202Accepted,
+            (await browser.SendAsync("POST", "/account/identifiers", ("kind", "email"), ("value", Second))).Status);
+
+        string staged = Assert.Single(_deployment.Pending.All).Identifier.Value.ToString();
+
+        Assert.Equal(2, Emails(await browser.SendAsync("GET", "/account")).GetArrayLength());
+
+        Answer removed = await browser.SendAsync("DELETE", "/account/identifiers/" + staged);
+
+        Assert.Equal(StatusCodes.Status204NoContent, removed.Status);
+        Assert.Equal(1, Emails(await browser.SendAsync("GET", "/account")).GetArrayLength());
+        Assert.Empty(_deployment.Pending.All);
+        Assert.Null(await _deployment.Identifiers.ReservedToAsync(
+            IdentifierKind.Email,
+            Second,
+            _deployment.Clock.GetUtcNow(),
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// BFF-SESS-004 AC1 and AC2, IDN-LIFE-008: removing a sign-in identifier is a
     /// privilege change, so the session that made it is given a new secret beside a
     /// new synchronizer token, the secret it held before resolves nothing, and the
@@ -652,6 +809,11 @@ public sealed class AccountApplicationTests : IAsyncDisposable
 
     private static JsonElement Emails(Answer account) =>
         account.Json().GetProperty("identifiers").GetProperty("emails");
+
+    // The listed identifier an identifier names.
+    private static JsonElement Listed(JsonElement emails, string id) =>
+        emails.EnumerateArray().Single(each =>
+            string.Equals(each.GetProperty("id").GetString(), id, StringComparison.OrdinalIgnoreCase));
 
     // How many of the listed sessions say they are the one asking.
     private static int Current(JsonElement listed)

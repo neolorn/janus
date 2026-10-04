@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Janus.Core;
@@ -46,6 +47,17 @@ internal interface IPendingVerificationStore
     /// <returns>The verification, or nothing where none answers to it.</returns>
     ValueTask<PendingVerification?> FindByLinkAsync(
         byte[] fingerprint,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The adds an account has pending, which it lists as unverified identifiers and
+    /// counts toward each kind's maximum until they verify (REG-IDENT-004).
+    /// </summary>
+    /// <param name="subject">Whose adds.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>The pending adds, the earliest staged first; no replace is among them.</returns>
+    ValueTask<IReadOnlyList<PendingVerification>> AddsOfAsync(
+        SubjectId subject,
         CancellationToken cancellationToken);
 
     /// <summary>

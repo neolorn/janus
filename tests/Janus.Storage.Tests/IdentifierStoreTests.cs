@@ -758,7 +758,10 @@ public sealed class IdentifierStoreTests(DatabaseFixture database) : IClassFixtu
     }
 
     private IdentifierDirectory Directory(StoreContext context) =>
-        new(Store(context), new PreferenceStore(context, _deployment.Ring, _deployment.Randomness));
+        new(
+            Store(context),
+            new PreferenceStore(context, _deployment.Ring, _deployment.Randomness),
+            new PendingVerificationStore(context, _deployment.Ring, _deployment.Randomness));
 
     private static string Fresh(string person) =>
         person + "." + Guid.NewGuid().ToString("N") + "@Example.COM";

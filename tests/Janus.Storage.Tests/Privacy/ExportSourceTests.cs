@@ -527,7 +527,10 @@ public sealed class ExportSourceTests(DatabaseFixture database)
                 Preferences(reading),
                 Declared,
                 new OutboxStore(reading, new FixedTime(Noon))),
-            new IdentifierDirectory(Identifiers(reading), Preferences(reading)),
+            new IdentifierDirectory(
+                Identifiers(reading),
+                Preferences(reading),
+                new PendingVerificationStore(reading, _deployment.Ring, _deployment.Randomness)),
             new AuthenticatorStore(reading, _deployment.Ring, _deployment.Randomness),
             new PasswordStore(reading),
             new RecoveryCodeStore(reading, new DataConnections(reading)),

@@ -62,6 +62,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     private readonly PolicyRaiseStoreInMemory _raises = new();
     private readonly ConfigurationInMemory _configuration = new();
     private readonly GovernedSendInMemory _notifications = new();
+    private readonly SendingRestrictionsInMemory _restrictions = new();
     private readonly UnitOfWorkInMemory _work = new();
     private readonly EventsInMemory _events = new();
     private readonly FixedClock _clock = new(Noon);
@@ -75,11 +76,14 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     public IdentifierServiceTests()
     {
         _notifications.Work = _work;
+        _restrictions.Work = _work;
+        _pending.Work = _work;
+        _codes.Work = _work;
+        _directory.Pending = _pending;
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, English);
         _person = SubjectId.New(_randomness);
         _passwords.Hold(_person, Noon);
-
     }
 
     private IdentifierService Service =>
@@ -89,6 +93,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
             _pending,
             new VerificationCodes(_codes, _configuration, _work, _clock, _randomness),
             _notifications,
+            _restrictions,
             Landing.Links,
             _notices,
             _sessions,
@@ -223,6 +228,359 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
             .Select(sent => sent.Destination.Canonical)];
 
         Assert.Equal([Primary, Second], [.. told.Order(StringComparer.Ordinal)]);
+    }
+
+    /// <summary>
+    /// REG-IDENT-004 AC5: an add of a value no account holds writes no identifier until
+    /// it verifies. Until then the account lists it as unverified, under the identifier
+    /// the verified identifier then keeps.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_004_AC5_AnAddWritesNoIdentifierUntilItVerifiesAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        await AddedAsync(Second);
+
+        IdentifierId staged = Assert.Single(_pending.All).Identifier;
+        HeldIdentifier listed = Named(await HeldAsync(), Second);
+
+        Assert.Equal(staged, listed.Id);
+        Assert.False(listed.IsVerified);
+        Assert.True(listed.IsPending);
+        Assert.Null(await _directory.OwnerAsync(
+            IdentifierKind.Email,
+            Second,
+            TestContext.Current.CancellationToken));
+
+        await VerifiedAsync(staged);
+
+        HeldIdentifier written = Named(await HeldAsync(), Second);
+
+        Assert.Equal(staged, written.Id);
+        Assert.True(written.IsVerified);
+        Assert.False(written.IsPending);
+        Assert.Empty(_pending.All);
+        Assert.Equal(_person, await _directory.OwnerAsync(
+            IdentifierKind.Email,
+            Second,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-IDENT-004 AC5, AC3, API-CONV-005: an add of a value another account holds is
+    /// staged and listed as one of a fresh value is, and the account's own notice set
+    /// hears of it alike. No code is sent, the ask is counted as its message would be,
+    /// and the holder is told.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_004_AC5_AnAddOfAHeldValueIsStagedAndListedAlikeAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        var other = SubjectId.New(_randomness);
+
+        _ = _directory.Verified(other, IdentifierKind.Email, Third);
+
+        await AddedAsync(Third);
+
+        PendingVerification staged = Assert.Single(_pending.All);
+        HeldIdentifier listed = Named(await HeldAsync(), Third);
+
+        Assert.Equal(staged.Identifier, listed.Id);
+        Assert.False(listed.IsVerified);
+        Assert.Null(staged.Staged.Link);
+        Assert.False(Outstanding(staged.Identifier).IsAnswerable());
+        Assert.Equal(Third, Assert.Single(_restrictions.Drawn).Destination.Canonical);
+        Assert.Equal(RestrictionPurpose.Verification, _restrictions.Drawn[0].Purpose);
+        Assert.Equal(
+            [MessageKind.AccountExists, MessageKind.IdentifierAdded],
+            _notifications.Mail
+                .Select(sent => sent.Message)
+                .OrderBy(kind => kind.ToString(), StringComparer.Ordinal));
+        Assert.Equal(
+            Primary,
+            _notifications.Mail.Single(sent => sent.Message is MessageKind.IdentifierAdded).Destination.Canonical);
+        Assert.Equal(other, await _directory.OwnerAsync(
+            IdentifierKind.Email,
+            Third,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-IDENT-004 AC6: a kind's identifiers and its pending adds together count
+    /// toward its maximum, and an abandoned add counts no longer.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_004_AC6_APendingAddCountsTowardTheMaximumUntilItIsAbandonedAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 2);
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        await AddedAsync(Second);
+
+        string link = _notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Token();
+
+        Assert.Equal(
+            ErrorCodes.IdentifierMaximum,
+            Refused(await Service.AddAsync(
+                Acting,
+                Stepped(),
+                IdentifierKind.Email,
+                Third,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Accepted(await Service.AbandonAsync(link, TestContext.Current.CancellationToken));
+
+        Assert.Equal(Primary, Assert.Single(await HeldAsync()).Canonical);
+
+        await AddedAsync(Third);
+
+        Assert.Equal(Third, Assert.Single(_pending.All).Staged.Canonical);
+    }
+
+    /// <summary>
+    /// REG-IDENT-004 AC7: of two accounts that add one value no account holds, the one
+    /// that verifies first holds it. The second's right code writes nothing and is
+    /// answered <c>auth.code.expired</c>, its unit of work rolled back and its pending
+    /// add left listed for the sweep.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_004_AC7_TheSecondOfTwoAccountsToVerifyOneValueIsAnsweredExpiredAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        var other = SubjectId.New(_randomness);
+
+        _passwords.Hold(other, Noon);
+        _ = _directory.Verified(other, IdentifierKind.Email, Third);
+
+        await AddedAsync(Fourth);
+
+        IdentifierId mine = Assert.Single(_pending.All).Identifier;
+
+        Accepted(await Service.AddAsync(
+            AccessContext.Of(other),
+            Stepped(other),
+            IdentifierKind.Email,
+            Fourth,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        IdentifierId theirs = _pending.All.Single(pending => pending.Subject == other).Identifier;
+
+        Assert.True(Outstanding(theirs).IsAnswerable());
+
+        Accepted(await Service.VerifyAsync(
+            AccessContext.Of(other),
+            Stepped(other),
+            theirs,
+            Code(theirs),
+            Source,
+            TestContext.Current.CancellationToken));
+
+        string code = Code(mine);
+
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            Refused(await Service.VerifyAsync(
+                Acting,
+                Stepped(),
+                mine,
+                code,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(other, await _directory.OwnerAsync(
+            IdentifierKind.Email,
+            Fourth,
+            TestContext.Current.CancellationToken));
+        Assert.Equal(mine, Assert.Single(_pending.All).Identifier);
+        Assert.False(Named(await HeldAsync(), Fourth).IsVerified);
+        Assert.DoesNotContain(
+            _events.Published,
+            raised => raised is IdentifierAdded added && added.Subject == _person);
+    }
+
+    /// <summary>
+    /// REG-IDENT-004: a press of the add's link from the browser that staged it judges
+    /// the value again as the right code does, so a value held since writes nothing and
+    /// is answered <c>auth.code.expired</c>.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_004_APressForAValueHeldSinceTheAddWritesNothingAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        SessionId browser = Stepped();
+
+        Accepted(await Service.AddAsync(
+            Acting,
+            browser,
+            IdentifierKind.Email,
+            Fourth,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        string link = _notifications.Mail.Last(sent => sent.Message is MessageKind.VerificationLink).Token();
+        var other = SubjectId.New(_randomness);
+
+        _ = _directory.Verified(other, IdentifierKind.Email, Fourth);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            Refused(await Service.LandAsync(browser, link, press: true, Source, TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.False(Named(await HeldAsync(), Fourth).IsVerified);
+        Assert.True(Outstanding(Assert.Single(_pending.All).Identifier).IsAnswerable());
+    }
+
+    /// <summary>
+    /// REG-IDENT-004, CONV-DESIGN-003: an add of a value the account holds already
+    /// writes nothing, so its unit of work is rolled back and it is answered as any
+    /// other add.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_004_AnAddOfAValueTheAccountHoldsIsRolledBackAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Email, Second);
+
+        SessionId session = Stepped();
+
+        _work.Reset();
+
+        Accepted(await Service.AddAsync(
+            Acting,
+            session,
+            IdentifierKind.Email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_pending.All);
+        Assert.Empty(_notifications.Sent);
+    }
+
+    /// <summary>
+    /// REG-SESS-005 AC5, AUTH-FACT-004: a code presented for an add of a value another
+    /// account holds is answered as a wrong code for a value no account holds:
+    /// <c>auth.code.invalid</c> for each try up to the cap, each counted and committed,
+    /// then <c>auth.code.expired</c>. No code verifies it.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_005_AC5_ACodeForAHeldValueAtAnAddIsAnsweredAsAWrongOneAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        var other = SubjectId.New(_randomness);
+
+        _ = _directory.Verified(other, IdentifierKind.Email, Third);
+
+        await AddedAsync(Third);
+
+        IdentifierId staged = Assert.Single(_pending.All).Identifier;
+        SessionId browser = Stepped();
+
+        for (int tried = 0; tried < Settings.CodeVerificationAttempts.Default; tried++)
+        {
+            Assert.Equal(
+                ErrorCodes.CodeInvalid,
+                Refused(await Service.VerifyAsync(
+                    Acting,
+                    browser,
+                    staged,
+                    "000000",
+                    Source,
+                    TestContext.Current.CancellationToken)));
+        }
+
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            Refused(await Service.VerifyAsync(
+                Acting,
+                browser,
+                staged,
+                "000000",
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(Named(await HeldAsync(), Third).IsVerified);
+        Assert.Equal(other, await _directory.OwnerAsync(
+            IdentifierKind.Email,
+            Third,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC14: an ask of a code for a held value at an add is counted
+    /// against the restrictions as its message would be and refused by them alike. The
+    /// refusal is <c>auth.restriction.exceeded</c> and nothing is staged.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC14_AnAddOfAHeldValueTheRestrictionsRefuseStagesNothingAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        var other = SubjectId.New(_randomness);
+
+        _ = _directory.Verified(other, IdentifierKind.Email, Third);
+
+        SessionId session = Stepped();
+
+        _restrictions.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.RestrictionExceeded,
+            Refused(await Service.AddAsync(
+                Acting,
+                session,
+                IdentifierKind.Email,
+                Third,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_pending.All);
+        Assert.Empty(_codes.All);
+        Assert.Equal(Primary, Assert.Single(await HeldAsync()).Canonical);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC14, REG-IDENT-004: asking again for an add of a held value is
+    /// a resend on the same pending verification, counted again as its message would be.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC14_AResendForAHeldValueIsCountedAgainOnTheSameAddAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        var other = SubjectId.New(_randomness);
+
+        _ = _directory.Verified(other, IdentifierKind.Email, Third);
+
+        await AddedAsync(Third);
+        await AddedAsync(Third);
+
+        Assert.Equal(2, _restrictions.Drawn.Count);
+        Assert.False(Outstanding(Assert.Single(_pending.All).Identifier).IsAnswerable());
+        Assert.Single(_notifications.Mail, sent => sent.Message is MessageKind.IdentifierAdded);
     }
 
     /// <summary>
@@ -511,14 +869,185 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-IDENT-006 AC2: a removed address stays out of reach while the undo can
-    /// still restore it, and an account offering it is answered exactly as an account
-    /// offering an address another holds is answered. Once the window has run out the
-    /// address is free.
+    /// REG-IDENT-006 (D-187): a removal naming a pending add ends its pending
+    /// verification as an abandon does. It needs the step-up a removal needs, and it
+    /// leaves no undo, reservation, notice, ended session or event.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_006_ARemovalNamingAPendingAddEndsItAsAnAbandonDoesAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        await AddedAsync(Second);
+
+        IdentifierId staged = Assert.Single(_pending.All).Identifier;
+
+        Assert.Equal(
+            ErrorCodes.StepUpRequired,
+            Refused(await Service.RemoveAsync(
+                Acting,
+                Stale(),
+                staged,
+                Source,
+                TestContext.Current.CancellationToken)));
+        Assert.Single(_pending.All);
+
+        SessionId elsewhere = Stepped();
+        int told = _notifications.Sent.Count;
+        int raised = _events.Published.Count;
+
+        _work.Reset();
+        _directory.Locked.Clear();
+
+        Accepted(await Service.RemoveAsync(
+            Acting,
+            Stepped(),
+            staged,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(1, _work.OutermostCommitted);
+        Assert.Empty(_pending.All);
+        Assert.Empty(_codes.All);
+        Assert.Equal(Primary, Assert.Single(await HeldAsync()).Canonical);
+        Assert.Equal(told, _notifications.Sent.Count);
+        Assert.Equal(raised, _events.Published.Count);
+        Assert.Empty(_directory.Locked);
+        Assert.Null(await _directory.ReservedToAsync(
+            IdentifierKind.Email,
+            Second,
+            _clock.GetUtcNow(),
+            TestContext.Current.CancellationToken));
+        Assert.Null((await _sessions.FindAsync(elsewhere, TestContext.Current.CancellationToken))?.EndedAt);
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 AC7: the verification of another account's add of a value,
+    /// presented once that value's removal has committed, is answered
+    /// <c>auth.code.expired</c> and writes nothing, and the undo then restores the value
+    /// to the account it was removed from.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_006_AC7_AnAddVerifiedOnceTheValueIsReservedWritesNothingAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        await AddedAsync(Fourth);
+
+        IdentifierId staged = Assert.Single(_pending.All).Identifier;
+        string code = Code(staged);
+        var other = SubjectId.New(_randomness);
+
+        _passwords.Hold(other, Noon);
+        _ = _directory.Verified(other, IdentifierKind.Email, Third);
+        IdentifierId theirs = _directory.Verified(other, IdentifierKind.Email, Fourth);
+
+        Accepted(await Service.RemoveAsync(
+            AccessContext.Of(other),
+            Stepped(other),
+            theirs,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        string undo = Undo();
+
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            Refused(await Service.VerifyAsync(
+                Acting,
+                Stepped(),
+                staged,
+                code,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Null(await _directory.OwnerAsync(
+            IdentifierKind.Email,
+            Fourth,
+            TestContext.Current.CancellationToken));
+
+        Accepted(await Service.UndoAsync(undo, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(other, await _directory.OwnerAsync(
+            IdentifierKind.Email,
+            Fourth,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 AC5: a removed address stays reserved while the undo can still
+    /// restore it, and another account adding it is answered as for a held value: the
+    /// add stages a verification no code answers, no code is sent, nobody who holds or
+    /// held the value is told, the ask is counted as its message would be, and the undo
+    /// then restores the value.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task REG_IDENT_006_AC2_AReservedAddressIsAnsweredAsAHeldOneIsAsync()
+    public async Task REG_IDENT_006_AC5_AnAddOfAReservedValueStagesAVerificationNoCodeAnswersAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
+
+        Accepted(await Service.RemoveAsync(
+            Acting,
+            Stepped(),
+            second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        string undo = Undo();
+        var other = SubjectId.New(_randomness);
+
+        _passwords.Hold(other, Noon);
+        _ = _directory.Verified(other, IdentifierKind.Email, Third);
+
+        int told = _notifications.Sent.Count;
+
+        Accepted(await Service.AddAsync(
+            AccessContext.Of(other),
+            Stepped(other),
+            IdentifierKind.Email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        PendingVerification staged = Assert.Single(_pending.All);
+
+        Assert.Equal(Second, staged.Staged.Canonical);
+        Assert.Null(staged.Staged.Link);
+        Assert.False(Outstanding(staged.Identifier).IsAnswerable());
+        Assert.Equal(Second, Assert.Single(_restrictions.Drawn).Destination.Canonical);
+
+        // What went out is the notice the adding account's own set hears of every
+        // addition, and nothing to the value or about it (REG-SESS-005).
+        OutboundMessage heard = Assert.Single(_notifications.Sent.Skip(told));
+
+        Assert.Equal(MessageKind.IdentifierAdded, heard.Message);
+        Assert.Equal(Third, heard.Destination.Canonical);
+        Assert.Null(await _directory.OwnerAsync(
+            IdentifierKind.Email,
+            Second,
+            TestContext.Current.CancellationToken));
+
+        Accepted(await Service.UndoAsync(undo, Source, TestContext.Current.CancellationToken));
+
+        Assert.Equal(_person, await _directory.OwnerAsync(
+            IdentifierKind.Email,
+            Second,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-IDENT-006 AC5: after the undo window the same attempt stages a verification
+    /// a sent code answers.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_006_AC5_AfterTheWindowTheSameAddIsSentACodeThatAnswersAsync()
     {
         _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
         IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
@@ -535,26 +1064,6 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         _passwords.Hold(other, Noon);
         _ = _directory.Verified(other, IdentifierKind.Email, Third);
 
-        int told = _notifications.Sent.Count;
-
-        Accepted(await Service.AddAsync(
-            AccessContext.Of(other),
-            Stepped(other),
-            IdentifierKind.Email,
-            Second,
-            Source,
-            TestContext.Current.CancellationToken));
-
-        // Nothing was staged, so no code can be entered against the address, and the
-        // account asking cannot tell a reserved value from a held one (REG-SESS-005).
-        // Nobody was told either, because a reserved value has no holder to tell.
-        Assert.Empty(_pending.All);
-        Assert.Equal(told, _notifications.Sent.Count);
-        Assert.Null(await _directory.OwnerAsync(
-            IdentifierKind.Email,
-            Second,
-            TestContext.Current.CancellationToken));
-
         _clock.Advance(Settings.IdentifierChangeCoolingOff.Default + TimeSpan.FromMinutes(1));
 
         Accepted(await Service.AddAsync(
@@ -565,7 +1074,24 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
             Source,
             TestContext.Current.CancellationToken));
 
-        Assert.Equal(Second, Assert.Single(_pending.All).Staged.Canonical);
+        PendingVerification staged = Assert.Single(_pending.All);
+
+        Assert.True(Outstanding(staged.Identifier).IsAnswerable());
+        Assert.NotNull(staged.Staged.Link);
+        Assert.Empty(_restrictions.Drawn);
+
+        Accepted(await Service.VerifyAsync(
+            AccessContext.Of(other),
+            Stepped(other),
+            staged.Identifier,
+            Code(staged.Identifier),
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(other, await _directory.OwnerAsync(
+            IdentifierKind.Email,
+            Second,
+            TestContext.Current.CancellationToken));
     }
 
     /// <summary>
@@ -588,8 +1114,8 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
     /// <summary>
     /// REG-SESS-005: a value another account took while the addition waited for the
-    /// value's lock is judged held under that lock, so nothing is staged and nothing
-    /// is written to the account.
+    /// value's lock is judged held under that lock, so the add is staged with a record
+    /// no code answers, nothing is sent to the value and no identifier is written.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
@@ -608,10 +1134,13 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         await AddedAsync(Second);
 
-        Assert.Empty(_pending.All);
+        PendingVerification staged = Assert.Single(_pending.All);
+
+        Assert.False(Outstanding(staged.Identifier).IsAnswerable());
         Assert.DoesNotContain(
-            await HeldAsync(),
-            identifier => string.Equals(identifier.Canonical, Second, StringComparison.Ordinal));
+            _notifications.Mail,
+            sent => sent.Message is MessageKind.VerificationLink);
+        Assert.False(Named(await HeldAsync(), Second).IsVerified);
         Assert.Equal(other, await _directory.OwnerAsync(
             IdentifierKind.Email,
             Second,
@@ -750,13 +1279,14 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// REG-IDENT-006: an undo pressed while the account's own addition of the removed
-    /// value waits unverified restores the value, and the unproved addition ends as an
-    /// abandoned one does, so the account holds the value once.
+    /// REG-IDENT-006, REG-IDENT-004: an undo pressed while the account's own add of the
+    /// removed value is pending restores the value and leaves the add as it stands. The
+    /// add's code then writes nothing and is answered <c>auth.code.expired</c>, the
+    /// account holds the value once, and the add is left to the sweep.
     /// </summary>
     /// <returns>The work of running it.</returns>
     [Fact]
-    public async Task REG_IDENT_006_AnUndoWhileTheValueWaitsUnverifiedAgainRestoresItOnceAsync()
+    public async Task REG_IDENT_006_AnUndoWhileTheValueIsAddedAgainLeavesTheAddToTheSweepAsync()
     {
         _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
         IdentifierId second = _directory.Verified(_person, IdentifierKind.Email, Second);
@@ -772,14 +1302,33 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         await AddedAsync(Second);
 
+        IdentifierId again = Assert.Single(_pending.All).Identifier;
+        string code = Code(again);
+
         Accepted(await Service.UndoAsync(undo, Source, TestContext.Current.CancellationToken));
 
-        HeldIdentifier restored = Named(await HeldAsync(), Second);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            Refused(await Service.VerifyAsync(
+                Acting,
+                Stepped(),
+                again,
+                code,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+
+        HeldIdentifier restored = (await HeldAsync()).Single(identifier =>
+            identifier.IsVerified
+            && string.Equals(identifier.Canonical, Second, StringComparison.Ordinal));
 
         Assert.Equal(second, restored.Id);
-        Assert.True(restored.IsVerified);
-        Assert.Empty(_pending.All);
-        Assert.Empty(_codes.All);
+        Assert.Equal(again, Assert.Single(_pending.All).Identifier);
+        Assert.True(Outstanding(again).IsAnswerable());
     }
 
     /// <summary>
@@ -1084,6 +1633,242 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-007 AC7: a replace whose new value an identifier has come to hold since
+    /// it was staged applies no swap. The right code writes nothing and is answered
+    /// <c>auth.code.expired</c>, the identifier stays as it stood, and a new replace of
+    /// it is refused <c>identity.change.pending</c> while the staged one stands.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC7_AReplaceWhoseNewValueIsHeldSinceAppliesNoSwapAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+
+        SessionId session = Stepped();
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            session,
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        string code = Code(email);
+        var other = SubjectId.New(_randomness);
+
+        _ = _directory.Verified(other, IdentifierKind.Email, Second);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            Refused(await Service.VerifyAsync(
+                Acting,
+                session,
+                email,
+                code,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(Primary, (await HeldAsync()).Single(identifier => identifier.Id == email).Canonical);
+        Assert.Null((await _sessions.FindAsync(session, TestContext.Current.CancellationToken))?.EndedAt);
+        Assert.DoesNotContain(_notifications.Texts, sent => sent.Message is MessageKind.IdentifierRemoved);
+        Assert.Single(_pending.All);
+        Assert.Equal(
+            ErrorCodes.ChangePending,
+            Refused(await Service.ReplaceAsync(
+                Acting,
+                Stepped(),
+                email,
+                Third,
+                Source,
+                TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC7: a replace whose new value an undo has come to reserve to
+    /// another account since it was staged applies no swap either.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC7_AReplaceWhoseNewValueIsReservedSinceAppliesNoSwapAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        string code = Code(email);
+        var other = SubjectId.New(_randomness);
+
+        _passwords.Hold(other, Noon);
+        _ = _directory.Verified(other, IdentifierKind.Email, Third);
+        IdentifierId theirs = _directory.Verified(other, IdentifierKind.Email, Second);
+
+        Accepted(await Service.RemoveAsync(
+            AccessContext.Of(other),
+            Stepped(other),
+            theirs,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            Refused(await Service.VerifyAsync(
+                Acting,
+                Stepped(),
+                email,
+                code,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.Equal(Primary, (await HeldAsync()).Single(identifier => identifier.Id == email).Canonical);
+        Assert.Single(_pending.All);
+    }
+
+    /// <summary>
+    /// REG-SESS-005 AC5, REG-IDENT-007: a replace by a value another account holds is
+    /// staged as one by a fresh value is, with a record no code answers: nothing is sent
+    /// to the value, the ask is counted as its message would be, each code presented is
+    /// answered <c>auth.code.invalid</c> up to the cap and <c>auth.code.expired</c>
+    /// after it, and the identifier stays as it stood.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_005_AC5_ACodeForAHeldValueAtAReplaceIsAnsweredAsAWrongOneAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+
+        var other = SubjectId.New(_randomness);
+
+        _ = _directory.Verified(other, IdentifierKind.Email, Third);
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Third,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.True(Assert.Single(_pending.All).IsReplacement);
+        Assert.False(Outstanding(email).IsAnswerable());
+        Assert.Equal(Third, Assert.Single(_restrictions.Drawn).Destination.Canonical);
+        Assert.DoesNotContain(_notifications.Mail, sent => sent.Message is MessageKind.VerificationLink);
+
+        SessionId browser = Stepped();
+
+        for (int tried = 0; tried < Settings.CodeVerificationAttempts.Default; tried++)
+        {
+            Assert.Equal(
+                ErrorCodes.CodeInvalid,
+                Refused(await Service.VerifyAsync(
+                    Acting,
+                    browser,
+                    email,
+                    "000000",
+                    Source,
+                    TestContext.Current.CancellationToken)));
+        }
+
+        Assert.Equal(
+            ErrorCodes.CodeExpired,
+            Refused(await Service.VerifyAsync(
+                Acting,
+                browser,
+                email,
+                "000000",
+                Source,
+                TestContext.Current.CancellationToken)));
+        Assert.Equal(Primary, (await HeldAsync()).Single(identifier => identifier.Id == email).Canonical);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-004 AC14: an ask of a code for a held value at a replace that the
+    /// restrictions refuse is answered <c>auth.restriction.exceeded</c> and stages
+    /// nothing.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_004_AC14_AReplaceByAHeldValueTheRestrictionsRefuseStagesNothingAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+
+        var other = SubjectId.New(_randomness);
+
+        _ = _directory.Verified(other, IdentifierKind.Email, Third);
+
+        SessionId session = Stepped();
+
+        _restrictions.Refusal = Error.From(ErrorCodes.RestrictionExceeded);
+        _work.Reset();
+
+        Assert.Equal(
+            ErrorCodes.RestrictionExceeded,
+            Refused(await Service.ReplaceAsync(
+                Acting,
+                session,
+                email,
+                Third,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_pending.All);
+        Assert.Empty(_codes.All);
+    }
+
+    /// <summary>
+    /// REG-IDENT-007, CONV-DESIGN-003: a replace by the value the identifier already
+    /// has writes nothing, so its unit of work is rolled back and it is answered as any
+    /// other replace.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AReplaceByTheValueTheAccountHoldsIsRolledBackAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+
+        SessionId session = Stepped();
+
+        _work.Reset();
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            session,
+            email,
+            Primary,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.OutermostCommitted);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Empty(_pending.All);
+        Assert.Empty(_notifications.Sent);
+    }
+
+    /// <summary>
     /// AUTH-FACT-004: the holder of a pending verification's record is the SHA-256 of
     /// its UUID's sixteen bytes in the order of RFC 9562, and the confirmation's is a
     /// holder of its own.
@@ -1263,9 +2048,22 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
             TestContext.Current.CancellationToken));
 
         // What went out is the notice the holder of the number gets, not a code the
-        // account asking could enter (REG-SESS-005).
+        // account asking could enter (REG-SESS-005): the add is staged with a record no
+        // code answers.
         Assert.Equal(MessageKind.AccountExists, Assert.Single(_notifications.Texts).Message);
-        Assert.Empty(_pending.All);
+
+        IdentifierId staged = Assert.Single(_pending.All).Identifier;
+
+        Assert.False(Outstanding(staged).IsAnswerable());
+        Assert.Equal(
+            ErrorCodes.CodeInvalid,
+            Refused(await Service.VerifyAsync(
+                Acting,
+                Stepped(),
+                staged,
+                "000000",
+                Source,
+                TestContext.Current.CancellationToken)));
         Assert.Equal(other, await _directory.OwnerAsync(
             IdentifierKind.Phone,
             Number,
@@ -2109,9 +2907,9 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
-    /// AUTH-ABUSE-004 AC18, REG-SESS-005 AC1: the notice to the holder of a value another
-    /// account offers, refused by a restriction, fails nothing: the asker is answered as
-    /// it would have been, nothing is staged and no unit of work is left open.
+    /// AUTH-ABUSE-004 AC18, REG-SESS-005 AC1: an addition of a value another account
+    /// holds, whose notice to that holder a restriction refuses, is answered as it would
+    /// have been. The add is staged and committed, and the holder keeps the value.
     /// </summary>
     [Fact]
     public async Task AUTH_ABUSE_004_AC18_AnAdditionOfAHeldValueWhoseNoticeIsRefusedIsAnsweredAlikeAsync()
@@ -2137,7 +2935,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         Assert.False(_work.Open);
         Assert.Equal(0, _work.RolledBack);
-        Assert.Empty(_pending.All);
+        Assert.False(Outstanding(Assert.Single(_pending.All).Identifier).IsAnswerable());
         Assert.Empty(_notifications.Carried);
         Assert.Equal(other, await _directory.OwnerAsync(
             IdentifierKind.Email,

@@ -23,6 +23,7 @@ namespace Janus.Authentication.Identifiers;
 /// <param name="pending">Where the verifications outstanding are held.</param>
 /// <param name="codes">Where the code that verifies a staged value is issued and answered.</param>
 /// <param name="sending">The one path every message takes.</param>
+/// <param name="restrictions">What an ask that sends nothing is counted against.</param>
 /// <param name="landing">Where a link the message carries lands.</param>
 /// <param name="notices">What keeps a holder from being told twice in a window.</param>
 /// <param name="sessions">Where the account's sessions are read and ended.</param>
@@ -38,8 +39,8 @@ namespace Janus.Authentication.Identifiers;
 /// verification is the registration's, unchanged: the same code, the same link and
 /// the same rule that only a press from the browser that staged the change proves
 /// anything. What differs is that an account already exists, so what is added is
-/// written to it unverified rather than staged nowhere, and what is given up is held
-/// out of reach while its undo lasts.
+/// held on a pending verification the account lists unverified and written to it only
+/// when it verifies, and what is given up is held out of reach while its undo lasts.
 /// </remarks>
 internal sealed class IdentifierService(
     IIdentifierDirectory directory,
@@ -47,6 +48,7 @@ internal sealed class IdentifierService(
     IPendingVerificationStore pending,
     VerificationCodes codes,
     IGovernedSend sending,
+    ISendingRestrictions restrictions,
     LandingLinks landing,
     INoticeLedger notices,
     ISessionStore sessions,
@@ -170,8 +172,8 @@ internal sealed class IdentifierService(
         // under its lock, taken after the set's and before the code's send is counted.
         await directory.LockValuesAsync([(kind, canonical)], cancellationToken).ConfigureAwait(false);
 
-        Error? refused = await StageAsync(
-                subject, session, held, kind, entered, canonical, maximum, source, cancellationToken)
+        (Error? refused, bool staged) = await StageAsync(
+                subject, session, held, kind, entered, canonical, source, cancellationToken)
             .ConfigureAwait(false);
 
         if (refused is not null)
@@ -179,6 +181,15 @@ internal sealed class IdentifierService(
             await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Failure(refused);
+        }
+
+        // CONV-DESIGN-003: an addition of a value the account holds already wrote
+        // nothing, so its unit of work is rolled back and answered as any other.
+        if (!staged)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success();
         }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
@@ -274,6 +285,11 @@ internal sealed class IdentifierService(
             return Result.Failure(since);
         }
 
+        // REG-IDENT-004, CONV-DESIGN-003: a verification writes an identifier to the
+        // set, so the set's lock is taken before the verification's, the code's and the
+        // value's, as an addition takes them.
+        await directory.HoldAsync(subject, cancellationToken).ConfigureAwait(false);
+
         // D-166 X3: the verification is read under its lock, so every wrong code of many
         // at once is counted, and of two right ones only the first proves it.
         PendingVerification? waiting = await pending
@@ -366,6 +382,9 @@ internal sealed class IdentifierService(
                 return Result.Failure<LinkLanding>(notBegunAgain);
             }
 
+            // CONV-DESIGN-003: the set's lock first, as for a code.
+            await directory.HoldAsync(waiting.Subject, cancellationToken).ConfigureAwait(false);
+
             // D-166 X3: the confirmation is written on the verification as read under its
             // lock, so a code proved at the same moment is seen and the change is applied
             // by whichever of the two comes second; one settled meanwhile has no row.
@@ -442,6 +461,9 @@ internal sealed class IdentifierService(
             return Result.Failure<LinkLanding>(notBegun);
         }
 
+        // CONV-DESIGN-003: the set's lock first, as for a code.
+        await directory.HoldAsync(waiting.Subject, cancellationToken).ConfigureAwait(false);
+
         // D-166 X3: as for the displaced address's confirmation; a press that finds the
         // value proved meanwhile changes nothing, as the press would have before it.
         if (await pending.FindForUpdateAsync(waiting.Identifier, cancellationToken).ConfigureAwait(false)
@@ -504,17 +526,11 @@ internal sealed class IdentifierService(
             return Result.Failure(notBegun);
         }
 
+        // REG-IDENT-004, REG-IDENT-007: what an add or a replace staged is held on its
+        // pending verification alone, so ending that and its records leaves the account
+        // as it stood.
         await EndRecordsAsync(waiting.Identifier, cancellationToken).ConfigureAwait(false);
         await pending.RemoveAsync(waiting.Identifier, cancellationToken).ConfigureAwait(false);
-
-        // What an add wrote to the account goes with the verification it was waiting
-        // on; what a replace staged was never on the account to begin with.
-        if (!waiting.IsReplacement)
-        {
-            await directory
-                .DiscardAsync(waiting.Subject, waiting.Identifier, cancellationToken)
-                .ConfigureAwait(false);
-        }
 
         if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notCommitted)
@@ -792,6 +808,21 @@ internal sealed class IdentifierService(
 
         HeldIdentifier going = held.Find(identifier)!;
 
+        // REG-IDENT-006, D-187: a pending add the account lists is no identifier to
+        // remove. Naming it ends its pending verification as an abandon does, with no
+        // undo, reservation, notice, session ended or event.
+        if (going.IsPending)
+        {
+            // Its row is locked before its records, as a code's presentation locks them.
+            _ = await pending.FindForUpdateAsync(identifier, cancellationToken).ConfigureAwait(false);
+
+            await EndRecordsAsync(identifier, cancellationToken).ConfigureAwait(false);
+            await pending.RemoveAsync(identifier, cancellationToken).ConfigureAwait(false);
+
+            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+                .Match(Result.Success, Result.Failure);
+        }
+
         // REG-IDENT-006: the removal reserves the value under its lock, so an add of it
         // presented meanwhile finds it held or reserved, never free.
         await directory.LockValuesAsync([(going.Kind, going.Canonical)], cancellationToken).ConfigureAwait(false);
@@ -897,16 +928,9 @@ internal sealed class IdentifierService(
             return Result.Failure(Error.From(ErrorCodes.ChangeWindowElapsed));
         }
 
-        // The account may have added the value again and not yet proved it: the undo
-        // restores the value, so the unproved addition ends as an abandoned one does.
-        if (Standing(await directory.HeldAsync(given.Subject, cancellationToken).ConfigureAwait(false), given.Canonical)
-            is { IsVerified: false } again)
-        {
-            await codes.EndAsync(PendingVerification.CodeHolder(again.Id), cancellationToken).ConfigureAwait(false);
-            await pending.RemoveAsync(again.Id, cancellationToken).ConfigureAwait(false);
-            await directory.DiscardAsync(given.Subject, again.Id, cancellationToken).ConfigureAwait(false);
-        }
-
+        // REG-IDENT-004: an add of the value the account staged meanwhile is left as it
+        // stands. The undo's write is what its verification then finds, so it writes
+        // nothing and the add is the sweep's.
         await directory.TakeBackAsync(given.Id, maximum, cancellationToken).ConfigureAwait(false);
 
         HeldIdentifiers held = await directory.HeldAsync(given.Subject, cancellationToken)
@@ -1101,14 +1125,12 @@ internal sealed class IdentifierService(
         // judged under its lock, taken before the code's send is counted.
         await directory.LockValuesAsync([(changing.Kind, canonical)], cancellationToken).ConfigureAwait(false);
 
-        if (await TakenAsync(subject, changing.Kind, canonical, source, cancellationToken)
-            .ConfigureAwait(false))
+        // CONV-DESIGN-003: a replace by a value the account holds already writes nothing,
+        // so its unit of work is rolled back and answered as any other.
+        if (await directory.OwnerAsync(changing.Kind, canonical, cancellationToken).ConfigureAwait(false)
+            == subject)
         {
-            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
-            {
-                return Result.Failure(notCommittedAgain);
-            }
+            await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Success();
         }
@@ -1124,7 +1146,9 @@ internal sealed class IdentifierService(
 
         await pending.AddAsync(waiting, cancellationToken).ConfigureAwait(false);
 
-        if (await SendCodeAsync(waiting, source, cancellationToken).ConfigureAwait(false)
+        // REG-SESS-005, AUTH-ABUSE-004: a held or reserved value is staged as a fresh
+        // one is, and a send the restrictions refuse stages nothing either way.
+        if (await AskAsync(waiting, source, cancellationToken).ConfigureAwait(false)
             is Error refused)
         {
             await work.RollbackAsync().ConfigureAwait(false);
@@ -1351,10 +1375,11 @@ internal sealed class IdentifierService(
             : null;
     }
 
-    // The fresh case and the case where the value is out of reach are one path: the
-    // caller cannot tell which happened and nothing is written either way
-    // (REG-SESS-005, REG-IDENT-004). A value reserved to the account asking is free to
-    // it (REG-IDENT-006). The caller holds the value's lock.
+    // Whether a value is out of the asking account's reach: an account holds it, or an
+    // undo reserves it to another account (REG-SESS-005, REG-IDENT-006). Another
+    // account that holds it is told, once in a window; a reservation tells nobody. A
+    // value reserved to the account asking is free to it. The caller holds the value's
+    // lock.
     private async ValueTask<bool> TakenAsync(
         SubjectId subject,
         IdentifierKind kind,
@@ -1381,70 +1406,75 @@ internal sealed class IdentifierService(
                 && reserved != subject);
     }
 
-    private async ValueTask<Error?> StageAsync(
+    // REG-IDENT-004, REG-IDENT-007, REG-SESS-005: the judgement made again where a
+    // verified value would be written. An identifier has come to hold the value, the
+    // account's own included, or an undo to reserve it to another account. The caller
+    // holds the value's lock.
+    private async ValueTask<bool> HeldSinceAsync(
+        SubjectId subject,
+        IdentifierKind kind,
+        string canonical,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) =>
+        await directory.OwnerAsync(kind, canonical, cancellationToken).ConfigureAwait(false) is not null
+        || (await directory.ReservedToAsync(kind, canonical, now, cancellationToken).ConfigureAwait(false)
+                is SubjectId reserved
+            && reserved != subject);
+
+    // REG-IDENT-004 (D-187): every add is staged as a pending verification that holds
+    // the value, a held or reserved value as a fresh one, and no identifier is written
+    // until it verifies. What comes back beside a refusal is whether anything was
+    // staged or sent, which is false only for a value the account holds already.
+    private async ValueTask<(Error? Refused, bool Staged)> StageAsync(
         SubjectId subject,
         SessionId session,
         HeldIdentifiers held,
         IdentifierKind kind,
         string entered,
         string canonical,
-        int maximum,
         string source,
         CancellationToken cancellationToken)
     {
-        // A value the account already holds unverified is the one it is waiting on,
-        // so asking again sends again rather than starting a second wait.
+        // A value the account already lists as a pending add is the one it is waiting
+        // on, so asking again sends again rather than starting a second wait.
         if (Standing(held, canonical) is HeldIdentifier standing)
         {
             PendingVerification? again = standing.IsVerified
                 ? null
-                : await pending.FindAsync(standing.Id, cancellationToken).ConfigureAwait(false);
+                : await pending.FindForUpdateAsync(standing.Id, cancellationToken).ConfigureAwait(false);
 
             if (again is null)
             {
-                return null;
+                return (null, false);
             }
 
-            if (await SendCodeAsync(again, source, cancellationToken).ConfigureAwait(false)
-                is Error refused)
+            if (await AskAsync(again, source, cancellationToken).ConfigureAwait(false) is Error refused)
             {
-                return refused;
+                return (refused, false);
             }
 
             await pending.RecordAsync(again, cancellationToken).ConfigureAwait(false);
 
-            return null;
+            return (null, true);
         }
-
-        if (await TakenAsync(subject, kind, canonical, source, cancellationToken).ConfigureAwait(false))
-        {
-            return null;
-        }
-
-        var id = IdentifierId.New(time);
-        DateTimeOffset now = time.GetUtcNow();
-
-        await directory
-            .TakeOnAsync(subject, id, kind, entered, canonical, now, maximum, cancellationToken)
-            .ConfigureAwait(false);
 
         var staged = PendingVerification.ToAdd(
             subject,
             session,
-            StagedIdentity.Of(id, kind, entered, canonical),
-            now);
+            StagedIdentity.Of(IdentifierId.New(time), kind, entered, canonical),
+            time.GetUtcNow());
 
         await pending.AddAsync(staged, cancellationToken).ConfigureAwait(false);
 
-        if (await SendCodeAsync(staged, source, cancellationToken).ConfigureAwait(false)
-            is Error sending)
+        if (await AskAsync(staged, source, cancellationToken).ConfigureAwait(false) is Error unasked)
         {
-            return sending;
+            return (unasked, false);
         }
 
         await pending.RecordAsync(staged, cancellationToken).ConfigureAwait(false);
 
-        // REG-IDENT-004 AC3: the set as it stands hears of every addition, once.
+        // REG-IDENT-004 AC3, API-CONV-005: the set as it stands hears of every addition,
+        // once, of a held or reserved value as of a fresh one.
         _ = await TellAsync(
                 held.NoticeSet,
                 subject,
@@ -1454,7 +1484,64 @@ internal sealed class IdentifierService(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        return null;
+        return (null, true);
+    }
+
+    // REG-SESS-005, API-CONV-005: the fresh case and the case where the value is out of
+    // reach are one path. A fresh value is sent its code and its link; a held or
+    // reserved one is given a record no code answers, and nothing is sent to it. Each
+    // is judged at every ask, so a value freed since is sent a code. The caller holds
+    // the value's lock.
+    private async ValueTask<Error?> AskAsync(
+        PendingVerification waiting,
+        string source,
+        CancellationToken cancellationToken)
+    {
+        StagedIdentity staged = waiting.Staged;
+
+        return await TakenAsync(waiting.Subject, staged.Kind, staged.Canonical, source, cancellationToken)
+            .ConfigureAwait(false)
+            ? await WithholdAsync(waiting, source, cancellationToken).ConfigureAwait(false)
+            : await SendCodeAsync(waiting, source, cancellationToken).ConfigureAwait(false);
+    }
+
+    // AUTH-FACT-004, AUTH-ABUSE-004: an ask of a code for a held or reserved value is
+    // judged and counted against the restrictions as its message would be, and refused
+    // by them alike; admitted, the pending verification is given a verification-code
+    // record that lives and counts as a sent code's does and that no code matches.
+    // Nothing is sent, and no link stands for a press to prove.
+    private async ValueTask<Error?> WithholdAsync(
+        PendingVerification waiting,
+        string source,
+        CancellationToken cancellationToken)
+    {
+        StagedIdentity staged = waiting.Staged;
+
+        Result drawn = await restrictions
+            .DrawAsync(
+                new OutboundMessage(
+                    Destination(staged.Kind, staged.Canonical),
+                    MessageKind.VerificationLink,
+                    RestrictionPurpose.Verification,
+                    source,
+                    await LanguageAsync(waiting.Subject, cancellationToken).ConfigureAwait(false))
+                {
+                    Subject = waiting.Subject,
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (drawn.Match(() => (Error?)null, error => error) is Error refused)
+        {
+            return refused;
+        }
+
+        staged.Unlinked();
+
+        return (await codes
+                .WithholdAsync(PendingVerification.CodeHolder(staged.Id), cancellationToken)
+                .ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error);
     }
 
     private async ValueTask<Error?> SendCodeAsync(
@@ -1728,9 +1815,12 @@ internal sealed class IdentifierService(
         }
     }
 
-    // What a completed verification does to the account: an add proves the identifier
-    // it wrote, a replace swaps the value of the one it named, keeps the session it
-    // completed under and holds the displaced value for the undo.
+    // What a completed verification does to the account: an add writes its identifier,
+    // verified, under the pending verification's identifier; a replace swaps the value
+    // of the one it named, keeps the session it completed under and holds the displaced
+    // value for the undo. Either writes nothing and is answered auth.code.expired where
+    // the value has come to be held or reserved since it was staged, and its caller
+    // then rolls the presentation back (REG-IDENT-004, REG-IDENT-007).
     private async ValueTask<Result> SettleAsync(
         PendingVerification waiting,
         SessionId? completing,
@@ -1757,11 +1847,25 @@ internal sealed class IdentifierService(
         }
         else
         {
-            // REG-SESS-005: an add's verification writes under the value's lock.
+            // REG-SESS-005: an add's verification judges and writes under the value's
+            // lock.
             await directory.LockValuesAsync([(staged.Kind, staged.Canonical)], cancellationToken).ConfigureAwait(false);
 
+            if (await HeldSinceAsync(waiting.Subject, staged.Kind, staged.Canonical, now, cancellationToken)
+                .ConfigureAwait(false))
+            {
+                return Result.Failure(Error.From(ErrorCodes.CodeExpired));
+            }
+
             await directory
-                .ProveAsync(waiting.Subject, staged.Id, now, cancellationToken)
+                .TakeOnAsync(
+                    waiting.Subject,
+                    staged.Id,
+                    staged.Kind,
+                    staged.Entered,
+                    staged.Canonical,
+                    now,
+                    cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -1820,6 +1924,14 @@ internal sealed class IdentifierService(
                 [(staged.Kind, staged.Canonical), (displaced.Kind, displaced.Canonical)],
                 cancellationToken)
             .ConfigureAwait(false);
+
+        // REG-IDENT-007: whether the new value is held or reserved is judged again
+        // under its lock, before the swap's first write.
+        if (await HeldSinceAsync(waiting.Subject, staged.Kind, staged.Canonical, now, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            return Result.Failure(Error.From(ErrorCodes.CodeExpired));
+        }
 
         var undo = OpaqueToken.Draw(randomness);
 

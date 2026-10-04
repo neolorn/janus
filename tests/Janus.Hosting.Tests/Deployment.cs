@@ -169,6 +169,7 @@ internal sealed class Deployment : IAsyncDisposable
 
         Signals = new RegistrationSignalsInMemory(Clock);
         Directory = new RegistrationDirectoryInMemory(Identifiers);
+        Identifiers.Pending = Pending;
         Grants = new OidcAuthorizationStoreInMemory(Tokens);
         Provider = new ProviderInMemory(this);
         Organizations = new Janus.Authentication.Tests.Organizations.OrganizationsInMemory(Memberships);

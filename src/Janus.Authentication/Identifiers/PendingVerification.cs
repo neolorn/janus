@@ -6,8 +6,9 @@ using Janus.Core;
 namespace Janus.Authentication.Identifiers;
 
 /// <summary>
-/// An identifier of a live account waiting to be proved: the one an add staged
-/// unverified, or the value a replace will swap in when it proves.
+/// A value a live account is waiting to prove: the one an add will write as an
+/// identifier when it verifies, or the one a replace will swap in. It holds the value
+/// until then, and the account holds no identifier for it.
 /// </summary>
 /// <remarks>
 /// Implements REG-IDENT-004, REG-IDENT-007 and REG-SESS-003. The verification itself
@@ -135,7 +136,8 @@ internal sealed class PendingVerification
     }
 
     /// <summary>
-    /// Stages the verification of an identifier the account has just taken on.
+    /// Stages the verification of a value the account is adding, under the identifier
+    /// the verified identifier then keeps (REG-IDENT-004).
     /// </summary>
     /// <param name="subject">Whose it is.</param>
     /// <param name="browser">The session it was added from.</param>

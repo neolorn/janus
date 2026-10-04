@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -86,6 +87,28 @@ internal sealed class PendingVerificationStore(
             .ConfigureAwait(false);
 
         return record is null ? null : await ReadAsync(record, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask<IReadOnlyList<PendingVerification>> AddsOfAsync(
+        SubjectId subject,
+        CancellationToken cancellationToken)
+    {
+        List<PendingVerificationRecord> records = await context.IdentifierVerifications
+            .Where(pending => pending.Subject == subject && !pending.IsReplacement)
+            .OrderBy(pending => pending.StagedAt)
+            .ThenBy(pending => pending.Identifier)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var adds = new List<PendingVerification>(records.Count);
+
+        foreach (PendingVerificationRecord record in records)
+        {
+            adds.Add(await ReadAsync(record, cancellationToken).ConfigureAwait(false));
+        }
+
+        return adds;
     }
 
     /// <inheritdoc/>

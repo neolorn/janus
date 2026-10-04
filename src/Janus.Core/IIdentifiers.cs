@@ -18,9 +18,11 @@ namespace Janus.Core;
 public interface IIdentifiers
 {
     /// <summary>
-    /// Adds an email or a phone, unverified, and sends a code and a link to it. The
-    /// answer is the same whether or not the value already belongs to an account: a
-    /// value that does receives nothing and its holder is told instead.
+    /// Stages the add of an email or a phone and sends a code and a link to it. The
+    /// account lists the add as an unverified identifier, and the identifier is written
+    /// only when it verifies. The answer is the same whether or not the value already
+    /// belongs to an account: a value that does is staged alike, receives nothing and
+    /// its holder is told instead.
     /// </summary>
     /// <param name="context">Who is asking.</param>
     /// <param name="session">The session the request arrived on.</param>

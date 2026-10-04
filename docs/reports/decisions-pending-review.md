@@ -3664,6 +3664,8 @@ which D-162 does not reverse.
 `ModelTests.REG_ACCT_001_AC2_NoFieldExistsOutsideTheGroupsTheTableNames`, which carries
 the new table's columns and no longer the challenge's two.
 
+**Superseded by D-166.**
+
 ---
 
 ## 116. The configuration store stands, and the area's services are the container's
