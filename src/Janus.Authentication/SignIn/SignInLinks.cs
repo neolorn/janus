@@ -320,7 +320,7 @@ internal sealed class SignInLinks(
             return Result.Success(true);
         }
 
-        if (!await signals.AllowsAsync(factor, number.Canonical, subject, cancellationToken)
+        if (!await signals.AllowsAsync(factor, texted.Value, subject, cancellationToken)
                 .ConfigureAwait(false))
         {
             return Result.Success(false);

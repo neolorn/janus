@@ -72,6 +72,10 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
     private PhoneSignalProvider? _provider;
 
+    // One consideration for the whole of a test, as a request's scope holds one, made at
+    // its first use so that it reads the provider the test declared.
+    private PhoneSignals? _considering;
+
     private INotificationHandler? _replaced;
 
     private ILogger<SendPublisher> _log = NullLogger<SendPublisher>.Instance;
@@ -97,7 +101,7 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         new(_configuration, _ledger, _outbox, _templates, _mail, _sms, _balances, _work, _events, _clock, _randomness)
         {
             Suppliers = _suppliers,
-            Signals = new PhoneSignals(_provider, _signals, _work, _clock),
+            Signals = _considering ??= new PhoneSignals(_provider, _signals, _work, _clock),
             Replaced = _replaced,
             Alerts = _events,
             Log = _log,
@@ -244,8 +248,9 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
 
     /// <summary>
     /// AUTH-FACT-002b AC6: what the deployment can learn about the number is asked for
-    /// before a restricted factor is carried to it, and the answer is written down
-    /// against the entry it was asked for.
+    /// before a restricted factor is carried to it and before the unit of work that
+    /// sends it begins, once, and the answer is written down against the entry it was
+    /// asked for in that unit of work.
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -258,15 +263,66 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         {
             asked.Add(number);
 
+            Assert.False(_work.Open);
             Assert.Empty(_sms.Taken);
 
-            return ValueTask.FromResult(PhoneSignal.Risk);
+            return ValueTask.FromResult(PhoneSignal.Clear);
         });
+
+        Assert.True(await Path.Signals.AllowsAsync(
+            Factor.PhoneLink,
+            Phone.Value,
+            subject,
+            TestContext.Current.CancellationToken));
+        Assert.Empty(_signals.Records);
 
         _ = await SentAsync(Link(subject));
 
         Assert.Equal([Phone.Value], asked);
+        Assert.Equal([(Factor.PhoneLink, PhoneSignal.Clear, subject)], _signals.Records);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b, CONV-DESIGN-003: the provider is the host's callback, so it is
+    /// never asked inside an open transaction. A restricted factor undertaken for a
+    /// number nothing was asked about before the unit of work began is a fault, and
+    /// nothing is recorded or sent.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002b_TheProviderIsNeverAskedInsideAUnitOfWorkAsync()
+    {
+        _provider = new PhoneSignalProvider((_, _) =>
+            throw new Xunit.Sdk.XunitException("The provider was asked inside a unit of work."));
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await SendAsync(Link(), TestContext.Current.CancellationToken));
+
+        Assert.Empty(_signals.Records);
+        Assert.Empty(_outbox.Waiting);
+        Assert.Empty(_sms.Taken);
+    }
+
+    /// <summary>
+    /// AUTH-FACT-002b AC6: a reported change is recorded where it is asked, in a unit of
+    /// work of its own, and the factor is withheld.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTH_FACT_002b_AC6_AReportedChangeIsRecordedWhereItIsAskedAsync()
+    {
+        var subject = new SubjectId(Guid.NewGuid());
+
+        _provider = new PhoneSignalProvider((_, _) => ValueTask.FromResult(PhoneSignal.Risk));
+
+        Assert.False(await Path.Signals.AllowsAsync(
+            Factor.PhoneLink,
+            Phone.Value,
+            subject,
+            TestContext.Current.CancellationToken));
+
         Assert.Equal([(Factor.PhoneLink, PhoneSignal.Risk, subject)], _signals.Records);
+        Assert.Equal((1, 1, false), (_work.Opened, _work.OutermostCommitted, _work.Open));
     }
 
     /// <summary>
@@ -280,6 +336,12 @@ public sealed class SendingGovernanceTests : IAsyncDisposable
         var subject = new SubjectId(Guid.NewGuid());
 
         _provider = new PhoneSignalProvider((_, _) => ValueTask.FromResult(PhoneSignal.Clear));
+
+        Assert.True(await Path.Signals.AllowsAsync(
+            Factor.PhoneLink,
+            Phone.Value,
+            subject,
+            TestContext.Current.CancellationToken));
 
         _ = await SentAsync(Link(subject) with
         {

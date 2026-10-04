@@ -10,6 +10,10 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The phone signal callback is asked before an operation's transaction begins and never
+  inside one. What it answered is recorded in the transaction that undertakes the
+  restricted factor, and a restricted factor undertaken for a number nothing was asked
+  about is a fault.
 - A fault of the library's own in a send's immediate attempt after the commit (a
   setting that does not read, the database failing at the claim or at the outcome) is
   logged and left to the publisher's next pass. The operation answers what it
