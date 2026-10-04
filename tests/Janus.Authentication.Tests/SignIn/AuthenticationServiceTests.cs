@@ -625,6 +625,63 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// IDN-LIFE-009b AC5, AUTH-SESS-009 AC5, AUTH-STEP-002 AC9: a session the account
+    /// held before a membership attached passes no gate once it is downgraded; a factor
+    /// the organization's policy does not permit is refused at the step-up before it is
+    /// verified, right or wrong, and counted; a permitted factor presented then lifts
+    /// the downgrade and leaves what the session had attained as it was.
+    /// </summary>
+    [Fact]
+    public async Task IDN_LIFE_009b_ASessionHeldBeforeTheMembershipIsDowngradedAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Remembered(subject);
+
+        SessionId held = Assert.IsType<SessionId>((await SignedInAsync(subject, Factor.Password, Secret)).Session);
+        Session session = Assert.IsType<Session>(await _live.FindAsync(held, TestContext.Current.CancellationToken));
+        (AssuranceLevel attained, DateTimeOffset attainedAt) = (session.Attained, session.AttainedAt);
+
+        _memberships.Place(subject, Locked);
+        Permits(Factor.Passkey);
+        _clock.Advance(TimeSpan.FromMinutes(1));
+        _ = await _live.DowngradeAsync(subject, _clock.GetUtcNow(), TestContext.Current.CancellationToken);
+
+        Result<SignInProgress> right = await SteppedUpAsync(subject, held, Secret);
+        Result<SignInProgress> wrong = await SteppedUpAsync(subject, held, "not the password at all");
+
+        Assert.Equal(ErrorCodes.FactorNotPermitted, Refused(right));
+        Assert.Equal(ErrorCodes.FactorNotPermitted, Refused(wrong));
+        Assert.Equal([Factor.Password, Factor.Password], _audit.StepUpsFailed.Select(failed => failed.Presented));
+        Assert.Equal(2, _throttle.Counted.Count);
+        Assert.False(session.Counts(session.AttainedAt));
+        Assert.Equal((attained, attainedAt), (session.Attained, session.AttainedAt));
+
+        Permits(Factor.Passkey, Factor.Password);
+        _clock.Advance(TimeSpan.FromMinutes(1));
+
+        _ = Reached(await SteppedUpAsync(subject, held, Secret));
+
+        Assert.True(session.Counts(session.AttainedAt));
+        Assert.Equal(attained, session.Attained);
+
+        void Permits(params Factor[] factors) =>
+            _configuration.Set(
+                Settings.OrganizationPolicy,
+                Locked.ToString(),
+                PolicyOverride.None with { LoginFactors = new HashSet<Factor>(factors) });
+
+        async ValueTask<Result<SignInProgress>> SteppedUpAsync(SubjectId stepping, SessionId on, string password) =>
+            await Service.StepUpAsync(
+                AccessContext.Of(stepping),
+                on,
+                (await BeganAsync(Address)).Challenge,
+                new FactorPresentation(Factor.Password) { Value = password },
+                Source,
+                TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC5, AUTH-FACT-004: a wrong try at a sign-in code is refused with
     /// its count kept, so its transaction is committed and not rolled back.
     /// </summary>

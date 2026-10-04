@@ -97,6 +97,13 @@ internal sealed class Session
     public DateTimeOffset? EndedAt { get; private set; }
 
     /// <summary>
+    /// When it was last downgraded, or nothing where it never was. What it attained
+    /// stays as it was reached, and a gate counts it only where it was attained after
+    /// this instant (AUTH-SESS-009, AUTH-STEP-002).
+    /// </summary>
+    public DateTimeOffset? DowngradedAt { get; private set; }
+
+    /// <summary>
     /// Whether the session passes every gate and the stated floor for its lifetime,
     /// which only the emergency path sets and nothing else does.
     /// </summary>
@@ -176,6 +183,7 @@ internal sealed class Session
     /// <param name="idleExpiry">When it lapses without use.</param>
     /// <param name="absoluteExpiry">When it lapses whatever happens.</param>
     /// <param name="endedAt">When it ended, or nothing while it stands.</param>
+    /// <param name="downgradedAt">When it was last downgraded, or nothing where it never was.</param>
     /// <param name="satisfiesEveryGate">Whether it passes every gate while it lasts.</param>
     /// <param name="breakGlassReason">The reason given at the credential's use, where one was.</param>
     /// <param name="client">The client a registration captured, where it established the session.</param>
@@ -197,6 +205,7 @@ internal sealed class Session
         DateTimeOffset idleExpiry,
         DateTimeOffset absoluteExpiry,
         DateTimeOffset? endedAt,
+        DateTimeOffset? downgradedAt,
         bool satisfiesEveryGate,
         string? breakGlassReason,
         string? client)
@@ -223,6 +232,7 @@ internal sealed class Session
             LastSeen = lastSeen,
             IdleExpiry = idleExpiry,
             EndedAt = endedAt,
+            DowngradedAt = downgradedAt,
             Client = client,
         };
     }
@@ -275,6 +285,8 @@ internal sealed class Session
         // The derived session is a handle on the record, not a credential of its own:
         // it ends when the record does, whatever its own idle clock says
         // (AUTH-SESS-012 AC7, AUTH-OIDC-003).
+        // AUTH-SESS-009: a handle on a record that stands downgraded is downgraded from
+        // its first instant, so deriving one lifts nothing a presentation has not.
         return new Session(
             id,
             Spine,
@@ -286,7 +298,10 @@ internal sealed class Session
             inactivity,
             AbsoluteExpiry,
             SatisfiesEveryGate,
-            BreakGlassReason);
+            BreakGlassReason)
+        {
+            DowngradedAt = Counts(AttainedAt) ? DowngradedAt : at,
+        };
     }
 
     /// <summary>
@@ -327,6 +342,23 @@ internal sealed class Session
             PhishingResistantAt = at;
         }
     }
+
+    /// <summary>
+    /// Downgrades the session: what it attained up to this instant passes no gate until
+    /// a combination the policy in force permits is presented, which lifts it
+    /// (AUTH-SESS-009).
+    /// </summary>
+    /// <param name="at">When the policy in force tightened.</param>
+    public void Downgrade(DateTimeOffset at) => DowngradedAt = at;
+
+    /// <summary>
+    /// Whether a proof made at an instant counts at a gate: one attained after the
+    /// session's last downgrade does, and one attained up to it does not
+    /// (AUTH-STEP-002 step 1).
+    /// </summary>
+    /// <param name="attainedAt">When the proof was made.</param>
+    /// <returns>Whether a gate counts it.</returns>
+    public bool Counts(DateTimeOffset attainedAt) => DowngradedAt is not { } downgraded || attainedAt > downgraded;
 
     /// <summary>
     /// The session ended, by logout, by revocation, or because the account left

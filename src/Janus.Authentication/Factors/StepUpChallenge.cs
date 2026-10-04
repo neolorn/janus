@@ -27,4 +27,12 @@ internal sealed record StepUpChallenge(
     bool PhishingResistant,
     TimeSpan MaximumAge,
     IReadOnlyList<IReadOnlyList<Factor>> Combinations,
-    DateTimeOffset? LossCompletes);
+    DateTimeOffset? LossCompletes)
+{
+    /// <summary>
+    /// Whether the session would meet the gate but for proof it attained up to its last
+    /// downgrade, which a capability names <c>reauthenticate</c> (AUTH-SESS-009,
+    /// AUTHZ-GATE-005).
+    /// </summary>
+    public bool Downgraded { get; init; }
+}

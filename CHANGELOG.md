@@ -10,6 +10,18 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A session records the instant it was last downgraded (`sessions.downgraded_at`,
+  migration `RecordWhenASessionWasDowngraded`). Acknowledging an invitation downgrades
+  every session the account holds, in the transaction that attaches the membership:
+  what a session attained up to then passes no step-up gate until a factor the policy
+  in force permits is presented, which lifts the downgrade, and the attained values
+  stay as they were reached. A capability whose gate the session would meet but for
+  its downgrade carries `requires` `reauthenticate`; any other unmet gate carries
+  `stepup`.
+- At a step-up, a factor the policy in force does not permit is refused with
+  `auth.factor.notpermitted` before it is verified, whether it is right or wrong, and
+  counted as a refused step-up factor. A sign-in goes on refusing it only after the
+  factor has succeeded.
 - A host's assurance report meets a step-up gate only where it reads: a report whose
   instant is after now, or whose level or reachable assurance is not an assurance
   level, meets no gate and is refused with `auth.stepup.required` as a report the

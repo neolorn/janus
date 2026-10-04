@@ -552,6 +552,49 @@ public sealed class InvitationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// AUTH-SESS-009 AC5, IDN-LIFE-009b: every session the account holds is downgraded
+    /// in the transaction that attaches the membership, and a refused acknowledgement
+    /// downgrades none.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_009_AC5_TheAcknowledgementDowngradesEverySessionTheAccountHoldsAsync()
+    {
+        string token = Accepted(await IssueAsync(Customer, Request(phone: Number))).Token!;
+        SubjectId holder = Holder();
+        InvitationId invitation = _invitations.Held[0].Id;
+
+        _ = _identifiers.Verified(holder, IdentifierKind.Phone, Number);
+        _authenticators.Hold(Passkey(holder));
+        Accepted(await OpenAsync(holder, token));
+
+        var session = Session.Begin(
+            SessionId.New(_clock),
+            holder,
+            new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),
+            Somewhere,
+            _clock.GetUtcNow(),
+            TimeSpan.FromDays(1),
+            TimeSpan.FromDays(30),
+            breakGlassReason: null);
+
+        await _sessions.AddAsync(session, Drawn(), Drawn(), TestContext.Current.CancellationToken);
+        _gate.Revoke(_inviter, Customer, Permissions.MembershipManage);
+
+        Assert.Equal(ErrorCodes.InvitationExpired, Failure(await AcknowledgeAsync(holder, invitation)).Code);
+        Assert.Null(session.DowngradedAt);
+
+        _gate.Grant(_inviter, Customer, Permissions.MembershipManage);
+        _clock.Advance(TimeSpan.FromMinutes(1));
+        _work.Reset();
+
+        Accepted(await AcknowledgeAsync(holder, invitation));
+
+        Assert.Equal(_clock.GetUtcNow(), session.DowngradedAt);
+        Assert.False(session.Counts(session.AttainedAt));
+        Assert.Equal((1, 1), (_work.Opened, _work.Committed));
+    }
+
+    /// <summary>
     /// REG-INV-001: an identifier that does not read, or whose words mix scripts, is
     /// refused naming the member it was entered in.
     /// </summary>
@@ -1877,6 +1920,7 @@ public sealed class InvitationServiceTests : IAsyncDisposable
                 new DomainLock(_memberships, _configuration, _domains),
                 _attachments,
                 _mailboxes,
+                _sessions,
                 _notifications,
                 _events,
                 _configuration,

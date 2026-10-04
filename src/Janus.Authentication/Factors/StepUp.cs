@@ -128,7 +128,7 @@ internal static class StepUp
     {
         ArgumentNullException.ThrowIfNull(session);
 
-        if (Proved(session, gate, required, phishingResistant, now))
+        if (Proved(session, gate, required, phishingResistant, now, sinceDowngrade: true))
         {
             return new StepUpChallenge(
                 StepUpOutcome.Satisfied,
@@ -138,6 +138,10 @@ internal static class StepUp
                 [],
                 null);
         }
+
+        // AUTH-SESS-009, AUTHZ-GATE-005: a gate the session would meet but for proof it
+        // attained up to its last downgrade asks the person to authenticate again.
+        bool downgraded = Proved(session, gate, required, phishingResistant, now, sinceDowngrade: false);
 
         IReadOnlyList<IReadOnlyList<Factor>> offered =
             [.. Combinations(held.Usable).Where(combination => Meets(combination, required, phishingResistant))];
@@ -150,7 +154,10 @@ internal static class StepUp
                 phishingResistant,
                 gate.MaximumAge,
                 offered,
-                null);
+                null)
+            {
+                Downgraded = downgraded,
+            };
         }
 
         // Three answers and never a bare refusal: the account has never held what the
@@ -168,7 +175,10 @@ internal static class StepUp
             phishingResistant,
             gate.MaximumAge,
             [],
-            outcome is StepUpOutcome.LossPending ? held.LossCompletes : null);
+            outcome is StepUpOutcome.LossPending ? held.LossCompletes : null)
+        {
+            Downgraded = downgraded,
+        };
     }
 
     // The emergency credential satisfies every gate for the session's lifetime, which
@@ -179,14 +189,25 @@ internal static class StepUp
         Gate gate,
         AssuranceLevel required,
         bool phishingResistant,
-        DateTimeOffset now) =>
+        DateTimeOffset now,
+        bool sinceDowngrade) =>
         session.SatisfiesEveryGate
         || (session.Attained >= required
-            && Within(session.AttainedAt, gate.MaximumAge, now)
+            && Counted(session, session.AttainedAt, gate, now, sinceDowngrade)
             && (!phishingResistant
                 || (session.PhishingResistant
                     && session.PhishingResistantAt is { } proved
-                    && Within(proved, gate.MaximumAge, now))));
+                    && Counted(session, proved, gate, now, sinceDowngrade))));
+
+    // AUTH-STEP-002 step 1: a proof counts where it was earned within the maximum age
+    // and after the session's last downgrade.
+    private static bool Counted(
+        Session session,
+        DateTimeOffset at,
+        Gate gate,
+        DateTimeOffset now,
+        bool sinceDowngrade) =>
+        Within(at, gate.MaximumAge, now) && (!sinceDowngrade || session.Counts(at));
 
     private static bool Within(DateTimeOffset at, TimeSpan age, DateTimeOffset now) =>
         now - at <= age;

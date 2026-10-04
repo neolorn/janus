@@ -3,16 +3,20 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication.Accounts;
+using Janus.Authentication.Factors;
+using Janus.Authentication.Sessions;
 using Janus.Authorization.Tests.Gate;
 using Janus.Core;
 using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Janus.Privacy.Consents;
+using Janus.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -98,6 +102,11 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a change to the account's own settings, by a restricted caller", Decided.Restricted),
         ("a page's record whose subject gave the consent its purpose asks", Decided.Allowed),
         ("a page's record whose subject gave no consent to its purpose", Decided.ConsentRequired),
+        ("a page's record under a bound action, on a session that proved its gate", Decided.Allowed),
+        ("a page's record under a bound action, on a session whose proof has aged", Decided.StepUpRequired),
+        (
+            "a page's record under a bound action, on a session downgraded since it proved its gate",
+            Decided.ReauthenticationRequired),
         ("a grant in the administrative organization, to a member of it", Decided.Allowed),
         ("a grant in the administrative organization, to an account holding no membership of it", Decided.Denied),
     ];
@@ -684,6 +693,15 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     caller,
                     consented: scenario == "a page's record whose subject gave the consent its purpose asks");
 
+            case "a page's record under a bound action, on a session that proved its gate":
+                return await BoundPagedAsync(deployment, caller, TimeSpan.FromMinutes(1), downgraded: false);
+
+            case "a page's record under a bound action, on a session whose proof has aged":
+                return await BoundPagedAsync(deployment, caller, TimeSpan.FromDays(1), downgraded: false);
+
+            case "a page's record under a bound action, on a session downgraded since it proved its gate":
+                return await BoundPagedAsync(deployment, caller, TimeSpan.FromMinutes(1), downgraded: true);
+
             case "a grant in the administrative organization, to a member of it":
             case "a grant in the administrative organization, to an account holding no membership of it":
                 return await AdministeredAsync(
@@ -773,6 +791,109 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Assert.Equal(checkedAlone, Paged(paged));
 
         return checkedAlone;
+    }
+
+    // AUTHZ-GATE-005, AUTH-SESS-009: a page under an action bound to a step-up gate,
+    // asked on the caller's own session. The page names what the action still requires
+    // and the single check refuses it for step-up, or both admit it; a session
+    // downgraded since its proof is asked to authenticate again, and one whose proof has
+    // aged to step up.
+    private async Task<Decided> BoundPagedAsync(
+        Deployment deployment,
+        SubjectId caller,
+        TimeSpan ago,
+        bool downgraded)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        ResourceReference workspace = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+        RoleName publishing = await deployment.RoleAsync(
+            [HostPermissions.Read, HostPermissions.Publish],
+            cancellationToken);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(record, workspace, cancellationToken);
+        await deployment.GrantAsync(
+            GrantSubject.Of(caller), publishing, workspace, false, null, null, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        IServiceProvider services = scope.ServiceProvider;
+
+        var session = Session.Begin(
+            SessionId.New(TimeProvider.System),
+            caller,
+            new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),
+            new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")),
+            Deployment.Noon - ago,
+            TimeSpan.FromDays(7),
+            TimeSpan.FromDays(30),
+            breakGlassReason: null);
+
+        if (downgraded)
+        {
+            session.Downgrade(Deployment.Noon - (ago / 2));
+        }
+
+        IUnitOfWork work = services.GetRequiredService<IUnitOfWork>();
+
+        await work.BeginAsync(cancellationToken);
+
+        // A session is kept under its person's key, which an account written directly
+        // does not have until its first session asks for it.
+        ISubjectKeyStore keys = services.GetRequiredService<ISubjectKeyStore>();
+
+        if (await keys.FindBySubjectAsync(caller, cancellationToken) is null)
+        {
+            await keys.CreateAsync(caller, cancellationToken);
+        }
+
+        await services.GetRequiredService<ISessionStore>().AddAsync(
+            session,
+            RandomNumberGenerator.GetBytes(32),
+            RandomNumberGenerator.GetBytes(32),
+            cancellationToken);
+        await work.CommitAsync(cancellationToken);
+
+        services.GetRequiredService<RequestSession>().Resolved(session);
+
+        IAccessGate gate = services.GetRequiredService<IAccessGate>();
+
+        Capability paged = Rendered(await gate.CapabilitiesAsync(
+                AccessContext.Of(caller),
+                Document,
+                [record.Id],
+                [HostPermissions.Publish],
+                Sources(reading),
+                cancellationToken))
+            .Single();
+
+        Decided checkedAlone = (await gate.RequireAsync(
+                AccessContext.Of(caller),
+                HostPermissions.Publish,
+                record,
+                Sources(reading),
+                cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
+
+        Assert.Contains(HostPermissions.Publish, paged.Can);
+
+        Decided asked = paged.Requires.TryGetValue(
+            HostPermissions.Publish,
+            out IReadOnlySet<CapabilityResidual>? outstanding)
+            ? outstanding.SetEquals([CapabilityResidual.Reauthenticate])
+                ? Decided.ReauthenticationRequired
+                : outstanding.SetEquals([CapabilityResidual.StepUp])
+                    ? Decided.StepUpRequired
+                    : throw new InvalidOperationException("The page asks what the table has no row for.")
+            : Decided.Allowed;
+
+        Assert.Equal(
+            asked is Decided.Allowed ? Decided.Allowed : Decided.StepUpRequired,
+            checkedAlone);
+
+        return asked;
     }
 
     // What the page decides on one record: the consent it still requires, the action

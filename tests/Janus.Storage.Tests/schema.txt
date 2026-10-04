@@ -1034,6 +1034,7 @@ table sessions
   column csrf_fingerprint bytea not null default '\x'::bytea
   column breakglass_reason text
   column client text
+  column downgraded_at timestamp with time zone
   constraint ck_sessions_attained CHECK ((attained = ANY (ARRAY['aal1'::text, 'aal2'::text, 'aal3'::text, 'delegated'::text])))
   constraint ck_sessions_breakglass_reason CHECK (((breakglass_reason IS NULL) OR (satisfies_every_gate AND ((length(btrim(breakglass_reason)) >= 1) AND (length(btrim(breakglass_reason)) <= 1024)))))
   constraint ck_sessions_phishing_resistant CHECK ((phishing_resistant = (phishing_resistant_at IS NOT NULL)))

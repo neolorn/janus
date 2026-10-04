@@ -9119,6 +9119,8 @@ the membership makes the organization's policy the one in force.
 *Chapter text that should change.* Chapter 09 section 6a could name the details of the
 **403** and say that only the factors the policy permits are counted.
 
+**Superseded by D-166.**
+
 ---
 
 ## 247. How the roles of an invitation are granted

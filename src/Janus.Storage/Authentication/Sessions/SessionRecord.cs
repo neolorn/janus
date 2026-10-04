@@ -51,6 +51,9 @@ internal sealed class SessionRecord
     /// <summary>The <c>phishing_resistant_at</c> column.</summary>
     public DateTimeOffset? PhishingResistantAt { get; set; }
 
+    /// <summary>The <c>downgraded_at</c> column.</summary>
+    public DateTimeOffset? DowngradedAt { get; set; }
+
     /// <summary>The <c>origin_browser</c> column.</summary>
     public string OriginBrowser { get; set; } = string.Empty;
 

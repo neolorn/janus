@@ -507,6 +507,52 @@ public sealed class SessionStoreTests(DatabaseFixture database)
     }
 
     /// <summary>
+    /// AUTH-SESS-009 AC5, AC6, AUTH-SESS-001: a downgrade is written on every session of
+    /// the account that has not ended, as the instant it was made, and on no other
+    /// account's; what each session attained reads back as it was reached, and an ended
+    /// session is left alone.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_SESS_009_AC5_ADowngradeIsWrittenOnEveryStandingSessionOfTheAccountAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        SubjectId other = await _deployment.AccountAsync(Noon);
+        Session first = Record(subject);
+        Session second = Record(subject);
+        Session ended = Record(subject);
+        Session elsewhere = Record(other);
+        DateTimeOffset tightened = Noon + TimeSpan.FromMinutes(1);
+
+        ended.End(Noon);
+
+        await WrittenAsync(first, second, ended);
+        await WrittenAsync(elsewhere);
+
+        int downgraded;
+
+        await using (StoreContext writing = database.Context())
+        {
+            downgraded = await Store(writing).DowngradeAsync(
+                subject,
+                tightened,
+                TestContext.Current.CancellationToken);
+        }
+
+        await using StoreContext reading = database.Context();
+        Session? held = await Store(reading).FindAsync(first.Id, TestContext.Current.CancellationToken);
+        Session? another = await Store(reading).FindAsync(second.Id, TestContext.Current.CancellationToken);
+        Session? left = await Store(reading).FindAsync(ended.Id, TestContext.Current.CancellationToken);
+        Session? untouched = await Store(reading).FindAsync(elsewhere.Id, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, downgraded);
+        Assert.Equal(
+            [tightened, tightened, null, null],
+            new[] { held?.DowngradedAt, another?.DowngradedAt, left?.DowngradedAt, untouched?.DowngradedAt });
+        Assert.Equal((first.Attained, first.AttainedAt), (held?.Attained, held?.AttainedAt));
+        Assert.False(held?.Counts(first.AttainedAt));
+    }
+
+    /// <summary>
     /// AUTH-KEY-003 AC1: a session that has passed its absolute expiry is taken by the
     /// sweep, which is one call and no person's task; one that has not is left.
     /// </summary>

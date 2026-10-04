@@ -33,6 +33,13 @@ public enum Decided
     StepUpRequired,
 
     /// <summary>
+    /// The action is refused for step-up, and its capability asks the caller to
+    /// authenticate again: the session would meet the gate but for proof attained before
+    /// its last downgrade (<c>reauthenticate</c>).
+    /// </summary>
+    ReauthenticationRequired,
+
+    /// <summary>
     /// The action is refused where nothing reports what the caller proved
     /// (<c>auth.stepup.unavailable</c>).
     /// </summary>

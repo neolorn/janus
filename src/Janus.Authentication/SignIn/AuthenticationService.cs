@@ -702,6 +702,28 @@ internal sealed class AuthenticationService(
                 ?? Error.From(ErrorCodes.FactorRejected));
         }
 
+        Error? unread = null;
+
+        Policy policy = (await policies.ForAsync(asking, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Policy>(error, ref unread));
+
+        if (unread is not null)
+        {
+            return Result.Failure<SignInOutcome>(unread);
+        }
+
+        // AUTH-STEP-002, IDN-LIFE-009b: a factor the policy in force does not permit
+        // satisfies no gate, so at a step-up it is refused before it is verified, right
+        // or wrong, and counted as a refused step-up factor. A sign-in refuses it only
+        // after the factor succeeds, since its caller is not yet authenticated.
+        if (!policy.LoginFactors.Contains(presented.Factor))
+        {
+            return Result.Failure<SignInOutcome>(
+                await StepUpRefusedAsync(attempt, live, presented.Factor, cancellationToken)
+                    .ConfigureAwait(false)
+                ?? Error.From(ErrorCodes.FactorNotPermitted));
+        }
+
         Error? refusal = null;
 
         _ = (await AcceptsAsync(open, asking, presented, cancellationToken).ConfigureAwait(false))
