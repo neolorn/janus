@@ -629,6 +629,25 @@ public sealed class ConfigurationEndpointTests : IAsyncDisposable
             raised.Details["key"].GetString());
     }
 
+    /// <summary>
+    /// AUTHZ-GATE-006 AC3: a restriction of the caller committed after the gate step and
+    /// before the first write refuses the change of a key and of a declared category's
+    /// retention, each inside its unit of work, and neither is written.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task AUTHZ_GATE_006_AC3_ARestrictionCommittedSinceTheGateStepRefusesAKeyAndARetentionAsync()
+    {
+        Browser administrator = await AuthorisedAsync(Permissions.ConfigurationManage);
+        TimeSpan inactivity = await InForceAsync(Settings.SessionAal2Inactivity);
+
+        await RestrictedSinceTheGateStep.RefusesAsync(_deployment, () => TightenedAsync(administrator));
+        await RestrictedSinceTheGateStep.RefusesAsync(_deployment, () => RetainedAsync(administrator, "P2000D"));
+
+        Assert.Equal(inactivity, await InForceAsync(Settings.SessionAal2Inactivity));
+        Assert.Empty(_deployment.Changes.Written);
+    }
+
     private static Task<Answer> RetainedAsync(Browser browser, string period, string category = "statement") =>
         browser.SendAsync(
             "PUT",

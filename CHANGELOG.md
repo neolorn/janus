@@ -31,6 +31,11 @@ against the public contract of LIB-API-001.
   takedown ask the gate again inside their unit of work before the first write. A
   restriction of the acting account committed after the first ask refuses the change
   `authz.restricted` and leaves nothing written.
+- Changing a configuration key or a declared category's retention through the
+  administration interface asks the gate again inside its unit of work before the first
+  write, and the setting's one writer joins that transaction. A restriction of the
+  acting account committed after the first ask refuses the change `authz.restricted`
+  and leaves nothing written.
 - The shipped mail-server adapter lists an account whose `emailAddress` does not read as
   an email address, or that holds none, with no address, where it failed the listing
   for an account holding none. Reconciliation reads such a listing whole: the account

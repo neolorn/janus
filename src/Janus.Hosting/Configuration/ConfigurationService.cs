@@ -157,9 +157,42 @@ internal sealed class ConfigurationService(
             return Result.Failure(failure);
         }
 
-        return await setting
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written. The one operation
+        // that writes the setting joins this transaction.
+        if (await scope.RefusedAsync(context, Permissions.ConfigurationManage, cancellationToken)
+                .ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
+        }
+
+        Result changed = await setting
             .Apply(new SettingChange(administration, value, reason, challenge, context, cancellationToken))
             .ConfigureAwait(false);
+
+        if (changed.Match<Error?>(() => null, error => error) is Error unchanged)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(unchanged);
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure(notCommitted);
+        }
+
+        return Result.Success();
     }
 
     // OPS-ALERT-004a: the destination keys change through the one way that tells the
@@ -259,6 +292,17 @@ internal sealed class ConfigurationService(
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
             return Result.Failure(notBegun);
+        }
+
+        // AUTHZ-GATE-006, D-183: the gate is asked again inside the unit of work, with the
+        // acting account's row held before any other lock, so a restriction committed since
+        // the gate step refuses the change before anything is written.
+        if (await scope.RefusedAsync(context, Permissions.ConfigurationManage, cancellationToken)
+                .ConfigureAwait(false) is Error since)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(since);
         }
 
         await administration.HoldAsync(family, category, cancellationToken).ConfigureAwait(false);
