@@ -1365,6 +1365,25 @@ Tests: `ValueLockTests.REG_SESS_005_AC6_ATermsStepAndAnotherAccountsAddAtOnceLea
 - `SubjectEraserTests.PRIV_RIGHT_005a_WhatAnAttachedInvitationBindsGoesWithTheSubjectAsync` is renamed with criterion 14; earlier reports cite the old name.
 - After the merge: the fast checks, and `InvitationStoreTests`, `SubjectEraserTests`, `PrivacyRequestStoreTests`, `SchemaContractTests`, `ModelTests` and `MigrationRunTests` (70) passed. No ledger line is owed.
 
+### `part/sending`, merged as `3a7d3d48`: questions 109, 110 and 114, and question 61 for the event rows and the erasure outbox
+
+| Item | Commits | Implements | Tests |
+|---|---|---|---|
+| Question 110: `SmsBalance.BelowFloorAsync` reads the floor and the latest recorded balance (`ISmsBalanceLedger.LatestAsync`), never the gateway; with no balance recorded the floor refuses nothing | `06652a5d` | AUTH-ABUSE-006, INT-SMS-004, AUTH-ABUSE-004 | `SmsBalanceTests.AUTH_ABUSE_006_AC3_TheFloorIsJudgedOnTheLatestRecordedBalanceAsync`, `SmsBalanceTests.AUTH_ABUSE_006_AC3_WithNoBalanceRecordedTheFloorRefusesNothingAsync`, `SmsBalanceTests.AUTH_ABUSE_006_AC2_AtTheFloorTheHardStopIsInForceAsync`, `SmsBalanceTests.INT_SMS_004_APollThatCannotReadTheBalanceFailsAndRecordsNothingAsync`, `SendingGovernanceTests.AUTH_ABUSE_004_AC17_TheFloorIsJudgedOnTheRecordedBalanceAndNeverOnTheGatewayAsync`, `SmsBalanceLedgerTests.AUTH_ABUSE_006_AC3_TheLatestRecordedBalanceIsReadHoweverOldAsync`, `BackgroundJobsTests.INT_SMS_004_TheBalancePollFailsWithoutATransportAsync`, `SendingGovernanceTests.OPS_ALERT_003_AC3_AnAlertIsSentBelowTheFloorAsync` |
+| Question 110: an ask of AUTH-ABUSE-003 the floor refuses (the sign-in link, the recovery link, the notice to an unheld address) rolls back and answers as the ask would have; a code the floor refuses is refused alike whoever holds the number | `89f4038b` | AUTH-ABUSE-003, AUTH-ABUSE-006 | `NonExistenceNoticeTests.AUTH_ABUSE_006_AC4_AnAskTheFloorRefusesIsAnsweredAsItWouldHaveBeenAsync`, `AuthenticationServiceTests.AUTH_ABUSE_006_AC4_ALinkAskTheFloorRefusesIsAnsweredAsItWouldHaveBeenAsync`, `RecoveryServiceTests.AUTH_ABUSE_006_AC4_ARecoveryTheFloorRefusesIsAnsweredAsItWouldHaveBeenAsync`, `RegistrationServiceTests.AUTH_ABUSE_006_AC4_ACodeTheFloorRefusesIsRefusedAlikeWhoeverHoldsTheNumberAsync`, `IdentifierServiceTests.AUTH_ABUSE_006_AC4_AnAdditionWhoseCodeTheFloorRefusesIsRefusedAndRolledBackAsync` |
+| Question 109: a retry the restrictions or the floor refuse removes its row under the claim, releases its count and credit and raises nothing | `397daae8` | AUTH-ABUSE-004, INT-SMS-004 | `SendingGovernanceTests.AUTH_ABUSE_004_AC9_ARetryTheRestrictionsRefuseFailsForGoodAsync`, `SendingGovernanceTests.AUTH_ABUSE_004_AC9_ARetryTheFloorRefusesFailsForGoodAsync`, `SendingGovernanceTests.AUTH_ABUSE_004_AC9_ASendThatHoldsNoCountIsJudgedBeforeItIsCarriedAsync` |
+| Question 114: a send's row is claimed only where it is due; a new row is due from its admission (question 150) | `0521afe1` | CONV-DESIGN-003 | `SendingGovernanceTests.CONV_DESIGN_003_AC9_ARowReleasedAndRescheduledIsNotClaimedBeforeItIsDueAsync`, `SendOutboxTests.CONV_DESIGN_003_AC9_ARowReleasedAndRescheduledIsNotClaimedBeforeItIsDueAsync` |
+| Questions 114 and 61, the event rows: `EventPublisher` claims the row whole, renews before each consumer, writes each take as it happens and the outcome once, all under the claim; migration `ClaimAnEventBeforeItIsOffered` | `5946f3d4` | CONV-DESIGN-003, INF-BG-001, IDN-LIFE-003a | `EventPublisherTests.CONV_DESIGN_003_AC9_AnEventIsClaimedWholeAndItsClaimRenewedBeforeEachConsumerAsync`, `EventPublisherTests.CONV_DESIGN_003_AC9_AnAttemptIsOnePassOverTheConsumersStillToTakeTheEventAsync`, `EventPublisherTests.CONV_DESIGN_003_AC9_APassStopsWhereTheRenewalOfItsClaimChangesNothingAsync`, `EventPublisherTests.CONV_DESIGN_003_AC9_ATakeWhoseClaimWasTakenOverIsNotWrittenAsync`, `EventPublisherTests.CONV_DESIGN_003_AC9_AnEventAnotherPassHoldsIsCarriedOnlyOnceItsClaimTimesOutAsync`, `EventPublisherTests.CONV_DESIGN_003_AConsumerStillRunningWhenTheClaimTimesOutIsAbandonedAsync`, `EventPublisherTests.CONV_DESIGN_003_AC5_ASpentBudgetWhoseAlertCannotBeRaisedRollsBackAsync`, `PendingEventsTests.CONV_DESIGN_003_AC9_AnEventIsClaimedByOnePassAndWrittenOnlyUnderItsClaimAsync`, `PendingEventsTests.CONV_DESIGN_003_AC9_AnEventReleasedAndRescheduledIsNotClaimedBeforeItIsDueAsync`, `PendingEventsTests.IDN_LIFE_003a_AMarkedOrFailedEventIsNotReadAgainAsync` |
+| Questions 114 and 61, the erasure outbox: `OutboxPublisher` works as the event publisher does, the ledger's line among the subscribers; the catch-up pass over completed erasures claims each row first; migration `ClaimAnOutboxRowBeforeItIsDelivered` | `d014b8a3` | CONV-DESIGN-003, INF-BG-001, DR-016 | `OutboxPublisherTests.CONV_DESIGN_003_AC9_ADeliveryIsClaimedWholeAndItsClaimRenewedBeforeEachSubscriberAsync`, `OutboxPublisherTests.CONV_DESIGN_003_AC9_AnAttemptIsOnePassOverTheSubscribersStillToConfirmAsync`, `OutboxPublisherTests.CONV_DESIGN_003_AC9_APassStopsWhereTheRenewalOfItsClaimChangesNothingAsync`, `OutboxPublisherTests.CONV_DESIGN_003_AC9_AConfirmationWhoseClaimWasTakenOverIsNotWrittenAsync`, `OutboxPublisherTests.CONV_DESIGN_003_AC9_ADeliveryAnotherPassHoldsIsCarriedOnlyOnceItsClaimTimesOutAsync`, `OutboxPublisherTests.CONV_DESIGN_003_AC9_ACompletedErasureAnotherPassHoldsIsNotWrittenDownTwiceAsync`, `OutboxPublisherTests.CONV_DESIGN_002_AnExhaustionThatCannotBeRaisedCommitsNothingAsync`, `OutboxStoreTests.CONV_DESIGN_003_AC9_ADeliveryIsClaimedByOnePassAndWrittenOnlyUnderItsClaimAsync`, `OutboxStoreTests.CONV_DESIGN_003_AC9_ADeliveryReleasedAndRescheduledIsNotClaimedBeforeItIsDueAsync`, `OutboxStoreTests.CONV_DESIGN_003_AC9_ACompletedErasureIsClaimedForItsLineByOnePassAsync`, `OutboxStoreTests.DR_016_AC5_TheCompletedErasuresWithoutALineAreReadAPageAtATimeAsync`, `BackgroundJobsTests.CONV_DESIGN_003_AC9_TheWorkerCarriesAnOutboxRowUnderItsClaimAsync` |
+
+- Tests removed or replaced: `SmsBalanceTests.BelowFloorAsync_AReadingInsideTheInterval_DoesNotAskTheGatewayAsync` (the gateway is never asked); `SendingGovernanceTests.AUTH_ABUSE_004_AC9_ARetryIsJudgedByTheRestrictionsAgainAsync` and `SendingGovernanceTests.INT_SMS_004_AC2_ARetryIsHeldBelowTheFloorAsync` (replaced by the two retry tests above).
+- No test decides: the 422 of the floor at each endpoint (the codes come with questions 50 and 51; `ApiStatus` maps the code to 422); the floor at the second-step text code's ask (the same path, read); the release of a spent credit at a refused retry (a retry is judged with its own spend set aside, so the case cannot be arranged); two passes in two processes (the store tests race four claims at one row); an outbox subscriber still running at the claim's timeout (the event publisher's test holds the shared shape).
+- The outcome's instant in both publishers is now the end of the pass. `OutboxPublisher` rolls back where its work faults.
+- Two migrations, each a nullable `claimed_until` column, no hand-written SQL. The snapshot merged without conflict; nothing was regenerated; `has-pending-model-changes` reports none.
+- The merge kept both sides in `CHANGELOG.md`, `RecoveryLinkStoreInMemory.cs` and `AuthenticationServiceTests.cs`. After it: the fast checks, and `SendOutboxTests`, `PendingEventsTests`, `OutboxStoreTests`, `SmsBalanceLedgerTests`, `SchemaContractTests`, `ModelTests` and `MigrationRunTests` (43) passed.
+- No public surface change, no change to permission logic, no ledger line.
+- Parked: nothing unbuilt; questions 148 to 150.
+
 ## 2. Items not implemented
 
 | Item | Reason | Waits on |
@@ -1383,7 +1402,7 @@ Tests: `ValueLockTests.REG_SESS_005_AC6_ATermsStepAndAnotherAccountsAddAtOnceLea
 | The full gate, the pull request for `corrections-4` | The push of `corrections-4` after `d5a7fc0e` was refused in the session's environment | The full gate: section 5. The pull request: the push |
 | Questions 21 to 65, as D-183 answers them | Each was parked until D-183 | Built (section 1, from "the housekeeping before D-183's items" on), but for the rows below |
 | Questions 50 and 51: the codes and the produced and accepted types as endpoint metadata, `endpoints.txt` and its contract test, the test host's check, the lines of `release.sh` and the two scenarios of D-166 382; ledger line 382 | What "the codes its `09` row gives" covers | Nothing: D-187 answers question 119; not yet built |
-| Question 61 for the event rows and the erasure outbox | How a row that tracks several deliveries is claimed | Nothing: D-186 answers question 114; not yet built |
+| Question 61 for the event rows and the erasure outbox | How a row that tracks several deliveries is claimed | Nothing: built (`part/sending`) |
 | Question 31 at an account identifier's add and replace of a held or reserved value; D-166 306 whole, the sweep of pending verifications (REG-IDENT-004 criterion 4, REG-IDENT-007 criterion 4); ledger lines 115 and 306 | Where the staged value is held; what the sweep waits for | Nothing: D-187 answers questions 115 and 116; not yet built |
 | Question 62 at `AppPasswords.CreateAsync`, `RecoveryService.SendAsync`, `ErasureService.CompleteAsync` and the destination keys | A first write outside the unit of work, or two units of work | Nothing: built (`part/gate-sites`) |
 | Question 46: the filter half of the six unmet step-up rows; the seven step-up scenarios of the conformance suite | Criterion 2 against the filter of a bound action; how the suite arranges a provider's report | The filter half: built (`part/authorization`). The seven scenarios: question 144 |
@@ -1528,6 +1547,8 @@ Tests: `ValueLockTests.REG_SESS_005_AC6_ATermsStepAndAnotherAccountsAddAtOnceLea
 | `tests/Janus.Storage.Tests/Authentication/VerificationCodesTests.cs` (`bc42d32c`) | The helper presented a code with no unit of work, and `VerificationCodes.PresentAsync` now decides in its caller's | CONV-DESIGN-003 | Test infrastructure: the helper begins and commits the unit of work around each presentation |
 | `LibraryStructureTests` CONV_ERR_003_AC2, `FailClosedTests` AUTH_PRIN_001_AC3 (`681c2ff2`) | Both refused every catch that carries on; CONV-ERR-003 now exempts the one around work registered to run after the commit | CONV-ERR-003 criterion 2 | The gate tests admit that one catch in `SendPublisher.AttemptAsync` and hold every other |
 | `DeviceStoreInMemory.Locking`, `SendingPath.Log` (`6c9a8044`, `681c2ff2`) | The fakes gave no hook for a change made under the lock, nor the log | CONV-DESIGN-003 criteria 10 and 12 | Test infrastructure: one hook and one property on the fakes |
+| `tests/Janus.Storage.Tests/ModelTests.cs`, `tests/Janus.Storage.Tests/schema.txt` (`5946f3d4`, `d014b8a3`) | The gate lists every column and did not hold `events.claimed_until` and `outbox.claimed_until` | CONV-DESIGN-003 | Test infrastructure: the two columns the claim needs join the lists the gate enforces |
+| `OutboxPublisher`, the catch-up pass (`d014b8a3`) | CONV-DESIGN-003 takes a claim only on a due row "where it carries one"; a completed erasure without its ledger line carries no next attempt | CONV-DESIGN-003, DR-016 criterion 5 | The catch-up claim is conditional on the row being unclaimed or timed out and still a completed erasure without its line, with no due condition |
 
 ## 4. Open questions
 
@@ -3565,6 +3586,39 @@ part of 389 (3) and waits with 389 on question 48.
   1. As built.
   2. A nullable key column or another constraint; `receiptSentAt` as the instant of the send's admission.
 - **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
+
+**148. Tier 2. CONV-DESIGN-003: "a send row's languages".**
+
+- **Item.** Question 114.
+- **What the code has.** A text message owed in several languages is one row for each language; a mail in several languages is one row and one composed message (question 108). No send row tracks more than one delivery, so nothing is renewed and no outcome is written per language.
+- **What the specification says.** A send row's languages are among the deliveries of a row claimed whole, the claim renewed before each.
+- **Readings.**
+  1. The wording binds nothing as the rows stand.
+  2. A text message in several languages is one row with a take for each language: a schema and publisher change.
+- **Parked.** Nothing: the sends stand on reading 1.
+- **Answer:** pending.
+
+**149. Tier 2. AUTH-ABUSE-003 and AUTH-ABUSE-006: what an ask the floor refuses leaves behind.**
+
+- **Item.** Question 110.
+- **What the code does.** The ask answers its ordinary success and its unit of work rolls back. The pending sign-in or recovery link is written after the send is admitted, so nothing else had been written.
+- **What the specification says.** The ask is answered as it would have been.
+- **Readings.**
+  1. As built.
+  2. The pending record is written all the same, so that its absence tells nothing later: the write moves before the send in `SignInLinks` and `RecoveryService`.
+- **Parked.** Nothing: reading 1 is built.
+- **Answer:** pending.
+
+**150. Tier 2. CONV-DESIGN-003 criterion 9, AUTH-ABUSE-004 criterion 19 and question 111: a new send row is due from its admission.**
+
+- **Item.** Question 114, "a claim only on a due row".
+- **What the code did.** A row with an immediate attempt was written due `outbox.retry.initial` later, so the job left it to that attempt. No chapter states the hold-back, and with a claim taken only on a due row the immediate attempt could no longer claim its row.
+- **What the code does.** A new row is due from its admission and the claim decides who carries it. The `sends` job can then claim a row before its immediate attempt does; `IFollowedSend` answers "not taken by its immediate attempt" for a message the pass carried, so a loss report or an alert may count as undelivered though it went.
+- **Readings.**
+  1. As built: the answer is the immediate attempt's own outcome, as question 111 says.
+  2. The hold-back stays and the immediate attempt is exempt from the due condition.
+- **Parked.** Nothing: reading 1 is built. It changes when a row is due, so it is raised here and not recorded as resolved by rule.
 - **Answer:** pending.
 
 ## 5. Gate result
