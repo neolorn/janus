@@ -62,8 +62,8 @@ breaking.
 |---|---|
 | **Model builder API** | Resource type declaration, containment, concealment, sensitivity, purposes with their data and subject categories, roles, the step-up gate and the purpose bound to an action, **derivations**; and the processing read back from them, `DeclaredProcessing` and `DeclaredPurpose` with its `ConsentKind` (`10` section 5.10) |
 | **Permission filter shape** | The expression form and the SQL fragment form |
-| **Operations contract** | The service contracts for every library-owned operation (LIB-API-005), the strongly typed identifiers they take and return (CONV-DESIGN-004), `PrivacyRequestId` among them, the gates one area asks of another, `IAccessGate` and `IStepUpGate`, the governed send every sending area asks of `Janus.Authentication` (`IGovernedSend`, taking an `OutboundMessage`; CONV-LAYOUT-002), the key ring's contract (CONV-CODE-007), which every area borrows a key through and no host implements, and the contract of the mail server in use (CONV-DESIGN-007), which several areas ask and no host implements |
-| **Extension contracts** | The interfaces a host implements or replaces for the library to call: the mail and SMS transports, `INotificationHandler` with `SendRequest` (the admitted message: its kind, destination, subject, language, values and the `SendReference` it is carried under, and none of the restrictions' inputs), `SendDestination` and `SendReference`, and `ISecretSource` (LIB-EXT-001); the declarations and environment seams of LIB-HOST-001; the assurance provider of LIB-HOST-004 |
+| **Operations contract** | The service contracts for every library-owned operation (LIB-API-005), the strongly typed identifiers they take and return (CONV-DESIGN-004), `PrivacyRequestId` and `AppPasswordId` among them, and the value types they take (CONV-DESIGN-004), `RestrictionName` and `DocumentName` among them, the gates one area asks of another, `IAccessGate` and `IStepUpGate`, the unit of work every area writes through (`IUnitOfWork`, with `AfterCommit`, the registration of work to run after the outermost commit; CONV-DESIGN-003) and event publication (`IEvents`, CONV-DESIGN-002), which no host implements, the governed send every sending area asks of `Janus.Authentication` (`IGovernedSend`, taking an `OutboundMessage`; CONV-LAYOUT-002), the key ring's contract (CONV-CODE-007), which every area borrows a key through and no host implements, and the contract of the mail server in use (CONV-DESIGN-007), which several areas ask and no host implements |
+| **Extension contracts** | The interfaces a host implements or replaces for the library to call: the mail and SMS transports, `INotificationHandler`, whose `SendAsync` answers `Result`, with `SendRequest` (the admitted message: its kind, destination, subject, language, values and the `SendReference` it is carried under, and none of the restrictions' inputs), `SendDestination` and `SendReference` (with `TryParse`, since the store reads a reference back from its row), and `ISecretSource` (LIB-EXT-001); the declarations and environment seams of LIB-HOST-001; the assurance provider of LIB-HOST-004 |
 | **Emitted events** | Lifecycle event contracts, including the identifier, restriction and device events of D-146 (`IdentifierAdded`, `IdentifierRemoved`, `IdentifierPrimaryChanged`, `SendingRestrictionChanged`, `SendingRestrictionGranted`, `DeviceVerified`; `10` section 5b), each delivered to every registered `IEventConsumer<TEvent>` from a row written in the emitting transaction, retried under `outbox.retry.*`, and on exhaustion failed with `degradation`; publication is not replaceable (CONV-DESIGN-002). And the host registrations that answer for them: `ISubjectEventSubscriber`, naming the resource types it covers (`Covers`), and `IPurposeHandler`, naming the purposes it handles (`Purposes`) |
 | **Database schema** | All library-owned tables |
 | **Ancestry closure table** | Structure and semantics of `identity.ancestry`, `identity.effective_grants` and `identity.consented_resources` |
@@ -74,7 +74,8 @@ breaking.
 | **HTTP endpoints** | Method, path, body members, status codes and error codes of each endpoint, as `09-api-contract` gives them, held in a committed contract file generated from the endpoint data source |
 | **Configuration keys** | Names, types, scopes and value constraints, and the key families |
 
-*Source: D-026.4, D-017, D-041, D-106, D-146, D-166, D-171, D-172, D-176, D-183*
+*Source: D-026.4, D-017, D-041, D-106, D-146, D-166, D-171, D-172, D-176, D-183, D-186,
+D-187*
 
 The ancestry closure is public because hand-written SQL will query it. It cannot be
 restructured without a major version.
@@ -464,7 +465,7 @@ versions.
 **LIB-TEST-001** — The library SHALL ship a conformance suite a host can run against
 its own configuration, as the `Janus.Conformance` package (`08` CONV-LAYOUT-001).
 
-*Source: P-003, AUTHZ-TEST-001, D-149, D-166, D-172*
+*Source: P-003, AUTHZ-TEST-001, D-149, D-166, D-172, D-187*
 
 The suite answers a report whose findings each carry the check and a `10` section 1 code
 with structured data; it writes no sentence (CONV-CONTENT-001).
@@ -488,7 +489,11 @@ the host (D-172).
 2. It runs the host's truth table, stated as cases over the library's scenarios, through
    both check and filter and asserts agreement; a derived scenario runs once for each
    derivation its type declares, and a finding on one names the relationship
-   (`details.derivation`).
+   (`details.derivation`); a step-up scenario is judged with an assurance provider of
+   the suite's own, set in the deployment's place for those cases alone, which gives
+   each scenario's report or fails to give one, and which the suite leaves unset for the
+   scenario with no provider (`10` section 5.30); a finding on one names the action's
+   gate (`details.gate`).
 3. It validates the model declaration as startup does and reports each kind of failure
    under its own `10` section 1.5 code, stopping at the first; a refusal the model raises
    without a code fails the suite as the startup failure.

@@ -35,7 +35,10 @@ for one job produce case-by-case judgment calls.
 **OPS-DATA-002** — A single accessor SHALL hand out a connection with the ambient
 transaction already attached. Direct connection retrieval SHALL NOT be used.
 
-*Source: D-017, D-166*
+A port that runs hand-written SQL inside a unit of work first saves the changes the
+context tracks, in that transaction, so the query sees them too (CONV-DESIGN-003).
+
+*Source: D-017, D-166, D-186*
 
 Without this, a hand-written query on a separate connection silently misses rows
 written earlier in the same transaction — a nasty and easily-missed bug in financial
@@ -43,7 +46,7 @@ code.
 
 **Acceptance criteria**
 1. A hand-written query inside a transaction sees uncommitted writes from that
-   transaction.
+   transaction, the changes the context tracked before the query included.
 2. Direct connection retrieval is unreachable from the service layer. In
    `Janus.Storage` only the accessor retrieves a connection, besides the listen/notify
    connection of OPS-DATA-003, which runs nothing but `LISTEN`.
@@ -603,7 +606,7 @@ a system administrator one step removed, and the distinction is decorative.
 schema and changed through the management application, audited as permission grants
 are.
 
-*Source: D-071*
+*Source: D-071, D-186*
 
 Previously unstated: the specification required settings to be runtime-changeable and
 audited without saying what stored them.
@@ -621,7 +624,10 @@ settings table be read.
 type and constraints (`10` section 4). A value that does not read SHALL be a fault
 (CONV-ERR-001): the read throws, naming the key and never the stored text, and no
 default and no other value stands in for it. A request fails as `system.fault`
-(BFF-ERR-002) and a job fails its run (`background-job-failed`).
+(BFF-ERR-002) and a job fails its run (`background-job-failed`), save inside work
+registered to run after a commit (a send's immediate attempt), where the fault is
+logged, the row is left to the publisher and the operation answers what it committed
+(CONV-DESIGN-003, CONV-ERR-003, D-186).
 
 **The named restriction set is runtime configuration** (`restrictions`,
 AUTH-ABUSE-004), edited through `GET/PUT/DELETE /admin/restrictions/{name}` exactly as
@@ -653,7 +659,8 @@ protected keys (OPS-CFG-005).
 4. Editing a restriction applies to the next send without a restart, is audited with
    before and after values, and a loosening raises the Normal alert.
 5. A settings row whose value does not read under its key fails, as a fault, the
-   operation or job that reads it; nothing proceeds on the key's default.
+   operation or job that reads it, save work run after a commit, which logs it and
+   leaves its row to the publisher; nothing proceeds on the key's default.
 6. A runtime setting changed in process and one changed over `PUT /admin/config/{key}`
    meet the same rule and produce the same audit record.
 7. In the application, nothing but the one configuration operation writes a runtime
@@ -683,7 +690,7 @@ protected keys (OPS-CFG-005).
 | **Erasure or takedown delivery exhausted its retries** | High | IDN-LIFE-003a |
 | **Certificate renewal failure** | High — a total-outage precursor | INF-TLS-003 |
 | **Host clock drift beyond tolerance** | Normal | INF-HOST-001 |
-| **Degradation: blocklist fallback, failed provider push, undelivered notification, reconciliation drift, registration channel lost, a watch the environment does not supply** | Normal | OPS-OBS-002 |
+| **Degradation: blocklist fallback, failed provider push, undelivered notification (attempts exhausted), reconciliation drift, registration channel lost, a watch the environment does not supply** | Normal | OPS-OBS-002 |
 | **Repeated callback verification failure** | Normal | BFF-MACH-003 |
 | **Unusual rate of duplicate-identifier notifications** — an enumeration probe | Normal | AUTH-ABUSE-003, D-121 |
 | **Privacy-request decision deadline approaching** — `privacy.request.warninglead` before it | Normal | PRIV-RIGHT-002, D-126 |
@@ -699,7 +706,7 @@ protected keys (OPS-CFG-005).
 | **`legal.governinglanguage` changed**, raised beside `protected-setting-changed` | Normal | PRIV-CONS-005, OPS-CFG-004, D-146 |
 | **Governing-language text missing**: a document version cannot publish, or a document that must be shown has no governing-language text | Normal | PRIV-CONS-006, D-146 |
 
-*Source: D-048, D-071, D-121, D-146, D-147, D-153, D-166, D-177*
+*Source: D-048, D-071, D-121, D-146, D-147, D-153, D-166, D-177, D-186*
 
 **Identifiers and thresholds (D-153, D-177).** Every row carries the identifier `10`
 section 5.23 lists, in table order; `AlertRaised` carries it, with the scope where the
@@ -776,8 +783,11 @@ attack.
 
 ---
 
-**OPS-ALERT-003** — Email SHALL carry all conditions; SMS SHALL additionally carry
-high severity. Both SHALL support delivery confirmation.
+**OPS-ALERT-003** — Email SHALL carry all conditions; SMS SHALL additionally carry high
+severity. Both SHALL support delivery confirmation: the alert channels undertake their
+sends in the unit of work they begin as the outermost, commit, and learn from each
+send's immediate attempt whether it was taken; a row gone is not a send taken
+(AUTH-ABUSE-004, D-186).
 
 **Two routing exemptions:**
 - **All alert-class sends are exempt from the send hard-stop**, not balance alerts
@@ -796,7 +806,7 @@ high severity. Both SHALL support delivery confirmation.
 - **Mail-system alerts are SMS-first.** An alert about the mail system arriving by
   mail is a loop — out-of-band routing is the standard rule for exactly this
 
-*Source: D-048, D-071, D-166*
+*Source: D-048, D-071, D-166, D-186*
 
 **Acceptance criteria**
 1. A mail-system failure still produces a reachable alert.
@@ -823,8 +833,11 @@ is called while one is open (CONV-DESIGN-002). The change SHALL then be written 
 update conditional on that value still being in force (CONV-DESIGN-003); where a
 concurrent change committed meanwhile, nothing is written and the change is refused with
 409 `config.change.superseded`, so no destination is replaced without having been told.
+Where the gate, asked again inside the change's unit of work, refuses it
+(AUTHZ-GATE-006), nothing is written either, and the notice already given stands as the
+notice of a change requested and not made (D-186).
 
-*Source: D-083, D-166, D-183*
+*Source: D-083, D-166, D-183, D-186*
 
 **This closes a bypass of the entire alerting system.** An attacker holding one
 stepped-up administrative session could replace the destinations with their own — a
@@ -852,6 +865,9 @@ REG-IDENT-006): the existing security-notice set is always told, whatever the ne
    the other is refused with `config.change.superseded`, writes nothing and raises no
    `alert-destination-changed`, and the destinations the applied change replaced were
    notified before it.
+8. A change the gate refuses when asked again inside its unit of work writes nothing and
+   raises no `alert-destination-changed`, and its previous destinations were notified of
+   the change requested.
 
 ---
 
@@ -904,15 +920,16 @@ individually audited, and rate-limited.
 **Values (D-166).** An export operation is a host-declared permission whose action is
 `export`; the library declares none, and `/privacy/export` is not one. Each admitted
 check, list filter or SQL fragment exercising one is one export. The gate applies, in
-order, restriction, grants, the bound gate (or, while
-`exfiltration.export.stepuprequired` is on, a gate named by the export, costing the
-strictest of the policy's gates), consent, the limit (`exfiltration.export.ratelimit`
-per actor over a rolling hour, refused with `auth.throttled` and `retryAt`) and the
-audit row `authz.access.exported`. A system principal meets no gate and cannot export
-while the key is on. The limit's records of an actor are cleared by the expiry sweep
-once they are an hour old (OPS-OBS-003).
+order, restriction, grants (for a list filter or SQL fragment, the bound gate is asked
+before the grants are rendered into the query, AUTHZ-GATE-005), the bound gate (or,
+while `exfiltration.export.stepuprequired` is on, a gate named by the export, costing
+the strictest of the policy's gates), consent, the limit
+(`exfiltration.export.ratelimit` per actor over a rolling hour, refused with
+`auth.throttled` and `retryAt`) and the audit row `authz.access.exported`. A system
+principal meets no gate and cannot export while the key is on. The limit's records of an
+actor are cleared by the expiry sweep once they are an hour old (OPS-OBS-003).
 
-*Source: D-045, D-166*
+*Source: D-045, D-166, D-187*
 
 Bulk export is the exfiltration mechanism; ordinary browsing is not.
 
@@ -1154,7 +1171,7 @@ removed) under the `password.argon2.*` parameters in force at generation, which 
 carries; the code is held **on paper only**, never in the secrets manager, never
 emailed, never written to a file.
 
-*Source: D-148; D-065, D-133, D-147, D-166, D-170, D-183*
+*Source: D-148; D-065, D-133, D-147, D-166, D-170, D-183, D-186*
 
 **Strength and throttle (D-147, D-153).** The credential SHALL carry at least 128 bits
 of entropy, drawn from a typeable alphabet (no characters that are confused in print or
@@ -1171,7 +1188,10 @@ delay, the check symbols or any hash is looked at, an attempt the limit refuses
 included. The count, and the `auth-failures-sustained` raise below, SHALL be committed
 with the refusal, together with the attempt's other kept writes (its source's failure
 under AUTH-ABUSE-001 and its failed authentication under CONV-LOG-005) and nothing else
-(CONV-DESIGN-003), so both stand. A refusal by the limit is 429 `auth.throttled` with
+(CONV-DESIGN-003), so both stand. A code refused for any cause, the code of the issue
+last used presented again (`auth.breakglass.consumed`) included, is a refused
+credential, and the unit of work that decides the refusal is the one that commits these
+kept writes (D-186). A refusal by the limit is 429 `auth.throttled` with
 `details.retryAt` one hour after the refused attempt. The first attempt the limit
 refuses SHALL raise `auth-failures-sustained` for the reserved account, and with no
 scope where no reserved account exists yet, so an attack on a deployment not yet
@@ -1332,7 +1352,8 @@ by subject identifier; the progress row holds the key version, the key of the la
 table processed (a row's key, not a subject identifier, PRIV-RIGHT-005a, D-174), the processed count, and the started, completed and retired
 instants.
 
-*Source: D-148; D-147; DR-009a, PRIV-RIGHT-005a, OPS-SEC-001, D-166, D-174, D-183*
+*Source: D-148; D-147; DR-009a, PRIV-RIGHT-005a, OPS-SEC-001, D-166, D-174, D-183,
+D-186, D-187*
 
 **The shape.** The operator adds the new key version to the secrets manager as
 current, keeping the previous one, and restarts the application on it; `rotate-kek`,
@@ -1370,21 +1391,25 @@ rotation (suspicion of exposure, DR-009a) is also the case in which the applicat
 may be compromised or down.
 
 **Fingerprint key.** Rotation of the fingerprint key (OPS-SEC-001) uses the same shape
-(new version, resumable batch job, previous version usable until complete, escrow copy)
-but re-computes every stored fingerprint rather than re-wrapping a key. Every stored
-fingerprint whose value is held (identifiers, live reservations, mailboxes, provider
-links) is computed again. What no value stands behind (a held username, an erased
-subject's reservation, the lines of the abuse ledgers, a sign-in in progress) is read
-under its version until it lapses; retirement waits for it, and is refused with
-`model.rotation.notready` and `pending` while a username is held, an erased subject's
-reservation has not lapsed, an abuse ledger line under a previous version still counts,
-or a sign-in in progress carries a fingerprint computed under a previous version
-(AUTH-ABUSE-001). The expiry sweep removes each abuse ledger line once its own check no
-longer reads it (OPS-OBS-003), and a sign-in lapses with its record. At retirement the
-command deletes unspent restriction credit and released username holds under a previous
-version, which lapse on no clock of their own, and nothing else (OPS-MIG-003a criterion
-4). It is documented as heavy and is expected never to run; it exists so that a
-suspected exposure has a procedure rather than an improvisation.
+(new version, added as below, resumable batch job, previous version usable until
+retired, escrow copy) but re-computes every stored fingerprint rather than re-wrapping a
+key. The new version is first added as a version that is not current, and every process
+is restarted on it; only then is it made current, every process restarted again, and the
+command run, so that no process writes a fingerprint under a version another process
+cannot read (CONV-DESIGN-003). Every stored fingerprint whose value is held
+(identifiers, live reservations, mailboxes, provider links) is computed again. What no
+value stands behind (a held username, an erased subject's reservation, the lines of the
+abuse ledgers, a sign-in in progress) is read under its version until it lapses;
+retirement waits for it, and is refused with `model.rotation.notready` and `pending`
+while a username is held, an erased subject's reservation has not lapsed, an abuse
+ledger line under a previous version still counts, or a sign-in in progress carries a
+fingerprint computed under a previous version (AUTH-ABUSE-001). The expiry sweep removes
+each abuse ledger line once its own check no longer reads it (OPS-OBS-003), and a
+sign-in lapses with its record. At retirement the command deletes unspent restriction
+credit and released username holds under a previous version, which lapse on no clock of
+their own, and nothing else (OPS-MIG-003a criterion 4). It is documented as heavy and is
+expected never to run; it exists so that a suspected exposure has a procedure rather
+than an improvisation.
 
 **Acceptance criteria**
 1. The operation is a `Janus.Cli` command that requires the maintenance credential
@@ -1393,14 +1418,15 @@ suspected exposure has a procedure rather than an improvisation.
 2. Killing the process mid-run and starting it again resumes from the recorded
    progress; no subject key is re-wrapped twice and none is left under the old version
    when the job reports complete.
-3. Until the previous version is retired, values wrapped under it remain readable;
-   after retirement, a value still wrapped under it (there is none by construction:
-   every value under the key-encryption key is a row of the subject-key table,
+3. Until the previous version is retired, values wrapped under it remain readable; after
+   retirement, a value still wrapped under it (there is none by construction: every
+   value under the key-encryption key is a row of the subject-key table,
    PRIV-RIGHT-005a) fails to unwrap as a fault (CONV-ERR-001) carrying
    `model.startup.secretunavailable`, `details.key` `keyEncryptionKeys` and
-   `details.version` naming the version: a request is answered `system.fault`, a job
-   fails its run and a command exits 1 with the code. A start is refused with the same
-   code where such a row stands (OPS-SEC-001 criterion 2).
+   `details.version` naming the version: a request is answered `system.fault` and a job
+   fails its run, save inside work run after a commit, which logs it and leaves its row
+   to the publisher (CONV-DESIGN-003), and a command exits 1 with the code. A start is
+   refused with the same code where such a row stands (OPS-SEC-001 criterion 2).
 4. The escrow copy of the new version is produced by the same command, and the
    previous version is not retired until the operator confirms with `--sealed` that
    the copy is sealed (DR-009); `--sealed` before the rotation completes is refused
@@ -1412,6 +1438,8 @@ suspected exposure has a procedure rather than an improvisation.
    version and the number of values processed.
 6. A test exercises the fingerprint-key rotation in the same shape on a small
    fixture, so the procedure is known to work despite never running in production.
+7. A process that holds a fingerprint key version that is not current matches values
+   fingerprinted under it and computes no fingerprint to store under it.
 
 ---
 
@@ -1432,11 +1460,12 @@ debugger.
 ---
 
 **OPS-OBS-002** — Degradations SHALL be visible, never silent. Fallback to an offline
-blocklist, a failed provider push, a notification that did not deliver, a
-reconciliation discrepancy and a lost database channel (the registration signal,
-REG-SESS-003) SHALL each surface. The absence of a watch the library needs from the
-environment (a clock reference, a certificate renewal outcome, the location file) is a
-degradation too.
+blocklist, a failed provider push, a notification whose attempts are exhausted (a send
+the restrictions or the gateway floor refuse, at its admission or at its retry, is no
+degradation and raises nothing, AUTH-ABUSE-004), a reconciliation discrepancy and a lost
+database channel (the registration signal, REG-SESS-003) SHALL each surface. The absence
+of a watch the library needs from the environment (a clock reference, a certificate
+renewal outcome, the location file) is a degradation too.
 
 **Values (D-166).** Each degradation raises `degradation` (OPS-ALERT-001) under a scope
 naming it; the scopes include `password.blocklist.fallback`, `clock.reference.absent`,
@@ -1450,7 +1479,7 @@ is raised as `password.blocklist.fallback` with `details.configured` (the corpus
 configured) and `details.used` (`offline`) before the offline corpus is asked; a fall
 back that cannot be raised refuses the operation with what refused the raise.
 
-*Source: D-011, D-006, D-022, P-003, D-166, D-183*
+*Source: D-011, D-006, D-022, P-003, D-166, D-183, D-186*
 
 **Acceptance criteria**
 1. Each listed condition produces a monitored signal.
@@ -1464,16 +1493,16 @@ and elapsed grace windows SHALL run as background jobs.
 
 **Values (D-153, D-166).** One sweep every `sweep.interval` (default five minutes)
 covers expired sessions, tokens and codes (a consumed refresh token kept until no
-session it could derive from can still exist, AUTH-KEY-003), identifier verifications
-whose codes have all expired unused (REG-IDENT-004, REG-IDENT-007), elapsed grace and
-cooling-off windows, privacy request deadlines (PRIV-RIGHT-002), sending-restriction
-records and every other abuse ledger line its own check no longer reads (PRIV-RET-005),
-export-limit records an hour old (OPS-ALERT-006), and domain re-verification
-(`domain.reverify.interval`); a deadline therefore takes effect within that interval
-of its instant. The DR-016 replay is the `replay-erasures <ledger path>` command of
-`Janus.Cli`.
+session it could derive from can still exist, AUTH-KEY-003), identifier adds and
+replaces whose every record is spent or past its lifetime (REG-IDENT-004, REG-IDENT-007,
+D-187), elapsed grace and cooling-off windows, privacy request deadlines
+(PRIV-RIGHT-002), sending-restriction records and every other abuse ledger line its own
+check no longer reads (PRIV-RET-005), export-limit records an hour old (OPS-ALERT-006),
+and domain re-verification (`domain.reverify.interval`); a deadline therefore takes
+effect within that interval of its instant. The DR-016 replay is the
+`replay-erasures <ledger path>` command of `Janus.Cli`.
 
-*Source: D-007, D-038, D-166*
+*Source: D-007, D-038, D-166, D-187*
 
 **Acceptance criteria**
 1. No recurring human task is required for cleanup.

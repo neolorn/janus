@@ -161,11 +161,24 @@ concealed path. A username therefore always contains at least one letter
 
 **REG-IDENT-004** — Adding an identifier SHALL be a step-up action, after which the new
 identifier SHALL be verified (section 4.3) before it counts. The security-notice set
-SHALL be notified of the addition. An add whose codes have all expired unused SHALL be
-swept (OPS-OBS-003) together with the unverified identifier it staged; the person adds
-the identifier again.
+SHALL be notified of the addition. An add, of a value no account holds and of one
+REG-SESS-005 answers as held or reserved alike, SHALL be staged as a pending
+verification that holds the value, as a replace's staged value is held; the identifier
+is written only when the add verifies, under the pending verification's identifier.
+Until then the account lists the add as an unverified identifier under that identifier,
+and a kind's identifiers and its pending adds together count toward the kind's maximum.
+Where the right code, or a press of the add's link, is presented, whether the value is
+held or reserved SHALL be judged again inside that presentation's transaction, under the
+value's lock, as REG-SESS-005 judges it at the terms step: where an identifier has come
+to hold it or an undo to reserve it since the add was staged, nothing is written and the
+presentation is answered 422 `auth.code.expired`; the pending add stays listed until it
+is swept or abandoned. A route that names the add by that identifier treats it as an
+unverified identifier: made primary or named by the backup setting it is refused
+`identity.identifier.unverified`, and removed it ends as an abandon does
+(REG-IDENT-006). An add whose every record is spent or past its lifetime SHALL be swept
+(OPS-OBS-003) with what it staged; the person adds the identifier again (D-187).
 
-*Source: D-146, D-166; amends D-035*
+*Source: D-146, D-166, D-187; amends D-035*
 
 **Acceptance criteria**
 1. `POST /account/identifiers` without step-up at the gate's level returns the step-up
@@ -173,8 +186,18 @@ the identifier again.
 2. An added identifier appears as unverified until a code or same-browser link confirms
    it, and cannot sign in or receive recovery links until then.
 3. Every member of the security-notice set receives one notice per addition.
-4. An add left past the expiry of its code leaves no identifier after the next sweep,
-   and adding the same address again sends a new code.
+4. An add left past the expiry of its code is no longer listed on the account and no
+   longer counts toward its kind's maximum after the next sweep, and adding the same
+   address again sends a new code.
+5. An add, of a value no account holds or of a held or reserved one alike, writes no
+   identifier until it verifies; until then the account lists it as unverified under the
+   identifier the verified identifier then keeps.
+6. With `identifiers.email.max` at n, an account holding n less 1 emails and one pending
+   add is refused a further add with `identity.identifier.maximum`, and is admitted one
+   once the pending add is swept or abandoned.
+7. Two accounts that add one value no account holds and each present their code end with
+   one identifier, on the account that verified first; the second presentation writes
+   nothing and is answered 422 `auth.code.expired`, its pending add left to the sweep.
 
 ---
 
@@ -203,20 +226,28 @@ otherwise it SHALL be refused when removal would leave fewer than the required m
 of its kind (`identity.identifier.lastofkind`). The last verified identifier of a kind
 is its primary, so its removal answers `identity.identifier.primary`;
 `identity.identifier.lastofkind` answers the discard of a staged identifier during
-registration (REG-SESS-004, `09` section 2). The **remaining** members of
-the security-notice set SHALL receive an **undo** link valid for
+registration (REG-SESS-004, `09` section 2). The **remaining** members of the
+security-notice set SHALL receive an **undo** link valid for
 `identifier.change.coolingoff`; the removed identifier SHALL receive a notice with no
 link and no powers and SHALL NEVER be usable for recovery of that account again. Until
 `identifier.change.coolingoff` ends, the removed value SHALL stay reserved to the
-account it was removed from: no other account may add it and no registration session
-may stage it. An attempt SHALL be answered exactly as an attempt on a value another
-account holds (REG-SESS-005, API-CONV-005), and nobody SHALL be notified. A sign-in
-link or email code sent to the identifier before its removal SHALL NOT sign in; it is
-refused with `auth.factor.rejected`. Other sessions SHALL end when a sign-in identifier
-is removed.
+account it was removed from: no other account may add it and no registration session may
+stage it. An attempt SHALL be answered exactly as an attempt on a value another account
+holds (REG-SESS-005, API-CONV-005), and nobody SHALL be notified. A removal and an undo
+SHALL write the value under its lock (REG-SESS-005), so that an add of the value
+presented meanwhile finds it held or reserved, never free. A write of the value to the
+account it is reserved to (an add's verification, a replace's swap, a corporate address
+taken on at an acknowledgement) ends the reservation, and the undo is then answered as
+one past its window (422 `identity.change.windowelapsed`). A sign-in link or email code
+sent to the identifier before its removal SHALL NOT sign in; it is refused with
+`auth.factor.rejected`. Other sessions SHALL end when a sign-in identifier is removed. A
+pending add listed on the account (REG-IDENT-004) is not an identifier this item
+removes: a removal naming it, admitted at the same gate, ends its pending verification
+as `POST /account/identifiers/{id}/abandon` does, with no undo, reservation, notice or
+session ended (D-187).
 
-*Source: D-146, D-162, D-166; amends D-035 (old-address confirmation retired except in
-REG-IDENT-007); IDN-LIFE-008 applies*
+*Source: D-146, D-162, D-166, D-187; amends D-035 (old-address confirmation retired
+except in REG-IDENT-007); IDN-LIFE-008 applies*
 
 Why the undo goes to the remaining set and never to the removed address: an undo that
 reaches the removed address lets a compromised mailbox re-attach itself. A stolen session
@@ -234,25 +265,44 @@ usable.
    identifier to any recovery path afterwards behaves as an unknown identifier.
 4. Every other session of the account is terminated on removal.
 5. Within the undo window, adding the removed value to another account or staging it in
-   a registration answers as for a held value, sends no code and notifies nobody; the
-   undo then restores it. After the window the same attempt stages a verification.
+   a registration answers as for a held value: it stages a verification that no code
+   answers (AUTH-FACT-004), sends no code and notifies nobody, and the undo then
+   restores the value. After the window the same attempt stages a verification a sent
+   code answers.
 6. A sign-in link or email code sent to the identifier before its removal does not sign
    in and is refused with `auth.factor.rejected`.
+7. The verification of another account's add of a value, presented while that value's
+   removal commits, is answered 422 `auth.code.expired` and writes nothing, and the undo
+   then restores the value to the account it was removed from.
+8. An account that adds again a value it removed, or replaces back to a value it
+   replaced, and verifies it within the window, ends the value's reservation; its undo
+   link is then answered 422 `identity.change.windowelapsed`.
 
 ---
 
 **REG-IDENT-007** — Where a kind's maximum is `1`, a change SHALL be a **replace** in
 one operation: step-up, the new identifier verifies, the swap applies at once, and the
-undo goes to the remaining channels of the account. **Only where no other channel
-exists at all** SHALL the old address confirm before the swap, except within an
-admin-assisted enrolment session (AUTH-RECOV-002), where the approver's recorded
-confirmation stands in for the old address and the new address confirms alone. The
-confirmation is the message `identifier-change-confirm` under the sending purpose
-`verification`, as the new address's code is: the person making the change asked for it,
-and it is not a notice (AUTH-ABUSE-004). A replace whose codes have all expired unused
-SHALL be swept (OPS-OBS-003), leaving the identifier as it stood.
+undo goes to the remaining channels of the account. **Only where no other channel exists
+at all** SHALL the old address confirm before the swap, except within an admin-assisted
+enrolment session (AUTH-RECOV-002), where the approver's recorded confirmation stands in
+for the old address and the new address confirms alone. The confirmation is the message
+`identifier-change-confirm` under the sending purpose `verification`, as the new
+address's code is: the person making the change asked for it, and it is not a notice
+(AUTH-ABUSE-004). Whether the new value is held or reserved SHALL be judged again inside
+the transaction that would apply the swap, under the lock of REG-SESS-005 on each value
+the swap writes, as at an add (REG-IDENT-004): where an identifier has come to hold it
+or an undo to reserve it since the replace was staged, nothing is written and the
+presentation is answered 422 `auth.code.expired`; the replace stays staged until it is
+swept or abandoned. The confirmation SHALL be held in a verification-code record of its
+own (AUTH-FACT-004), living `code.verification.lifetime` from its send, and a press
+after that changes nothing and is answered 422 `auth.code.expired`, as a verification
+link past its lifetime is. A replace whose swap has not applied SHALL be swept
+(OPS-OBS-003) once every record it holds is spent or past its lifetime, the new
+address's code and, where the old address must confirm, that confirmation, leaving the
+identifier as it stood (D-187).
 
-*Source: D-148; D-146, D-166, D-183, amends D-035 and restates IDN-LIFE-004, IDN-LIFE-007, IDN-LIFE-010*
+*Source: D-148; D-146, D-166, D-183, D-187, amends D-035 and restates IDN-LIFE-004,
+IDN-LIFE-007, IDN-LIFE-010*
 
 The degenerate case is one email, phone optional and never added: nothing else could
 undo a hostile change. If that address is lost or compromised, administrative recovery
@@ -269,6 +319,15 @@ undo a hostile change. If that address is lost or compromised, administrative re
    the same identifier is accepted.
 5. The confirmation sent to the displaced address is counted under the purpose
    `verification` and is neither counted nor refused by `notification.destination`.
+6. A replace whose new address verified and whose old address does not confirm within
+   `code.verification.lifetime` of the confirmation's send is swept, leaving the
+   identifier as it stood, and a press of the confirmation after that changes nothing
+   and is answered 422 `auth.code.expired`.
+7. A replace whose new value an identifier has come to hold, or an undo to reserve,
+   since it was staged applies no swap: the presentation that would apply it writes
+   nothing and is answered 422 `auth.code.expired`, the identifier stays as it stood,
+   and a new replace of it is refused `identity.change.pending` until the staged one is
+   swept or abandoned.
 
 ---
 
@@ -309,15 +368,16 @@ the person could change about an address the provider gave them.
 
 ### 2.5 Username
 
-**REG-IDENT-009** — Where enabled, a username SHALL be optional, chosen at the
-"about you" step or later, and changed through `PUT /account/profile` as a step-up
-action with a cooling-off of `identifiers.username.changecooloff` between changes.
-"Taken" and "reserved" SHALL be disclosed at choice time (`identity.username.taken`,
+**REG-IDENT-009** — Where enabled, a username SHALL be optional, chosen at the "about
+you" step or later, and changed through `PUT /account/profile` as a step-up action with
+a cooling-off of `identifiers.username.changecooloff` between changes. "Taken" and
+"reserved" SHALL be disclosed at choice time (`identity.username.taken`,
 `identity.username.reserved`), throttled per source. After erasure of its account a
 username SHALL be **held** for the period of `retention.consent` and released
 afterwards. The hold SHALL be a record of its own that names no subject and holds no
 value under the erased subject's key: the username's fingerprint and the instant the
-hold ends.
+hold ends. A choice SHALL be judged taken or held under the username's lock
+(CONV-DESIGN-003), and an erasure SHALL write its hold under that lock (PRIV-RIGHT-005).
 
 A username SHALL contain at least one letter, so that no username is also a phone
 number under REG-IDENT-003's detection; an all-digit choice is refused with
@@ -330,7 +390,7 @@ per source" means each `taken` or `reserved` answer counts as one failure in the
 AUTH-ABUSE-001 per-source throttle. `identity.username.coolingoff` carries
 `details.retryAt`.
 
-*Source: D-146, D-162, D-166*
+*Source: D-146, D-162, D-166, D-187*
 
 Usernames are the one identifier whose existence is disclosed to anyone, because they
 are public by nature; the only other disclosure is of the email an invitation binds, to
@@ -344,6 +404,10 @@ an erased person from being impersonated at once under their former name.
    from the erasure.
 4. After erasure, the hold of the username names no subject and is readable with the
    subject key destroyed.
+5. A choice of a username made while that username's erasure commits is answered
+   `identity.username.taken`, and two choices of one free username made at once leave it
+   on exactly one account, the other answered `identity.username.taken`, never
+   `system.fault`.
 
 ---
 
@@ -401,11 +465,13 @@ the date of birth. The adult affirmation SHALL be **derived** from it and record
 a timestamp, when the account is created. The date itself SHALL be retained only where
 `profile.dateofbirth` is not off. On a host with `registration.adultaffirmation` =
 `required`, a date under eighteen SHALL end the registration session before any
-identifier is collected and SHALL lock the fields against retry in that session. A host
-that serves minors SHALL use the same screen to set the age group.
+identifier is collected and SHALL lock the fields against retry in that session; the
+session's end and its lock are that refusal's kept write, committed with it
+(CONV-DESIGN-003). A host that serves minors SHALL use the same screen to set the age
+group.
 
-*Source: D-146; amends D-027 and D-039; supersedes IDN-LIFE-002 and PRIV-MINOR-001's
-"date of birth SHALL NOT be collected"*
+*Source: D-146, D-186; amends D-027 and D-039; supersedes IDN-LIFE-002 and
+PRIV-MINOR-001's "date of birth SHALL NOT be collected"*
 
 The screen is neutral so that it does not announce what answer passes. The affirmation
 verifies nothing; what makes self-declaration proportionate is that a wrong answer has a
@@ -592,7 +658,8 @@ confirmation of REG-IDENT-007) and `undo` (the undo of REG-IDENT-006), which lan
 account application. Every kind acts only on a press, never on load (FE-VER-001). The
 token travels in the fragment, so no request, log or referrer carries it.
 
-*Source: D-148; D-146, D-162, D-166, D-183, supersedes the code-only design of IDN-LIFE-004; API-LAND-001*
+*Source: D-148; D-146, D-162, D-166, D-183, supersedes the code-only design of
+IDN-LIFE-004; API-LAND-001, D-187*
 
 Without the browser binding, an attacker who starts a registration with a victim's
 address gets it verified the moment the victim clicks the verification link. Mail scanners
@@ -601,7 +668,8 @@ the screen listens for the session's state over server-sent events on the sessio
 (no token in any URL), with polling as fallback (FE-VER-001).
 
 The same rule applies to adding an identifier later (REG-IDENT-004), to the replace flow
-(REG-IDENT-007) and to sign-in links (`02` AUTH-FACT-002). There the ending control has
+(REG-IDENT-007; the new address's link, the old address's confirmation being bound to no
+browser) and to sign-in links (`02` AUTH-FACT-002). There the ending control has
 no registration session to end: for a sign-in link it calls `POST /auth/link/abandon`,
 which ends the pending link; for an identifier add or replace it calls
 `POST /account/identifiers/{id}/abandon`, which ends the pending verification (D-148).
@@ -652,24 +720,33 @@ The step SHALL complete only when every identifier on the screen is verified;
 ---
 
 **REG-SESS-005** — An identifier that already belongs to another account SHALL NOT let
-the session complete. The person SHALL see the ordinary sent outcome,
-no code SHALL be sent to the identifier, and its owner SHALL be notified once per
+the session complete. The person SHALL see the ordinary sent outcome, no code SHALL be
+sent to the identifier, and its owner SHALL be notified once per
 `abuse.nonexistent.window` that someone tried to register with it. The session SHALL
-carry a sign-in exit. A value reserved for an undo (REG-IDENT-006) SHALL be answered
-the same, and nobody SHALL be notified. Whether a staged identifier is held or reserved
-SHALL be judged again inside the terms step's transaction, before the account is
-written: one taken or reserved since it was staged ends the session, and no account is
-created. The email an invitation binds is the one exception: where an account holds it,
-the press that begins the registration is refused (REG-INV-001). A code presented for a
-held or reserved value SHALL be answered from a verification-code record that no code
-matches (AUTH-FACT-004), exactly as a wrong code for a value no account holds; the same
-holds at an identifier's add and replace (REG-IDENT-004, REG-IDENT-007).
+carry a sign-in exit. A value reserved for an undo (REG-IDENT-006) SHALL be answered the
+same, and nobody SHALL be notified. Whether a staged identifier is held or reserved
+SHALL be judged again inside the terms step's transaction, before the step's first
+write: one taken or reserved since it was staged ends the session, which is answered as
+an expired one (401 `auth.session.expired`), and no account is created; the session's
+end is that refusal's kept write (CONV-DESIGN-003). The email an invitation binds is the
+one exception: where an account holds it, the press that begins the registration is
+refused (REG-INV-001). A code presented for a held value, or for one reserved to another
+account, SHALL be answered from a verification-code record that no code matches
+(AUTH-FACT-004), exactly as a wrong code for a value no account holds; the same holds at
+an identifier's add and replace (REG-IDENT-004, REG-IDENT-007). Every operation that
+writes an identifier's value to an account or reserves one (among them an account's
+identifiers at the terms step, an add's verification and a replace's swap, REG-IDENT-004
+and REG-IDENT-007, a removal and an undo, REG-IDENT-006, and a corporate address taken
+on at an acknowledgement, REG-INV-001 and REG-INV-002) SHALL take the value's lock
+(CONV-DESIGN-003) before it judges or writes, and one that writes the value to an
+account SHALL judge under that lock whether an account holds the value or it is reserved
+to another account.
 
 **Values (D-153).** The sign-in exit is a static link on every registration screen, drawn
 by the frontend; `GET /register` carries no field for it, because a field present only
 for a duplicate would be an oracle.
 
-*Source: D-146, D-162, D-166, D-183; D-076, D-112*
+*Source: D-146, D-162, D-166, D-183, D-186, D-187; D-076, D-112*
 
 **Acceptance criteria**
 1. The response to a duplicate, the email an invitation binds excepted, is byte- and
@@ -679,12 +756,18 @@ for a duplicate would be an oracle.
 2. The owner's notice contains no link and no code.
 3. The session expires without creating an account.
 4. An identifier another account takes, or that becomes reserved, after it was staged
-   ends the session at the terms step, and no account is created.
-5. A code presented for a duplicate, or for a value reserved for an undo, is answered as
-   a wrong code for a value no account holds: `auth.code.invalid` for each of the first
-   `code.verification.attempts` tries, then `auth.code.expired`, in the same bytes and
-   counted by the throttle alike; no code verifies it, and an add or replace of such a
-   value is swept when one of a fresh value would be.
+   ends the session at the terms step, the request is answered 401
+   `auth.session.expired`, the session stays ended, and no account is created.
+5. A code presented for a duplicate, or for a value reserved for an undo to another
+   account, is answered as a wrong code for a value no account holds:
+   `auth.code.invalid` for each of the first `code.verification.attempts` tries, then
+   `auth.code.expired`, in the same bytes and counted by the throttle alike; no code
+   verifies it, and an add or replace of such a value is swept when one of a fresh value
+   would be.
+6. A terms step and the verification of another account's add of the same value, run at
+   once on two connections, end with one holder of the value: exactly one of them writes
+   it, and the other is answered as its item says (401 `auth.session.expired` with the
+   session ended, or 422 `auth.code.expired`), never `system.fault`.
 
 ---
 
@@ -915,15 +998,19 @@ removed. A failed scheduled re-verification is recorded as the domain's last che
 does not unverify it. Only listed, verified domains are re-verified; a listed domain
 never verified waits for the administrator's verify. A domain is listed, stored and
 compared in one form: its canonical form (IDN-ACCT-004) converted to its IDNA ASCII form
-under the STD3 rules, by the library's own UTS #46 mapping tables at the pinned Unicode
-version and RFC 3492 Punycode, never the machine's (D-154); of at least two labels, with
-no trailing dot, and at most 236 octets so that `_identity-verify.<domain>` is a valid
-name. Because the canonical form folds case fully, `ß` reads as `ss`. An address's
-domain is read the same way and admits only where it equals a listed domain; a
+by the library's own UTS #46 processing at the pinned Unicode version, never the
+machine's (D-154): nontransitional, with UseSTD3ASCIIRules, CheckHyphens, CheckBidi,
+CheckJoiners and VerifyDnsLength set and IgnoreInvalidPunycode not, over the IDNA
+mapping table and the Unicode Character Database of that version (the bidirectional
+classes and joining types the two checks read among them), with RFC 3492 Punycode, and
+in lower case, so `xn--bcher-KVA` reads as `xn--bcher-kva` (D-187); of at least two
+labels, with no trailing dot, and at most 236 octets so that `_identity-verify.<domain>`
+is a valid name. Because the canonical form folds case fully, `ß` reads as `ss`. An
+address's domain is read the same way and admits only where it equals a listed domain; a
 subdomain is a different domain. An address whose domain does not read is admitted only
 where no lock applies.
 
-*Source: D-146, D-166, D-183*
+*Source: D-146, D-166, D-183, D-187*
 
 In a single-organization deployment the administrator is trusted anyway; the library is
 generic, and DNS verification is what every comparable product requires.
@@ -953,6 +1040,16 @@ generic, and DNS verification is what every comparable product requires.
 12. Listing a domain while no DNS resolver is declared is refused with
     `config.value.notallowed` and `details.requires` `dnsResolver`; a deployment whose
     stored lock lists a domain does not start without one.
+13. A domain's ASCII form is the same whatever ICU the machine holds. The UTS #46
+    conversion, given its input as it stands (the canonical form of IDN-ACCT-004 not
+    applied first) and before the label count and the length bound above, refuses
+    `ab--c.example`, `xn--a.example`, a label mixing U+05D0 with `b`, a label that opens
+    with a digit before U+05D0, and U+200C between two Latin letters, reads
+    `xn--bcher-KVA.example` as `xn--bcher-kva.example`, and answers every line of the
+    conformance test file of UTS #46 at the pinned version (`IdnaTestV2.txt`, vendored
+    beside the mapping table) as its nontransitional ASCII column gives it, a status
+    that marks an error under these checks, the STD3 rules included, read as a failure.
+    Read through the canonical form, U+200C is removed and `ß` reads as `ss`.
 
 ---
 
@@ -1031,9 +1128,14 @@ them off from their mail or end their app passwords. A `restricted` account SHAL
 and revoke its app passwords and SHALL be refused creation with `authz.restricted`
 (IDN-ACCT-007). A creation from the break-glass session or a session another application
 opened from it (BFF-SESS-006) SHALL be refused with `authz.denied` at the operation's
-gate step, before the mailbox is looked up (OPS-BOOT-002).
+gate step, before the mailbox is looked up (OPS-BOOT-002). A creation the gate refuses
+when it is asked again after the server's call is revoked at the server, its secret
+never shown, and is neither notified nor audited as a creation or a revocation; where
+that revocation fails, the password, whose secret nobody holds, stays listed for its
+holder to revoke (INT-MAIL-010, D-186).
 
-*Source: D-146, D-166, D-179; amends D-006 (managed through the library, stored by the mail server)*
+*Source: D-146, D-166, D-179, D-186; amends D-006 (managed through the library, stored
+by the mail server)*
 
 A mail credential is the weakest credential in the system (R-A02). The membership step
 ends on this section so that a new staff member can set up a phone client before leaving

@@ -88,20 +88,25 @@ delivery report (INT-SMS-005) and the social providers' security events
 providers' callbacks on the same pipeline and owns what state, if any, they may
 influence.
 
-**Values (D-153, D-166).** The callback endpoints accept `integration.callback.ratelimit`
-requests per source (AUTH-ABUSE-001) per minute, fixed window, and answer 429
-`integration.callback.rejected` with `Retry-After` before any lookup. Every other
-refusal of a callback is 422 `integration.callback.rejected`, with no `Retry-After`;
-the route of a provider whose events follow RFC 8935 answers as `09` section 10 states.
-A correlation reference is 128 random bits, base64url, held only as its SHA-256 and
-looked up by it (BFF-MACH-003), and never logged (CONV-LOG-003); a send's reference,
-drawn at its admission, also travels inside its outbox row's encrypted content until the
-row is removed (PRIV-RIGHT-005a). A signing secret rotates with a 24 hour overlap
-(BFF-MACH-002).
+**Values (D-153, D-166).** The callback endpoints accept
+`integration.callback.ratelimit` requests per source (AUTH-ABUSE-001) per minute, fixed
+window, and answer 429 `integration.callback.rejected` with `Retry-After` before any
+lookup. Every other refusal of a callback is 422 `integration.callback.rejected`, with
+no `Retry-After`; the route of a provider whose events follow RFC 8935 answers as `09`
+section 10 states. A correlation reference is 128 random bits, base64url, held only as
+its SHA-256 and looked up by it (BFF-MACH-003), and never logged (CONV-LOG-003); a
+send's reference, drawn at its admission, also travels inside its outbox row's encrypted
+content until the row is removed (PRIV-RIGHT-005a). A signing secret rotates with a 24
+hour overlap (BFF-MACH-002). A callback's admission count, a rejected callback's count
+and record, the `callback-verification-failed` raise past `alerting.callback.threshold`
+and, for a provider's security event, the record of its rejection
+(`auth.providerevent.rejected`, IDN-LIFE-012a) are kept writes, committed with the
+refusal and nothing else (CONV-DESIGN-003); any other failure in handling a callback
+rolls back.
 
 *Source: D-070*
 
-*Source: D-013, D-030, D-164, D-166, D-183*
+*Source: D-013, D-030, D-164, D-166, D-183, D-186*
 
 Callbacks arrive unauthenticated or weakly authenticated. A forged one must be
 unable to mark a phone verified, or to advance any state the host hangs on a callback.
@@ -202,7 +207,7 @@ others.
 | App passwords | **Stored by Stalwart**, never by this system; managed for the person through the library's first-party OIDC client (INT-MAIL-010) |
 | Storage | Stalwart's own database, not co-located with business data |
 
-*Source: D-006, D-146, D-166, D-176, D-177, D-183*
+*Source: D-006, D-146, D-166, D-176, D-177, D-183, D-187*
 
 **Restated** (D-146): every management operation happens through JMAP objects, so
 "management API" means JMAP and nothing else. The four concerns are unchanged. Should the edition change,
@@ -243,11 +248,11 @@ of `outbox.retry.*` cannot resolve a conflict that someone must resolve at the m
 server (INT-MAIL-007). The listing is `x:Account/query` with `x:Account/get` of
 `emailAddress`, `description` and `permissions`, and answers for each account the
 mailbox identifier its `description` carries (none where it carries none), its address
-(none where `emailAddress` does not read as an email address) and whether it is enabled;
-an account is listed enabled exactly where `authenticate` is not disabled and, under
-`Replace`, is enabled. App passwords are `AppPassword` objects (`x:AppPassword/get`,
-`x:AppPassword/set`) called with the person's token (INT-MAIL-010) and never with the
-management key.
+(none where `emailAddress` is absent, is not text, or does not read as an email address,
+D-187) and whether it is enabled; an account is listed enabled exactly where
+`authenticate` is not disabled and, under `Replace`, is enabled. App passwords are
+`AppPassword` objects (`x:AppPassword/get`, `x:AppPassword/set`) called with the
+person's token (INT-MAIL-010) and never with the management key.
 
 **Acceptance criteria**
 1. No code reads Stalwart's database.
@@ -510,17 +515,17 @@ read, and a push that waited for it waits no longer. The account it left at the 
 is counted with the accounts that carry no identifier of a mailbox the library holds,
 since that account is outside the library (D-101) and only the operator can erase it
 there. Addresses SHALL be compared in their canonical form (IDN-ACCT-004), the server's
-listed addresses canonicalised before the comparison, and a listed address that does not
-read is listed as none and matches no mailbox: the account is counted where it carries
-no identifier of a mailbox the library holds, and is a difference where it carries one;
-it never fails the listing. Comparing by identifier, not by address, keeps apart the two
-mailboxes that a `replace`, or a release followed by a new invitation, leaves at one
-address (REG-MAIL-003, REG-MAIL-001). A difference SHALL raise `degradation`, scope
-`mailbox.reconciliation`, details `{ mailboxes, unknown }` (mailbox identifiers and a
-count, never an address); a listing that cannot be had SHALL raise it with
-`{ listed: false }`. Nothing SHALL be changed on either side.
+listed addresses canonicalised before the comparison, and a listed address that is
+absent, is not text or does not read is listed as none and matches no mailbox: the
+account is counted where it carries no identifier of a mailbox the library holds, and is
+a difference where it carries one; it never fails the listing. Comparing by identifier,
+not by address, keeps apart the two mailboxes that a `replace`, or a release followed by
+a new invitation, leaves at one address (REG-MAIL-003, REG-MAIL-001). A difference SHALL
+raise `degradation`, scope `mailbox.reconciliation`, details `{ mailboxes, unknown }`
+(mailbox identifiers and a count, never an address); a listing that cannot be had SHALL
+raise it with `{ listed: false }`. Nothing SHALL be changed on either side.
 
-*Source: D-006, D-041, D-166, D-177, D-178, D-183*
+*Source: D-006, D-041, D-166, D-177, D-178, D-183, D-187*
 
 A failed suspension leaves a person reading mail after offboarding. Silent
 auto-correction conceals a broken pipeline.
@@ -549,9 +554,10 @@ auto-correction conceals a broken pipeline.
    unconfirmed, that push ends without a send; the push of the new mailbox is then sent
    and, while the old account stands at the server, is answered
    `integration.mailserver.conflict`.
-9. A listing that holds an account whose address does not read is read whole: every
-   other account is compared as before, and that account is counted where it carries no
-   identifier of a mailbox the library holds and is a difference where it carries one.
+9. A listing that holds an account whose address is absent, is not text or does not read
+   is read whole: every other account is compared as before, and that account is counted
+   where it carries no identifier of a mailbox the library holds and is a difference
+   where it carries one.
 
 ---
 
@@ -602,7 +608,7 @@ server's (`MailServerClient`, LIB-HOST-001); it SHALL name that client as `aud`
 (AUTH-OIDC-006), last no longer than `oidc.accesstoken.lifetime` or the session
 record, and SHALL NOT be stored.
 
-*Source: D-146, D-164, D-166, D-179; amends D-006*
+*Source: D-146, D-164, D-166, D-179, D-186; amends D-006*
 
 The mail server generates the secret and accepts no supplied or pre-hashed value, so the
 library can neither choose nor retain one. What the library adds is the gate (step-up
@@ -615,8 +621,14 @@ the mail server is told to enable, the app-password operations answer
 another application opened from it (BFF-SESS-006) is the exception, refused with
 `authz.denied` at the operation's gate step before the mailbox is looked up
 (OPS-BOOT-002). A restricted account keeps its enabled mailbox (INT-MAIL-006): it lists
-and revokes its app passwords and creates none (`authz.restricted`, IDN-ACCT-007). `09`
-section 6 gives every answer.
+and revokes its app passwords and creates none (`authz.restricted`, IDN-ACCT-007). A
+creation is gated before the server is called and asked again inside the unit of work
+that records it, with the acting account's row held (AUTHZ-GATE-006); where that second
+ask refuses, the unit of work rolls back, the password the server created is revoked at
+the server before the refusal is answered, and its secret is never returned, so nothing
+records, notifies or shows it; where that revocation fails, the refusal is still
+answered, the failure is logged, and the password, whose secret nobody holds, stays
+listed for its holder to revoke. `09` section 6 gives every answer.
 
 **Acceptance criteria**
 1. Creating an app password results in one call to the mail server's app-password
@@ -733,10 +745,16 @@ document or subscriber declared under a name outside it is refused at startup wi
 `model.startup.declarationinvalid`, `details.declaration` and `details.field` naming it;
 and a route naming a document outside it, the publish route included, is refused with
 400 `api.request.malformed` naming `document` before anything is read (`09` sections 7
-and 8a). Bounding these values where they are written keeps every rendered template
-within the width it was measured at.
+and 8a). A restriction's name and a document's name are the value types
+`RestrictionName` and `DocumentName` of `Janus.Core` (CONV-DESIGN-004), which bind a
+route's value through `IParsable` and which the operation contracts that name one take
+(`IRestrictionSet`, `ILegalDocuments`), so a route answers the name before any body is
+read and an in-process caller cannot name a restriction or a document outside the rule
+either; a declaration names a document as text, judged at startup as above (D-187).
+Bounding these values where they are written keeps every rendered template within the
+width it was measured at.
 
-*Source: D-013, D-031, AUTH-ABUSE-005, D-162, D-166, D-183*
+*Source: D-013, D-031, AUTH-ABUSE-005, D-162, D-166, D-183, D-187*
 
 Unicode messages are 70 characters for a single message and 67 per part when
 concatenated; Latin gets 160 and 153. An Arabic message one character over 70 costs
@@ -760,19 +778,22 @@ double.
 **INT-SMS-004** — Balance SHALL be polled, drain rate alerted on, and sends
 hard-stopped below a configured floor.
 
-**Values (D-153, D-166).** `abuse.sms.balancefloor` is a decimal in the currency the gateway
-reports. The balance is read every `abuse.sms.pollinterval`; the `sms-balance` alert
-fires when the last hour's spend exceeds `abuse.sms.drainfactor` times the trailing
-seven-day hourly mean, or when the balance would reach the floor within 24 hours at the
-current rate. A poll that cannot read the balance, no SMS transport being registered
-included, fails, and its lapse raises `background-job-failed` (INF-BG-001); no poll
-succeeds without a balance read.
+**Values (D-153, D-166).** `abuse.sms.balancefloor` is a decimal in the currency the
+gateway reports. The balance is read every `abuse.sms.pollinterval`; the `sms-balance`
+alert fires when the last hour's spend exceeds `abuse.sms.drainfactor` times the
+trailing seven-day hourly mean, or when the balance would reach the floor within 24
+hours at the current rate. A poll that cannot read the balance, no SMS transport being
+registered included, fails, and its lapse raises `background-job-failed` (INF-BG-001);
+no poll succeeds without a balance read. A send other than an alert (OPS-ALERT-003) is
+judged against the floor on the latest balance a poll recorded, never by a read of the
+gateway inside the send's transaction, and until a first balance is recorded the floor
+refuses nothing (AUTH-ABUSE-006, D-186).
 
-*Source: D-013, AUTH-ABUSE-006, D-166*
+*Source: D-013, AUTH-ABUSE-006, D-166, D-186*
 
 **Acceptance criteria**
 1. Abnormal drain raises an alert without human monitoring.
-2. Below the floor, sends are refused and surfaced.
+2. Below the floor, sends other than alerts are refused and surfaced (OPS-ALERT-003).
 
 ---
 

@@ -314,18 +314,21 @@ mechanism, and withdrawal timestamp where applicable.
 the purpose, or over a live one the purpose no longer admits, is recorded `reconsent`,
 by the operation and whoever calls it; any other mechanism is recorded as named.
 
-**A grant is a record of its own, unless an admitted one stands.** A grant SHALL add a record, except where the
-subject holds a live record for the purpose that the purpose admits (recorded against
-the document it now names, of the kind it requires): that grant SHALL change nothing,
-raise nothing and be answered as a grant. A live record the purpose no longer admits
-SHALL be stamped superseded by the grant that replaces it, in that grant's transaction,
-`ConsentChanged` carrying `superseded` and then `granted` (D-183). A withdrawal or a
-supersession SHALL stamp the live record and never overwrite or remove it. A subject
-holds at most one live record (neither withdrawn nor superseded) per purpose, and every
-earlier record stays, with its document, version and instants, for `retention.consent`
-(PRIV-RET-001).
+**A grant is a record of its own, unless an admitted one stands.** A grant SHALL add a
+record, except where the subject holds a live record for the purpose that the purpose
+admits (recorded against the document it now names, of the kind it requires): that grant
+SHALL change nothing, raise nothing and be answered as a grant. A live record the
+purpose no longer admits SHALL be stamped superseded by the grant that replaces it, in
+that grant's transaction, `ConsentChanged` carrying `superseded` and then `granted`
+(D-183). A withdrawal or a supersession SHALL stamp the live record and never overwrite
+or remove it; where the subject holds no live record for the purpose, a withdrawal
+stamps the latest record not yet withdrawn (a superseded one), so that the data held for
+that consent is erased (PRIV-CONS-008), and where every record is withdrawn, or none
+exists, it changes nothing (D-187). A subject holds at most one live record (neither
+withdrawn nor superseded) per purpose, and every earlier record stays, with its
+document, version and instants, for `retention.consent` (PRIV-RET-001).
 
-*Source: D-024, D-162, D-166, D-183*
+*Source: D-024, D-162, D-166, D-183, D-187*
 
 **Acceptance criteria**
 1. Consent for two purposes produces two records.
@@ -533,7 +536,7 @@ re-consented. A service-wide outage caused by editing a paragraph.
 steps, no retention flow, no hidden settings, ideally through the same mechanism by
 which consent was given.
 
-*Source: D-024, D-166*
+*Source: D-024, D-166, D-187*
 
 **Withdrawal ends the purpose, not only the activity.** Any data held *solely* for the
 withdrawn purpose SHALL be erased on withdrawal, in the library and by every
@@ -547,8 +550,10 @@ retained for `retention.consent` as the evidence Law 151/2020 Art. 18 requires
 3. Withdrawal takes effect without human approval.
 4. Data held solely for the withdrawn purpose no longer exists after the handlers
    complete; the consent record does.
-5. Withdrawing a consent the subject does not hold changes nothing and is answered as a
-   withdrawal.
+5. Withdrawing where every record for the purpose is withdrawn, or none exists, changes
+   nothing and is answered as a withdrawal; withdrawing where no record is live stamps
+   the latest record not yet withdrawn, a superseded one, and raises `ConsentChanged`
+   `withdrawn`.
 
 ---
 
@@ -740,10 +745,11 @@ counsel's confirmation of receipt versus postmark; if counsel says postmark, the
 deadline is earlier than a receipt-based one and the `receivedAt` key of the request
 is adjusted accordingly by the administrator entering it (D-147). The system SHALL therefore:
 
-- send the subject an automatic **receipt** the moment the request enters the queue:
-  at submission in the application, at entry for out-of-band requests a human
-  types in. The receipt is the message `privacy-request-received` (`10` section 5). A
-  receipt is not a decision; it starts nothing and stops nothing
+- send the subject an automatic **receipt** the moment the request enters the queue: at
+  submission in the application, at entry for out-of-band requests a human types in. The
+  receipt is the message `privacy-request-received` (`10` section 5). A receipt is not a
+  decision; it starts nothing and stops nothing, and one a sending restriction refuses
+  leaves the request standing (AUTH-ABUSE-004, D-186)
 - raise a **Normal** alert `privacy.request.warninglead` (default **2 working days**)
   before the deadline, and a **High** alert on the deadline day (OPS-ALERT-001)
 - for a **restriction** request undecided at the deadline, **apply the restriction
@@ -770,7 +776,7 @@ grant by lapse and the deemed refusals are taken by a pass of the one sweep of
 OPS-OBS-003, every `sweep.interval`; each takes effect within that interval of its
 instant.
 
-*Source: D-148; D-037, D-122, D-126, D-147, D-166*
+*Source: D-148; D-037, D-122, D-126, D-147, D-166, D-186*
 
 With one operator, any deadline that depends on a human click is a deadline missed by
 an absence. **Residual, honestly stated:** a paper letter arriving while nobody is
@@ -779,14 +785,16 @@ business-availability matter the library cannot control.
 
 **Acceptance criteria**
 1. Every request carries a creation timestamp, a computed decision deadline, and a
-   receipt-sent timestamp equal to creation.
+   receipt-sent timestamp equal to creation, or none where a sending restriction refused
+   the receipt, which leaves the request standing (AUTH-ABUSE-004).
 2. The Normal alert fires `privacy.request.warninglead` before the deadline and the
    High alert on the deadline day, without human monitoring.
 3. A restriction request undecided at the deadline moves the account to
    `restricted`, or holds the restriction where the account is `suspended` or
    `deleting` (PRIV-RIGHT-004), and is recorded *granted by lapse*.
 4. An erasure or rectification request undecided at the deadline is recorded *deemed
-   refused by lapse*, the subject is notified, and the record persists.
+   refused by lapse*, the subject is notified unless a sending restriction refuses the
+   notice, and the record persists.
 5. A decision made before the deadline (fulfil or refuse) cancels both alerts.
 
 ---
@@ -862,7 +870,7 @@ totals for a condition that is meant to be reversible.
 remains, and every personal field is rendered unrecoverable by **destroying the
 subject's key** (PRIV-RIGHT-005a). It SHALL NOT merely pseudonymise.
 
-*Source: D-148; D-026.1, D-037, D-068, D-117, D-147, D-166, D-177, D-178*
+*Source: D-148; D-026.1, D-037, D-068, D-117, D-147, D-166, D-177, D-178, D-187*
 
 **The distinction is decisive.** Pseudonymised data is still personal data, and
 controls preventing further processing combined with pseudonymisation are not
@@ -874,9 +882,10 @@ pseudonymisation.
 **Preferences and declared values go with the key.** Declared preferences (REG-PREF-001)
 and the declared profile values (legal name, date of birth, REG-PROF-001) are personal
 fields under the subject key and become unreadable with the rest. A username freed by
-erasure is **held** for `retention.consent` and released afterwards (REG-IDENT-009): it
-is public by nature and is not personal data under the key, and the hold stops an erased
-person being impersonated at once under their former name.
+erasure is **held** for `retention.consent` and released afterwards, the hold written
+under the username's lock (REG-IDENT-009, CONV-DESIGN-003): it is public by nature and
+is not personal data under the key, and the hold stops an erased person being
+impersonated at once under their former name.
 
 **A corporate mailbox's address goes with the key too.** The address of a corporate
 mailbox (INT-MAIL-006) is a personal field of the account that holds or last held it,
@@ -936,7 +945,8 @@ mailbox's) is the 32 zero bytes alone, and no marker byte is written into it. Ev
 unwrap refuses a wrapped key of 32 zero bytes before it is tried, and the DR-016 ledger
 and a restore recognise it as erased.
 
-*Source: D-097, D-099, D-100, D-147, D-166, D-171, D-172, D-173, D-174, D-178, D-183*
+*Source: D-097, D-099, D-100, D-147, D-166, D-171, D-172, D-173, D-174, D-178, D-183,
+D-187*
 
 **Per column, not per row.** Name and phone on a host record are encrypted; its
 non-personal columns (dates, amounts, quantities, references) are not. Aggregates and
@@ -1068,16 +1078,18 @@ expire — bounded by retention, and stated rather than implied.
 be encrypted as one value under a data key of the invitation's own, which the
 deployment's data key wraps. The value SHALL be bound by the additional authenticated
 data to the invitation's identifier, in the place a subject identifier takes; the
-wrapped key takes none (D-173). The value and its wrapped key SHALL be overwritten when
-the invitation is revoked, acknowledged or found expired by the sweep, and an erasure
-SHALL overwrite them, in the erasure transaction, for every invitation attached to the
-subject. The invitation link's token SHALL be stored only as a one-way hash, and an
-invitation's audit records SHALL name the invitation and nothing it binds. The address
-of a mailbox nobody has held, released when its invitation is revoked (REG-MAIL-001), is
-under a data key of the mailbox's own; when the mail server confirms the removal owed to
-it (INT-MAIL-007), that wrapped key SHALL be overwritten and the fingerprint of the
-address neutralised, in the transaction that records the confirmation, and the row
-remains, so nothing about a person outlives an invitation that led nowhere.
+wrapped key takes none (D-173). The value and its wrapped key SHALL be overwritten, the
+wrapped key with the 32 zero bytes of an erased key and the value set to null (D-187),
+when the invitation is revoked, acknowledged or found expired by the sweep, and an
+erasure SHALL overwrite them so, in the erasure transaction, for every invitation
+attached to the subject. The invitation link's token SHALL be stored only as a one-way
+hash, and an invitation's audit records SHALL name the invitation and nothing it binds.
+The address of a mailbox nobody has held, released when its invitation is revoked
+(REG-MAIL-001), is under a data key of the mailbox's own; when the mail server confirms
+the removal owed to it (INT-MAIL-007), that wrapped key SHALL be overwritten and the
+fingerprint of the address neutralised, in the transaction that records the
+confirmation, and the row remains, so nothing about a person outlives an invitation that
+led nowhere.
 
 **The send outbox.** A send may name no subject, or a subject that holds no key yet, so
 an outbox row holds the whole message (destination, source address, values and the
@@ -1113,7 +1125,8 @@ transaction, and a row whose key is erased SHALL be removed without being carrie
     the subject-key table, the deployment's data key among them, without re-encrypting
     any data.
 14. An invitation revoked, acknowledged or swept after expiry, and every invitation
-    attached to an erased subject, holds no readable identifier and no wrapped key.
+    attached to an erased subject, holds no identifier and, in place of its wrapped key,
+    the 32 zero bytes of an erased key.
 15. After erasure, an outstanding outbox message naming the subject cannot be decrypted
     and is never carried.
 16. No value other than a row of the subject-key table is wrapped directly under the
@@ -1154,11 +1167,12 @@ encrypted column becomes decorative.
 `NFKC_Casefold` for email addresses and names, E.164 for phone numbers (IDN-ACCT-004,
 D-115) — applied before the keyed function, with the canonicalisation version (the
 pinned Unicode version) stored alongside, and the fingerprint key version it was
-computed under; a lookup matches under the current version first, then each other
-version held. Case-insensitive matching cannot be performed by the database on a
-fingerprint, so it moves entirely here and becomes load-bearing;
-pinning the version means a future normalization change re-derives rather than silently
-stranding every existing fingerprint.
+computed under; a lookup matches under every version held, and one that judges whether a
+value is held, reserved or taken reads every version in one statement (CONV-DESIGN-003),
+so that a row the rotation rewrites meanwhile is seen once. Case-insensitive matching
+cannot be performed by the database on a fingerprint, so it moves entirely here and
+becomes load-bearing; pinning the version means a future normalization change re-derives
+rather than silently stranding every existing fingerprint.
 
 **Where the key lives:** in the secrets manager, fetched at startup beside the
 key-encryption key and never written to the database (INF-HOST-003, D-105). It is
@@ -1176,7 +1190,7 @@ version until it lapses, and the previous version is retired only then (OPS-SEC-
 (IDN-ACCT-004), 32 byte output. The neutralised value is 32 zero bytes, and no lookup
 path may match it.
 
-*Source: D-082, D-093, D-166, D-183*
+*Source: D-082, D-093, D-166, D-183, D-187*
 
 Email and phone must be matchable for sign-in lookup and duplicate detection, and
 anything searchable cannot be encrypted. This is inherent, not a gap.
@@ -1304,7 +1318,12 @@ Fields, and their source:
 | **Implemented Organisational Security Measures** | **Declared — human input** |
 | **Links to LIA, DPIA, TIA** | **Declared — human input** |
 
-*Source: D-036, D-162, D-166*
+**Values (D-187).** The template's labels keep the regulator's spelling
+("Organisational"); every name the library gives the field (the request and response
+members, the members of its public types, its column) spells it `organizational`, as
+`09` and `10` section 5.27 do.
+
+*Source: D-036, D-162, D-166, D-187*
 
 **Acceptance criteria**
 1. Generated output matches the template's field set and ordering.

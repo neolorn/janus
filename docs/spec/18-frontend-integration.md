@@ -109,9 +109,10 @@ as the query member `error` (BFF-ERR-001) and is rendered from its code the same
 `details.reauthenticate`**, the frontend SHALL reauthenticate **in place** and **retry
 the original request**, without requiring the person to re-enter what they had already
 provided. An expired session SHALL NOT redirect the person to a sign-in page. A 401 with
-no `details` means no session was held, and is FE-API-006's.
+no `details` means no session was held, and is FE-API-006's, save on a registration
+request, where it means the registration session ended (FE-REG-005).
 
-*Source: BFF-STEP-001, AUTH-STEP-001, AUTH-SESS-005, D-123, D-166*
+*Source: BFF-STEP-001, AUTH-STEP-001, AUTH-SESS-005, D-123, D-166, D-186*
 
 The BFF rejects rather than redirecting mid-request. Recovering is the frontend's
 job. For an expiry, `details.reauthenticate` is `single-factor` or `full`, and the
@@ -186,11 +187,11 @@ exceptions to the content rule).
 **FE-API-006** — A frontend that finds no per-app session SHALL navigate the browser to
 `GET /auth/signon?returnTo=<route>`, `<route>` being the path of its own route the
 person was on. It finds none where `GET /auth/session` answers that no session is held,
-or where any request is refused 401 with no `details` (BFF-ORDER-001 stage 8). A route
-the browser was returned to with `error` (FE-API-003) SHALL render the refusal and SHALL
-NOT navigate to the sign-on by itself.
+or where any request other than a registration request (FE-REG-005) is refused 401 with
+no `details` (BFF-ORDER-001 stage 8). A route the browser was returned to with `error`
+(FE-API-003) SHALL render the refusal and SHALL NOT navigate to the sign-on by itself.
 
-*Source: BFF-SESS-006, BFF-ORDER-001, BFF-ERR-001, D-166*
+*Source: BFF-SESS-006, BFF-ORDER-001, BFF-ERR-001, D-166, D-186*
 
 The sign-on is the library's (BFF-SESS-006); the frontend only starts it, because only
 the frontend knows the route the person meant to reach.
@@ -510,10 +511,13 @@ REG-SESS-008, to the origin `GET /auth/session` answers as `landing`: the terms 
 keeps the client captured at step 1 on the session it establishes, and no destination
 crosses between the applications in the frontend's hands. The wizard SHALL read the
 registration session's state from the server (`GET /register`, `GET /register/events`)
-and SHALL NEVER hold it only in the browser.
+and SHALL NEVER hold it only in the browser. A registration request refused 401
+`auth.session.expired` means the registration session has ended: the wizard shows that
+the registration ended, with the sign-in exit and a way to begin again, and neither
+reauthenticates (FE-API-004) nor starts the sign-on (FE-API-006) (REG-SESS-005, D-186).
 
 *Source: D-146; REG-SESS-002, REG-SESS-004, REG-SESS-006, REG-SESS-008, REG-IDENT-010,
-API-REDIR-002, D-166*
+API-REDIR-002, D-166, D-186*
 
 The first six steps run on the authentication application against the registration
 session; the account exists from the end of step 6; steps 7 to 10 run on the account
@@ -613,14 +617,14 @@ hands the token to on a press:
 | `enrolment` | Authentication | `POST /enrol/begin` (AUTH-RECOV-002) |
 | `invitation` | Authentication | `POST /register` with the invitation token (REG-INV-001), or a sign-in followed by the membership step (REG-INV-002) |
 | `identifier` | Account | On a press in the originating browser `POST /account/identifiers/{id}/verify`; elsewhere the code and `POST /account/identifiers/{id}/abandon` (REG-IDENT-004, REG-IDENT-007) |
-| `identifier-confirm` | Account | The old address's confirmation of a replace where the account has no other channel (REG-IDENT-007) |
+| `identifier-confirm` | Account | The old address's confirmation of a replace where the account has no other channel: on a press, in any browser, `POST /account/identifiers/{id}/verify` with the token and `press` (REG-IDENT-007) |
 | `undo` | Account | `POST /account/identifiers/{id}/undo` (REG-IDENT-006) |
 | `deletion-cancel` | Account | `POST /account/delete/cancel` |
 | `reactivation` | Account | `POST /account/reactivate` |
 | `loss-report` | Account | `POST /recovery/report-loss/{id}/cancel` (AUTH-RECOV-007) |
 
 *Source: D-148; D-146; REG-SESS-003, AUTH-FACT-003, API-LAND-001, BFF-CSRF-005b,
-LIB-HOST-001, D-166*
+LIB-HOST-001, D-166, D-187*
 
 The server decides which case applies: the landing call without `press` returns
 `sameBrowser` and, where false, the code (`09` `POST /register/verify/{id}`). The
@@ -637,9 +641,9 @@ control to end the attempt.
    a press does.
 2. In the originating browser, a press verifies and the waiting screen advances without
    a reload; with the event stream blocked, polling advances it.
-3. In another browser, the page shows the code and the abandon control, and pressing
-   the control ends the attempt (the registration session, the pending sign-in link or
-   the staged identifier); nothing is verified from that browser.
+3. In another browser, the page shows the code and the abandon control, and pressing the
+   control ends the attempt (the registration session, the pending sign-in link, or the
+   pending add or replace); nothing is verified from that browser.
 4. The same component, with the same behaviour, serves identifier add, replace and
    sign-in links, calling the abandon operation that matches the link's kind.
 5. No token from a link appears in a URL the frontend constructs for the event stream or

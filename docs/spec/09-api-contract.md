@@ -13,16 +13,20 @@ The method, path, request and response members, statuses and error codes of ever
 endpoint below are part of the public contract (LIB-API-001). They are held in a
 committed contract file generated from the endpoint data source, which a contract test
 checks and the release gate judges (REF-001 AC2, D-166). Under each endpoint the file
-lists every status it answers and the codes each carries: the codes its row below gives,
-which the endpoint declares (`08` CONV-DESIGN-006), each under the status `10` gives it;
-and the answers its mounting gives it, which the file derives and nothing declares: 401
-`auth.session.expired` where it requires a session, 403 `auth.session.csrfinvalid` where
-the request-forgery layers of `17` section 4 apply to it, and 400
-`api.request.malformed` where it reads a body or binds a typed route or query value.
-What the pipeline answers whatever the endpoint (429 `auth.throttled` from the browser
-profile's source-based rate limiting, 404 `authz.resource.notfound` for a path or method
-no endpoint serves, 500 `system.fault`) is listed once, beside the stage order, and not
-under each endpoint (D-183).
+lists every status it answers and the codes each carries: the codes its row below gives
+and those the text of its section or subsection gives the routes that text governs,
+before or after a table, which the endpoint declares (`08` CONV-DESIGN-006, D-187), and
+422 `integration.sms.balancefloor`, which an endpoint declares where its row answers
+`auth.restriction.exceeded` for a send that may go by SMS, an ask of AUTH-ABUSE-003
+excepted (AUTH-ABUSE-006, D-186), each under the status `10` gives it; and the answers
+its mounting gives it, where its row does not give them, which the file derives and
+nothing declares: 401 `auth.session.expired` where it requires a session, 403
+`auth.session.csrfinvalid` where the request-forgery layers of `17` section 4 apply to
+it, and 400 `api.request.malformed` where it reads a body or binds a typed route or
+query value. What the pipeline answers whatever the endpoint (429 `auth.throttled` from
+the browser profile's source-based rate limiting, 404 `authz.resource.notfound` for a
+path or method no endpoint serves, 500 `system.fault`) is listed once, beside the stage
+order, and not under each endpoint (D-183).
 
 ---
 
@@ -98,7 +102,7 @@ next attempt is looked at, built by one builder wherever it is answered (D-166).
 |---|---|
 | 200 | Success with a body |
 | 204 | Success, no body |
-| 400 | Malformed request: the body is not the shape the endpoint takes, a required member is absent or empty, a free-text member is outside the bound of API-CONV-002, or a word lies outside a closed vocabulary fixed in `10` or at startup (a configuration key the route does not serve, a takedown trigger, an undeclared permission, a role name's or a document name's form), or a route or query value does not read as its type (an identifier that is not a UUID, a restriction name outside its rule). Carries `api.request.malformed` with `details.member` naming the member as the request writes it, in the form API-CONV-002 gives, and nothing of its value; where the body failed before any member, the code alone |
+| 400 | Malformed request: the body is not the shape the endpoint takes, a required member is absent or empty, a free-text member is outside the bound of API-CONV-002, or a word lies outside a closed vocabulary fixed in `10` or at startup (a configuration key the route does not serve, a takedown trigger, an undeclared permission), or a route or query value or a body member does not read as its type (an identifier that is not a UUID, or an app-password identifier outside its form; a role name, a restriction name or a document name outside its rule). Carries `api.request.malformed` with `details.member` naming the member as the request writes it, in the form API-CONV-002 gives, and nothing of its value; where the body failed before any member, the code alone |
 | 401 | No valid session: **session death only** |
 | 403 | Authenticated, not permitted, **and existence is not concealed**. `authz.denied` means only that a permission is absent (section 8 states when an identifier naming no row is answered so); the reserved account's refusals of OPS-BOOT-002 are answered with it too. Also carries `auth.stepup.required` (step-up is a 403, never a 401), `authz.restricted` and `auth.session.csrfinvalid` |
 | 404 | Not found: a path naming a runtime record the deployment does not hold, answered with a named code (under `/admin` nothing is concealed; section 8 states the one case answered as a missing permission instead); **or concealed denial** (`authz.resource.notfound`); also a path under the prefix that no endpoint serves, and a method a served path does not take. 405 is not used and no `Allow` header is sent |
@@ -106,7 +110,7 @@ next attempt is looked at, built by one builder wherever it is answered (D-166).
 | 422 | Well-formed but refused on meaning: a body referring to something that does not exist or cannot be acted on, a blocklisted password, a mixed-script identifier. Answered with a named code, and with `api.request.invalid` (`details.member`) where `10` names none more specific |
 | 429 | Throttled, or refused by a rate limit or a sending restriction (`auth.throttled`, `auth.restriction.exceeded`, and `integration.callback.rejected` for the callback rate limit only); carries `Retry-After` and `details.retryAt` |
 
-*Source: D-016, AUTHZ-CONCEAL-001, D-162, D-166, D-179, D-183*
+*Source: D-016, AUTHZ-CONCEAL-001, D-162, D-166, D-179, D-183, D-187*
 
 **Acceptance criteria**
 1. A concealed denial is byte-identical and timing-identical to a genuine 404.
@@ -230,12 +234,13 @@ steps enrolled under `security.secondStep` (D-162, D-166).
 | `PUT /register/age` | 1 | Records the date of birth (REG-PROF-002). **422** `identity.profile.underage` on an adults-only host: the session ends and accepts no further date |
 | `PUT /register/email` · `PUT /register/phone` | 2, 3 | Stages the identifier, canonicalised, and dispatches a code and a link (REG-SESS-003) unless a provider verified it (REG-IDENT-008). **202**, whether or not the identifier belongs to an account. **429** `auth.throttled` with `retryAt` while the delay of AUTH-ABUSE-001 stands for the source or the identifier, every ask being delayed under it (REG-SESS-003 AC6); **429** `auth.restriction.exceeded` with `retryAt` for a send a restriction refuses (AUTH-ABUSE-004). A provider sign-in that resolves to a linked `sub` is a sign-in, not a registration. An email an invitation bound is verified by the press, so step 2 is complete when step 1 is. A phone an invitation bound is staged locked at the press; at step 3 `PUT /register/phone` takes that number and no other and sends its code, and step 3 cannot be skipped while it stands (REG-MAIL-001 AC3) |
 | `POST /register/phone/skip` | 3 | Passes over the phone step where `registration.phone` is `optional` and no invitation bound a phone (REG-SESS-002 AC3, REG-MAIL-001); nothing is staged. **200** with the `GET /register` state at its next step. **409** `identity.registration.incomplete` where `registration.phone` is `required`, an invitation bound a phone, or the session is not at step 3 |
-| `POST /register/identifiers` · `PUT /register/identifiers/{id}` · `DELETE /register/identifiers/{id}` | 4 | Adds a further email or phone within `identifiers.email.max` and `identifiers.phone.max`; Change on an unlocked identifier (re-verification follows); removes an unverified extra. On a locked phone not yet verified, `PUT /register/identifiers/{id}` takes only its own number and sends a new code. **409** `identity.identifier.maximum` where the kind's maximum is reached; `identity.identifier.lastofkind` where removal would leave the required minimum unmet; `identity.identifier.locked` for any other value on a locked identifier; **422** `identity.identifier.domainnotallowed` under a domain lock (REG-DOM-001) |
+| `POST /register/identifiers` · `PUT /register/identifiers/{id}` · `DELETE /register/identifiers/{id}` | 4 | Adds a further email or phone within `identifiers.email.max` and `identifiers.phone.max`; Change on an unlocked identifier (re-verification follows); removes an unverified extra. On a locked phone not yet verified, `PUT /register/identifiers/{id}` takes only its own number and sends a new code. **429** `auth.throttled` with `retryAt` while the delay of AUTH-ABUSE-001 stands; `auth.restriction.exceeded` with `retryAt` where a restriction refuses the code's send, identical for a value another account holds or an undo reserves, and nothing is staged (AUTH-ABUSE-004). **409** `identity.identifier.maximum` where the kind's maximum is reached; `identity.identifier.lastofkind` where removal would leave the required minimum unmet; `identity.identifier.locked` for any other value on a locked identifier; **422** `identity.identifier.domainnotallowed` under a domain lock (REG-DOM-001) |
 | `POST /register/confirm` | 4 | Completes the confirm step. **409** `identity.registration.incomplete` while any staged identifier is unverified (REG-SESS-004) |
 | `PUT /register/security` | 5 | Password (**422** `auth.password.blocklisted`, `auth.password.tooshort`, `auth.password.toolong`) and the second-step choice (**400** `api.request.malformed` naming `secondStep` where the choice is none of the four). WebAuthn and TOTP enrolment (`/auth/webauthn/register/*`, `/account/factors/totp/*`) accept the registration session in place of an account session for this step (REG-SESS-006); a label is required (AUTH-FACT-001). Recovery codes are returned once when a second step is enrolled beside a password (AUTH-RECOV-006) |
-| `POST /register/terms` | 6 | Records terms accepted, notice presented, the derived affirmation and the consent controls (REG-SESS-007), runs the one transaction that creates the account `active`, emits `AccountRegistered` once, and signs the person in at the assurance the security step proved. The client captured at `POST /register` is kept on the session this step establishes and read back as `landing` at `GET /auth/session` (REG-SESS-008). **201** with the session cookie set. **422** `identity.affirmation.required` where the affirmation record is absent; **422** `privacy.purpose.noconsent` for a ticked control whose purpose takes no consent; **409** `privacy.notice.unpublished` for a ticked control whose governing document has no published version; **409** `identity.registration.incomplete` where the account would be created without a terms version or a notice version (REG-SESS-007). Nothing is written on any refusal |
+| `POST /register/terms` | 6 | Records terms accepted, notice presented, the derived affirmation and the consent controls (REG-SESS-007), runs the one transaction that creates the account `active`, emits `AccountRegistered` once, and signs the person in at the assurance the security step proved. The client captured at `POST /register` is kept on the session this step establishes and read back as `landing` at `GET /auth/session` (REG-SESS-008). **201** with the session cookie set. **422** `identity.affirmation.required` where the affirmation record is absent; **422** `privacy.purpose.noconsent` for a ticked control whose purpose takes no consent; **409** `privacy.notice.unpublished` for a ticked control whose governing document has no published version; **409** `identity.registration.incomplete` where the account would be created without a terms version or a notice version (REG-SESS-007). Nothing is written on any refusal save one: where a staged identifier was taken or reserved since it was staged, the session ends, a kept write (CONV-DESIGN-003), and the request is answered **401** `auth.session.expired` with no `details`, as for an ended session (REG-SESS-005, D-186) |
 
-*Source: D-146; REG-SESS-002 to REG-SESS-007, REG-IDENT-010, REG-DOM-001, D-162, D-166*
+*Source: D-146; REG-SESS-002 to REG-SESS-007, REG-IDENT-010, REG-DOM-001, D-162, D-166,
+D-186, D-187*
 
 Steps 7 to 10 (about you, preferences, membership, done) run on the account
 application in the new session through `PUT /account/profile`,
@@ -296,9 +301,10 @@ session held. Where the stream is unavailable the frontend polls `GET /register`
 
 **200**: event stream
 **401** is never used here (API-CONV-003); a request without the session cookie
-receives **404**
+receives **404** `authz.resource.notfound` (D-187)
 
-*Source: D-146; REG-SESS-003, `17-bff` (server-sent events on the session cookie), D-166*
+*Source: D-146; REG-SESS-003, `17-bff` (server-sent events on the session cookie),
+D-166, D-187*
 
 ---
 
@@ -636,12 +642,13 @@ Raises an existing session's assurance. Same request and response shape as
 policy in force for the account does not permit is refused `auth.factor.notpermitted`
 before it is verified, and counted (AUTH-STEP-002, IDN-LIFE-009b). A `phoneCode` ask
 whose number answers `risk` is answered **403** `auth.stepup.required` with `details`
-computed without that entry (AUTH-FACT-002b).
+computed without that entry, against the strictest of the policy's gates field by field,
+since the step-up names no action (AUTH-FACT-002, AUTH-FACT-002b, D-187).
 
 **429**: `auth.throttled`, with `Retry-After`; `auth.restriction.exceeded` with
 `retryAt` where a restriction refuses the send of a `phoneCode` ask (AUTH-ABUSE-004)
 
-*Source: AUTH-STEP-001, AUTH-STEP-002, D-141, D-166, D-183*
+*Source: AUTH-STEP-001, AUTH-STEP-002, D-141, D-166, D-183, D-187*
 
 Rotates the session identifier on success.
 
@@ -756,11 +763,16 @@ primary email>", "displayName": "<the display name, or empty>" }`; during regist
 account's, and `name` the staged email; the credential is staged on the registration
 session and no account row is written before the terms step (REG-PM-001, REG-SESS-006).
 
+**403**: `auth.stepup.required` (`factor:enrol`, AUTH-STEP-007); `authz.restricted` for
+an enrolment by a restricted account, save one a policy hold requires (IDN-ACCT-007,
+AUTH-FACT-017); `authz.denied` from the break-glass session or a session another
+application opened from it (`factor:enrol`, OPS-BOOT-002)
 **422**: `auth.webauthn.algorithmnotallowed`,
-`auth.webauthn.userverificationrequired`
+`auth.webauthn.userverificationrequired`, `auth.credential.labelinvalid`
+(AUTH-FACT-001)
 
 *Source: AUTH-FACT-001, AUTH-FACT-002b, AUTH-FACT-011, AUTH-FACT-013, AUTH-FACT-014,
-D-146, D-162, D-166, D-183*
+D-146, D-162, D-166, D-183, D-187*
 
 Where the credential is device-bound, the response indicates a second enrolment is
 prompted — advisory for public users, required for administrative-organization
@@ -808,8 +820,11 @@ The addresses they name are frontend routes (API-LAND-001), declared by the host
 ```
 
 **202** — always, regardless of existence.
+**429**: `auth.throttled` with `retryAt`, or, where a restriction refuses the ask,
+`auth.restriction.exceeded` with `retryAt`, identical for an identifier that exists and
+one that does not (AUTH-ABUSE-002, AUTH-ABUSE-003, AUTH-ABUSE-004)
 
-*Source: AUTH-ABUSE-003, AUTH-FACT-002b, D-166*
+*Source: AUTH-ABUSE-003, AUTH-FACT-002b, D-166, D-187*
 
 Where the identifier does not exist, **that address is emailed to say so**. The real
 owner gets their answer; an enumerating attacker learns nothing. A number the SIM-change
@@ -858,10 +873,11 @@ notification.
 **409** — `auth.lossreport.notpermitted` (administrative-organization member);
 `auth.lossreport.pending` (already reported)
 
-*Source: AUTH-RECOV-007, AUTH-RECOV-008, D-141*
+*Source: AUTH-RECOV-007, AUTH-RECOV-008, D-141, D-186*
 
 Invalidation is automatic after `recovery.invalidation.window` and is **held** if no
-notification delivered. Reachable assurance (AUTH-STEP-006) changes only then.
+notification was taken at its immediate attempt (AUTH-RECOV-007, AUTH-ABUSE-004).
+Reachable assurance (AUTH-STEP-006) changes only then.
 
 ---
 
@@ -875,9 +891,18 @@ step-up (`recovery:approve`).
 ```
 
 **200** `{ enrolmentLinkExpiresAt }`; the link itself goes to the channel
-**422** — `auth.recovery.reasonrequired`, `auth.recovery.channelnotonaccount`
+**403**: `authz.denied` without `recovery:approve`; `auth.stepup.required`
+(`recovery:approve`); `authz.restricted` where the approver's account is restricted, at
+the gate step or at the second ask inside the unit of work, nothing approved and nothing
+sent (AUTHZ-GATE-006)
+**422** — `auth.recovery.reasonrequired`, `auth.recovery.channelnotonaccount`,
+`auth.recovery.selfapproval` (AUTH-RECOV-002a); `integration.sms.balancefloor` where the
+gateway floor refuses the link's SMS, and nothing is approved (AUTH-ABUSE-006)
+**429**: `auth.throttled` with `retryAt` past a rate limit of AUTH-RECOV-002;
+`auth.restriction.exceeded` with `retryAt` where a restriction refuses the link's send,
+and nothing is approved (AUTH-ABUSE-004)
 
-*Source: AUTH-RECOV-002, AUTH-RECOV-003*
+*Source: AUTH-RECOV-002, AUTH-RECOV-002a, AUTH-RECOV-003, D-186*
 
 `channelUsed` SHALL be one of the account's **recorded** channels. A
 requester-supplied channel is rejected. Available for **every account**, not only
@@ -937,10 +962,14 @@ and nothing else:
 Credentials are reported by property and label, never by secret material; `legalName`
 and `dateOfBirth` are present only where `profile.legalname` and `profile.dateofbirth`
 are on (REG-PROF-001). The credential list renders `backupState` as synced or this
-device only (`18` FE-ACCT-001). `recoveryCodes.remindedAt` is the instant a channel took
-the set's one reminder, or null (AUTH-FACT-008).
+device only (`18` FE-ACCT-001). `recoveryCodes.remindedAt` is the instant the set's one
+reminder was admitted to a channel or the pass found no channel it could reach, and null
+before either (AUTH-FACT-008). An identifier being added is listed with `verified` false
+under the identifier of its pending verification, which it keeps once verified
+(REG-IDENT-004).
 
-*Source: D-146; REG-ACCT-001, AUTH-FACT-001, AUTH-FACT-008, AUTH-FACT-009, D-166*
+*Source: D-146; REG-ACCT-001, AUTH-FACT-001, AUTH-FACT-008, AUTH-FACT-009, D-166, D-186,
+D-187*
 
 ---
 
@@ -999,18 +1028,22 @@ Adds an email or phone (REG-IDENT-004). Step-up action `identifier:add`.
 ```
 
 **202**: always, whether or not the identifier belongs to another account
-(API-CONV-005): the identifier is staged unverified, a code and a link are sent
-(REG-SESS-003) and the security-notice set is notified. A duplicate sends no code and
-notifies the identifier's owner (REG-SESS-005, D-076).
+(API-CONV-005): the add is staged, its value held on a pending verification and listed
+unverified until it verifies (REG-IDENT-004), a code and a link are sent (REG-SESS-003)
+and the security-notice set is notified. A duplicate is staged and listed alike, sends
+no code and notifies the identifier's owner (REG-SESS-005, D-076).
 **403**: `auth.stepup.required`
+**429**: `auth.restriction.exceeded` with `retryAt` where a restriction refuses the
+code's send, identical for a value another account holds or an undo reserves, and
+nothing is staged (AUTH-ABUSE-004)
 **409**: `identity.identifier.maximum`, the kind's maximum (`identifiers.email.max`,
-`identifiers.phone.max`) reached; in single-address mode use
+`identifiers.phone.max`) reached, its pending adds counted; in single-address mode use
 `PUT /account/identifiers/{id}/replace`
 **422**: `identity.identifier.mixedscript`, `identity.identifier.domainnotallowed`
 (REG-DOM-001), `identity.identifier.invalid` (a value that is not a well-formed
 identifier of its kind)
 
-*Source: D-146; REG-IDENT-004, REG-SESS-005, REG-DOM-001, D-162, D-166*
+*Source: D-146; REG-IDENT-004, REG-SESS-005, REG-DOM-001, D-162, D-166, D-187*
 
 An unverified identifier cannot sign in and receives no recovery link until verified.
 
@@ -1018,15 +1051,20 @@ An unverified identifier cannot sign in and receives no recovery link until veri
 
 ### `POST /account/identifiers/{id}/verify`
 
-Verifies an added identifier. Same request, responses and browser binding as
-`POST /register/verify/{id}` (REG-SESS-003): a typed code, or a link pressed in the
-browser that added it.
+Verifies an added identifier, or the new value of a replace: same request, responses and
+browser binding as `POST /register/verify/{id}` (REG-SESS-003), a typed code or a link
+pressed in the browser that added it. It also takes the old address's confirmation of a
+replace (`identifier-confirm`, REG-IDENT-007): link-borne, needing no session and bound
+to no browser, a press with its `linkToken` and `press` confirms from any browser, under
+the `{id}` its landing names as an `identifier` link's does, and a press after
+`code.verification.lifetime` from its send changes nothing and is answered **422**
+`auth.code.expired`.
 
 **204** · **200** (link opened elsewhere: nothing changes, the code is shown) ·
 **422**: `auth.code.invalid`, `auth.code.expired` ·
 **429**: `auth.throttled` with `retryAt`
 
-*Source: D-146; REG-IDENT-004, REG-SESS-003, D-183*
+*Source: D-146; REG-IDENT-004, REG-SESS-003, REG-IDENT-007, D-183, D-187*
 
 Emits `IdentifierAdded` on success.
 
@@ -1059,15 +1097,18 @@ Emits `IdentifierPrimaryChanged` on a primary change.
 Removes an identifier, **immediately** (REG-IDENT-006). Step-up action
 `identifier:remove`.
 
-**204**: removed; the remaining security-notice set receives an **undo** link valid
-for `identifier.change.coolingoff`; the removed identifier receives a notice with no
-link; every other session of the account ends. Emits `IdentifierRemoved`.
+**204**: removed; the remaining security-notice set receives an **undo** link valid for
+`identifier.change.coolingoff`; the removed identifier receives a notice with no link;
+every other session of the account ends. Emits `IdentifierRemoved`. An `{id}` naming a
+pending add (REG-IDENT-004), admitted at the same gate, ends that pending verification
+as `POST /account/identifiers/{id}/abandon` does: **204**, with no undo, no notice, no
+reservation, no session ended and no `IdentifierRemoved`.
 **403**: `auth.stepup.required`
 **409**: `identity.identifier.primary` (set another primary first; decided before any
 other refusal, so the last verified identifier of a kind answers this),
 `identity.identifier.lastofkind` (the required minimum of the kind would be unmet)
 
-*Source: D-146; REG-IDENT-006, D-166*
+*Source: D-146; REG-IDENT-006, D-166, D-187*
 
 The undo goes to the remaining set and never to the removed address, so a compromised
 mailbox cannot re-attach itself. The removed identifier is powerless from then on and
@@ -1086,9 +1127,10 @@ accepts the link token from the undo notice, the same shape as deletion cancella
 ```
 
 **204**: restored, verified as it was, and the security-notice set notified
-**422**: `identity.change.windowelapsed` (after `identifier.change.coolingoff`)
+**422**: `identity.change.windowelapsed` (after `identifier.change.coolingoff`, or
+once a write of the value to the account has ended its reservation, REG-IDENT-006)
 
-*Source: D-146; REG-IDENT-006*
+*Source: D-146; REG-IDENT-006, D-187*
 
 ---
 
@@ -1101,7 +1143,10 @@ the undo goes to the remaining channels of the account. **Only where the account
 no other channel at all** does the old address confirm before the swap, except within
 an admin-assisted enrolment session (AUTH-RECOV-002, REG-IDENT-007); the old address's
 message (`identifier-change-confirm`) carries a link of kind `identifier-confirm`
-(API-LAND-001).
+(API-LAND-001), which the old address confirms by a press presented to
+`POST /account/identifiers/{id}/verify` with its token; the confirmation lives
+`code.verification.lifetime` from its send, and a press after that changes nothing and
+is answered **422** `auth.code.expired` (REG-IDENT-007).
 
 ```json
 { "value": "..." }
@@ -1110,10 +1155,13 @@ message (`identifier-change-confirm`) carries a link of kind `identifier-confirm
 **202**: always, whether or not the new value belongs to another account
 (API-CONV-005)
 **403**: `auth.stepup.required`
+**429**: `auth.restriction.exceeded` with `retryAt` where a restriction refuses the
+code's send, identical for a value another account holds or an undo reserves, and
+nothing is staged (AUTH-ABUSE-004)
 **409**: `identity.change.pending` (a replace is already staged for this identifier)
 **422**: `identity.identifier.mixedscript`, `identity.identifier.domainnotallowed`
 
-*Source: D-148; D-146, REG-IDENT-007, D-166*
+*Source: D-148; D-146, REG-IDENT-007, D-166, D-187*
 
 Also the endpoint an enrolment session opened for a lost mailbox uses to set a new
 address confirmed by the new address alone (`POST /enrol/begin`, AUTH-RECOV-002). The
@@ -1138,10 +1186,10 @@ link opened in a browser other than the one that staged it (REG-SESS-003, FE-VER
 **204**: always; a token that resolves to no pending verification is answered
 identically
 
-*Source: D-148; REG-SESS-003, REG-IDENT-004, REG-IDENT-007*
+*Source: D-148; REG-SESS-003, REG-IDENT-004, REG-IDENT-007, D-187*
 
-The staged identifier is discarded, or the staged replace withdrawn, and its code and
-link stop working; the account's verified identifiers are unchanged.
+The pending add ends, or the staged replace is withdrawn, and its code and link stop
+working; the account's verified identifiers are unchanged.
 
 ---
 
@@ -1403,15 +1451,19 @@ set), never a cached copy. `POST`: the generated **secret, returned once**, with
 **204**: `DELETE`: revoked at the server; a client using it fails on its next
 connection.
 **400**: `api.request.malformed` naming `label` where it is absent, or `id` where `{id}`
-does not read as an app-password identifier
+does not read as an app-password identifier (1 to 255 octets of the URL and filename
+safe base64 alphabet, the pad `=` excluded, RFC 8620 section 1.2; CONV-DESIGN-004)
 **403**: `auth.stepup.required` (`mailcredential:create`, `mailcredential:revoke`);
-`authz.restricted` for a creation by a restricted account; `authz.denied` for a creation
-from the break-glass session or a session opened from it (OPS-BOOT-002)
+`authz.restricted` for a creation by a restricted account, at the gate step or at the
+second ask after the server's call, the password the server created revoked there
+(where that revocation fails, left listed for its holder to revoke) and no secret
+returned (INT-MAIL-010); `authz.denied` for a creation from the break-glass
+session or a session opened from it (OPS-BOOT-002)
 **404**: `identity.mailbox.notfound`; `auth.credential.notfound` where the server holds
 no app password of the person under the identifier
 **422**: `auth.credential.labelinvalid`
 
-*Source: D-146; REG-MAIL-002, INT-MAIL-010, D-166, D-179, D-183*
+*Source: D-146; REG-MAIL-002, INT-MAIL-010, D-166, D-179, D-183, D-186, D-187*
 
 Creation and revocation are notified to the security-notice set and audited; no secret
 or hash appears in the library's database, logs or audit records. Ending a membership
@@ -1552,7 +1604,8 @@ would pass `identifiers.email.max`
 `expiresAt`, its organization's deletion was requested or it was erased, or its inviter
 no longer holds what issuing it required (REG-INV-001);
 `identity.invitation.identifiermismatch` (a bound email or phone is not verified on the
-account accepting, or the corporate address is already held by an account);
+account accepting, or the corporate address is held by an account or reserved for an
+undo to another account, judged under its lock, REG-SESS-005);
 `identity.identifier.domainnotallowed` where the organization's lock is on and the
 address the member will sign in with is outside it, or the account holds no verified
 email the lock could admit (REG-DOM-001)
@@ -1560,7 +1613,7 @@ email the lock could admit (REG-DOM-001)
 Emits `MembershipChanged` and, where a corporate address is taken on,
 `IdentifierAdded` and `IdentifierPrimaryChanged`.
 
-*Source: D-148; D-146, REG-INV-001, REG-INV-002, REG-MAIL-001, D-166, D-183*
+*Source: D-148; D-146, REG-INV-001, REG-INV-002, REG-MAIL-001, D-166, D-183, D-187*
 
 ---
 
@@ -1585,11 +1638,13 @@ revision, or a start whose declaration names another document for the purpose
 ### `POST /privacy/consents/{purpose}/grant` · `POST /privacy/consents/{purpose}/withdraw`
 
 **204** · **422** `privacy.purpose.noconsent` · **409** `privacy.notice.unpublished`
-(grant only). A withdrawal where the subject holds no consent for the purpose answers
-204 and records nothing; so does a grant where the subject holds a live consent the
-purpose admits (PRIV-CONS-001).
+(grant only). A withdrawal where the subject holds no live consent for the purpose but a
+record not yet withdrawn stamps the latest such record, a superseded one, and raises
+`ConsentChanged` `withdrawn`; where every record for the purpose is withdrawn, or none
+exists, it answers 204 and records nothing; so does a grant where the subject holds a
+live consent the purpose admits (PRIV-CONS-001).
 
-*Source: PRIV-CONS-008, PRIV-CONS-011, D-135, D-162, D-166, D-183*
+*Source: PRIV-CONS-008, PRIV-CONS-011, D-135, D-162, D-166, D-183, D-187*
 
 Grant records the current version of the document the purpose's consent is governed
 by and the consent kind, and the mechanism `reconsent` where the subject holds a
@@ -1668,13 +1723,14 @@ portability are the self-service export.
 { "requestId": "...", "receiptSentAt": "...", "decisionDue": "..." }
 ```
 
-*Source: PRIV-RIGHT-001, PRIV-RIGHT-002, D-113, D-126*
+*Source: PRIV-RIGHT-001, PRIV-RIGHT-002, D-113, D-126, D-186*
 
-`receiptSentAt` equals creation time; `decisionDue` is `privacy.request.decision` (six
-working days) after **submission** — creation time for an in-app request — computed
-on the deployment's working-day calendar (`privacy.workingdays`, `privacy.holidays`).
-It is the statutory decision deadline, after which lapse is a deemed rejection
-(PRIV-RIGHT-002, D-136).
+`receiptSentAt` is the instant the receipt was admitted, which is the creation, or null
+where a sending restriction refused it (AUTH-ABUSE-004); `decisionDue` is
+`privacy.request.decision` (six working days) after **submission** — creation time for
+an in-app request — computed on the deployment's working-day calendar
+(`privacy.workingdays`, `privacy.holidays`). It is the statutory decision deadline,
+after which lapse is a deemed rejection (PRIV-RIGHT-002, D-136).
 
 Access and portability are the self-service export; objection completes immediately
 through `POST /privacy/objections/{purpose}` (PRIV-RIGHT-001a). **Rectification of editable data** is
@@ -2316,12 +2372,14 @@ or carries no `jti` (RFC 8417 section 2.2), `invalid_request`; a provider not de
 not hold, or a signature its key does not verify, `invalid_key`; an `iss` other than the
 issuer the provider's document names, `invalid_issuer`; an `aud` naming none of the
 declared `clientIds`, `invalid_audience`; an `exp` that has passed, `invalid_request`,
-while a token carrying no `exp` is not refused for it. The rate limit is answered
-**429** with `Retry-After`. Apple posts `{ "payload": "<token>" }` and is answered
-**200** with no body. On either route, a provider document the library cannot have or
-read (its metadata or its key set) refuses nothing: the delivery is answered **500**
-`system.fault`, nothing is claimed, recorded or changed, and the provider may deliver
-the event again (RFC 8935 section 2.3).
+while a token carrying no `exp` is not refused for it; an `nbf` later than now,
+`invalid_request`, while a token carrying no `nbf` is not refused for it. Neither
+instant is given any leeway (D-187). The rate limit is answered **429** with
+`Retry-After`. Apple posts `{ "payload": "<token>" }` and is answered **200** with no
+body. On either route, a provider document the library cannot have or read (its metadata
+or its key set) refuses nothing: the delivery is answered **500** `system.fault`,
+nothing is claimed, recorded or changed, and the provider may deliver the event again
+(RFC 8935 section 2.3).
 
 Every other refusal on a callback, the host's included, is `integration.callback.rejected`:
 **429** with `Retry-After` and `details.retryAt` where `integration.callback.ratelimit`
@@ -2331,7 +2389,8 @@ whose earlier delivery is still being carried, its claim younger than
 is not counted as a rejection, and is carried when the provider delivers it again; one
 meeting an older unsettled claim takes it over and is carried (BFF-MACH-002).
 
-*Source: AUTH-ABUSE-007, INT-GEN-003, IDN-LIFE-012a, BFF-MACH-002, D-164, D-166, D-183*
+*Source: AUTH-ABUSE-007, INT-GEN-003, IDN-LIFE-012a, BFF-MACH-002, D-164, D-166, D-183,
+D-187*
 
 **Acceptance criteria**
 1. A forged callback with a guessed reference is rejected and logged.

@@ -332,37 +332,37 @@ PostgreSQL holds the durable copy. Losing the cache costs latency, not access.
 Required by: notification delivery with retry (D-022): an admitted send writes its
 outbox row in the transaction that undertakes it, one immediate attempt runs after the
 outermost transaction commits and never inside an open one, and the worker carries
-whatever that attempt did not (AUTH-ABUSE-004); Stalwart reconciliation
-(INT-MAIL-007); mailbox provisioning, which pushes the state each mailbox is owed
-(INT-MAIL-006, INT-MAIL-006a); expired-session and consumed-token sweeps
-(AUTH-KEY-003); the sending-restriction record sweep (PRIV-RET-005); organization
-deletion grace windows (IDN-ORG-003); authenticator invalidation windows
-(AUTH-RECOV-007); gateway balance polling (INT-SMS-004); licence expiry warnings and
-the annual envelope operation (OPS-MAINT-001); the key-encryption key's cryptoperiod
-(DR-009a); the automated restore test (DR-007); the audit partition job, which creates
-the months ahead and drops expired partitions (PRIV-RET-002, OPS-MIG-003a); the
-registration-session sweep (REG-SESS-001); the invitation sweep, which forgets what an
-expired invitation bound (PRIV-RIGHT-005a); domain-lock re-verification (REG-DOM-001);
-the IP-to-city database refresh (INT-GEN-006); the recovery-code reminder
-(AUTH-FACT-008); the account deletion grace window (`account.deletion.grace`,
-IDN-ACCT-007); the takedown window (`takedown.grace`, IDN-LIFE-003); the transactional
-outbox publisher (IDN-LIFE-003a); the event publisher, which carries each event from
-the row written in the transaction that made its fact true (CONV-DESIGN-002,
-LIB-API-001); the daily drift check of materialised derivations over the declared
-relationship sources (`derivation.materialised.driftcheck`, AUTHZ-DERIVE-005), under
-the principal `derivation-driftcheck`; the carrying of
-raised alerts to their channels every `outbox.poll.interval` (OPS-ALERT-001); the
-watches of the host clock (INF-HOST-001), of certificate renewal (INF-TLS-003) and of
-the emergency credential (OPS-BOOT-001); the privacy-request deadline alerts and the
-holiday-list look (PRIV-RIGHT-002); and the read-volume baseline (OPS-ALERT-005)
-(D-148, D-166). Each runs as the system principal `10` names for it (INF-BG-002). A job
-may run in several processes at once; what a delivery job carries is claimed row by row
-before it is carried (CONV-DESIGN-003), so each row is carried by one process at a time.
-The key-encryption-key re-wrap (OPS-SEC-003)
-is not background work of the worker: it runs inside the command-line process so that
-it does not depend on the application being up (D-147).
+whatever that attempt did not (AUTH-ABUSE-004); Stalwart reconciliation (INT-MAIL-007);
+mailbox provisioning, which pushes the state each mailbox is owed (INT-MAIL-006,
+INT-MAIL-006a); expired-session and consumed-token sweeps (AUTH-KEY-003); the
+sending-restriction record sweep (PRIV-RET-005); organization deletion grace windows
+(IDN-ORG-003); authenticator invalidation windows (AUTH-RECOV-007); gateway balance
+polling (INT-SMS-004); licence expiry warnings and the annual envelope operation
+(OPS-MAINT-001); the key-encryption key's cryptoperiod (DR-009a); the automated restore
+test (DR-007); the audit partition job, which creates the months ahead and drops expired
+partitions (PRIV-RET-002, OPS-MIG-003a); the registration-session sweep (REG-SESS-001);
+the invitation sweep, which forgets what an expired invitation bound (PRIV-RIGHT-005a);
+domain-lock re-verification (REG-DOM-001); the IP-to-city database refresh
+(INT-GEN-006); the recovery-code reminder (AUTH-FACT-008); the account deletion grace
+window (`account.deletion.grace`, IDN-ACCT-007); the takedown window (`takedown.grace`,
+IDN-LIFE-003); the transactional outbox publisher (IDN-LIFE-003a); the event publisher,
+which carries each event from the row written in the transaction that made its fact true
+(CONV-DESIGN-002, LIB-API-001); the daily drift check of materialised derivations over
+the declared relationship sources (`derivation.materialised.driftcheck`,
+AUTHZ-DERIVE-005), under the principal `derivation-driftcheck`; the carrying of raised
+alerts to their channels every `outbox.poll.interval` (OPS-ALERT-001); the watches of
+the host clock (INF-HOST-001), of certificate renewal (INF-TLS-003) and of the emergency
+credential (OPS-BOOT-001); the privacy-request deadline alerts and the holiday-list look
+(PRIV-RIGHT-002); and the read-volume baseline (OPS-ALERT-005) (D-148, D-166). Each runs
+as the system principal `10` names for it (INF-BG-002). A job may run in several
+processes at once; what a delivery job carries is claimed row by row before it is
+carried (CONV-DESIGN-003), so each row is carried by one process at a time: a row is
+claimed only once it is due, and a row that tracks several deliveries is carried under
+one claim, renewed before each delivery (D-186). The key-encryption-key re-wrap
+(OPS-SEC-003) is not background work of the worker: it runs inside the command-line
+process so that it does not depend on the application being up (D-147).
 
-*Source: D-148, D-166, D-183; D-147, the items named above*
+*Source: D-148, D-166, D-183, D-186; D-147, the items named above*
 
 **Acceptance criteria**
 1. Scheduled work runs without a person triggering it.
@@ -372,7 +372,8 @@ it does not depend on the application being up (D-147).
    router directly from the worker, so a stalled carrier still reports itself
    (OPS-ALERT-001).
 3. No job's run delays another job's turn in the same process.
-4. Two processes running one delivery job at once carry each row once.
+4. Two processes running one delivery job at once carry each row once, and each delivery
+   of a row that tracks several once.
 
 ---
 

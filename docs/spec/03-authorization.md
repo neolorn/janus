@@ -113,10 +113,12 @@ is refused with `authz.grant.reasonrequired` (422).
 
 A grant no person made SHALL record the nil subject as its granter, never its holder:
 the grants bootstrap makes carry the reason `OPS-BOOT-001`, and a materialised grant the
-drift check writes carries the reason `AUTHZ-DERIVE-005`, its audit record naming the
-system principal `derivation-driftcheck` (AUTHZ-DERIVE-005).
+drift check writes carries the reason `AUTHZ-DERIVE-005`, its audit record,
+`authz.grant.materialised`, naming the system principal `derivation-driftcheck`; a grant
+the drift check takes back is recorded as `authz.grant.retracted` the same way, in the
+transaction that corrects the drift (AUTHZ-DERIVE-005, D-187).
 
-*Source: D-015, D-166*
+*Source: D-015, D-166, D-187*
 
 Expiry supports contractors, trials and temporary escalation. Free to add now; a
 migration across every query later.
@@ -128,6 +130,10 @@ migration across every query later.
 4. The grants bootstrap makes, and the grants the drift check materialises, record the
    nil subject as their granter, with the reasons `OPS-BOOT-001` and `AUTHZ-DERIVE-005`
    respectively.
+5. A grant the drift check writes or takes back is recorded as
+   `authz.grant.materialised` or `authz.grant.retracted`, naming the principal
+   `derivation-driftcheck` and the reason `AUTHZ-DERIVE-005`, in the transaction that
+   corrects the drift.
 
 ---
 
@@ -387,17 +393,18 @@ corrected in the same run. A refresh SHALL write the derivation's grant on each 
 derivation is declared on whose ancestry includes the resource the relationship's row
 names, that resource itself included where it is of that type.
 
-**Values (D-166).** The drift check reads each relationship's rows through the source the
-host declares for it (`07` LIB-HOST-001), the source the `GET /admin/access` view reads
-(AUTHZ-DERIVE-007). The host SHALL declare that source for every declared derivation,
-materialised or not; a derivation whose relationship has none fails startup with
-`model.startup.declarationmissing` naming the relationship. The drift check runs as the
-system principal `derivation-driftcheck` (`10` section 5.29, IDN-PRIN-001); a grant it
-writes records the nil subject as its granter and the reason `AUTHZ-DERIVE-005`, and
-its audit record names the principal (AUTHZ-GRANT-003). The refresh meets no gate of
+**Values (D-166).** The drift check reads each relationship's rows through the source
+the host declares for it (`07` LIB-HOST-001), the source the `GET /admin/access` view
+reads (AUTHZ-DERIVE-007). The host SHALL declare that source for every declared
+derivation, materialised or not; a derivation whose relationship has none fails startup
+with `model.startup.declarationmissing` naming the relationship. The drift check runs as
+the system principal `derivation-driftcheck` (`10` section 5.29, IDN-PRIN-001); a grant
+it writes records the nil subject as its granter and the reason `AUTHZ-DERIVE-005`, and
+its audit record (`authz.grant.materialised`, or `authz.grant.retracted` for one it
+takes back) names the principal (AUTHZ-GRANT-003, D-187). The refresh meets no gate of
 its own: the host calls it from its own gated operation (CONV-DESIGN-002 AC3).
 
-*Source: D-043, D-162, D-166, D-183*
+*Source: D-043, D-162, D-166, D-183, D-187*
 
 Materialisation reintroduces, deliberately and in one controlled place, the
 synchronisation problem the design otherwise avoids. It is the last rung of the
@@ -724,7 +731,7 @@ beside the other two; the SQL rendering names the view. A list therefore admits 
 record whose data subject has not consented, or has withdrawn (PRIV-SENS-002,
 PRIV-SENS-002a).
 
-*Source: D-017, D-166, D-183*
+*Source: D-017, D-166, D-183, D-187*
 
 **Acceptance criteria**
 1. Both renderings derive from one rule definition — neither is written separately.
@@ -732,8 +739,11 @@ PRIV-SENS-002a).
 3. The SQL fragment is parameterised; no value is interpolated into SQL text.
 4. For a permission bound to a consent-based purpose, both renderings admit only the
    records whose data subject holds a live consent of the required kind for that
-   purpose, recorded against the document the purpose now names, and a truth-table case
-   bound to such a purpose is asserted equal across them.
+   purpose, recorded against the document the purpose now names; every truth-table case
+   bound to such a purpose is asserted equal across them, and those cases include a
+   subject whose live record stands beside an ended one, whose records are admitted, and
+   a subject whose every record for the purpose is withdrawn or superseded, whose
+   records are not (D-187).
 
 ---
 
@@ -793,9 +803,14 @@ meaning **"permitted by grants, subject to session gates"** — computed in the 
 query.
 
 **A capability is not a promise the action will succeed.** An action can still be
-refused for step-up, a downgraded session, the subject's processing restriction,
-missing or superseded consent, or the caller's account state — none of which the
-per-row grant query evaluates.
+refused for step-up, a downgraded session, the subject's processing restriction, missing
+or superseded consent, or the caller's account state — none of which the per-row grant
+query evaluates. A list filter or SQL fragment under an action bound to a step-up gate
+asks that gate after the restriction and before its query is rendered, and is refused
+with the gate's code where it is unmet, whatever its rows; the per-row query then
+renders no step-up term (D-187). A check answers the gate's code only for a record its
+grants admit, so a step-up case of the truth table is one whose grants admit the record
+(AUTHZ-TEST-001).
 
 **Each capability therefore carries what it still requires:**
 
@@ -837,7 +852,7 @@ each derivation confers allows is read from the model and mapped in memory; no r
 and no permission costs a further query, and no grant is read through the library's own
 connection.
 
-*Source: D-015, D-078, D-162, D-166, D-183*
+*Source: D-015, D-078, D-162, D-166, D-183, D-187*
 
 The frontend must never infer permissions from role names; that is how a button
 appears while the endpoint refuses. Computing them per row in separate calls
@@ -883,15 +898,34 @@ a refusal there is recorded as every gate refusal is, and the unit of work rolls
 Where a host asks the gate for a modifying action inside an open transaction, the gate
 holds the row in that transaction the same way.
 
-*Source: D-037, D-166, D-183*
+**Values (D-186).** The first write is the first write to the library's database of the
+unit of work that makes the change. Where an effect outside it must come first, the gate
+is still asked again inside the unit of work before that first write, and a refusal
+there leaves the outside effect as follows: the app password the mail server created is
+revoked at the server and its secret never returned, and where the revocation fails the
+password, whose secret nobody holds, stays listed for its holder to revoke
+(INT-MAIL-010); the notice to the alert destinations being replaced stands as the notice
+of a change requested and not made, as for a superseded change (OPS-ALERT-004a); and a
+line the erasure ledger already holds stands, since it names an erasure committed before
+and is no effect of the completion (DR-016). Every other operation that sends undertakes
+the send in the unit of work that writes what the send carries, so the second ask covers
+both: an approved recovery's link is undertaken in the approval's unit of work
+(AUTH-RECOV-002).
+
+*Source: D-037, D-166, D-183, D-186*
 
 **Acceptance criteria**
 1. A restricted account's records are readable by that account and not modifiable.
 2. Restriction is enforced through the gate, not by scattered checks.
 3. A restriction committed after a modifying action of the account passed the gate step
    and before its first write refuses the action with `authz.restricted`, and the action
-   leaves nothing; a restriction begun while an admitted action holds the row waits for
-   that action to commit.
+   leaves nothing of its own in the library's database (the gate's record of the refusal
+   stands, AUTHZ-CONCEAL-004); a restriction begun while an admitted action holds the
+   row waits for that action to commit.
+4. An app password's creation refused at the second ask leaves no app password at the
+   mail server where the server answers the revocation, and returns no secret either
+   way; an approved recovery refused there leaves neither the approval nor its link's
+   send.
 
 ---
 
@@ -1059,9 +1093,11 @@ from both identities: the account an action is taken on is the record's `subject
 its effective identity. Every new record carries an effective identity equal to its
 acting identity, the nil subject for both beside a system principal. The trail read by
 subject (PRIV-BREACH-002) reads the records naming the subject as acting identity or as
-`subject`.
+`subject`. Every event raised with the access context of a person who acted carries both
+identities from it; an event raised from a link a message carried, with no context,
+carries neither (`10` section 5b, D-187).
 
-*Source: D-014, D-166, D-183*
+*Source: D-014, D-166, D-183, D-187*
 
 Impersonation is out of scope. Two identity fields where one would do is defensible
 on its own terms — it makes "who did this" unambiguous — and retrofitting a second
@@ -1074,6 +1110,9 @@ identity into every audit record and permission check later would not be.
 4. An action taken by one account on another, a break-glass session's included, records
    the actor as acting and effective identity and the other account as the record's
    `subject`.
+5. Every event raised with the access context of a person who acted carries the acting
+   and the effective identity from it; one raised from a link with no context carries
+   neither.
 
 ---
 
@@ -1083,7 +1122,7 @@ identity into every audit record and permission check later would not be.
 relationship, permission, and condition for each resource type. Changing a policy
 SHALL require changing the table first.
 
-*Source: D-015, D-183*
+*Source: D-015, D-183, D-187*
 
 The diff in that table is the change under review. It is the difference between an
 authorization system that is trusted and one that is feared.
@@ -1095,9 +1134,10 @@ authorization system that is trusted and one that is feared.
    grant**, **a derived grant on a container reaching its contents**, and **a bound
    action judged from a host's assurance report** (met; unmet on its level, its phishing
    resistance, its age or an instant after now; a provider that fails; no provider).
-2. Every case runs through both the single check and the list filter
-   (AUTHZ-PRIN-001). A step-up case agrees when the filter lists the record and the
-   check answers the gate's outcome (AUTHZ-GATE-005).
+2. Every case runs through both the single check and the list filter (AUTHZ-PRIN-001). A
+   step-up case agrees when the check answers the gate's outcome and the filter answers
+   the same: where the gate is met, the filter lists the record; where it is not, the
+   filter is refused with the code the check answers (AUTHZ-GATE-005).
 3. Where a derivation is materialised, the same cases pass identically before and
    after materialisation.
 

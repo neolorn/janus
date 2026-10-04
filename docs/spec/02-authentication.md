@@ -143,7 +143,7 @@ The identifier is the value used in `loginFactors` (`10` section 4.1a), in `/aut
 requests and in credential records; eleven identifiers may appear in `loginFactors`
 (D-151).
 
-*Source: D-151; D-148, D-012, D-009, D-013, D-141, D-146, D-147, D-166, D-183*
+*Source: D-151; D-148, D-012, D-009, D-013, D-141, D-146, D-147, D-166, D-183, D-187*
 
 Conditional UI (autofill) is a presentation mode of passkey sign-in, not a separate
 factor. A hardware security key is one way to hold a WebAuthn credential, appearing
@@ -169,8 +169,11 @@ signal of the number (AUTH-FACT-002b). Where it does not answer `risk`, a code b
 that challenge is issued on its record and sent as criterion 6 states, and the ask is
 answered 202. Where it answers `risk`, nothing is issued, sent or counted, the
 consideration is recorded, `phoneCode` is withheld from the challenge, and the ask is
-answered with what the challenge then offers (AUTH-FACT-002b criterion 6). An ask before
-a first factor sends nothing and is answered 202, whatever the account holds.
+answered with what the challenge then offers (AUTH-FACT-002b criterion 6); at a step-up,
+whose challenge names no action, what it offers is judged against the strictest of the
+policy's gates, field by field, as a host-named gate that no policy states values for is
+(AUTH-STEP-002, D-187). An ask before a first factor sends nothing and is answered 202,
+whatever the account holds.
 
 **Acceptance criteria**
 1. `emailLink`, `emailCode`, `phoneLink` and `phoneCode` are absent from every
@@ -192,9 +195,9 @@ a first factor sends nothing and is answered 202, whatever the account holds.
    sign-in.
 7. A `phoneCode` ask whose number answers `risk` sends nothing and records the
    consideration; at a sign-in it is answered with the factors the challenge still
-   offers, or `auth.factor.rejected` where none is left; at a step-up with no
-   combination left it is answered `auth.stepup.required` with `outcome` `report-loss`
-   or `enrol`.
+   offers, or `auth.factor.rejected` where none is left; at a step-up, judged against
+   the strictest of the policy's gates field by field, with no combination left it is
+   answered `auth.stepup.required` with `outcome` `report-loss` or `enrol`.
 
 ---
 
@@ -221,8 +224,13 @@ optional host callback declared on the model builder (LIB-HOST-001), returning `
 person sees is the frontend's, keyed on the catalogue identifier (`18` FE-SEC-001); no
 response of `09` carries a marker field.
 
+**Values (D-186).** The callback is the host's and may call across the network, so it is
+asked before the operation's unit of work begins, never inside an open transaction; the
+consideration is recorded in the unit of work that follows, a kept write
+(CONV-DESIGN-003).
+
 *Source: D-146; NIST SP 800-63B-4 section 3.1.3.3; IDN-ATTR-008; `18` FE-SEC-001; D-166,
-D-183*
+D-183, D-186*
 
 Two-step is a second factor *beside a password*; without a password there is nothing
 for it to be second to, and a passkey is already two factors (AUTH-SESS-005a). The
@@ -341,39 +349,49 @@ second step (AUTH-FACT-002, `phoneCode`).
 ### 2.2 Verification codes are not authentication codes
 
 **AUTH-FACT-004** — Channel verification codes and authentication codes SHALL be
-modelled as distinct concepts with independent lifetimes, storage, and validation
-rules. A verification code SHALL NEVER be usable as an authentication credential.
-A verification code SHALL live `code.verification.lifetime` and SHALL be invalidated
-after `code.verification.attempts` (default **5**) wrong tries; a replacement code
-draws on the sending restrictions (AUTH-ABUSE-004). A code SHALL validate once: the
-correct code, once accepted, is refused if presented again. Every channel verification
-code (a registration's, an identifier's, the new-device check's) SHALL be issued and
-answered through one verification-code record, in a table of its own that no
-credential is reachable through. A wrong try and the spending of the right code SHALL
-be decided under a lock on that record, a wrong try's count kept as AUTH-ABUSE-001
-states, so that concurrent tries count as the same number of sequential ones and the
-right code answers once. A value REG-SESS-005 answers as held or reserved, at
-registration or at an identifier's add or replace, SHALL be given a record as any other
-value is, with the same lifetime and attempt cap, holding no code that any presentation
-matches: no code is sent (a held value's holder is notified as REG-SESS-005 states, and
-nobody for a reserved value), and every presentation SHALL be read, compared in fixed
-time, counted and answered on the path a presentation against a sent code takes. It
-therefore answers `auth.code.invalid` for each of the first `code.verification.attempts`
-tries and `auth.code.expired` after them and after its lifetime, and is swept when such
-a record would be.
+modelled as distinct concepts with independent lifetimes, storage, and validation rules.
+A verification code SHALL NEVER be usable as an authentication credential. A
+verification code SHALL live `code.verification.lifetime` and SHALL be invalidated after
+`code.verification.attempts` (default **5**) wrong tries; a replacement code draws on
+the sending restrictions (AUTH-ABUSE-004). A code SHALL validate once: the correct code,
+once accepted, is refused if presented again. Every channel verification code (a
+registration's, an identifier's, the new-device check's), and the old address's
+confirmation of a replace, which a press answers (REG-IDENT-007), SHALL each be issued
+and answered through a verification-code record of its own, in a table of its own that
+no credential is reachable through. Where a record's holder, the unkeyed SHA-256 that
+binds it to what it verifies, is computed from a pending verification's UUID, that
+UUID's sixteen bytes are taken in the byte order of RFC 9562, as PostgreSQL's
+`uuid_send` gives them, so that a statement can compute the same holder (D-187). A wrong
+try and the spending of the right code SHALL be decided under a lock on that record, a
+wrong try's count kept as AUTH-ABUSE-001 states, so that concurrent tries count as the
+same number of sequential ones and the right code answers once. A value REG-SESS-005
+answers as held or reserved, at registration or at an identifier's add or replace, SHALL
+be given a record as any other value is, with the same lifetime and attempt cap, holding
+no code that any presentation matches: no code is sent (a held value's holder is
+notified as REG-SESS-005 states, and nobody for a reserved value), and every
+presentation SHALL be read, compared in fixed time, counted and answered on the path a
+presentation against a sent code takes. It therefore answers `auth.code.invalid` for
+each of the first `code.verification.attempts` tries and `auth.code.expired` after them
+and after its lifetime, and is swept when such a record would be. A wrong try's count,
+and the invalidation at the cap, are kept writes (CONV-DESIGN-003); a presentation past
+the code's lifetime, or where no code is outstanding, changes nothing on the code's
+record, the lapsed record being the sweep's, and commits only the kept writes
+AUTH-ABUSE-001 and CONV-LOG-005 make for it, rolling back where they make none.
 
-**Authentication codes.** The `emailCode` sign-in code, the code of a `phoneCode`
-second step (AUTH-FACT-002), and the code a sign-in link shows where it is opened in
-another browser (AUTH-FACT-003) are authentication codes, held apart from verification
-codes. The `emailCode` and `phoneCode` codes SHALL live `code.signin.lifetime` (default
-**10 minutes**, ceiling 30 minutes); the code a sign-in link shows SHALL live as long as
-its link, `link.magic.lifetime`. Every authentication code SHALL be invalidated after
+**Authentication codes.** The `emailCode` sign-in code, the code of a `phoneCode` second
+step (AUTH-FACT-002), and the code a sign-in link shows where it is opened in another
+browser (AUTH-FACT-003) are authentication codes, held apart from verification codes.
+The `emailCode` and `phoneCode` codes SHALL live `code.signin.lifetime` (default **10
+minutes**, ceiling 30 minutes); the code a sign-in link shows SHALL live as long as its
+link, `link.magic.lifetime`. Every authentication code SHALL be invalidated after
 `code.signin.attempts` (default **5**, ceiling 10) wrong tries, SHALL validate once, and
-SHALL be decided under a lock as a verification code is. The `emailCode` code SHALL be
-sent as the message kind `sign-in-code` and the `phoneCode` code as `secondstep-code`,
-never as a verification code.
+SHALL be decided under a lock as a verification code is, its wrong try's count and its
+invalidation at the cap (the pending sign-in removed) kept writes as a verification
+code's are (CONV-DESIGN-003, D-186). The `emailCode` code SHALL be sent as the message
+kind `sign-in-code` and the `phoneCode` code as `secondstep-code`, never as a
+verification code.
 
-*Source: D-034, D-146, D-166, D-183*
+*Source: D-034, D-146, D-166, D-183, D-186, D-187*
 
 Collapsing them is a common source of bugs in which a verification code becomes a
 login credential. The attempt cap makes a six-digit code unguessable within its
@@ -447,26 +465,27 @@ Prevents lockout from a mis-scanned QR code.
 
 ### 2.4 Recovery codes
 
-**AUTH-FACT-008** — Recovery codes SHALL be issued in sets of 10, single-use,
-displayed once at generation, and stored hashed. The set SHALL record `viewedAt`, set
-when the response that returns it is produced, and `exportedAt`, set when the frontend
-reports a copy, download or print (`POST /account/recoverycodes/exported`), and a
-**reminder** SHALL be sent through the account and as a notice when
-`recovery.codes.reminder` (default **365 days**) has elapsed since the set was
-generated.
+**AUTH-FACT-008** — Recovery codes SHALL be issued in sets of 10, single-use, displayed
+once at generation, and stored hashed. The set SHALL record `viewedAt`, set when the
+response that returns it is produced, and `exportedAt`, set when the frontend reports a
+copy, download or print (`POST /account/recoverycodes/exported`, the mapping of the
+operation `ICredentials.MarkRecoveryCodesExportedAsync`, D-187), and a **reminder**
+SHALL be sent through the account and as a notice when `recovery.codes.reminder`
+(default **365 days**) has elapsed since the set was generated.
 
 **Values (D-153).** A recovery code is 10 symbols from the Crockford base32 alphabet
 (about 50 bits), shown as two groups of five and hashed as a password is.
 
 The reminder is the message kind `recovery-codes-reminder`, carrying no link, sent by a
 daily pass to every channel of the security-notice set of an **active** account. The
-set records `remindedAt` once at least one channel took the reminder, or where the set
-holds no channel it can reach; a set whose every notice was refused stays owed and is
-reminded at a later pass. A set of an account that is not active stays owed and is
-reminded if the account becomes active again. `remindedAt` is shown in the account and
-carried in the export.
+recovery-code set records `remindedAt` once the reminder's send to at least one channel
+is admitted (AUTH-ABUSE-004), or where the security-notice set holds no channel the pass
+can reach; a reminder whose every send is refused writes nothing and rolls back, and the
+set stays owed and is reminded at a later pass (CONV-DESIGN-003, D-186). A set of an
+account that is not active stays owed and is reminded if the account becomes active
+again. `remindedAt` is shown in the account and carried in the export.
 
-*Source: D-034, D-146, D-166*
+*Source: D-034, D-146, D-166, D-186, D-187*
 
 Hashed as passwords are: verifiable, never recoverable. The timestamps let the
 account say whether the person ever saved the codes; the reminder exists because a set
@@ -580,7 +599,7 @@ These drive the adaptive second-credential prompt (AUTH-RECOV-001).
 attestation, SHALL restrict signature algorithms to a configured allow-list, and
 SHALL verify the signature counter where the authenticator provides one.
 
-*Source: D-034, D-120*
+*Source: D-034, D-120, D-186*
 
 **The allow-list is configuration** (`webauthn.algorithms`, `10` §4.3): default
 **EdDSA (−8), ES256 (−7), RS256 (−257)**, offered in that preference order — the
@@ -595,7 +614,10 @@ not supply one, so the check applies only where present.
 **Acceptance criteria**
 1. An authentication without user verification is rejected.
 2. A credential from an unattested authenticator enrols successfully.
-3. A counter lower than the stored value is rejected and the event audited.
+3. A counter lower than the stored value is rejected; the refusal records
+   `auth.credential.countermismatch`, records the failed authentication (CONV-LOG-005)
+   and counts the failure (AUTH-ABUSE-001), the three committed together and nothing
+   else (CONV-DESIGN-003).
 4. A credential using an algorithm outside the allow-list is rejected at enrolment.
 5. The default allow-list is exactly −8, −7, −257; a configuration omitting −7 is
    refused at startup.
@@ -610,7 +632,7 @@ second factor SHALL then be skipped on that browser for `factor.trusteddevice.li
 **Values (D-153).** The trust token lives in `__Host-identity-device`: 32 random bytes,
 base64url, stored server side against the account.
 
-*Source: D-124, D-166*
+*Source: D-124, D-166, D-186*
 
 **Mechanics.** A separate, opaque, single-purpose device token in its own `__Host-`
 cookie, stored server-side against the account with created-at, last-used, and a
@@ -641,10 +663,11 @@ so its sign-in is not offered the option and records no trusted device (D-166).
    for the account.
 5. A trusted device older than `factor.trusteddevice.lifetime` is asked for the
    second factor again.
-6. **Three consecutive wrong passwords on a trusted device revoke that device's
-   trust** (`factor.trusteddevice.failurelimit`, default 3); the next sign-in on it
-   requires the second factor. The count is kept per trusted device and resets on a
-   successful sign-in on it.
+6. **Three consecutive wrong passwords on a trusted device revoke that device's trust**
+   (`factor.trusteddevice.failurelimit`, default 3); the next sign-in on it requires the
+   second factor. The count is kept per trusted device and resets on a successful
+   sign-in on it. The failure that reaches the limit revokes the trust in the refusal's
+   unit of work, and the count and the revocation are kept writes (CONV-DESIGN-003).
 7. The offer is **withheld while the account's password is below the single-factor
    floor** (AUTH-PASS-001a): on a trusted device that password would complete a
    sign-in alone. The offer appears once the password meets the floor; an existing
@@ -1786,13 +1809,18 @@ of asking where a limit is 0; the anomaly alerts fire at
 `alerting.recovery.accountthreshold` and `alerting.recovery.approverthreshold`
 (OPS-ALERT-001).
 
-*Source: D-008, D-041, D-111, D-166*
+*Source: D-008, D-041, D-111, D-166, D-186*
 
 **Where the link goes.** To a channel **already recorded on the account** and chosen by
 the approver — for a customer whose mailbox is gone, the phone. Delivering the link by
 SMS does not make the link an authentication factor (AUTH-FACT-002): the control is the
 approver's confirmation on a recorded channel, and the link is the same time-boxed,
-single-use artefact in every case.
+single-use artefact in every case. The approval, its audit record and the link's send
+are written in one unit of work, the send undertaken in it (AUTH-ABUSE-004): a send a
+sending restriction or the gateway floor refuses leaves no approval and is answered 429
+`auth.restriction.exceeded` with `retryAt`, or 422 `integration.sms.balancefloor`, and a
+processing restriction of the approver's account committed before the approval's first
+write refuses the approval whole with `authz.restricted` (AUTHZ-GATE-006, D-186).
 
 **What the link permits.** A re-enrolment session in which the person sets a password
 or passkey and, where the old mailbox is unreachable, **sets a new email address
@@ -1810,6 +1838,10 @@ old one. The remaining security-notice set is still notified and receives the un
 5. A customer with an unreachable mailbox can regain access and move their account
    to a new address through this path, with the old address notified.
 6. The link is never sent to a channel supplied in the request.
+7. An approval whose link's send a sending restriction refuses is answered 429
+   `auth.restriction.exceeded`, and one whose SMS link the gateway floor refuses is
+   answered 422 `integration.sms.balancefloor`, each leaving no approval, no record of
+   it and no send.
 
 ---
 
@@ -1922,22 +1954,23 @@ codes to stand in for (AUTH-FACT-002b).
 ---
 
 **AUTH-RECOV-007** — Every authenticator SHALL be in one of three states: `active`,
-`suspended`, `invalidated`. **Reporting an authenticator lost** SHALL require one
-usable factor **or** one unused recovery code presented in a live session — no
-step-up — and SHALL move it to `suspended` at once. A suspended authenticator SHALL
-NOT be accepted for sign-in or at a gate. Every recorded channel SHALL be notified
-immediately and repeatedly, each notification carrying a cancel link; cancellation
-from the link or from any session of the account returns it to `active`.
-**Invalidation** completes after `recovery.invalidation.window` (default **7 days**,
-configurable) and SHALL NOT complete if none of the notifications delivered. Only on
-invalidation is the account's reachable assurance recomputed (AUTH-STEP-006).
+`suspended`, `invalidated`. **Reporting an authenticator lost** SHALL require one usable
+factor **or** one unused recovery code presented in a live session — no step-up — and
+SHALL move it to `suspended` at once. A suspended authenticator SHALL NOT be accepted
+for sign-in or at a gate. Every recorded channel SHALL be notified immediately and
+repeatedly, each notification carrying a cancel link; cancellation from the link or from
+any session of the account returns it to `active`. **Invalidation** completes after
+`recovery.invalidation.window` (default **7 days**, configurable) and SHALL NOT complete
+if no notification was taken by its immediate attempt (AUTH-ABUSE-004), whatever later
+becomes of its row. Only on invalidation is the account's reachable assurance recomputed
+(AUTH-STEP-006).
 
 **Values (D-153).** "Repeatedly" is once at the report, once every
 `recovery.invalidation.noticeinterval`, and once 24 hours before invalidation. Each
 notification is the message kind `credential-suspended`, carrying the cancel link
 (D-166).
 
-*Source: D-009, D-022, D-141, D-166*
+*Source: D-009, D-022, D-141, D-166, D-186*
 
 **The waiting period is the control** — long enough that a real owner notices, short
 enough that a locked-out customer does not give up. During it the account still
@@ -1961,8 +1994,8 @@ have nothing left to stand in for.
    suspends the authenticator immediately; no step-up is demanded.
 2. A suspended authenticator is rejected at sign-in and at every gate.
 3. Invalidation does not complete before the window elapses; cancellation during the
-   window returns the authenticator to `active`; with all notifications failing
-   delivery, invalidation is held and flagged.
+   window returns the authenticator to `active`; with no notification taken by its
+   immediate attempt, invalidation is held and flagged.
 4. Reachable assurance is unchanged while suspended and recomputed on invalidation.
 5. Removing an active authenticator that leaves reachable assurance unchanged
    completes immediately after the gate; one that would lower it is suspended and
@@ -2043,15 +2076,22 @@ failure earns is the one the count it wrote earns under `abuse.throttle.threshol
 and it SHALL run from that failure: an attempt is looked at once the failure's instant
 plus that delay has passed, and a refusal carries that instant as `retryAt`.
 
-**Where a refusal's count is kept (D-183).** A count or record a refusal makes that
-SHALL stand whatever the operation's outcome (a failure under this item, a wrong try of
-a code under AUTH-FACT-004, a refused step-up factor, a pressed registration token that
-opens nothing, a trusted device's failure under AUTH-FACT-015, the record of a refused
-factor, signal or provider event) is committed with the refusal, the operation having
-written nothing else (CONV-DESIGN-003). A refusal the gate records is written outside
-the operation instead (AUTHZ-CONCEAL-004).
+**Where a refusal's count is kept (D-183, D-186).** A count or record a refusal makes
+that SHALL stand, whatever the operation's outcome, is one of the kept writes
+CONV-DESIGN-003 lists, and is committed with the refusal, together with the refusal's
+other kept writes and nothing else. This chapter's are a failure under this item, a
+pressed registration link token that opens nothing among them, and the
+`auth-failures-sustained` raise such failures bring for their account (OPS-ALERT-002); a
+consumed refresh token's session family revoked at its reuse, with its audit record
+(AUTH-OIDC-003); a wrong try of a code and its invalidation at the cap (AUTH-FACT-004);
+a trusted device's failure and its trust revoked at the limit (AUTH-FACT-015); the
+record of a refused step-up factor and of a failed authentication (AUTH-STEP-002,
+CONV-LOG-005); the audit record of a signature counter that did not advance
+(AUTH-FACT-014); and the record of a bot-defence signal and of a phone signal's
+consideration (AUTH-ABUSE-008, AUTH-FACT-002b). A refusal the gate records is written
+outside the operation instead (AUTHZ-CONCEAL-004).
 
-*Source: D-013, D-166, D-183*
+*Source: D-013, D-166, D-183, D-186*
 
 Lockout is a denial-of-service weapon usable by anyone who knows a user's email, at
 no cost to the attacker.
@@ -2222,44 +2262,62 @@ the transaction of the operation that undertakes the send, and a refusal SHALL r
 before its count or its outbox row is written. The judgement SHALL be made with the
 counter of every key the send's restrictions apply to held (`SELECT ... FOR UPDATE`, the
 counter created first where none stands), the counters taken in one fixed order, after
-the operation's own row locks, and held to the end of that transaction, so that two
-sends judged at once are judged one after the other (CONV-DESIGN-003). An admitted send
-SHALL count from its admission: its count, any credit it spends and its row in the
-library's own outbox, carrying the `SendReference` drawn for it, SHALL be written in
-that transaction, and the governed send answers its caller with that reference or with
-the refusal, never with the delivery. One immediate attempt SHALL run after the
-outermost transaction commits, and SHALL be discarded if it rolls back; whatever that
-attempt does not carry is the outbox publisher's, under `outbox.retry.*` (D-022,
-INF-BG-001). No transport SHALL be called inside an open transaction, and an operation
-that rolls back SHALL send nothing. A retried send SHALL be judged by the restrictions
-as they stand when it is retried, with its own count set aside: admitted, it counts at
-the retry's instant in place of its earlier count; refused, it holds none. A send's
-count and any credit it spent SHALL be released where it fails for good: its attempts
-are spent, its row is removed uncarried after erasure (PRIV-RIGHT-005a), a delivery
-report says it failed (INT-SMS-005), or the restrictions refuse its retry. A row SHALL
-be removed once every language it owes is taken (IDN-PRIN-003); a send whose attempts
-are exhausted raises the `degradation` condition in the transaction that removes its
-row. This holds on every send path: invitations, recovery, sign-in and notices.
+the operation's own row locks and value locks, and held to the end of that transaction,
+so that two sends judged at once are judged one after the other (CONV-DESIGN-003). The
+gateway floor is judged on the latest balance the poll recorded (AUTH-ABUSE-006), never
+by asking the gateway inside the transaction. An admitted send SHALL count from its
+admission: its count, any credit it spends and its row in the library's own outbox,
+carrying the `SendReference` drawn for it, SHALL be written in that transaction, and the
+governed send answers its caller with that reference or with the refusal, never with the
+delivery. A refused send fails the operation that undertook it only where a chapter or
+the operation's `09` row answers that refusal; elsewhere the operation goes on without
+the send and commits what else it wrote, or rolls back where it wrote nothing else
+(CONV-DESIGN-003). One immediate attempt SHALL run after the outermost transaction
+commits, and SHALL be discarded if it rolls back; whatever that attempt does not carry
+is the outbox publisher's, under `outbox.retry.*` (D-022, INF-BG-001). A caller that
+acts on whether its sends were carried (the loss report's notifications, AUTH-RECOV-007;
+an alert's channels, OPS-ALERT-003) undertakes them in the unit of work it begins as the
+outermost and commits, and once their immediate attempts have run asks, through an
+internal port of `Janus.Authentication`, whether each was taken by its attempt, a send
+owing several languages being taken only where its attempt took every one; a row gone is
+not by itself a send taken, since a row is also removed at exhaustion, after erasure and
+at a refused retry. No transport SHALL be called inside an open transaction, and an
+operation that rolls back SHALL send nothing. A retried send SHALL be judged by the
+restrictions and the gateway floor as they stand when it is retried, with its own count
+set aside: admitted, it counts at the retry's instant in place of its earlier count;
+refused, it fails for good, holding no count, and its row is removed uncarried, raising
+nothing. A send's count and any credit it spent SHALL be released where it fails for
+good: its attempts are spent, its row is removed uncarried after erasure
+(PRIV-RIGHT-005a), a delivery report says it failed (INT-SMS-005), or the restrictions
+or the floor refuse its retry. A row SHALL be removed once every language it owes is
+taken (IDN-PRIN-003); a send whose attempts are exhausted raises the `degradation`
+condition in the transaction that removes its row. This holds on every send path:
+invitations, recovery, sign-in and notices.
 
 **Every declared language.** A send resolved to every declared language (IDN-ATTR-001
 step 3) SHALL be judged exactly, with no bucket overrun. By email it SHALL be one
 message carrying every declared language, which the library composes from each
 language's rendered template in the order of `notification.languages`, their subject
-lines joined in the same order; it is judged and counted once. By SMS it SHALL be one
-message per declared language, admitted only where every applicable bucket has room for
-all of them (judged once, with the weight of their number), and each SHALL count. No
-multilingual rule enters the catalogue: it holds one text per language.
+lines joined in the same order, a space, `|` and a space between each two, and their
+texts with one blank line between each two (IDN-ATTR-001); it is judged and counted
+once. By SMS it SHALL be one message per declared language, admitted only where every
+applicable bucket has room for all of them (judged once, with the weight of their
+number), and each SHALL count. No multilingual rule enters the catalogue: it holds one
+text per language.
 
 **An ask that sends nothing.** An ask of a sign-in link, an email code or a recovery
 that sends nothing, for any reason, and an ask or resend of a verification code for a
 value REG-SESS-005 answers as held or reserved, at registration or at an identifier's
 add or replace (AUTH-FACT-004), SHALL be judged and counted against the restrictions as
 its message would be, in the message's destination, kind, purpose and language, and
-SHALL be refused by them alike. For an address no account holds, the `account` key does
-not apply. The ask is answered before any transport is called (AUTH-ABUSE-003).
+SHALL be refused by them alike. An ask or resend of a verification code for a held or
+reserved value SHALL also be judged against the gateway floor as its message would be,
+and refused by it alike (AUTH-ABUSE-006, D-186). For an address no account holds, the
+`account` key does not apply. The ask is answered before any transport is called
+(AUTH-ABUSE-003).
 
 *Source: D-146; replaces the fixed window of D-013, INT-SMS-002 and IDN-LIFE-011;
-OPS-CFG-002; D-142 for the editing model; D-166, D-183*
+OPS-CFG-002; D-142 for the editing model; D-166, D-183, D-186, D-187*
 
 Shipped defaults:
 
@@ -2312,7 +2370,9 @@ or the alert that tells someone something is wrong.
 8. A send undertaken inside an operation that then rolls back reaches no transport and
    leaves no row; one undertaken inside an operation that commits is carried after the
    commit, and no transport is called while its transaction is open.
-9. A retried send is judged by the restrictions as they stand when it is retried.
+9. A retried send is judged by the restrictions and the floor as they stand when it is
+   retried; refused, its row is removed uncarried, its count released, and nothing is
+   raised.
 10. A fourth mail to one address inside 24 hours is sent where only `sms.destination`
     would have counted it.
 11. A security notice to an existing holder is neither counted nor refused by
@@ -2321,8 +2381,8 @@ or the alert that tells someone something is wrong.
 13. An alert is sent whatever the buckets of every restriction hold; only the
     deduplication of OPS-ALERT-002 limits it.
 14. An ask of a sign-in link, an email code or a recovery that sends nothing, and an ask
-    of a verification code for a held or reserved value, is counted against the
-    restrictions as its message would be, and is refused by them alike.
+    or resend of a verification code for a held or reserved value, is counted against
+    the restrictions as its message would be, and is refused by them alike.
 15. A recovery link and an invitation link are counted under the purpose `signin`, and
     the confirmation a replace asks of the displaced address under `verification`; none
     of the three is counted or refused by `notification.destination`.
@@ -2330,6 +2390,16 @@ or the alert that tells someone something is wrong.
     the others are refused with `retryAt`, and one credit is spent once; a send counts
     from its admission, a retried send is judged with its own count set aside, and a
     send that fails for good releases its count and its credit.
+17. With no balance yet recorded, an SMS send is not refused by the floor; with a
+    recorded balance below it, an SMS send other than an alert is refused and an alert
+    is not (OPS-ALERT-003), and no gateway is asked while the send's transaction is
+    open.
+18. A notice a restriction refuses inside an operation where neither a chapter nor its
+    `09` row answers that refusal leaves the operation's other writes committed and its
+    answer as it would have been; an operation where a chapter or its row answers the
+    refusal commits nothing it wrote but the kept writes it made (CONV-DESIGN-003).
+19. A loss report's notification or an alert whose immediate attempt is not taken counts
+    as not carried for its caller, whatever later becomes of its row.
 
 ---
 
@@ -2370,14 +2440,33 @@ in **every configured language** at startup — any of them might be the one sen
 **AUTH-ABUSE-006** — Gateway balance SHALL be polled, drain rate monitored with
 alerting, and sends hard-stopped below a configured floor.
 
-*Source: D-013*
+**Values (D-186).** A send other than an alert (OPS-ALERT-003) is judged against the
+floor on the latest balance the poll recorded (INT-SMS-004), inside the transaction that
+undertakes it and never by a read of the gateway there (CONV-DESIGN-002); until a first
+balance is recorded the floor refuses nothing. Where a chapter or an operation's `09`
+row answers a restriction's refusal of a send, it answers the floor's refusal of that
+send too, failing the operation alike, with 422 `integration.sms.balancefloor`; an ask
+of AUTH-ABUSE-003 is answered as it would have been, and an ask or resend of a
+verification code for a value REG-SESS-005 answers as held or reserved is refused as the
+send of a code for a value no account holds would be (AUTH-ABUSE-004), so that the floor
+tells nothing of an account.
+
+*Source: D-013, D-186*
 
 **Acceptance criteria**
 1. The balance is read every `abuse.sms.pollinterval`; spend in the last hour above
    `abuse.sms.drainfactor` times the trailing seven-day hourly mean, or a balance that
    would reach the floor within 24 hours at the current rate, raises the `sms-balance`
    alert without human monitoring (D-153).
-2. Below the floor, sends are refused and the condition surfaced.
+2. Below the floor, sends other than alerts are refused and the condition surfaced
+   (OPS-ALERT-003).
+3. A send other than an alert is judged on the latest recorded balance, and one judged
+   before any balance is recorded is not refused by the floor.
+4. Below the floor, an SMS send whose refusal by a restriction its operation answers is
+   answered 422 `integration.sms.balancefloor`, the operation committing only its kept
+   writes; an ask of AUTH-ABUSE-003 is answered as it would have been; and an ask or
+   resend of a verification code for a held or reserved value is refused exactly as one
+   for a value no account holds.
 
 ---
 
@@ -2404,7 +2493,13 @@ unauthenticated.
 **AUTH-ABUSE-008** — Bot defence at registration SHALL be signal-driven, not
 universal. An additional challenge SHALL appear only on adverse signals.
 
-*Source: D-013*
+**Values (D-186).** Every signal that fires is recorded (`auth.botdefence.signalled`),
+whether or not a verifier is declared. The record is a kept write, committed alone
+before the host's verifier is asked, since the verifier is called outside any open
+transaction, and a challenge the verifier then requires leaves it standing
+(CONV-DESIGN-003).
+
+*Source: D-013, D-186*
 
 Phone verification already imposes attacker cost; showing every customer a puzzle is
 friction without proportionate benefit.
@@ -2420,6 +2515,10 @@ friction without proportionate benefit.
    and a verifier is declared, the step answers `auth.challenge.required` and completes
    only with a passing token; when none is declared the signal is audited and no
    challenge is shown. The library ships no challenge (D-153).
+5. A signal that fires is recorded as `auth.botdefence.signalled` whether or not a
+   verifier is declared; with a verifier declared the record is committed before the
+   verifier is asked, no transaction is open while it is asked, and the record stands
+   where the verifier fails, does not answer or requires a challenge.
 
 ---
 

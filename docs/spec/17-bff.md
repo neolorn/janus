@@ -391,7 +391,8 @@ otherwise answer with the code to type and change nothing. Every link lands on `
 with its token in the fragment (FE-VER-001); a fragment is no part of a request's target
 (RFC 9110), so the token reaches the BFF only in the body of the call the landing makes.
 
-*Source: D-146; REG-SESS-001, REG-SESS-003, AUTH-FACT-003, API-LAND-001, D-166, D-183*
+*Source: D-146; REG-SESS-001, REG-SESS-003, AUTH-FACT-003, API-LAND-001, D-166, D-183,
+D-187*
 
 The cookie is what makes "the browser that started the flow" a checkable fact rather
 than a hope. A token in the URL of an event stream would appear in proxy logs, browser
@@ -403,14 +404,15 @@ what turns the press into the right person's intent.
 **Acceptance criteria**
 1. A `/register/*` request without the pre-authentication cookie of the session that
    created it is refused, except a request presenting a message's `linkToken`;
-   `GET /register/events` without it answers as API-CONV-003 requires and streams
-   nothing.
+   `GET /register/events` without it answers 404 `authz.resource.notfound` (`09`
+   `GET /register/events`) and streams nothing.
 2. No request or response of the registration flow carries a token in a URL; the event
    stream's only credential is the cookie.
 3. Disconnecting the stream and polling `GET /register` yields the same state.
 4. Loading a link landing route issues no state-changing request; a press from the
    originating browser verifies or signs in, a press from any other browser returns the
-   code and changes nothing.
+   code and changes nothing, save the kinds that act from any browser
+   (`identifier-confirm`, `undo` and the other link-borne kinds of `18` FE-VER-001).
 
 ---
 
@@ -718,12 +720,14 @@ pass through to the frontend unchanged; the BFF adds nothing and removes nothing
 
 **BFF-ABUSE-001** — Throttling responses SHALL carry the retry interval and SHALL be
 identical whether or not the account exists. A send refused by a restriction
-(AUTH-ABUSE-004) SHALL cross the boundary as `auth.restriction.exceeded` with
-`retryAt`, identical whether or not the address is registered. A throttled answer to a
-navigation (a social provider's return) SHALL carry `retryAt` as a query member beside
-`error` (BFF-ERR-001).
+(AUTH-ABUSE-004) whose refusal the operation answers (a chapter or the operation's `09`
+row gives that answer, CONV-DESIGN-002, AUTH-ABUSE-004) SHALL cross the boundary as
+`auth.restriction.exceeded` with `retryAt`, identical whether or not the address is
+registered; a refused send that neither a chapter nor the operation's `09` row answers
+fails nothing and crosses nothing. A throttled answer to a navigation (a social
+provider's return) SHALL carry `retryAt` as a query member beside `error` (BFF-ERR-001).
 
-*Source: AUTH-ABUSE-002, AUTH-ABUSE-003, D-146, D-166*
+*Source: AUTH-ABUSE-002, AUTH-ABUSE-003, D-146, D-166, D-186*
 
 **Acceptance criteria**
 1. Responses and timing are indistinguishable across existence.

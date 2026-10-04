@@ -70,7 +70,7 @@ stored and compared; the original SHALL be retained for display.
 Applies to: email addresses, phone numbers, organization names, display names,
 usernames.
 
-*Source: D-040, D-115, D-146, D-166*
+*Source: D-040, D-115, D-146, D-166, D-187*
 
 **The canonical form is `NFKC_Casefold`** (Unicode Standard §3.13, the `NFKC_CF`
 property): compatibility normalisation, full case folding and removal of
@@ -90,15 +90,18 @@ Unicode Character Database at the pinned version (**Unicode 17.0.0**) by
 `tools/Janus.UnicodeTables` (CONV-LAYOUT-001) and checked in under `Janus.Core`: the
 `NFKC_CF` mapping, canonical decompositions, combining classes and composition
 exclusions (so NFC and NFKC are the library's own), full case folding, general
-categories and the derived properties PRECIS needs, `Script` and `Script_Extensions`.
-The pinned version is a constant beside the tables and is the canonicalisation version
-recorded with every fingerprint. The public types are `CanonicalForm` (`NFKC_Casefold`,
-E.164 digit mapping), `Precis` (the two profiles below) and `ScriptMixing` (IDN-ACCT-005)
-in `Janus.Core`, because Identity and Authentication both canonicalise. No package.
-The ASCII form of a domain (REG-DOM-001) is the library's own in the same way: UTS #46
-processing over the IDNA mapping table of the pinned version (`IdnaMappingTable.txt`,
-carried beside the Unicode Character Database files), with RFC 3492 Punycode, never the
-machine's ICU (D-166).
+categories and the derived properties PRECIS needs, `Script` and `Script_Extensions`;
+and, for the ASCII form of a domain (REG-DOM-001), the IDNA mapping, `Bidi_Class` and
+`Joining_Type`. The pinned version is a constant beside the tables and is the
+canonicalisation version recorded with every fingerprint. The public types are
+`CanonicalForm` (`NFKC_Casefold`, E.164 digit mapping), `Precis` (the two profiles
+below) and `ScriptMixing` (IDN-ACCT-005) in `Janus.Core`, because Identity and
+Authentication both canonicalise. No package. The ASCII form of a domain (REG-DOM-001)
+is the library's own in the same way: UTS #46 processing, nontransitional and with the
+checks REG-DOM-001 names, over the IDNA mapping table of the pinned version
+(`IdnaMappingTable.txt`, carried beside the Unicode Character Database files, whose
+bidirectional classes and joining types the checks read), with RFC 3492 Punycode, never
+the machine's ICU (D-166, D-187).
 
 **Usernames** take the PRECIS UsernameCaseMapped profile (RFC 8265) and nothing else:
 letters and digits, no spaces, case-folded, NFC, 3 to 32 characters, checked against
@@ -664,7 +667,7 @@ minor's personal data was still present.
 **IDN-LIFE-003b** — Erasure progress SHALL be tracked in a **dedicated erasures table**,
 not in the account record.
 
-*Source: D-094, D-102, D-147, D-166*
+*Source: D-094, D-102, D-147, D-166, D-186*
 
 | Column | Purpose |
 |---|---|
@@ -672,15 +675,16 @@ not in the account record.
 | Requested at | When |
 | Reason | `erasure-request` · `minor-takedown` (`10` section 5.12a, D-147); an organization erasure erases no account (IDN-ORG-003) |
 | Status | `awaiting-subscribers` · `complete` · `failed` |
-| Attempts | Retry count across subscribers |
+| Attempts | The row's attempts, one for each pass over its unconfirmed subscribers (IDN-LIFE-003a) |
 
-**The row is written in the same transaction as the erasure itself** — the state
-change, the overwrite of the subject's wrapped key and the neutralisation of the
-fingerprint (PRIV-RIGHT-005c). It therefore never describes the library's own steps,
-which have already committed if the row exists; it describes the **host-side work**
-still outstanding. `awaiting-subscribers` means required subscribers have not all
-confirmed; `failed` means a subscriber exhausted its retries and the manual completion
-path (IDN-LIFE-003a) is pending; `complete` means every required subscriber confirmed.
+**The row is written in the same transaction as the erasure itself** — the state change,
+the overwrite of the subject's wrapped key and the neutralisation of the fingerprint
+(PRIV-RIGHT-005c). It therefore never describes the library's own steps, which have
+already committed if the row exists; it describes the **host-side work** still
+outstanding. `awaiting-subscribers` means required subscribers have not all confirmed;
+`failed` means the row's attempts were spent with a required subscriber unconfirmed and
+the manual completion path (IDN-LIFE-003a) is pending; `complete` means every required
+subscriber confirmed.
 
 **The account's own states are unchanged** — `active` → `deleting` → `deleted`. An
 erasure is a background operation, not a phase of the account's life, and adding a state
@@ -711,7 +715,7 @@ changes freely.
 **transactional outbox**, and SHALL be **generic** — the library publishes facts about
 identity and knows nothing of who consumes them.
 
-*Source: D-148; D-090, D-102, D-166, D-168*
+*Source: D-148; D-090, D-102, D-166, D-168, D-186*
 
 **The flow:**
 
@@ -738,9 +742,11 @@ subscriber and the library changes not at all.
 - **Subscribers SHALL be idempotent.** Delivery is at-least-once; a retry may arrive
   after a successful attempt. Built from the start rather than retro-fitted
 - **A subscriber that faults SHALL be treated as one that did not confirm.** The
-  publisher catches the fault, counts the attempt and schedules the next under the
-  backoff below, exactly as for a subscriber that answered failure; the fault ends
-  nothing for another subscriber or another delivery
+  publisher catches the fault and leaves that delivery unconfirmed, exactly as for a
+  subscriber that answered failure; the pass goes on to the row's other deliveries, and
+  the row's attempt is counted once for the pass and the next scheduled under the
+  backoff below (CONV-DESIGN-003, D-186); the fault ends nothing for another subscriber
+  or another delivery
 - **Subscriber names SHALL be distinct**, each following the name rule of INT-SMS-003
   (a name that breaks it is refused at startup with `model.startup.declarationinvalid`),
   and `erasure-ledger` is the library's own (DR-016): startup refuses two subscribers
@@ -782,8 +788,9 @@ erasure pass; what a host derived from the subject's fields is the host's to cle
 6. Adding a subscriber requires no library change; a missing handler fails startup
    (PRIV-RIGHT-005b).
 7. Two subscribers under one name, or one named `erasure-ledger`, fail startup.
-8. A subscriber that throws is counted as an attempt and retried under the backoff;
-   the other subscribers' deliveries go on.
+8. A subscriber that throws leaves its delivery unconfirmed and is retried under the
+   backoff; the other subscribers' deliveries go on, and the pass counts one attempt for
+   the row.
 9. A takedown or restriction delivery whose retries are spent is closed by the manual
    completion path, and the takedown's progress then reads complete.
 
@@ -952,7 +959,7 @@ to the security-notice set); on an email disable, the provider-verified identifi
 SHALL drop to unverified. Every event is verified against the provider's
 published keys, is idempotent by its `jti`, and is audited.
 
-*Source: D-164, D-166, D-183*
+*Source: D-164, D-166, D-183, D-187*
 
 A person's Google account is taken over and Google tells every relying party within
 seconds. A system that ignores that is choosing to keep the attacker signed in.
@@ -980,16 +987,17 @@ exclude the held credential's restores it in that transaction, recorded as
 `auth.credential.restored`; a credential suspended by a loss report is not restored this
 way.
 
-**How an event is taken (D-166).** An event is claimed by its `jti` under its
-provider's callback name, in the transaction its work runs in; an event that carries no
-`jti` is refused as unreadable (RFC 8417 section 2.2). A provider document the library
-cannot have or read refuses nothing: the delivery is answered as a fault, nothing is
-claimed or recorded, and the provider may deliver it again (`09` section 10). A carried
-event is recorded as `auth.providerevent.taken`; a replayed one as
-`auth.providerevent.rejected` and answered as a carried one is; one the provider's keys
-do not verify as `auth.providerevent.rejected` against the account its unverified claims
-name, where they name one, and refused. The provider's subject identifier is never
-recorded or logged.
+**How an event is taken (D-166).** An event is claimed by its `jti` under its provider's
+callback name, in the transaction its work runs in; an event that carries no `jti` is
+refused as unreadable (RFC 8417 section 2.2). A provider document the library cannot
+have or read refuses nothing: the delivery is answered as a fault, nothing is claimed or
+recorded, and the provider may deliver it again (`09` section 10). A carried event is
+recorded as `auth.providerevent.taken`; a replayed one as `auth.providerevent.rejected`
+and answered as a carried one is; one the provider's keys do not verify as
+`auth.providerevent.rejected` against the account its unverified claims name, where they
+name one, and refused. The provider's subject identifier is never recorded or logged. On
+the Google route a token whose `nbf` is later than now is refused as one whose `exp` has
+passed is, with no leeway (`09` section 10, D-187).
 
 **Acceptance criteria**
 1. A signed `sessions-revoked` or `account-disabled` event ends every session of the
@@ -1011,6 +1019,9 @@ recorded or logged.
    it, the same code as `description`, and `Content-Language: en`; on either route a
    provider document that cannot be read is answered 500 `system.fault`, and nothing is
    claimed, recorded or changed.
+9. On the Google route a token whose `nbf` is later than now is answered 400
+   `invalid_request` after the `exp` check, and one carrying no `nbf` is not refused for
+   it.
 
 ---
 
@@ -1131,7 +1142,7 @@ remains and its identifying fields become unreadable (PRIV-RIGHT-005a).
 **IDN-ATTR-001** — The account SHALL carry a **language preference**, user-changeable
 and visible to the person.
 
-*Source: D-055, D-146, D-166*
+*Source: D-055, D-146, D-166, D-186*
 
 A notification sent by a background job has no request context, so something must
 answer what language the person reads. A preference belongs to a person, and people
@@ -1158,10 +1169,11 @@ order, a range with `q=0` left out; what is found is always a declared tag.
 
 **Every declared language (D-166).** An email resolved to every declared language SHALL
 be one message carrying them all, composed by the library from each language's rendered
-template in `notification.languages` order, the subject lines joined; no rule for
-composing several languages enters the message catalogue. An SMS resolved to every
-declared language SHALL be one message per declared language. How each is judged and
-counted against the sending restrictions is AUTH-ABUSE-004.
+template in `notification.languages` order, the subject lines joined in that order with
+a space, `|` and a space between each two, and the texts with one blank line between
+each two (D-186); no rule for composing several languages enters the message catalogue.
+An SMS resolved to every declared language SHALL be one message per declared language.
+How each is judged and counted against the sending restrictions is AUTH-ABUSE-004.
 
 **Registration SHALL set the preference to the declared language the request locale
 finds, and to none where it finds none**, so the verification message matches the
@@ -1171,7 +1183,9 @@ language in use and case 3 becomes nearly unreachable.
 1. The preference is editable by the person and appears in the subject access export.
 2. A background-triggered notification resolves language without a request.
 3. An account with no preference and no request receives every declared language: one
-   email carrying them all, or one SMS for each.
+   email carrying them all, its subject the declared languages' subject lines in
+   `notification.languages` order with a space, `|` and a space between each two, and
+   its texts with one blank line between each two; or one SMS for each.
 4. A request whose `Accept-Language` is `fr-CH, en;q=0.8`, on a deployment declaring
    `ar` and `en`, resolves to `en`; an administrator's request never decides the
    language of a message to someone else.
@@ -1380,7 +1394,7 @@ identity, effective identity, event time, and organization — **where one appli
 Events on a principal holding no membership (a customer) carry no organization; the
 field is nullable and its absence is the recorded fact, not an omission.
 
-*Source: D-014, D-026.2, D-125, D-166, D-170, D-171*
+*Source: D-014, D-026.2, D-125, D-166, D-170, D-171, D-187*
 
 Acting and effective identity are separate values, identical in every current path.
 This is the impersonation seam — two fields where one would do, defensible on its
@@ -1405,7 +1419,7 @@ actor: its acting and effective identity are the nil subject, and its subject is
 account attempted, where one was resolved.
 
 **Acceptance criteria**
-1. Both identity fields are populated on every event; an event of background work
+1. Both identity fields are populated on every audit record; a record of background work
    carries the nil subject in both, and the principal's name and reason.
 2. The recorded time is the instant the event occurred, not the instant it was
    written.

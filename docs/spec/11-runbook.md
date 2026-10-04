@@ -180,7 +180,13 @@ for the old address (REG-IDENT-007).
 3. Record a written reason. Mandatory.
 4. Issue the time-boxed enrolment link **to a recorded channel**: for a customer
    whose mailbox is gone, their recorded phone; for a customer whose phone is gone,
-   their recorded email.
+   their recorded email. If the approval is answered with a wait (a sending
+   restriction on that channel, or the approval limits of AUTH-RECOV-002), nothing was
+   approved and no link went: approve again once the time shown has passed. If it is
+   refused because the SMS balance is below the floor, nothing was approved either:
+   approve again once a poll has recorded the restored balance (within
+   `abuse.sms.pollinterval` of the top-up), or name the recorded email instead where the
+   person still holds that mailbox.
 5. The account owner is notified on a separate channel automatically.
 6. If the person's old mailbox is unreachable, the re-enrolment session lets them set
    a new email address; the old address is notified without a link and the remaining
@@ -313,7 +319,7 @@ this:
 | Email verification during registration | New customers |
 | Account recovery | Anyone locked out |
 | Identifier verification and undo notices | Anyone adding or removing an address |
-| **Pending authenticator invalidations** (loss reports) | Held, deliberately — AUTH-RECOV-007 will not complete without a delivered warning |
+| **Pending authenticator invalidations** (loss reports) | Held, deliberately — AUTH-RECOV-007 will not complete unless a warning was taken by its immediate attempt |
 
 **The last one is easy to miss.** A mail outage holds every pending removal; the hold
 is **flagged** (AUTH-RECOV-007 AC3) and the undelivered warnings surface as a
