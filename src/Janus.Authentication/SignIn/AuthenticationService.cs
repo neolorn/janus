@@ -96,6 +96,7 @@ internal sealed class AuthenticationService(
         ErrorCodes.CodeInvalid,
         ErrorCodes.CodeExpired,
         ErrorCodes.CodeReplayed,
+        ErrorCodes.CredentialSuspended,
         ErrorCodes.WebAuthnAlgorithmNotAllowed,
         ErrorCodes.WebAuthnCounterMismatch,
         ErrorCodes.WebAuthnRelyingPartyChanged,
@@ -1487,7 +1488,7 @@ internal sealed class AuthenticationService(
     // presented, which is a failed attempt, as against a fault of the library's own (a
     // setting that does not read, the database failing), which is none: nothing is
     // counted or recorded for it and the request answers system.fault.
-    private static bool Refuses(Error failure) => Refusals.Contains(failure.Code);
+    internal static bool Refuses(Error failure) => Refusals.Contains(failure.Code);
 
     // CONV-DESIGN-003: ends the unit of work a refusal was decided in. A refusal that
     // keeps a write is counted inside it, the count joining it, and the whole is

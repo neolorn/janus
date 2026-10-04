@@ -3,6 +3,7 @@ using System.Buffers.Binary;
 using System.Buffers.Text;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -964,6 +965,145 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
         Assert.False(_work.Open);
         Assert.Empty(_audit.StepUpsFailed);
         Assert.Empty(_throttle.Counted);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001: a failed attempt of a presented factor is one refused with a code
+    /// the item lists, and with no other code of the catalogue: the domain lock's
+    /// refusal, which follows a factor that succeeded, and a fault of the library's own
+    /// are none.
+    /// </summary>
+    [Fact]
+    public void AUTH_ABUSE_001_AFailedAttemptIsAFactorRefusedWithAListedCode()
+    {
+        ErrorCode[] listed =
+        [
+            ErrorCodes.FactorRejected,
+            ErrorCodes.FactorNotPermitted,
+            ErrorCodes.CodeInvalid,
+            ErrorCodes.CodeExpired,
+            ErrorCodes.CodeReplayed,
+            ErrorCodes.CredentialSuspended,
+            ErrorCodes.WebAuthnAlgorithmNotAllowed,
+            ErrorCodes.WebAuthnCounterMismatch,
+            ErrorCodes.WebAuthnRelyingPartyChanged,
+            ErrorCodes.WebAuthnUserVerificationRequired,
+        ];
+
+        ErrorCode[] counted = [.. typeof(ErrorCodes)
+            .GetProperties(BindingFlags.Public | BindingFlags.Static)
+            .Where(property => property.PropertyType == typeof(ErrorCode))
+            .Select(property => (ErrorCode)property.GetValue(obj: null)!)
+            .Where(code => AuthenticationService.Refuses(Error.From(code)))];
+
+        Assert.Equal(
+            listed.Select(code => code.ToString()).Order(StringComparer.Ordinal),
+            counted.Select(code => code.ToString()).Order(StringComparer.Ordinal));
+        Assert.DoesNotContain(ErrorCodes.IdentifierDomainNotAllowed, counted);
+        Assert.DoesNotContain(ErrorCodes.SystemFault, counted);
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001, CONV-LOG-005, `09` `POST /auth/step-up`: a step-up answers each
+    /// refusal a factor gives what is presented to it, and each is a failed attempt,
+    /// recorded as a refused step-up factor and counted against the source.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_AStepUpCountsEveryRefusalAFactorAnswersAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.PhoneCode);
+        Holds(subject, Factor.PhoneCode);
+        Holds(subject, Factor.Totp);
+        _configuration.Set(Settings.AbuseThrottleThreshold, 100);
+
+        SessionId session = Opened(subject);
+        string generated = new Totp(new byte[20], TotpCodes.StepSeconds, OtpHashMode.Sha1, TotpCodes.Digits)
+            .ComputeTotp(_clock.GetUtcNow().UtcDateTime);
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var refused = new List<ErrorCode?>();
+
+        refused.Add(await SteppedAsync(_ => new FactorPresentation(Factor.Password) { Value = "not the password" }));
+        refused.Add(await SteppedAsync(_ => new FactorPresentation(Factor.EmailCode) { Value = "000000" }));
+        refused.Add(await SteppedAsync(_ => new FactorPresentation(Factor.PhoneCode) { Value = "000000" }));
+
+        SignInChallenge texted = await BeganAsync(Address);
+
+        Assert.True((await AskedAsync(texted.Challenge, subject, session)).Match(offered => offered is null, _ => false));
+
+        refused.Add(await SteppedAsync(
+            _ => new FactorPresentation(Factor.PhoneCode) { Value = Other(_notifications.Texts[^1].Values["code"]) },
+            texted));
+
+        Assert.Null(await SteppedAsync(_ => new FactorPresentation(Factor.Totp) { Value = generated }));
+
+        refused.Add(await SteppedAsync(_ => new FactorPresentation(Factor.Totp) { Value = generated }));
+        refused.Add(await KeyedAsync(counter: 8, "example.test", algorithm: -7, flags: 0x05));
+        refused.Add(await KeyedAsync(counter: 10, "elsewhere.test", algorithm: -7, flags: 0x05));
+        refused.Add(await KeyedAsync(counter: 10, "example.test", algorithm: -7, flags: 0x01));
+        refused.Add(await KeyedAsync(counter: 10, "example.test", algorithm: -8, flags: 0x05));
+
+        Assert.Equal<ErrorCode?>(
+            [
+                ErrorCodes.FactorRejected,
+                ErrorCodes.FactorNotPermitted,
+                ErrorCodes.CodeExpired,
+                ErrorCodes.CodeInvalid,
+                ErrorCodes.CodeReplayed,
+                ErrorCodes.WebAuthnCounterMismatch,
+                ErrorCodes.WebAuthnRelyingPartyChanged,
+                ErrorCodes.WebAuthnUserVerificationRequired,
+                ErrorCodes.WebAuthnAlgorithmNotAllowed,
+            ],
+            refused);
+        Assert.Equal(
+            [
+                Factor.Password,
+                Factor.EmailCode,
+                Factor.PhoneCode,
+                Factor.PhoneCode,
+                Factor.Totp,
+                Factor.Passkey,
+                Factor.Passkey,
+                Factor.Passkey,
+                Factor.Passkey,
+            ],
+            _audit.StepUpsFailed.Select(failed => failed.Presented));
+        Assert.All(_audit.StepUpsFailed, failed => Assert.Equal((session, subject), (failed.Session, failed.Subject)));
+        Assert.Equal(
+            9,
+            (await _throttle.FindAsync(ThrottleScope.Source, Source, TestContext.Current.CancellationToken))?.Failures);
+        Assert.False(_work.Open);
+
+        async ValueTask<ErrorCode?> SteppedAsync(
+            Func<SignInChallenge, FactorPresentation> presented,
+            SignInChallenge? opened = null)
+        {
+            SignInChallenge began = opened ?? await BeganAsync(Address);
+
+            return Refused(await Service.StepUpAsync(
+                AccessContext.Of(subject),
+                session,
+                began.Challenge,
+                presented(began),
+                Source,
+                TestContext.Current.CancellationToken));
+        }
+
+        async ValueTask<ErrorCode?> KeyedAsync(uint counter, string relyingParty, int algorithm, byte flags)
+        {
+            AuthenticatorId held = Keyed(subject, key, counter: 9, relyingParty, algorithm);
+
+            ErrorCode? answered = await SteppedAsync(began => new FactorPresentation(Factor.Passkey)
+            {
+                Assertion = Asserted(key, began.WebAuthn.Challenge, counter, relyingParty, flags),
+            });
+
+            await _authenticators.RemoveAsync(held, TestContext.Current.CancellationToken);
+
+            return answered;
+        }
     }
 
     /// <summary>
@@ -2951,8 +3091,13 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     // A passkey of the account whose public key is the given one, as its enrolment
-    // left it.
-    private AuthenticatorId Keyed(SubjectId subject, ECDsa key, uint counter)
+    // left it, under the relying party and the algorithm it was enrolled with.
+    private AuthenticatorId Keyed(
+        SubjectId subject,
+        ECDsa key,
+        uint counter,
+        string relyingParty = "example.test",
+        int algorithm = -7)
     {
         var id = AuthenticatorId.New(_clock);
 
@@ -2967,15 +3112,28 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             null,
             confirmed: true,
             null,
-            new WebAuthnMaterial(CredentialId, key.ExportSubjectPublicKeyInfo(), -7, "example.test", counter, false, false),
+            new WebAuthnMaterial(
+                CredentialId,
+                key.ExportSubjectPublicKeyInfo(),
+                algorithm,
+                relyingParty,
+                counter,
+                false,
+                false),
             isPreferred: false));
 
         return id;
     }
 
     // What an authenticator holding the key answers the sign-in's ceremony with, user
-    // present and verified, reporting the given counter.
-    private static AuthenticatorAssertion Asserted(ECDsa key, string challenge, uint counter)
+    // present and verified unless the flags say otherwise, reporting the given counter
+    // for the relying party it holds the key for.
+    private static AuthenticatorAssertion Asserted(
+        ECDsa key,
+        string challenge,
+        uint counter,
+        string relyingParty = "example.test",
+        byte flags = 0x05)
     {
         byte[] clientData = JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, string>
         {
@@ -2986,8 +3144,8 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
 
         byte[] authenticatorData = new byte[37];
 
-        SHA256.HashData(Encoding.UTF8.GetBytes("example.test")).CopyTo(authenticatorData, 0);
-        authenticatorData[32] = 0x05;
+        SHA256.HashData(Encoding.UTF8.GetBytes(relyingParty)).CopyTo(authenticatorData, 0);
+        authenticatorData[32] = flags;
         BinaryPrimitives.WriteUInt32BigEndian(authenticatorData.AsSpan(33), counter);
 
         byte[] signature = key.SignData(
