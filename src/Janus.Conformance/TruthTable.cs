@@ -20,7 +20,8 @@ namespace Janus.Conformance;
 /// <typeparam name="TResource">The host's type of the records asked about.</typeparam>
 /// <param name="services">The host's deployment, as it registered the library.</param>
 /// <param name="deployment">
-/// Builds the host's composition with the suite's assurance provider, or with none.
+/// Builds the host's composition with the suite's assurance provider, or with none; or
+/// nothing, for a table with no step-up case.
 /// </param>
 /// <param name="library">Where the library's own rows of a case are written.</param>
 /// <param name="rows">The host's own rows of the type.</param>
@@ -37,7 +38,7 @@ namespace Janus.Conformance;
 /// </remarks>
 internal sealed class TruthTable<TResource>(
     IServiceProvider services,
-    DeploymentFactory deployment,
+    DeploymentFactory? deployment,
     CaseRows library,
     IConformanceRows<TResource> rows)
     where TResource : class
@@ -52,8 +53,8 @@ internal sealed class TruthTable<TResource>(
     /// <returns>A finding for each case that decided otherwise than it states.</returns>
     /// <exception cref="ArgumentException">
     /// The deployment declares no such type, a case names a scenario the type's
-    /// declaration does not place it in, or a step-up case names a permission the
-    /// declaration binds to no gate.
+    /// declaration does not place it in, the table holds a step-up case and no factory
+    /// was given, or a step-up case names a permission the declaration binds to no gate.
     /// </exception>
     public async ValueTask<ConformanceReport> RunAsync(
         IReadOnlyList<TruthTableCase> cases,
@@ -74,6 +75,15 @@ internal sealed class TruthTable<TResource>(
                     string.Create(
                         CultureInfo.InvariantCulture,
                         $"The scenario {row.Scenario} cannot be written for the type {rows.Type}, whose declaration does not place it so."),
+                    nameof(cases));
+            }
+
+            if (row.StepUp && deployment is null)
+            {
+                throw new ArgumentException(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The scenario {row.Scenario} cannot be judged without a deployment factory, which builds the composition a step-up case is asked of."),
                     nameof(cases));
             }
 
@@ -215,13 +225,18 @@ internal sealed class TruthTable<TResource>(
         string gate,
         CancellationToken cancellationToken)
     {
+        // The table was refused before anything was written where it holds a step-up
+        // case and no factory, so one reaching here without it is a fault.
+        DeploymentFactory factory = deployment
+            ?? throw new InvalidOperationException("A step-up case is run with no deployment factory.");
+
         Written written = await WriteAsync(row, chain, derived: null, cancellationToken).ConfigureAwait(false);
 
         ScenarioAssurance? assurance = row.Scenario == TruthTableScenario.StepUpProviderAbsent
             ? null
             : new ScenarioAssurance(row.Scenario, services.GetRequiredService<TimeProvider>().GetUtcNow());
 
-        IServiceProvider built = await deployment(assurance, cancellationToken).ConfigureAwait(false)
+        IServiceProvider built = await factory(assurance, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("The deployment factory built no composition.");
 
         ErrorCode? checks;

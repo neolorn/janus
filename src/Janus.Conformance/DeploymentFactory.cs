@@ -19,11 +19,11 @@ namespace Janus.Conformance;
 /// it. The suite disposes it once the scenario is judged, where it can be disposed.
 /// </returns>
 /// <remarks>
-/// Implements LIB-TEST-001 AC2 and LIB-HOST-004 (D-188). The suite calls it once for
-/// each step-up case, with a provider of its own that gives the scenario's report or
-/// fails to give one, and with none for the scenario of a deployment that has no
+/// Implements LIB-TEST-001 AC2 and LIB-HOST-004 (D-188, D-189). The suite calls it once
+/// for each step-up case, with a provider of its own that gives the scenario's report
+/// or fails to give one, and with none for the scenario of a deployment that has no
 /// provider. Whatever provider the host's own composition registers is left out of the
-/// one built here.
+/// one built here. A host whose table holds no step-up case gives the suite none.
 /// </remarks>
 public delegate ValueTask<IServiceProvider> DeploymentFactory(
     IAssuranceProvider? assurance,

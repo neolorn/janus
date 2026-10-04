@@ -11,10 +11,12 @@ namespace Janus.Hosting;
 /// together.
 /// </summary>
 /// <remarks>
-/// Implements CONV-CODE-007, CONV-DESIGN-007, D-171, D-176 and D-180. The ring and the
-/// mail server in use are the core's to register. The host's own mail server and its
-/// secret source are declarations it may leave out, so the service that fills the ring
-/// is made by a factory that asks the container for each.
+/// Implements CONV-CODE-007, CONV-DESIGN-007, D-171, D-176, D-180 and D-189. The ring
+/// and the mail server in use are the core's to register, and both are seams: the
+/// service that fills the ring reaches them through the core's contracts and never
+/// through what stands behind either. The host's own mail server and its secret source
+/// are declarations it may leave out, so the service is made by a factory that asks the
+/// container for each.
 /// </remarks>
 internal static class KeyRingRegistration
 {
@@ -40,8 +42,8 @@ internal static class KeyRingRegistration
         ArgumentNullException.ThrowIfNull(provider);
 
         return new KeyRingService(
-            provider.GetRequiredService<KeyRing>(),
-            provider.GetRequiredService<MailServerInUse>(),
+            provider.GetRequiredService<IKeyRingFilling>(),
+            provider.GetRequiredService<IKeyRing>(),
             provider.GetRequiredService<JmapMailServer>(),
             provider.GetRequiredService<IServiceScopeFactory>(),
             provider.GetServices<SocialProvider>(),

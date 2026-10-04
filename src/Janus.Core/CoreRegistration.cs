@@ -8,17 +8,17 @@ namespace Janus.Core;
 /// The one method that registers everything this project provides.
 /// </summary>
 /// <remarks>
-/// Implements CONV-DESIGN-007, CONV-CODE-007, D-171, D-176 and D-187. The key ring and
+/// Implements CONV-DESIGN-007, CONV-CODE-007, D-171, D-176, D-187 and D-189. The key ring and
 /// the mail server in use are one of each for the process, and no service receives a
 /// secret or a mail server when it is registered or made; each asks at its use.
 /// </remarks>
 internal static class CoreRegistration
 {
     /// <summary>
-    /// Registers the key ring, the mail server in use, and the shipped defaults that
-    /// stand in for a declaration the host did not make. What fills the ring and
-    /// chooses the mail server is the caller's: the application's start, or a command
-    /// at its own.
+    /// Registers the key ring, the mail server in use, the contract the start fills the
+    /// one and records the other through, and the shipped defaults that stand in for a
+    /// declaration the host did not make. What fills the ring and chooses the mail
+    /// server is the caller's: the application's start, or a command at its own.
     /// </summary>
     /// <param name="services">The host's collection.</param>
     /// <returns>The collection, for chaining.</returns>
@@ -31,6 +31,7 @@ internal static class CoreRegistration
         services.AddSingleton<IKeyRing>(provider => provider.GetRequiredService<KeyRing>());
         services.AddSingleton<MailServerInUse>();
         services.AddSingleton<IMailServerInUse>(provider => provider.GetRequiredService<MailServerInUse>());
+        services.AddSingleton<IKeyRingFilling, KeyRingFilling>();
 
         // LIB-HOST-001: a declaration the host may leave out is the host's where it made
         // one, so each default stands only where none is registered. A deployment that

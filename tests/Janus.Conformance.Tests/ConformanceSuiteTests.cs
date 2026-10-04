@@ -327,6 +327,42 @@ public sealed class ConformanceSuiteTests(SampleHost host) : IClassFixture<Sampl
     }
 
     /// <summary>
+    /// LIB-TEST-001 AC2 (D-189): the factory is optional, so a table with a step-up case
+    /// and no factory reaches no run: it is refused, naming the scenario, before
+    /// anything is written, the cases ahead of the step-up case included.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task LIB_TEST_001_AC2_AStepUpCaseWithNoFactoryIsRefusedBeforeAnythingIsWrittenAsync()
+    {
+        int opened = 0;
+        await using SampleContext context = host.Context();
+        var rows = new SampleRows<Sheet>(context, SampleHost.SheetType, row => row.Id);
+        int held = rows.Rows.Count();
+
+        ArgumentException refused = await Assert.ThrowsAsync<ArgumentException>(
+            async () => await ConformanceSuite.TruthTableAsync(
+                host.Services,
+                deployment: null,
+                cancellationToken =>
+                {
+                    opened++;
+
+                    return host.ConnectAsync(cancellationToken);
+                },
+                rows,
+                [
+                    new(TruthTableScenario.GrantOnRecord, SampleHost.ReadSheet, Allowed: true),
+                    new(TruthTableScenario.StepUpLevelUnmet, SampleHost.AmendSheet, Allowed: false),
+                ],
+                TestContext.Current.CancellationToken));
+
+        Assert.Contains(nameof(TruthTableScenario.StepUpLevelUnmet), refused.Message, StringComparison.Ordinal);
+        Assert.Equal(0, opened);
+        Assert.Equal(held, rows.Rows.Count());
+    }
+
+    /// <summary>
     /// LIB-TEST-001 AC3: the sample host's declaration holds together.
     /// </summary>
     [Fact]
@@ -484,6 +520,8 @@ public sealed class ConformanceSuiteTests(SampleHost host) : IClassFixture<Sampl
         return (found.Failure.Code, named.Key, named.Value.GetString() ?? string.Empty);
     }
 
+    // LIB-TEST-001 AC2 (D-189): a table with no step-up case, which is run on the
+    // deployment passed and is given no factory.
     private async Task<ConformanceReport> TableAsync<TResource>(
         Func<SampleContext, SampleRows<TResource>> rows,
         IReadOnlyList<TruthTableCase> cases)
@@ -493,7 +531,7 @@ public sealed class ConformanceSuiteTests(SampleHost host) : IClassFixture<Sampl
 
         return await ConformanceSuite.TruthTableAsync(
             host.Services,
-            host.DeployAsync,
+            deployment: null,
             host.ConnectAsync,
             rows(context),
             cases,

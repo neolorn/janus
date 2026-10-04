@@ -479,6 +479,10 @@ against the public contract of LIB-API-001.
   constructed, and a table whose step-up case names a permission bound to no gate is
   refused before anything is written. The members of a `TruthTableCase` are set at
   construction alone.
+- The `DeploymentFactory` of `ConformanceSuite.TruthTableAsync` is optional: a host
+  whose table holds no step-up case passes none, and a table that holds one and is
+  given none is refused with an `ArgumentException` naming the scenario before
+  anything is written.
 - `IResources` in `Janus.Core`: a host registers each record it creates, many at once
   for an import, and moves one, inside its own unit of work, and the ancestry the
   permission filter reads is written in the same transaction. A record is placed only in
