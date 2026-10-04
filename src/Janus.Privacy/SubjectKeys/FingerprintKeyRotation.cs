@@ -67,6 +67,11 @@ internal sealed class FingerprintKeyRotation(
             return Result.Failure<KeyRotationProgress>(Error.From(ErrorCodes.Denied));
         }
 
+        if (Held() is not { } held)
+        {
+            return Result.Failure<KeyRotationProgress>(KeysUnavailable());
+        }
+
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
@@ -81,11 +86,6 @@ internal sealed class FingerprintKeyRotation(
         KeyRotationProgress? latest = await rotations.LatestAsync(Kind, cancellationToken).ConfigureAwait(false);
         IReadOnlySet<int> computing = await store.FingerprintVersionsAsync(now, cancellationToken).ConfigureAwait(false);
 
-        if (Held() is not { } held)
-        {
-            return Result.Failure<KeyRotationProgress>(KeysUnavailable());
-        }
-
         // As the key-encryption key's: a rotation is to a version later than any rotated
         // to before, one that stopped is finished before another starts, and every
         // fingerprint still read must be under a version the command holds and none
@@ -95,6 +95,8 @@ internal sealed class FingerprintKeyRotation(
         if ((!resumed && latest is not null && (latest.RetiredAt is null || latest.Version >= held.Current))
             || computing.Any(version => version > held.Current || !held.Versions.Contains(version)))
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<KeyRotationProgress>(KeysUnavailable());
         }
 
@@ -232,8 +234,9 @@ internal sealed class FingerprintKeyRotation(
         if (await CommittedAsync(latest, cancellationToken).ConfigureAwait(false)
             is not { CompletedAt: not null, RetiredAt: null } standing)
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Failure<KeyRetirement>(SealRefused(pending: null)), Result.Failure<KeyRetirement>);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<KeyRetirement>(SealRefused(pending: null));
         }
 
         DateTimeOffset now = time.GetUtcNow();
@@ -241,11 +244,7 @@ internal sealed class FingerprintKeyRotation(
 
         if (pending > 0)
         {
-            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notCommittedLater)
-            {
-                return Result.Failure<KeyRetirement>(notCommittedLater);
-            }
+            await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Failure<KeyRetirement>(SealRefused(pending));
         }
