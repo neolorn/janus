@@ -87,6 +87,23 @@ internal sealed class DomainLock(
         CancellationToken cancellationToken) =>
         JudgedAsync(organization, Domain(address), cancellationToken);
 
+    /// <summary>
+    /// Judges, against one organization's lock, an account that holds no address to
+    /// sign in with.
+    /// </summary>
+    /// <param name="organization">Whose lock.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Nothing where the organization locks nothing, or the refusal:
+    /// <c>identity.identifier.domainnotallowed</c> where its lock is on, since a lock
+    /// admits listed addresses and no address is none of them (REG-DOM-001 criterion
+    /// 10), or the failure that kept the lock from being read.
+    /// </returns>
+    public ValueTask<Error?> RefusedWithoutAddressInAsync(
+        OrganizationId organization,
+        CancellationToken cancellationToken) =>
+        JudgedAsync(organization, domain: null, cancellationToken);
+
     // The domain an address is judged under, or nothing where it does not read.
     private static string? Domain(EmailAddress address) =>
         DomainName.TryReadOf(address, out string domain) ? domain : null;

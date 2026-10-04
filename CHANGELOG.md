@@ -17,6 +17,52 @@ against the public contract of LIB-API-001.
   carries one.
 - The two log entries of a concealed refusal carry the audit record they name as an
   `AuditRecordId`, in the text it was always written in.
+- Every count and delay of a registration uses the source of the request in hand, never
+  the address its begin arrived on: `IRegistration.StageAsync`, `AddAsync`,
+  `ChangeAsync`, `VerifyAsync` and `LandAsync` take that source, and the address given
+  to `BeginAsync` is the whole address the session holds. A pressed registration link
+  token that opens nothing is held to its source's delay, counted against that source
+  alone and answered `auth.code.expired` (`auth.throttled` with `retryAt` while the
+  delay stands), also from a browser holding no registration session; one merely
+  opened counts nothing.
+- A source, for every count the library keeps per source, is the address the connection
+  arrived on with an IPv4-mapped IPv6 address read as its IPv4 address and any other
+  IPv6 address counted by its /64, so one host no longer holds a budget for each
+  address of its subnet; an IPv6 address whose first three bits are 000 is counted
+  whole. The flood limit also counts each IPv6 source's enclosing /48 under the new key
+  `abuse.source.sitelimit` (3000 a minute, sliding, per instance), and a request
+  refused while its source or /48 is held writes no log line of its own. A session
+  still records the whole address, and the session a registration opens records the
+  whole address of the request that completes its terms step.
+- A text code asked for at a sign-in, after a first factor, whose number's signal
+  answers `risk` is no longer answered 202: nothing is issued, sent or counted, the
+  consideration is recorded, and `POST /auth/factor` answers with what the challenge
+  then offers, 200 `factorRequired` naming the factors left or 422
+  `auth.factor.rejected` where none is. An ask before a first factor is still 202
+  and sends nothing.
+- A session records the instant it was last downgraded (`sessions.downgraded_at`,
+  migration `RecordWhenASessionWasDowngraded`). Acknowledging an invitation downgrades
+  every session the account holds, in the transaction that attaches the membership:
+  what a session attained up to then passes no step-up gate until a factor the policy
+  in force permits is presented, which lifts the downgrade, and the attained values
+  stay as they were reached. A capability whose gate the session would meet but for
+  its downgrade carries `requires` `reauthenticate`; any other unmet gate carries
+  `stepup`.
+- At a step-up, a factor the policy in force does not permit is refused with
+  `auth.factor.notpermitted` before it is verified, whether it is right or wrong, and
+  counted as a refused step-up factor. A sign-in goes on refusing it only after the
+  factor has succeeded.
+- A host's assurance report meets a step-up gate only where it reads: a report whose
+  instant is after now, or whose level or reachable assurance is not an assurance
+  level, meets no gate and is refused with `auth.stepup.required` as a report the
+  provider fails to give is.
+- An account that holds no verified email cannot acknowledge an invitation into an
+  organization whose domain lock is on: it is refused with
+  `identity.identifier.domainnotallowed` and nothing is written, as an account whose
+  verified emails are all outside the list is.
+- `CredentialSuspended` carries the effective identity of the context that reported the
+  loss or asked for the removal as `Effective`, beside its `Actor`, as
+  `CredentialRestored` from a session does. Both are carried as the context gives them.
 - `IUnitOfWork.RollbackAsync` ends an operation with nothing of it saved: the
   transaction, every tracked change and every registration to run after the commit are
   discarded. It takes no cancellation token and answers no result. An operation that

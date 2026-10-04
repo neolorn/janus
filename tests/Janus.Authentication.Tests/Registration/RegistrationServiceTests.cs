@@ -252,6 +252,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 session,
                 IdentifierKind.Email,
                 Address,
+                Source,
                 TestContext.Current.CancellationToken)));
 
         _ = Ok(await Service.RecordAgeAsync(session, Adult, TestContext.Current.CancellationToken));
@@ -300,6 +301,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             required,
             IdentifierKind.Email,
             Address,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.Equal(
@@ -456,6 +458,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             token,
             press: false,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.False(opened.Verified);
@@ -465,6 +468,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             token,
             press: true,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.True(pressed.Verified);
@@ -486,6 +490,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session: null,
             token,
             press: true,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.False(elsewhere.Verified);
@@ -506,6 +511,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 session,
                 IdentifierId.New(_clock),
                 code,
+                Source,
                 TestContext.Current.CancellationToken)));
     }
 
@@ -530,6 +536,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                     session,
                     staged,
                     "000000",
+                    Source,
                     TestContext.Current.CancellationToken)));
         }
 
@@ -541,6 +548,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 session,
                 staged,
                 code,
+                Source,
                 TestContext.Current.CancellationToken)));
 
         Later();
@@ -549,12 +557,14 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             staged,
             Address,
+            Source,
             TestContext.Current.CancellationToken));
 
         _ = Ok(await Service.VerifyAsync(
             session,
             staged,
             Code(session, IdentifierKind.Email),
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.True(Identity(session, IdentifierKind.Email).IsVerified);
@@ -578,11 +588,11 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         {
             Assert.Equal(
                 ErrorCodes.CodeInvalid,
-                Refused(await Service.VerifyAsync(session, staged, wrong, TestContext.Current.CancellationToken)));
+                Refused(await Service.VerifyAsync(session, staged, wrong, Source, TestContext.Current.CancellationToken)));
         }
 
-        Error held = Failed(await Service.VerifyAsync(session, staged, right, TestContext.Current.CancellationToken));
-        Error asked = Failed(await Service.ChangeAsync(session, staged, Address, TestContext.Current.CancellationToken));
+        Error held = Failed(await Service.VerifyAsync(session, staged, right, Source, TestContext.Current.CancellationToken));
+        Error asked = Failed(await Service.ChangeAsync(session, staged, Address, Source, TestContext.Current.CancellationToken));
 
         Assert.Equal(ErrorCodes.Throttled, held.Code);
         Assert.Equal(ErrorCodes.Throttled, asked.Code);
@@ -592,9 +602,92 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
 
         _clock.Advance(Settings.AbuseThrottleDelayInitial.Default);
 
-        _ = Ok(await Service.VerifyAsync(session, staged, right, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.VerifyAsync(session, staged, right, Source, TestContext.Current.CancellationToken));
 
         Assert.True(Identity(session, IdentifierKind.Email).IsVerified);
+    }
+
+    /// <summary>
+    /// REG-SESS-003 AC6, AUTH-ABUSE-001: a pressed link token that opens nothing is
+    /// counted against the source of the request that presents it, and against no
+    /// identifier, and answered <c>auth.code.expired</c>; while that source's delay
+    /// stands the press is refused with the instant it lifts; one merely opened counts
+    /// nothing.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_003_AC6_APressedTokenThatOpensNothingIsCountedAgainstItsSourceAsync()
+    {
+        const string presenting = "203.0.113.44";
+        const string nothing = "a-token-no-registration-sent";
+
+        Result<LinkLanding> opened = await Service.LandAsync(
+            session: null,
+            nothing,
+            press: false,
+            presenting,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(opened.Match(_ => false, _ => true));
+        Assert.Empty(_throttle.Counted);
+
+        for (int press = 0; press < Settings.AbuseThrottleThreshold.Default; press++)
+        {
+            Assert.Equal(
+                ErrorCodes.CodeExpired,
+                Failed(await Service.LandAsync(
+                    session: null,
+                    nothing,
+                    press: true,
+                    presenting,
+                    TestContext.Current.CancellationToken)).Code);
+        }
+
+        Error held = Failed(await Service.LandAsync(
+            session: null,
+            nothing,
+            press: true,
+            presenting,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal([(ThrottleScope.Source, presenting)], _throttle.Counted);
+        Assert.Equal(ErrorCodes.Throttled, held.Code);
+        Assert.Equal(
+            Noon + Settings.AbuseThrottleDelayInitial.Default,
+            held.Details["retryAt"].GetDateTimeOffset());
+    }
+
+    /// <summary>
+    /// AUTH-ABUSE-001, REG-SESS-001: every count and delay of a registration uses the
+    /// source of the request in hand, never the address its begin arrived on: a code
+    /// asked for and a wrong try from another source are counted against that source,
+    /// and the session goes on holding the whole address it began on.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_ABUSE_001_ARegistrationCountsAgainstTheSourceOfTheRequestInHandAsync()
+    {
+        const string elsewhere = "203.0.113.45";
+
+        RegistrationSessionId session = await AgedAsync();
+
+        _ = Ok(await Service.StageAsync(
+            session,
+            IdentifierKind.Email,
+            Address,
+            elsewhere,
+            TestContext.Current.CancellationToken));
+
+        IdentifierId staged = Identity(session, IdentifierKind.Email).Id;
+        string right = Code(session, IdentifierKind.Email);
+        string wrong = string.Equals(right, "000000", StringComparison.Ordinal) ? "111111" : "000000";
+
+        Assert.Equal(
+            ErrorCodes.CodeInvalid,
+            Refused(await Service.VerifyAsync(session, staged, wrong, elsewhere, TestContext.Current.CancellationToken)));
+
+        Assert.Equal(elsewhere, Assert.Single(_notifications.Sent).Source);
+        Assert.Contains((ThrottleScope.Source, elsewhere), _throttle.Counted);
+        Assert.DoesNotContain(_throttle.Counted, counted => counted.Key == Source);
+        Assert.Equal(Source, Assert.Single(_sessions.All).Source);
     }
 
     /// <summary>
@@ -610,6 +703,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             Token(IdentifierKind.Email),
             press: true,
+            Source,
             TestContext.Current.CancellationToken));
 
         RegistrationState watched =
@@ -634,6 +728,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             IdentifierKind.Email,
             "second@example.test",
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.Equal(
@@ -663,12 +758,14 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             IdentifierKind.Phone,
             Mistyped,
+            Source,
             TestContext.Current.CancellationToken));
 
         _ = Ok(await Service.ChangeAsync(
             session,
             Identity(session, IdentifierKind.Phone).Id,
             Number,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.Equal(Number, _notifications.Texts[^1].Destination.Canonical);
@@ -693,6 +790,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             fresh,
             IdentifierKind.Email,
             Address,
+            Source,
             TestContext.Current.CancellationToken));
 
         _directory.Held(IdentifierKind.Email, Address, SubjectId.New(_randomness));
@@ -703,6 +801,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             duplicate,
             IdentifierKind.Email,
             Address,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.Equal(first.Step, second.Step);
@@ -734,6 +833,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             fresh,
             IdentifierKind.Email,
             Address,
+            Source,
             TestContext.Current.CancellationToken));
 
         int sent = _notifications.Mail.Count;
@@ -746,6 +846,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             reserved,
             IdentifierKind.Email,
             Address,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.Equal(first.Step, second.Step);
@@ -808,6 +909,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             IdentifierKind.Email,
             Address,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.Empty(Assert.Single(_notifications.Mail).Values);
@@ -828,6 +930,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             IdentifierKind.Email,
             Address,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.Equal(
@@ -836,6 +939,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 session,
                 Identity(session, IdentifierKind.Email).Id,
                 "000000",
+                Source,
                 TestContext.Current.CancellationToken)));
 
         _clock.Advance(Settings.RegistrationSessionLifetime.Default + TimeSpan.FromMinutes(1));
@@ -1101,6 +1205,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             Notice,
             Unticked,
             Browser,
+            address: null,
             TestContext.Current.CancellationToken));
 
         var devices = new DeviceService(
@@ -1280,6 +1385,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 session,
                 IdentifierKind.Email,
                 Address,
+                Source,
                 TestContext.Current.CancellationToken)));
 
         Assert.Empty(Live(session).Identifiers);
@@ -1379,12 +1485,14 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             IdentifierKind.Email,
             wideAddress,
+            Source,
             TestContext.Current.CancellationToken));
         await VerifiedAsync(session, IdentifierKind.Email);
         _ = Ok(await Service.StageAsync(
             session,
             IdentifierKind.Phone,
             arabicIndicNumber,
+            Source,
             TestContext.Current.CancellationToken));
         await VerifiedAsync(session, IdentifierKind.Phone);
         _ = Ok(await Service.ConfirmAsync(session, TestContext.Current.CancellationToken));
@@ -1422,6 +1530,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 typed,
                 IdentifierKind.Email,
                 mixed,
+                Source,
                 TestContext.Current.CancellationToken)));
         Assert.Equal(
             ErrorCodes.IdentifierMixedScript,
@@ -1429,6 +1538,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 changed,
                 Identity(changed, IdentifierKind.Email).Id,
                 mixed,
+                Source,
                 TestContext.Current.CancellationToken)));
         Assert.Equal(
             ErrorCodes.IdentifierMixedScript,
@@ -1512,6 +1622,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 unanswered,
                 IdentifierKind.Email,
                 Address,
+                Source,
                 TestContext.Current.CancellationToken)));
 
         RegistrationSessionId underage = await StartedAsync();
@@ -1609,6 +1720,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 session,
                 staged.Id,
                 "other@example.test",
+                Source,
                 TestContext.Current.CancellationToken)));
 
         Assert.Equal(Address, Identity(session, IdentifierKind.Email).Canonical);
@@ -1631,6 +1743,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             staged.Id,
             "other@example.test",
+            Source,
             TestContext.Current.CancellationToken));
 
         StagedIdentity changed = Identity(session, IdentifierKind.Email);
@@ -1679,6 +1792,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 bound,
                 Identity(bound, IdentifierKind.Email).Id,
                 "other@example.test",
+                Source,
                 TestContext.Current.CancellationToken)));
         Assert.Equal(
             ErrorCodes.IdentifierLocked,
@@ -1686,12 +1800,14 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 bound,
                 IdentifierKind.Phone,
                 Mistyped,
+                Source,
                 TestContext.Current.CancellationToken)));
 
         RegistrationState taken = Ok(await Service.StageAsync(
             bound,
             IdentifierKind.Phone,
             Number,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.Equal(RegistrationStep.Confirm, taken.Step);
@@ -1701,11 +1817,12 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         RegistrationSessionId open = Ok(await InvitedAsync(Issued(email: "other@example.test")));
 
         _ = Ok(await Service.RecordAgeAsync(open, Adult, TestContext.Current.CancellationToken));
-        _ = Ok(await Service.StageAsync(open, IdentifierKind.Phone, Mistyped, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.StageAsync(open, IdentifierKind.Phone, Mistyped, Source, TestContext.Current.CancellationToken));
         _ = Ok(await Service.ChangeAsync(
             open,
             Identity(open, IdentifierKind.Phone).Id,
             Number,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.Equal(Number, Identity(open, IdentifierKind.Phone).Canonical);
@@ -1728,7 +1845,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
 
         _ = Refused(await Service.SkipPhoneAsync(session, TestContext.Current.CancellationToken));
 
-        _ = Ok(await Service.StageAsync(session, IdentifierKind.Phone, Number, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.StageAsync(session, IdentifierKind.Phone, Number, Source, TestContext.Current.CancellationToken));
 
         _ = Refused(await Service.ConfirmAsync(session, TestContext.Current.CancellationToken));
 
@@ -1854,9 +1971,10 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 session,
                 IdentifierKind.Email,
                 "person@elsewhere.test",
+                Source,
                 TestContext.Current.CancellationToken)));
 
-        _ = Ok(await Service.StageAsync(session, IdentifierKind.Email, Address, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.StageAsync(session, IdentifierKind.Email, Address, Source, TestContext.Current.CancellationToken));
     }
 
     /// <summary>
@@ -1877,7 +1995,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         RegistrationSessionId invited = Ok(await InvitedAsync(Issued(organization, email: Address, phone: Number)));
 
         _ = Ok(await Service.RecordAgeAsync(invited, Adult, TestContext.Current.CancellationToken));
-        _ = Ok(await Service.StageAsync(invited, IdentifierKind.Phone, Number, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.StageAsync(invited, IdentifierKind.Phone, Number, Source, TestContext.Current.CancellationToken));
         await VerifiedAsync(invited, IdentifierKind.Phone);
         _ = Ok(await Service.ConfirmAsync(invited, TestContext.Current.CancellationToken));
 
@@ -1905,7 +2023,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
         RegistrationSessionId session = Ok(await InvitedAsync(Issued(email: Address, phone: Number)));
 
         _ = Ok(await Service.RecordAgeAsync(session, Adult, TestContext.Current.CancellationToken));
-        _ = Ok(await Service.StageAsync(session, IdentifierKind.Phone, Number, TestContext.Current.CancellationToken));
+        _ = Ok(await Service.StageAsync(session, IdentifierKind.Phone, Number, Source, TestContext.Current.CancellationToken));
         await VerifiedAsync(session, IdentifierKind.Phone);
         _ = Ok(await Service.ConfirmAsync(session, TestContext.Current.CancellationToken));
         _ = Ok(await Service.SetPasswordAsync(session, Chosen, TestContext.Current.CancellationToken));
@@ -1993,7 +2111,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
 
         Assert.Equal(
             ErrorCodes.CodeInvalid,
-            Refused(await Service.VerifyAsync(session, staged, wrong, TestContext.Current.CancellationToken)));
+            Refused(await Service.VerifyAsync(session, staged, wrong, Source, TestContext.Current.CancellationToken)));
 
         Assert.False(_work.Open);
         Assert.Equal(1, _work.OutermostCommitted);
@@ -2017,6 +2135,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 session,
                 IdentifierId.New(_clock),
                 "000000",
+                Source,
                 TestContext.Current.CancellationToken)));
 
         Assert.False(_work.Open);
@@ -2042,6 +2161,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 stepping,
                 IdentifierKind.Email,
                 "other@example.test",
+                Source,
                 TestContext.Current.CancellationToken)));
         Assert.Equal(
             ErrorCodes.Throttled,
@@ -2049,6 +2169,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 confirming,
                 IdentifierKind.Email,
                 "second@example.test",
+                Source,
                 TestContext.Current.CancellationToken)));
 
         Assert.False(_work.Open);
@@ -2070,7 +2191,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
 
         Assert.Equal(
             ErrorCodes.Throttled,
-            Refused(await Service.StageAsync(session, IdentifierKind.Phone, Number, TestContext.Current.CancellationToken)));
+            Refused(await Service.StageAsync(session, IdentifierKind.Phone, Number, Source, TestContext.Current.CancellationToken)));
 
         Assert.False(_work.Open);
         Assert.Equal(0, _work.Committed);
@@ -2095,6 +2216,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 session,
                 staged,
                 "other@example.test",
+                Source,
                 TestContext.Current.CancellationToken)));
 
         Assert.False(_work.Open);
@@ -2184,6 +2306,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             IdentifierKind.Email,
             Address,
+            Source,
             TestContext.Current.CancellationToken));
 
         return session;
@@ -2204,6 +2327,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             IdentifierKind.Phone,
             Number,
+            Source,
             TestContext.Current.CancellationToken));
 
         await VerifiedAsync(session, IdentifierKind.Phone);
@@ -2240,6 +2364,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             staged.Id,
             VerificationCode.Read(staged.Code!),
+            Source,
             TestContext.Current.CancellationToken));
     }
 
@@ -2407,6 +2532,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 session,
                 Identity(session, IdentifierKind.Email).Id,
                 Code(session, IdentifierKind.Email),
+                Source,
                 TestContext.Current.CancellationToken)));
     }
 
@@ -2434,6 +2560,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                     session,
                     staged,
                     "000000",
+                    Source,
                     TestContext.Current.CancellationToken)));
         }
 
@@ -2447,6 +2574,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 session,
                 staged,
                 right,
+                Source,
                 TestContext.Current.CancellationToken)));
 
         Later();
@@ -2455,6 +2583,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             session,
             staged,
             Address,
+            Source,
             TestContext.Current.CancellationToken));
 
         Assert.NotEqual(right, Code(session, IdentifierKind.Email));
@@ -2465,6 +2594,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
                 session,
                 Identity(session, IdentifierKind.Email).Id,
                 right,
+                Source,
                 TestContext.Current.CancellationToken)));
     }
 
@@ -2486,6 +2616,7 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             Notice,
             Unticked,
             Browser,
+            address: null,
             TestContext.Current.CancellationToken));
 
         var single = new Assurance(AssuranceLevel.Aal1, PhishingResistant: false);
@@ -2506,5 +2637,48 @@ public sealed partial class RegistrationServiceTests : IAsyncDisposable
             single,
             completed.Browser.Value,
             TestContext.Current.CancellationToken)));
+    }
+
+    /// <summary>
+    /// REG-SESS-007 AC6, AUTH-SESS-013 AC6: the session the terms step opens records the
+    /// whole address of the request that completes the step, whatever address the
+    /// registration began on; completed in process, with no request, it records the
+    /// address the registration began on.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_007_AC6_TheFirstSessionRecordsTheWholeAddressOfTheCompletingRequestAsync()
+    {
+        const string completing = "2001:db8:1:1::7";
+
+        RegistrationSessionId overTheWire = await SecuredAsync(Floor);
+
+        RegistrationOutcome completed = Ok(await Service.CompleteAsync(
+            overTheWire,
+            Terms,
+            Notice,
+            Unticked,
+            Browser,
+            completing,
+            TestContext.Current.CancellationToken));
+
+        Session opened = Assert.IsType<Session>(
+            await _live.FindAsync(completed.Session.Id, TestContext.Current.CancellationToken));
+
+        RegistrationSessionId inProcess = await SecuredAsync(Floor);
+        string began = Assert.Single(_sessions.All, held => held.Id == inProcess).Source;
+
+        RegistrationCompleted accepted = Ok(await Service.AcceptTermsAsync(
+            inProcess,
+            Terms,
+            Notice,
+            Unticked,
+            Browser,
+            TestContext.Current.CancellationToken));
+
+        Session own = Assert.IsType<Session>(
+            await _live.FindAsync(accepted.Session, TestContext.Current.CancellationToken));
+
+        Assert.Equal(completing, opened.Origin.Address);
+        Assert.Equal((Source, Source), (began, own.Origin.Address));
     }
 }

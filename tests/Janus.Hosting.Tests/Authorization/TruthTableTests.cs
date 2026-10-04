@@ -3,14 +3,20 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Janus.Authentication.Accounts;
+using Janus.Authentication.Factors;
+using Janus.Authentication.Sessions;
+using Janus.Authorization.Tests.Gate;
 using Janus.Core;
+using Janus.Core.Configuration;
 using Janus.Hosting.Bff;
 using Janus.Privacy.Consents;
+using Janus.Privacy.SubjectKeys;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -40,7 +46,15 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         [ErrorCodes.Denied] = Decided.Denied,
         [ErrorCodes.Restricted] = Decided.Restricted,
         [ErrorCodes.ConsentRequired] = Decided.ConsentRequired,
+        [ErrorCodes.StepUpRequired] = Decided.StepUpRequired,
+        [ErrorCodes.StepUpUnavailable] = Decided.StepUpUnavailable,
     };
+
+    // The gate a report is judged against: the account is a member of the case's
+    // organization, whose policy states one gate at two factors, phishing-resistant,
+    // five minutes old at most, so the gate the host names costs that
+    // (AUTHZ-GATE-005, AUTH-STEP-002).
+    private static readonly Gate Strict = new(GateLevel.Aal2, PhishingResistant: true, TimeSpan.FromMinutes(5));
 
     // The table itself, stated once. Changing a policy is changing a row here, and both
     // the case-by-case run and the agreement check read it (AUTHZ-TEST-001).
@@ -88,14 +102,40 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         ("a change to the account's own settings, by a restricted caller", Decided.Restricted),
         ("a page's record whose subject gave the consent its purpose asks", Decided.Allowed),
         ("a page's record whose subject gave no consent to its purpose", Decided.ConsentRequired),
+        ("a page's record under a bound action, on a session that proved its gate", Decided.Allowed),
+        ("a page's record under a bound action, on a session whose proof has aged", Decided.StepUpRequired),
+        (
+            "a page's record under a bound action, on a session downgraded since it proved its gate",
+            Decided.ReauthenticationRequired),
         ("a grant in the administrative organization, to a member of it", Decided.Allowed),
         ("a grant in the administrative organization, to an account holding no membership of it", Decided.Denied),
+    ];
+
+    // An action bound to a step-up gate, judged from what a host's assurance provider
+    // reports of the caller where no session of the library carries the request: every
+    // outcome of the report against the gate (AUTHZ-TEST-001 AC1, LIB-HOST-004,
+    // AUTH-STEP-002, AUTH-STEP-003). The gate is one the host names, costing the
+    // strictest of the gates of the policy the caller is under.
+    private static readonly (string Scenario, Decided Decided)[] StepUps =
+    [
+        ("a report that meets the gate", Decided.Allowed),
+        ("a report below the level the gate asks", Decided.StepUpRequired),
+        ("a report that was not phishing-resistant, at a gate asking it", Decided.StepUpRequired),
+        ("a report older than the gate's maximum age", Decided.StepUpRequired),
+        ("a report made at an instant after now", Decided.StepUpRequired),
+        ("a provider that fails to report", Decided.StepUpRequired),
+        ("no provider", Decided.StepUpUnavailable),
     ];
 
     /// <summary>
     /// The table as the run reads it.
     /// </summary>
     public static TheoryData<string, Decided> Cases => Read(Table);
+
+    /// <summary>
+    /// The step-up table as the run reads it.
+    /// </summary>
+    public static TheoryData<string, Decided> StepUpCases => Read(StepUps);
 
     /// <summary>
     /// The operations' table as the run reads it.
@@ -136,6 +176,33 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         string scenario,
         Decided decided) =>
         Assert.Equal(decided, await OperationAsync(scenario));
+
+    /// <summary>
+    /// AUTHZ-TEST-001 AC1, LIB-HOST-004 AC3, AC4, AUTH-STEP-003 AC1: every case of the
+    /// step-up table decides the way the table says through the single check, and where
+    /// the report meets the gate both renderings of the filter list the record.
+    /// </summary>
+    /// <param name="scenario">The case.</param>
+    /// <param name="decided">What it decides.</param>
+    /// <returns>The work of running it.</returns>
+    [Theory]
+    [MemberData(nameof(StepUpCases))]
+    public async Task AUTHZ_TEST_001_AC1_EveryStepUpCaseDecidesTheWayTheTableSaysAsync(
+        string scenario,
+        Decided decided)
+    {
+        Case written = await WriteBoundAsync();
+
+        await using ServiceProvider? reporting = Reporting(scenario);
+
+        Assert.Equal(decided, await ChecksAsync(written, reporting));
+
+        if (decided is Decided.Allowed)
+        {
+            Assert.Equal(Decided.Allowed, await ExpressionAdmitsAsync(written, reporting));
+            Assert.Equal(Decided.Allowed, await FragmentAdmitsAsync(written, reporting));
+        }
+    }
 
     /// <summary>
     /// AUTHZ-PRIN-001 AC1: the single check and the list filter are asked the whole
@@ -626,6 +693,15 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
                     caller,
                     consented: scenario == "a page's record whose subject gave the consent its purpose asks");
 
+            case "a page's record under a bound action, on a session that proved its gate":
+                return await BoundPagedAsync(deployment, caller, TimeSpan.FromMinutes(1), downgraded: false);
+
+            case "a page's record under a bound action, on a session whose proof has aged":
+                return await BoundPagedAsync(deployment, caller, TimeSpan.FromDays(1), downgraded: false);
+
+            case "a page's record under a bound action, on a session downgraded since it proved its gate":
+                return await BoundPagedAsync(deployment, caller, TimeSpan.FromMinutes(1), downgraded: true);
+
             case "a grant in the administrative organization, to a member of it":
             case "a grant in the administrative organization, to an account holding no membership of it":
                 return await AdministeredAsync(
@@ -715,6 +791,109 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
         Assert.Equal(checkedAlone, Paged(paged));
 
         return checkedAlone;
+    }
+
+    // AUTHZ-GATE-005, AUTH-SESS-009: a page under an action bound to a step-up gate,
+    // asked on the caller's own session. The page names what the action still requires
+    // and the single check refuses it for step-up, or both admit it; a session
+    // downgraded since its proof is asked to authenticate again, and one whose proof has
+    // aged to step up.
+    private async Task<Decided> BoundPagedAsync(
+        Deployment deployment,
+        SubjectId caller,
+        TimeSpan ago,
+        bool downgraded)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        ResourceReference workspace = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+        RoleName publishing = await deployment.RoleAsync(
+            [HostPermissions.Read, HostPermissions.Publish],
+            cancellationToken);
+
+        await deployment.RegisterAsync(workspace, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(record, workspace, cancellationToken);
+        await deployment.GrantAsync(
+            GrantSubject.Of(caller), publishing, workspace, false, null, null, cancellationToken);
+
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+        await using HostContext reading = host.Context();
+
+        IServiceProvider services = scope.ServiceProvider;
+
+        var session = Session.Begin(
+            SessionId.New(TimeProvider.System),
+            caller,
+            new Assurance(AssuranceLevel.Aal2, PhishingResistant: true),
+            new SessionOrigin("198.51.100.7", new DeviceDescription("Firefox", "Linux")),
+            Deployment.Noon - ago,
+            TimeSpan.FromDays(7),
+            TimeSpan.FromDays(30),
+            breakGlassReason: null);
+
+        if (downgraded)
+        {
+            session.Downgrade(Deployment.Noon - (ago / 2));
+        }
+
+        IUnitOfWork work = services.GetRequiredService<IUnitOfWork>();
+
+        await work.BeginAsync(cancellationToken);
+
+        // A session is kept under its person's key, which an account written directly
+        // does not have until its first session asks for it.
+        ISubjectKeyStore keys = services.GetRequiredService<ISubjectKeyStore>();
+
+        if (await keys.FindBySubjectAsync(caller, cancellationToken) is null)
+        {
+            await keys.CreateAsync(caller, cancellationToken);
+        }
+
+        await services.GetRequiredService<ISessionStore>().AddAsync(
+            session,
+            RandomNumberGenerator.GetBytes(32),
+            RandomNumberGenerator.GetBytes(32),
+            cancellationToken);
+        await work.CommitAsync(cancellationToken);
+
+        services.GetRequiredService<RequestSession>().Resolved(session);
+
+        IAccessGate gate = services.GetRequiredService<IAccessGate>();
+
+        Capability paged = Rendered(await gate.CapabilitiesAsync(
+                AccessContext.Of(caller),
+                Document,
+                [record.Id],
+                [HostPermissions.Publish],
+                Sources(reading),
+                cancellationToken))
+            .Single();
+
+        Decided checkedAlone = (await gate.RequireAsync(
+                AccessContext.Of(caller),
+                HostPermissions.Publish,
+                record,
+                Sources(reading),
+                cancellationToken))
+            .Match(() => Decided.Allowed, Refused);
+
+        Assert.Contains(HostPermissions.Publish, paged.Can);
+
+        Decided asked = paged.Requires.TryGetValue(
+            HostPermissions.Publish,
+            out IReadOnlySet<CapabilityResidual>? outstanding)
+            ? outstanding.SetEquals([CapabilityResidual.Reauthenticate])
+                ? Decided.ReauthenticationRequired
+                : outstanding.SetEquals([CapabilityResidual.StepUp])
+                    ? Decided.StepUpRequired
+                    : throw new InvalidOperationException("The page asks what the table has no row for.")
+            : Decided.Allowed;
+
+        Assert.Equal(
+            asked is Decided.Allowed ? Decided.Allowed : Decided.StepUpRequired,
+            checkedAlone);
+
+        return asked;
     }
 
     // What the page decides on one record: the consent it still requires, the action
@@ -910,6 +1089,89 @@ public sealed class TruthTableTests(HostFixture host) : IClassFixture<HostFixtur
             cancellationToken);
 
         await deployment.ReviewAsync(workspace, account, cancellationToken);
+    }
+
+    // What a provider reports in each case of the step-up table, and nothing where the
+    // case has it fail.
+    private static AttainedAssurance? Reported(string scenario)
+    {
+        var met = new AttainedAssurance(
+            AssuranceLevel.Aal2,
+            PhishingResistant: true,
+            Deployment.Noon - TimeSpan.FromMinutes(1),
+            AssuranceLevel.Aal2);
+
+        return scenario switch
+        {
+            "a report that meets the gate" => met,
+            "a report below the level the gate asks" => met with { Level = AssuranceLevel.Aal1 },
+            "a report that was not phishing-resistant, at a gate asking it" => met with { PhishingResistant = false },
+            "a report older than the gate's maximum age" => met with { AttainedAt = Deployment.Noon - TimeSpan.FromMinutes(6) },
+            "a report made at an instant after now" => met with { AttainedAt = Deployment.Noon + TimeSpan.FromMinutes(1) },
+            "a provider that fails to report" => null,
+            _ => throw new ArgumentOutOfRangeException(nameof(scenario), scenario, "The table has no such case."),
+        };
+    }
+
+    // The same deployment with a host's assurance provider registered, which is what a
+    // deployment consuming authorization without the library's sign-in supplies
+    // (LIB-HOST-004); the last case registers none, as the fixture does.
+    private ServiceProvider? Reporting(string scenario)
+    {
+        if (scenario == "no provider")
+        {
+            return null;
+        }
+
+        var services = new ServiceCollection();
+
+        services.AddSingleton<TimeProvider>(new FixedTime(Deployment.Noon));
+        services.AddSingleton<ISecretSource>(HostFixture.Secrets(host.MaintenanceConnectionString));
+        services.AddSingleton<IAssuranceProvider>(new AssuranceProviderInMemory(Reported(scenario)));
+        services.AddJanus(host.ConnectionString, HostFixture.Declaration(), ApplicationKind.Public);
+
+        return HostFixture.Started(services.BuildServiceProvider());
+    }
+
+    // A record the account's grant confers the bound action on, in an organization the
+    // account is a member of and whose policy states the strict gate.
+    private async Task<Case> WriteBoundAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var deployment = new Deployment(host);
+
+        RoleName role = await deployment.BeginAsync(
+            [HostPermissions.Read, HostPermissions.Publish],
+            cancellationToken);
+
+        SubjectId account = await deployment.AccountAsync(cancellationToken);
+        ResourceReference outer = Reference(Workspace);
+        ResourceReference inner = Reference(Workspace);
+        ResourceReference record = Reference(Document);
+        ResourceReference sibling = Reference(Document);
+
+        await deployment.RegisterAsync(outer, containedIn: null, cancellationToken);
+        await deployment.RegisterAsync(inner, outer, cancellationToken);
+        await deployment.RegisterAsync(sibling, inner, cancellationToken);
+        await deployment.RegisterAsync(record, inner, cancellationToken);
+        await deployment.MemberAsync(account, deployment.Organization, cancellationToken);
+        await deployment.GrantAsync(GrantSubject.Of(account), role, record, false, null, null, cancellationToken);
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO identity.settings (key, value) VALUES (@key, @value);",
+            new
+            {
+                key = Settings.OrganizationPolicy.For(deployment.Organization.ToString()).ToString(),
+                value = Settings.OrganizationPolicy.Write(PolicyOverride.None with
+                {
+                    Gates = new Dictionary<StepUpAction, Gate> { [StepUpAction.IdentifierAdd] = Strict },
+                }),
+            },
+            cancellationToken: cancellationToken));
+
+        return new Case(host, deployment, account, record, sibling, inner, outer, HostPermissions.Publish);
     }
 
     // The same deployment with the one derivation precomputed into grant rows, which

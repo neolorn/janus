@@ -275,11 +275,16 @@ internal sealed class RegistrationService(
         RegistrationSessionId session,
         IdentifierId identifier,
         [NeverLogged] string code,
+        string source,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(code);
+        ArgumentNullException.ThrowIfNull(source);
 
-        return HeldAsync(session, live => VerifiedAsync(live, identifier, code, cancellationToken), cancellationToken);
+        return HeldAsync(
+            session,
+            live => VerifiedAsync(live, identifier, code, source, cancellationToken),
+            cancellationToken);
     }
 
     private async ValueTask<(Result<RegistrationState> Answer, bool Commits)> AgeAsync(
@@ -365,9 +370,11 @@ internal sealed class RegistrationService(
         RegistrationSessionId session,
         IdentifierKind kind,
         string value,
+        string source,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(value);
+        ArgumentNullException.ThrowIfNull(source);
 
         RegistrationSession? live =
             await LiveAsync(session, cancellationToken).ConfigureAwait(false);
@@ -392,17 +399,17 @@ internal sealed class RegistrationService(
             return OutOfStep();
         }
 
-        if (await DelayedAsync(Attempt(live, value), cancellationToken).ConfigureAwait(false) is Error delayed)
+        if (await DelayedAsync(Attempt(source, value), cancellationToken).ConfigureAwait(false) is Error delayed)
         {
             return Result.Failure<RegistrationState>(delayed);
         }
 
         if (live.Bound(kind) is StagedIdentity bound)
         {
-            return await ResentAsync(live, bound, value, cancellationToken).ConfigureAwait(false);
+            return await ResentAsync(live, bound, value, source, cancellationToken).ConfigureAwait(false);
         }
 
-        return await CollectAsync(live, kind, value, isExtra: false, cancellationToken)
+        return await CollectAsync(live, kind, value, isExtra: false, source, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -466,9 +473,11 @@ internal sealed class RegistrationService(
         RegistrationSessionId session,
         IdentifierKind kind,
         string value,
+        string source,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(value);
+        ArgumentNullException.ThrowIfNull(source);
 
         RegistrationSession? live =
             await LiveAsync(session, cancellationToken).ConfigureAwait(false);
@@ -499,12 +508,12 @@ internal sealed class RegistrationService(
             return Result.Failure<RegistrationState>(Error.From(ErrorCodes.IdentifierMaximum));
         }
 
-        if (await DelayedAsync(Attempt(live, value), cancellationToken).ConfigureAwait(false) is Error delayed)
+        if (await DelayedAsync(Attempt(source, value), cancellationToken).ConfigureAwait(false) is Error delayed)
         {
             return Result.Failure<RegistrationState>(delayed);
         }
 
-        return await CollectAsync(live, kind, value, isExtra: true, cancellationToken)
+        return await CollectAsync(live, kind, value, isExtra: true, source, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -513,9 +522,11 @@ internal sealed class RegistrationService(
         RegistrationSessionId session,
         IdentifierId identifier,
         string value,
+        string source,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(value);
+        ArgumentNullException.ThrowIfNull(source);
 
         RegistrationSession? live =
             await LiveAsync(session, cancellationToken).ConfigureAwait(false);
@@ -530,14 +541,14 @@ internal sealed class RegistrationService(
             return OutOfStep();
         }
 
-        if (await DelayedAsync(Attempt(live, value), cancellationToken).ConfigureAwait(false) is Error delayed)
+        if (await DelayedAsync(Attempt(source, value), cancellationToken).ConfigureAwait(false) is Error delayed)
         {
             return Result.Failure<RegistrationState>(delayed);
         }
 
         if (staged.IsLocked)
         {
-            return await ResentAsync(live, staged, value, cancellationToken).ConfigureAwait(false);
+            return await ResentAsync(live, staged, value, source, cancellationToken).ConfigureAwait(false);
         }
 
         if (Canonical(staged.Kind, value) is not (string entered, string canonical))
@@ -564,7 +575,7 @@ internal sealed class RegistrationService(
 
         staged.Change(entered, canonical);
 
-        if (await DispatchAsync(live, staged, cancellationToken).ConfigureAwait(false) is Error refused)
+        if (await DispatchAsync(live, staged, source, cancellationToken).ConfigureAwait(false) is Error refused)
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
@@ -631,6 +642,7 @@ internal sealed class RegistrationService(
         RegistrationSession? live,
         IdentifierId identifier,
         [NeverLogged] string code,
+        string source,
         CancellationToken cancellationToken)
     {
         if (live is null)
@@ -645,7 +657,7 @@ internal sealed class RegistrationService(
 
         // REG-SESS-003 AC6: a try is held to the delay the source and the identifier have
         // earned, and every refused one is counted towards it.
-        ThrottleAttempt attempt = Attempt(live, staged.Canonical);
+        ThrottleAttempt attempt = Attempt(source, staged.Canonical);
 
         if (await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false) is Error delayed)
         {
@@ -719,9 +731,11 @@ internal sealed class RegistrationService(
         RegistrationSessionId? session,
         [NeverLogged] string linkToken,
         bool press,
+        string source,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(linkToken);
+        ArgumentNullException.ThrowIfNull(source);
 
         byte[] fingerprint = OpaqueToken.Of(linkToken).Fingerprint();
 
@@ -734,7 +748,12 @@ internal sealed class RegistrationService(
             || sender.HasExpired(now)
             || Sent(sender, fingerprint) is not StagedIdentity staged)
         {
-            return Result.Failure<LinkLanding>(Error.From(ErrorCodes.CodeInvalid));
+            // REG-SESS-003 AC6: a pressed token that opens nothing names no identifier,
+            // so it is held to the delay of the source that presents it and counted
+            // against that source alone; one merely opened counts nothing.
+            return press
+                ? await GoneAsync(source, cancellationToken).ConfigureAwait(false)
+                : Result.Failure<LinkLanding>(Error.From(ErrorCodes.CodeInvalid));
         }
 
         // The press completes the verification only from the browser that started the
@@ -897,6 +916,7 @@ internal sealed class RegistrationService(
                     noticeVersion,
                     consents,
                     device,
+                    address: null,
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(
@@ -939,6 +959,11 @@ internal sealed class RegistrationService(
     /// <param name="noticeVersion">The version of the notice presented.</param>
     /// <param name="consents">What each consent control was left at.</param>
     /// <param name="device">What the browser said it is.</param>
+    /// <param name="address">
+    /// The whole address of the request completing the step, which the first session
+    /// records (REG-SESS-007, AUTH-SESS-013), or nothing where a caller in process
+    /// completes it, whose session records the address the registration began on.
+    /// </param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>The account, the session it is signed in on, and the browser token.</returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
@@ -948,6 +973,7 @@ internal sealed class RegistrationService(
         string noticeVersion,
         IReadOnlyDictionary<string, bool> consents,
         DeviceDescription device,
+        string? address,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(termsVersion);
@@ -1074,7 +1100,7 @@ internal sealed class RegistrationService(
                 .BeginRegisteredAsync(
                     live.Provisional,
                     SecurityStep.Presented(live, policy.LoginFactors),
-                    new SessionOrigin(live.Source, device),
+                    new SessionOrigin(address ?? live.Source, device),
                     live.Client.Length > 0 ? live.Client : null,
                     cancellationToken)
                 .ConfigureAwait(false))
@@ -1302,6 +1328,7 @@ internal sealed class RegistrationService(
     /// <param name="providerSubject">The provider's own identifier for the person.</param>
     /// <param name="address">The address the provider supplied, where it supplied one.</param>
     /// <param name="label">What the credential is called until the person renames it.</param>
+    /// <param name="source">The source of the request in hand, which a message it sends is counted against.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>
     /// That the identity is linked to an account already, or the state with the
@@ -1321,9 +1348,11 @@ internal sealed class RegistrationService(
         [NeverLogged] string providerSubject,
         ProvidedAddress? address,
         CredentialLabel label,
+        string source,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(providerSubject);
+        ArgumentNullException.ThrowIfNull(source);
 
         // REG-IDENT-008 AC3: an identity already linked makes the attempt a sign-in,
         // whatever the session holds.
@@ -1382,7 +1411,7 @@ internal sealed class RegistrationService(
             return Result.Success(new ProvidedRegistration(Linked: false, State(live)));
         }
 
-        return (await SuppliedAsync(live, credential, address, cancellationToken).ConfigureAwait(false))
+        return (await SuppliedAsync(live, credential, address, source, cancellationToken).ConfigureAwait(false))
             .Match(
                 state => Result.Success(new ProvidedRegistration(Linked: false, state)),
                 Result.Failure<ProvidedRegistration>);
@@ -1422,10 +1451,11 @@ internal sealed class RegistrationService(
         kind is IdentifierKind.Email ? Settings.IdentifiersEmailMax : Settings.IdentifiersPhoneMax;
 
     // AUTH-ABUSE-001, REG-SESS-003 AC6: a registration's asks and tries are held to the
-    // delay the session's source and the identifier's keyed hash have earned, as a
-    // sign-in's are, and nothing about any account is part of it.
-    private ThrottleAttempt Attempt(RegistrationSession session, string identifier) =>
-        new(session.Source, throttle.Identify(identifier, usernames: false));
+    // delay the source of the request in hand and the identifier's keyed hash have
+    // earned, as a sign-in's are, never to a source stored when the session began, and
+    // nothing about any account is part of it.
+    private ThrottleAttempt Attempt(string source, string identifier) =>
+        new(source, throttle.Identify(identifier, usernames: false));
 
     private async ValueTask<Error?> DelayedAsync(ThrottleAttempt attempt, CancellationToken cancellationToken)
     {
@@ -1440,6 +1470,24 @@ internal sealed class RegistrationService(
         }
 
         return delay > TimeSpan.Zero ? Error.Throttled(time.GetUtcNow() + delay) : null;
+    }
+
+    // AUTH-ABUSE-001, CONV-DESIGN-003: the count of a pressed token that opens nothing
+    // stands whatever the outcome, and the refusal writes nothing else; the throttle's
+    // own unit of work is the outermost here, since nothing was begun for the press.
+    private async ValueTask<Result<LinkLanding>> GoneAsync(string source, CancellationToken cancellationToken)
+    {
+        var attempt = new ThrottleAttempt(source, Identifier: null);
+
+        if (await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false) is Error delayed)
+        {
+            return Result.Failure<LinkLanding>(delayed);
+        }
+
+        return (await throttle.FailedAsync(attempt, cancellationToken).ConfigureAwait(false))
+            .Match(
+                () => Result.Failure<LinkLanding>(Error.From(ErrorCodes.CodeExpired)),
+                Result.Failure<LinkLanding>);
     }
 
     // The refusal is counted against the delay after it is decided, and answers as it
@@ -1748,6 +1796,7 @@ internal sealed class RegistrationService(
         RegistrationSession session,
         StagedIdentity bound,
         string value,
+        string source,
         CancellationToken cancellationToken)
     {
         RegistrationStep collecting =
@@ -1771,7 +1820,7 @@ internal sealed class RegistrationService(
             return Result.Failure<RegistrationState>(notBegun);
         }
 
-        if (await DispatchAsync(session, bound, cancellationToken).ConfigureAwait(false) is Error refused)
+        if (await DispatchAsync(session, bound, source, cancellationToken).ConfigureAwait(false) is Error refused)
         {
             await work.RollbackAsync().ConfigureAwait(false);
 
@@ -1799,6 +1848,7 @@ internal sealed class RegistrationService(
         IdentifierKind kind,
         string value,
         bool isExtra,
+        string source,
         CancellationToken cancellationToken)
     {
         if (Canonical(kind, value) is not (string entered, string canonical))
@@ -1833,7 +1883,7 @@ internal sealed class RegistrationService(
 
         session.Stage(staged);
 
-        if (await DispatchAsync(session, staged, cancellationToken).ConfigureAwait(false)
+        if (await DispatchAsync(session, staged, source, cancellationToken).ConfigureAwait(false)
             is Error refused)
         {
             await work.RollbackAsync().ConfigureAwait(false);
@@ -1867,6 +1917,7 @@ internal sealed class RegistrationService(
         RegistrationSession session,
         StagedCredential credential,
         ProvidedAddress address,
+        string source,
         CancellationToken cancellationToken)
     {
         if (Canonical(IdentifierKind.Email, address.Entered) is not (string entered, string canonical))
@@ -1910,7 +1961,7 @@ internal sealed class RegistrationService(
         {
             staged.Verify(time.GetUtcNow());
         }
-        else if (await DispatchAsync(session, staged, cancellationToken).ConfigureAwait(false)
+        else if (await DispatchAsync(session, staged, source, cancellationToken).ConfigureAwait(false)
                  is Error refused)
         {
             await work.RollbackAsync().ConfigureAwait(false);
@@ -1938,6 +1989,7 @@ internal sealed class RegistrationService(
     private async ValueTask<Error?> DispatchAsync(
         RegistrationSession session,
         StagedIdentity staged,
+        string source,
         CancellationToken cancellationToken)
     {
         SubjectId? owner = await directory
@@ -1946,7 +1998,7 @@ internal sealed class RegistrationService(
 
         if (owner is SubjectId holder)
         {
-            return await TellHolderAsync(session, staged, holder, cancellationToken).ConfigureAwait(false);
+            return await TellHolderAsync(session, staged, holder, source, cancellationToken).ConfigureAwait(false);
         }
 
         if (await directory
@@ -1956,7 +2008,7 @@ internal sealed class RegistrationService(
             return null;
         }
 
-        return await SendCodeAsync(session, staged, cancellationToken).ConfigureAwait(false);
+        return await SendCodeAsync(session, staged, source, cancellationToken).ConfigureAwait(false);
     }
 
     // Whether a value belongs to an account or is held out of reach for an undo, which
@@ -1973,6 +2025,7 @@ internal sealed class RegistrationService(
     private async ValueTask<Error?> SendCodeAsync(
         RegistrationSession session,
         StagedIdentity staged,
+        string source,
         CancellationToken cancellationToken)
     {
         Error? failure = null;
@@ -1999,7 +2052,7 @@ internal sealed class RegistrationService(
                     Destination(staged),
                     MessageKind.VerificationLink,
                     RestrictionPurpose.Verification,
-                    session.Source,
+                    source,
                     RecipientLanguage.Found(session.Language, languages))
                 {
                     Values = new Dictionary<string, string>(capacity: 2, StringComparer.Ordinal)
@@ -2025,6 +2078,7 @@ internal sealed class RegistrationService(
         RegistrationSession session,
         StagedIdentity staged,
         SubjectId holder,
+        string source,
         CancellationToken cancellationToken)
     {
         Error? failure = null;
@@ -2062,7 +2116,7 @@ internal sealed class RegistrationService(
                     Destination(staged),
                     MessageKind.AccountExists,
                     RestrictionPurpose.Notification,
-                    session.Source,
+                    source,
                     RecipientLanguage.Of(settled, session.Language, languages))
                 {
                     Subject = holder,

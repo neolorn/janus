@@ -578,6 +578,94 @@ public sealed class StepUpTests : IDisposable
     }
 
     /// <summary>
+    /// AUTH-SESS-009 AC6, AUTH-STEP-002 AC3: a session that proved the gate a minute
+    /// before it is downgraded is asked a presentation at its next gated action, the
+    /// gate saying that the downgrade alone keeps it unmet; a presentation made after
+    /// the downgrade passes the gate, and what the session attained before it is as it
+    /// was reached.
+    /// </summary>
+    [Fact]
+    public void AUTH_SESS_009_AC6_ADowngradedSessionIsAskedAPresentationThatLiftsIt()
+    {
+        var reached = new Assurance(AssuranceLevel.Aal2, PhishingResistant: true);
+        Gate gate = Gate(GateLevel.Aal2, phishingResistant: true);
+        HeldFactors held = Held(password: true, Factor.Passkey);
+        Session session = Signed(reached);
+
+        session.Downgrade(Noon + TimeSpan.FromMinutes(1));
+
+        StepUpChallenge asked = StepUp.On(session, gate, held, Noon + TimeSpan.FromMinutes(2));
+
+        Assert.Equal((StepUpOutcome.Present, true), (asked.Outcome, asked.Downgraded));
+        Assert.Equal(
+            (AssuranceLevel.Aal2, Noon, true, (DateTimeOffset?)Noon),
+            (session.Attained, session.AttainedAt, session.PhishingResistant, session.PhishingResistantAt));
+
+        session.Present(reached, Noon + TimeSpan.FromMinutes(3));
+
+        StepUpChallenge lifted = StepUp.On(session, gate, held, Noon + TimeSpan.FromMinutes(4));
+
+        Assert.Equal((StepUpOutcome.Satisfied, false), (lifted.Outcome, lifted.Downgraded));
+    }
+
+    /// <summary>
+    /// AUTH-STEP-002 AC3, AUTHZ-GATE-005: a gate a downgraded session would not meet
+    /// whatever its downgrade, its proof having aged, is not one the downgrade alone
+    /// keeps unmet; and a session never downgraded is judged as before.
+    /// </summary>
+    [Fact]
+    public void AUTH_STEP_002_AC3_ProofAttainedUpToTheLastDowngradeIsNotCounted()
+    {
+        var reached = new Assurance(AssuranceLevel.Aal2, PhishingResistant: true);
+        Gate gate = Gate(GateLevel.Aal2, phishingResistant: true);
+        HeldFactors held = Held(password: true, Factor.Passkey);
+        Session downgraded = Signed(reached);
+        Session standing = Signed(reached);
+
+        downgraded.Downgrade(Noon);
+
+        StepUpChallenge atOnce = StepUp.On(downgraded, gate, held, Noon + TimeSpan.FromMinutes(1));
+        StepUpChallenge aged = StepUp.On(downgraded, gate, held, Noon + TimeSpan.FromMinutes(16));
+
+        Assert.Equal((StepUpOutcome.Present, true), (atOnce.Outcome, atOnce.Downgraded));
+        Assert.Equal((StepUpOutcome.Present, false), (aged.Outcome, aged.Downgraded));
+        Assert.Equal(
+            StepUpOutcome.Satisfied,
+            StepUp.On(standing, gate, held, Noon + TimeSpan.FromMinutes(1)).Outcome);
+    }
+
+    /// <summary>
+    /// AUTH-SESS-009 AC5: a session derived from a record that stands downgraded passes
+    /// no gate either, and one derived after a presentation lifted the downgrade does.
+    /// </summary>
+    [Fact]
+    public void AUTH_SESS_009_AC5_ASessionDerivedFromADowngradedRecordPassesNoGate()
+    {
+        var reached = new Assurance(AssuranceLevel.Aal2, PhishingResistant: true);
+        Gate gate = Gate(GateLevel.Aal2, phishingResistant: true);
+        HeldFactors held = Held(password: true, Factor.Passkey);
+        Session record = Signed(reached);
+
+        record.Downgrade(Noon + TimeSpan.FromMinutes(1));
+
+        Session derived = Derived(record, Noon + TimeSpan.FromMinutes(2));
+
+        record.Present(reached, Noon + TimeSpan.FromMinutes(3));
+
+        Session after = Derived(record, Noon + TimeSpan.FromMinutes(4));
+
+        Assert.Equal(
+            StepUpOutcome.Present,
+            StepUp.On(derived, gate, held, Noon + TimeSpan.FromMinutes(5)).Outcome);
+        Assert.Equal(
+            StepUpOutcome.Satisfied,
+            StepUp.On(after, gate, held, Noon + TimeSpan.FromMinutes(5)).Outcome);
+
+        static Session Derived(Session record, DateTimeOffset at) =>
+            record.Derive(SessionId.New(TimeProvider.System), SessionType.PerApp, Origin(), at, TimeSpan.FromDays(1));
+    }
+
+    /// <summary>
     /// AUTH-STEP-008 invariant 4: removing an authenticator is gated on the tier the
     /// account reaches and never on the authenticator itself, so the passkey that is
     /// no longer in its owner's hands is in none of the combinations offered to

@@ -25,7 +25,8 @@ namespace Janus.Hosting.Authorization;
 /// </remarks>
 internal sealed class RequestGates(RequestSession request, StepUpGuard guard) : ISessionGates
 {
-    private readonly Dictionary<string, Error?> _judged = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (Error? Outstanding, bool Downgraded)> _judged =
+        new(StringComparer.Ordinal);
 
     /// <inheritdoc/>
     public bool Judges(AccessContext context)
@@ -41,35 +42,20 @@ internal sealed class RequestGates(RequestSession request, StepUpGuard guard) : 
     public async ValueTask<Error?> OutstandingAsync(
         AccessContext context,
         string gate,
-        CancellationToken cancellationToken)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(gate);
+        CancellationToken cancellationToken) =>
+        (await JudgedAsync(context, gate, cancellationToken).ConfigureAwait(false)).Outstanding;
 
-        if (!Judges(context))
+    /// <inheritdoc/>
+    public async ValueTask<CapabilityResidual?> ResidualAsync(
+        AccessContext context,
+        string gate,
+        CancellationToken cancellationToken) =>
+        await JudgedAsync(context, gate, cancellationToken).ConfigureAwait(false) switch
         {
-            return Error.From(ErrorCodes.StepUpRequired);
-        }
-
-        if (_judged.TryGetValue(gate, out Error? judged))
-        {
-            return judged;
-        }
-
-        Session live = request.Required;
-
-        // Chapter 09, POST /auth/step-up: the refusal carries what the gate costs and
-        // what the person can present, as a gate on the library's own surface does.
-        Error? outstanding = (await guard
-                .ChallengeAsync(live.Subject, live.Id, gate, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(
-                challenge => StepUpRefusal.Met(challenge) ? null : StepUpRefusal.Of(challenge),
-                error => error);
-
-        _judged[gate] = outstanding;
-
-        return outstanding;
-    }
+            (null, _) => null,
+            (_, true) => CapabilityResidual.Reauthenticate,
+            _ => CapabilityResidual.StepUp,
+        };
 
     /// <inheritdoc/>
     public async ValueTask<Result<Gate>> CostAsync(
@@ -83,5 +69,42 @@ internal sealed class RequestGates(RequestSession request, StepUpGuard guard) : 
         return context is { IsSystem: false, Acting: SubjectId acting }
             ? await guard.CostAsync(acting, gate, cancellationToken).ConfigureAwait(false)
             : Result.Failure<Gate>(Error.From(ErrorCodes.StepUpRequired));
+    }
+
+    private async ValueTask<(Error? Outstanding, bool Downgraded)> JudgedAsync(
+        AccessContext context,
+        string gate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(gate);
+
+        if (!Judges(context))
+        {
+            return (Error.From(ErrorCodes.StepUpRequired), false);
+        }
+
+        if (_judged.TryGetValue(gate, out (Error? Outstanding, bool Downgraded) judged))
+        {
+            return judged;
+        }
+
+        Session live = request.Required;
+
+        // Chapter 09, POST /auth/step-up: the refusal carries what the gate costs and
+        // what the person can present, as a gate on the library's own surface does.
+        // AUTH-SESS-009: what the session attained up to its last downgrade is not
+        // counted, and the gate says where that alone keeps it unmet.
+        judged = (await guard
+                .ChallengeAsync(live.Subject, live.Id, gate, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(
+                challenge => StepUpRefusal.Met(challenge)
+                    ? (null, false)
+                    : ((Error?)StepUpRefusal.Of(challenge), challenge.Downgraded),
+                error => (error, false));
+
+        _judged[gate] = judged;
+
+        return judged;
     }
 }

@@ -83,6 +83,7 @@ internal sealed class SessionStore(
                 AttainedAt = session.AttainedAt,
                 PhishingResistant = session.PhishingResistant,
                 PhishingResistantAt = session.PhishingResistantAt,
+                DowngradedAt = session.DowngradedAt,
                 OriginBrowser = session.Origin.Device.Browser,
                 OriginOs = session.Origin.Device.Os,
                 OriginPlace = Written(
@@ -210,6 +211,18 @@ internal sealed class SessionStore(
     }
 
     /// <inheritdoc/>
+    public async ValueTask<int> DowngradeAsync(
+        SubjectId subject,
+        DateTimeOffset at,
+        CancellationToken cancellationToken) =>
+        await context.Sessions
+            .Where(session => session.Subject == subject && session.EndedAt == null)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(session => session.DowngradedAt, at),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc/>
     public async ValueTask EndSpineAsync(
         SessionId spine,
         DateTimeOffset at,
@@ -295,6 +308,7 @@ internal sealed class SessionStore(
         record.IdleExpiry,
         record.AbsoluteExpiry,
         record.EndedAt,
+        record.DowngradedAt,
         record.SatisfiesEveryGate,
         record.BreakGlassReason,
         record.Client);

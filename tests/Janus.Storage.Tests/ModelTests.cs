@@ -799,8 +799,8 @@ public sealed class ModelTests
 
             // Sessions: the spine of AUTH-SESS-001, what it reached (AUTH-SESS-002), the
             // fingerprint of its secret (AUTH-SESS-003), where it was used from with
-            // the place under the key (AUTH-SESS-013), and the client a registration
-            // captured (REG-SESS-008).
+            // the place under the key (AUTH-SESS-013), the client a registration
+            // captured (REG-SESS-008), and when it was last downgraded (AUTH-SESS-009).
             "sessions.absolute_expiry",
             "sessions.attained",
             "sessions.attained_at",
@@ -808,6 +808,7 @@ public sealed class ModelTests
             "sessions.client",
             "sessions.created_at",
             "sessions.csrf_fingerprint",
+            "sessions.downgraded_at",
             "sessions.ended_at",
             "sessions.id",
             "sessions.idle_expiry",

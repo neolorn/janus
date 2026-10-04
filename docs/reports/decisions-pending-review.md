@@ -5463,6 +5463,8 @@ and reported again, and three reports of one credential are three facts.
 *Chapter text that should change.* None. `10` section 5b already names all four and
 says what each is raised for.
 
+**Superseded by D-166.**
+
 ---
 
 ## 153. Startup verifies the schema, and refuses only a database behind the model
@@ -9118,6 +9120,8 @@ the membership makes the organization's policy the one in force.
 
 *Chapter text that should change.* Chapter 09 section 6a could name the details of the
 **403** and say that only the factors the policy permits are counted.
+
+**Superseded by D-166.**
 
 ---
 
@@ -13212,6 +13216,8 @@ compared with, or return the three values a gate needs.
 
 **Revised by entry 399.**
 
+**Superseded by D-166.**
+
 ---
 
 ## 329. What an export operation is, and what it asks
@@ -16207,6 +16213,8 @@ counts are kept, or what a deployment of several instances admits.
 - the count is kept per instance, by connection address after trusted proxies;
 - a deployment of several instances sets its share.
 
+**Superseded by D-166.**
+
 ---
 
 ## 390. Stage 4 is the one file of the boundary that reads a key, and it reads that key alone
@@ -17584,6 +17592,8 @@ first read.
   the identifier's canonical form, carried by the sign-in, and counted on every refused
   factor whether or not an account holds it.
 - OPS-SEC-003 AC6 could list sign-ins in progress among what a retirement forgets.
+
+**Superseded by D-166.**
 
 ---
 

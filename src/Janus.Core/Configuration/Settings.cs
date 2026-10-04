@@ -307,6 +307,13 @@ public static class Settings
         new("abuse.source.ratelimit", SettingScope.Runtime, 300, loosening: SettingDirection.Increase);
 
     /// <summary>
+    /// Requests admitted a minute from the /48 that encloses an IPv6 source, whichever
+    /// of its subnets they come from.
+    /// </summary>
+    public static IntegerSetting AbuseSourceSiteLimit { get; } =
+        new("abuse.source.sitelimit", SettingScope.Runtime, 3000, loosening: SettingDirection.Increase);
+
+    /// <summary>
     /// Registration sessions from one source in an hour above which the repeated
     /// attempts signal fires.
     /// </summary>
@@ -975,6 +982,7 @@ public static class Settings
         AbuseThrottleDecay,
         AbuseNonexistentWindow,
         AbuseSourceRateLimit,
+        AbuseSourceSiteLimit,
         AbuseBotDefenceRepeatedAttempts,
         IntegrationCallbackRateLimit,
         IntegrationCallbackClaimTimeout,

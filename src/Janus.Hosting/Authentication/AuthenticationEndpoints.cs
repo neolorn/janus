@@ -155,11 +155,11 @@ internal static class AuthenticationEndpoints
                         challenge,
                         request.Factor,
                         stepping: null,
-                        origin.Address,
+                        origin.Source,
                         RequestOrigin.Language(context.Request),
                         cancellationToken)
                     .ConfigureAwait(false),
-                Accepted);
+                Asked);
         }
 
         return await ReachedAsync(
@@ -253,7 +253,7 @@ internal static class AuthenticationEndpoints
                         RequestOrigin.Language(context.Request),
                         cancellationToken)
                     .ConfigureAwait(false),
-                Accepted);
+                Asked);
         }
 
         return await ReachedAsync(
@@ -475,6 +475,17 @@ internal static class AuthenticationEndpoints
         return await CarriedAsync(signedIn, cookies, configuration, time, context, cancellationToken)
             .ConfigureAwait(false);
     }
+
+    // AUTH-FACT-002: an ask is accepted, save at a sign-in whose number's signal
+    // withheld the code, which is answered with what the challenge then offers.
+    private static IResult Asked(SignInProgress? offered) =>
+        offered is null
+            ? Accepted
+            : TypedResults.Json(
+                SignInProgressView.Of(offered),
+                AuthenticationJson.Default.SignInProgressView,
+                contentType: null,
+                StatusCodes.Status200OK);
 
     private static async Task<IResult> ReachedAsync(
         Result<SignInOutcome> outcome,

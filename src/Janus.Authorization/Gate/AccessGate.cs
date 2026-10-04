@@ -579,14 +579,19 @@ internal sealed class AccessGate(
 
         // AUTHZ-GATE-005 (D-160): a gate is the session's to meet whatever the record,
         // so it is judged once for the page rather than once per row.
-        var unstepped = new HashSet<Permission>();
+        var unstepped = new Dictionary<Permission, CapabilityResidual>();
 
         foreach (Permission permission in permissions)
         {
-            if (await UnsteppedAsync(context, permission, cancellationToken).ConfigureAwait(false)
-                is not null)
+            if (await gates
+                    .ResidualAsync(
+                        context,
+                        model.GateOf(permission)
+                            ?? await exports.GateOfAsync(permission, cancellationToken).ConfigureAwait(false),
+                        cancellationToken)
+                    .ConfigureAwait(false) is CapabilityResidual unmet)
             {
-                unstepped.Add(permission);
+                unstepped.Add(permission, unmet);
             }
         }
 
@@ -811,7 +816,7 @@ internal sealed class AccessGate(
         IReadOnlyList<PageCapability> conferred,
         IReadOnlyDictionary<Permission, IReadOnlySet<string>> derivedRows,
         bool restricted,
-        HashSet<Permission> unstepped,
+        Dictionary<Permission, CapabilityResidual> unstepped,
         IReadOnlySet<Permission> unconsented)
     {
         string named = resource.ToString();
@@ -850,9 +855,9 @@ internal sealed class AccessGate(
                 outstanding.Add(CapabilityResidual.Restricted);
             }
 
-            if (unstepped.Contains(permission))
+            if (unstepped.TryGetValue(permission, out CapabilityResidual unmet))
             {
-                outstanding.Add(CapabilityResidual.StepUp);
+                outstanding.Add(unmet);
             }
 
             if (unconsented.Contains(permission))

@@ -550,6 +550,7 @@ internal sealed class ProviderSignIn(
                     subject,
                     ProvidedAddress.Of(provider, Claim(identity, "email"), Verified(identity), Claim(identity, "hd")),
                     CredentialLabel.Of(origin.Device),
+                    origin.Source,
                     cancellationToken)
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<ProvidedRegistration>(error, ref failure));

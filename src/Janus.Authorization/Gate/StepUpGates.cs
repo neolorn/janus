@@ -87,15 +87,54 @@ internal sealed class StepUpGates(
             return failure;
         }
 
-        // A report that cannot be read is a gate unmet, never one assumed met.
+        DateTimeOffset now = time.GetUtcNow();
+
+        // LIB-HOST-004 AC4: a report the provider fails to give, or one that does not
+        // read, is a gate unmet, never one assumed met.
         AttainedAssurance? attained = (await assurance.AttainedAsync(context, cancellationToken).ConfigureAwait(false))
-            .Match<AttainedAssurance?>(value => value, _ => null);
+            .Match<AttainedAssurance?>(value => Reads(value, now) ? value : null, _ => null);
 
         AssuranceLevel required = Required(cost, attained);
 
-        return attained is not null && Meets(attained, cost, required, time.GetUtcNow())
+        return attained is not null && Meets(attained, cost, required, now)
             ? null
             : Refusal(cost, required);
+    }
+
+    /// <summary>
+    /// What a capability bound to a named gate still requires, or nothing where no gate
+    /// is named or the gate is met.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="gate">The gate's name, or nothing.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// The residual of chapter 10 section 5.20: <c>reauthenticate</c> where the acting
+    /// person's own session would meet the gate but for proof attained before its last
+    /// downgrade (AUTH-SESS-009), <c>stepup</c> for a gate otherwise unmet.
+    /// </returns>
+    public async ValueTask<CapabilityResidual?> ResidualAsync(
+        AccessContext context,
+        string? gate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (gate is null)
+        {
+            return null;
+        }
+
+        if (sessions is not null && sessions.Judges(context))
+        {
+            return await sessions.ResidualAsync(context, gate, cancellationToken).ConfigureAwait(false);
+        }
+
+        // A downgrade is a fact of the library's own session record, so a gate judged
+        // from anything else is met or asks for step-up.
+        return await OutstandingAsync(context, gate, cancellationToken).ConfigureAwait(false) is null
+            ? null
+            : CapabilityResidual.StepUp;
     }
 
     // AUTH-STEP-002a: a gate asking for what the account can reach asks for what the
@@ -107,6 +146,13 @@ internal sealed class StepUpGates(
             GateLevel.Aal2 => AssuranceLevel.Aal2,
             _ => attained is { Reachable: > AssuranceLevel.Aal1 } report ? report.Reachable : AssuranceLevel.Aal1,
         };
+
+    // AUTH-STEP-002: a report reads where its levels are levels of chapter 10 section 5.4
+    // and its proof was made no later than now.
+    private static bool Reads(AttainedAssurance attained, DateTimeOffset now) =>
+        Enum.IsDefined(attained.Level)
+        && Enum.IsDefined(attained.Reachable)
+        && attained.AttainedAt <= now;
 
     private static bool Meets(AttainedAssurance attained, Core.Gate cost, AssuranceLevel required, DateTimeOffset now) =>
         attained.Level >= required

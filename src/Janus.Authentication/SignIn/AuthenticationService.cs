@@ -242,15 +242,21 @@ internal sealed class AuthenticationService(
     /// <param name="source">The address the ask came from.</param>
     /// <param name="language">The language the ask was made in.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
-    /// <returns>Nothing, or the refusal of the send.</returns>
+    /// <returns>
+    /// Nothing where the ask is answered as every ask is; at a sign-in whose number's
+    /// signal answers <c>risk</c>, what the challenge then offers, or
+    /// <c>auth.factor.rejected</c> where it offers nothing; or the refusal of the send.
+    /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
     /// <remarks>
-    /// Implements AUTH-FACT-002 AC6. An ask is answered alike whatever it finds, so a
-    /// handle that opens nothing, a sign-in no first factor has been accepted for, an
-    /// account holding no such credential and a policy that does not permit it are sent
-    /// nothing and answered as the rest.
+    /// Implements AUTH-FACT-002 AC6 and AC7 and AUTH-FACT-002b AC6. A handle that opens
+    /// nothing, a sign-in no first factor has been accepted for, an account holding no
+    /// such credential and a policy that does not permit it are sent nothing and
+    /// answered as an ask that sent its code. A number whose signal answers
+    /// <c>risk</c> after a first factor is sent nothing either, and the sign-in is told
+    /// what is left to present, which an anonymous caller is never told.
     /// </remarks>
-    public async ValueTask<Result> AskAsync(
+    public async ValueTask<Result<SignInProgress?>> AskAsync(
         string challenge,
         Factor factor,
         SubjectId? stepping,
@@ -270,7 +276,7 @@ internal sealed class AuthenticationService(
             || !(await authenticators.OfAsync(subject, cancellationToken).ConfigureAwait(false))
                 .Any(credential => credential.IsUsable && credential.Factor == factor))
         {
-            return Result.Success();
+            return Result.Success<SignInProgress?>(null);
         }
 
         Error? failure = null;
@@ -282,12 +288,51 @@ internal sealed class AuthenticationService(
         // refused when presented, so nothing is sent for it.
         if (failure is not null || !policy.LoginFactors.Contains(factor))
         {
-            return failure is null ? Result.Success() : Result.Failure(failure);
+            return failure is null
+                ? Result.Success<SignInProgress?>(null)
+                : Result.Failure<SignInProgress?>(failure);
         }
 
-        return await links
-            .SendSecondStepAsync(open.Fingerprint, subject, factor, source, language, cancellationToken)
-            .ConfigureAwait(false);
+        bool sent = (await links
+                .SendSecondStepAsync(open.Fingerprint, subject, factor, source, language, cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Withheld<bool>(error, ref failure));
+
+        if (failure is not null)
+        {
+            return Result.Failure<SignInProgress?>(failure);
+        }
+
+        if (sent || stepping is not null)
+        {
+            return Result.Success<SignInProgress?>(null);
+        }
+
+        // AUTH-FACT-002b AC6: the entries a text carries ride the one number, so the
+        // signal withholds them all, and the sign-in is answered with the second steps
+        // it still offers; one left with none is refused, never completed.
+        Assurance reached = Assurance.Reached(Properties(open.Presented))
+            ?? new Assurance(AssuranceLevel.Delegated, PhishingResistant: false);
+
+        List<Factor> wanted = Wanted(
+            policy,
+            await authenticators.OfAsync(subject, cancellationToken).ConfigureAwait(false),
+            reached,
+            trusts: false);
+
+        _ = wanted.RemoveAll(entry => FactorCatalogue.Of(entry).Restricted);
+
+        return wanted.Count is 0
+            ? Result.Failure<SignInProgress?>(Error.From(ErrorCodes.FactorRejected))
+            : Result.Success<SignInProgress?>(new SignInProgress(
+                SignInStatus.FactorRequired,
+                reached.Level,
+                reached.PhishingResistant,
+                wanted,
+                TrustDeviceOffered: false,
+                Session: null,
+                Requirement: null,
+                PasswordChangeRequired: false));
     }
 
     /// <inheritdoc/>
@@ -380,7 +425,7 @@ internal sealed class AuthenticationService(
             .ByProviderAsync(provider, providerSubject, cancellationToken)
             .ConfigureAwait(false);
 
-        var attempt = new ThrottleAttempt(origin.Address, null) { Account = linked?.Subject };
+        var attempt = new ThrottleAttempt(origin.Source, null) { Account = linked?.Subject };
 
         if (await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false) is Error held)
         {
@@ -491,7 +536,7 @@ internal sealed class AuthenticationService(
 
         // AUTH-ABUSE-001 AC5: only a token that stands for this sign-in's account
         // recognises the browser; carrying one proves nothing.
-        var attempt = new ThrottleAttempt(origin.Address, open?.Identifier)
+        var attempt = new ThrottleAttempt(origin.Source, open?.Identifier)
         {
             Account = open?.Subject,
             Recognised = await RecognisedAsync(open?.Subject, remembered, trusted, cancellationToken)
@@ -581,7 +626,7 @@ internal sealed class AuthenticationService(
         ArgumentNullException.ThrowIfNull(origin);
 
         Challenge? open = await OpenAsync(challenge, cancellationToken).ConfigureAwait(false);
-        var attempt = new ThrottleAttempt(origin.Address, open?.Identifier) { Account = open?.Subject };
+        var attempt = new ThrottleAttempt(origin.Source, open?.Identifier) { Account = open?.Subject };
 
         if (await DelayedAsync(attempt, cancellationToken).ConfigureAwait(false) is Error held)
         {
@@ -702,6 +747,28 @@ internal sealed class AuthenticationService(
                 ?? Error.From(ErrorCodes.FactorRejected));
         }
 
+        Error? unread = null;
+
+        Policy policy = (await policies.ForAsync(asking, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<Policy>(error, ref unread));
+
+        if (unread is not null)
+        {
+            return Result.Failure<SignInOutcome>(unread);
+        }
+
+        // AUTH-STEP-002, IDN-LIFE-009b: a factor the policy in force does not permit
+        // satisfies no gate, so at a step-up it is refused before it is verified, right
+        // or wrong, and counted as a refused step-up factor. A sign-in refuses it only
+        // after the factor succeeds, since its caller is not yet authenticated.
+        if (!policy.LoginFactors.Contains(presented.Factor))
+        {
+            return Result.Failure<SignInOutcome>(
+                await StepUpRefusedAsync(attempt, live, presented.Factor, cancellationToken)
+                    .ConfigureAwait(false)
+                ?? Error.From(ErrorCodes.FactorNotPermitted));
+        }
+
         Error? refusal = null;
 
         _ = (await AcceptsAsync(open, asking, presented, cancellationToken).ConfigureAwait(false))
@@ -805,7 +872,7 @@ internal sealed class AuthenticationService(
         {
             return Result.Failure<LandedSignIn>(
                 press
-                    ? await GoneAsync(new ThrottleAttempt(origin.Address, null), factor, cancellationToken)
+                    ? await GoneAsync(new ThrottleAttempt(origin.Source, null), factor, cancellationToken)
                         .ConfigureAwait(false)
                     : Error.From(ErrorCodes.CodeExpired));
         }
@@ -825,7 +892,7 @@ internal sealed class AuthenticationService(
 
         Challenge? open = await OpenAsync(challenge, cancellationToken).ConfigureAwait(false);
 
-        var attempt = new ThrottleAttempt(origin.Address, open?.Identifier)
+        var attempt = new ThrottleAttempt(origin.Source, open?.Identifier)
         {
             Account = held.Subject,
             Recognised = await RecognisedAsync(held.Subject, remembered, trusted: null, cancellationToken)
@@ -1318,7 +1385,7 @@ internal sealed class AuthenticationService(
         }
 
         return checks
-            ? await HoldAsync(open, subject, reached, origin.Address, changeRequired, cancellationToken)
+            ? await HoldAsync(open, subject, reached, origin.Source, changeRequired, cancellationToken)
                 .ConfigureAwait(false)
             : await CompleteAsync(
                     open,

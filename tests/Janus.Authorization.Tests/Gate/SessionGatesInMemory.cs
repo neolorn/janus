@@ -51,6 +51,13 @@ internal sealed class SessionGatesInMemory(SubjectId holder) : ISessionGates
     }
 
     /// <inheritdoc/>
+    public ValueTask<CapabilityResidual?> ResidualAsync(
+        AccessContext context,
+        string gate,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult<CapabilityResidual?>(_met.Contains(gate) ? null : CapabilityResidual.StepUp);
+
+    /// <inheritdoc/>
     public ValueTask<Result<Core.Gate>> CostAsync(
         AccessContext context,
         string gate,

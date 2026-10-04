@@ -36,6 +36,20 @@ internal interface ISessionGates
     ValueTask<Error?> OutstandingAsync(AccessContext context, string gate, CancellationToken cancellationToken);
 
     /// <summary>
+    /// What a capability bound to the named gate still requires of the acting person's
+    /// session, as chapter 10 section 5.20 names it.
+    /// </summary>
+    /// <param name="context">Who is asking.</param>
+    /// <param name="gate">The gate's name: one of chapter 10 section 5a, or one the host names.</param>
+    /// <param name="cancellationToken">Abandons the operation.</param>
+    /// <returns>
+    /// Nothing where the session meets the gate; <c>reauthenticate</c> where it would but
+    /// for proof attained before its last downgrade (AUTH-SESS-009); otherwise
+    /// <c>stepup</c>.
+    /// </returns>
+    ValueTask<CapabilityResidual?> ResidualAsync(AccessContext context, string gate, CancellationToken cancellationToken);
+
+    /// <summary>
     /// What the named gate costs under the acting person's policy, where no session of
     /// the library carries the request and a host reports what the caller proved.
     /// </summary>

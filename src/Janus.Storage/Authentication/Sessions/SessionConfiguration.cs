@@ -94,6 +94,7 @@ internal sealed class SessionConfiguration : IEntityTypeConfiguration<SessionRec
         builder.Property(session => session.AttainedAt).HasColumnName("attained_at");
         builder.Property(session => session.PhishingResistant).HasColumnName("phishing_resistant");
         builder.Property(session => session.PhishingResistantAt).HasColumnName("phishing_resistant_at");
+        builder.Property(session => session.DowngradedAt).HasColumnName("downgraded_at");
 
         builder.Property(session => session.OriginBrowser)
             .HasColumnName("origin_browser")

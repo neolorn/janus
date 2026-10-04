@@ -13,6 +13,7 @@ using Janus.Authentication.Organizations;
 using Janus.Authentication.Passwords;
 using Janus.Authentication.Policies;
 using Janus.Authentication.Sending;
+using Janus.Authentication.Sessions;
 using Janus.Core;
 using Janus.Core.Configuration;
 
@@ -36,6 +37,7 @@ namespace Janus.Authentication.Invitations;
 /// <param name="locks">What judges the address the member will sign in with against the organization's lock.</param>
 /// <param name="memberships">Where the membership and its grants are written.</param>
 /// <param name="mailboxes">Where the corporate mailbox is given to the person.</param>
+/// <param name="sessions">Where the account's live sessions are downgraded as the membership attaches.</param>
 /// <param name="sending">What tells the security-notice set of the corporate address.</param>
 /// <param name="events">Where the membership, the corporate address added and the new primary are announced.</param>
 /// <param name="configuration">Where the membership limit, the email maximum and the languages are read.</param>
@@ -64,6 +66,7 @@ internal sealed class InvitationAcknowledgement(
     DomainLock locks,
     IMembershipAttachment memberships,
     IMailboxStore mailboxes,
+    ISessionStore sessions,
     INotificationHandler sending,
     IEvents events,
     IConfigurationStore configuration,
@@ -245,6 +248,11 @@ internal sealed class InvitationAcknowledgement(
 
             return Result.Failure(failure);
         }
+
+        // AUTH-SESS-009, IDN-LIFE-009b: the membership tightens the policy in force for
+        // the account, so every session it holds is downgraded in this transaction and
+        // passes no gate until a factor the organization permits is presented.
+        _ = await sessions.DowngradeAsync(invitee, now, cancellationToken).ConfigureAwait(false);
 
         List<DomainEvent> announced =
         [
@@ -447,8 +455,9 @@ internal sealed class InvitationAcknowledgement(
 
     // REG-DOM-001: the lock is judged as it now stands on the address the member will
     // sign in with: the corporate address where one is taken on, else the bound email,
-    // else any verified email the account holds. An account holding no email signs in
-    // with none, so nothing of it is judged.
+    // else any verified email the account holds. An account holding no verified email
+    // has no address a lock admits, so it is refused wherever the lock is on
+    // (criterion 10).
     private async ValueTask<Error?> OutsideLockAsync(
         Invitation invitation,
         InvitedIdentifiers bound,
@@ -466,7 +475,9 @@ internal sealed class InvitationAcknowledgement(
                 .ConfigureAwait(false);
         }
 
-        Error? refused = null;
+        Error? refused = await locks
+            .RefusedWithoutAddressInAsync(invitation.Organization, cancellationToken)
+            .ConfigureAwait(false);
 
         foreach (HeldIdentifier email in held.OfKind(IdentifierKind.Email).Where(identifier => identifier.IsVerified))
         {

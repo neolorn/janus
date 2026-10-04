@@ -5,6 +5,7 @@ abuse.sms.balancefloor decimal R
 abuse.sms.drainfactor decimal R floor=1.0
 abuse.sms.pollinterval duration R
 abuse.source.ratelimit integer R
+abuse.source.sitelimit integer R
 abuse.throttle.account.cap duration R ceiling=PT1M
 abuse.throttle.decay duration R
 abuse.throttle.delay.factor decimal R floor=1.0
