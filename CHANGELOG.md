@@ -10,6 +10,9 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A trust or a remembered browser found revoked under its lock, and the end of a
+  suspension window for a loss report cancelled meanwhile, answer as before and roll
+  their transaction back, having written nothing.
 - A rotation of a registered client's secret that another process made first, a change
   of the signing keys with nothing due, and a longer lifetime stored against a key no
   longer current each answer as before and commit nothing: an operation that succeeds

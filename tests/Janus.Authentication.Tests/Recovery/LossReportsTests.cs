@@ -186,6 +186,34 @@ public sealed class LossReportsTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC10: the window's end for a report cancelled meanwhile
+    /// invalidates nothing and writes nothing, so its unit of work is rolled back.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_AWindowEndForACancelledReportIsRolledBackAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        AuthenticatorId generator = await EnrolledAsync(subject);
+
+        _ = await Service.ReportAsync(
+            AccessContext.Of(subject),
+            generator,
+            Source,
+            TestContext.Current.CancellationToken);
+
+        _clock.Advance(TimeSpan.FromDays(8));
+        _authenticators.Locking = credential => credential.Restore();
+        _work.Reset();
+
+        _ = await Service.AdvanceAsync(Sweeper, TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.False(_work.Open);
+    }
+
+    /// <summary>
     /// AUTH-RECOV-007, chapter 10 section 5b: the three things that become of a
     /// reported credential are each announced, carrying what it is and, for the
     /// suspension, when the window ends.

@@ -484,10 +484,13 @@ internal sealed class LossReports(
         Authenticator? held = await authenticators.FindForUpdateAsync(report.Credential, cancellationToken)
             .ConfigureAwait(false);
 
+        // CONV-DESIGN-003: a report cancelled meanwhile invalidates nothing, so nothing
+        // was written and the unit of work is rolled back.
         if (held is not null && !Running(held, report))
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Success(0), Result.Failure<int>);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Success(0);
         }
 
         if (held is not null)

@@ -510,18 +510,23 @@ internal sealed class DeviceService(
         // revoked by failures counted meanwhile is not used.
         DateTimeOffset now = time.GetUtcNow();
         Device? locked = await devices.FindForUpdateAsync(device.Id, cancellationToken).ConfigureAwait(false);
-        bool stands = Stands(locked, subject, kind, now);
 
-        if (stands)
+        // CONV-DESIGN-003: a browser that no longer stands is answered having written
+        // nothing, so the unit of work is rolled back.
+        if (!Stands(locked, subject, kind, now))
         {
-            locked!.Used(now);
-            await devices.RecordAsync(locked, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return false;
         }
+
+        locked!.Used(now);
+        await devices.RecordAsync(locked, cancellationToken).ConfigureAwait(false);
 
         (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
 
-        return stands;
+        return true;
     }
 
     private static bool Stands(Device? device, SubjectId subject, DeviceKind kind, DateTimeOffset now) =>
