@@ -11928,6 +11928,8 @@ runs the sweep over the database; the reach itself is the constant `LongestSessi
 *Chapter text that should change.* AUTH-KEY-003 could say how long a consumed refresh
 token is kept, and chapter `20` how long a staged identifier verification stands.
 
+**Superseded by D-166.**
+
 ---
 
 ## 307. How the command-line application reaches the deployment's keys

@@ -85,11 +85,13 @@ internal interface IPendingVerificationStore
     ValueTask RemoveAsync(IdentifierId identifier, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Ends every verification staged before an instant, which is what the sweep of an
-    /// abandoned add or replace leaves nothing behind by.
+    /// Ends every verification that no verification-code record holds any longer: one
+    /// whose code and, for a replace, whose confirmation are each spent or past their
+    /// lifetime. An add goes with nothing else to remove, and a replace leaves the
+    /// identifier as it stood (REG-IDENT-004, REG-IDENT-007, OPS-OBS-003).
     /// </summary>
-    /// <param name="before">The instant a staged verification is too old at.</param>
+    /// <param name="now">The instant a record's lifetime is judged at.</param>
     /// <param name="cancellationToken">Abandons the operation.</param>
     /// <returns>How many were ended.</returns>
-    ValueTask<int> SweepAsync(DateTimeOffset before, CancellationToken cancellationToken);
+    ValueTask<int> SweepAsync(DateTimeOffset now, CancellationToken cancellationToken);
 }

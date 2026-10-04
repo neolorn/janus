@@ -158,11 +158,34 @@ internal sealed class PendingVerificationStore(
     }
 
     /// <inheritdoc/>
-    public async ValueTask<int> SweepAsync(DateTimeOffset before, CancellationToken cancellationToken) =>
-        await context.IdentifierVerifications
-            .Where(pending => pending.StagedAt <= before)
-            .ExecuteDeleteAsync(cancellationToken)
+    /// <remarks>
+    /// The holders are computed in the statement as
+    /// <see cref="PendingVerification.CodeHolder"/> and
+    /// <see cref="PendingVerification.ConfirmationHolder"/> compute them: the SHA-256
+    /// of the UUID's sixteen bytes in the order of RFC 9562, which is what
+    /// <c>uuid_send</c> gives (AUTH-FACT-004). A spent record is a removed one, so a
+    /// verification stays exactly while a record under either holder is within its
+    /// lifetime.
+    /// </remarks>
+    public async ValueTask<int> SweepAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        byte[] confirmation = PendingVerification.ConfirmationName.ToArray();
+
+        return await context.Database
+            .ExecuteSqlAsync(
+                $"""
+                DELETE FROM identity.identifier_verifications AS pending
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM identity.verification_codes AS held
+                    WHERE held.expires_at > {now}
+                      AND held.holder IN (
+                          sha256(uuid_send(pending.identifier_id)),
+                          sha256(uuid_send(pending.identifier_id) || {confirmation})))
+                """,
+                cancellationToken)
             .ConfigureAwait(false);
+    }
 
     private static PersonalFieldLocation Located(SubjectId subject) =>
         new(subject, PendingVerificationConfiguration.Table, PendingVerificationConfiguration.StagedColumn);

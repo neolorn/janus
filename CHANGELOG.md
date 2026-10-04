@@ -10,6 +10,13 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- The `expiry-sweep` job removes an identifier's add, and a replace whose swap has not
+  applied, once every verification-code record it holds is spent or past
+  `code.verification.lifetime`: the new address's code and, where the old address must
+  confirm, that confirmation. A swept add is no longer listed on the account and no
+  longer counts toward its kind's maximum, a swept replace leaves the identifier as it
+  stood and no longer refuses a new replace with `identity.change.pending`, and the
+  person asks again for a new code.
 - An identifier added to an account is held on its pending verification until it
   verifies: no identifier is written before then, `GET /account` lists the add as an
   unverified identifier under the identifier the verified one keeps, and a kind's

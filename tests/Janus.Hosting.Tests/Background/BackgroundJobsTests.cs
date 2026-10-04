@@ -9,7 +9,9 @@ using Dapper;
 using Janus.Authentication;
 using Janus.Authentication.Events;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Identifiers;
 using Janus.Authentication.Recovery;
+using Janus.Authentication.Registration;
 using Janus.Authentication.Sessions;
 using Janus.Authentication.Tests;
 using Janus.Authentication.Tests.Sending;
@@ -106,6 +108,73 @@ public sealed class BackgroundJobsTests(HostFixture host) : IClassFixture<HostFi
                 await connection.ExecuteScalarAsync<int>(
                     "SELECT count(*) FROM identity.identifier_removals WHERE subject = @subject",
                     new { subject = subject.Value })));
+    }
+
+    /// <summary>
+    /// OPS-OBS-003 AC1, REG-IDENT-004 AC4 (D-166, 306): an identifier's add whose code is
+    /// past its lifetime is gone after one pass of the worker, which nobody started, and
+    /// one whose code still stands is kept.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task OPS_OBS_003_AC1_AnAddPastItsCodesLifetimeIsClearedWithNobodyAskingAsync()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        await ForgetEarlierRunsAsync();
+
+        DateTimeOffset noon = Authorization.Deployment.Noon;
+        SubjectId subject = await new Authorization.Deployment(host).AccountAsync(cancellationToken);
+        var lapsed = IdentifierId.New(TimeProvider.System);
+        var standing = IdentifierId.New(TimeProvider.System);
+
+        await using (ServiceProvider seeding = Deployed(host, noon))
+        {
+            await using AsyncServiceScope scope = seeding.CreateAsyncScope();
+            IUnitOfWork work = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            IPendingVerificationStore pending = scope.ServiceProvider.GetRequiredService<IPendingVerificationStore>();
+            IVerificationCodeStore codes = scope.ServiceProvider.GetRequiredService<IVerificationCodeStore>();
+
+            await work.BeginAsync(cancellationToken);
+            await scope.ServiceProvider.GetRequiredService<ISubjectKeyStore>().CreateAsync(subject, cancellationToken);
+
+            foreach ((IdentifierId staged, TimeSpan lifetime) in new[]
+            {
+                (lapsed, TimeSpan.FromMinutes(10)),
+                (standing, TimeSpan.FromDays(2)),
+            })
+            {
+                string value = staged.Value.ToString("N") + "@example.test";
+
+                await pending.AddAsync(
+                    PendingVerification.ToAdd(
+                        subject,
+                        browser: null,
+                        StagedIdentity.Of(staged, IdentifierKind.Email, value, value),
+                        noon),
+                    cancellationToken);
+                await codes.AddAsync(
+                    VerificationCode.Issue(PendingVerification.CodeHolder(staged), "123456", noon, lifetime),
+                    cancellationToken);
+            }
+
+            await work.CommitAsync(cancellationToken);
+        }
+
+        await using ServiceProvider services = Deployed(host, noon.AddDays(1));
+
+        BackgroundWorker worker = services.GetServices<IHostedService>().OfType<BackgroundWorker>().Single();
+
+        _ = await worker.RunDueAsync(cancellationToken);
+        await worker.SettledAsync(TestContext.Current.CancellationToken);
+
+        await using NpgsqlConnection connection = await host.OpenAsync();
+
+        Assert.Equal(
+            [standing.Value],
+            await connection.QueryAsync<Guid>(
+                "SELECT identifier_id FROM identity.identifier_verifications WHERE identifier_id = ANY(@ids)",
+                new { ids = new[] { lapsed.Value, standing.Value } }));
     }
 
     /// <summary>

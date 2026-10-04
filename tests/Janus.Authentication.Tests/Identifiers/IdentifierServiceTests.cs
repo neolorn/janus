@@ -80,6 +80,7 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
         _pending.Work = _work;
         _codes.Work = _work;
         _directory.Pending = _pending;
+        _pending.Codes = _codes;
         _configuration.Set(Settings.AbuseSmsBalanceFloor, 0m);
         _configuration.Set(Settings.NotificationLanguages, English);
         _person = SubjectId.New(_randomness);
@@ -1633,6 +1634,199 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// REG-IDENT-007 AC4 (D-166, 306): a replace left past the lifetime of its code is
+    /// swept, leaving the identifier as it stood, after which a new replace of the same
+    /// identifier is accepted; until then a new one is refused.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AnAbandonedReplaceIsSweptAndANewOneIsTakenAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(_person, IdentifierKind.Phone, Number);
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        _clock.Advance(Settings.CodeVerificationLifetime.Default - TimeSpan.FromSeconds(1));
+
+        Assert.Equal(0, await SweptAsync());
+        Assert.Equal(
+            ErrorCodes.ChangePending,
+            Refused(await Service.ReplaceAsync(
+                Acting,
+                Stepped(),
+                email,
+                Third,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        _clock.Advance(TimeSpan.FromSeconds(1));
+
+        Assert.Equal(1, await SweptAsync());
+        Assert.Empty(_pending.All);
+        Assert.Equal(Primary, Named(await HeldAsync(), Primary).Canonical);
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Third,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(Third, Waiting(email).Staged.Canonical);
+        Assert.True(Outstanding(email).IsLive(_clock.GetUtcNow()));
+    }
+
+    /// <summary>
+    /// REG-IDENT-007 AC6: a replace whose new address verified is held by the
+    /// confirmation's record while that stands, and is swept once the old address has
+    /// not confirmed within <c>code.verification.lifetime</c> of the confirmation's
+    /// send, leaving the identifier as it stood.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_007_AC6_AReplaceTheOldAddressLeftUnconfirmedIsSweptAsItStoodAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 1);
+
+        IdentifierId email = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        Accepted(await Service.ReplaceAsync(
+            Acting,
+            Stepped(),
+            email,
+            Second,
+            Source,
+            TestContext.Current.CancellationToken));
+
+        await VerifiedAsync(email);
+
+        Assert.DoesNotContain(
+            _codes.All,
+            held => held.Holder.AsSpan().SequenceEqual(PendingVerification.CodeHolder(email)));
+
+        _clock.Advance(Settings.CodeVerificationLifetime.Default - TimeSpan.FromSeconds(1));
+
+        Assert.Equal(0, await SweptAsync());
+        Assert.True(Waiting(email).Staged.IsVerified);
+
+        _clock.Advance(TimeSpan.FromSeconds(1));
+
+        Assert.Equal(1, await SweptAsync());
+        Assert.Empty(_pending.All);
+        Assert.Equal(Primary, Assert.Single(await HeldAsync()).Canonical);
+        Assert.Null(await _directory.OwnerAsync(
+            IdentifierKind.Email,
+            Second,
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// REG-IDENT-004 AC4 (D-166, 306): an add left past the lifetime of its code is
+    /// swept with what it staged, so the account lists it no longer and holds no
+    /// identifier for it, and adding the same address again sends a new code.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_004_AnAbandonedAddLeavesNoIdentifierAsync()
+    {
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        await AddedAsync(Second);
+
+        IdentifierId abandoned = Assert.Single(_pending.All).Identifier;
+        int sent = _notifications.Mail.Count(message => message.Message is MessageKind.VerificationLink);
+
+        _clock.Advance(Settings.CodeVerificationLifetime.Default);
+
+        Assert.Equal(1, await SweptAsync());
+        Assert.Empty(_pending.All);
+        Assert.Equal(Primary, Assert.Single(await HeldAsync()).Canonical);
+        Assert.Null(await _directory.OwnerAsync(
+            IdentifierKind.Email,
+            Second,
+            TestContext.Current.CancellationToken));
+
+        await AddedAsync(Second);
+
+        IdentifierId again = Assert.Single(_pending.All).Identifier;
+
+        Assert.NotEqual(abandoned, again);
+        Assert.Equal(
+            sent + 1,
+            _notifications.Mail.Count(message => message.Message is MessageKind.VerificationLink));
+        Assert.True(Outstanding(again).IsAnswerable());
+        Assert.True(Outstanding(again).IsLive(_clock.GetUtcNow()));
+    }
+
+    /// <summary>
+    /// REG-IDENT-004 AC4 and AC6: an add whose code still stands survives the sweep,
+    /// listed and counted, and once it is swept the account is admitted a further add.
+    /// </summary>
+    [Fact]
+    public async Task REG_IDENT_004_AC6_ASweptAddCountsTowardTheMaximumNoLongerAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 2);
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+
+        await AddedAsync(Second);
+
+        _clock.Advance(Settings.CodeVerificationLifetime.Default - TimeSpan.FromSeconds(1));
+
+        Assert.Equal(0, await SweptAsync());
+        Assert.Equal(2, (await HeldAsync()).Count);
+        Assert.Equal(
+            ErrorCodes.IdentifierMaximum,
+            Refused(await Service.AddAsync(
+                Acting,
+                Stepped(),
+                IdentifierKind.Email,
+                Third,
+                Source,
+                TestContext.Current.CancellationToken)));
+
+        _clock.Advance(TimeSpan.FromSeconds(1));
+
+        Assert.Equal(1, await SweptAsync());
+
+        await AddedAsync(Third);
+
+        Assert.Equal(Third, Assert.Single(_pending.All).Staged.Canonical);
+    }
+
+    /// <summary>
+    /// REG-SESS-005 AC5: an add of a value another account holds is swept when one of a
+    /// value no account holds is, neither sooner nor later.
+    /// </summary>
+    [Fact]
+    public async Task REG_SESS_005_AC5_AnAddOfAHeldValueIsSweptWhenAFreshOneIsAsync()
+    {
+        _configuration.Set(Settings.IdentifiersEmailMax, 3);
+        _ = _directory.Verified(_person, IdentifierKind.Email, Primary);
+        _ = _directory.Verified(SubjectId.New(_randomness), IdentifierKind.Email, Third);
+
+        await AddedAsync(Third);
+        await AddedAsync(Fourth);
+
+        Assert.Equal(2, _pending.All.Count);
+
+        _clock.Advance(Settings.CodeVerificationLifetime.Default - TimeSpan.FromSeconds(1));
+
+        Assert.Equal(0, await SweptAsync());
+
+        _clock.Advance(TimeSpan.FromSeconds(1));
+
+        Assert.Equal(2, await SweptAsync());
+        Assert.Empty(_pending.All);
+    }
+
+    /// <summary>
     /// REG-IDENT-007 AC7: a replace whose new value an identifier has come to hold since
     /// it was staged applies no swap. The right code writes nothing and is answered
     /// <c>auth.code.expired</c>, the identifier stays as it stood, and a new replace of
@@ -3067,6 +3261,10 @@ public sealed class IdentifierServiceTests : IAsyncDisposable
 
         return opened;
     }
+
+    // One pass of the expiry sweep over the pending verifications (OPS-OBS-003).
+    private async Task<int> SweptAsync() =>
+        await _pending.SweepAsync(_clock.GetUtcNow(), TestContext.Current.CancellationToken);
 
     private PendingVerification Waiting(IdentifierId identifier) =>
         _pending.All.Single(pending => pending.Identifier == identifier);

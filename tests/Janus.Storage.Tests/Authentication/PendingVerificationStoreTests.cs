@@ -2,9 +2,11 @@ using System;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Registration;
 using Janus.Core;
+using Janus.Storage.Authentication.Factors;
 using Janus.Storage.Authentication.Identifiers;
 using Janus.Storage.Identity.Identifiers;
 using Janus.Storage.Identity.Preferences;
@@ -200,11 +202,91 @@ public sealed class PendingVerificationStoreTests(DatabaseFixture database) : IC
             TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// REG-IDENT-004 AC4, REG-IDENT-007 AC4 and AC6 (D-166, 306), AUTH-FACT-004: the
+    /// sweep keeps a verification whose code still stands, and a replace whose
+    /// confirmation alone still stands, and removes one whose every record is spent or
+    /// past its lifetime, a record at the instant of its expiry included. The holders
+    /// the statement computes are the ones the records were written under.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task REG_IDENT_004_AVerificationWhoseCodeStillStandsSurvivesTheSweepAsync()
+    {
+        SubjectId subject = await _deployment.AccountAsync(Noon);
+        var lifetime = TimeSpan.FromMinutes(10);
+        DateTimeOffset now = Noon.AddMinutes(5);
+
+        IdentifierId standing = await StagedAsync(subject, replacing: false);
+        IdentifierId lapsed = await StagedAsync(subject, replacing: false);
+        IdentifierId lapsing = await StagedAsync(subject, replacing: false);
+        IdentifierId spent = await StagedAsync(subject, replacing: false);
+        IdentifierId confirming = await StagedAsync(subject, replacing: true);
+        IdentifierId unconfirmed = await StagedAsync(subject, replacing: true);
+
+        await using (StoreContext writing = database.Context())
+        {
+            var codes = new VerificationCodeStore(writing, new DataConnections(writing));
+
+            foreach (VerificationCode code in new[]
+            {
+                VerificationCode.Issue(PendingVerification.CodeHolder(standing), "123456", Noon, lifetime),
+                VerificationCode.Issue(PendingVerification.CodeHolder(lapsed), "123456", Noon - lifetime, lifetime),
+                VerificationCode.Issue(PendingVerification.CodeHolder(lapsing), "123456", now - lifetime, lifetime),
+                VerificationCode.Unanswerable(PendingVerification.ConfirmationHolder(confirming), Noon, lifetime),
+                VerificationCode.Unanswerable(PendingVerification.ConfirmationHolder(unconfirmed), Noon - lifetime, lifetime),
+            })
+            {
+                await codes.AddAsync(code, TestContext.Current.CancellationToken);
+            }
+
+            await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (StoreContext sweeping = database.Context())
+        {
+            Assert.True(await Store(sweeping).SweepAsync(now, TestContext.Current.CancellationToken) >= 4);
+        }
+
+        await using StoreContext reading = database.Context();
+        PendingVerificationStore store = Store(reading);
+
+        Assert.NotNull(await store.FindAsync(standing, TestContext.Current.CancellationToken));
+        Assert.NotNull(await store.FindAsync(confirming, TestContext.Current.CancellationToken));
+        Assert.Null(await store.FindAsync(lapsed, TestContext.Current.CancellationToken));
+        Assert.Null(await store.FindAsync(lapsing, TestContext.Current.CancellationToken));
+        Assert.Null(await store.FindAsync(spent, TestContext.Current.CancellationToken));
+        Assert.Null(await store.FindAsync(unconfirmed, TestContext.Current.CancellationToken));
+        Assert.Equal(
+            standing,
+            Assert.Single(await store.AddsOfAsync(subject, TestContext.Current.CancellationToken)).Identifier);
+    }
+
     /// <inheritdoc/>
     public void Dispose() => _deployment.Dispose();
 
     private static string Fresh(string person) =>
         person + "." + Guid.NewGuid().ToString("N") + "@example.test";
+
+    // A verification staged at noon, of an add or of a replace whose old address must
+    // confirm, with no record written for it.
+    private async Task<IdentifierId> StagedAsync(SubjectId subject, bool replacing)
+    {
+        var staged = IdentifierId.New(TimeProvider.System);
+        string value = Fresh("staged");
+        var identity = StagedIdentity.Of(staged, IdentifierKind.Email, value, value);
+
+        await using StoreContext writing = database.Context();
+
+        await Store(writing).AddAsync(
+            replacing
+                ? PendingVerification.ToReplace(subject, browser: null, identity, oldMustConfirm: true, Noon)
+                : PendingVerification.ToAdd(subject, browser: null, identity, Noon),
+            TestContext.Current.CancellationToken);
+        await writing.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        return staged;
+    }
 
     // Each proof is its own request, read before its transaction and again under the
     // lock, as the identifier service does, and says whether it was the one that

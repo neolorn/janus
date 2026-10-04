@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Janus.Authentication.Factors;
 using Janus.Authentication.Identifiers;
 using Janus.Authentication.Registration;
+using Janus.Authentication.Tests.Factors;
 using Janus.Core;
 
 namespace Janus.Authentication.Tests.Identifiers;
@@ -23,6 +25,12 @@ internal sealed class PendingVerificationStoreInMemory : IPendingVerificationSto
     /// the store wrote inside a unit of work that rolled back is put back.
     /// </summary>
     public UnitOfWorkInMemory? Work { get; set; }
+
+    /// <summary>
+    /// The verification-code records the sweep reads, where a test names them: without
+    /// them the sweep finds no record standing and ends every verification.
+    /// </summary>
+    public VerificationCodeStoreInMemory? Codes { get; set; }
 
     /// <summary>
     /// Every verification the store holds.
@@ -103,11 +111,11 @@ internal sealed class PendingVerificationStoreInMemory : IPendingVerificationSto
     }
 
     /// <inheritdoc/>
-    public ValueTask<int> SweepAsync(DateTimeOffset before, CancellationToken cancellationToken)
+    public ValueTask<int> SweepAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
-        List<IdentifierId> gone = [.. _pending
-            .Where(pending => pending.Value.StagedAt < before)
-            .Select(pending => pending.Key)];
+        List<IdentifierId> gone = [.. _pending.Keys.Where(identifier =>
+            !Stands(PendingVerification.CodeHolder(identifier), now)
+            && !Stands(PendingVerification.ConfirmationHolder(identifier), now))];
 
         foreach (IdentifierId identifier in gone)
         {
@@ -135,6 +143,12 @@ internal sealed class PendingVerificationStoreInMemory : IPendingVerificationSto
             pending.OldConfirmedAt,
             pending.OldLink,
             pending.StagedAt);
+
+    // A record stands while it is neither spent, which removes it, nor past its
+    // lifetime (AUTH-FACT-004).
+    private bool Stands(byte[] holder, DateTimeOffset now) =>
+        Codes is not null
+        && Codes.All.Any(code => code.Holder.AsSpan().SequenceEqual(holder) && code.IsLive(now));
 
     private void Enlist()
     {

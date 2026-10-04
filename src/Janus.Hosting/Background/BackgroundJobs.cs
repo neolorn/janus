@@ -9,6 +9,7 @@ using Janus.Authentication.Callbacks;
 using Janus.Authentication.Credentials;
 using Janus.Authentication.Events;
 using Janus.Authentication.Factors;
+using Janus.Authentication.Identifiers;
 using Janus.Authentication.Invitations;
 using Janus.Authentication.Mailboxes;
 using Janus.Authentication.Maintenance;
@@ -341,6 +342,11 @@ internal static class BackgroundJobs
         _ = await services.GetRequiredService<IPendingSignInStore>()
             .SweepAsync(now, cancellationToken).ConfigureAwait(false);
         _ = await services.GetRequiredService<IVerificationCodeStore>()
+            .SweepAsync(now, cancellationToken).ConfigureAwait(false);
+
+        // REG-IDENT-004, REG-IDENT-007 (D-187): an add or a replace goes once every
+        // record it holds is spent or past its lifetime.
+        _ = await services.GetRequiredService<IPendingVerificationStore>()
             .SweepAsync(now, cancellationToken).ConfigureAwait(false);
         _ = await services.GetRequiredService<IKeyCeremonyStore>()
             .SweepAsync(now, cancellationToken).ConfigureAwait(false);
