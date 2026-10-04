@@ -93,6 +93,11 @@ against the public contract of LIB-API-001.
   answered 403 `auth.stepup.required` with `details` computed without the entry against
   the strictest of the gates of the policy in force, field by field, the step-up naming
   no action; `outcome` is `report-loss` or `enrol` where no combination is left.
+- A sign-in code presented right whose sign-in a domain lock then refuses is spent in the
+  one transaction that refuses it: the refusal `identity.identifier.domainnotallowed`
+  counts no failure and records no failed authentication, where it used to be counted
+  and recorded in a second transaction. A right code sent to an address the account has
+  given up since commits its spend with the refusal's record and counts.
 - Every event raised with the access context of a person who acted now carries
   `Effective` beside `Actor`, each as the context gives it: `AccountSuspended`,
   `AccountReactivated`, `AccountDeletionRequested` and `AccountDeletionCancelled` raised

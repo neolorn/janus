@@ -805,6 +805,104 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC10, AUTH-FACT-004: a right sign-in code whose sign-in a domain
+    /// lock then refuses is spent, and its spend is committed alone in the one unit of
+    /// work with the refusal, which counts no failure and records no failed
+    /// authentication.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ARightSignInCodeADomainLockRefusesCommitsItsSpendAloneAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailCode);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await Service.SendCodeAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+
+        string right = Code();
+
+        LockedElsewhere(subject);
+        _work.Reset();
+
+        Result<SignInProgress> refused = await PresentAsync(began.Challenge, Factor.EmailCode, right);
+
+        Assert.Equal(ErrorCodes.IdentifierDomainNotAllowed, Refused(refused));
+        Assert.False(_work.Open);
+        Assert.Equal((1, 1, 0), (_work.Opened, _work.OutermostCommitted, _work.RolledBack));
+        Assert.Null(await _pending.FindAsync(subject, Factor.EmailCode, TestContext.Current.CancellationToken));
+        Assert.Empty(_audit.Failed);
+        Assert.Empty(_throttle.Counted);
+        Assert.Empty(await _live.LiveOfAsync(subject, _clock.GetUtcNow(), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// AUTH-FACT-004: the domain lock is judged after the code, never before it, so a
+    /// wrong code presented under a lock is told what a wrong code is told anywhere and
+    /// learns nothing of the lock.
+    /// </summary>
+    [Fact]
+    public async Task AUTH_FACT_004_AWrongSignInCodeUnderADomainLockLearnsNothingOfTheLockAsync()
+    {
+        SubjectId subject = await AccountAsync();
+
+        Enables(Factor.EmailCode);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await Service.SendCodeAsync(Address, Language, Source, TestContext.Current.CancellationToken);
+
+        string right = Code();
+
+        LockedElsewhere(subject);
+
+        Result<SignInProgress> refused = await PresentAsync(began.Challenge, Factor.EmailCode, Other(right));
+
+        Assert.Equal(ErrorCodes.CodeInvalid, Refused(refused));
+        Assert.Equal(
+            1,
+            (await _pending.FindAsync(subject, Factor.EmailCode, TestContext.Current.CancellationToken))?.WrongAttempts);
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.EmailCode)], _audit.Failed);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC10, REG-IDENT-006 AC6: a right sign-in code sent to an address
+    /// the account has given up since is spent and refused as a wrong factor is, the
+    /// spend, the failed authentication's record and the failure's counts committed in
+    /// one unit of work.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC10_ARightSignInCodeToAnAddressGivenUpCommitsItsSpendWithTheRefusalAsync()
+    {
+        SubjectId subject = await AccountAsync();
+        IdentifierId second = _identifiers.Verified(subject, IdentifierKind.Email, Second);
+
+        Enables(Factor.EmailCode);
+        Remembered(subject);
+
+        SignInChallenge began = await BeganAsync(Address);
+
+        _ = await Service.SendCodeAsync(Second, Language, Source, TestContext.Current.CancellationToken);
+
+        string right = Code();
+
+        await RemovedAsync(subject, second);
+        _work.Reset();
+
+        Result<SignInProgress> refused = await PresentAsync(began.Challenge, Factor.EmailCode, right);
+
+        Assert.Equal(ErrorCodes.FactorRejected, Refused(refused));
+        Assert.False(_work.Open);
+        Assert.Equal((1, 0), (_work.OutermostCommitted, _work.RolledBack));
+        Assert.Null(await _pending.FindAsync(subject, Factor.EmailCode, TestContext.Current.CancellationToken));
+        Assert.Equal<(SubjectId?, Factor)>([(subject, Factor.EmailCode)], _audit.Failed);
+        Assert.Contains(_throttle.Counted, counter => counter.Scope is ThrottleScope.Source);
+    }
+
+    /// <summary>
     /// CONV-DESIGN-003 AC10, AUTH-FACT-004: a wrong code of the new-device check commits
     /// its count on the code's record, the refusal's record and the failure's counts in
     /// one unit of work.
@@ -2402,6 +2500,16 @@ public sealed class AuthenticationServiceTests : IAsyncDisposable
             .GetResult();
 
         return session.Id;
+    }
+
+    // REG-DOM-001: the account is placed under a lock that admits no address it holds.
+    private void LockedElsewhere(SubjectId subject)
+    {
+        _memberships.Place(subject, Locked);
+        _configuration.Set(
+            Settings.OrganizationPolicy,
+            Locked.ToString(),
+            PolicyOverride.None with { EmailDomains = ["elsewhere.test"] });
     }
 
     // AUTH-FACT-002b: the deployment's own provider, standing for the carrier.
