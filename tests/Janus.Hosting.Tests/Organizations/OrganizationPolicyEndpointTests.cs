@@ -181,7 +181,8 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
     /// OPS-CFG-002 AC6 and X3 of D-166 (178): a policy change is decided on the values
     /// in force under the locks of the system policy's row and the organization's,
     /// taken in that order inside its one unit of work, which the write joins; a
-    /// refusal made under them ends that unit of work before it answers (X9).
+    /// refusal made under them rolls that unit of work back before it answers
+    /// (CONV-DESIGN-003).
     /// </summary>
     /// <returns>The work of the test.</returns>
     [Fact]
@@ -210,7 +211,9 @@ public sealed class OrganizationPolicyEndpointTests : IAsyncDisposable
 
         Assert.Equal("requiredAssurance", Below(refused));
         Assert.Equal([Settings.PolicyDefault.Key, member], _deployment.Configuration.Held);
-        Assert.Equal(_deployment.Work.Opened, _deployment.Work.Committed);
+        Assert.False(_deployment.Work.Open);
+        Assert.Equal(1, _deployment.Work.RolledBack);
+        Assert.Equal(_deployment.Work.Opened, _deployment.Work.Committed + _deployment.Work.RolledBack);
     }
 
     /// <summary>

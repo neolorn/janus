@@ -121,6 +121,8 @@ internal sealed class OrganizationService(
                 .ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error unwritten)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<OrganizationId>(unwritten);
         }
 
@@ -209,6 +211,8 @@ internal sealed class OrganizationService(
         if ((await directory.RequestDeletionAsync(organization, now, cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error protectedOrganization)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(protectedOrganization);
         }
 
@@ -303,14 +307,18 @@ internal sealed class OrganizationService(
         OrganizationStanding held = await directory.HoldAsync(organization, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("An organization's row is never removed.");
 
-        if (held.DeletionRequestedAt is null || held.ErasedAt is not null)
+        if (held.ErasedAt is not null)
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(
-                    () => held.ErasedAt is null
-                        ? Result.Success()
-                        : Result.Failure(Error.From(ErrorCodes.DeletionWindowElapsed)),
-                    Result.Failure);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.DeletionWindowElapsed));
+        }
+
+        // A deletion cancelled meanwhile stands as asked: the operation is done with
+        // nothing to write.
+        if (held.DeletionRequestedAt is null)
+        {
+            return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
 
         await directory.CancelDeletionAsync(organization, cancellationToken).ConfigureAwait(false);
@@ -438,7 +446,9 @@ internal sealed class OrganizationService(
 
         if (failure is not null)
         {
-            return await EndedAsync(failure, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(failure);
         }
 
         PolicyOverride after = replacement with { EmailDomains = before.EmailDomains };
@@ -447,13 +457,13 @@ internal sealed class OrganizationService(
         // below the system policy.
         if (PolicyStrictness.BelowSystem(system, after) is string looser)
         {
-            return await EndedAsync(
-                    Error.From(
-                        ErrorCodes.ConfigurationPolicyBelowSystem,
-                        "field",
-                        JsonSerializer.SerializeToElement(looser)),
-                    cancellationToken)
-                .ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(
+                Error.From(
+                    ErrorCodes.ConfigurationPolicyBelowSystem,
+                    "field",
+                    JsonSerializer.SerializeToElement(looser)));
         }
 
         Policy was = PolicyStrictness.Tighten(system, before);
@@ -463,13 +473,13 @@ internal sealed class OrganizationService(
         // AAL2, which no change of its policy takes it below.
         if (standing.IsAdministrative && becomes.RequiredAssurance < AssuranceLevel.Aal2)
         {
-            return await EndedAsync(
-                    Error.From(
-                        ErrorCodes.ConfigurationValueBelowFloor,
-                        "field",
-                        JsonSerializer.SerializeToElement("requiredAssurance")),
-                    cancellationToken)
-                .ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(
+                Error.From(
+                    ErrorCodes.ConfigurationValueBelowFloor,
+                    "field",
+                    JsonSerializer.SerializeToElement("requiredAssurance")));
         }
 
         bool loosening = PolicyStrictness.Loosens(was, becomes);
@@ -480,7 +490,9 @@ internal sealed class OrganizationService(
             && await scope.RefusedAsync(context, Permissions.SystemAdminister, cancellationToken).ConfigureAwait(false)
                 is Error withheld)
         {
-            return await EndedAsync(withheld, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(withheld);
         }
 
         if (await stepUp
@@ -488,7 +500,9 @@ internal sealed class OrganizationService(
                 .ConfigureAwait(false)
             is Error challenged)
         {
-            return await EndedAsync(challenged, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(challenged);
         }
 
         if ((await administration
@@ -505,6 +519,8 @@ internal sealed class OrganizationService(
                 .ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error unwritten)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unwritten);
         }
 
@@ -528,6 +544,8 @@ internal sealed class OrganizationService(
                     .ConfigureAwait(false))
                 .Match(() => (Error?)null, error => error) is Error unalerted)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unalerted);
         }
 
@@ -538,20 +556,6 @@ internal sealed class OrganizationService(
         }
 
         return Result.Success();
-    }
-
-    // X9: a refusal made under the rows' locks has written nothing, so the unit of
-    // work is ended before the refusal returns, which releases the rows and leaves the
-    // scope clean for the next operation.
-    private async ValueTask<Result> EndedAsync(Error refusal, CancellationToken cancellationToken)
-    {
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure(notCommitted);
-        }
-
-        return Result.Failure(refusal);
     }
 
     private static TValue Held<TValue>(Error error, ref Error? failure)

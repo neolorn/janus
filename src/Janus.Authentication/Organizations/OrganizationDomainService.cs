@@ -119,11 +119,7 @@ internal sealed class OrganizationDomainService(
         // declares, so without one no domain is listed.
         if (dns is null)
         {
-            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
-            {
-                return Result.Failure<OrganizationDomain>(notCommittedAgain);
-            }
+            await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Failure<OrganizationDomain>(Unresolvable);
         }
@@ -134,11 +130,7 @@ internal sealed class OrganizationDomainService(
                 .ConfigureAwait(false)
             is Error withheld)
         {
-            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
-            {
-                return Result.Failure<OrganizationDomain>(notCommittedAgain);
-            }
+            await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Failure<OrganizationDomain>(withheld);
         }
@@ -153,6 +145,8 @@ internal sealed class OrganizationDomainService(
                 .ConfigureAwait(false)
             is Error unwritten)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<OrganizationDomain>(unwritten);
         }
 
@@ -309,11 +303,7 @@ internal sealed class OrganizationDomainService(
         if (await RefusedAsync(context, session, read.Acting, loosening, cancellationToken).ConfigureAwait(false)
             is Error withheld)
         {
-            if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match<Error?>(() => null, error => error) is Error notCommittedAgain)
-            {
-                return Result.Failure(notCommittedAgain);
-            }
+            await work.RollbackAsync().ConfigureAwait(false);
 
             return Result.Failure(withheld);
         }
@@ -327,6 +317,8 @@ internal sealed class OrganizationDomainService(
         if (await WrittenAsync(read, after, loosening, context.BreakGlassReason, cancellationToken).ConfigureAwait(false)
             is Error unwritten)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unwritten);
         }
 
@@ -355,6 +347,8 @@ internal sealed class OrganizationDomainService(
                 .ConfigureAwait(false))
             .Match(() => (Error?)null, error => error) is Error unalerted)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unalerted);
         }
 
@@ -402,8 +396,8 @@ internal sealed class OrganizationDomainService(
     // its list and the domain's row, in that order. A change that writes the list
     // begins its unit of work and takes the list's row under a lock before it reads the
     // list, so what it decides is decided on the list in force (X3, OPS-CFG-002 AC6),
-    // and ends that unit of work on every return from then on, a refusal included,
-    // which has written nothing (X9).
+    // and ends that unit of work on every return from then on, a refusal by rolling it
+    // back (CONV-DESIGN-003).
     private async ValueTask<Change?> ReadAsync(
         AccessContext context,
         OrganizationId organization,
@@ -465,8 +459,7 @@ internal sealed class OrganizationDomainService(
         {
             if (holding)
             {
-                (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                    .Switch(() => { }, error => throw new InvalidOperationException(error.Code.ToString()));
+                await work.RollbackAsync().ConfigureAwait(false);
             }
 
             return Change.Refused(acting, failure);
