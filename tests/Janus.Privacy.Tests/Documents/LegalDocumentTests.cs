@@ -364,6 +364,41 @@ public sealed class LegalDocumentTests : IAsyncDisposable
         Assert.Equal(1, _work.Committed);
     }
 
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a material publication whose supersession cannot announce a
+    /// consent it ended is refused after its unit of work began, and rolls it back.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_APublicationRefusedAfterItBeganRollsBackAsync()
+    {
+        Permit();
+
+        await _consents.RecordAsync(
+            Officer,
+            new ConsentRecord(
+                "recommendations",
+                Notice,
+                "0",
+                ConsentMechanism.Dashboard,
+                ConsentKind.Ordinary,
+                Noon,
+                WithdrawnAt: null,
+                SupersededAt: null),
+            CancellationToken.None);
+
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+
+        Result<DocumentVersion> refused = await Documents.PublishAsync(
+            Acting,
+            new DocumentPublication(Notice, "النص", "ar", [], Material: true),
+            CancellationToken.None);
+
+        Assert.Equal(ErrorCodes.SystemFault, refused.Match(_ => default(ErrorCode?), error => error.Code));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
     private static DocumentVersion Read(Result<DocumentVersion> outcome) =>
         outcome.Match(
             version => version,
