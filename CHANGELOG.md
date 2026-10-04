@@ -10,6 +10,14 @@ against the public contract of LIB-API-001.
 
 ### Added
 
+- A refused factor's record, the delay's counts and a trusted device's failure are
+  committed in one transaction, and none stands where one cannot be written. A wrong
+  sign-in code or new-device code commits its count on the code, or the code's removal
+  at the cap, in that same transaction; a code presented past its lifetime is no longer
+  removed by the presentation and is left to the sweep. A passkey or security key whose
+  signature counter did not advance commits `auth.credential.countermismatch` with the
+  failed authentication's record and the failure's counts, and an assertion refused
+  after its counter was read no longer advances the stored counter.
 - A break-glass presentation runs in one transaction. A refused code, the code of the
   issue last used presented again included, commits the attempt's count, the source's
   failure and the failed authentication together, and a refusal by the global limit

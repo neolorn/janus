@@ -139,6 +139,12 @@ internal sealed class VerificationCodes(
     /// outstanding or it has run out of life.
     /// </returns>
     /// <exception cref="ArgumentNullException">A part is absent.</exception>
+    /// <remarks>
+    /// Implements AUTH-FACT-004 and CONV-DESIGN-003. The try is decided in its caller's
+    /// unit of work and begins none of its own, so the caller commits the wrong try's
+    /// count with the refusal's other kept writes; a try at a code out of life, or with
+    /// none outstanding, writes nothing.
+    /// </remarks>
     public async ValueTask<Result> PresentAsync(
         byte[] holder,
         [NeverLogged] string entered,
@@ -159,12 +165,6 @@ internal sealed class VerificationCodes(
             return Result.Failure(failure);
         }
 
-        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notBegun)
-        {
-            return Result.Failure(notBegun);
-        }
-
         // AUTH-FACT-004 AC4: the row is read under its lock, so a second try waits for
         // this one to commit and decides on what it left.
         VerificationCode? outstanding = await codes.FindForUpdateAsync(holder, cancellationToken)
@@ -173,11 +173,13 @@ internal sealed class VerificationCodes(
         DateTimeOffset now = time.GetUtcNow();
         Result answer = Judged(outstanding, entered, now);
 
-        if (outstanding is not null)
+        // A code out of life is left as it stands, the lapsed record being the sweep's,
+        // so that try writes nothing (CONV-DESIGN-003).
+        if (outstanding is not null && outstanding.IsLive(now))
         {
-            // The right code is spent by the try it answered, and a code out of life or
-            // out of tries is ended with the try that found it so (AUTH-FACT-004 AC3).
-            if (answer.Match(() => true, _ => false) || !outstanding.IsLive(now) || outstanding.Exhausted(cap))
+            // The right code is spent by the try it answered, and a code out of tries
+            // is ended with the try that found it so (AUTH-FACT-004 AC3).
+            if (answer.Match(() => true, _ => false) || outstanding.Exhausted(cap))
             {
                 await codes.RemoveAsync(holder, cancellationToken).ConfigureAwait(false);
             }
@@ -185,12 +187,6 @@ internal sealed class VerificationCodes(
             {
                 await codes.RecordAsync(outstanding, cancellationToken).ConfigureAwait(false);
             }
-        }
-
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure(notCommitted);
         }
 
         return answer;

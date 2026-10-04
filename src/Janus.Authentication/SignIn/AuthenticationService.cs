@@ -567,15 +567,26 @@ internal sealed class AuthenticationService(
             ? Error.From(ErrorCodes.FactorRejected)
             : null;
 
-        bool changeRequired = refusal is null
-            && (await AcceptsAsync(open, subject, presented, cancellationToken).ConfigureAwait(false))
-                .Match(value => value, error => Withheld<bool>(error, ref refusal));
-
         if (refusal is not null)
         {
             return Result.Failure<SignInOutcome>(
                 await CountedAsync(attempt, presented.Factor, subject, trusted, cancellationToken).ConfigureAwait(false)
                 ?? refusal);
+        }
+
+        // A refusal the factor's judgement answers comes back counted and recorded.
+        bool changeRequired = (await AcceptsAsync(
+                    open,
+                    subject,
+                    presented,
+                    token => CountedAsync(attempt, presented.Factor, subject, trusted, token),
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Match(value => value, error => Withheld<bool>(error, ref refusal));
+
+        if (refusal is not null)
+        {
+            return Result.Failure<SignInOutcome>(refusal);
         }
 
         await throttle.SucceededAsync(attempt, cancellationToken).ConfigureAwait(false);
@@ -646,18 +657,34 @@ internal sealed class AuthenticationService(
         Error? failure = null;
 
         // AUTH-FACT-004: the code answers to its own rules, so the sign-in learns only
-        // whether it was the one outstanding and never holds it.
+        // whether it was the one outstanding and never holds it. The try is decided in
+        // this unit of work, so a refused one commits its count on the code's record
+        // with the refusal's record and the delay's counts (CONV-DESIGN-003).
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<SignInOutcome>(notBegun);
+        }
+
         Result presented = await codes
             .PresentAsync(open.Fingerprint, code, cancellationToken)
             .ConfigureAwait(false);
 
-        Error? refused = presented.Match<Error?>(() => null, error => error);
-
-        if (refused is not null)
+        if (presented.Match<Error?>(() => null, error => error) is Error refused)
         {
             return Result.Failure<SignInOutcome>(
-                await CountedAsync(attempt, presented: null, subject, null, cancellationToken).ConfigureAwait(false)
-                ?? refused);
+                await RefusedAsync(
+                        refused,
+                        Answered(refused),
+                        token => CountedAsync(attempt, presented: null, subject, null, token),
+                        cancellationToken)
+                    .ConfigureAwait(false));
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<SignInOutcome>(notCommitted);
         }
 
         await throttle.SucceededAsync(attempt, cancellationToken).ConfigureAwait(false);
@@ -771,15 +798,19 @@ internal sealed class AuthenticationService(
 
         Error? refusal = null;
 
-        _ = (await AcceptsAsync(open, asking, presented, cancellationToken).ConfigureAwait(false))
+        // A refusal the factor's judgement answers comes back counted and recorded.
+        _ = (await AcceptsAsync(
+                    open,
+                    asking,
+                    presented,
+                    token => StepUpRefusedAsync(attempt, live, presented.Factor, token),
+                    cancellationToken)
+                .ConfigureAwait(false))
             .Match(value => value, error => Withheld<bool>(error, ref refusal));
 
         if (refusal is not null)
         {
-            return Result.Failure<SignInOutcome>(
-                await StepUpRefusedAsync(attempt, live, presented.Factor, cancellationToken)
-                    .ConfigureAwait(false)
-                ?? refusal);
+            return Result.Failure<SignInOutcome>(refusal);
         }
 
         await throttle.SucceededAsync(attempt, cancellationToken).ConfigureAwait(false);
@@ -1061,7 +1092,46 @@ internal sealed class AuthenticationService(
     // challenge (AUTH-FACT-001). What comes back
     // beside the acceptance is whether the account is to be asked to change the
     // password it just used (AUTH-PASS-004).
+    // A refusal comes back counted and recorded already, by the count its caller hands
+    // in: a factor whose refusal keeps a write of its own (a code's wrong try, a
+    // counter that did not advance) commits that write with the count, in one unit of
+    // work (CONV-DESIGN-003).
     private async ValueTask<Result<bool>> AcceptsAsync(
+        Challenge open,
+        SubjectId subject,
+        FactorPresentation presented,
+        Func<CancellationToken, ValueTask<Error?>> counted,
+        CancellationToken cancellationToken)
+    {
+        if (FactorCatalogue.Entries.TryGetValue(presented.Factor, out FactorProperties? properties)
+            && presented.Factor != FactorCatalogue.Password)
+        {
+            if (properties.IsWebAuthn)
+            {
+                return await CeremonyAsync(open, subject, presented, counted, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            if (FactorCatalogue.Delivered.Contains(presented.Factor))
+            {
+                return await CodeAsync(open, subject, presented, counted, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        Error? refusal = null;
+
+        bool changeRequired = (await JudgedAsync(open, subject, presented, cancellationToken).ConfigureAwait(false))
+            .Match(value => value, error => Withheld<bool>(error, ref refusal));
+
+        return refusal is null
+            ? Result.Success(changeRequired)
+            : Result.Failure<bool>(await counted(cancellationToken).ConfigureAwait(false) ?? refusal);
+    }
+
+    // The factors whose services end their own unit of work, a refusal of theirs
+    // keeping no write of its own.
+    private async ValueTask<Result<bool>> JudgedAsync(
         Challenge open,
         SubjectId subject,
         FactorPresentation presented,
@@ -1077,18 +1147,6 @@ internal sealed class AuthenticationService(
         if (presented.Factor == FactorCatalogue.Password)
         {
             return await PasswordAsync(open, subject, presented, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        if (properties.IsWebAuthn)
-        {
-            return await CeremonyAsync(open, subject, presented, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        if (FactorCatalogue.Delivered.Contains(presented.Factor))
-        {
-            return await CodeAsync(open, subject, presented, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -1186,15 +1244,27 @@ internal sealed class AuthenticationService(
         }
     }
 
+    // AUTH-FACT-014 AC3: the ceremony is judged in this unit of work, so the record of a
+    // counter that did not advance commits with the failed authentication's record and
+    // the failure's counts, and nothing else. Any other refusal wrote nothing to keep
+    // and is rolled back before it is counted.
     private async ValueTask<Result<bool>> CeremonyAsync(
         Challenge open,
         SubjectId subject,
         FactorPresentation presented,
+        Func<CancellationToken, ValueTask<Error?>> counted,
         CancellationToken cancellationToken)
     {
         if (presented.Assertion is null)
         {
-            return Result.Failure<bool>(Error.From(ErrorCodes.FactorRejected));
+            return Result.Failure<bool>(
+                await counted(cancellationToken).ConfigureAwait(false) ?? Error.From(ErrorCodes.FactorRejected));
+        }
+
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
+        {
+            return Result.Failure<bool>(notBegun);
         }
 
         Error? refusal = null;
@@ -1204,16 +1274,28 @@ internal sealed class AuthenticationService(
                 .ConfigureAwait(false))
             .Match(value => value, error => Withheld<Authenticator>(error, ref refusal));
 
-        if (refusal is not null)
-        {
-            return Result.Failure<bool>(refusal);
-        }
-
         // A credential of another account answering this challenge is refused as any
         // other wrong credential is: whose it is is not disclosed.
-        if (answered.Subject != subject)
+        if (refusal is null && answered.Subject != subject)
         {
-            return Result.Failure<bool>(Error.From(ErrorCodes.FactorRejected));
+            refusal = Error.From(ErrorCodes.FactorRejected);
+        }
+
+        if (refusal is not null)
+        {
+            return Result.Failure<bool>(
+                await RefusedAsync(
+                        refusal,
+                        refusal.Code == ErrorCodes.WebAuthnCounterMismatch,
+                        counted,
+                        cancellationToken)
+                    .ConfigureAwait(false));
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<bool>(notCommitted);
         }
 
         open.Accepted(answered.Factor);
@@ -1221,10 +1303,15 @@ internal sealed class AuthenticationService(
         return Result.Success(false);
     }
 
+    // AUTH-FACT-004: the try is decided in this unit of work, so a wrong try's count and
+    // the invalidation at the cap commit with the refusal's record and the failure's
+    // counts; a code gone or out of life changes nothing on its record and commits
+    // those alone (CONV-DESIGN-003).
     private async ValueTask<Result<bool>> CodeAsync(
         Challenge open,
         SubjectId subject,
         FactorPresentation presented,
+        Func<CancellationToken, ValueTask<Error?>> counted,
         CancellationToken cancellationToken)
     {
         PendingSignIn? held = await links
@@ -1235,29 +1322,73 @@ internal sealed class AuthenticationService(
         // this one.
         if (held is null || !held.Answers(open.Fingerprint))
         {
-            return Result.Failure<bool>(Error.From(ErrorCodes.CodeExpired));
+            return Result.Failure<bool>(
+                await counted(cancellationToken).ConfigureAwait(false) ?? Error.From(ErrorCodes.CodeExpired));
         }
 
-        Error? refusal = null;
-
-        _ = (await links
-                .SpendCodeAsync(held, presented.Value ?? string.Empty, cancellationToken)
-                .ConfigureAwait(false))
-            .Match(() => true, error => Withheld<bool>(error, ref refusal));
-
-        if (refusal is not null)
+        if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notBegun)
         {
-            return Result.Failure<bool>(refusal);
+            return Result.Failure<bool>(notBegun);
+        }
+
+        Result spent = await links
+            .SpendCodeAsync(held, presented.Value ?? string.Empty, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (spent.Match<Error?>(() => null, error => error) is Error refusal)
+        {
+            return Result.Failure<bool>(
+                await RefusedAsync(refusal, Answered(refusal), counted, cancellationToken).ConfigureAwait(false));
+        }
+
+        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        {
+            return Result.Failure<bool>(notCommitted);
         }
 
         if (await links.LockedAsync(held, cancellationToken).ConfigureAwait(false) is Error locked)
         {
-            return Result.Failure<bool>(locked);
+            return Result.Failure<bool>(await counted(cancellationToken).ConfigureAwait(false) ?? locked);
         }
 
         open.Accepted(presented.Factor);
 
         return Result.Success(false);
+    }
+
+    // What a code answers a try with, as against a failure to judge it.
+    private static bool Answered(Error refusal) =>
+        refusal.Code == ErrorCodes.CodeInvalid || refusal.Code == ErrorCodes.CodeExpired;
+
+    // CONV-DESIGN-003: ends the unit of work a refusal was decided in. A refusal that
+    // keeps a write is counted inside it, the count joining it, and the whole is
+    // committed together; any other is rolled back and then counted, as a refusal
+    // that never began one is. A count that fails is what the caller is told, with
+    // nothing committed.
+    private async ValueTask<Error> RefusedAsync(
+        Error refusal,
+        bool kept,
+        Func<CancellationToken, ValueTask<Error?>> counted,
+        CancellationToken cancellationToken)
+    {
+        if (!kept)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return await counted(cancellationToken).ConfigureAwait(false) ?? refusal;
+        }
+
+        if (await counted(cancellationToken).ConfigureAwait(false) is Error uncounted)
+        {
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return uncounted;
+        }
+
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match(() => refusal, error => error);
     }
 
     private async ValueTask<IReadOnlyList<string>> OwnWordsAsync(
@@ -1788,6 +1919,9 @@ internal sealed class AuthenticationService(
     // (AUTH-ABUSE-003).
     // The refused value is a factor, or, where none is named, the new-device check's
     // code, which is recorded as that verification (CONV-LOG-005).
+    // The record, the delay's counts and a trusted device's failure are the refusal's
+    // kept writes and commit together, in this unit of work or in the one it joins,
+    // and none of them stands where one cannot be written (CONV-DESIGN-003).
     private async ValueTask<Error?> CountedAsync(
         ThrottleAttempt attempt,
         Factor? presented,
@@ -1811,28 +1945,24 @@ internal sealed class AuthenticationService(
                 .ConfigureAwait(false);
         }
 
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        Error? failure = (await throttle.FailedAsync(attempt, cancellationToken).ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error);
+
+        if (failure is null && subject is SubjectId account)
         {
-            return notCommitted;
+            failure = (await devices.FailedAsync(account, trusted, cancellationToken).ConfigureAwait(false))
+                .Match(() => (Error?)null, error => error);
         }
 
-        Error? failure = null;
-
-        _ = (await throttle.FailedAsync(attempt, cancellationToken).ConfigureAwait(false))
-            .Match(() => true, error => Withheld<bool>(error, ref failure));
-
-        if (subject is not SubjectId account)
+        if (failure is not null)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return failure;
         }
 
-        Error? revoked = null;
-
-        _ = (await devices.FailedAsync(account, trusted, cancellationToken).ConfigureAwait(false))
-            .Match(() => true, error => Withheld<bool>(error, ref revoked));
-
-        return failure ?? revoked;
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error);
     }
 
     // CONV-LOG-005, AUTH-ABUSE-001: a pressed link token that opens nothing, unknown or
@@ -1848,8 +1978,9 @@ internal sealed class AuthenticationService(
             ?? Error.From(ErrorCodes.CodeExpired);
 
     // CONV-LOG-005: a factor refused at a step-up is written to the trail against the
-    // session it was presented on, whatever the log level, and is then counted against
-    // the delay as a factor refused at sign-in is (AUTH-ABUSE-001).
+    // session it was presented on, whatever the log level, and is counted against the
+    // delay as a factor refused at sign-in is (AUTH-ABUSE-001), the record and the
+    // counts committed together (CONV-DESIGN-003).
     private async ValueTask<Error?> StepUpRefusedAsync(
         ThrottleAttempt attempt,
         Session session,
@@ -1872,13 +2003,15 @@ internal sealed class AuthenticationService(
                 cancellationToken)
             .ConfigureAwait(false);
 
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
+        if ((await throttle.FailedAsync(attempt, cancellationToken).ConfigureAwait(false))
+            .Match(() => (Error?)null, error => error) is Error failure)
         {
-            return notCommitted;
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return failure;
         }
 
-        return (await throttle.FailedAsync(attempt, cancellationToken).ConfigureAwait(false))
+        return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
             .Match(() => (Error?)null, error => error);
     }
 }
