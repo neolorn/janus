@@ -504,6 +504,31 @@ public sealed class SendingServiceTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC5, D-022: a message whose budget is spent and whose alert cannot
+    /// be raised is refused after the unit of work began, and rolls it back, so the
+    /// message is not removed without its alert.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ASpentBudgetWhoseAlertCannotBeRaisedRollsBackAsync()
+    {
+        _configuration.Set(Settings.OutboxRetryMaxAttempts, 2);
+        _mail.Accepts = false;
+
+        _ = await Service.SendAsync(Mailed(), TestContext.Current.CancellationToken);
+
+        _clock.Advance(TimeSpan.FromHours(1));
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Result<int> retried = await Service.RetryAsync(Carrier, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, Refusal(retried));
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
     /// AUTH-ABUSE-004 AC4: credit granted to a key carries one send each and the key
     /// is refused again once it is spent.
     /// </summary>

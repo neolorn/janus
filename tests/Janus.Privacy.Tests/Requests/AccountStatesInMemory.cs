@@ -77,9 +77,9 @@ internal sealed class AccountStatesInMemory : IAccountStates
     }
 
     /// <summary>
-    /// Gets or sets what another transaction commits while a deletion or a takedown waits
-    /// for the account's row, so a test may move the account under a decision about to
-    /// be taken.
+    /// Gets or sets what another transaction commits while a deletion, a takedown or its
+    /// reversal waits for the account's row, so a test may move the account under a
+    /// decision about to be taken.
     /// </summary>
     public Action<SubjectId>? Holding { get; set; }
 
@@ -219,6 +219,8 @@ internal sealed class AccountStatesInMemory : IAccountStates
         DeletionWindows windows,
         CancellationToken cancellationToken)
     {
+        Holding?.Invoke(subject);
+
         if (Of(subject) is not AccountState.Deleting
             || _deletions.GetValueOrDefault(subject) is not { By: DeletionOrigin.Takedown } taken
             || now >= windows.ErasureDue(taken.By, taken.Since, taken.HeldSince))

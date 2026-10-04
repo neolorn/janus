@@ -372,6 +372,63 @@ public sealed class RoleEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC5: a definition and a removal refused after the unit of work
+    /// began, under the role's lock or for want of the step-up, each roll it back, so
+    /// no unit of work is left open.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ADefinitionOrARemovalRefusedAfterItBeganRollsBackAsync()
+    {
+        (Browser administrator, _) = await AuthorisedAsync(Permissions.RoleManage);
+
+        _ = await DefinedAsync(administrator, Editing);
+        _ = await DefinedAsync(administrator, Reading, name: "reader");
+
+        int rolledBack = _deployment.Work.RolledBack;
+
+        Answer conferred = await DefinedAsync(administrator, Administering);
+
+        Assert.Equal(ErrorCodes.Denied.ToString(), conferred.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 1), Ended());
+
+        Answer narrowed = await RemovedAsync(administrator, "system-administrator");
+
+        Assert.Equal(ErrorCodes.Denied.ToString(), narrowed.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 2), Ended());
+
+        Answer unknown = await RemovedAsync(administrator, "no-such-role");
+
+        Assert.Equal(ErrorCodes.RoleNotFound.ToString(), unknown.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 3), Ended());
+
+        Answer derived = await RemovedAsync(administrator, "reader");
+
+        Assert.Equal(ErrorCodes.RoleInUse.ToString(), derived.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 4), Ended());
+
+        _deployment.Clock.Advance(TimeSpan.FromMinutes(16));
+
+        Answer changed = await DefinedAsync(administrator, Reading);
+
+        Assert.Equal(ErrorCodes.StepUpRequired.ToString(), changed.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 5), Ended());
+
+        Answer removed = await RemovedAsync(administrator, "editor");
+
+        Assert.Equal(ErrorCodes.StepUpRequired.ToString(), removed.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 6), Ended());
+
+        // Whether a unit of work is open, how many were left neither committed nor rolled
+        // back, and how many were rolled back.
+        (bool Open, int Unended, int RolledBack) Ended() =>
+            (
+                _deployment.Work.Open,
+                _deployment.Work.Opened - _deployment.Work.Committed - _deployment.Work.RolledBack,
+                _deployment.Work.RolledBack);
+    }
+
+    /// <summary>
     /// CONV-CODE-006 AC2: a body missing the reason defining or removing a role requires,
     /// or carrying one past 1024 characters (API-CONV-002), is refused naming it before
     /// the service is reached, so a caller the service would refuse for want of the

@@ -132,6 +132,8 @@ internal sealed class ConsentService(
         if (await AnnouncedAsync(subject, purpose, ConsentChange.Granted, now, cancellationToken)
                 .ConfigureAwait(false) is Error unannounced)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unannounced);
         }
 
@@ -212,6 +214,8 @@ internal sealed class ConsentService(
         if (await AnnouncedAsync(subject, purpose, ConsentChange.Withdrawn, now, cancellationToken)
                 .ConfigureAwait(false) is Error unannounced)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unannounced);
         }
 
@@ -293,6 +297,8 @@ internal sealed class ConsentService(
         if (await ObjectedAsync(subject, purpose, objecting: true, now, cancellationToken)
                 .ConfigureAwait(false) is Error unannounced)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unannounced);
         }
 
@@ -372,6 +378,8 @@ internal sealed class ConsentService(
         if (await ObjectedAsync(subject, purpose, objecting: false, now, cancellationToken)
                 .ConfigureAwait(false) is Error unannounced)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unannounced);
         }
 

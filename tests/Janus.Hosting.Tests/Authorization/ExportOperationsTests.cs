@@ -159,6 +159,9 @@ public sealed class ExportOperationsTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.Throttled, Refusal(await AdmitAsync(AccessContext.Of(clerk), HostPermissions.Export))?.Code);
         Assert.Single(_ledger.Admitted);
         Assert.Empty(_audit.Exports);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>

@@ -331,7 +331,7 @@ internal sealed class BackgroundWorker(
                             .LapsedAsync(job.Name, now, interval, window, cancellationToken)
                             .ConfigureAwait(false))
                     {
-                        return Result.Success();
+                        return await work.CommitAsync(cancellationToken).ConfigureAwait(false);
                     }
 
                     AlertRaised lapse = Alerts.Of(AlertCondition.BackgroundJobFailed, job.Name, now, Lapse(job));
@@ -355,6 +355,8 @@ internal sealed class BackgroundWorker(
 
                     if (failure is not null)
                     {
+                        await work.RollbackAsync().ConfigureAwait(false);
+
                         return Result.Failure(failure);
                     }
 

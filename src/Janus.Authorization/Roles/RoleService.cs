@@ -115,7 +115,9 @@ internal sealed class RoleService(
         if (await AdministeringRefusedAsync(context, [held, defined], cancellationToken).ConfigureAwait(false)
             is Error administering)
         {
-            return await EndedAsync<bool>(administering, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<bool>(administering);
         }
 
         // OPS-BOOT-002, D-166: the break-glass session holds what the reserved account's
@@ -124,12 +126,16 @@ internal sealed class RoleService(
         if (!Permissions.All.All(defined.Allows)
             && await ReservedHoldsAsync(role.Name, cancellationToken).ConfigureAwait(false))
         {
-            return await EndedAsync<bool>(Error.From(ErrorCodes.Denied), cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<bool>(Error.From(ErrorCodes.Denied));
         }
 
         if (await SteppedUpAsync(acting, session, cancellationToken).ConfigureAwait(false) is Error challenged)
         {
-            return await EndedAsync<bool>(challenged, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<bool>(challenged);
         }
 
         if (held is null)
@@ -200,13 +206,17 @@ internal sealed class RoleService(
         // too, so none comes to name a role removed meanwhile.
         if (await roles.FindForUpdateAsync(role, cancellationToken).ConfigureAwait(false) is not Role held)
         {
-            return await EndedAsync(Error.From(ErrorCodes.RoleNotFound), cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.RoleNotFound));
         }
 
         if (await AdministeringRefusedAsync(context, [held], cancellationToken).ConfigureAwait(false)
             is Error administering)
         {
-            return await EndedAsync(administering, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(administering);
         }
 
         // AUTHZ-GRANT-003 AC3, REG-INV-001: a grant's history names its role, revoked or
@@ -214,12 +224,16 @@ internal sealed class RoleService(
         // grants it at the acknowledgement; none is left naming nothing.
         if (Derived(role) || await references.NamedAsync(role, cancellationToken).ConfigureAwait(false))
         {
-            return await EndedAsync(Error.From(ErrorCodes.RoleInUse), cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(ErrorCodes.RoleInUse));
         }
 
         if (await SteppedUpAsync(acting, session, cancellationToken).ConfigureAwait(false) is Error challenged)
         {
-            return await EndedAsync(challenged, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(challenged);
         }
 
         await roles.RemoveAsync(role, cancellationToken).ConfigureAwait(false);
@@ -252,24 +266,6 @@ internal sealed class RoleService(
 
     private static Error Malformed(string member) =>
         Error.From(ErrorCodes.RequestMalformed, "member", JsonSerializer.SerializeToElement(member));
-
-    // X9: a refusal made inside the unit of work writes nothing of the operation, so
-    // the unit of work is ended before the refusal returns, which leaves the scope
-    // clean for the next operation.
-    private async ValueTask<Result> EndedAsync(Error refusal, CancellationToken cancellationToken)
-    {
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure(notCommitted);
-        }
-
-        return Result.Failure(refusal);
-    }
-
-    private async ValueTask<Result<TValue>> EndedAsync<TValue>(Error refusal, CancellationToken cancellationToken) =>
-        (await EndedAsync(refusal, cancellationToken).ConfigureAwait(false))
-            .Match(() => Result.Failure<TValue>(refusal), Result.Failure<TValue>);
 
     // Bootstrap grants the reserved account its role in the administrative
     // organization, and nothing grants it anything further (OPS-BOOT-002).

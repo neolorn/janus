@@ -516,6 +516,48 @@ public sealed class GrantEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC5: a grant refused under its role's lock, and a revocation
+    /// refused under the grant's because another revoked it while this one waited, each
+    /// roll the unit of work back, so no unit of work is left open.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AGrantOrARevocationRefusedAfterItBeganRollsBackAsync()
+    {
+        (Browser administrator, SubjectId actor) = await AuthorisedAsync(Branch, Permissions.GrantManage);
+
+        Answer created = await GrantedAsync(administrator, "document", "d-1");
+
+        int rolledBack = _deployment.Work.RolledBack;
+
+        Answer again = await GrantedAsync(administrator, "document", "d-1");
+
+        Assert.Equal(ErrorCodes.GrantDuplicate.ToString(), again.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 1), Ended());
+
+        var id = new GrantId(Guid.Parse(created.Text("id")));
+
+        _deployment.AccessGrants.Locking = held =>
+        {
+            _deployment.AccessGrants.Locking = null;
+            _ = held.Revoke(actor, _deployment.Clock.GetUtcNow(), "Revoked meanwhile.");
+        };
+
+        Answer revoked = await RevokedAsync(administrator, id.ToString());
+
+        Assert.Equal(ErrorCodes.GrantNotFound.ToString(), revoked.Text("code"));
+        Assert.Equal((false, 0, rolledBack + 2), Ended());
+
+        // Whether a unit of work is open, how many were left neither committed nor rolled
+        // back, and how many were rolled back.
+        (bool Open, int Unended, int RolledBack) Ended() =>
+            (
+                _deployment.Work.Open,
+                _deployment.Work.Opened - _deployment.Work.Committed - _deployment.Work.RolledBack,
+                _deployment.Work.RolledBack);
+    }
+
+    /// <summary>
     /// AUTHZ-GRANT-001: a grant names a role, an organization, and a group of the
     /// grant's own organization. A body that cannot be read is malformed; a role the
     /// deployment does not hold, or a group that does not exist or belongs to another

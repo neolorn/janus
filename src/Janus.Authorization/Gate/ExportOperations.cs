@@ -140,8 +140,9 @@ internal sealed class ExportOperations(
         {
             DateTimeOffset retryAt = limit <= 0 ? now + Window : taken[^limit] + Window;
 
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Failure(Error.Throttled(retryAt)), Result.Failure);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.Throttled(retryAt));
         }
 
         await ledger

@@ -237,6 +237,8 @@ internal sealed class LegalDocumentService(
 
         if (ended.Match(_ => (Error?)null, error => error) is Error unended)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<DocumentVersion>(unended);
         }
 

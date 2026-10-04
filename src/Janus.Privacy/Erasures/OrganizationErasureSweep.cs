@@ -141,6 +141,8 @@ internal sealed class OrganizationErasureSweep(
                     .ConfigureAwait(false))
                 .Match(() => (Error?)null, failure => failure) is Error refused)
             {
+                await work.RollbackAsync().ConfigureAwait(false);
+
                 return Result.Failure<int>(refused);
             }
         }
@@ -156,6 +158,8 @@ internal sealed class OrganizationErasureSweep(
                 .ConfigureAwait(false))
             .Match(() => (Error?)null, failure => failure) is Error unannounced)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<int>(unannounced);
         }
 

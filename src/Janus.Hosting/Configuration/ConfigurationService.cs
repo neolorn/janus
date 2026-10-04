@@ -254,7 +254,9 @@ internal sealed class ConfigurationService(
 
         if (failure is not null)
         {
-            return await EndedAsync(failure, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(failure);
         }
 
         bool loosening = family.Loosens(before, period);
@@ -263,7 +265,9 @@ internal sealed class ConfigurationService(
                 .RefusalAsync(family, category, loosening, reason, challenge, context, cancellationToken)
                 .ConfigureAwait(false) is Error refused)
         {
-            return await EndedAsync(refused, cancellationToken).ConfigureAwait(false);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(refused);
         }
 
         if ((await administration
@@ -280,6 +284,8 @@ internal sealed class ConfigurationService(
                 .ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error unwritten)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unwritten);
         }
 
@@ -303,20 +309,6 @@ internal sealed class ConfigurationService(
             && declaration.RetentionFloors.ContainsKey(name[prefix.Length..])
             ? name[prefix.Length..]
             : null;
-    }
-
-    // X9: a refusal made under the row's lock has written nothing, so the unit of work
-    // is ended before the refusal returns, which releases the row and leaves the scope
-    // clean for the next operation.
-    private async ValueTask<Result> EndedAsync(Error refusal, CancellationToken cancellationToken)
-    {
-        if ((await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-            .Match<Error?>(() => null, error => error) is Error notCommitted)
-        {
-            return Result.Failure(notCommitted);
-        }
-
-        return Result.Failure(refusal);
     }
 
     private static JsonElement Json(TimeSpan period) =>

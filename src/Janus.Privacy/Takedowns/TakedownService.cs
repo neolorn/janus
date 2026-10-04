@@ -118,9 +118,13 @@ internal sealed class TakedownService(
         // refused as OPS-BOOT-002 refuses it.
         if (!await accounts.TakeDownAsync(subject, now, cancellationToken).ConfigureAwait(false))
         {
-            return Result.Failure<ExecutedTakedown>(
+            Error untakenThere =
                 Untaken(await accounts.StandingAsync(subject, cancellationToken).ConfigureAwait(false))
-                ?? Error.From(ErrorCodes.Denied));
+                ?? Error.From(ErrorCodes.Denied);
+
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<ExecutedTakedown>(untakenThere);
         }
 
         // IDN-LIFE-003a: the hosts' half is a delivery written with the transition, and
@@ -152,6 +156,8 @@ internal sealed class TakedownService(
                 .ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<ExecutedTakedown>(unpublished);
         }
 
@@ -291,11 +297,15 @@ internal sealed class TakedownService(
         // committed first leaves the window closed.
         if (!await accounts.ReverseTakedownAsync(subject, now, windows, cancellationToken).ConfigureAwait(false))
         {
-            return Result.Failure(Error.From(
+            ErrorCode unreversed =
                 await accounts.StandingAsync(subject, cancellationToken).ConfigureAwait(false)
                     is { DeletingBy: DeletionOrigin.Takedown }
                     ? ErrorCodes.TakedownWindowElapsed
-                    : ErrorCodes.TakedownNotFound));
+                    : ErrorCodes.TakedownNotFound;
+
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure(Error.From(unreversed));
         }
 
         await audit
@@ -321,6 +331,8 @@ internal sealed class TakedownService(
                 .ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error unpublished)
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure(unpublished);
         }
 

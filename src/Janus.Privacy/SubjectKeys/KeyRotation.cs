@@ -71,6 +71,11 @@ internal sealed class KeyRotation(
             return Result.Failure<KeyRotationProgress>(Error.From(ErrorCodes.Denied));
         }
 
+        if (Held() is not { } held)
+        {
+            return Result.Failure<KeyRotationProgress>(KeysUnavailable());
+        }
+
         if ((await work.BeginAsync(cancellationToken).ConfigureAwait(false))
             .Match<Error?>(() => null, error => error) is Error notBegun)
         {
@@ -84,11 +89,6 @@ internal sealed class KeyRotation(
         KeyRotationProgress? latest = await store.LatestAsync(Kind, cancellationToken).ConfigureAwait(false);
         IReadOnlySet<int> wrapping = await store.WrappingVersionsAsync(cancellationToken).ConfigureAwait(false);
 
-        if (Held() is not { } held)
-        {
-            return Result.Failure<KeyRotationProgress>(KeysUnavailable());
-        }
-
         // A rotation is to a version later than any rotated to before, and one that
         // stopped is finished before another starts; every value must unwrap under a
         // version the command holds, and none may be under one later than the current.
@@ -97,6 +97,8 @@ internal sealed class KeyRotation(
         if ((!resumed && latest is not null && (latest.RetiredAt is null || latest.Version >= held.Current))
             || wrapping.Any(version => version > held.Current || !held.Versions.Contains(version)))
         {
+            await work.RollbackAsync().ConfigureAwait(false);
+
             return Result.Failure<KeyRotationProgress>(KeysUnavailable());
         }
 
@@ -237,8 +239,9 @@ internal sealed class KeyRotation(
         if (await CommittedAsync(latest, cancellationToken).ConfigureAwait(false)
             is not { CompletedAt: not null, RetiredAt: null } standing)
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(() => Result.Failure<KeyRetirement>(SealRefused(pending: null)), Result.Failure<KeyRetirement>);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<KeyRetirement>(SealRefused(pending: null));
         }
 
         DateTimeOffset now = time.GetUtcNow();

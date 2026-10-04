@@ -98,10 +98,9 @@ internal sealed class ExportService(
         if (await SpentAsync(subject, now, cancellationToken).ConfigureAwait(false)
             is DateTimeOffset spentUntil)
         {
-            return (await work.CommitAsync(cancellationToken).ConfigureAwait(false))
-                .Match(
-                    () => Result.Failure<SubjectExport>(Error.Throttled(spentUntil)),
-                    Result.Failure<SubjectExport>);
+            await work.RollbackAsync().ConfigureAwait(false);
+
+            return Result.Failure<SubjectExport>(Error.Throttled(spentUntil));
         }
 
         await ledger.RecordAsync(subject, now, cancellationToken).ConfigureAwait(false);

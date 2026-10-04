@@ -87,7 +87,11 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
         _gate.GrantEveryone(administrative, Permissions.SystemAdminister);
     }
 
-    private AlertDestinationChange Change =>
+    private AlertDestinationChange Change => Announcing(_events);
+
+    // The change, announcing itself through the events given, so a test may stand in for
+    // an event row that cannot be written without refusing the sends before it.
+    private AlertDestinationChange Announcing(IEvents announced) =>
         new(
             _configuration,
             new ConfigurationAdministration(
@@ -120,7 +124,7 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
                 _alerts,
                 _work,
                 _log),
-            _events,
+            announced,
             _work,
             _clock);
 
@@ -314,6 +318,30 @@ public sealed class AlertDestinationChangeTests : IAsyncDisposable
 
         Assert.Equal(AlertCondition.AlertDestinationChanged, raised.Condition);
         Assert.False(_work.Open);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a change whose event row cannot be written is refused after
+    /// its unit of work began, and rolls it back, so the change that joined it commits
+    /// nothing either.
+    /// </summary>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AChangeThatCannotBeAnnouncedRollsBackAsync()
+    {
+        var refusing = new EventsInMemory { Refusal = Error.From(ErrorCodes.SystemFault) };
+
+        Result refused = await Announcing(refusing).ChangeAsync(
+            SendKind.Email,
+            Elsewhere,
+            "an incident",
+            Satisfied,
+            AccessContext.Of(SubjectId.New(_randomness)),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ErrorCodes.SystemFault, refused.Match(() => default(ErrorCode?), error => error.Code));
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.RolledBack);
+        Assert.Equal(_work.Opened, _work.Committed + _work.RolledBack);
     }
 
     private async Task<IReadOnlyList<string>> DestinationsAsync(TextListSetting setting) =>

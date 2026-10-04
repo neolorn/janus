@@ -265,6 +265,9 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
             refused.Match(_ => default, error => error.Code));
         Assert.Single(_requests.Queue);
         Assert.Single(_notices.Told, told => told.Message is MessageKind.PrivacyRequestReceived);
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>
@@ -506,6 +509,9 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.AccountNotFound, fulfilled.Match(() => default, error => error.Code));
         Assert.Equal(PrivacyRequestStatus.Open, Assert.Single(_requests.Queue).Status);
         Assert.Null(_accounts.Deleting);
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>
@@ -571,6 +577,39 @@ public sealed class PrivacyRequestTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.RequestDecided, fulfilled.Match(() => default, error => error.Code));
         Assert.Equal(PrivacyRequestStatus.Refused, Assert.Single(_requests.Queue).Status);
         Assert.Equal(AccountState.Active, _accounts.Of(Ahmed));
+        Assert.False(_work.Open);
+        Assert.Equal(1, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a refusal of a request decided while it waited for the
+    /// request's row is refused under that row's lock, and rolls its unit of work back.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_ARefusalOfARequestDecidedMeanwhileRollsBackAsync()
+    {
+        PrivacyRequestReceipt receipt = await SubmittedAsync(PrivacyRequestType.Rectification);
+
+        _work.Reset();
+        _requests.Locking = request =>
+        {
+            _requests.Locking = null;
+            request.Fulfil(_clock.GetUtcNow());
+        };
+
+        Result refused = await Requests.RefuseAsync(
+            AccessContext.Of(Mona),
+            receipt.RequestId,
+            "the record is right",
+            CancellationToken.None);
+
+        Assert.Equal(ErrorCodes.RequestDecided, refused.Match(() => default, error => error.Code));
+        Assert.Equal(PrivacyRequestStatus.Fulfilled, Assert.Single(_requests.Queue).Status);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>

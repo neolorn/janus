@@ -309,6 +309,40 @@ public sealed class ConsentTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// CONV-DESIGN-003 AC5: a grant, a withdrawal, an objection and the withdrawal of an
+    /// objection, each refused after its unit of work began, each roll it back, so
+    /// nothing stays open and nothing is committed.
+    /// </summary>
+    /// <returns>The work of running it.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AChangeRefusedAfterItBeganRollsBackAsync()
+    {
+        await GrantAsync(Recommendations);
+        await ObjectAsync(Security);
+
+        _events.Refusal = Error.From(ErrorCodes.SystemFault);
+        _work.Reset();
+
+        Assert.Equal(ErrorCodes.SystemFault, await RefusedGrantAsync(Marketing));
+        Assert.Equal((false, 0, 1), (_work.Open, _work.Committed, _work.RolledBack));
+
+        Assert.Equal(ErrorCodes.SystemFault, await RefusedWithdrawalAsync(Recommendations));
+        Assert.Equal((false, 0, 2), (_work.Open, _work.Committed, _work.RolledBack));
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            (await Consents.ObjectAsync(Acting, Security, ConsentMechanism.Dashboard, CancellationToken.None))
+                .Match(() => default(ErrorCode?), error => error.Code));
+        Assert.Equal((false, 0, 3), (_work.Open, _work.Committed, _work.RolledBack));
+
+        Assert.Equal(
+            ErrorCodes.SystemFault,
+            (await Consents.WithdrawObjectionAsync(Acting, Security, CancellationToken.None))
+                .Match(() => default(ErrorCode?), error => error.Code));
+        Assert.Equal((false, 0, 4), (_work.Open, _work.Committed, _work.RolledBack));
+    }
+
+    /// <summary>
     /// PRIV-RIGHT-001a AC5: a purpose whose basis is not objectable is refused with
     /// the code that says so.
     /// </summary>

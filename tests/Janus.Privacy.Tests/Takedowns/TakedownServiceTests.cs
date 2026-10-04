@@ -370,6 +370,33 @@ public sealed class TakedownServiceTests : IAsyncDisposable
         Assert.Equal(ErrorCodes.TakedownActive, taken.Code);
         Assert.Empty(_outbox.Deliveries);
         Assert.Empty(_audit.Entries);
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(2, _work.RolledBack);
+    }
+
+    /// <summary>
+    /// CONV-DESIGN-003 AC5: a reversal refused under the account's lock, because an
+    /// erasure committed while it waited for the row, rolls its unit of work back.
+    /// </summary>
+    /// <returns>The work of the test.</returns>
+    [Fact]
+    public async Task CONV_DESIGN_003_AC5_AReversalRefusedUnderTheLockRollsBackAsync()
+    {
+        _ = Held(await ExecutedAsync());
+        _work.Reset();
+
+        _accounts.Holding = subject =>
+        {
+            _accounts.Holding = null;
+            _accounts.Erases(subject);
+        };
+
+        Assert.Equal(ErrorCodes.TakedownWindowElapsed, Refused(await ReversedAsync()).Code);
+        Assert.Empty(_events.Of<TakedownReversed>());
+        Assert.False(_work.Open);
+        Assert.Equal(0, _work.Committed);
+        Assert.Equal(1, _work.RolledBack);
     }
 
     /// <summary>
@@ -659,6 +686,7 @@ public sealed class TakedownServiceTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.SystemFault, Refused(await ExecutedAsync()).Code);
         Assert.Equal((1, 0), (_work.Opened, _work.Committed));
+        Assert.Equal((false, 1), (_work.Open, _work.RolledBack));
         Assert.Empty(_events.Published);
     }
 
@@ -693,6 +721,7 @@ public sealed class TakedownServiceTests : IAsyncDisposable
 
         Assert.Equal(ErrorCodes.SystemFault, Refused(await ReversedAsync()).Code);
         Assert.Equal((1, 0), (_work.Opened, _work.Committed));
+        Assert.Equal((false, 1), (_work.Open, _work.RolledBack));
         Assert.Empty(_events.Of<TakedownReversed>());
     }
 
